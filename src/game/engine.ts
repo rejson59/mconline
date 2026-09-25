@@ -4,6 +4,9 @@ import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, is
 import { getAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, type Body } from './physics';
 import { Mob, type MobType } from './mobs';
+
+/** Mobs that attack the player – used for the night/cave spawn cap. */
+const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider']);
 import { Inventory, RECIPES, type Stack } from './inventory';
 import * as Sfx from './audio';
 import { patchChunkMaterial } from './lighting';
@@ -77,6 +80,7 @@ export interface SaveData {
   furnaces?: FurnaceState[];
   chests?: ChestState[];
   unlocked?: string[];
+  weather?: 'clear' | 'rain';
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
@@ -440,6 +444,7 @@ export class Game {
       for (const f of opts.save.furnaces ?? []) this.furnaces.set(furnaceKey(f.x, f.y, f.z), { ...f, input: f.input ? { ...f.input } : null, fuel: f.fuel ? { ...f.fuel } : null, output: f.output ? { ...f.output } : null });
       for (const c of opts.save.chests ?? []) this.chests.set(chestKey(c.x, c.y, c.z), { x: c.x, y: c.y, z: c.z, slots: (c.slots ?? []).slice(0, 27).map((s) => (s ? { ...s } : null)) });
       for (const id of opts.save.unlocked ?? []) this.unlocked.add(id);
+      this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
       if ((opts.save.day || 1) >= 2) this.unlocked.add('night');
       this.findSpawn();
       if (opts.save.spawn) this.spawnPoint.set(...opts.save.spawn);
@@ -1027,7 +1032,15 @@ export class Game {
   }
 
   spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2) {
-    if (count <= 0 || this.drops.length > 120) return;
+    if (count <= 0) return;
+    // The oldest drop makes room instead of silently eating the new item.
+    while (this.drops.length >= 120) {
+      const victim = this.drops.shift();
+      if (!victim) break;
+      this.scene.remove(victim.mesh);
+      const mat = (victim.mesh as THREE.Mesh).material;
+      if (mat && !Array.isArray(mat)) mat.dispose();
+    }
     let mesh: THREE.Object3D;
     if (BLOCKS[id]) {
       let geo = this.dropGeos.get(id);
@@ -1186,6 +1199,7 @@ export class Game {
         furnaces: [...this.furnaces.values()],
         chests: [...this.chests.values()],
         unlocked: [...this.unlocked],
+        weather: this.weather,
         updated: Date.now(),
       };
       upsertSave({ ...data, id: this.worldId });
@@ -2152,7 +2166,7 @@ export class Game {
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 1.5;
       const alive = this.mobs.filter((m) => !m.dead);
-      const hostile = alive.filter((m) => m.type === 'zombie' || m.type === 'creeper').length;
+      const hostile = alive.filter((m) => HOSTILE_MOBS.has(m.type)).length;
       const passive = alive.length - hostile;
       const tryPos = (minD: number, maxD: number) => {
         const ang = Math.random() * Math.PI * 2;
@@ -2187,10 +2201,11 @@ export class Game {
         const x = Math.floor(p.x + Math.cos(ang) * dist);
         const z = Math.floor(p.z + Math.sin(ang) * dist);
         if (this.world.hasChunk(Math.floor(x / CS), Math.floor(z / CS))) {
+          const ceiling = this.world.heightAt(x, z) - 2; // hoisted out of the scan loop
           for (let y = Math.floor(p.y) + 2; y > 8 && y > p.y - 18; y--) {
             const here = this.world.peekBlock(x, y, z);
             const below = this.world.peekBlock(x, y - 1, z);
-            if (here === B.AIR && this.world.peekBlock(x, y + 1, z) === B.AIR && IS_SOLID[below] && below !== B.LEAVES && y < this.world.heightAt(x, z) - 2) {
+            if (here === B.AIR && this.world.peekBlock(x, y + 1, z) === B.AIR && IS_SOLID[below] && below !== B.LEAVES && y < ceiling) {
               const roll = Math.random();
               const type: MobType = roll < 0.3 ? 'creeper' : roll < 0.65 ? 'zombie' : 'spider';
               this.spawnMob(type, x + 0.5, y, z + 0.5);

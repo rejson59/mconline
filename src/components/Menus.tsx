@@ -102,7 +102,10 @@ export function toggleFullscreen() {
 /** Builds a shareable link that recreates this world (seed + mode in the hash). */
 export function worldShareUrl(seed: number, mode: GameMode): string {
   const loc = window.location;
-  const base = `${loc.origin}${loc.pathname}${loc.search}`;
+  // file:// pages report origin "null" – keep only the path so the link still
+  // resolves when the game is opened straight from the file system.
+  const origin = loc.origin && loc.origin !== 'null' ? loc.origin : '';
+  const base = `${origin}${loc.pathname}${loc.search}`;
   return `${base}#seed=${seed}&mode=${mode}`;
 }
 
