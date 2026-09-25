@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
-import { BLOCKS, CREATIVE_BLOCKS } from '../game/blocks';
+import { CREATIVE_BLOCKS } from '../game/blocks';
 import { RECIPES, type Stack } from '../game/inventory';
+import { CREATIVE_ITEMS, displayName, stackLimit } from '../game/items';
 
 function Slot({
   stack,
@@ -27,7 +28,7 @@ function Slot({
         onClick?.(e.button === 2);
       }}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseEnter={() => onHover?.(stack ? BLOCKS[stack.id].name : null)}
+      onMouseEnter={() => onHover?.(stack ? displayName(stack.id) : null)}
       onMouseLeave={() => onHover?.(null)}
     >
       {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
@@ -41,6 +42,8 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<'blocks' | 'items'>('blocks');
+  const [onlyReady, setOnlyReady] = useState(false);
   const inv = game.inventory;
   const creative = game.mode === 'creative';
   const refresh = () => {
@@ -67,7 +70,8 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
     </div>
   );
 
-  const filtered = CREATIVE_BLOCKS.filter((id) => BLOCKS[id].name.toLowerCase().includes(search.toLowerCase()));
+  const pool = tab === 'blocks' ? CREATIVE_BLOCKS : CREATIVE_ITEMS;
+  const filtered = pool.filter((id) => displayName(id).toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div
@@ -82,12 +86,15 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
         }
       }}
     >
-      <div className="flex flex-wrap items-start justify-center gap-4">
+      <div className="flex max-h-[94vh] flex-wrap items-start justify-center gap-4 overflow-y-auto p-3">
         <div className="mc-panel p-4">
           {creative ? (
             <>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="text-lg font-semibold">Bloki (kreatywny)</div>
+                <div className="flex gap-2 text-lg font-semibold">
+                  <button type="button" className={tab === 'blocks' ? 'underline' : 'opacity-60'} onClick={() => setTab('blocks')}>Bloki</button>
+                  <button type="button" className={tab === 'items' ? 'underline' : 'opacity-60'} onClick={() => setTab('items')}>Przedmioty</button>
+                </div>
                 <input
                   className="mc-input !w-44 !py-1 !text-sm"
                   placeholder="Szukaj..."
@@ -106,7 +113,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                     onHover={setHover}
                     onClick={() => {
                       if (inv.cursor) inv.cursor = null;
-                      else inv.cursor = { id, count: 64 };
+                      else inv.cursor = { id, count: stackLimit(id) === 1 ? 1 : 64 };
                       refresh();
                     }}
                   />
@@ -131,10 +138,13 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
 
         {!creative && (
           <div className="mc-panel w-[330px] p-4">
-            <div className="mb-1 text-lg font-semibold">{game.craftingTable ? 'Stół rzemieślniczy' : 'Wytwarzanie'}</div>
-            {!game.craftingTable && <div className="mb-2 text-xs">Niektóre receptury wymagają stołu rzemieślniczego (PPM na stół).</div>}
+            <div className="mb-1 flex items-center justify-between text-lg font-semibold">
+              <span>{game.craftingTable ? 'Stół rzemieślniczy' : 'Wytwarzanie'}</span>
+              <button type="button" className="text-xs underline" onClick={() => setOnlyReady((v) => !v)}>{onlyReady ? 'Wszystkie' : 'Tylko możliwe'}</button>
+            </div>
+            {!game.craftingTable && <div className="mb-2 text-xs">Narzędzia, łóżko i piec wymagają stołu (PPM na stół). Piec przetapia rudy – PPM na piec.</div>}
             <div className="max-h-[380px] space-y-1 overflow-y-auto pr-1">
-              {RECIPES.map((r, i) => {
+              {RECIPES.filter((r) => !onlyReady || (inv.canCraft(r) && !(r.table && !game.craftingTable))).map((r, i) => {
                 const needTable = r.table && !game.craftingTable;
                 const can = inv.canCraft(r) && !needTable;
                 return (
@@ -142,11 +152,11 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                     key={i}
                     disabled={!can}
                     onClick={() => {
-                      if (inv.craft(r)) refresh();
+                      if (inv.craft(r)) { game.onCraft(r.out.id); refresh(); }
                     }}
                     className="flex w-full items-center gap-2 border-2 border-[#555] px-2 py-1 text-left"
                     style={{ background: can ? '#9fd39a' : '#a9a9a9', opacity: needTable ? 0.55 : 1, cursor: can ? 'pointer' : 'default' }}
-                    onMouseEnter={() => setHover(BLOCKS[r.out.id].name)}
+                    onMouseEnter={() => setHover(displayName(r.out.id))}
                     onMouseLeave={() => setHover(null)}
                   >
                     <div className="flex items-center gap-1">
@@ -162,7 +172,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                       <img src={icons[r.out.id]} width={30} height={30} className="pixelated" />
                       <span className="absolute -bottom-1 right-0 text-xs font-bold text-white mc-text">{r.out.count}</span>
                     </div>
-                    <span className="ml-1 truncate text-sm text-[#222]">{BLOCKS[r.out.id].name}</span>
+                    <span className="ml-1 truncate text-sm text-[#222]">{displayName(r.out.id)}</span>
                     {r.table && <span className="ml-auto text-xs">🛠</span>}
                   </button>
                 );

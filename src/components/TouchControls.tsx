@@ -55,6 +55,7 @@ export default function TouchControls({ game, onInventory, onPause }: { game: Ga
     const dead = 0.28;
     if (dy < -dead) k.add('KeyW');
     else k.delete('KeyW');
+    game.sprinting = dy < -0.86;
     if (dy > dead) k.add('KeyS');
     else k.delete('KeyS');
     if (dx < -dead) k.add('KeyA');

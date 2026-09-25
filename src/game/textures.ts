@@ -301,6 +301,96 @@ export function buildAtlas(): AtlasResult {
       const p = getPx(T.mossy, x, y); if (p[0] > 70) setPx(T.mossy, x, y, 70 + r() * 30, 120 + r() * 30, 50); } }
   { const r = R(54); noiseFill(T.clay, [160, 166, 180], 0.08, r); }
 
+  // Torch, saplings, crops, farmland, bed, lit furnace – transparent where noted.
+  const clear = (tile: number) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(tile, x, y, 0, 0, 0, 0); };
+  clear(T.torch);
+  for (let y = 7; y < 15; y++) { setPx(T.torch, 7, y, 92, 64, 36); setPx(T.torch, 8, y, 70, 48, 26); }
+  for (const [x, y, c] of [[6, 3, [255, 230, 80]], [7, 2, [255, 250, 180]], [7, 3, [255, 180, 40]], [8, 3, [255, 210, 50]], [7, 4, [255, 140, 30]], [8, 4, [230, 90, 20]], [9, 4, [255, 200, 60]], [5, 4, [255, 190, 40]], [7, 5, [200, 70, 20]]] as [number, number, RGB][]) {
+    setPx(T.torch, x, y, c[0], c[1], c[2]);
+  }
+  clear(T.sapling);
+  for (let y = 8; y < 15; y++) setPx(T.sapling, 8, y, 90, 62, 34);
+  for (const [x, y] of [[6, 4], [7, 4], [8, 4], [9, 4], [5, 5], [6, 5], [7, 5], [8, 5], [9, 5], [10, 5], [7, 3], [8, 3], [8, 6], [6, 6], [9, 6]]) setPx(T.sapling, x, y, 46, 120, 36);
+  clear(T.birch_sapling);
+  for (let y = 8; y < 15; y++) setPx(T.birch_sapling, 8, y, 210, 208, 196);
+  for (const [x, y] of [[6, 4], [7, 4], [8, 4], [9, 4], [6, 5], [7, 5], [8, 5], [9, 5], [7, 3], [8, 3], [8, 6]]) setPx(T.birch_sapling, x, y, 130, 170, 70);
+  { const r = R(58); copyTile(T.dirt, T.farmland);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const wet = shade([78, 52, 28], 0.85 + r() * 0.2);
+      if (y < 5 || (x + y) % 5 === 0) setPx(T.farmland, x, y, wet[0], wet[1], wet[2]);
+    }
+  }
+  const wheat = (tile: number, h: number, gold: boolean) => {
+    clear(tile);
+    for (let i = 0; i < 5; i++) {
+      const x = 2 + i * 3;
+      for (let y = 0; y < h; y++) setPx(tile, x, 15 - y, gold ? 210 : 70, gold ? 180 : 140, gold ? 40 : 36);
+      if (h > 6) { setPx(tile, x - 1, 15 - h, gold ? 230 : 80, gold ? 190 : 150, gold ? 50 : 40); setPx(tile, x + 1, 16 - h, gold ? 230 : 80, gold ? 190 : 150, gold ? 50 : 40); }
+    }
+  };
+  wheat(T.wheat0, 4, false);
+  wheat(T.wheat1, 8, false);
+  wheat(T.wheat2, 12, false);
+  wheat(T.wheat3, 14, true);
+  { const r = R(63); wool(T.bed_top, [170, 40, 40], r);
+    for (let y = 0; y < 5; y++) for (let x = 0; x < 16; x++) setPx(T.bed_top, x, y, 236, 236, 236);
+    for (let x = 0; x < 16; x++) setPx(T.bed_top, x, 5, 180, 180, 180);
+  }
+  { const r = R(64); copyTile(T.planks, T.bed_side);
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) { const c = shade([170, 40, 40], 0.9 + r() * 0.15); setPx(T.bed_side, x, y, c[0], c[1], c[2]); }
+    for (let x = 0; x < 5; x++) for (let y = 1; y < 6; y++) setPx(T.bed_side, x, y, 236, 236, 236);
+  }
+  { copyTile(T.furnace_front, T.furnace_lit);
+    for (let y = 8; y < 14; y++) for (let x = 4; x < 12; x++) setPx(T.furnace_lit, x, y, y > 11 ? 255 : 255, y > 11 ? 180 : 90, 20);
+    setPx(T.furnace_lit, 6, 10, 255, 240, 140); setPx(T.furnace_lit, 8, 9, 255, 220, 80);
+  }
+
+  // Home update: chest, door, ladder, fence, trapdoor, campfire.
+  { const r = R(66); noiseFill(T.chest_side, [122, 78, 42], 0.12, r);
+    for (let x = 0; x < 16; x++) { setPx(T.chest_side, x, 0, 78, 48, 26); setPx(T.chest_side, x, 15, 70, 42, 22); }
+  }
+  { copyTile(T.chest_side, T.chest_top);
+    for (let x = 1; x < 15; x++) setPx(T.chest_top, x, 7, 86, 54, 28);
+    for (let y = 2; y < 14; y++) { setPx(T.chest_top, 1, y, 86, 54, 28); setPx(T.chest_top, 14, y, 86, 54, 28); }
+  }
+  { copyTile(T.chest_side, T.chest_front);
+    for (let y = 6; y < 10; y++) for (let x = 6; x < 10; x++) setPx(T.chest_front, x, y, 196, 164, 48);
+    setPx(T.chest_front, 7, 8, 90, 60, 20);
+    setPx(T.chest_front, 8, 8, 90, 60, 20);
+    for (let x = 0; x < 16; x++) { setPx(T.chest_front, x, 0, 70, 42, 22); setPx(T.chest_front, x, 15, 70, 42, 22); }
+  }
+  { const r = R(69); noiseFill(T.door, [138, 88, 48], 0.1, r);
+    for (let y = 0; y < 16; y++) { setPx(T.door, 0, y, 78, 48, 26); setPx(T.door, 15, y, 78, 48, 26); setPx(T.door, 1, y, 96, 60, 32); }
+    for (let x = 0; x < 16; x++) { setPx(T.door, x, 0, 78, 48, 26); setPx(T.door, x, 15, 78, 48, 26); }
+    for (let y = 6; y < 11; y++) setPx(T.door, 12, y, 210, 176, 52);
+    setPx(T.door, 11, 8, 210, 176, 52);
+  }
+  { copyTile(T.door, T.door_top);
+    for (let y = 3; y < 10; y++) for (let x = 4; x < 12; x++) setPx(T.door_top, x, y, 150, 196, 214);
+    for (let y = 3; y < 10; y++) { setPx(T.door_top, 4, y, 70, 90, 100); setPx(T.door_top, 11, y, 70, 90, 100); }
+    for (let x = 4; x < 12; x++) { setPx(T.door_top, x, 3, 70, 90, 100); setPx(T.door_top, x, 9, 70, 90, 100); }
+  }
+  clear(T.ladder);
+  for (let y = 0; y < 16; y++) { setPx(T.ladder, 3, y, 120, 78, 40); setPx(T.ladder, 12, y, 96, 60, 30); }
+  for (let y = 1; y < 16; y += 3) for (let x = 3; x <= 12; x++) setPx(T.ladder, x, y, 140, 92, 48);
+  clear(T.fence);
+  for (let y = 0; y < 16; y++) { setPx(T.fence, 2, y, 150, 98, 52); setPx(T.fence, 3, y, 120, 76, 40); setPx(T.fence, 12, y, 150, 98, 52); setPx(T.fence, 13, y, 110, 70, 36); }
+  for (let x = 2; x <= 13; x++) { setPx(T.fence, x, 4, 150, 98, 52); setPx(T.fence, x, 5, 110, 70, 36); setPx(T.fence, x, 10, 150, 98, 52); setPx(T.fence, x, 11, 110, 70, 36); }
+  { const r = R(73); noiseFill(T.trapdoor, [146, 96, 50], 0.1, r);
+    for (let x = 0; x < 16; x++) { setPx(T.trapdoor, x, 0, 86, 54, 28); setPx(T.trapdoor, x, 15, 86, 54, 28); }
+    for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x++) setPx(T.trapdoor, x, y, 96, 62, 32);
+    for (let y = 6; y < 10; y++) setPx(T.trapdoor, 8, y, 210, 176, 52);
+  }
+  { const r = R(75); noiseFill(T.campfire_side, [92, 58, 32], 0.14, r);
+    for (let y = 10; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.campfire_side, x, y, 48, 32, 22);
+  }
+  { const r = R(74); noiseFill(T.campfire, [62, 40, 24], 0.16, r);
+    for (let x = 2; x < 14; x++) { setPx(T.campfire, x, 4, 110, 68, 34); setPx(T.campfire, x, 11, 90, 54, 28); }
+    for (let y = 5; y < 11; y++) for (let x = 5; x < 11; x++) setPx(T.campfire, x, y, y < 8 ? 255 : 220, y < 8 ? 150 : 70, 20);
+    setPx(T.campfire, 7, 6, 255, 240, 140);
+    setPx(T.campfire, 8, 7, 255, 220, 80);
+  }
+
   ctx.putImageData(img, 0, 0);
 
   // average colors

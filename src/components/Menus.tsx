@@ -1,25 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameMode } from '../game/engine';
+import { ACHIEVEMENTS } from '../game/achievements';
+import { loadSettings, saveSettings, type Settings } from '../utils/settings';
 
 // BASE_URL is "./" for this build, so the background resolves relative to
 // index.html and works on GitHub Pages project sites, custom domains and file://
 const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 
-export interface Settings {
-  renderDistance: number;
-  sensitivity: number;
-  fov: number;
-  volume: number;
-}
+export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  'Jak Minecraft, ale w przeglądarce!',
-  'Teraz z TNT!',
-  '100% proceduralne!',
-  'Zombie w nocy!',
-  'Wykop diamenty!',
+  'Aktualizacja 1.2: Zbuduj dom!',
+  'Aktualizacja 1.1: Przetrwanie!',
+  'Uważaj na creepery!',
+  'Wytop żelazo w piecu!',
   'Nie kop prosto w dół!',
-  'Kwadratowe chmury!',
+  'Pochodnie świecą w jaskiniach!',
+  'Głód to nie żart!',
+  'Wyhoduj własne drzewo!',
   'Polska wersja!',
 ];
 
@@ -59,6 +57,17 @@ export function Controls() {
     ['E', 'Ekwipunek / wytwarzanie'],
     ['Q', 'Wyrzuć przedmiot'],
     ['T lub /', 'Czat i komendy'],
+    ['PPM na jedzeniu', 'Jedzenie'],
+    ['PPM na piecu', 'Przetapianie'],
+    ['PPM na łóżku', 'Sen i punkt odrodzenia'],
+    ['PPM na drzwiach / włazie', 'Otwórz lub zamknij'],
+    ['PPM na skrzyni', 'Schowek'],
+    ['Drabina + W / spacja', 'Wspinaczka'],
+    ['Nożyce + LPM na owcy', 'Wełna bez zabijania'],
+    ['Krzesiwo + PPM', 'Podpal TNT'],
+    ['Kompas / zegar', 'Kierunek odrodzenia i pora dnia'],
+    ['Motyka + PPM', 'Grządka'],
+    ['M', 'Minimapa'],
     ['F3', 'Informacje debugowania'],
     ['Esc', 'Pauza'],
   ];
@@ -97,27 +106,36 @@ export interface SaveSummary {
   seed: number;
 }
 
+export interface WorldCard {
+  id: string;
+  name?: string;
+  seed: number;
+  mode?: string;
+  day?: number;
+}
+
 export function MainMenu({
-  hasSave,
-  saveInfo,
+  saves,
   sharedSeed,
   sharedMode,
-  onContinue,
+  onPlay,
   onNew,
-  onDeleteSave,
+  onDelete,
 }: {
-  hasSave: boolean;
-  saveInfo?: SaveSummary | null;
+  saves: WorldCard[];
   /** seed / mode taken from the URL hash (shareable world links) */
   sharedSeed?: number | null;
   sharedMode?: GameMode | null;
-  onContinue: () => void;
-  onNew: (seed: number, mode: GameMode) => void;
-  onDeleteSave?: () => void;
+  onPlay: (id: string) => void;
+  onNew: (seed: number, mode: GameMode, name: string) => void;
+  onDelete: (id: string) => void;
 }) {
-  const [view, setView] = useState<'main' | 'new' | 'controls'>(sharedSeed != null ? 'new' : 'main');
+  const [view, setView] = useState<'main' | 'new' | 'controls' | 'options'>(sharedSeed != null ? 'new' : 'main');
   const [seedText, setSeedText] = useState(sharedSeed != null ? String(sharedSeed) : '');
+  const [worldName, setWorldName] = useState('');
   const [mode, setMode] = useState<GameMode>(sharedMode ?? 'survival');
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<Settings>(loadSettings);
 
   const create = () => {
     let seed: number;
@@ -127,7 +145,7 @@ export function MainMenu({
       seed = 0;
       for (const ch of seedText) seed = (Math.imul(seed, 31) + ch.charCodeAt(0)) | 0;
     }
-    onNew(Math.abs(seed), mode);
+    onNew(Math.abs(seed), mode, worldName.trim() || 'Nowy świat');
   };
 
   return (
@@ -147,15 +165,28 @@ export function MainMenu({
         <Title />
         {view === 'main' && (
           <div className="flex w-full flex-col gap-3">
-            {hasSave && (
-              <button className="mc-btn" onClick={onContinue}>
-                Kontynuuj świat
-                {saveInfo && (
-                  <span className="block text-xs font-normal opacity-80">
-                    dzień {saveInfo.day} · {saveInfo.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'} · ziarno {saveInfo.seed}
-                  </span>
-                )}
-              </button>
+            {saves.length > 0 && (
+              <div className="max-h-[34vh] space-y-2 overflow-y-auto bg-black/40 p-2">
+                {saves.map((s) => (
+                  <div key={s.id} className="flex gap-2">
+                    <button className="mc-btn min-w-0 flex-1 !py-2 text-left" onClick={() => onPlay(s.id)}>
+                      {s.name || 'Świat'}
+                      <span className="block text-xs font-normal opacity-80">
+                        dzień {s.day ?? 1} · {s.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'} · ziarno {s.seed}
+                      </span>
+                    </button>
+                    <button
+                      className="mc-btn !w-24 !px-2 !text-sm"
+                      onClick={() => {
+                        if (confirmId === s.id) onDelete(s.id);
+                        else setConfirmId(s.id);
+                      }}
+                    >
+                      {confirmId === s.id ? 'Na pewno?' : 'Usuń'}
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
             <button className="mc-btn" onClick={() => setView('new')}>
               Nowy świat
@@ -163,14 +194,12 @@ export function MainMenu({
             <button className="mc-btn" onClick={() => setView('controls')}>
               Sterowanie
             </button>
+            <button className="mc-btn" onClick={() => setView('options')}>
+              Opcje
+            </button>
             <button className="mc-btn" onClick={toggleFullscreen}>
               Pełny ekran
             </button>
-            {hasSave && onDeleteSave && (
-              <button className="mc-btn" onClick={onDeleteSave}>
-                Usuń zapis
-              </button>
-            )}
           </div>
         )}
         {view === 'new' && (
@@ -179,6 +208,8 @@ export function MainMenu({
             {sharedSeed != null && (
               <div className="text-xs text-green-300">Ziarno i tryb zostały wczytane z adresu – kliknij „Stwórz świat”, aby zagrać.</div>
             )}
+            <label className="text-sm text-gray-300">Nazwa świata</label>
+            <input className="mc-input" value={worldName} onChange={(e) => setWorldName(e.target.value)} placeholder="np. Wyspa" onKeyDown={(e) => e.stopPropagation()} />
             <label className="text-sm text-gray-300">Ziarno generatora (puste = losowe)</label>
             <input className="mc-input" value={seedText} onChange={(e) => setSeedText(e.target.value)} placeholder="np. 12345 lub dowolny tekst" />
             <button className="mc-btn" onClick={() => setMode(mode === 'survival' ? 'creative' : 'survival')}>
@@ -186,10 +217,10 @@ export function MainMenu({
             </button>
             <div className="text-xs text-gray-300">
               {mode === 'survival'
-                ? 'Zbieraj surowce, wytwarzaj bloki, uważaj na zombie, lawę i upadki.'
+                ? 'Zetnij drzewo, wytwórz kilof, postaw drzwi i skrzynię. W jaskiniach leżą skrzynie.'
                 : 'Nieograniczone bloki, latanie, natychmiastowe niszczenie, brak obrażeń.'}
             </div>
-            {hasSave && <div className="text-xs text-red-300">Uwaga: nowy świat nadpisze zapisany świat.</div>}
+            <div className="text-xs text-gray-300">Nowy świat nie kasuje pozostałych zapisów. Maksymalnie 8 światów.</div>
             <div className="flex gap-3">
               <button className="mc-btn" onClick={() => setView('main')}>
                 Anuluj
@@ -208,10 +239,40 @@ export function MainMenu({
             </button>
           </div>
         )}
+        {view === 'options' && (
+          <div className="flex w-full flex-col gap-3 bg-black/55 p-5">
+            <div className="text-lg mc-text">Opcje</div>
+            <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={12} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => { const n = { ...settings, renderDistance: v }; setSettings(n); saveSettings(n); }} />
+            <OptionSlider label="Czułość myszy" value={settings.sensitivity} min={0.2} max={3} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => { const n = { ...settings, sensitivity: v }; setSettings(n); saveSettings(n); }} />
+            <OptionSlider label="Pole widzenia" value={settings.fov} min={50} max={110} step={1} fmt={(v) => `${v}°`} onChange={(v) => { const n = { ...settings, fov: v }; setSettings(n); saveSettings(n); }} />
+            <OptionSlider label="Głośność" value={settings.volume} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => { const n = { ...settings, volume: v }; setSettings(n); saveSettings(n); }} />
+            <button className="mc-btn" onClick={() => { const n = { ...settings, minimap: !settings.minimap }; setSettings(n); saveSettings(n); }}>
+              Minimapa: {settings.minimap ? 'włączona' : 'wyłączona'}
+            </button>
+            <button className="mc-btn" onClick={() => setView('main')}>
+              Gotowe
+            </button>
+          </div>
+        )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.0</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.2</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
+    </div>
+  );
+}
+
+export function AchievementsPanel({ unlocked }: { unlocked: string[] }) {
+  const have = new Set(unlocked);
+  return (
+    <div className="max-h-[360px] w-full space-y-1 overflow-y-auto">
+      <div className="mb-1 text-sm opacity-80">{have.size} / {ACHIEVEMENTS.length}</div>
+      {ACHIEVEMENTS.map((a) => (
+        <div key={a.id} className="px-2 py-1" style={{ background: have.has(a.id) ? 'rgba(40,80,30,0.85)' : 'rgba(0,0,0,0.45)' }}>
+          <div className={have.has(a.id) ? 'text-yellow-200' : 'text-gray-400'}>{have.has(a.id) ? a.title : '???'}</div>
+          <div className="text-xs opacity-80">{have.has(a.id) ? a.text : 'Jeszcze nieodkryte'}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -219,6 +280,8 @@ export function MainMenu({
 export function PauseMenu({
   settings,
   shareUrl,
+  worldName,
+  unlocked,
   onSettings,
   onResume,
   onQuit,
@@ -226,12 +289,14 @@ export function PauseMenu({
 }: {
   settings: Settings;
   shareUrl: string;
+  worldName?: string;
+  unlocked?: string[];
   onSettings: (s: Settings) => void;
   onResume: () => void;
   onQuit: () => void;
   onSave: () => void;
 }) {
-  const [view, setView] = useState<'main' | 'options' | 'controls'>('main');
+  const [view, setView] = useState<'main' | 'options' | 'controls' | 'achievements'>('main');
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
@@ -250,10 +315,11 @@ export function PauseMenu({
   };
   return (
     <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)' }}>
-      <div className="flex w-full max-w-[420px] flex-col items-center gap-3 px-4">
+      <div className="flex max-h-[92vh] w-full max-w-[420px] flex-col items-center gap-3 overflow-y-auto px-4">
         {view === 'main' && (
           <>
-            <div className="mb-4 text-2xl mc-text">Menu gry</div>
+            <div className="mb-1 text-2xl mc-text">Menu gry</div>
+            {worldName && <div className="mb-3 text-sm opacity-80">{worldName}</div>}
             <button className="mc-btn" onClick={onResume}>
               Wróć do gry
             </button>
@@ -262,6 +328,9 @@ export function PauseMenu({
             </button>
             <button className="mc-btn" onClick={() => setView('controls')}>
               Sterowanie
+            </button>
+            <button className="mc-btn" onClick={() => setView('achievements')}>
+              Osiągnięcia ({unlocked?.length ?? 0}/{ACHIEVEMENTS.length})
             </button>
             <button className="mc-btn" onClick={copyLink}>
               {copied ? 'Link skopiowany ✓' : 'Kopiuj link do świata'}
@@ -291,6 +360,9 @@ export function PauseMenu({
             <OptionSlider label="Czułość myszy" value={settings.sensitivity} min={0.2} max={3} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => onSettings({ ...settings, sensitivity: v })} />
             <OptionSlider label="Pole widzenia" value={settings.fov} min={50} max={110} step={1} fmt={(v) => `${v}°`} onChange={(v) => onSettings({ ...settings, fov: v })} />
             <OptionSlider label="Głośność" value={settings.volume} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => onSettings({ ...settings, volume: v })} />
+            <button className="mc-btn" onClick={() => onSettings({ ...settings, minimap: !settings.minimap })}>
+              Minimapa: {settings.minimap ? 'włączona' : 'wyłączona'}
+            </button>
             <button className="mc-btn mt-2" onClick={() => setView('main')}>
               Gotowe
             </button>
@@ -299,6 +371,15 @@ export function PauseMenu({
         {view === 'controls' && (
           <div className="flex w-full flex-col gap-4 bg-black/60 p-5">
             <Controls />
+            <button className="mc-btn" onClick={() => setView('main')}>
+              Gotowe
+            </button>
+          </div>
+        )}
+        {view === 'achievements' && (
+          <div className="flex w-full flex-col gap-3 bg-black/60 p-4">
+            <div className="text-xl mc-text">Osiągnięcia</div>
+            <AchievementsPanel unlocked={unlocked ?? []} />
             <button className="mc-btn" onClick={() => setView('main')}>
               Gotowe
             </button>
@@ -340,7 +421,7 @@ export function DeathScreen({ onRespawn, onQuit }: { onRespawn: () => void; onQu
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4" style={{ background: 'rgba(120,0,0,0.5)' }}>
       <div className="mb-2 text-5xl font-bold mc-text">Zginąłeś!</div>
-      <div className="mb-6 text-lg mc-text">Twój ekwipunek przepadł.</div>
+      <div className="mb-6 text-lg mc-text">Ekwipunek wypadł w miejscu śmierci.</div>
       <div className="flex w-[360px] flex-col gap-3">
         <button className="mc-btn" onClick={onRespawn}>
           Odrodzenie

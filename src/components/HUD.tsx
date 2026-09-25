@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { HUDState } from '../game/engine';
-import { BLOCKS } from '../game/blocks';
+import { displayName, durabilityMax } from '../game/items';
 
 const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
 const BUBBLE = ['.XXX.', 'X..XX', 'X.XXX', 'XXXXX', '.XXX.'];
@@ -35,47 +35,83 @@ function Bubble({ pop }: { pop: boolean }) {
   );
 }
 
+function Drumstick({ fill }: { fill: 0 | 1 | 2 }) {
+  const meat = fill === 0 ? '#4a2a12' : '#c47a32';
+  const bone = fill === 0 ? '#3a3a3a' : '#f2efe6';
+  return (
+    <svg width={18} height={16} viewBox="0 0 8 7" style={{ filter: outline }} shapeRendering="crispEdges">
+      <rect x={1} y={1} width={4} height={3} fill={meat} />
+      <rect x={1} y={1} width={1} height={1} fill={fill ? '#f0c090' : meat} />
+      <rect x={4} y={3} width={3} height={1} fill={bone} />
+      <rect x={5} y={4} width={2} height={2} fill={bone} />
+      {fill === 1 && <rect x={3} y={1} width={2} height={3} fill="#4a2a12" />}
+    </svg>
+  );
+}
+
 export function Hotbar({ hud, icons }: { hud: HUDState; icons: Record<number, string> }) {
   return (
     <div className="flex" style={{ background: 'rgba(0,0,0,0.35)', border: '2px solid #1a1a1a', padding: 2 }}>
-      {hud.hotbar.map((s, i) => (
-        <div
-          key={i}
-          className="relative flex items-center justify-center"
-          style={{
-            width: 48,
-            height: 48,
-            border: i === hud.selected ? '3px solid #fff' : '3px solid #6b6b6b',
-            outline: i === hud.selected ? '2px solid #000' : 'none',
-            zIndex: i === hud.selected ? 2 : 1,
-            background: 'rgba(40,40,40,0.35)',
-            margin: -1,
-          }}
-        >
-          {s && <img src={icons[s.id]} className="pixelated" width={34} height={34} draggable={false} />}
-          {s && hud.mode === 'survival' && s.count > 1 && <span className="mc-count">{s.count}</span>}
-        </div>
-      ))}
+      {hud.hotbar.map((s, i) => {
+        const max = s ? durabilityMax(s.id) : 0;
+        const frac = s && max && s.dur !== undefined ? Math.max(0, s.dur / max) : 1;
+        return (
+          <div
+            key={i}
+            className="relative flex items-center justify-center"
+            style={{
+              width: 48,
+              height: 48,
+              border: i === hud.selected ? '3px solid #fff' : '3px solid #6b6b6b',
+              outline: i === hud.selected ? '2px solid #000' : 'none',
+              zIndex: i === hud.selected ? 2 : 1,
+              background: 'rgba(40,40,40,0.35)',
+              margin: -1,
+            }}
+          >
+            {s && <img src={icons[s.id]} className="pixelated" width={34} height={34} draggable={false} />}
+            {s && hud.mode === 'survival' && s.count > 1 && <span className="mc-count">{s.count}</span>}
+            {s && max > 0 && s.dur !== undefined && s.dur < max && (
+              <span className="dur-bar"><i style={{ width: `${frac * 100}%`, background: frac < 0.25 ? '#e04040' : '#3dba3d' }} /></span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-export default function HUD({ hud, icons }: { hud: HUDState; icons: Record<number, string> }) {
+export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Record<number, string>; minimap?: HTMLCanvasElement | null }) {
   const [label, setLabel] = useState<{ text: string; key: number } | null>(null);
+  const mapRef = useRef<HTMLCanvasElement>(null);
   const sel = hud.hotbar[hud.selected];
   const selId = sel ? sel.id : -1;
 
   useEffect(() => {
     if (selId < 0) { setLabel(null); return; }
-    setLabel({ text: BLOCKS[selId].name, key: Date.now() });
+    setLabel({ text: displayName(selId), key: Date.now() });
     const t = setTimeout(() => setLabel(null), 2000);
     return () => clearTimeout(t);
   }, [selId, hud.selected]);
+
+  useEffect(() => {
+    const dst = mapRef.current;
+    if (!dst || !minimap || !hud.minimap) return;
+    const ctx = dst.getContext('2d');
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(minimap, 0, 0, dst.width, dst.height);
+  });
 
   const hearts = [];
   for (let i = 0; i < 10; i++) {
     const v = hud.health - i * 2;
     hearts.push(<Heart key={i} fill={v >= 2 ? 2 : v >= 1 ? 1 : 0} />);
+  }
+  const drums = [];
+  for (let i = 0; i < 10; i++) {
+    const v = hud.hunger - i * 2;
+    drums.push(<Drumstick key={i} fill={v >= 2 ? 2 : v >= 1 ? 1 : 0} />);
   }
   const bubbles = [];
   const airFrac = hud.air / hud.maxAir;
@@ -101,7 +137,7 @@ export default function HUD({ hud, icons }: { hud: HUDState; icons: Record<numbe
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 1.0 (${hud.fps} fps)`,
+            `BlockCraft 1.2 (${hud.fps} fps)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -111,7 +147,9 @@ export default function HUD({ hud, icons }: { hud: HUDState; icons: Record<numbe
             `Moby: ${hud.mobs}`,
             `Cel: ${hud.target}`,
             `Ziarno: ${hud.seed}`,
-            `Tryb: ${hud.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'}${hud.flying ? ' (lot)' : ''}`,
+            `Tryb: ${hud.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'}${hud.flying ? ' (lot)' : ''}${hud.sprinting ? ' sprint' : ''}`,
+            `Głód: ${hud.hunger.toFixed(1)}  Pogoda: ${hud.weather === 'rain' ? 'deszcz' : 'jasno'}`,
+            `Świat: ${hud.worldName}`,
           ].map((l, i) => (
             <div key={i} className="w-fit px-1" style={{ background: 'rgba(0,0,0,0.45)' }}>
               {l}
@@ -120,6 +158,24 @@ export default function HUD({ hud, icons }: { hud: HUDState; icons: Record<numbe
         </div>
       ) : (
         <div className="absolute left-2 top-2 text-sm opacity-70 mc-text">{hud.fps} FPS</div>
+      )}
+
+      {hud.toast && (
+        <div className="absolute left-1/2 top-16 w-[min(420px,90vw)] -translate-x-1/2 px-4 py-2 text-center" style={{ background: 'rgba(0,0,0,0.72)', border: '2px solid #3a3a3a' }}>
+          <div className="text-sm text-yellow-300">Osiągnięcie zdobyte</div>
+          <div className="text-xl mc-text">{hud.toast.title}</div>
+          <div className="text-sm opacity-80">{hud.toast.text}</div>
+        </div>
+      )}
+
+      {hud.minimap && (
+        <canvas
+          ref={mapRef}
+          width={96}
+          height={96}
+          className="pixelated absolute right-3 top-3 hidden sm:block"
+          style={{ width: 112, height: 112, border: '2px solid #111', boxShadow: '0 0 0 2px rgba(255,255,255,0.25)', background: '#111' }}
+        />
       )}
 
       {/* chat messages */}
@@ -139,11 +195,16 @@ export default function HUD({ hud, icons }: { hud: HUDState; icons: Record<numbe
           </div>
         )}
         {hud.mode === 'survival' && (
-          <div className="mb-1 flex w-full justify-between px-1" style={{ width: 9 * 48 }}>
-            <div className="flex gap-[2px]">{hearts}</div>
-            <div className="flex flex-row-reverse gap-[2px]">{hud.air < hud.maxAir - 0.01 ? bubbles : null}</div>
+          <div className="mb-1 flex w-full flex-col gap-0.5 px-1" style={{ width: 9 * 48 }}>
+            <div className="flex justify-between">
+              <div className="flex gap-[2px]">{hearts}</div>
+              <div className="flex flex-row-reverse gap-[2px]">{hud.air < hud.maxAir - 0.01 ? bubbles : null}</div>
+            </div>
+            <div className="flex gap-[2px]">{drums}</div>
           </div>
         )}
+        {hud.heldHint && <div className="mb-1 text-sm text-yellow-200 mc-text">{hud.heldHint}</div>}
+        {hud.sprinting && <div className="mb-1 text-sm opacity-80 mc-text">Sprint</div>}
         {hud.mode === 'creative' && hud.flying && <div className="mb-1 text-sm opacity-80 mc-text">✈ Latanie</div>}
         <Hotbar hud={hud} icons={icons} />
       </div>

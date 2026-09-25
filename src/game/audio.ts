@@ -116,7 +116,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'zombie' | 'sheep') {
+export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -130,6 +130,19 @@ export function playMob(type: 'pig' | 'zombie' | 'sheep') {
     o.type = 'triangle';
     o.frequency.setValueAtTime(420, t);
     for (let i = 0; i < 6; i++) o.frequency.setValueAtTime(i % 2 ? 400 : 440, t + i * 0.05);
+  } else if (type === 'cow') {
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.linearRampToValueAtTime(90, t + 0.45);
+  } else if (type === 'chicken') {
+    o.type = 'square';
+    o.frequency.setValueAtTime(880, t);
+    o.frequency.setValueAtTime(640, t + 0.08);
+    o.frequency.setValueAtTime(980, t + 0.14);
+  } else if (type === 'creeper') {
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(180, t);
+    o.frequency.linearRampToValueAtTime(40, t + 0.35);
   } else {
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(110, t);
@@ -179,6 +192,72 @@ export function playPop() {
   o.start(t);
   o.stop(t + 0.1);
 }
+export function playEat() {
+  noiseBurst(900, 2.2, 0.12, 0.35);
+  const c = ensure();
+  if (!c || !master) return;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  const t = c.currentTime;
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(420, t);
+  o.frequency.exponentialRampToValueAtTime(180, t + 0.12);
+  g.gain.setValueAtTime(0.08, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + 0.16);
+}
+
+export function playThunder() {
+  const c = ensure();
+  if (!c || !master || !noiseBuf) return;
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf;
+  src.playbackRate.value = 0.22;
+  const f = c.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.value = 240;
+  const g = c.createGain();
+  const t = c.currentTime;
+  g.gain.setValueAtTime(0.7, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 1.4);
+  src.connect(f).connect(g).connect(master);
+  src.start(t);
+  src.stop(t + 1.5);
+}
+
+let rainSrc: AudioBufferSourceNode | null = null;
+
+export function setRain(on: boolean) {
+  const c = ensure();
+  if (!c || !master || !noiseBuf) return;
+  if (on) {
+    if (rainSrc) return;
+    const src = c.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    src.playbackRate.value = 0.55;
+    const f = c.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 900;
+    f.Q.value = 0.4;
+    const g = c.createGain();
+    g.gain.value = 0.16;
+    src.connect(f).connect(g).connect(master);
+    src.start();
+    rainSrc = src;
+  } else if (rainSrc) {
+    try {
+      rainSrc.stop();
+    } catch {
+      /* already stopped */
+    }
+    rainSrc.disconnect();
+    rainSrc = null;
+  }
+}
+
 export function unlockAudio() {
   ensure();
 }
