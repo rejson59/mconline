@@ -253,6 +253,34 @@ export function playArrowHit() {
   src.stop(t + 0.16);
 }
 
+/**
+ * Ambient music: a slow, quiet pentatonic phrase. Minecraft-like games use it to
+ * fill the silence while exploring; kept sparse and soft so it never fights the
+ * sound effects.
+ */
+export function playMusic() {
+  const c = ensure();
+  if (!c || !master) return;
+  // A minor pentatonic, two octaves – any order sounds calm.
+  const scale = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25];
+  const notes = 3 + Math.floor(Math.random() * 3);
+  const base = Math.floor(Math.random() * (scale.length - 4));
+  for (let i = 0; i < notes; i++) {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    const t = c.currentTime + i * (0.55 + Math.random() * 0.4);
+    const f = scale[base + Math.floor(Math.random() * 4)] * (Math.random() < 0.3 ? 2 : 1);
+    o.type = Math.random() < 0.5 ? 'sine' : 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + 1.1);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 4.2);
+    o.connect(g).connect(master);
+    o.start(t);
+    o.stop(t + 4.4);
+  }
+}
+
 export function playThunder() {
   const c = ensure();
   if (!c || !master || !noiseBuf) return;

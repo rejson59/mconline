@@ -283,6 +283,7 @@ export class Game {
   weather: 'clear' | 'rain' = 'clear';
   private weatherTimer = 70;
   private lightning = 0;
+  private musicTimer = 90 + Math.random() * 150;
   private nextBolt = 12;
   private rain!: THREE.Points;
   private rainGeo!: THREE.BufferGeometry;
@@ -2555,6 +2556,14 @@ export class Game {
   }
 
   private updateWeather(dt: number) {
+    // Sparse ambient music – never during combat-ish menus, never on the title screen.
+    if (this.ui === 'playing' || this.ui === 'chat') {
+      this.musicTimer -= dt;
+      if (this.musicTimer <= 0) {
+        this.musicTimer = 110 + Math.random() * 190;
+        Sfx.playMusic();
+      }
+    }
     this.weatherTimer -= dt;
     if (this.weatherTimer <= 0) this.setWeather(this.weather === 'clear' ? 'rain' : 'clear');
     this.lightning = Math.max(0, this.lightning - dt * 1.6);
