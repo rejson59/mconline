@@ -135,13 +135,23 @@ export const ITEMS: (ItemDef | undefined)[] = [];
 for (const it of ITEM_LIST) ITEMS[it.id] = it;
 
 const KEYS = new Map<string, number>();
-for (const it of ITEM_LIST) for (const k of it.keys) KEYS.set(k, it.id);
 for (const b of BLOCKS) {
   if (!b || b.id === 0) continue;
   KEYS.set(String(b.id), b.id);
   KEYS.set(fold(b.name), b.id);
 }
-for (const it of ITEM_LIST) KEYS.set(String(it.id), it.id);
+// Items are registered last so their aliases win over same-named blocks
+// (e.g. "pszenica" is the wheat item, not the wheat crop block).
+for (const it of ITEM_LIST) {
+  KEYS.set(String(it.id), it.id);
+  for (const k of it.keys) KEYS.set(k, it.id);
+}
+// A block whose name was shadowed by an item alias stays reachable as "<nazwa>_blok".
+for (const b of BLOCKS) {
+  if (!b || b.id === 0) continue;
+  const n = fold(b.name);
+  if (KEYS.get(n) !== b.id && !KEYS.has(n + '_blok')) KEYS.set(n + '_blok', b.id);
+}
 
 function fold(s: string): string {
   return s
