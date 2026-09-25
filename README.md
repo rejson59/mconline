@@ -180,6 +180,16 @@ src/
 .harness/                  # (poza gitem) headless testy silnika: node .harness/run.mjs
 ```
 
+## 🧪 Testy (bez przeglądarki)
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm test            # headless testy silnika + test UI w jsdom
+```
+
+`.harness/smoke.ts` to kilkanaście tysięcy asercji na czysty silnik (generowanie świata, bloki, fizykę, ekwipunek, receptury, piece, moby, zapisy) – działa bez WebGL.
+`.harness/ui.mjs` renderuje całe menu w `jsdom`, przechodzi tworzenie świata (w tym przełącznik typu świata) i sprawdza, że brak WebGL kończy się czytelnym komunikatem, a nie białą stroną. UI wymaga `npm i --no-save jsdom`; bez niego jest pomijany.
+
 ## 🛠️ Rozwiązywanie problemów
 
 | Problem | Rozwiązanie |

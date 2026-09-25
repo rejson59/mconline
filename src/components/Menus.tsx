@@ -61,6 +61,7 @@ export function Controls() {
     ['E', 'Ekwipunek / wytwarzanie'],
     ['Q', 'Wyrzuć przedmiot'],
     ['T lub /', 'Czat i komendy'],
+    ['/help', 'Lista komend (np. /summon <mob>)'],
     ['PPM na jedzeniu', 'Jedzenie'],
     ['PPM na piecu', 'Przetapianie'],
     ['PPM na łóżku', 'Sen i punkt odrodzenia'],

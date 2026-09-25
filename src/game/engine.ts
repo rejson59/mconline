@@ -1518,7 +1518,12 @@ export class Game {
       return;
     }
     if (t && t.id === B.CAMPFIRE && this.cookOnCampfire(s)) return;
-    if (s.id === I.BOW) { this.bowDraw = 0.0001; this.swingT = 0; return; }
+    if (s.id === I.BOW) {
+      // holding RMB keeps drawing; only a fresh press starts a new draw
+      if (this.bowDraw < 0) this.bowDraw = 0.0001;
+      this.swingT = 0;
+      return;
+    }
     if (isFood(s.id)) { this.tryEat(s); return; }
     if (!t) return;
     if (isHoe(s.id) && this.tryTill(t)) return;
