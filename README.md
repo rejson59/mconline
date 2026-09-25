@@ -1,6 +1,8 @@
 # BlockCraft 🟩
 
 Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci.
+**Wersja 1.2 „Dom”**: skrzynie (także w jaskiniach), dwublokowe drzwi, drabiny, płot, właz, ognisko, nożyce, krzesiwo, kompas i zegar.
+Wersja 1.1 zostaje: narzędzia z wytrzymałością, głód, piec, farming, wiadra, pochodnie, łóżko, deszcz, creepery i kilka światów.
 Proceduralny świat, kopanie i budowanie, crafting, moby, TNT, cykl dnia i nocy oraz tryb kreatywny z lataniem.
 
 Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa do publikacji na **GitHub Pages** jednym kliknięciem.
@@ -24,6 +26,17 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | `E` | ekwipunek i wytwarzanie |
 | `Q` | wyrzucenie przedmiotu |
 | `T` lub `/` | czat i komendy |
+| `PPM` na jedzeniu | jedzenie (głód) |
+| `PPM` na piecu | przetapianie |
+| `PPM` na łóżku | sen w nocy i punkt odrodzenia |
+| `PPM` na drzwiach lub włazie | otwórz / zamknij |
+| `PPM` na skrzyni | schowek |
+| drabina + `W` lub spacja | wspinaczka |
+| nożyce + LPM na owcy | wełna bez zabijania |
+| krzesiwo + `PPM` na TNT | podpalenie |
+| kompas / zegar w ręce | kierunek odrodzenia i pora dnia |
+| motyka + `PPM` | grządka pod pszenicę |
+| `M` | minimapa |
 | `F3` | informacje debugowania |
 | `Esc` | pauza |
 
@@ -43,10 +56,11 @@ Gra wykrywa ekran dotykowy i włącza sterowanie dotykowe:
 /help                      lista komend
 /gamemode <survival|creative>
 /time set <day|night|noon|midnight>
+/weather <clear|rain>
 /tp <x> <y> <z>            teleportacja
-/give <id> [ilość]         np. /give 3 64
-/summon <pig|sheep|zombie>
-/kill  /seed  /spawn  /clear  /blocks
+/give <nazwa|id> [ilość]   np. /give wegiel 16, /give drewniany_kilof
+/summon <pig|sheep|cow|chicken|zombie|creeper>
+/heal  /kill  /seed  /spawn  /clear  /blocks
 ```
 
 ---
@@ -106,16 +120,29 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 ## 🧱 Co jest w grze
 
 * **Proceduralny świat** – kontynenty, wzgórza, góry, jaskinie, rudy (węgiel, żelazo, złoto, diament), biomy: równiny, las, las brzozowy, pustynia z kaktusami, tundra, góry, plaża, ocean.
-* **43 rodzaje bloków** (od trawy, przez rudy i wełny, po TNT i obsydian) z proceduralnie rysowaną teksturą 16×16 px – atlas + ikony 3D do ekwipunku.
-* **20 receptur** wytwarzania (deski, stół, piec, szkło, cegły, TNT, wełna, obsydian…), część wymaga stołu rzemieślniczego.
-* **Moby**: świnie, owce, zombie (atakują w nocy, palą się w dzień), AI chodzenia, skoków i unikania wody.
+* **Ponad 50 bloków** (trawa, rudy, wełna, TNT, obsydian, pochodnia, sadzonki, grządka, pszenica, łóżko, rozpalony piec) z proceduralnie rysowaną teksturą 16×16 px – atlas + ikony 3D do ekwipunku.
+* **Światło blokowe**: pochodnie, lawa i rozpalony piec rozjaśniają jaskinie także w nocy.
+* **Narzędzia** (drewno, kamień, żelazo, diament): kilof, siekiera, łopata, miecz i motyka. Mają wytrzymałość i przyspieszają kopanie właściwych bloków. Węgiel chce dowolnego kilofa, żelazo i złoto – kamiennego, diamenty – żelaznego, obsydian – diamentowego.
+* **Głód i jedzenie**: jabłka z liści, surowe i pieczone mięso, chleb z pszenicy. Regeneracja działa tylko przy pełnym brzuchu; sprint wymaga jedzenia.
+* **Piec**: PPM otwiera przetapianie (ruda → sztabka, piasek → szkło, pień → węgiel drzewny, mięso). Paliwem jest węgiel, deski, patyki albo pnie.
+* **Uprawa**: motyka robi grządkę, nasiona (z trawy) rosną w pszenicę szybciej przy wodzie. Sadzonki z liści wyrastają w drzewa.
+* **Wiadra** z żelaza zbierają i stawiają wodę oraz lawę.
+* **Kilkadziesiąt receptur** wytwarzania, część wymaga stołu rzemieślniczego. Lista ma filtr „tylko możliwe”.
+* **Moby**: świnie, owce, krowy i kury (zostawiają jedzenie lub wełnę), zombie (atakują w nocy i w jaskiniach, palą się w dzień) oraz creepery, które podchodzą i wybuchają.
 * **Fizyka**: kolizje AABB, grawitacja, obrażenia od upadku, pływanie i tonięcie, lawa, kaktusy, wybuchy TNT z odrzutem.
 * **Świat i cykl dnia**: 10-minutowa doba, wschody i zachody słońca, gwiazdy, chmury, mgła pod wodą i w lawie.
-* **Zapis gry** w `localStorage` (modyfikacje bloków, pozycja, ekwipunek, czas) + autozapis co 30 s, przy zamykaniu karty i przy chowaniu karty.
+* **Do 8 światów** w `localStorage` (nazwa, modyfikacje bloków, pozycja, ekwipunek, głód, piece, osiągnięcia) + autozapis co 30 s, przy zamykaniu karty i przy chowaniu karty. Stary pojedynczy zapis jest przenoszony automatycznie.
+* **Przedmioty leżą na ziemi** po kopaniu, śmierci i zabiciu moba – podnosisz je, podchodząc.
+* **Pogoda**: deszcz i śnieg (w tundrze i górach), błyskawice, ciemniejsze niebo. Na pustyni nie pada.
+* **Minimapa** (klawisz `M`) obraca się razem z graczem.
+* **Dom**: dwublokowe drzwi (PPM otwiera), skrzynia na 27 slotów, drabina, płot, właz i ognisko, na którym piecze się mięso. Moby nie przeskakują płotu ani zamkniętych drzwi.
+* **Jaskinie** czasem kryją starą skrzynię z pochodniami, jedzeniem i rzadziej żelazem albo diamentem.
+* **Nożyce** zbierają liście i wełnę z żywej owcy. Żwir czasem daje krzemień, a krzesiwo podpala TNT. Kompas wskazuje punkt odrodzenia, zegar porę dnia.
+* **Osiągnięcia** za drewno, kilof, diament, sen, creepera, dom i inne pierwsze razy.
 * **Linki do świata**: w pauzie przycisk *„Kopiuj link do świata”* zapisuje ziarno i tryb w adresie (`#seed=1234&mode=creative`) – po otwarciu takiego linku menu jest już wypełnione.
 * **Pełny ekran** jednym przyciskiem (menu główne i pauza) oraz **usuwanie zapisu** z menu głównego.
 * **Awaryjne komunikaty**: brak WebGL, błąd inicjalizacji czy zablokowany dźwięk nie zostawiają czarnej strony.
-* **Tryb kreatywny**: latanie, natychmiastowe niszczenie, nieograniczone bloki, brak obrażeń.
+* **Tryb kreatywny**: latanie, natychmiastowe niszczenie, nieograniczone bloki i przedmioty, brak obrażeń i głodu.
 
 ## 📁 Struktura projektu
 

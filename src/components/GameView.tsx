@@ -3,31 +3,27 @@ import { Game, type GameMode, type HUDState, type SaveData, type UIState } from 
 import { setVolume } from '../game/audio';
 import HUD from './HUD';
 import InventoryScreen from './InventoryScreen';
-import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type Settings } from './Menus';
+import FurnaceScreen from './FurnaceScreen';
+import ChestScreen from './ChestScreen';
+import { ChatInput, DeathScreen, PauseMenu, worldShareUrl } from './Menus';
 import TouchControls, { isTouchDevice } from './TouchControls';
+import { loadSettings, saveSettings, type Settings } from '../utils/settings';
 
-const SETTINGS_KEY = 'blockcraft-settings';
-
-export const DEFAULT_SETTINGS: Settings = { renderDistance: 6, sensitivity: 1, fov: 72, volume: 0.5 };
-
-function loadSettings(): Settings {
-  try {
-    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '');
-    return { ...DEFAULT_SETTINGS, ...s };
-  } catch {
-    return { ...DEFAULT_SETTINGS };
-  }
-}
+export type { Settings };
 
 export default function GameView({
   seed,
   mode,
   save,
+  worldId,
+  worldName,
   onQuit,
 }: {
   seed: number;
   mode: GameMode;
   save?: SaveData;
+  worldId: string;
+  worldName: string;
   onQuit: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,7 +42,7 @@ export default function GameView({
     try {
       game = new Game(
         containerRef.current!,
-        { seed, mode, save, renderDistance: s.renderDistance },
+        { seed, mode, save, renderDistance: s.renderDistance, worldId, worldName },
         { onHud: setHud, onUI: setUi }
       );
     } catch (e) {
@@ -59,6 +55,7 @@ export default function GameView({
     }
     game.sensitivity = s.sensitivity;
     game.fovBase = s.fov;
+    game.showMinimap = s.minimap;
     setVolume(s.volume);
     gameRef.current = game;
     // handy for debugging from the browser console: blockcraft.game.…
@@ -77,12 +74,9 @@ export default function GameView({
     if (g.renderDistance !== settings.renderDistance) g.setRenderDistance(settings.renderDistance);
     g.sensitivity = settings.sensitivity;
     g.fovBase = settings.fov;
+    g.showMinimap = settings.minimap;
     setVolume(settings.volume);
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    } catch {
-      /* storage full or blocked – not fatal */
-    }
+    saveSettings(settings);
   }, [settings]);
 
   useEffect(() => {
@@ -120,7 +114,7 @@ export default function GameView({
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="absolute inset-0" />
-      {hud && game && ui !== 'dead' && <HUD hud={hud} icons={icons} />}
+      {hud && game && ui !== 'dead' && <HUD hud={hud} icons={icons} minimap={game.minimapCanvas} />}
       {hud && ui === 'playing' && !hud.locked && !touch && (
         <div className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 bg-black/50 px-4 py-2 text-xl mc-text">
           Kliknij, aby kontynuować
@@ -134,6 +128,8 @@ export default function GameView({
         />
       )}
       {game && ui === 'inventory' && <InventoryScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'furnace' && <FurnaceScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'chat' && (
         <ChatInput
           onSubmit={(t) => game.command(t)}
@@ -154,7 +150,7 @@ export default function GameView({
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-6" style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div className="text-4xl font-bold mc-text">Świat gotowy!</div>
           <div className="text-center text-gray-200 mc-text">
-            {game.mode === 'creative' ? 'Tryb kreatywny – buduj bez ograniczeń.' : 'Tryb przetrwania – zdobywaj drewno z drzew, aby zacząć.'}
+            {game.mode === 'creative' ? 'Tryb kreatywny – buduj bez ograniczeń. Pochodnie, ognisko i lawa świecą.' : 'Tryb przetrwania – zetnij drzewo, wytwórz kilof, postaw drzwi i skrzynię.'}
           </div>
           <div className="w-[360px]">
             <button className="mc-btn" onClick={resume}>
@@ -164,7 +160,7 @@ export default function GameView({
           <div className="px-6 text-center text-sm text-gray-300 mc-text">
             {touch
               ? 'Lewy drążek – ruch · przeciągnij po ekranie – rozglądanie · przyciski po prawej – skok, kopanie, stawianie'
-              : 'Esc – pauza · E – ekwipunek · T – czat · F3 – debug'}
+              : 'Esc – pauza · E – ekwipunek · T – czat · M – minimapa · F3 – debug'}
           </div>
         </div>
       )}
@@ -172,6 +168,8 @@ export default function GameView({
         <PauseMenu
           settings={settings}
           shareUrl={worldShareUrl(game.world.seed, game.mode)}
+          worldName={game.worldName}
+          unlocked={game.achievementIds()}
           onSettings={setSettings}
           onResume={resume}
           onSave={() => game.save()}

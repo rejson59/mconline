@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import type { World } from './world';
 import { stepBody, type Body } from './physics';
-import { IS_SOLID, RENDER, B } from './blocks';
+import { IS_SOLID, RENDER, B, isDoor } from './blocks';
 
-export type MobType = 'pig' | 'zombie' | 'sheep';
+export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper';
 
 function box(w: number, h: number, d: number, color: number, mats: Map<number, THREE.Material>) {
   let m = mats.get(color);
@@ -32,6 +32,12 @@ export class Mob {
   walkPhase = 0;
   attackCooldown = 0;
   soundTimer = 3 + Math.random() * 10;
+  /** Creeper fuse. -1 = idle, otherwise seconds left. */
+  fuse = -1;
+  exploded = false;
+  looted = false;
+  sheared = false;
+  private woolMesh: THREE.Mesh | null = null;
   legs: THREE.Object3D[] = [];
   arms: THREE.Object3D[] = [];
   head!: THREE.Object3D;
@@ -39,10 +45,10 @@ export class Mob {
 
   constructor(type: MobType, x: number, y: number, z: number) {
     this.type = type;
-    const w = type === 'zombie' ? 0.6 : 0.9;
-    const h = type === 'zombie' ? 1.9 : type === 'sheep' ? 1.2 : 0.9;
+    const w = type === 'zombie' || type === 'creeper' ? 0.6 : type === 'chicken' ? 0.45 : type === 'cow' ? 1.1 : 0.9;
+    const h = type === 'zombie' ? 1.9 : type === 'creeper' ? 1.7 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : 0.9;
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
-    this.maxHealth = this.health = type === 'zombie' ? 20 : type === 'sheep' ? 8 : 10;
+    this.maxHealth = this.health = type === 'zombie' ? 20 : type === 'creeper' ? 16 : type === 'cow' ? 10 : type === 'chicken' ? 4 : type === 'sheep' ? 8 : 10;
     this.build();
   }
 
@@ -60,25 +66,41 @@ export class Mob {
 
   private build() {
     const g = this.group;
-    if (this.type === 'pig' || this.type === 'sheep') {
+    if (this.type === 'pig' || this.type === 'sheep' || this.type === 'cow') {
       const isSheep = this.type === 'sheep';
-      const bodyColor = isSheep ? 0xeeeeee : 0xf0a0a0;
-      const skin = isSheep ? 0xd8c8b0 : 0xf0a0a0;
-      const legH = isSheep ? 0.5 : 0.35;
-      const body = box(isSheep ? 0.75 : 0.62, isSheep ? 0.62 : 0.55, 1.0, bodyColor, sharedMats);
-      body.position.set(0, legH + 0.28, 0);
+      const isCow = this.type === 'cow';
+      const bodyColor = isCow ? 0x6b4423 : isSheep ? 0xeeeeee : 0xf0a0a0;
+      const skin = isCow ? 0x8a5a32 : isSheep ? 0xd8c8b0 : 0xf0a0a0;
+      const legH = isCow ? 0.62 : isSheep ? 0.5 : 0.35;
+      const body = box(isCow ? 0.9 : isSheep ? 0.75 : 0.62, isCow ? 0.75 : isSheep ? 0.62 : 0.55, isCow ? 1.35 : 1.0, bodyColor, sharedMats);
+      body.position.set(0, legH + (isCow ? 0.36 : 0.28), 0);
       g.add(body);
       this.meshes.push(body);
+      if (isSheep) this.woolMesh = body;
+      if (isCow) {
+        const spot = box(0.28, 0.22, 0.32, 0xf2f2f2, sharedMats);
+        spot.position.set(0.22, legH + 0.55, -0.15);
+        g.add(spot);
+        this.meshes.push(spot);
+      }
       const head = new THREE.Group();
-      head.position.set(0, legH + 0.45, 0.55);
-      const hm = box(0.5, 0.5, 0.45, skin, sharedMats);
+      head.position.set(0, legH + (isCow ? 0.7 : 0.45), isCow ? 0.72 : 0.55);
+      const hm = box(isCow ? 0.55 : 0.5, isCow ? 0.55 : 0.5, isCow ? 0.5 : 0.45, skin, sharedMats);
       head.add(hm);
       this.meshes.push(hm);
       if (!isSheep) {
-        const snout = box(0.28, 0.18, 0.08, 0xe07f86, sharedMats);
-        snout.position.set(0, -0.08, 0.26);
+        const snout = box(isCow ? 0.32 : 0.28, isCow ? 0.2 : 0.18, 0.1, isCow ? 0xd9a0a0 : 0xe07f86, sharedMats);
+        snout.position.set(0, isCow ? -0.12 : -0.08, 0.28);
         head.add(snout);
         this.meshes.push(snout);
+      }
+      if (isCow) {
+        const hornL = box(0.08, 0.16, 0.08, 0xeee8dc, sharedMats);
+        hornL.position.set(-0.18, 0.32, 0.05);
+        const hornR = hornL.clone();
+        hornR.position.x = 0.18;
+        head.add(hornL, hornR);
+        this.meshes.push(hornL, hornR);
       }
       const eyeL = box(0.08, 0.08, 0.02, 0x111111, sharedMats);
       eyeL.position.set(-0.14, 0.08, 0.23);
@@ -87,11 +109,67 @@ export class Mob {
       head.add(eyeL, eyeR);
       g.add(head);
       this.head = head;
-      const lc = isSheep ? 0xd8c8b0 : 0xf0a0a0;
-      this.addLeg(-0.18, legH, 0.32, 0.22, legH, 0.22, lc, this.legs);
-      this.addLeg(0.18, legH, 0.32, 0.22, legH, 0.22, lc, this.legs);
-      this.addLeg(-0.18, legH, -0.32, 0.22, legH, 0.22, lc, this.legs);
-      this.addLeg(0.18, legH, -0.32, 0.22, legH, 0.22, lc, this.legs);
+      const lc = isCow ? 0x6b4423 : isSheep ? 0xd8c8b0 : 0xf0a0a0;
+      const lw = isCow ? 0.26 : 0.22;
+      const fz = isCow ? 0.46 : 0.32;
+      const bz = isCow ? -0.46 : -0.32;
+      const lx = isCow ? 0.24 : 0.18;
+      this.addLeg(-lx, legH, fz, lw, legH, lw, lc, this.legs);
+      this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
+      this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
+      this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'chicken') {
+      const body = box(0.36, 0.32, 0.48, 0xf4f4f4, sharedMats);
+      body.position.set(0, 0.42, 0);
+      g.add(body);
+      this.meshes.push(body);
+      const head = new THREE.Group();
+      head.position.set(0, 0.62, 0.28);
+      const hm = box(0.22, 0.22, 0.22, 0xf4f4f4, sharedMats);
+      head.add(hm);
+      this.meshes.push(hm);
+      const beak = box(0.1, 0.08, 0.1, 0xf0b429, sharedMats);
+      beak.position.set(0, -0.02, 0.14);
+      const comb = box(0.06, 0.1, 0.08, 0xd02020, sharedMats);
+      comb.position.set(0, 0.14, 0);
+      const eyeL = box(0.05, 0.05, 0.02, 0x111111, sharedMats);
+      eyeL.position.set(-0.07, 0.02, 0.11);
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.07;
+      head.add(beak, comb, eyeL, eyeR);
+      this.meshes.push(beak, comb, eyeL, eyeR);
+      g.add(head);
+      this.head = head;
+      this.addLeg(-0.08, 0.28, 0.02, 0.06, 0.28, 0.06, 0xf0b429, this.legs);
+      this.addLeg(0.08, 0.28, 0.02, 0.06, 0.28, 0.06, 0xf0b429, this.legs);
+      const wingL = this.addLeg(-0.2, 0.48, 0, 0.06, 0.22, 0.28, 0xe8e8e8, this.arms);
+      const wingR = this.addLeg(0.2, 0.48, 0, 0.06, 0.22, 0.28, 0xe8e8e8, this.arms);
+      wingL.rotation.z = 0.35;
+      wingR.rotation.z = -0.35;
+    } else if (this.type === 'creeper') {
+      this.addLeg(-0.16, 0.4, 0.12, 0.18, 0.4, 0.18, 0x1d6b1d, this.legs);
+      this.addLeg(0.16, 0.4, 0.12, 0.18, 0.4, 0.18, 0x1d6b1d, this.legs);
+      this.addLeg(-0.16, 0.4, -0.12, 0.18, 0.4, 0.18, 0x165816, this.legs);
+      this.addLeg(0.16, 0.4, -0.12, 0.18, 0.4, 0.18, 0x165816, this.legs);
+      const torso = box(0.5, 0.85, 0.32, 0x3aaa32, sharedMats);
+      torso.position.y = 0.85;
+      g.add(torso);
+      this.meshes.push(torso);
+      const head = new THREE.Group();
+      head.position.y = 1.5;
+      const hm = box(0.5, 0.5, 0.5, 0x46c23c, sharedMats);
+      head.add(hm);
+      this.meshes.push(hm);
+      const eyeL = box(0.1, 0.08, 0.02, 0x111111, sharedMats);
+      eyeL.position.set(-0.1, 0.06, 0.26);
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.1;
+      const mouth = box(0.16, 0.08, 0.02, 0x111111, sharedMats);
+      mouth.position.set(0, -0.1, 0.26);
+      head.add(eyeL, eyeR, mouth);
+      this.meshes.push(eyeL, eyeR, mouth);
+      g.add(head);
+      this.head = head;
     } else {
       // zombie
       this.addLeg(-0.13, 0.75, 0, 0.25, 0.75, 0.25, 0x3b3f8f, this.legs);
@@ -133,6 +211,13 @@ export class Mob {
     });
   }
 
+  setFlash(on: boolean) {
+    this.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) (mesh.material as THREE.MeshLambertMaterial).emissive.setHex(on ? 0xaaaaaa : 0x000000);
+    });
+  }
+
   damage(amount: number, fromX: number, fromZ: number) {
     if (this.dead || this.hurtTime > 0) return false;
     this.health -= amount;
@@ -146,6 +231,7 @@ export class Mob {
     if (this.health <= 0) {
       this.dead = true;
       this.deathTime = 0;
+      this.fuse = -1;
     }
     if (this.type !== 'zombie') {
       // panic
@@ -153,6 +239,14 @@ export class Mob {
       this.walking = true;
       this.yaw = Math.atan2(dx, dz);
     }
+    return true;
+  }
+
+  /** Removes a sheep's wool once. Returns false if it was already sheared or isn't a sheep. */
+  shear(): boolean {
+    if (this.type !== 'sheep' || this.dead || this.sheared) return false;
+    this.sheared = true;
+    if (this.woolMesh) this.woolMesh.material = new THREE.MeshLambertMaterial({ color: 0xd8c8b0 });
     return true;
   }
 
@@ -171,25 +265,42 @@ export class Mob {
     this.soundTimer -= dt;
 
     const inWater = RENDER[world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y + 0.4), Math.floor(b.pos.z))] === 2;
-    let speed = this.type === 'zombie' ? 2.3 : 1.2;
+    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'chicken' ? 1.35 : 1.2;
     const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
     const dist = Math.hypot(dx, dz);
+    const hostile = this.type === 'zombie' || this.type === 'creeper';
 
-    if (this.type === 'zombie' && dist < 24 && Math.abs(player.y - b.pos.y) < 8 && !peaceful) {
+    if (this.fuse > 0) {
+      this.fuse -= dt;
+      this.walking = false;
+      this.setFlash(Math.floor(this.fuse * 8) % 2 === 0);
+      this.group.scale.setScalar(1 + Math.sin(this.fuse * 18) * 0.05);
+      if (this.fuse <= 0 && !this.dead) {
+        this.exploded = true;
+        this.dead = true;
+        this.deathTime = 0;
+        this.group.scale.setScalar(1);
+      }
+    } else if (hostile && dist < (this.type === 'creeper' ? 14 : 24) && Math.abs(player.y - b.pos.y) < 8 && !peaceful) {
       this.yaw = Math.atan2(dx, dz);
-      this.walking = dist > 0.9;
-      if (dist < 1.4 && Math.abs(player.y - b.pos.y) < 1.8 && this.attackCooldown <= 0) {
+      this.walking = this.type === 'creeper' ? dist > 2.1 : dist > 0.9;
+      if (this.type === 'zombie' && dist < 1.4 && Math.abs(player.y - b.pos.y) < 1.8 && this.attackCooldown <= 0) {
         this.attackCooldown = 1;
         onAttack(3, this);
       }
+      if (this.type === 'creeper' && dist < 2.15 && Math.abs(player.y - b.pos.y) < 2) {
+        this.fuse = 1.35;
+        this.walking = false;
+      }
     } else {
+      if (this.type === 'creeper') this.group.scale.setScalar(1);
       this.aiTimer -= dt;
       if (this.aiTimer <= 0) {
         this.aiTimer = 2 + Math.random() * 5;
         this.walking = Math.random() < 0.6;
         this.yaw = Math.random() * Math.PI * 2;
       }
-      if (this.hurtTime > 0 || this.aiTimer > 0 && this.health < this.maxHealth && this.type !== 'zombie') speed *= 1.8;
+      if (this.hurtTime > 0 || (this.aiTimer > 0 && this.health < this.maxHealth && !hostile)) speed *= 1.8;
     }
 
     if (this.walking && this.hurtTime < 0.3) {
@@ -210,14 +321,16 @@ export class Mob {
     const wasWall = b.hitWall;
     stepBody(world, b, dt);
     if ((b.hitWall || wasWall) && b.onGround && this.walking) {
-      // jump over obstacle if space above
+      // jump over obstacle if space above — but not onto a fence or a closed door
       const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.8), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.8);
       const hy = Math.floor(b.pos.y);
-      if (!IS_SOLID[world.peekBlock(fx, hy + 1, fz)] && !IS_SOLID[world.peekBlock(fx, hy + 2, fz)]) b.vel.y = 8.2;
+      const front = world.peekBlock(fx, hy, fz);
+      if (front === B.FENCE || isDoor(front)) this.yaw += Math.PI * (0.45 + Math.random() * 0.3);
+      else if (!IS_SOLID[world.peekBlock(fx, hy + 1, fz)] && !IS_SOLID[world.peekBlock(fx, hy + 2, fz)]) b.vel.y = 8.2;
       else if (this.type !== 'zombie') this.yaw += Math.PI / 2;
     }
     // avoid walking into water / cliffs (passive mobs)
-    if (this.type !== 'zombie' && this.walking && b.onGround) {
+    if (this.type !== 'zombie' && this.type !== 'creeper' && this.walking && b.onGround) {
       const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.9), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.9);
       const fy = Math.floor(b.pos.y);
       const below = world.peekBlock(fx, fy - 1, fz);
@@ -237,7 +350,11 @@ export class Mob {
     } else if (this.legs.length === 2) {
       this.legs[0].rotation.x = swing;
       this.legs[1].rotation.x = -swing;
-      if (this.arms.length) {
+      if (this.type === 'chicken' && this.arms.length) {
+        const flap = Math.sin(this.walkPhase * 2) * 0.45;
+        this.arms[0].rotation.z = 0.4 + flap;
+        this.arms[1].rotation.z = -0.4 - flap;
+      } else if (this.arms.length) {
         this.arms[0].rotation.x = -Math.PI / 2 + Math.sin(this.walkPhase * 0.5) * 0.08;
         this.arms[1].rotation.x = -Math.PI / 2 - Math.sin(this.walkPhase * 0.5) * 0.08;
       }

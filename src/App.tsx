@@ -1,29 +1,30 @@
 import { useState } from 'react';
 import GameView from './components/GameView';
-import { MainMenu } from './components/Menus';
-import { SAVE_KEY, type GameMode, type SaveData } from './game/engine';
-import type { SaveSummary } from './components/Menus';
+import { MainMenu, type WorldCard } from './components/Menus';
+import { type GameMode, type SaveData } from './game/engine';
+import { deleteSave, loadSaves } from './game/saves';
 
 interface Session {
   seed: number;
   mode: GameMode;
   save?: SaveData;
   id: number;
+  worldId: string;
+  worldName: string;
 }
 
-function loadSave(): SaveData | null {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as SaveData;
-  } catch {
-    return null;
-  }
+function asSave(raw: ReturnType<typeof loadSaves>[number]): SaveData {
+  return raw as unknown as SaveData;
 }
 
-function summarize(s: SaveData | null): SaveSummary | null {
-  if (!s) return null;
-  return { mode: s.mode ?? 'survival', day: s.day ?? 1, seed: s.seed };
+function cards(): WorldCard[] {
+  return loadSaves().map((s) => ({
+    id: s.id,
+    name: s.name,
+    seed: s.seed,
+    mode: s.mode,
+    day: s.day,
+  }));
 }
 
 /** Seed + mode can be shared through the URL hash, e.g. #seed=1234&mode=creative */
@@ -42,9 +43,10 @@ function readSharedWorld(): { seed: number | null; mode: GameMode | null } {
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
-  const [hasSave, setHasSave] = useState(() => !!loadSave());
-  const [saveInfo, setSaveInfo] = useState<SaveSummary | null>(() => summarize(loadSave()));
-  const [shared, setShared] = useState(() => readSharedWorld());
+  const [saves, setSaves] = useState<WorldCard[]>(cards);
+  const [shared, setShared] = useState(readSharedWorld);
+
+  const refresh = () => setSaves(cards());
 
   if (session) {
     return (
@@ -53,13 +55,11 @@ export default function App() {
         seed={session.seed}
         mode={session.mode}
         save={session.save}
+        worldId={session.worldId}
+        worldName={session.worldName}
         onQuit={() => {
           setSession(null);
-          setTimeout(() => {
-            const s = loadSave();
-            setHasSave(!!s);
-            setSaveInfo(summarize(s));
-          }, 50);
+          setTimeout(refresh, 50);
         }}
       />
     );
@@ -67,32 +67,38 @@ export default function App() {
 
   return (
     <MainMenu
-      hasSave={hasSave}
-      saveInfo={saveInfo}
+      saves={saves}
       sharedSeed={shared.seed}
       sharedMode={shared.mode}
-      onDeleteSave={() => {
-        try {
-          localStorage.removeItem(SAVE_KEY);
-        } catch {
-          /* ignore */
+      onDelete={(id) => {
+        deleteSave(id);
+        refresh();
+      }}
+      onPlay={(id) => {
+        const s = loadSaves().find((w) => w.id === id);
+        if (!s) return;
+        const save = asSave(s);
+        setSession({
+          seed: save.seed,
+          mode: save.mode ?? 'survival',
+          save,
+          id: Date.now(),
+          worldId: save.id || id,
+          worldName: save.name || 'Świat',
+        });
+      }}
+      onNew={(seed, mode, name) => {
+        if (saves.length >= 8) {
+          window.alert('Możesz mieć najwyżej 8 światów. Usuń jeden, żeby utworzyć nowy.');
+          return;
         }
-        setHasSave(false);
-        setSaveInfo(null);
-      }}
-      onContinue={() => {
-        const s = loadSave();
-        if (s) setSession({ seed: s.seed, mode: s.mode, save: s, id: Date.now() });
-      }}
-      onNew={(seed, mode) => {
-        localStorage.removeItem(SAVE_KEY);
         try {
           window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
         } catch {
           /* ignore */
         }
         setShared({ seed: null, mode: null });
-        setSession({ seed, mode, id: Date.now() });
+        setSession({ seed, mode, id: Date.now(), worldId: 'w' + Date.now().toString(36), worldName: name });
       }}
     />
   );

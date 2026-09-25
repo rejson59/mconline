@@ -14,6 +14,10 @@ export default defineConfig({
   // That is what makes the same build work on GitHub Pages project sites
   // (https://user.github.io/<repo>/), on a custom domain and even from file://
   base: "./",
+  server: {
+    host: "0.0.0.0",
+    allowedHosts: true,
+  },
   plugins: [react(), tailwindcss(), viteSingleFile()],
   resolve: {
     alias: {

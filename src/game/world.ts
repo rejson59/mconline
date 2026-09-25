@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, IS_OPAQUE, IS_SOLID, LAYER, RENDER, tileFor } from './blocks';
+import { B, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor } from './blocks';
 import { tileUV } from './textures';
 
 export const CS = 16; // chunk size
@@ -56,8 +56,63 @@ class MeshBuffer {
   pos: number[] = [];
   uv: number[] = [];
   col: number[] = [];
+  block: number[] = [];
   ind: number[] = [];
   count = 0;
+}
+
+/** Axis-aligned box in local 0–1 space, translated to world. Used for doors, ladders and hatches. */
+function addBox(
+  buf: MeshBuffer,
+  ox: number,
+  oy: number,
+  oz: number,
+  x0: number,
+  y0: number,
+  z0: number,
+  x1: number,
+  y1: number,
+  z1: number,
+  tile: number,
+  sky: number,
+  blk: number,
+) {
+  const map = (v: number, a: number, b: number) => a + v * (b - a);
+  for (let f = 0; f < 6; f++) {
+    const F = FACES[f];
+    const base = buf.count;
+    for (let k = 0; k < 4; k++) {
+      const cr = F.c[k];
+      buf.pos.push(ox + map(cr[0], x0, x1), oy + map(cr[1], y0, y1), oz + map(cr[2], z0, z1));
+      const uv = tileUV(tile, cr[3], cr[4]);
+      buf.uv.push(uv[0], uv[1]);
+      const skyB = F.shade * sky;
+      const br = skyB * skyB;
+      buf.col.push(br, br, br);
+      const bb = F.shade * blk;
+      buf.block.push(bb * bb);
+    }
+    buf.ind.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
+    buf.count += 4;
+  }
+}
+
+/** Local bounds of a thin panel. null = draw a normal cube. */
+function panelBounds(id: number): [number, number, number, number, number, number] | null {
+  const t = 0.1875;
+  const face = ladderFacing(id);
+  if (face === 0 || id === B.TRAP_N) return [0, 0, 0, 1, 1, t];
+  if (face === 1 || id === B.TRAP_E) return [1 - t, 0, 0, 1, 1, 1];
+  if (face === 2 || id === B.TRAP_S) return [0, 0, 1 - t, 1, 1, 1];
+  if (face === 3 || id === B.TRAP_W) return [0, 0, 0, t, 1, 1];
+  if (id === B.TRAP) return [0, 1 - t, 0, 1, 1, 1];
+  if (!isDoorOpen(id)) return null;
+  // Open door swings flat against the left jamb.
+  if (id === B.DOOR_ON || id === B.DOOR_UON) return [0, 0, 0, t, 1, 1];
+  if (id === B.DOOR_OE || id === B.DOOR_UOE) return [0, 0, 0, 1, 1, t];
+  if (id === B.DOOR_OS || id === B.DOOR_UOS) return [1 - t, 0, 0, 1, 1, 1];
+  if (id === B.DOOR_OW || id === B.DOOR_UOW) return [0, 0, 1 - t, 1, 1, 1];
+  return null;
 }
 
 export class World {
@@ -249,6 +304,28 @@ export class World {
         if (topY + 3 > maxY) maxY = topY + 3;
       }
 
+    // Buried chests in caves. Does not change terrain height, only fills an existing air pocket.
+    for (let n = 0; n < 3; n++) {
+      if (hash(ox + n, 80, oz, s) > 0.42) continue;
+      const lx = 1 + Math.floor(hash(ox, 81 + n, oz, s) * 14);
+      const lz = 1 + Math.floor(hash(ox, 91 + n, oz, s) * 14);
+      const colH = surf[lz * CS + lx].h;
+      for (let y = 8; y < colH - 3 && y < 52; y++) {
+        if (d[idx(lx, y, lz)] !== B.AIR || d[idx(lx, y + 1, lz)] !== B.AIR) continue;
+        const under = d[idx(lx, y - 1, lz)];
+        if (under !== B.STONE && under !== B.COBBLE && under !== B.DIRT) continue;
+        let walls = 0;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+          const nb = d[idx(lx + dx, y, lz + dz)];
+          if (nb === B.STONE || nb === B.DIRT || nb === B.GRAVEL || nb === B.COBBLE) walls++;
+        }
+        if (walls < 2) continue;
+        d[idx(lx, y, lz)] = B.LOOT_CHEST;
+        if (y + 2 > maxY) maxY = y + 2;
+        break;
+      }
+    }
+
     // Apply player modifications
     const m = this.mods.get(World.key(c.cx, c.cz));
     if (m) {
@@ -358,7 +435,61 @@ export class World {
       const n = neigh[ncz * 3 + ncx];
       return n.heightMap[(z - (ncz - 1) * CS) * CS + (x - (ncx - 1) * CS)];
     };
-    const light = (x: number, y: number, z: number): number => {
+    // Block light (torches, lava, lit furnaces) spread a few blocks across chunk borders.
+    const PAD = 8;
+    const LW = CS + PAD * 2;
+    const Lmap = new Uint8Array(LW * LW * CH);
+    const lat = (x: number, y: number, z: number) => (y * LW + (z + PAD)) * LW + (x + PAD);
+    const qx: number[] = [];
+    const qy: number[] = [];
+    const qz: number[] = [];
+    const seed = (x: number, y: number, z: number, lv: number) => {
+      if (y < 0 || y >= CH || x < -PAD || x >= CS + PAD || z < -PAD || z >= CS + PAD) return;
+      const i = lat(x, y, z);
+      if (Lmap[i] >= lv) return;
+      Lmap[i] = lv;
+      qx.push(x); qy.push(y); qz.push(z);
+    };
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const chunk = neigh[(dz + 1) * 3 + (dx + 1)];
+        const ox = dx * CS;
+        const oz = dz * CS;
+        const xMin = Math.max(0, -PAD - ox);
+        const xMax = Math.min(CS, CS + PAD - ox);
+        const zMin = Math.max(0, -PAD - oz);
+        const zMax = Math.min(CS, CS + PAD - oz);
+        const data = chunk.data;
+        for (let z = zMin; z < zMax; z++) {
+          for (let x = xMin; x < xMax; x++) {
+            for (let y = 0; y < CH; y++) {
+              const e = EMIT[data[idx(x, y, z)]];
+              if (e) seed(ox + x, y, oz + z, e);
+            }
+          }
+        }
+      }
+    }
+    const DIRS: [number, number, number][] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    for (let qi = 0; qi < qx.length; qi++) {
+      const x = qx[qi], y = qy[qi], z = qz[qi];
+      const lv = Lmap[lat(x, y, z)] - 1;
+      if (lv <= 0) continue;
+      for (let d = 0; d < 6; d++) {
+        const nx = x + DIRS[d][0], ny = y + DIRS[d][1], nz = z + DIRS[d][2];
+        if (ny < 0 || ny >= CH || nx < -PAD || nx >= CS + PAD || nz < -PAD || nz >= CS + PAD) continue;
+        if (IS_OPAQUE[get(nx, ny, nz)]) continue;
+        const i = lat(nx, ny, nz);
+        if (Lmap[i] >= lv) continue;
+        Lmap[i] = lv;
+        qx.push(nx); qy.push(ny); qz.push(nz);
+      }
+    }
+    const blockLight = (x: number, y: number, z: number): number => {
+      if (y < 0 || y >= CH || x < -PAD || x >= CS + PAD || z < -PAD || z >= CS + PAD) return 0;
+      return Lmap[lat(x, y, z)] / 15;
+    };
+    const skyLight = (x: number, y: number, z: number): number => {
       const h = heightLocal(x, z);
       if (y > h) return 1;
       return Math.max(0.12, 1 - (h - y + 1) * 0.11);
@@ -370,13 +501,23 @@ export class World {
         for (let x = 0; x < CS; x++) {
           const id = c.data[idx(x, y, z)];
           if (id === 0) continue;
+          const panel = panelBounds(id);
+          if (panel) {
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            addBox(bufs[LAYER[id]], ox + x, y, oz + z, panel[0], panel[1], panel[2], panel[3], panel[4], panel[5], tileFor(id, 0), sky, blk);
+            continue;
+          }
           const layer = LAYER[id];
           const rt = RENDER[id];
           const buf = bufs[layer];
           if (rt === 1) {
             // cross plant
             const t = tileFor(id, 0);
-            const l = light(x, y, z);
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const skyB = sky * sky * 0.85;
+            const blkB = blk * blk * 0.85;
             const wx = ox + x, wz = oz + z;
             const quads = [
               [[0.15, 0, 0.15], [0.85, 0, 0.85], [0.15, 1, 0.15], [0.85, 1, 0.85]],
@@ -388,8 +529,8 @@ export class World {
                 buf.pos.push(wx + q[k][0], y + q[k][1] * 0.95, wz + q[k][2]);
                 const uv = tileUV(t, uvs[k][0], uvs[k][1]);
                 buf.uv.push(uv[0], uv[1]);
-                const lp = l * l * 0.85;
-                buf.col.push(lp, lp, lp);
+                buf.col.push(skyB, skyB, skyB);
+                buf.block.push(blkB);
               }
               const n = buf.count;
               buf.ind.push(n, n + 1, n + 2, n + 2, n + 1, n + 3);
@@ -407,7 +548,8 @@ export class World {
             if (nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES) continue;
             if (isLiquid && (RENDER[nb] === 2)) continue;
             const t = tileFor(id, f);
-            const l = light(nx, ny, nz);
+            const sky = skyLight(nx, ny, nz);
+            const blk = Math.max(blockLight(nx, ny, nz), EMIT[id] / 15);
             const aos: number[] = [];
             const base = buf.count;
             for (let k = 0; k < 4; k++) {
@@ -436,9 +578,12 @@ export class World {
               buf.pos.push(ox + x + px, vy, oz + z + pz);
               const uv = tileUV(t, cr[3], cr[4]);
               buf.uv.push(uv[0], uv[1]);
-              const b0 = F.shade * AO_CURVE[ao] * l;
-              const br = b0 * b0;
+              const shadeAo = F.shade * AO_CURVE[ao];
+              const skyB = shadeAo * sky;
+              const br = skyB * skyB;
               buf.col.push(br, br, br);
+              const bb = shadeAo * blk;
+              buf.block.push(bb * bb);
             }
             if (aos[0] + aos[3] > aos[1] + aos[2]) buf.ind.push(base, base + 1, base + 3, base, base + 3, base + 2);
             else buf.ind.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
@@ -452,6 +597,7 @@ export class World {
       g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute(b.uv, 2));
       g.setAttribute('color', new THREE.Float32BufferAttribute(b.col, 3));
+      g.setAttribute('aBlock', new THREE.Float32BufferAttribute(b.block, 1));
       g.setIndex(b.count > 65000 ? new THREE.Uint32BufferAttribute(b.ind, 1) : new THREE.Uint16BufferAttribute(b.ind, 1));
       g.computeBoundingSphere();
       return g;
@@ -481,4 +627,45 @@ export class World {
     }
     return null;
   }
+}
+
+/** Grows an oak or birch where a sapling stands. Returns false if the space is blocked. */
+export function plantTree(world: World, x: number, y: number, z: number, birch: boolean): boolean {
+  const logId = birch ? B.BIRCH_LOG : B.LOG;
+  const leafId = birch ? B.BIRCH_LEAVES : B.LEAVES;
+  const ground = world.getBlock(x, y - 1, z);
+  if (ground !== B.DIRT && ground !== B.GRASS && ground !== B.FARMLAND) return false;
+  const th = 4 + Math.floor(Math.random() * 3);
+  const topY = y + th - 1;
+  if (topY + 1 >= CH) return false;
+  const clearish = (id: number) =>
+    id === B.AIR || id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.LEAVES || id === B.BIRCH_LEAVES || RENDER[id] === 1;
+  for (let ly = y; ly < topY; ly++) if (!clearish(world.getBlock(x, ly, z))) return false;
+  for (let ly = topY - 2; ly <= topY + 1; ly++) {
+    for (let dx = -2; dx <= 2; dx++)
+      for (let dz = -2; dz <= 2; dz++) {
+        if (dx === 0 && dz === 0) continue;
+        if (!clearish(world.getBlock(x + dx, ly, z + dz))) return false;
+      }
+  }
+  const put = (px: number, py: number, pz: number, id: number, force: boolean) => {
+    if (py < 0 || py >= CH) return;
+    const cur = world.getBlock(px, py, pz);
+    if (force || clearish(cur)) world.setBlock(px, py, pz, id);
+  };
+  for (let ly = topY - 3; ly <= topY; ly++) {
+    const rad = ly >= topY - 1 ? 1 : 2;
+    for (let dx = -rad; dx <= rad; dx++)
+      for (let dz = -rad; dz <= rad; dz++) {
+        if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || Math.random() < 0.5)) continue;
+        put(x + dx, ly, z + dz, leafId, false);
+      }
+  }
+  put(x, topY + 1, z, leafId, false);
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+    if (Math.random() < 0.65) put(x + dx, topY + 1, z + dz, leafId, false);
+  }
+  for (let ly = y; ly < topY; ly++) put(x, ly, z, logId, true);
+  if (ground !== B.DIRT) put(x, y - 1, z, B.DIRT, true);
+  return true;
 }
