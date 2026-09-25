@@ -28,7 +28,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'loot', title: 'Znalazca', text: 'Otwórz skrzynię ukrytą w jaskiniach.' },
   { id: 'string', title: 'Sieć-pająk', text: 'Zdobądź strunę z pająka.' },
   { id: 'archer', title: 'Łucznik', text: 'Wystrzel strzałę z łuku.' },
-  { id: 'skeleton', title: 'Kościeny łowca', text: 'Pokonaj szkieleta.' },
+  { id: 'skeleton', title: 'Kościany łowca', text: 'Pokonaj szkieletowego strzelca.' },
   { id: 'foundry', title: 'Hutnik', text: 'Wytwórz blok żelaza.' },
 ];
 
