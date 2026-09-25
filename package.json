@@ -1,0 +1,46 @@
+{
+  "name": "blockcraft",
+  "private": true,
+  "version": "1.0.0",
+  "description": "BlockCraft – gra sandboxowa w stylu Minecraft działająca w przeglądarce (React + TypeScript + Three.js + Vite).",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "minecraft",
+    "voxel",
+    "browser-game",
+    "threejs",
+    "vite",
+    "react",
+    "github-pages"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "deploy:branch": "npm run build && npx --yes gh-pages -d dist"
+  },
+  "dependencies": {
+    "@types/three": "^0.186.0",
+    "clsx": "2.1.1",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "tailwind-merge": "3.4.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
+    "@types/node": "22.19.17",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "7.3.2",
+    "vite-plugin-singlefile": "2.3.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
