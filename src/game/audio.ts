@@ -1,29 +1,55 @@
+// Procedural sound effects generated with the Web Audio API.
+// Every entry point is fail-safe: if the browser has no (or a blocked)
+// AudioContext the game keeps running silently instead of throwing.
+type Kind = 'stone' | 'wood' | 'grass' | 'sand' | 'glass' | 'cloth';
+
 let ctx: AudioContext | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let master: GainNode | null = null;
+let broken = false; // audio unavailable -> stay silent
 export let volume = 0.5;
 
-function ensure() {
+function ensure(): AudioContext | null {
+  if (broken) return null;
   if (!ctx) {
-    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    ctx = new AC();
-    master = ctx.createGain();
-    master.gain.value = volume;
-    master.connect(ctx.destination);
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    try {
+      const w = window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+      const AC = w.AudioContext || w.webkitAudioContext;
+      if (!AC) throw new Error('Web Audio API unavailable');
+      const c = new AC();
+      const m = c.createGain();
+      m.gain.value = volume;
+      m.connect(c.destination);
+      const buf = c.createBuffer(1, Math.max(1, c.sampleRate), c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      master = m;
+      noiseBuf = buf;
+      ctx = c;
+    } catch (e) {
+      broken = true;
+      console.warn('Audio disabled:', e);
+      return null;
+    }
   }
-  if (ctx.state === 'suspended') ctx.resume();
+  try {
+    if (ctx.state === 'suspended') void ctx.resume();
+  } catch {
+    /* ignore */
+  }
   return ctx;
 }
 
 export function setVolume(v: number) {
-  volume = v;
-  if (master) master.gain.value = v;
+  volume = Math.max(0, Math.min(1, v));
+  if (master) {
+    try {
+      master.gain.value = volume;
+    } catch {
+      /* ignore */
+    }
+  }
 }
-
-type Kind = 'stone' | 'wood' | 'grass' | 'sand' | 'glass' | 'cloth';
 
 const KIND_FREQ: Record<Kind, [number, number]> = {
   stone: [900, 1.2],
@@ -36,6 +62,7 @@ const KIND_FREQ: Record<Kind, [number, number]> = {
 
 function noiseBurst(freq: number, q: number, dur: number, gain: number) {
   const c = ensure();
+  if (!c || !master || !noiseBuf) return;
   const src = c.createBufferSource();
   src.buffer = noiseBuf;
   src.playbackRate.value = 0.8 + Math.random() * 0.4;
@@ -47,7 +74,7 @@ function noiseBurst(freq: number, q: number, dur: number, gain: number) {
   const t = c.currentTime;
   g.gain.setValueAtTime(gain, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  src.connect(f).connect(g).connect(master!);
+  src.connect(f).connect(g).connect(master);
   src.start(t, Math.random() * 0.5);
   src.stop(t + dur + 0.05);
 }
@@ -76,6 +103,7 @@ export function playSplash() {
 }
 export function playHurt() {
   const c = ensure();
+  if (!c || !master) return;
   const o = c.createOscillator();
   const g = c.createGain();
   o.type = 'square';
@@ -84,12 +112,13 @@ export function playHurt() {
   o.frequency.exponentialRampToValueAtTime(140, t + 0.18);
   g.gain.setValueAtTime(0.18, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-  o.connect(g).connect(master!);
+  o.connect(g).connect(master);
   o.start(t);
   o.stop(t + 0.22);
 }
 export function playMob(type: 'pig' | 'zombie' | 'sheep') {
   const c = ensure();
+  if (!c || !master) return;
   const o = c.createOscillator();
   const g = c.createGain();
   const t = c.currentTime;
@@ -112,12 +141,13 @@ export function playMob(type: 'pig' | 'zombie' | 'sheep') {
   const f = c.createBiquadFilter();
   f.type = 'lowpass';
   f.frequency.value = 900;
-  o.connect(f).connect(g).connect(master!);
+  o.connect(f).connect(g).connect(master);
   o.start(t);
   o.stop(t + 0.65);
 }
 export function playExplosion() {
   const c = ensure();
+  if (!c || !master || !noiseBuf) return;
   const src = c.createBufferSource();
   src.buffer = noiseBuf;
   src.playbackRate.value = 0.3;
@@ -128,7 +158,7 @@ export function playExplosion() {
   const t = c.currentTime;
   g.gain.setValueAtTime(1.5, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
-  src.connect(f).connect(g).connect(master!);
+  src.connect(f).connect(g).connect(master);
   src.start(t);
   src.stop(t + 1.7);
 }
@@ -137,6 +167,7 @@ export function playFuse() {
 }
 export function playPop() {
   const c = ensure();
+  if (!c || !master) return;
   const o = c.createOscillator();
   const g = c.createGain();
   const t = c.currentTime;
@@ -144,7 +175,7 @@ export function playPop() {
   o.frequency.exponentialRampToValueAtTime(1400, t + 0.06);
   g.gain.setValueAtTime(0.08, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-  o.connect(g).connect(master!);
+  o.connect(g).connect(master);
   o.start(t);
   o.stop(t + 0.1);
 }

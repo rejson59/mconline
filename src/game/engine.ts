@@ -446,6 +446,13 @@ export class Game {
     }) as EventListener, { passive: true });
     this.on(window, 'keydown', ((e: KeyboardEvent) => this.onKeyDown(e)) as EventListener);
     this.on(window, 'keyup', ((e: KeyboardEvent) => { this.keys.delete(e.code); }) as EventListener);
+    this.on(document, 'visibilitychange', () => {
+      if (document.hidden) {
+        this.keys.clear();
+        this.mouseLeft = this.mouseRight = false;
+        this.save();
+      }
+    });
   }
 
   private onKeyDown(e: KeyboardEvent) {
@@ -466,10 +473,10 @@ export class Game {
     if (e.code === 'KeyE') { this.openInventory(false); return; }
     if (e.code === 'KeyT' || e.code === 'Slash') { e.preventDefault(); this.setUI('chat'); return; }
     if (e.code === 'KeyQ') { this.dropItem(); }
-    if (e.code === 'KeyF' && this.mode === 'creative') { this.flying = !this.flying; this.body.vel.y = 0; }
+    if (e.code === 'KeyF' && this.mode === 'creative') { this.toggleFly(); }
     if (e.code === 'Space' && !e.repeat) {
       const now = performance.now();
-      if (this.mode === 'creative' && now - this.lastSpace < 300) { this.flying = !this.flying; this.body.vel.y = 0; }
+      if (this.mode === 'creative' && now - this.lastSpace < 300) { this.toggleFly(); }
       this.lastSpace = now;
     }
     if (e.code === 'KeyW' && !e.repeat) {
@@ -491,11 +498,17 @@ export class Game {
 
   setUI(s: UIState) {
     this.ui = s;
-    if (s === 'playing') {
-      this.lockPointer();
-      Sfx.unlockAudio();
-    } else if (document.pointerLockElement) {
-      document.exitPointerLock();
+    try {
+      if (s === 'playing') {
+        this.lockPointer();
+        Sfx.unlockAudio();
+      } else if (document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+    } catch (e) {
+      // Pointer lock / audio can be blocked by the browser: never let that
+      // stop the game from switching state (the React UI stays in sync).
+      console.warn('setUI side effect failed', e);
     }
     if (s === 'paused') this.save();
     this.keys.clear();
@@ -590,6 +603,14 @@ export class Game {
       default:
         this.message('Nieznana komenda. Wpisz /help');
     }
+    this.emitHud();
+  }
+
+  /** Toggle creative flight (used by F, double-space and the touch controls). */
+  toggleFly() {
+    if (this.mode !== 'creative') return;
+    this.flying = !this.flying;
+    this.body.vel.y = 0;
     this.emitHud();
   }
 
@@ -817,6 +838,12 @@ export class Game {
       const b = this.body;
       if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, px, py, pz)) return;
       for (const m of this.mobs) if (!m.dead && aabbIntersectsBlock(m.body.pos.x, m.body.pos.y, m.body.pos.z, m.body.w, m.body.h, px, py, pz)) return;
+    }
+    if (id === B.WATER || id === B.LAVA) {
+      // fluids always need a solid neighbour, otherwise they look detached
+      const below = this.world.getBlock(px, py - 1, pz);
+      const around = [this.world.getBlock(px + 1, py, pz), this.world.getBlock(px - 1, py, pz), this.world.getBlock(px, py, pz + 1), this.world.getBlock(px, py, pz - 1)];
+      if (!IS_SOLID[below] && !around.some((n) => IS_SOLID[n])) return;
     }
     // plants need ground
     if (RENDER[id] === 1) {

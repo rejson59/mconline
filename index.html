@@ -2,11 +2,57 @@
 <html lang="pl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#3b2a1e" />
     <title>BlockCraft – gra w stylu Minecraft w przeglądarce</title>
+    <meta
+      name="description"
+      content="BlockCraft – darmowa gra w stylu Minecraft działająca w przeglądarce. Proceduralny świat, kopanie, budowanie, crafting, moby, TNT i cykl dnia i nocy. Bez instalacji – wystarczy przeglądarka."
+    />
+    <meta name="author" content="mconline" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="BlockCraft – Minecraft w przeglądarce" />
+    <meta
+      property="og:description"
+      content="Proceduralny świat, kopanie i budowanie, crafting, zombie, TNT. Zagraj bez instalacji – w przeglądarce."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%238b6240'/%3E%3Crect width='16' height='5' fill='%2364a83c'/%3E%3Crect y='5' width='16' height='1' fill='%23508a2e'/%3E%3C/svg%3E"
+    />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Instant loading placeholder – replaced by React as soon as it mounts -->
+      <div
+        style="
+          position: fixed;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 18px;
+          background: #000;
+          color: #e0e0e0;
+          font-family: monospace;
+          text-align: center;
+        "
+      >
+        <div style="font-size: 28px; letter-spacing: 2px; text-shadow: 2px 2px 0 #3f3f3f">BLOCKCRAFT</div>
+        <div style="width: 220px; height: 12px; background: #1f1f1f; border: 2px solid #000">
+          <div style="width: 40%; height: 100%; background: #64a83c"></div>
+        </div>
+        <div style="font-size: 14px; opacity: 0.8">Ładowanie gry…</div>
+      </div>
+    </div>
+    <noscript>
+      <div style="color: #fff; font-family: monospace; padding: 24px; text-align: center">
+        BlockCraft wymaga włączonego JavaScriptu. Włącz go i odśwież stronę.
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

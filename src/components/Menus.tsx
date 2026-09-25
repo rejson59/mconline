@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameMode } from '../game/engine';
 
+// BASE_URL is "./" for this build, so the background resolves relative to
+// index.html and works on GitHub Pages project sites, custom domains and file://
+const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
+
 export interface Settings {
   renderDistance: number;
   sensitivity: number;
@@ -70,18 +74,50 @@ export function Controls() {
   );
 }
 
+/** Fullscreen is unavailable on some mobile browsers – never throw. */
+export function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) void document.exitFullscreen?.();
+    else void document.documentElement.requestFullscreen?.();
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Builds a shareable link that recreates this world (seed + mode in the hash). */
+export function worldShareUrl(seed: number, mode: GameMode): string {
+  const loc = window.location;
+  const base = `${loc.origin}${loc.pathname}${loc.search}`;
+  return `${base}#seed=${seed}&mode=${mode}`;
+}
+
+export interface SaveSummary {
+  mode: GameMode;
+  day: number;
+  seed: number;
+}
+
 export function MainMenu({
   hasSave,
+  saveInfo,
+  sharedSeed,
+  sharedMode,
   onContinue,
   onNew,
+  onDeleteSave,
 }: {
   hasSave: boolean;
+  saveInfo?: SaveSummary | null;
+  /** seed / mode taken from the URL hash (shareable world links) */
+  sharedSeed?: number | null;
+  sharedMode?: GameMode | null;
   onContinue: () => void;
   onNew: (seed: number, mode: GameMode) => void;
+  onDeleteSave?: () => void;
 }) {
-  const [view, setView] = useState<'main' | 'new' | 'controls'>('main');
-  const [seedText, setSeedText] = useState('');
-  const [mode, setMode] = useState<GameMode>('survival');
+  const [view, setView] = useState<'main' | 'new' | 'controls'>(sharedSeed != null ? 'new' : 'main');
+  const [seedText, setSeedText] = useState(sharedSeed != null ? String(sharedSeed) : '');
+  const [mode, setMode] = useState<GameMode>(sharedMode ?? 'survival');
 
   const create = () => {
     let seed: number;
@@ -98,7 +134,13 @@ export function MainMenu({
     <div className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden">
       <div
         className="absolute inset-0 scale-110"
-        style={{ backgroundImage: 'url(/menu-bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center', animation: 'none', filter: 'blur(2px) brightness(0.8)' }}
+        style={{
+          backgroundImage: `url("${MENU_BG}")`,
+          backgroundColor: '#3b2a1e',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: 'blur(2px) brightness(0.8)',
+        }}
       />
       <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
       <div className="relative z-10 flex w-full max-w-[440px] flex-col items-center px-4">
@@ -108,6 +150,11 @@ export function MainMenu({
             {hasSave && (
               <button className="mc-btn" onClick={onContinue}>
                 Kontynuuj świat
+                {saveInfo && (
+                  <span className="block text-xs font-normal opacity-80">
+                    dzień {saveInfo.day} · {saveInfo.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'} · ziarno {saveInfo.seed}
+                  </span>
+                )}
               </button>
             )}
             <button className="mc-btn" onClick={() => setView('new')}>
@@ -116,11 +163,22 @@ export function MainMenu({
             <button className="mc-btn" onClick={() => setView('controls')}>
               Sterowanie
             </button>
+            <button className="mc-btn" onClick={toggleFullscreen}>
+              Pełny ekran
+            </button>
+            {hasSave && onDeleteSave && (
+              <button className="mc-btn" onClick={onDeleteSave}>
+                Usuń zapis
+              </button>
+            )}
           </div>
         )}
         {view === 'new' && (
           <div className="flex w-full flex-col gap-3 bg-black/50 p-5">
-            <div className="text-lg mc-text">Utwórz nowy świat</div>
+            <div className="text-lg mc-text">{sharedSeed != null ? 'Świat z linku' : 'Utwórz nowy świat'}</div>
+            {sharedSeed != null && (
+              <div className="text-xs text-green-300">Ziarno i tryb zostały wczytane z adresu – kliknij „Stwórz świat”, aby zagrać.</div>
+            )}
             <label className="text-sm text-gray-300">Ziarno generatora (puste = losowe)</label>
             <input className="mc-input" value={seedText} onChange={(e) => setSeedText(e.target.value)} placeholder="np. 12345 lub dowolny tekst" />
             <button className="mc-btn" onClick={() => setMode(mode === 'survival' ? 'creative' : 'survival')}>
@@ -153,18 +211,21 @@ export function MainMenu({
       </div>
       <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.0</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
+      <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>
   );
 }
 
 export function PauseMenu({
   settings,
+  shareUrl,
   onSettings,
   onResume,
   onQuit,
   onSave,
 }: {
   settings: Settings;
+  shareUrl: string;
   onSettings: (s: Settings) => void;
   onResume: () => void;
   onQuit: () => void;
@@ -172,6 +233,21 @@ export function PauseMenu({
 }) {
   const [view, setView] = useState<'main' | 'options' | 'controls'>('main');
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copyLink = async () => {
+    try {
+      window.history.replaceState(null, '', shareUrl);
+    } catch {
+      /* ignore */
+    }
+    try {
+      await navigator.clipboard?.writeText(shareUrl);
+    } catch {
+      /* clipboard can be blocked – the address bar already has the link */
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
   return (
     <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)' }}>
       <div className="flex w-full max-w-[420px] flex-col items-center gap-3 px-4">
@@ -186,6 +262,12 @@ export function PauseMenu({
             </button>
             <button className="mc-btn" onClick={() => setView('controls')}>
               Sterowanie
+            </button>
+            <button className="mc-btn" onClick={copyLink}>
+              {copied ? 'Link skopiowany ✓' : 'Kopiuj link do świata'}
+            </button>
+            <button className="mc-btn" onClick={toggleFullscreen}>
+              Pełny ekran
             </button>
             <button
               className="mc-btn"
