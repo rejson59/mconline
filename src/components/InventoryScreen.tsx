@@ -1,0 +1,189 @@
+import { useEffect, useState } from 'react';
+import type { Game } from '../game/engine';
+import { BLOCKS, CREATIVE_BLOCKS } from '../game/blocks';
+import { RECIPES, type Stack } from '../game/inventory';
+
+function Slot({
+  stack,
+  icons,
+  onClick,
+  onHover,
+  showCount = true,
+  highlight = false,
+}: {
+  stack: Stack | null;
+  icons: Record<number, string>;
+  onClick?: (right: boolean) => void;
+  onHover?: (name: string | null) => void;
+  showCount?: boolean;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className="mc-slot cursor-pointer"
+      style={highlight ? { outline: '2px solid #fff', zIndex: 1 } : undefined}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        onClick?.(e.button === 2);
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+      onMouseEnter={() => onHover?.(stack ? BLOCKS[stack.id].name : null)}
+      onMouseLeave={() => onHover?.(null)}
+    >
+      {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
+      {stack && showCount && stack.count > 1 && <span className="mc-count">{stack.count}</span>}
+    </div>
+  );
+}
+
+export default function InventoryScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
+  const [, setTick] = useState(0);
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const [hover, setHover] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const inv = game.inventory;
+  const creative = game.mode === 'creative';
+  const refresh = () => {
+    setTick((t) => t + 1);
+    onChange();
+  };
+
+  useEffect(() => {
+    const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
+    window.addEventListener('mousemove', mm);
+    return () => window.removeEventListener('mousemove', mm);
+  }, []);
+
+  const clickSlot = (i: number, right: boolean) => {
+    inv.clickSlot(i, right);
+    refresh();
+  };
+
+  const hotbar = (
+    <div className="flex gap-0">
+      {inv.slots.slice(0, 9).map((s, i) => (
+        <Slot key={i} stack={s} icons={icons} onClick={(r) => clickSlot(i, r)} onHover={setHover} showCount={!creative} highlight={i === game.selected} />
+      ))}
+    </div>
+  );
+
+  const filtered = CREATIVE_BLOCKS.filter((id) => BLOCKS[id].name.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.55)' }}
+      onContextMenu={(e) => e.preventDefault()}
+      onMouseDown={(e) => {
+        // clicking outside panel with cursor in creative -> delete
+        if (e.target === e.currentTarget && inv.cursor && creative) {
+          inv.cursor = null;
+          refresh();
+        }
+      }}
+    >
+      <div className="flex flex-wrap items-start justify-center gap-4">
+        <div className="mc-panel p-4">
+          {creative ? (
+            <>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="text-lg font-semibold">Bloki (kreatywny)</div>
+                <input
+                  className="mc-input !w-44 !py-1 !text-sm"
+                  placeholder="Szukaj..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                />
+              </div>
+              <div className="mb-3 grid max-h-[300px] grid-cols-9 overflow-y-auto" style={{ width: 9 * 44 + 18 }}>
+                {filtered.map((id) => (
+                  <Slot
+                    key={id}
+                    stack={{ id, count: 64 }}
+                    icons={icons}
+                    showCount={false}
+                    onHover={setHover}
+                    onClick={() => {
+                      if (inv.cursor) inv.cursor = null;
+                      else inv.cursor = { id, count: 64 };
+                      refresh();
+                    }}
+                  />
+                ))}
+              </div>
+              <div className="mb-1 text-sm">Kliknij blok, a potem slot paska. Klik poza oknem usuwa trzymany blok.</div>
+              {hotbar}
+            </>
+          ) : (
+            <>
+              <div className="mb-2 text-lg font-semibold">Ekwipunek</div>
+              <div className="mb-3 grid grid-cols-9">
+                {inv.slots.slice(9, 36).map((s, i) => (
+                  <Slot key={i + 9} stack={s} icons={icons} onClick={(r) => clickSlot(i + 9, r)} onHover={setHover} />
+                ))}
+              </div>
+              {hotbar}
+              <div className="mt-2 text-xs opacity-80">LPM: weź/połóż stos · PPM: połowa / jeden</div>
+            </>
+          )}
+        </div>
+
+        {!creative && (
+          <div className="mc-panel w-[330px] p-4">
+            <div className="mb-1 text-lg font-semibold">{game.craftingTable ? 'Stół rzemieślniczy' : 'Wytwarzanie'}</div>
+            {!game.craftingTable && <div className="mb-2 text-xs">Niektóre receptury wymagają stołu rzemieślniczego (PPM na stół).</div>}
+            <div className="max-h-[380px] space-y-1 overflow-y-auto pr-1">
+              {RECIPES.map((r, i) => {
+                const needTable = r.table && !game.craftingTable;
+                const can = inv.canCraft(r) && !needTable;
+                return (
+                  <button
+                    key={i}
+                    disabled={!can}
+                    onClick={() => {
+                      if (inv.craft(r)) refresh();
+                    }}
+                    className="flex w-full items-center gap-2 border-2 border-[#555] px-2 py-1 text-left"
+                    style={{ background: can ? '#9fd39a' : '#a9a9a9', opacity: needTable ? 0.55 : 1, cursor: can ? 'pointer' : 'default' }}
+                    onMouseEnter={() => setHover(BLOCKS[r.out.id].name)}
+                    onMouseLeave={() => setHover(null)}
+                  >
+                    <div className="flex items-center gap-1">
+                      {r.inputs.map((inp, j) => (
+                        <div key={j} className="relative">
+                          <img src={icons[inp.id]} width={26} height={26} className="pixelated" />
+                          <span className="absolute -bottom-1 right-0 text-xs font-bold text-white mc-text">{inp.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-lg">→</span>
+                    <div className="relative">
+                      <img src={icons[r.out.id]} width={30} height={30} className="pixelated" />
+                      <span className="absolute -bottom-1 right-0 text-xs font-bold text-white mc-text">{r.out.count}</span>
+                    </div>
+                    <span className="ml-1 truncate text-sm text-[#222]">{BLOCKS[r.out.id].name}</span>
+                    {r.table && <span className="ml-auto text-xs">🛠</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {hover && !inv.cursor && (
+        <div className="pointer-events-none fixed z-50 px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', color: '#fff' }}>
+          {hover}
+        </div>
+      )}
+      {inv.cursor && (
+        <div className="pointer-events-none fixed z-50" style={{ left: mouse.x - 17, top: mouse.y - 17 }}>
+          <img src={icons[inv.cursor.id]} width={34} height={34} className="pixelated" />
+          {!creative && inv.cursor.count > 1 && <span className="mc-count">{inv.cursor.count}</span>}
+        </div>
+      )}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm mc-text opacity-80">E / Esc – zamknij</div>
+    </div>
+  );
+}
