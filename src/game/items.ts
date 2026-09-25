@@ -47,9 +47,14 @@ export const I = {
   FLINT_STEEL: 142,
   COMPASS: 143,
   CLOCK: 144,
+  STRING: 145,
+  BONE: 146,
+  FEATHER: 147,
+  ARROW: 148,
+  BOW: 149,
 } as const;
 
-export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter';
+export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow';
 
 export interface ItemDef {
   id: number;
@@ -129,6 +134,11 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.FLINT_STEEL, name: 'Krzesiwo', keys: ['krzesiwo', 'flint_and_steel', 'zapalniczka'], kind: 'tool', tool: 'igniter', durability: 48, color: '#c8c8d0' },
   { id: I.COMPASS, name: 'Kompas', keys: ['kompas', 'compass'], kind: 'material', color: '#c44848' },
   { id: I.CLOCK, name: 'Zegar', keys: ['zegar', 'clock'], kind: 'material', color: '#e2c14a' },
+  { id: I.STRING, name: 'Struna', keys: ['struna', 'string'], kind: 'material', color: '#e8e8ea' },
+  { id: I.BONE, name: 'Kość', keys: ['kosc', 'kość', 'bone'], kind: 'material', color: '#efe9d8' },
+  { id: I.FEATHER, name: 'Pióro', keys: ['pioro', 'piórko', 'feather'], kind: 'material', color: '#f2f2f0' },
+  { id: I.ARROW, name: 'Strzała', keys: ['strzala', 'strzała', 'arrow'], kind: 'material', color: '#c8b08a' },
+  { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
 ];
 
 export const ITEMS: (ItemDef | undefined)[] = [];
@@ -192,6 +202,7 @@ const TIER_SPEED = [0, 2, 4, 6, 8];
 const PICK_BLOCKS = new Set<number>([
   B.STONE, B.COBBLE, B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.BRICK, B.FURNACE,
   B.FURNACE_ON, B.OBSIDIAN, B.STONE_BRICKS, B.SANDSTONE, B.MOSSY, B.ICE, B.GLOWSTONE, B.BEDROCK,
+  B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK,
 ]);
 const AXE_BLOCKS = new Set<number>([
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED,
@@ -215,6 +226,8 @@ export function requiredPickTier(blockId: number): number {
   if (blockId === B.OBSIDIAN) return 4;
   if (blockId === B.DIAMOND_ORE) return 3;
   if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return 2;
+  if (blockId === B.GOLD_BLOCK || blockId === B.DIAMOND_BLOCK) return 3;
+  if (blockId === B.IRON_BLOCK) return 2;
   if (PICK_BLOCKS.has(blockId)) return 1;
   return 0;
 }
@@ -270,7 +283,7 @@ export function attackDamage(toolId: number, sprinting: boolean): number {
   const tool = ITEMS[toolId];
   let d = 3;
   if (tool?.tool === 'sword') d = [0, 5, 6, 7, 9][tool.tier ?? 1];
-  else if (tool?.tool === 'shears' || tool?.tool === 'igniter') d = 1;
+  else if (tool?.tool === 'shears' || tool?.tool === 'igniter' || tool?.tool === 'bow') d = 1;
   else if (tool?.tool) d = 4;
   if (sprinting) d += 2;
   return d;

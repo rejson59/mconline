@@ -50,8 +50,11 @@ export interface HUDState {
   toast: { title: string; text: string } | null;
   sprinting: boolean;
   worldName: string;
+  worldType: 'normal' | 'flat';
   minimap: boolean;
   heldHint: string | null;
+  /** -1 when the bow is idle, otherwise the draw charge 0–1. */
+  bow: number;
 }
 
 export interface SaveData {
@@ -67,6 +70,7 @@ export interface SaveData {
   day: number;
   id?: string;
   name?: string;
+  worldType?: 'normal' | 'flat';
   updated?: number;
   hunger?: number;
   spawn?: [number, number, number];
@@ -90,6 +94,16 @@ interface TNTEntity {
   mesh: THREE.Mesh;
   body: Body;
   fuse: number;
+}
+
+interface ArrowEntity {
+  mesh: THREE.Mesh;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  life: number;
+  power: number;
+  /** The mob that fired it, or null when the player shot it. */
+  from: Mob | null;
 }
 
 interface DropEntity {
@@ -238,8 +252,15 @@ export class Game {
   chests = new Map<string, ChestState>();
   chestPos: { x: number; y: number; z: number } | null = null;
   private campfireHurt = 0;
+  private arrows: ArrowEntity[] = [];
+  private arrowGeo!: THREE.BufferGeometry;
+  private arrowMat!: THREE.MeshBasicMaterial;
+  /** Seconds the bow has been drawn, -1 when idle. */
+  private bowDraw = -1;
+  private biomeCache = new Map<string, Biome>();
   worldId = '';
   worldName = 'Świat';
+  worldType: 'normal' | 'flat' = 'normal';
   unlocked = new Set<string>();
   toast: { title: string; text: string; at: number } | null = null;
   showMinimap = true;
@@ -280,7 +301,7 @@ export class Game {
 
   constructor(
     container: HTMLElement,
-    opts: { seed: number; mode: GameMode; save?: SaveData; renderDistance?: number; worldId?: string; worldName?: string },
+    opts: { seed: number; mode: GameMode; save?: SaveData; renderDistance?: number; worldId?: string; worldName?: string; worldType?: 'normal' | 'flat' },
     cb: { onHud: (h: HUDState) => void; onUI: (s: UIState) => void }
   ) {
     this.container = container;
@@ -291,7 +312,9 @@ export class Game {
     this.worldId = opts.worldId || opts.save?.id || 'w' + Date.now().toString(36);
     this.worldName = opts.worldName || opts.save?.name || 'Świat';
     const seed = opts.save ? opts.save.seed : opts.seed;
-    this.world = new World(seed);
+    const worldType = opts.save?.worldType ?? opts.worldType ?? 'normal';
+    this.worldType = worldType;
+    this.world = new World(seed, worldType === 'flat');
     if (opts.save) this.world.loadMods(opts.save.mods);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -399,6 +422,8 @@ export class Game {
     this.handMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, depthTest: false, alphaTest: 0.3, side: THREE.FrontSide });
     this.camera.add(this.hand);
     this.tntGeo = blockGeometry(B.TNT);
+    this.arrowGeo = new THREE.BoxGeometry(0.09, 0.09, 0.78);
+    this.arrowMat = new THREE.MeshBasicMaterial({ color: 0x9a7a4a });
 
     this.computeOffsets();
 
@@ -440,7 +465,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 1.2: drzewo, kilof, drzwi i skrzynia. W jaskiniach czekają skrzynie.');
+      : 'BlockCraft 1.3: zetnij drzewo, wytwórz kilof, a potem łuk. Po zmroku grasują nieumarli, a w jaskiniach pająki.');
   }
 
   private initWeather() {
@@ -615,6 +640,7 @@ export class Game {
     if (s === 'paused') this.save();
     this.keys.clear();
     this.mouseLeft = this.mouseRight = false;
+    this.bowDraw = -1;
     this.onUI(s);
   }
 
@@ -764,6 +790,7 @@ export class Game {
   onCraft(outId: number) {
     this.unlock('craft');
     if (ITEMS[outId]?.tool === 'pick') this.unlock('pick');
+    if (outId === B.IRON_BLOCK) this.unlock('foundry');
     this.notePickup(outId);
   }
 
@@ -1032,7 +1059,7 @@ export class Game {
     const [cmd, ...args] = txt.slice(1).split(/\s+/);
     switch (cmd.toLowerCase()) {
       case 'help':
-        this.message('Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, /give <nazwa|id> [ilość], /summon <pig|sheep|cow|chicken|zombie|creeper>, /heal, /kill, /seed, /spawn, /clear');
+        this.message('Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, /give <nazwa|id> [ilość], /summon <pig|sheep|cow|chicken|zombie|creeper|spider|skeleton>, /heal, /kill, /seed, /spawn, /clear, /blocks');
         break;
       case 'gamemode': case 'gm': {
         const m = (args[0] || '').toLowerCase();
@@ -1088,9 +1115,13 @@ export class Game {
         break;
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
-        const map: Record<string, MobType> = { pig: 'pig', swinia: 'pig', świnia: 'pig', sheep: 'sheep', owca: 'sheep', zombie: 'zombie', cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper' };
+        const map: Record<string, MobType> = {
+          pig: 'pig', swinia: 'pig', świnia: 'pig', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
+          spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
+        };
         const t = map[raw];
-        if (!t) { this.message('Moby: pig, sheep, cow, chicken, zombie, creeper'); break; }
+        if (!t) { this.message('Moby: pig, sheep, cow, chicken, zombie, creeper, spider, skeleton'); break; }
         const d = this.lookDir();
         this.spawnMob(t, this.body.pos.x + d.x * 3, this.body.pos.y + 1, this.body.pos.z + d.z * 3);
         this.message('Przyzwano: ' + t);
@@ -1139,6 +1170,7 @@ export class Game {
       const data: SaveData = {
         id: this.worldId,
         name: this.worldName,
+        worldType: this.worldType,
         seed: this.world.seed,
         mode: this.mode,
         mods: this.world.serializeMods(),
@@ -1230,6 +1262,19 @@ export class Game {
 
   selectedStack(): Stack | null {
     return this.inventory.slots[this.selected];
+  }
+
+  /** Biome under the player, cached per chunk so noise runs once per chunk, not per frame. */
+  private biomeAt(): Biome {
+    const cx = Math.floor(this.body.pos.x / CS), cz = Math.floor(this.body.pos.z / CS);
+    const key = World.key(cx, cz);
+    let b = this.biomeCache.get(key);
+    if (b === undefined) {
+      b = this.world.surface(this.body.pos.x, this.body.pos.z).biome;
+      if (this.biomeCache.size > 64) this.biomeCache.clear();
+      this.biomeCache.set(key, b);
+    }
+    return b;
   }
 
   daylight(): number {
@@ -1362,6 +1407,95 @@ export class Game {
     }
   }
 
+  /** Fires an arrow when the player lets go of RMB while holding a bow. */
+  private releaseBow() {
+    const charge = Math.max(0.12, Math.min(1, this.bowDraw));
+    this.bowDraw = -1;
+    if (this.mode === 'survival' && this.inventory.countOf(I.ARROW) <= 0) {
+      this.message('Brak strzał. Wytwórz je z krzemienia, patyka i pióra.');
+      return;
+    }
+    if (this.mode === 'survival') this.inventory.remove(I.ARROW, 1);
+    const eye = this.eyePos();
+    const d = this.lookDir();
+    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, 4 + charge * 5);
+    Sfx.playBow();
+    this.swingT = 0;
+    this.wearTool();
+    this.unlock('archer');
+  }
+
+  /** Spawns a flying arrow. `from` is the mob that shot it (null = player). */
+  spawnArrow(origin: THREE.Vector3, dir: THREE.Vector3, speed: number, from: Mob | null, power: number) {
+    if (this.arrows.length > 48) return;
+    const mesh = new THREE.Mesh(this.arrowGeo, this.arrowMat);
+    mesh.position.copy(origin);
+    this.scene.add(mesh);
+    this.arrows.push({ mesh, pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), life: 0, power, from });
+  }
+
+  private updateArrows(dt: number) {
+    const keep: ArrowEntity[] = [];
+    for (const a of this.arrows) {
+      a.life += dt;
+      if (a.life > 20) { this.scene.remove(a.mesh); continue; }
+      a.vel.y -= 18 * dt;
+      const dir = a.vel.clone().normalize();
+      let travel = a.vel.length() * dt;
+      let spent = false;
+      while (travel > 0 && !spent) {
+        const stepLen = Math.min(0.3, travel);
+        travel -= stepLen;
+        a.pos.addScaledVector(dir, stepLen);
+        const block = this.world.peekBlock(Math.floor(a.pos.x), Math.floor(a.pos.y), Math.floor(a.pos.z));
+        if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) { spent = true; break; }
+        if (a.from) {
+          // hostile arrow vs player
+          const p = this.body.pos;
+          if (
+            a.pos.x > p.x - 0.45 && a.pos.x < p.x + 0.45 &&
+            a.pos.y > p.y - 0.1 && a.pos.y < p.y + this.body.h + 0.1 &&
+            a.pos.z > p.z - 0.45 && a.pos.z < p.z + 0.45
+          ) {
+            this.damage(a.power);
+            this.body.vel.x += dir.x * 2.5;
+            this.body.vel.z += dir.z * 2.5;
+            spent = true;
+            break;
+          }
+        } else {
+          // player arrow vs mobs
+          for (const m of this.mobs) {
+            if (m.dead) continue;
+            const mb = m.body;
+            const r = mb.w / 2 + 0.12;
+            if (
+              a.pos.x > mb.pos.x - r && a.pos.x < mb.pos.x + r &&
+              a.pos.y > mb.pos.y - 0.1 && a.pos.y < mb.pos.y + mb.h + 0.1 &&
+              a.pos.z > mb.pos.z - r && a.pos.z < mb.pos.z + r
+            ) {
+              if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2)) {
+                mb.vel.x += dir.x * 4;
+                mb.vel.z += dir.z * 4;
+                mb.vel.y = Math.max(mb.vel.y, 2.5);
+                Sfx.playHurt();
+                Sfx.playMob(m.type);
+                this.wearTool();
+              }
+              spent = true;
+              break;
+            }
+          }
+        }
+      }
+      if (spent) { this.scene.remove(a.mesh); Sfx.playArrowHit(); continue; }
+      a.mesh.position.copy(a.pos);
+      a.mesh.lookAt(a.pos.clone().add(a.vel));
+      keep.push(a);
+    }
+    this.arrows = keep;
+  }
+
   tryUse() {
     const t = this.target;
     this.placeCooldown = 0.22;
@@ -1384,6 +1518,7 @@ export class Game {
       return;
     }
     if (t && t.id === B.CAMPFIRE && this.cookOnCampfire(s)) return;
+    if (s.id === I.BOW) { this.bowDraw = 0.0001; this.swingT = 0; return; }
     if (isFood(s.id)) { this.tryEat(s); return; }
     if (!t) return;
     if (isHoe(s.id) && this.tryTill(t)) return;
@@ -1666,6 +1801,7 @@ export class Game {
       this.updateInteraction(dt);
       this.updateMobs(dt);
       this.updateEntities(dt);
+      this.updateArrows(dt);
       this.updateDrops(dt);
       this.updateGrowth(dt);
       this.updateFurnaces(dt);
@@ -1938,6 +2074,14 @@ export class Game {
     } else this.crackMesh.visible = false;
 
     if (this.mouseRight && this.placeCooldown <= 0) this.tryUse();
+    if (this.bowDraw >= 0) {
+      if (this.selectedStack()?.id === I.BOW && this.ui === 'playing') {
+        if (this.mouseRight) {
+          this.bowDraw = Math.min(1, this.bowDraw + dt);
+          if (this.swingT >= 1) this.swingT = 0.55;
+        } else this.releaseBow();
+      } else this.bowDraw = -1;
+    }
     this.updateHand();
   }
 
@@ -1956,6 +2100,12 @@ export class Game {
           this.body.vel.z += (dz / l) * 8;
           this.body.vel.y = 5;
         }
+      }, (mob) => {
+        // skeleton shot: aim slightly above the player's chest
+        const from = new THREE.Vector3(mob.body.pos.x, mob.body.pos.y + mob.body.h * 0.85, mob.body.pos.z);
+        const to = new THREE.Vector3(p.x, p.y + 1.0, p.z);
+        const dir = to.sub(from).normalize();
+        this.spawnArrow(from.addScaledVector(dir, 0.6), dir, 24, mob, 4);
       }, peaceful);
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
@@ -2021,7 +2171,8 @@ export class Game {
       if (hostile < 8 && dl < 0.4) {
         const pos = tryPos(18, 40);
         if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES) {
-          const type: MobType = Math.random() < 0.34 ? 'creeper' : 'zombie';
+          const roll = Math.random();
+          const type: MobType = roll < 0.25 ? 'creeper' : roll < 0.6 ? 'zombie' : 'skeleton';
           this.spawnMob(type, pos.x, pos.y + 0.1, pos.z);
         }
       }
@@ -2035,7 +2186,9 @@ export class Game {
             const here = this.world.peekBlock(x, y, z);
             const below = this.world.peekBlock(x, y - 1, z);
             if (here === B.AIR && this.world.peekBlock(x, y + 1, z) === B.AIR && IS_SOLID[below] && below !== B.LEAVES && y < this.world.heightAt(x, z) - 2) {
-              this.spawnMob(Math.random() < 0.4 ? 'creeper' : 'zombie', x + 0.5, y, z + 0.5);
+              const roll = Math.random();
+              const type: MobType = roll < 0.3 ? 'creeper' : roll < 0.65 ? 'zombie' : 'spider';
+              this.spawnMob(type, x + 0.5, y, z + 0.5);
               break;
             }
           }
@@ -2121,7 +2274,7 @@ export class Game {
     const sky = nightCol.clone().lerp(dayCol, Math.max(0, Math.min(1, (dl - 0.16) / 0.84)));
     const sunset = Math.max(0, 1 - Math.abs(sunY) * 4) * (Math.cos(ang) > 0 || sunY > -0.2 ? 1 : 0);
     sky.lerp(new THREE.Color(1.0, 0.5, 0.25), sunset * 0.45);
-    const biome = this.world.surface(Math.floor(this.body.pos.x), Math.floor(this.body.pos.z)).biome;
+    const biome = this.biomeAt();
     const raining = this.weather === 'rain' && biome !== 'Pustynia';
     if (raining) sky.multiplyScalar(0.62);
     if (this.lightning > 0) sky.lerp(new THREE.Color(0.85, 0.88, 1), Math.min(1, this.lightning));
@@ -2184,7 +2337,7 @@ export class Game {
       fps: this.fps,
       pos: [p.x, p.y, p.z],
       facing: FACING[f],
-      biome: this.world.surface(Math.floor(p.x), Math.floor(p.z)).biome,
+      biome: this.biomeAt(),
       chunks: this.world.chunks.size,
       time: this.time,
       target: this.target ? `${BLOCKS[this.target.id].name} (${this.target.x}, ${this.target.y}, ${this.target.z})` : '-',
@@ -2204,8 +2357,10 @@ export class Game {
       toast: this.toast && now - this.toast.at < 4600 ? { title: this.toast.title, text: this.toast.text } : null,
       sprinting: this.sprinting,
       worldName: this.worldName,
+      worldType: this.worldType,
       minimap: this.showMinimap,
       heldHint: this.heldHint(),
+      bow: this.bowDraw,
     });
   }
 
@@ -2242,11 +2397,21 @@ export class Game {
     const x = m.body.pos.x, y = m.body.pos.y + 0.4, z = m.body.pos.z;
     if (m.type === 'pig') this.spawnDrop(I.RAW_PORK, 1, x, y, z);
     else if (m.type === 'cow') this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
-    else if (m.type === 'chicken') this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
-    else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
+    else if (m.type === 'chicken') {
+      this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
+      if (Math.random() < 0.4) this.spawnDrop(I.FEATHER, 1, x, y, z);
+    } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
     else if (m.type === 'creeper') this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
+    else if (m.type === 'spider') this.spawnDrop(I.STRING, 1 + (Math.random() < 0.5 ? 1 : 0), x, y, z);
+    else if (m.type === 'skeleton') {
+      this.spawnDrop(I.BONE, 1 + (Math.random() < 0.5 ? 1 : 0), x, y, z);
+      if (Math.random() < 0.5) this.spawnDrop(I.ARROW, 1 + Math.floor(Math.random() * 3), x, y, z);
+      if (Math.random() < 0.08) this.spawnDrop(I.BOW, 1, x, y, z);
+    }
     if (m.type === 'zombie') this.unlock('zombie');
     if (m.type === 'creeper') this.unlock('creeper');
+    if (m.type === 'spider') this.unlock('string');
+    if (m.type === 'skeleton') this.unlock('skeleton');
   }
 
   private updateDrops(dt: number) {
@@ -2373,7 +2538,7 @@ export class Game {
     this.weatherTimer -= dt;
     if (this.weatherTimer <= 0) this.setWeather(this.weather === 'clear' ? 'rain' : 'clear');
     this.lightning = Math.max(0, this.lightning - dt * 1.6);
-    const biome = this.world.surface(Math.floor(this.body.pos.x), Math.floor(this.body.pos.z)).biome;
+    const biome = this.biomeAt();
     const raining = this.weather === 'rain' && biome !== 'Pustynia';
     this.rain.visible = raining;
     if (raining) {
@@ -2454,7 +2619,39 @@ export class Game {
     if (document.pointerLockElement) document.exitPointerLock();
     for (const c of this.world.chunks.values()) for (const m of c.meshes) m.geometry.dispose();
     for (const m of this.mobs) m.dispose();
+    for (const t of this.tnts) (t.mesh.material as THREE.Material).dispose();
+    this.tnts = [];
+    for (const a of this.arrows) this.scene.remove(a.mesh);
+    this.arrows = [];
+    for (const d of this.drops) {
+      this.scene.remove(d.mesh);
+      const mesh = d.mesh as THREE.Mesh;
+      mesh.geometry?.dispose();
+      const mat = mesh.material;
+      if (mat && !Array.isArray(mat)) mat.dispose();
+    }
+    this.drops = [];
+    for (const pt of this.particles) this.scene.remove(pt.mesh);
+    this.particles = [];
+    for (const mat of this.particleMats.values()) mat.dispose();
+    this.particleMats.clear();
+    for (const mat of this.materials) mat.dispose();
+    this.materials = [];
+    this.handMat.dispose();
+    this.dropMat.dispose();
+    this.arrowMat.dispose();
+    this.arrowGeo.dispose();
+    this.tntGeo.dispose();
+    this.selection.geometry.dispose();
+    (this.selection.material as THREE.Material).dispose();
+    this.crackMesh.geometry.dispose();
+    (this.crackMesh.material as THREE.Material).dispose();
+    for (const t of this.crackTex) t.dispose();
+    for (const t of this.itemTex.values()) t.dispose();
+    this.itemTex.clear();
     this.renderer.dispose();
+    // Browsers cap the number of live WebGL contexts – release this one for good.
+    try { this.renderer.forceContextLoss(); } catch { /* not supported everywhere */ }
     this.renderer.domElement.remove();
   }
 }

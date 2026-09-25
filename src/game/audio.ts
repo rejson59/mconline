@@ -116,7 +116,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper') {
+export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -143,6 +143,14 @@ export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | '
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(180, t);
     o.frequency.linearRampToValueAtTime(40, t + 0.35);
+  } else if (type === 'spider') {
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(700, t);
+    for (let i = 0; i < 8; i++) o.frequency.setValueAtTime(600 + Math.random() * 300, t + i * 0.04);
+  } else if (type === 'skeleton') {
+    o.type = 'square';
+    o.frequency.setValueAtTime(900, t);
+    for (let i = 0; i < 6; i++) o.frequency.setValueAtTime(i % 2 ? 700 : 1100, t + i * 0.03);
   } else {
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(110, t);
@@ -207,6 +215,42 @@ export function playEat() {
   o.connect(g).connect(master);
   o.start(t);
   o.stop(t + 0.16);
+}
+
+/** Bow release and arrow impact. */
+export function playBow() {
+  const c = ensure();
+  if (!c || !master) return;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  const t = c.currentTime;
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(180, t);
+  o.frequency.exponentialRampToValueAtTime(620, t + 0.09);
+  g.gain.setValueAtTime(0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + 0.16);
+}
+
+export function playArrowHit() {
+  const c = ensure();
+  if (!c || !master || !noiseBuf) return;
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf;
+  src.playbackRate.value = 1.6;
+  const f = c.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = 2200;
+  f.Q.value = 1.4;
+  const g = c.createGain();
+  const t = c.currentTime;
+  g.gain.setValueAtTime(0.35, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  src.connect(f).connect(g).connect(master);
+  src.start(t, Math.random() * 0.4);
+  src.stop(t + 0.16);
 }
 
 export function playThunder() {

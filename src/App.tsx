@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import GameView from './components/GameView';
-import { MainMenu, type WorldCard } from './components/Menus';
+import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
 import { type GameMode, type SaveData } from './game/engine';
 import { deleteSave, loadSaves } from './game/saves';
 
@@ -11,6 +11,7 @@ interface Session {
   id: number;
   worldId: string;
   worldName: string;
+  worldType: WorldType;
 }
 
 function asSave(raw: ReturnType<typeof loadSaves>[number]): SaveData {
@@ -24,6 +25,7 @@ function cards(): WorldCard[] {
     seed: s.seed,
     mode: s.mode,
     day: s.day,
+    worldType: s.worldType === 'flat' ? 'flat' : 'normal',
   }));
 }
 
@@ -57,6 +59,7 @@ export default function App() {
         save={session.save}
         worldId={session.worldId}
         worldName={session.worldName}
+        worldType={session.worldType}
         onQuit={() => {
           setSession(null);
           setTimeout(refresh, 50);
@@ -74,6 +77,7 @@ export default function App() {
         deleteSave(id);
         refresh();
       }}
+      onImported={refresh}
       onPlay={(id) => {
         const s = loadSaves().find((w) => w.id === id);
         if (!s) return;
@@ -85,9 +89,10 @@ export default function App() {
           id: Date.now(),
           worldId: save.id || id,
           worldName: save.name || 'Świat',
+          worldType: save.worldType === 'flat' ? 'flat' : 'normal',
         });
       }}
-      onNew={(seed, mode, name) => {
+      onNew={(seed, mode, name, worldType) => {
         if (saves.length >= 8) {
           window.alert('Możesz mieć najwyżej 8 światów. Usuń jeden, żeby utworzyć nowy.');
           return;
@@ -98,7 +103,7 @@ export default function App() {
           /* ignore */
         }
         setShared({ seed: null, mode: null });
-        setSession({ seed, mode, id: Date.now(), worldId: 'w' + Date.now().toString(36), worldName: name });
+        setSession({ seed, mode, id: Date.now(), worldId: 'w' + Date.now().toString(36), worldName: name, worldType });
       }}
     />
   );

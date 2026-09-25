@@ -5,7 +5,7 @@ import HUD from './HUD';
 import InventoryScreen from './InventoryScreen';
 import FurnaceScreen from './FurnaceScreen';
 import ChestScreen from './ChestScreen';
-import { ChatInput, DeathScreen, PauseMenu, worldShareUrl } from './Menus';
+import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
 import TouchControls, { isTouchDevice } from './TouchControls';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
 
@@ -17,6 +17,7 @@ export default function GameView({
   save,
   worldId,
   worldName,
+  worldType,
   onQuit,
 }: {
   seed: number;
@@ -24,6 +25,7 @@ export default function GameView({
   save?: SaveData;
   worldId: string;
   worldName: string;
+  worldType: WorldType;
   onQuit: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -42,7 +44,7 @@ export default function GameView({
     try {
       game = new Game(
         containerRef.current!,
-        { seed, mode, save, renderDistance: s.renderDistance, worldId, worldName },
+        { seed, mode, save, renderDistance: s.renderDistance, worldId, worldName, worldType },
         { onHud: setHud, onUI: setUi }
       );
     } catch (e) {

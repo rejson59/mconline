@@ -61,3 +61,37 @@ export function upsertSave(data: StoredWorld) {
 export function deleteSave(id: string) {
   writeList(readList().filter((s) => s.id !== id));
 }
+
+/** Every world as one JSON blob – lets players back up or move their saves. */
+export function exportSaves(): string {
+  return JSON.stringify({ blockcraft: 1, saves: readList() }, null, 1);
+}
+
+/**
+ * Merges worlds from a previously exported file. Unknown or broken entries are
+ * skipped; ids are kept so re-importing updates instead of duplicating.
+ * Returns how many worlds were imported.
+ */
+export function importSaves(json: string): number {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return 0;
+  }
+  const raw: unknown = (parsed as { saves?: unknown })?.saves ?? (Array.isArray(parsed) ? parsed : []);
+  if (!Array.isArray(raw)) return 0;
+  const valid = raw.filter(
+    (s): s is StoredWorld => !!s && typeof (s as StoredWorld).seed === 'number' && typeof (s as StoredWorld).id === 'string'
+  );
+  if (!valid.length) return 0;
+  const list = readList();
+  for (const s of valid) {
+    const i = list.findIndex((w) => w.id === s.id);
+    const entry = { ...s, updated: s.updated || Date.now() };
+    if (i >= 0) list[i] = entry;
+    else list.push(entry);
+  }
+  writeList(list.slice(0, 8));
+  return valid.length;
+}

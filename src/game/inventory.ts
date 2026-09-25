@@ -55,6 +55,14 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.FLINT_STEEL, count: 1 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.IRON, count: 1 }], table: false },
   { out: { id: I.COMPASS, count: 1 }, inputs: [{ id: I.IRON, count: 4 }, { id: I.COAL, count: 1 }], table: true },
   { out: { id: I.CLOCK, count: 1 }, inputs: [{ id: I.GOLD, count: 4 }, { id: I.COAL, count: 1 }], table: true },
+  { out: { id: B.IRON_BLOCK, count: 1 }, inputs: [{ id: I.IRON, count: 9 }], table: true },
+  { out: { id: B.GOLD_BLOCK, count: 1 }, inputs: [{ id: I.GOLD, count: 9 }], table: true },
+  { out: { id: B.DIAMOND_BLOCK, count: 1 }, inputs: [{ id: I.DIAMOND, count: 9 }], table: true },
+  { out: { id: I.IRON, count: 9 }, inputs: [{ id: B.IRON_BLOCK, count: 1 }], table: false },
+  { out: { id: I.GOLD, count: 9 }, inputs: [{ id: B.GOLD_BLOCK, count: 1 }], table: false },
+  { out: { id: I.DIAMOND, count: 9 }, inputs: [{ id: B.DIAMOND_BLOCK, count: 1 }], table: false },
+  { out: { id: I.BOW, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 3 }], table: true },
+  { out: { id: I.ARROW, count: 4 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.STICK, count: 1 }, { id: I.FEATHER, count: 1 }], table: false },
 ];
 
 function addTools(mat: number, pick: number, axe: number, shovel: number, sword: number, hoe: number) {

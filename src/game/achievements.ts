@@ -25,7 +25,11 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'stash', title: 'Schowek', text: 'Postaw skrzynię.' },
   { id: 'climb', title: 'W górę', text: 'Wejdź po drabinie.' },
   { id: 'shear', title: 'Fryzjer', text: 'Ostrzyż owcę nożycami.' },
-  { id: 'loot', title: 'Znalazca', text: 'Otwórz skrzynię ukrytą w jaskini.' },
+  { id: 'loot', title: 'Znalazca', text: 'Otwórz skrzynię ukrytą w jaskiniach.' },
+  { id: 'string', title: 'Sieć-pająk', text: 'Zdobądź strunę z pająka.' },
+  { id: 'archer', title: 'Łucznik', text: 'Wystrzel strzałę z łuku.' },
+  { id: 'skeleton', title: 'Kościeny łowca', text: 'Pokonaj szkieleta.' },
+  { id: 'foundry', title: 'Hutnik', text: 'Wytwórz blok żelaza.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

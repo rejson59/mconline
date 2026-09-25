@@ -73,6 +73,17 @@ function toolIcon(it: ItemDef): string {
       for (let i = 0; i < 8; i++) set(4 + i, 10 - i, i % 2 ? HANDLE_DK : HANDLE);
       for (let y = 2; y <= 6; y++) { set(10, y, '#9a9aa2'); set(11, y, head); }
       set(11, 2, '#f0f0f4');
+    } else if (k === 'bow') {
+      // wooden arc with a taut string
+      for (let a = 0; a <= 12; a++) {
+        const t = (a / 12) * Math.PI;
+        const x = Math.round(4 + Math.sin(t) * 7);
+        const y = Math.round(2 + (1 - Math.cos(t)) * 5.5);
+        set(x, y, head);
+        set(x, y + 1, edge);
+      }
+      for (let y = 3; y <= 13; y++) set(4, y, '#e8e8ea');
+      set(10, 8, head);
     } else {
       // hoe
       for (let x = 3; x <= 10; x++) set(x, 2, head);
@@ -170,6 +181,21 @@ function materialIcon(it: ItemDef): string {
       set(9, 8, '#fff');
       set(10, 8, '#fff');
       set(8, 8, '#5a3a10');
+    } else if (it.keys.includes('struna')) {
+      for (let i = 0; i < 10; i++) { set(3 + i, 3 + (i >> 1), c); set(3 + i, 4 + (i >> 1), '#b9b9bd'); }
+      for (let i = 0; i < 6; i++) { set(4 + i, 9 + (i >> 1), c); set(4 + i, 10 + (i >> 1), '#b9b9bd'); }
+    } else if (it.keys.includes('kosc')) {
+      for (let y = 5; y <= 10; y++) { set(7, y, c); set(8, y, '#ddd6c2'); }
+      for (const [x, y] of [[6, 3], [7, 3], [8, 3], [9, 3], [6, 4], [9, 4]]) set(x, y, c);
+      for (const [x, y] of [[6, 11], [7, 11], [8, 11], [9, 11], [6, 12], [9, 12]]) set(x, y, c);
+      set(7, 7, '#fff');
+    } else if (it.keys.includes('pioro')) {
+      for (let i = 0; i < 9; i++) { set(4 + i, 12 - i, '#8a7a5a'); set(5 + i, 12 - i, '#6a5c44'); }
+      for (let i = 0; i < 7; i++) for (let j = 0; j <= i; j++) set(4 + i - j, 3 + j, i % 2 ? c : '#ffffff');
+    } else if (it.keys.includes('strzala')) {
+      for (let i = 0; i < 9; i++) { set(4 + i, 11 - i, '#8a6a3a'); set(5 + i, 11 - i, '#6a4e28'); }
+      for (const [x, y] of [[11, 4], [12, 3], [13, 2], [10, 5], [9, 6]]) set(x, y, '#4a4a52');
+      for (let i = 0; i < 4; i++) { set(4 + i, 11 - i, '#e8e8ea'); set(3 + i, 12 - i, '#c8c8cc'); }
     } else {
       // ingot
       for (let y = 6; y <= 10; y++) for (let x = 3; x <= 12; x++) set(x, y, x === 3 || y === 10 ? '#555' : c);
