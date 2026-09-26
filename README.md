@@ -2,6 +2,8 @@
 
 Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci.
 
+**Wersja 1.9 „Czysty ekwipunek”**: wszystkie **ikony przedmiotów zostały narysowane od nowa** – każdy przedmiot wygląda teraz jak to, czym naprawdę jest: mięso to mięso (kotlety z żyłką tłuszczu, udko z kością), sztabki mają fazy, diament i szmaragd są szlifowane, kompasy i zegary mają tarcze, nożyce są skrzyżowane, krzesiwo ma krzemień i iskry, a wiadra trzymają wodę i lawę z uchwytem na uchu. Ikony są spójne w ekwipunku, na pasku, u stołów, w okienkach handlu i na upuszczonych przedmiotach w świecie 3D. Do tego **perła Endu jest rzucana** (PPM): leci jak pocisk, a gracz teleportuje się w miejsce upadku (2 obrażenia, krótki odstęp między rzutami). Netherowa gospodarka ma wreszcie sens: **pył jasnogłazu składa się w jasnogłaz**, **magmowy krem w blok magmy**, **płomienna różdżka** (rzadki łup Ghasta, paliwo na 60 s) buduje **statyw alchemiczny** z brukiem, **łza Ghasta + obsydian = płaczący obsydian**, **brodawka Netheru** (skrzynie w jaskiniach) farbuje wełnę na czerwono, a netherrack wytapia się na netherową cegłę. Nowe osiągnięcie: „Skok przez wymiar”.
+
 **Wersja 1.8 „Prawdziwy Nether”**: portal prowadzi teraz do **osobnego wymiaru** – Nether to drugi, w pełni niezależny świat z własnym generatorem (falująca podłoga z netherracku, piaski dusz, jaskinie, ogromna jaskinia pod skalnym stropem z jasnogłazami, kwarc, magma, bazaltowe filary i morze lawy), własnymi chunkami, modyfikacjami bloków i zapisem. **Nadświat nigdy już nie jest nadpisywany** – stare wejście do Netheru skanowało i „stemplowało” teren wioski pośrodku mapy, przez co światy wchodziły sobie nawzajem w drogę. Wejście i wyjście są **budżetowane** (jeden chunk przy lądowaniu zamiast 81 naraz), więc portal **nie zawiesza klatek**, a powrót prowadzi dokładnie do portalu, przez który wszedłeś (w Netherze zawsze stoi gotowa rama powrotna). Osobne są też **moby, przedmioty, strzały, TNT i kule XP** obu wymiarów, skrzynie i piece (klucze z prefiksem wymiaru – piec w Netherze nie kasuje pieca w nadświecie), a w Netherze panuje stałe, czerwone światło: bez deszczu, snu i cyklu dnia. Poprawki: piec w niezaładowanym chunku **nie traci już zawartości**, spawn mobów nigdy nie wypadnie na dno lawy, a postęp w Netherze zapisuje się w zapisie gry (`netherMods`, `isInNether`, `portalExit`).
 
 **Wersja 1.7 „Nether & Redstone”**: pierwsze portale Netheru, redstone (przewód, dźwignie, przyciski, lampy, tłoki, obserwator, dispenser, dzwonek), ruda kwarcu i kilka nowych bloków.
@@ -46,6 +48,7 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | nożyce + LPM na owcy | wełna bez zabijania |
 | krzesiwo + `PPM` na TNT | podpalenie |
 | łuk: przytrzymaj `PPM`, puść | wystrzał ze strzały |
+| perła Endu + `PPM` | rzut perłą – teleportacja w miejsce upadku |
 | kompas / zegar w ręce | kierunek odrodzenia i pora dnia |
 | motyka + `PPM` | grządka pod pszenicę |
 | `PPM` na wilku z surowym mięsem | zatamej wilka (podąża i broni gracza) |
@@ -168,7 +171,7 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 * **Dom**: dwublokowe drzwi (PPM otwiera), skrzynia na 27 slotów, drabina, płot, właz i ognisko, na którym piecze się mięso. Moby nie przeskakują płotu ani zamkniętych drzwi.
 * **Jaskinie** czasem kryją starą skrzynię z pochodniami, jedzeniem i rzadziej żelazem albo diamentem.
 * **Nożyce** zbierają liście i wełnę z żywej owcy. Żwir czasem daje krzemień, a krzesiwo podpala TNT. Kompas wskazuje punkt odrodzenia, zegar porę dnia.
-* **Osiągnięcia** za drewno, kilof, diament, sen, creepera, dom, łuk, strunę, lazuryt, książkę, stół zaklęć, pierwsze zaklęcie, a od 1.6 także za odkrycie wioski, pierwszą wymianę, 25 wymian („Kupiec”), szmaragd, spotkanie golema i dzwon.
+* **Osiągnięcia** za drewno, kilof, diament, sen, creepera, dom, łuk, strunę, lazuryt, książkę, stół zaklęć, pierwsze zaklęcie, a od 1.6 także za odkrycie wioski, pierwszą wymianę, 25 wymian („Kupiec”), szmaragd, spotkanie golema i dzwon, a od 1.9 za teleportację perłą Endu.
 * **Linki do świata**: w pauzie przycisk *„Kopiuj link do świata”* zapisuje ziarno i tryb w adresie (`#seed=1234&mode=creative`) – po otwarciu takiego linku menu jest już wypełnione.
 * **Pełny ekran** jednym przyciskiem (menu główne i pauza) oraz **usuwanie zapisu** z menu głównego.
 * **Awaryjne komunikaty**: brak WebGL, błąd inicjalizacji czy zablokowany dźwięk nie zostawiają czarnej strony.

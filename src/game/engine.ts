@@ -215,6 +215,8 @@ interface ArrowEntity {
   power: number;
   /** The mob that fired it, or null when the player shot it. */
   from: Mob | null;
+  /** Perła Endu: nie rani, tylko teleportuje gracza w miejsce upadku (1.9). */
+  pearl?: boolean;
 }
 
 interface DropEntity {
@@ -385,6 +387,10 @@ export class Game {
   private orbMat!: THREE.MeshBasicMaterial;
   /** Seconds the bow has been drawn, -1 when idle. */
   private bowDraw = -1;
+  /** Rzuty perłą Endu mają krótki odstęp (1.9). */
+  private pearlCd = 0;
+  private pearlGeo: THREE.SphereGeometry | null = null;
+  private pearlMat: THREE.MeshBasicMaterial | null = null;
   private biomeCache = new Map<string, Biome>();
   /** Stół zaklęć: gdzie stoi i co właśnie w nim siedzi. */
   enchantPos: { x: number; y: number; z: number } | null = null;
@@ -2267,6 +2273,41 @@ export class Game {
     this.unlock('archer');
   }
 
+  /** PPM z perłą Endu: rzut; gracz teleportuje się tam, gdzie perła spadnie (1.9). */
+  private throwPearl() {
+    if (this.pearlCd > 0 || this.ui === 'dead') return;
+    this.pearlCd = 0.9;
+    if (this.mode === 'survival') this.consumeSelected();
+    if (!this.pearlGeo) this.pearlGeo = new THREE.SphereGeometry(0.1, 8, 6);
+    if (!this.pearlMat) this.pearlMat = new THREE.MeshBasicMaterial({ color: 0x49d8c0 });
+    const mesh = new THREE.Mesh(this.pearlGeo, this.pearlMat);
+    const eye = this.eyePos();
+    const d = this.lookDir();
+    mesh.position.copy(eye);
+    this.scene.add(mesh);
+    this.arrows.push({ mesh, pos: eye.clone(), vel: d.clone().multiplyScalar(24), life: 0, power: 0, from: null, pearl: true });
+    Sfx.playBow();
+    this.swingT = 0;
+  }
+
+  /** Perła wylądowała: gracz pojawia się w ostatnim wolnym punkcie lotu. */
+  private pearlTeleport(to: THREE.Vector3) {
+    if (this.ui === 'dead') return;
+    const b = this.body;
+    b.pos.set(to.x, to.y, to.z);
+    b.vel.set(0, 0, 0);
+    // podnieś pozycję, aż stopy i głowa będą w wolnych blokach
+    let guard = 0;
+    while (guard++ < CH && (this.world.isSolid(Math.floor(b.pos.x), Math.floor(b.pos.y), Math.floor(b.pos.z)) ||
+      this.world.isSolid(Math.floor(b.pos.x), Math.floor(b.pos.y + b.h - 0.1), Math.floor(b.pos.z)))) {
+      b.pos.y += 1;
+    }
+    this.damage(2);
+    Sfx.playPortal();
+    this.unlock('pearl');
+    this.swingT = 1;
+  }
+
   /** Spawns a flying arrow. `from` is the mob that shot it (null = player). */
   spawnArrow(origin: THREE.Vector3, dir: THREE.Vector3, speed: number, from: Mob | null, power: number) {
     if (this.arrows.length > 48) return;
@@ -2285,9 +2326,11 @@ export class Game {
       const dir = a.vel.clone().normalize();
       let travel = a.vel.length() * dt;
       let spent = false;
+      let prev: THREE.Vector3 | null = null;
       while (travel > 0 && !spent) {
         const stepLen = Math.min(0.3, travel);
         travel -= stepLen;
+        prev = a.pos.clone();
         a.pos.addScaledVector(dir, stepLen);
         const block = this.world.peekBlock(Math.floor(a.pos.x), Math.floor(a.pos.y), Math.floor(a.pos.z));
         if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) { spent = true; break; }
@@ -2322,6 +2365,7 @@ export class Game {
               a.pos.y > mb.pos.y - 0.1 && a.pos.y < mb.pos.y + mb.h + 0.1 &&
               a.pos.z > mb.pos.z - r && a.pos.z < mb.pos.z + r
             ) {
+              if (a.pearl) { spent = true; break; }
               if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2)) {
                 mb.vel.x += dir.x * 4;
                 mb.vel.z += dir.z * 4;
@@ -2336,9 +2380,14 @@ export class Game {
           }
         }
       }
-      if (spent) { this.scene.remove(a.mesh); Sfx.playArrowHit(); continue; }
+      if (spent) {
+        this.scene.remove(a.mesh);
+        if (a.pearl) this.pearlTeleport(prev ?? a.pos);
+        else Sfx.playArrowHit();
+        continue;
+      }
       a.mesh.position.copy(a.pos);
-      a.mesh.lookAt(a.pos.clone().add(a.vel));
+      if (!a.pearl) a.mesh.lookAt(a.pos.clone().add(a.vel));
       keep.push(a);
     }
     this.arrows = keep;
@@ -2408,6 +2457,10 @@ export class Game {
       // holding RMB keeps drawing; only a fresh press starts a new draw
       if (this.bowDraw < 0) this.bowDraw = 0.0001;
       this.swingT = 0;
+      return;
+    }
+    if (s.id === I.ENDER_PEARL) {
+      this.throwPearl();
       return;
     }
     if (isFood(s.id)) { this.tryEat(s); return; }
@@ -3136,6 +3189,7 @@ export class Game {
     this.breakCooldown -= dt;
     this.placeCooldown -= dt;
     this.attackCooldown -= dt;
+    this.pearlCd = Math.max(0, this.pearlCd - dt);
     this.eatCooldown = Math.max(0, this.eatCooldown - dt);
     if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * 4);
 
@@ -3728,6 +3782,8 @@ export class Game {
     } else if (m.type === 'ghast') {
       if (Math.random() < 0.6) this.spawnDrop(I.GHAST_TEAR, 1, x, y, z);
       if (Math.random() < 0.8) this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
+      if (Math.random() < 0.3) this.spawnDrop(I.BLAZE_ROD, 1, x, y, z);
+      if (Math.random() < 0.35) this.spawnDrop(I.MAGMA_CREAM, 1, x, y, z);
     } else if (m.type === 'villager') {
       this.message('Mieszkańcy nie zostawiają po sobie niczego. Golem zapamięta ten cios.');
     }

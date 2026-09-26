@@ -56,6 +56,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'slime', title: 'Szlamowy skok', text: 'Odbij się na bloku szlamu.' },
   { id: 'enderman', title: 'Spójrz mu w oczy', text: 'Pokonaj Endermana.' },
   { id: 'ghast', title: 'Łza Ghasta', text: 'Zdobądź łzę Ghasta.' },
+  // 1.9 „Czysty ekwipunek”
+  { id: 'pearl', title: 'Skok przez wymiar', text: 'Zteleportuj się perłą Endu.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

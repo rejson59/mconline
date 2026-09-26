@@ -2070,6 +2070,54 @@ section('portal: flint & steel lights the frame from any block');
   }
 }
 
+// ============================================== 1.9: netherowa gospodarka
+section('items: nether economy (1.9)');
+{
+  // pył jasnogłazu → jasnogłaz (2×2, mieści się w siatce 2×2)
+  const invG = new Inventory();
+  invG.grid[0] = { id: I.GLOWSTONE_DUST, count: 1 };
+  invG.grid[1] = { id: I.GLOWSTONE_DUST, count: 1 };
+  invG.grid[3] = { id: I.GLOWSTONE_DUST, count: 1 };
+  invG.grid[4] = { id: I.GLOWSTONE_DUST, count: 1 };
+  eq('4 glowstone dust craft glowstone in the 2×2', invG.gridMatch(false)?.out.id, B.GLOWSTONE);
+
+  // magmowy krem → blok magmy
+  const invM = new Inventory();
+  invM.grid[0] = { id: I.MAGMA_CREAM, count: 1 };
+  invM.grid[1] = { id: I.MAGMA_CREAM, count: 1 };
+  invM.grid[3] = { id: I.MAGMA_CREAM, count: 1 };
+  invM.grid[4] = { id: I.MAGMA_CREAM, count: 1 };
+  eq('4 magma cream craft a magma block', invM.gridMatch(false)?.out.id, B.MAGMA);
+
+  // płomienna różdżka + 3 bruk → statyw alchemiczny
+  const invB = new Inventory();
+  invB.grid[4] = { id: I.BLAZE_ROD, count: 1 };
+  invB.grid[6] = { id: B.COBBLE, count: 1 };
+  invB.grid[7] = { id: B.COBBLE, count: 1 };
+  invB.grid[8] = { id: B.COBBLE, count: 1 };
+  eq('blaze rod over 3 cobble crafts the brewing stand', invB.gridMatch(true)?.out.id, B.BREWING);
+
+  // obsydian + łza Ghasta → płaczący obsydian (bezpostaciowo)
+  const invC = new Inventory();
+  invC.grid[0] = { id: B.OBSIDIAN, count: 1 };
+  invC.grid[1] = { id: I.GHAST_TEAR, count: 1 };
+  eq('obsidian + ghast tear craft crying obsidian', invC.gridMatch(false)?.out.id, B.CRYING_OBSIDIAN);
+
+  // brodawka Netheru farbuje wełnę na czerwono
+  const invW = new Inventory();
+  invW.grid[0] = { id: B.WOOL_WHITE, count: 1 };
+  invW.grid[1] = { id: I.NETHER_WART, count: 1 };
+  eq('nether wart dyes wool red', invW.gridMatch(false)?.out.id, B.WOOL_RED);
+
+  // netherrack wytapia się na netherową cegłę (przedmiot), a ta składa się w blok
+  eq('netherrack smelts into the nether brick item', smeltResult(B.NETHERRACK), I.NETHER_BRICK_ITEM);
+  const brick = RECIPES.find((r) => r.out.id === B.NETHER_BRICKS);
+  check('nether brick item still crafts into blocks', !!brick && brick.inputs[0].id === I.NETHER_BRICK_ITEM && brick.inputs[0].count === 4);
+
+  // płomienna różdżka pali dłużej niż węgiel
+  check('blaze rod outburns coal', fuelSeconds(I.BLAZE_ROD) > fuelSeconds(I.COAL), `${fuelSeconds(I.BLAZE_ROD)}s vs ${fuelSeconds(I.COAL)}s`);
+}
+
 // =================================================================== report
 console.log(`\n${'='.repeat(56)}`);
 if (fail) {
