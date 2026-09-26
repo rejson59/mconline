@@ -1,6 +1,11 @@
-# BlockCraft 2.0 🟩
+# BlockCraft 2.1 🟩
 
 Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci. Teraz także **w pełni przemyślana dla telefonów i tabletów**.
+
+**Wersja 2.1 „Dziennik przygód”** rozbudowuje eksplorację i ułatwia ogarnianie zapisów:
+
+* **Dziennik przygód** (`J` lub przycisk w pauzie) śledzi postęp w siedmiu rozdziałach: od pierwszych narzędzi i schronienia, przez wioskę i zaklinanie, aż po wyprawę do Netheru. Cele aktualizują się na podstawie odblokowanych osiągnięć, a dziennik pokazuje pasek postępu, współrzędne, biom, dzień, poziom, seed i pełną listę osiągnięć. Wpisy można filtrować i wyszukiwać.
+* **Usprawnione menu światów** – wyszukiwanie po nazwie, ziarnie i trybie (z obsługą polskich znaków), sortowanie według ostatniego zapisu, nazwy albo długości rozgrywki oraz widoczny limit 8 zapisów. Menu i lista światów przewijają się na małych ekranach; elementy mają czytelne obramowanie fokusu klawiatury i respektują ustawienie ograniczenia animacji systemu.
 
 **Wersja 2.0 „Mobilny skok”** to potężny update skupiony na interfejsie i urządzeniach mobilnych:
 
@@ -68,6 +73,7 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | tarcza w ręku | przyłap strzały, ciosy tracą połowę mocy |
 | sloty pancerza (w `E`) | załóż / zdejmij pancerz (4 elementy) |
 | `M` | minimapa |
+| `J` | dziennik przygód i postęp celów (2.1) |
 | `F3` | informacje debugowania |
 | `Esc` | pauza |
 
@@ -207,6 +213,7 @@ src/
   components/
     Menus.tsx              # menu główne, pauza, ekran śmierci, czat
     SettingsScreen.tsx     # 2.0: opcje w zakładkach (grafika/sterowanie/dźwięk)
+    JournalScreen.tsx      # 2.1: dziennik rozdziałów, cele i postęp
     GameView.tsx           # montowanie silnika, HUD, obsługa błędów
     HUD.tsx                # serca, głód powietrza, pasek, komunikaty, F3
     InventoryScreen.tsx    # ekwipunek i crafting

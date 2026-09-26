@@ -25,6 +25,7 @@ function cards(): WorldCard[] {
     seed: s.seed,
     mode: s.mode,
     day: s.day,
+    updated: s.updated,
     worldType: s.worldType === 'flat' ? 'flat' : 'normal',
   }));
 }

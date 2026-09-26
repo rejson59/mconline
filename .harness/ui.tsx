@@ -9,10 +9,11 @@
  */
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MainMenu, Controls, AchievementsPanel, PauseMenu } from '../src/components/Menus';
+import { MainMenu, Controls, AchievementsPanel, PauseMenu, filterAndSortWorlds } from '../src/components/Menus';
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS, applyPreset } from '../src/utils/settings';
 import SettingsScreen from '../src/components/SettingsScreen';
+import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/components/JournalScreen';
 import EnchantScreen from '../src/components/EnchantScreen';
 import TradeScreen from '../src/components/TradeScreen';
 import { Inventory } from '../src/game/inventory';
@@ -75,6 +76,39 @@ section('trade screen: static render');
   check('player inventory is rendered', html.includes('Ekwipunek'));
 }
 
+section('adventure journal: quests and progress');
+{
+  const unlocked = ['wood', 'craft', 'pick', 'torch', 'home'];
+  const progress = journalProgress(unlocked);
+  check('journal has multi-step story chapters', JOURNAL_CHAPTERS.length >= 7);
+  check('chapter completion reflects achievement progress', progress[0].complete && progress[1].done === 2 && !progress[1].complete);
+  const hud = {
+    worldName: 'Nowy świat', day: 3, biome: 'plains', level: 4,
+    pos: [12.8, 65.2, -3.4], seed: 1234, mode: 'survival',
+  };
+  const html = renderToStaticMarkup(
+    <JournalScreen hud={hud as never} unlocked={unlocked} onClose={noop} />
+  );
+  check('journal shows world and progress summary', html.includes('Nowy świat') && html.includes('Postęp przygody'));
+  check('journal lists unfinished objectives', html.includes('Wyprawa pod ziemię') && html.includes('Diamenty!'));
+  check('journal includes accessible progress indicators', html.includes('role="progressbar"') && html.includes('aria-valuenow="3"'));
+  check('journal shows world seed and return hint', html.includes('1234') && html.includes('powrót do gry'));
+}
+
+section('world list: search and sorting');
+{
+  const worlds = [
+    { id: 'z', name: 'Żółta wyspa', seed: 91, day: 4, updated: 100, mode: 'survival' },
+    { id: 'a', name: 'Arkadia', seed: 27, day: 12, updated: 50, mode: 'creative', worldType: 'flat' as const },
+    { id: 'b', name: 'Góry', seed: 123, day: 2, updated: 200, mode: 'survival' },
+  ];
+  check('world search ignores Polish diacritics', filterAndSortWorlds(worlds, 'zol', 'recent').map((w) => w.id).join() === 'z');
+  check('world search matches seed and mode', filterAndSortWorlds(worlds, 'kreatywny', 'recent').map((w) => w.id).join() === 'a');
+  check('recent sorting puts newest save first', filterAndSortWorlds(worlds, '', 'recent').map((w) => w.id).join() === 'b,z,a');
+  check('day sorting puts longest worlds first', filterAndSortWorlds(worlds, '', 'day').map((w) => w.id).join() === 'a,z,b');
+  check('name sorting uses Polish locale', filterAndSortWorlds(worlds, '', 'name').map((w) => w.id).join() === 'a,b,z');
+}
+
 section('menus: static render');
 {
   const menu = renderToStaticMarkup(
@@ -90,13 +124,16 @@ section('menus: static render');
 
   const withSaves = renderToStaticMarkup(
     <MainMenu
-      saves={[{ id: 'w1', name: 'Wyspa', seed: 1234, mode: 'survival', day: 3, worldType: 'flat' }]}
+      saves={[{ id: 'w1', name: 'Wyspa', seed: 1234, mode: 'survival', day: 3, updated: 1710000000000, worldType: 'flat' }]}
       onPlay={noop}
       onNew={noop}
       onDelete={noop}
     />
   );
   check('saved worlds are listed', withSaves.includes('Wyspa') && withSaves.includes('1234'));
+  check('world management has search and sort controls', withSaves.includes('Szukaj nazwy') && withSaves.includes('Ostatnio grane'));
+  check('world capacity is visible', withSaves.includes('1/8'));
+  check('save date is shown when available', withSaves.includes('Zapisano:'));
   check('world type shown on the card', withSaves.includes('płaski'));
   check('delete button present', withSaves.includes('Usuń'));
 
@@ -108,12 +145,14 @@ section('menus: static render');
 
   const controls = renderToStaticMarkup(<Controls />);
   check('controls list movement keys', controls.includes('W A S D'));
+  check('controls include adventure journal key', controls.includes('Dziennik przygód'));
   check('controls list the enchanting table', /zakl/i.test(controls));
 
   const pause = renderToStaticMarkup(
-    <PauseMenu settings={DEFAULT_SETTINGS} shareUrl="http://x/#seed=1" onSettings={noop} onResume={noop} onQuit={noop} onSave={noop} />
+    <PauseMenu settings={DEFAULT_SETTINGS} shareUrl="http://x/#seed=1" onSettings={noop} onResume={noop} onJournal={noop} onQuit={noop} onSave={noop} />
   );
   check('pause menu offers resume and save', pause.includes('Wróć do gry') && pause.includes('Zapisz świat'));
+  check('pause menu opens the adventure journal', pause.includes('Dziennik przygód'));
   check('pause menu counts achievements', pause.includes(`/${ACHIEVEMENTS.length}`));
 
   // 2.0: ekran opcji (zakładki, presety jakości, sterowanie dotykowe)
