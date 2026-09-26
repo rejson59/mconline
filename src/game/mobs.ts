@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import type { World } from './world';
 import { stepBody, type Body } from './physics';
-import { IS_SOLID, RENDER, B, isDoor } from './blocks';
+import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 
-export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper';
+export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton';
 
 function box(w: number, h: number, d: number, color: number, mats: Map<number, THREE.Material>) {
   let m = mats.get(color);
@@ -37,6 +37,8 @@ export class Mob {
   exploded = false;
   looted = false;
   sheared = false;
+  /** True while a spider crawls up a wall (drives the leg animation). */
+  climbing = false;
   private woolMesh: THREE.Mesh | null = null;
   legs: THREE.Object3D[] = [];
   arms: THREE.Object3D[] = [];
@@ -48,7 +50,7 @@ export class Mob {
     const w = type === 'zombie' || type === 'creeper' ? 0.6 : type === 'chicken' ? 0.45 : type === 'cow' ? 1.1 : 0.9;
     const h = type === 'zombie' ? 1.9 : type === 'creeper' ? 1.7 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : 0.9;
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
-    this.maxHealth = this.health = type === 'zombie' ? 20 : type === 'creeper' ? 16 : type === 'cow' ? 10 : type === 'chicken' ? 4 : type === 'sheep' ? 8 : 10;
+    this.maxHealth = this.health = type === 'zombie' ? 20 : type === 'creeper' ? 16 : type === 'cow' ? 10 : type === 'chicken' ? 4 : type === 'sheep' ? 8 : type === 'skeleton' ? 20 : type === 'spider' ? 16 : 10;
     this.build();
   }
 
@@ -170,8 +172,7 @@ export class Mob {
       this.meshes.push(eyeL, eyeR, mouth);
       g.add(head);
       this.head = head;
-    } else {
-      // zombie
+    } else if (this.type === 'zombie') {
       this.addLeg(-0.13, 0.75, 0, 0.25, 0.75, 0.25, 0x3b3f8f, this.legs);
       this.addLeg(0.13, 0.75, 0, 0.25, 0.75, 0.25, 0x3b3f8f, this.legs);
       const torso = box(0.52, 0.72, 0.28, 0x2aa3a3, sharedMats);
@@ -194,6 +195,96 @@ export class Mob {
       const a2 = this.addLeg(0.38, 1.42, 0, 0.24, 0.72, 0.24, 0x5d8a44, this.arms);
       a1.rotation.x = -Math.PI / 2;
       a2.rotation.x = -Math.PI / 2;
+    } else if (this.type === 'spider') {
+      const shell = 0x2e1f16;
+      const dark = 0x3d2a1e;
+      const body = box(0.72, 0.42, 0.92, shell, sharedMats);
+      body.position.set(0, 0.52, -0.05);
+      g.add(body);
+      this.meshes.push(body);
+      const rear = box(0.5, 0.36, 0.34, dark, sharedMats);
+      rear.position.set(0, 0.5, -0.58);
+      g.add(rear);
+      this.meshes.push(rear);
+      const head = new THREE.Group();
+      head.position.set(0, 0.52, 0.5);
+      const hm = box(0.44, 0.34, 0.34, dark, sharedMats);
+      head.add(hm);
+      this.meshes.push(hm);
+      for (const sx of [-0.12, 0.12]) {
+        for (const sy of [0.1, -0.06]) {
+          const eye = box(0.07, 0.06, 0.03, 0xd02020, sharedMats);
+          eye.position.set(sx, sy, 0.18);
+          head.add(eye);
+          this.meshes.push(eye);
+        }
+      }
+      g.add(head);
+      this.head = head;
+      // eight legs, two per corner, splayed outwards
+      const legSpots: [number, number, number][] = [
+        [-0.34, 0.22, 0.16], [-0.34, 0.22, -0.16], [-0.34, 0.22, -0.44], [-0.34, 0.22, -0.68],
+        [0.34, 0.22, 0.16], [0.34, 0.22, -0.16], [0.34, 0.22, -0.44], [0.34, 0.22, -0.68],
+      ];
+      for (const [lx, ly, lz] of legSpots) {
+        const pivot = new THREE.Group();
+        pivot.position.set(lx, ly, lz);
+        const m = box(0.07, 0.46, 0.07, 0x241a12, sharedMats);
+        m.position.set(lx > 0 ? 0.04 : -0.04, -0.23, 0);
+        m.rotation.z = lx > 0 ? 0.5 : -0.5;
+        pivot.add(m);
+        this.meshes.push(m);
+        g.add(pivot);
+        this.legs.push(pivot);
+      }
+    } else if (this.type === 'skeleton') {
+      const bone = 0xe6e2d4;
+      const boneDark = 0xc9c4b2;
+      this.addLeg(-0.12, 0.72, 0, 0.2, 0.72, 0.2, boneDark, this.legs);
+      this.addLeg(0.12, 0.72, 0, 0.2, 0.72, 0.2, boneDark, this.legs);
+      const torso = box(0.44, 0.7, 0.24, bone, sharedMats);
+      torso.position.y = 1.07;
+      g.add(torso);
+      this.meshes.push(torso);
+      // ribs
+      for (const ry of [0.86, 0.98, 1.1, 1.22]) {
+        const rib = box(0.46, 0.04, 0.26, boneDark, sharedMats);
+        rib.position.y = ry;
+        g.add(rib);
+        this.meshes.push(rib);
+      }
+      const head = new THREE.Group();
+      head.position.y = 1.58;
+      const hm = box(0.42, 0.42, 0.42, bone, sharedMats);
+      head.add(hm);
+      this.meshes.push(hm);
+      const jaw = box(0.34, 0.08, 0.36, boneDark, sharedMats);
+      jaw.position.y = -0.18;
+      head.add(jaw);
+      this.meshes.push(jaw);
+      for (const sx of [-0.1, 0.1]) {
+        const eye = box(0.09, 0.07, 0.03, 0x101010, sharedMats);
+        eye.position.set(sx, 0.04, 0.22);
+        head.add(eye);
+        this.meshes.push(eye);
+      }
+      g.add(head);
+      this.head = head;
+      const a1 = this.addLeg(-0.3, 1.36, 0.1, 0.16, 0.68, 0.16, bone, this.arms);
+      const a2 = this.addLeg(0.3, 1.36, 0.1, 0.16, 0.68, 0.16, bone, this.arms);
+      a1.rotation.x = -1.15;
+      a2.rotation.x = -1.15;
+      // bow held in front
+      const bow1 = box(0.05, 0.62, 0.05, 0x7a5230, sharedMats);
+      bow1.position.set(0.34, 1.0, 0.3);
+      bow1.rotation.z = 0.35;
+      const bow2 = box(0.05, 0.62, 0.05, 0x7a5230, sharedMats);
+      bow2.position.set(0.5, 1.0, 0.3);
+      bow2.rotation.z = -0.35;
+      const string = box(0.03, 0.6, 0.03, 0xdedad2, sharedMats);
+      string.position.set(0.42, 1.0, 0.3);
+      g.add(bow1, bow2, string);
+      this.meshes.push(bow1, bow2, string);
     }
     g.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
@@ -250,7 +341,7 @@ export class Mob {
     return true;
   }
 
-  update(dt: number, world: World, player: THREE.Vector3, onAttack: (dmg: number, mob: Mob) => void, peaceful: boolean) {
+  update(dt: number, world: World, player: THREE.Vector3, onAttack: (dmg: number, mob: Mob) => void, onShoot: (mob: Mob) => void, peaceful: boolean) {
     const b = this.body;
     if (this.hurtTime > 0) {
       this.hurtTime -= dt;
@@ -265,10 +356,10 @@ export class Mob {
     this.soundTimer -= dt;
 
     const inWater = RENDER[world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y + 0.4), Math.floor(b.pos.z))] === 2;
-    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'chicken' ? 1.35 : 1.2;
+    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : 1.2;
     const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
     const dist = Math.hypot(dx, dz);
-    const hostile = this.type === 'zombie' || this.type === 'creeper';
+    const hostile = this.type === 'zombie' || this.type === 'creeper' || this.type === 'spider' || this.type === 'skeleton';
 
     if (this.fuse > 0) {
       this.fuse -= dt;
@@ -281,16 +372,31 @@ export class Mob {
         this.deathTime = 0;
         this.group.scale.setScalar(1);
       }
-    } else if (hostile && dist < (this.type === 'creeper' ? 14 : 24) && Math.abs(player.y - b.pos.y) < 8 && !peaceful) {
+    } else if (hostile && dist < (this.type === 'creeper' ? 14 : this.type === 'skeleton' ? 18 : 24) && Math.abs(player.y - b.pos.y) < 8 && !peaceful) {
       this.yaw = Math.atan2(dx, dz);
-      this.walking = this.type === 'creeper' ? dist > 2.1 : dist > 0.9;
-      if (this.type === 'zombie' && dist < 1.4 && Math.abs(player.y - b.pos.y) < 1.8 && this.attackCooldown <= 0) {
-        this.attackCooldown = 1;
-        onAttack(3, this);
-      }
-      if (this.type === 'creeper' && dist < 2.15 && Math.abs(player.y - b.pos.y) < 2) {
-        this.fuse = 1.35;
-        this.walking = false;
+      if (this.type === 'skeleton') {
+        // ranged: keep its distance and shoot when it has a clear line
+        const tooClose = dist < 5.5;
+        this.walking = dist > 12 || tooClose;
+        if (tooClose) this.yaw = Math.atan2(-dx, -dz);
+        if (dist < 16 && this.attackCooldown <= 0 && this.hasLineOfSight(world, player.x, player.y + 0.9, player.z)) {
+          this.attackCooldown = 2 + Math.random() * 1.2;
+          onShoot(this);
+        }
+      } else {
+        this.walking = this.type === 'creeper' ? dist > 2.1 : dist > 0.9;
+        if (this.type === 'spider' && dist < 1.5 && Math.abs(player.y - b.pos.y) < 1.4 && this.attackCooldown <= 0) {
+          this.attackCooldown = 1;
+          onAttack(3, this);
+        }
+        if (this.type === 'zombie' && dist < 1.4 && Math.abs(player.y - b.pos.y) < 1.8 && this.attackCooldown <= 0) {
+          this.attackCooldown = 1;
+          onAttack(3, this);
+        }
+        if (this.type === 'creeper' && dist < 2.15 && Math.abs(player.y - b.pos.y) < 2) {
+          this.fuse = 1.35;
+          this.walking = false;
+        }
       }
     } else {
       if (this.type === 'creeper') this.group.scale.setScalar(1);
@@ -320,7 +426,26 @@ export class Mob {
     }
     const wasWall = b.hitWall;
     stepBody(world, b, dt);
-    if ((b.hitWall || wasWall) && b.onGround && this.walking) {
+    if (this.type === 'spider' && !inWater && (b.hitWall || wasWall) && this.walking) {
+      // Spiders climb: a low ledge is a hop, a real wall is crawled up while the
+      // player is above it (the body stays flush against the face, so rising is
+      // free) – `climbing` keeps the crawl going between frames.
+      const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.7), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.7);
+      const hy = Math.floor(b.pos.y);
+      const at = (dy: number) => IS_SOLID[world.peekBlock(fx, hy + dy, fz)];
+      const wallFace = at(0); // the wall keeps going as long as its face is solid
+      if (wallFace && player.y > b.pos.y + 1.2 && (b.onGround || this.climbing)) {
+        b.vel.y = 3.6;
+        this.climbing = true;
+      } else if (b.onGround && at(1) && !at(2)) {
+        b.vel.y = 6.5; // a single ledge is just a hop
+        this.climbing = false;
+      } else if (!wallFace) {
+        this.climbing = false;
+      }
+    }
+    // A climbing spider keeps its heading: it must not turn away mid-wall.
+    if ((b.hitWall || wasWall) && b.onGround && this.walking && !(this.type === 'spider' && this.climbing)) {
       // jump over obstacle if space above — but not onto a fence or a closed door
       const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.8), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.8);
       const hy = Math.floor(b.pos.y);
@@ -330,7 +455,7 @@ export class Mob {
       else if (this.type !== 'zombie') this.yaw += Math.PI / 2;
     }
     // avoid walking into water / cliffs (passive mobs)
-    if (this.type !== 'zombie' && this.type !== 'creeper' && this.walking && b.onGround) {
+    if (this.type !== 'zombie' && this.type !== 'creeper' && this.type !== 'skeleton' && this.walking && b.onGround) {
       const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.9), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.9);
       const fy = Math.floor(b.pos.y);
       const below = world.peekBlock(fx, fy - 1, fz);
@@ -338,15 +463,20 @@ export class Mob {
       if (below === B.WATER || below === B.LAVA || (!IS_SOLID[below] && !IS_SOLID[below2])) this.yaw += Math.PI * (0.5 + Math.random());
     }
 
-    // animation
+    // animation (spiders scuttle faster, and fastest while climbing)
     const hs = Math.hypot(b.vel.x, b.vel.z);
-    this.walkPhase += hs * dt * 3.2;
+    const gait = this.type === 'spider' ? (this.climbing ? 6.5 : 4.4) : 3.2;
+    this.walkPhase += hs * dt * gait;
     const swing = Math.sin(this.walkPhase) * Math.min(1, hs / 1.5) * 0.7;
     if (this.legs.length === 4) {
       this.legs[0].rotation.x = swing;
       this.legs[3].rotation.x = swing;
       this.legs[1].rotation.x = -swing;
       this.legs[2].rotation.x = -swing;
+    } else if (this.legs.length === 8) {
+      for (let i = 0; i < 8; i++) {
+        this.legs[i].rotation.x = Math.sin(this.walkPhase + (i % 2 ? Math.PI : 0) + Math.floor(i / 4) * 0.6) * swing;
+      }
     } else if (this.legs.length === 2) {
       this.legs[0].rotation.x = swing;
       this.legs[1].rotation.x = -swing;
@@ -354,6 +484,9 @@ export class Mob {
         const flap = Math.sin(this.walkPhase * 2) * 0.45;
         this.arms[0].rotation.z = 0.4 + flap;
         this.arms[1].rotation.z = -0.4 - flap;
+      } else if (this.type === 'skeleton' && this.arms.length) {
+        this.arms[0].rotation.x = -1.15 + Math.sin(this.walkPhase * 0.5) * 0.05;
+        this.arms[1].rotation.x = -1.15 - Math.sin(this.walkPhase * 0.5) * 0.05;
       } else if (this.arms.length) {
         this.arms[0].rotation.x = -Math.PI / 2 + Math.sin(this.walkPhase * 0.5) * 0.08;
         this.arms[1].rotation.x = -Math.PI / 2 - Math.sin(this.walkPhase * 0.5) * 0.08;
@@ -365,6 +498,19 @@ export class Mob {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     this.group.rotation.y += diff * Math.min(1, dt * 8);
+  }
+
+  /** Cheap visibility test used by the skeleton before it shoots. */
+  hasLineOfSight(world: World, tx: number, ty: number, tz: number): boolean {
+    const sx = this.body.pos.x, sy = this.body.pos.y + this.body.h * 0.85, sz = this.body.pos.z;
+    const dx = tx - sx, dy = ty - sy, dz = tz - sz;
+    const d = Math.hypot(dx, dy, dz);
+    const steps = Math.max(1, Math.ceil(d * 2));
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      if (IS_OPAQUE[world.peekBlock(Math.floor(sx + dx * t), Math.floor(sy + dy * t), Math.floor(sz + dz * t))]) return false;
+    }
+    return true;
   }
 
   // Ray-AABB intersection distance

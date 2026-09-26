@@ -151,6 +151,24 @@ function bricksPattern(tile: number, brick: RGB, mortar: RGB, bw: number, bh: nu
     }
 }
 
+/** Storage block: a framed panel of ingots/gems. */
+function storageBlock(tile: number, base: RGB, rand: () => number) {
+  for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+    const border = x === 0 || y === 0 || x === 15 || y === 15;
+    const inner = x >= 3 && x <= 12 && y >= 3 && y <= 12;
+    let c: RGB;
+    if (border) c = shade(base, 0.55);
+    else if (!inner) c = shade(base, 0.8);
+    else {
+      const gx = Math.floor((x - 3) / 3.4), gy = Math.floor((y - 3) / 3.4);
+      const cell = (gx + gy) % 2 === 0 ? 1 : 0.86;
+      const shine = (x + y) % 5 === 0 ? 1.12 : 1;
+      c = shade(base, cell * shine * (0.95 + rand() * 0.1));
+    }
+    setPx(tile, x, y, c[0], c[1], c[2]);
+  }
+}
+
 // average colors per block (for particles)
 export const AVG_COLOR: RGB[] = [];
 
@@ -390,6 +408,11 @@ export function buildAtlas(): AtlasResult {
     setPx(T.campfire, 7, 6, 255, 240, 140);
     setPx(T.campfire, 8, 7, 255, 220, 80);
   }
+
+  // Storage blocks: iron, gold, diamond
+  storageBlock(T.iron_block, [220, 220, 224], R(76));
+  storageBlock(T.gold_block, [250, 214, 74], R(77));
+  storageBlock(T.diamond_block, [93, 236, 245], R(78));
 
   ctx.putImageData(img, 0, 0);
 

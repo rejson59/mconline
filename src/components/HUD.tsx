@@ -126,6 +126,12 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
       {hud.underwater && <div className="absolute inset-0" style={{ background: 'rgba(20,60,160,0.35)' }} />}
       {hud.inLava && <div className="absolute inset-0" style={{ background: 'rgba(230,90,10,0.6)' }} />}
       {hud.hurtCount > 0 && <div key={hud.hurtCount} className="hurt-flash absolute inset-0" style={{ background: 'radial-gradient(circle, rgba(255,0,0,0.1) 30%, rgba(200,0,0,0.7))' }} />}
+      {hud.mode === 'survival' && hud.health <= 6 && hud.health > 0 && (
+        <div
+          className="low-health absolute inset-0"
+          style={{ background: 'radial-gradient(circle, rgba(120,0,0,0) 45%, rgba(190,0,0,0.55) 100%)' }}
+        />
+      )}
 
       {/* crosshair */}
       <div className="absolute left-1/2 top-1/2" style={{ transform: 'translate(-50%,-50%)', mixBlendMode: 'difference' }}>
@@ -137,19 +143,19 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 1.2 (${hud.fps} fps)`,
+            `BlockCraft 1.3 (${hud.fps} fps)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
             `Kierunek: ${hud.facing}`,
             `Biom: ${hud.biome}`,
             `Czas: dzień ${hud.day}, ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`,
+            `Świat: ${hud.worldName} (${hud.worldType === 'flat' ? 'płaski' : 'normalny'})`,
             `Moby: ${hud.mobs}`,
             `Cel: ${hud.target}`,
             `Ziarno: ${hud.seed}`,
             `Tryb: ${hud.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'}${hud.flying ? ' (lot)' : ''}${hud.sprinting ? ' sprint' : ''}`,
             `Głód: ${hud.hunger.toFixed(1)}  Pogoda: ${hud.weather === 'rain' ? 'deszcz' : 'jasno'}`,
-            `Świat: ${hud.worldName}`,
           ].map((l, i) => (
             <div key={i} className="w-fit px-1" style={{ background: 'rgba(0,0,0,0.45)' }}>
               {l}
@@ -204,6 +210,14 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
           </div>
         )}
         {hud.heldHint && <div className="mb-1 text-sm text-yellow-200 mc-text">{hud.heldHint}</div>}
+        {hud.bow >= 0 && (
+          <div className="mb-1 flex items-center gap-2">
+            <span className="text-sm mc-text">Naciąg</span>
+            <div className="h-2.5 w-32 border-2 border-black bg-black/60">
+              <div className="h-full bg-yellow-300" style={{ width: `${Math.round(hud.bow * 100)}%` }} />
+            </div>
+          </div>
+        )}
         {hud.sprinting && <div className="mb-1 text-sm opacity-80 mc-text">Sprint</div>}
         {hud.mode === 'creative' && hud.flying && <div className="mb-1 text-sm opacity-80 mc-text">✈ Latanie</div>}
         <Hotbar hud={hud} icons={icons} />

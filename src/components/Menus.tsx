@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameMode } from '../game/engine';
 import { ACHIEVEMENTS } from '../game/achievements';
+import { exportSaves, importSaves } from '../game/saves';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
+
+export type WorldType = 'normal' | 'flat';
 
 // BASE_URL is "./" for this build, so the background resolves relative to
 // index.html and works on GitHub Pages project sites, custom domains and file://
@@ -10,6 +13,7 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  'Aktualizacja 1.3: Łowy!',
   'Aktualizacja 1.2: Zbuduj dom!',
   'Aktualizacja 1.1: Przetrwanie!',
   'Uważaj na creepery!',
@@ -57,6 +61,7 @@ export function Controls() {
     ['E', 'Ekwipunek / wytwarzanie'],
     ['Q', 'Wyrzuć przedmiot'],
     ['T lub /', 'Czat i komendy'],
+    ['/help', 'Lista komend (np. /summon <mob>)'],
     ['PPM na jedzeniu', 'Jedzenie'],
     ['PPM na piecu', 'Przetapianie'],
     ['PPM na łóżku', 'Sen i punkt odrodzenia'],
@@ -65,6 +70,7 @@ export function Controls() {
     ['Drabina + W / spacja', 'Wspinaczka'],
     ['Nożyce + LPM na owcy', 'Wełna bez zabijania'],
     ['Krzesiwo + PPM', 'Podpal TNT'],
+    ['Łuk: przytrzymaj PPM, puść', 'Wystrzał ze strzałą'],
     ['Kompas / zegar', 'Kierunek odrodzenia i pora dnia'],
     ['Motyka + PPM', 'Grządka'],
     ['M', 'Minimapa'],
@@ -96,7 +102,10 @@ export function toggleFullscreen() {
 /** Builds a shareable link that recreates this world (seed + mode in the hash). */
 export function worldShareUrl(seed: number, mode: GameMode): string {
   const loc = window.location;
-  const base = `${loc.origin}${loc.pathname}${loc.search}`;
+  // file:// pages report origin "null" – keep only the path so the link still
+  // resolves when the game is opened straight from the file system.
+  const origin = loc.origin && loc.origin !== 'null' ? loc.origin : '';
+  const base = `${origin}${loc.pathname}${loc.search}`;
   return `${base}#seed=${seed}&mode=${mode}`;
 }
 
@@ -112,6 +121,7 @@ export interface WorldCard {
   seed: number;
   mode?: string;
   day?: number;
+  worldType?: WorldType;
 }
 
 export function MainMenu({
@@ -121,13 +131,16 @@ export function MainMenu({
   onPlay,
   onNew,
   onDelete,
+  onImported,
 }: {
   saves: WorldCard[];
+  /** called after a save file was imported so the list can refresh */
+  onImported?: () => void;
   /** seed / mode taken from the URL hash (shareable world links) */
   sharedSeed?: number | null;
   sharedMode?: GameMode | null;
   onPlay: (id: string) => void;
-  onNew: (seed: number, mode: GameMode, name: string) => void;
+  onNew: (seed: number, mode: GameMode, name: string, worldType: WorldType) => void;
   onDelete: (id: string) => void;
 }) {
   const [view, setView] = useState<'main' | 'new' | 'controls' | 'options'>(sharedSeed != null ? 'new' : 'main');
@@ -135,7 +148,9 @@ export function MainMenu({
   const [worldName, setWorldName] = useState('');
   const [mode, setMode] = useState<GameMode>(sharedMode ?? 'survival');
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [worldType, setWorldType] = useState<WorldType>('normal');
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const create = () => {
     let seed: number;
@@ -145,7 +160,31 @@ export function MainMenu({
       seed = 0;
       for (const ch of seedText) seed = (Math.imul(seed, 31) + ch.charCodeAt(0)) | 0;
     }
-    onNew(Math.abs(seed), mode, worldName.trim() || 'Nowy świat');
+    onNew(Math.abs(seed), mode, worldName.trim() || 'Nowy świat', worldType);
+  };
+
+  const downloadSaves = () => {
+    try {
+      const blob = new Blob([exportSaves()], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'blockcraft-swiety.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch {
+      window.alert('Nie udało się pobrać pliku z zapisami.');
+    }
+  };
+
+  const pickSavesFile = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const n = importSaves(String(reader.result ?? ''));
+      window.alert(n > 0 ? `Zaimportowano światów: ${n}` : 'To nie jest plik z zapisami BlockCraft.');
+      onImported?.();
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -172,7 +211,7 @@ export function MainMenu({
                     <button className="mc-btn min-w-0 flex-1 !py-2 text-left" onClick={() => onPlay(s.id)}>
                       {s.name || 'Świat'}
                       <span className="block text-xs font-normal opacity-80">
-                        dzień {s.day ?? 1} · {s.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'} · ziarno {s.seed}
+                        dzień {s.day ?? 1} · {s.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'} · {s.worldType === 'flat' ? 'płaski' : 'normalny'} · ziarno {s.seed}
                       </span>
                     </button>
                     <button
@@ -200,6 +239,21 @@ export function MainMenu({
             <button className="mc-btn" onClick={toggleFullscreen}>
               Pełny ekran
             </button>
+            <div className="mt-1 flex gap-2">
+              <button className="mc-btn !py-2 !text-sm" onClick={downloadSaves}>
+                Eksport zapisów
+              </button>
+              <button className="mc-btn !py-2 !text-sm" onClick={() => fileRef.current?.click()}>
+                Import zapisów
+              </button>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => { pickSavesFile(e.target.files?.[0]); e.target.value = ''; }}
+            />
           </div>
         )}
         {view === 'new' && (
@@ -215,10 +269,15 @@ export function MainMenu({
             <button className="mc-btn" onClick={() => setMode(mode === 'survival' ? 'creative' : 'survival')}>
               Tryb gry: {mode === 'survival' ? 'Przetrwanie' : 'Kreatywny'}
             </button>
+            <button className="mc-btn" onClick={() => setWorldType(worldType === 'normal' ? 'flat' : 'normal')}>
+              Typ świata: {worldType === 'normal' ? 'Normalny' : 'Płaski'}
+            </button>
             <div className="text-xs text-gray-300">
-              {mode === 'survival'
-                ? 'Zetnij drzewo, wytwórz kilof, postaw drzwi i skrzynię. W jaskiniach leżą skrzynie.'
-                : 'Nieograniczone bloki, latanie, natychmiastowe niszczenie, brak obrażeń.'}
+              {worldType === 'flat'
+                ? 'Świat płaski: równa trawna równina na wysokości 64 – idealny do budowania i kopania rud.'
+                : mode === 'survival'
+                  ? 'Zetnij drzewo, wytwórz kilof, postaw drzwi i skrzynię. W jaskiniach leżą skrzynie.'
+                  : 'Nieograniczone bloki, latanie, natychmiastowe niszczenie, brak obrażeń.'}
             </div>
             <div className="text-xs text-gray-300">Nowy świat nie kasuje pozostałych zapisów. Maksymalnie 8 światów.</div>
             <div className="flex gap-3">
@@ -255,7 +314,7 @@ export function MainMenu({
           </div>
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.2</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.3</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>

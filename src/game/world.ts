@@ -6,6 +6,8 @@ import { tileUV } from './textures';
 export const CS = 16; // chunk size
 export const CH = 128; // chunk height
 export const SEA = 62;
+/** Surface height of a flat world. */
+export const FLAT_H = 64;
 
 export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las';
 
@@ -117,6 +119,8 @@ function panelBounds(id: number): [number, number, number, number, number, numbe
 
 export class World {
   seed: number;
+  /** Flat worlds are a single grass layer at FLAT_H – handy for building. */
+  flat: boolean;
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
@@ -127,8 +131,9 @@ export class World {
   private nCave2: SimplexNoise;
   private nTemp: SimplexNoise;
 
-  constructor(seed: number) {
+  constructor(seed: number, flat = false) {
     this.seed = seed;
+    this.flat = flat;
     this.n1 = new SimplexNoise(seed);
     this.n2 = new SimplexNoise(seed + 1);
     this.n3 = new SimplexNoise(seed + 2);
@@ -143,6 +148,7 @@ export class World {
 
   // ---------- Terrain ----------
   surface(x: number, z: number): { h: number; biome: Biome; temp: number; forest: number } {
+    if (this.flat) return { h: FLAT_H, biome: 'Równiny', temp: 0, forest: 0 };
     const cont = this.n1.fbm2D(x / 700, z / 700, 4);
     const hills = this.n2.fbm2D(x / 160, z / 160, 4);
     const ridge = 1 - Math.abs(this.n3.noise2D(x / 260, z / 260));
@@ -179,6 +185,7 @@ export class World {
   }
 
   private generate(c: Chunk) {
+    if (this.flat) { this.generateFlat(c); return; }
     const d = c.data;
     const ox = c.cx * CS, oz = c.cz * CS;
     const s = this.seed;
@@ -272,36 +279,9 @@ export class World {
         else if (info.biome === 'Góry' && info.h < 98) chance = 0.008;
         if (r > chance) continue;
         if (info.h <= SEA) continue;
-
         const birch = info.biome === 'Brzozowy las' ? hash(tx, 2, tz, s) < 0.8 : hash(tx, 2, tz, s) < 0.15;
-        const logId = birch ? B.BIRCH_LOG : B.LOG;
-        const leafId = birch ? B.BIRCH_LEAVES : B.LEAVES;
-        const th = 4 + Math.floor(hash(tx, 6, tz, s) * 3);
-        const base = info.h + 1;
-        const topY = base + th;
-        const put = (x: number, y: number, z: number, id: number, force: boolean) => {
-          const lx = x - ox, lz = z - oz;
-          if (lx < 0 || lx >= CS || lz < 0 || lz >= CS || y < 0 || y >= CH) return;
-          const i = idx(lx, y, lz);
-          const cur = d[i];
-          if (force || cur === B.AIR || cur === B.TALLGRASS || cur === B.FLOWER_RED || cur === B.FLOWER_YELLOW) d[i] = id;
-        };
-        for (let ly = topY - 3; ly <= topY; ly++) {
-          const rad = ly >= topY - 1 ? 1 : 2;
-          for (let dx = -rad; dx <= rad; dx++)
-            for (let dz = -rad; dz <= rad; dz++) {
-              if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || hash(tx + dx, ly, tz + dz, s) < 0.5)) continue;
-              put(tx + dx, ly, tz + dz, leafId, false);
-            }
-        }
-        put(tx, topY + 1, tz, leafId, false);
-        put(tx + 1, topY + 1, tz, leafId, false);
-        put(tx - 1, topY + 1, tz, leafId, false);
-        put(tx, topY + 1, tz + 1, leafId, false);
-        put(tx, topY + 1, tz - 1, leafId, false);
-        for (let y = base; y < topY; y++) put(tx, y, tz, logId, true);
-        put(tx, info.h, tz, B.DIRT, true);
-        if (topY + 3 > maxY) maxY = topY + 3;
+        const top = this.growTree(c, tx, tz, info.h + 1, birch);
+        if (top > maxY) maxY = top;
       }
 
     // Buried chests in caves. Does not change terrain height, only fills an existing air pocket.
@@ -326,17 +306,103 @@ export class World {
       }
     }
 
-    // Apply player modifications
-    const m = this.mods.get(World.key(c.cx, c.cz));
-    if (m) {
-      for (const [i, id] of m) {
-        d[i] = id;
-        const y = Math.floor(i / (CS * CS));
-        if (y + 2 > maxY) maxY = y + 2;
-      }
-    }
     c.maxY = Math.min(CH - 1, maxY);
+    this.applyMods(c);
     for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x, z);
+  }
+
+  /**
+   * Places an oak or birch trunk with its canopy, clipping to this chunk only.
+   * Returns the highest y the tree reaches (for maxY bookkeeping).
+   */
+  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean): number {
+    const d = c.data;
+    const ox = c.cx * CS, oz = c.cz * CS;
+    const s = this.seed;
+    const logId = birch ? B.BIRCH_LOG : B.LOG;
+    const leafId = birch ? B.BIRCH_LEAVES : B.LEAVES;
+    const th = 4 + Math.floor(hash(tx, 6, tz, s) * 3);
+    const topY = base + th;
+    if (topY + 1 >= CH) return base;
+    const put = (x: number, y: number, z: number, id: number, force: boolean) => {
+      const lx = x - ox, lz = z - oz;
+      if (lx < 0 || lx >= CS || lz < 0 || lz >= CS || y < 0 || y >= CH) return;
+      const i = idx(lx, y, lz);
+      const cur = d[i];
+      if (force || cur === B.AIR || cur === B.TALLGRASS || cur === B.FLOWER_RED || cur === B.FLOWER_YELLOW) d[i] = id;
+    };
+    for (let ly = topY - 3; ly <= topY; ly++) {
+      const rad = ly >= topY - 1 ? 1 : 2;
+      for (let dx = -rad; dx <= rad; dx++)
+        for (let dz = -rad; dz <= rad; dz++) {
+          if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || hash(tx + dx, ly, tz + dz, s) < 0.5)) continue;
+          put(tx + dx, ly, tz + dz, leafId, false);
+        }
+    }
+    put(tx, topY + 1, tz, leafId, false);
+    put(tx + 1, topY + 1, tz, leafId, false);
+    put(tx - 1, topY + 1, tz, leafId, false);
+    put(tx, topY + 1, tz + 1, leafId, false);
+    put(tx, topY + 1, tz - 1, leafId, false);
+    for (let y = base; y < topY; y++) put(tx, y, tz, logId, true);
+    put(tx, base - 1, tz, B.DIRT, true);
+    return topY + 3;
+  }
+
+  /** Superflat: one grass layer at FLAT_H, ores below, no caves and a few trees. */
+  private generateFlat(c: Chunk) {
+    const d = c.data;
+    const ox = c.cx * CS, oz = c.cz * CS;
+    const s = this.seed;
+    for (let z = 0; z < CS; z++)
+      for (let x = 0; x < CS; x++) {
+        const wx = ox + x, wz = oz + z;
+        for (let y = 0; y <= FLAT_H; y++) {
+          let id: number = B.AIR;
+          if (y === 0) id = B.BEDROCK;
+          else if (y < FLAT_H - 3) {
+            id = B.STONE;
+            const r = hash(wx, y, wz, s + 77);
+            const cl = hash(wx >> 1, y >> 1, wz >> 1, s + 11);
+            if (y < 16 && cl < 0.012 && r < 0.6) id = B.DIAMOND_ORE;
+            else if (y < 32 && cl > 0.985 && r < 0.6) id = B.GOLD_ORE;
+            else if (cl > 0.02 && cl < 0.045 && r < 0.6) id = B.IRON_ORE;
+            else if (cl > 0.5 && cl < 0.56 && r < 0.65) id = B.COAL_ORE;
+          } else if (y < FLAT_H) id = B.DIRT;
+          else id = B.GRASS;
+          d[idx(x, y, z)] = id;
+        }
+        const r = hash(wx, 3, wz, s + 9);
+        if (r < 0.18) d[idx(x, FLAT_H + 1, z)] = B.TALLGRASS;
+        else if (r < 0.022) d[idx(x, FLAT_H + 1, z)] = B.FLOWER_RED;
+        else if (r < 0.034) d[idx(x, FLAT_H + 1, z)] = B.FLOWER_YELLOW;
+        else if (r > 0.9995) d[idx(x, FLAT_H + 1, z)] = B.PUMPKIN;
+      }
+
+    // sparse trees so wood is still obtainable
+    let maxY = FLAT_H + 8;
+    for (let tz = oz - 2; tz < oz + CS + 2; tz++)
+      for (let tx = ox - 2; tx < ox + CS + 2; tx++) {
+        if (hash(tx, 1, tz, s + 3) > 0.006) continue;
+        const top = this.growTree(c, tx, tz, FLAT_H + 1, hash(tx, 2, tz, s) < 0.3);
+        if (top > maxY) maxY = top;
+      }
+
+    c.maxY = Math.min(CH - 1, maxY);
+    this.applyMods(c);
+    for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x, z);
+  }
+
+  /** Replays the player's block changes onto a freshly generated chunk. */
+  private applyMods(c: Chunk) {
+    const m = this.mods.get(World.key(c.cx, c.cz));
+    if (!m) return;
+    const d = c.data;
+    for (const [i, id] of m) {
+      d[i] = id;
+      const y = Math.floor(i / (CS * CS));
+      if (y + 2 > c.maxY) c.maxY = Math.min(CH - 1, y + 2);
+    }
   }
 
   // ---------- Access ----------

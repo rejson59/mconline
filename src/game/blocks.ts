@@ -14,6 +14,7 @@ export const T = {
   furnace_lit: 65,
   chest_top: 66, chest_side: 67, chest_front: 68, door: 69, door_top: 70,
   ladder: 71, fence: 72, trapdoor: 73, campfire: 74, campfire_side: 75,
+  iron_block: 76, gold_block: 77, diamond_block: 78,
 } as const;
 
 export const B = {
@@ -35,6 +36,7 @@ export const B = {
   CAMPFIRE: 73, LOOT_CHEST: 74,
   DOOR_UN: 75, DOOR_UE: 76, DOOR_US: 77, DOOR_UW: 78,
   DOOR_UON: 79, DOOR_UOE: 80, DOOR_UOS: 81, DOOR_UOW: 82,
+  IRON_BLOCK: 83, GOLD_BLOCK: 84, DIAMOND_BLOCK: 85,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid';
@@ -150,6 +152,9 @@ for (let i = 0; i < 4; i++) {
 def(B.TRAP, 'Właz', T.trapdoor, { hardness: 2, sound: 'wood', opaque: false });
 def(B.FENCE, 'Płot', T.fence, { opaque: false, layer: 1, hardness: 2, sound: 'wood' });
 def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { hardness: 2, sound: 'wood' });
+def(B.IRON_BLOCK, 'Blok żelaza', T.iron_block, { hardness: 5, sound: 'stone' });
+def(B.GOLD_BLOCK, 'Blok złota', T.gold_block, { hardness: 3, sound: 'stone' });
+def(B.DIAMOND_BLOCK, 'Blok diamentu', T.diamond_block, { hardness: 5, sound: 'stone' });
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;

@@ -116,7 +116,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper') {
+export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -143,6 +143,14 @@ export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | '
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(180, t);
     o.frequency.linearRampToValueAtTime(40, t + 0.35);
+  } else if (type === 'spider') {
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(700, t);
+    for (let i = 0; i < 8; i++) o.frequency.setValueAtTime(600 + Math.random() * 300, t + i * 0.04);
+  } else if (type === 'skeleton') {
+    o.type = 'square';
+    o.frequency.setValueAtTime(900, t);
+    for (let i = 0; i < 6; i++) o.frequency.setValueAtTime(i % 2 ? 700 : 1100, t + i * 0.03);
   } else {
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(110, t);
@@ -207,6 +215,147 @@ export function playEat() {
   o.connect(g).connect(master);
   o.start(t);
   o.stop(t + 0.16);
+}
+
+/** Bow release and arrow impact. */
+export function playBow() {
+  const c = ensure();
+  if (!c || !master) return;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  const t = c.currentTime;
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(180, t);
+  o.frequency.exponentialRampToValueAtTime(620, t + 0.09);
+  g.gain.setValueAtTime(0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + 0.16);
+}
+
+export function playArrowHit() {
+  const c = ensure();
+  if (!c || !master || !noiseBuf) return;
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf;
+  src.playbackRate.value = 1.6;
+  const f = c.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = 2200;
+  f.Q.value = 1.4;
+  const g = c.createGain();
+  const t = c.currentTime;
+  g.gain.setValueAtTime(0.35, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  src.connect(f).connect(g).connect(master);
+  src.start(t, Math.random() * 0.4);
+  src.stop(t + 0.16);
+}
+
+/** A short wind gust – filtered noise that slowly opens up. */
+export function playWind() {
+  const c = ensure();
+  if (!c || !master || !noiseBuf) return;
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf;
+  src.loop = true;
+  const f = c.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = 320;
+  f.Q.value = 0.8;
+  const g = c.createGain();
+  const t = c.currentTime;
+  const len = 2.5 + Math.random() * 2;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.05, t + len * 0.45);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  f.frequency.linearRampToValueAtTime(520 + Math.random() * 300, t + len);
+  src.connect(f).connect(g).connect(master);
+  src.start(t);
+  src.stop(t + len + 0.05);
+}
+
+/** A few bird chirps – daytime ambience on the surface. */
+export function playBird() {
+  const c = ensure();
+  if (!c || !master) return;
+  const notes = 2 + Math.floor(Math.random() * 3);
+  const base = 1900 + Math.random() * 1400;
+  for (let i = 0; i < notes; i++) {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    const t = c.currentTime + i * (0.09 + Math.random() * 0.13);
+    o.type = 'sine';
+    o.frequency.setValueAtTime(base * (1 + Math.random() * 0.25), t);
+    o.frequency.exponentialRampToValueAtTime(base * (0.7 + Math.random() * 0.3), t + 0.06);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.045, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    o.connect(g).connect(master);
+    o.start(t);
+    o.stop(t + 0.13);
+  }
+}
+
+/** Low cave drone plus a water drop – tells the player they are underground. */
+export function playCave() {
+  const c = ensure();
+  if (!c || !master) return;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  const t = c.currentTime;
+  o.type = 'sine';
+  o.frequency.setValueAtTime(55 + Math.random() * 45, t);
+  o.frequency.linearRampToValueAtTime(48 + Math.random() * 30, t + 3);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.06, t + 0.9);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + 3.3);
+  if (Math.random() < 0.6) {
+    const d = c.createOscillator();
+    const dg = c.createGain();
+    const dt = t + 0.6 + Math.random() * 1.6;
+    d.type = 'sine';
+    d.frequency.setValueAtTime(900 + Math.random() * 700, dt);
+    d.frequency.exponentialRampToValueAtTime(400, dt + 0.09);
+    dg.gain.setValueAtTime(0.0001, dt);
+    dg.gain.exponentialRampToValueAtTime(0.05, dt + 0.008);
+    dg.gain.exponentialRampToValueAtTime(0.0001, dt + 0.14);
+    d.connect(dg).connect(master);
+    d.start(dt);
+    d.stop(dt + 0.16);
+  }
+}
+
+/**
+ * Ambient music: a slow, quiet pentatonic phrase. Minecraft-like games use it to
+ * fill the silence while exploring; kept sparse and soft so it never fights the
+ * sound effects.
+ */
+export function playMusic() {
+  const c = ensure();
+  if (!c || !master) return;
+  // A minor pentatonic, two octaves – any order sounds calm.
+  const scale = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25];
+  const notes = 3 + Math.floor(Math.random() * 3);
+  const base = Math.floor(Math.random() * (scale.length - 4));
+  for (let i = 0; i < notes; i++) {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    const t = c.currentTime + i * (0.55 + Math.random() * 0.4);
+    const f = scale[base + Math.floor(Math.random() * 4)] * (Math.random() < 0.3 ? 2 : 1);
+    o.type = Math.random() < 0.5 ? 'sine' : 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05, t + 1.1);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 4.2);
+    o.connect(g).connect(master);
+    o.start(t);
+    o.stop(t + 4.4);
+  }
 }
 
 export function playThunder() {
