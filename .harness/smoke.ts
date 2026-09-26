@@ -400,6 +400,23 @@ section('mobs: behaviour');
   for (let i = 0; i < 60 * 4; i++) { sp2.update(1 / 60, w3, player, () => {}, () => {}, false); peak = Math.max(peak, sp2.body.pos.y); }
   check('spider climbs over a block', peak > y0 + 0.9, `y0=${y0} peak=${peak}`);
 
+  // a tall wall: the spider crawls up it while the player is above
+  const w5 = new World(31337);
+  w5.getChunk(0, 0);
+  const h5 = w5.heightAt(6, 6);
+  for (let dy = 1; dy <= 3; dy++) w5.setBlock(7, h5 + dy, 6, B.STONE);
+  const onTop = playerAt(10.5, h5 + 4, 6.5);
+  const sp3 = new Mob('spider', 6.5, h5 + 1, 6.5);
+  const y1 = sp3.body.pos.y;
+  let climbed = 0, sawClimb = false;
+  for (let i = 0; i < 60 * 4; i++) {
+    sp3.update(1 / 60, w5, onTop, () => {}, () => {}, false);
+    climbed = Math.max(climbed, sp3.body.pos.y);
+    if (sp3.climbing) sawClimb = true;
+  }
+  check('spider crawls up a tall wall', climbed > y1 + 2, `y0=${y1} peak=${climbed}`);
+  check('the climbing flag is used', sawClimb);
+
   // skeleton: shoots from afar, keeps its distance, needs line of sight
   const w2 = new World(31337);
   w2.getChunk(0, 0);

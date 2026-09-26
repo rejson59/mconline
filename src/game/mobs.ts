@@ -37,6 +37,8 @@ export class Mob {
   exploded = false;
   looted = false;
   sheared = false;
+  /** True while a spider crawls up a wall (drives the leg animation). */
+  climbing = false;
   private woolMesh: THREE.Mesh | null = null;
   legs: THREE.Object3D[] = [];
   arms: THREE.Object3D[] = [];
@@ -424,13 +426,26 @@ export class Mob {
     }
     const wasWall = b.hitWall;
     stepBody(world, b, dt);
-    if (this.type === 'spider' && !inWater && (b.hitWall || wasWall) && b.onGround && this.walking) {
-      // climb whatever it is walking into
+    if (this.type === 'spider' && !inWater && (b.hitWall || wasWall) && this.walking) {
+      // Spiders climb: a low ledge is a hop, a real wall is crawled up while the
+      // player is above it (the body stays flush against the face, so rising is
+      // free) – `climbing` keeps the crawl going between frames.
       const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.7), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.7);
       const hy = Math.floor(b.pos.y);
-      if (IS_SOLID[world.peekBlock(fx, hy + 1, fz)] && !IS_SOLID[world.peekBlock(fx, hy + 2, fz)]) b.vel.y = 6.5;
+      const at = (dy: number) => IS_SOLID[world.peekBlock(fx, hy + dy, fz)];
+      const wallFace = at(0); // the wall keeps going as long as its face is solid
+      if (wallFace && player.y > b.pos.y + 1.2 && (b.onGround || this.climbing)) {
+        b.vel.y = 3.6;
+        this.climbing = true;
+      } else if (b.onGround && at(1) && !at(2)) {
+        b.vel.y = 6.5; // a single ledge is just a hop
+        this.climbing = false;
+      } else if (!wallFace) {
+        this.climbing = false;
+      }
     }
-    if ((b.hitWall || wasWall) && b.onGround && this.walking) {
+    // A climbing spider keeps its heading: it must not turn away mid-wall.
+    if ((b.hitWall || wasWall) && b.onGround && this.walking && !(this.type === 'spider' && this.climbing)) {
       // jump over obstacle if space above — but not onto a fence or a closed door
       const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.8), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.8);
       const hy = Math.floor(b.pos.y);
@@ -448,9 +463,10 @@ export class Mob {
       if (below === B.WATER || below === B.LAVA || (!IS_SOLID[below] && !IS_SOLID[below2])) this.yaw += Math.PI * (0.5 + Math.random());
     }
 
-    // animation
+    // animation (spiders scuttle faster, and fastest while climbing)
     const hs = Math.hypot(b.vel.x, b.vel.z);
-    this.walkPhase += hs * dt * 3.2;
+    const gait = this.type === 'spider' ? (this.climbing ? 6.5 : 4.4) : 3.2;
+    this.walkPhase += hs * dt * gait;
     const swing = Math.sin(this.walkPhase) * Math.min(1, hs / 1.5) * 0.7;
     if (this.legs.length === 4) {
       this.legs[0].rotation.x = swing;
