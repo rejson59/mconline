@@ -327,7 +327,7 @@ export function MainMenu({
           </div>
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.8</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.9</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>

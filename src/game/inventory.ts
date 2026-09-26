@@ -72,7 +72,8 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.LAPIS, count: 9 }, inputs: [{ id: B.LAPIS_BLOCK, count: 1 }], table: false },
   { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.COAL, count: 5 }], table: true },
   { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.GUNPOWDER, count: 5 }], table: true },
-  { out: { id: B.GLOWSTONE, count: 1 }, inputs: [{ id: B.GOLD_ORE, count: 1 }, { id: B.GLASS, count: 1 }], table: true },
+  // 1.9: jasnogłaz składa się z pyłu jasnogłazu (jak w Minecraftcie)
+  { out: { id: B.GLOWSTONE, count: 1 }, inputs: [{ id: I.GLOWSTONE_DUST, count: 4 }], table: false, pattern: ['DD', 'DD'], key: { D: I.GLOWSTONE_DUST } },
   { out: { id: B.MOSSY, count: 1 }, inputs: [{ id: B.COBBLE, count: 1 }, { id: B.LEAVES, count: 1 }], table: false },
   { out: { id: B.WOOL_WHITE, count: 1 }, inputs: [{ id: B.TALLGRASS, count: 4 }], table: false },
   { out: { id: B.WOOL_RED, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 1 }, { id: B.FLOWER_RED, count: 1 }], table: false },
@@ -135,6 +136,11 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.ANVIL, count: 1 }, inputs: [{ id: B.IRON_BLOCK, count: 3 }, { id: I.IRON, count: 4 }], table: true, pattern: ['III', ' I ', 'III'], key: { I: B.IRON_BLOCK } },
   { out: { id: B.TARGET, count: 1 }, inputs: [{ id: I.REDSTONE, count: 4 }, { id: B.HAY, count: 1 }], table: true, pattern: [' R ', 'RHR', ' R '], key: { R: I.REDSTONE, H: B.HAY } },
   { out: { id: B.HONEYCOMB_BLOCK, count: 1 }, inputs: [{ id: I.HONEYCOMB, count: 4 }], table: true, pattern: ['HH', 'HH'], key: { H: I.HONEYCOMB } },
+  // 1.9: netherowe surowce mają swoje receptury i źródła
+  { out: { id: B.MAGMA, count: 1 }, inputs: [{ id: I.MAGMA_CREAM, count: 4 }], table: false, pattern: ['MM', 'MM'], key: { M: I.MAGMA_CREAM } },
+  { out: { id: B.BREWING, count: 1 }, inputs: [{ id: I.BLAZE_ROD, count: 1 }, { id: B.COBBLE, count: 3 }], table: false, pattern: [' R ', 'CCC'], key: { R: I.BLAZE_ROD, C: B.COBBLE } },
+  { out: { id: B.CRYING_OBSIDIAN, count: 1 }, inputs: [{ id: B.OBSIDIAN, count: 1 }, { id: I.GHAST_TEAR, count: 1 }], table: false },
+  { out: { id: B.WOOL_RED, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 1 }, { id: I.NETHER_WART, count: 1 }], table: false },
   { out: { id: B.OAK_STAIRS_N, count: 4 }, inputs: [{ id: B.PLANKS, count: 6 }], table: true, pattern: ['P  ', 'PP ', 'PPP'], key: { P: B.PLANKS } },
   { out: { id: B.COBBLE_STAIRS_N, count: 4 }, inputs: [{ id: B.COBBLE, count: 6 }], table: true, pattern: ['C  ', 'CC ', 'CCC'], key: { C: B.COBBLE } },
   { out: { id: B.OAK_SLAB, count: 6 }, inputs: [{ id: B.PLANKS, count: 3 }], table: true, pattern: ['PPP'], key: { P: B.PLANKS } },

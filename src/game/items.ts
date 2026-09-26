@@ -508,7 +508,7 @@ export function smeltResult(id: number): number | null {
     case B.COAL_ORE:
       return I.COAL;
     case B.NETHERRACK:
-      return B.NETHER_BRICKS;
+      return I.NETHER_BRICK_ITEM;
     case B.QUARTZ_ORE:
       return I.QUARTZ;
     case B.BLACKSTONE:
@@ -534,6 +534,7 @@ export function smeltResult(id: number): number | null {
 /** Seconds of burn time one item of fuel provides. 0 = not fuel. */
 export function fuelSeconds(id: number): number {
   if (id === I.COAL || id === B.COAL_ORE) return 32;
+  if (id === I.BLAZE_ROD) return 60;
   if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || id === B.CHEST || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
   if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || isLadder(id)) return 2;
   if (id === B.HAY) return 6;

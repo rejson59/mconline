@@ -1,17 +1,32 @@
 import { ITEM_LIST, type ItemDef } from './items';
 
-function paint(draw: (set: (x: number, y: number, color: string) => void) => void): string {
+/**
+ * Pixel-art painter for item icons.
+ *
+ * Every icon is authored as sixteen 16-character rows. Characters map to
+ * palette colours ('.' or ' ' = transparent), which keeps the art readable
+ * and easy to tweak next to the thing it depicts. The painted 16x16 canvas
+ * is upscaled 3x with nearest-neighbour so it stays crisp in the UI.
+ */
+
+function paint(rows: string[], pal: Record<string, string>): string {
   const c = document.createElement('canvas');
   c.width = 16;
   c.height = 16;
   const ctx = c.getContext('2d');
   if (!ctx) return '';
-  const set = (x: number, y: number, color: string) => {
-    if (x < 0 || y < 0 || x > 15 || y > 15) return;
-    ctx.fillStyle = color;
-    ctx.fillRect(x | 0, y | 0, 1, 1);
-  };
-  draw(set);
+  if (rows.length !== 16) throw new Error(`icon art needs 16 rows, got ${rows.length}`);
+  rows.forEach((row, y) => {
+    if (row.length !== 16) throw new Error(`icon row ${y} has ${row.length} chars: "${row}"`);
+    for (let x = 0; x < 16; x++) {
+      const ch = row[x];
+      if (ch === '.' || ch === ' ') continue;
+      const color = pal[ch];
+      if (!color) throw new Error(`icon row ${y} uses unknown palette char "${ch}"`);
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  });
   const out = document.createElement('canvas');
   out.width = 48;
   out.height = 48;
@@ -22,301 +37,6 @@ function paint(draw: (set: (x: number, y: number, color: string) => void) => voi
   return out.toDataURL();
 }
 
-const HANDLE = '#8a5a2b';
-const HANDLE_DK = '#5c3b1c';
-
-function handle(set: (x: number, y: number, color: string) => void) {
-  for (let i = 0; i < 9; i++) {
-    set(5 + i, 13 - i, i % 3 === 0 ? HANDLE_DK : HANDLE);
-    set(6 + i, 13 - i, HANDLE_DK);
-  }
-}
-
-function toolIcon(it: ItemDef): string {
-  const head = it.color;
-  const edge = '#222';
-  return paint((set) => {
-    handle(set);
-    const k = it.tool;
-    if (k === 'pick') {
-      for (let x = 2; x <= 12; x++) set(x, 3, head);
-      set(2, 4, head);
-      set(12, 4, head);
-      set(3, 4, edge);
-      set(11, 4, edge);
-      set(7, 4, head);
-    } else if (k === 'axe') {
-      for (let y = 1; y <= 6; y++) {
-        set(3, y, head);
-        set(4, y, head);
-        set(2, y, y === 1 || y === 6 ? edge : head);
-      }
-      set(5, 2, head);
-      set(5, 5, head);
-    } else if (k === 'shovel') {
-      for (let y = 1; y <= 5; y++) for (let x = 5; x <= 8; x++) set(x, y, y === 1 || x === 5 ? edge : head);
-      set(6, 2, head);
-      set(7, 2, '#fff');
-    } else if (k === 'sword') {
-      for (let i = 0; i < 10; i++) {
-        set(11 - i, 1 + i, head);
-        set(12 - i, 1 + i, edge);
-      }
-      set(6, 8, '#ddd');
-      set(5, 9, '#ddd');
-    } else if (k === 'shears') {
-      for (let i = 0; i < 8; i++) { set(3 + i, 3 + i, head); set(4 + i, 3 + i, edge); }
-      for (let i = 0; i < 8; i++) { set(12 - i, 3 + i, head); set(11 - i, 3 + i, edge); }
-      set(7, 8, '#c44848');
-      set(8, 8, '#c44848');
-    } else if (k === 'igniter') {
-      for (let i = 0; i < 8; i++) set(4 + i, 10 - i, i % 2 ? HANDLE_DK : HANDLE);
-      for (let y = 2; y <= 6; y++) { set(10, y, '#9a9aa2'); set(11, y, head); }
-      set(11, 2, '#f0f0f4');
-    } else if (k === 'bow') {
-      // wooden arc with a taut string
-      for (let a = 0; a <= 12; a++) {
-        const t = (a / 12) * Math.PI;
-        const x = Math.round(4 + Math.sin(t) * 7);
-        const y = Math.round(2 + (1 - Math.cos(t)) * 5.5);
-        set(x, y, head);
-        set(x, y + 1, edge);
-      }
-      for (let y = 3; y <= 13; y++) set(4, y, '#e8e8ea');
-      set(10, 8, head);
-    } else if (k === 'shield') {
-      // wooden shield with an iron boss
-      for (let y = 2; y <= 12; y++) {
-        const half = y < 7 ? 4 : y < 10 ? 3 : 2;
-        for (let x = 8 - half; x <= 8 + half; x++) {
-          if (y === 12 && Math.abs(x - 8) > 1) continue;
-          set(x, y, head);
-        }
-      }
-      for (let y = 3; y <= 11; y++) set(5, y, '#5c3b1c');
-      for (let y = 4; y <= 7; y++) set(9, y, '#c8c8d0');
-      set(9, 5, '#f0f0f4');
-      set(10, 6, '#9a9aa2');
-    } else {
-      // hoe
-      for (let x = 3; x <= 10; x++) set(x, 2, head);
-      set(3, 3, head);
-      set(4, 3, edge);
-      set(9, 3, head);
-    }
-  });
-}
-
-function foodIcon(it: ItemDef): string {
-  return paint((set) => {
-    const c = it.color;
-    if (it.id === 108) {
-      // apple
-      for (let y = 4; y <= 13; y++) for (let x = 4; x <= 12; x++) {
-        const dx = x - 8, dy = y - 8;
-        if (dx * dx + dy * dy < 18) set(x, y, c);
-      }
-      set(8, 3, '#6a3a1a');
-      set(9, 2, '#3e8a32');
-      set(10, 2, '#3e8a32');
-      set(6, 6, '#ffb0a8');
-    } else if (it.id === 109) {
-      for (let y = 5; y <= 11; y++) for (let x = 3; x <= 12; x++) set(x, y, y === 5 || y === 11 ? '#a87438' : c);
-      set(6, 7, '#f0d0a0');
-      set(9, 8, '#f0d0a0');
-    } else {
-      for (let y = 4; y <= 12; y++) for (let x = 4; x <= 11; x++) {
-        if ((x + y) % 5 === 0) set(x, y, '#fff');
-        else set(x, y, c);
-      }
-      set(5, 5, '#fff');
-    }
-  });
-}
-
-function materialIcon(it: ItemDef): string {
-  return paint((set) => {
-    const c = it.color;
-    if (it.keys.includes('stick')) {
-      for (let i = 0; i < 12; i++) set(3 + (i >> 1), 2 + i, i % 2 ? HANDLE_DK : HANDLE);
-    } else if (it.keys.includes('coal')) {
-      const pts = [[5, 4], [6, 4], [7, 5], [4, 6], [5, 6], [6, 6], [8, 6], [5, 7], [6, 8], [7, 8], [9, 7], [4, 8], [8, 9], [6, 10]];
-      for (const [x, y] of pts) set(x, y, c);
-      set(6, 5, '#555');
-    } else if (it.keys.includes('diamond')) {
-      const gem = [[8, 2], [6, 4], [7, 4], [8, 4], [9, 4], [10, 4], [5, 6], [6, 6], [7, 6], [8, 6], [9, 6], [10, 6], [11, 6], [6, 8], [7, 8], [8, 8], [9, 8], [10, 8], [7, 10], [8, 10], [9, 10], [8, 12]];
-      for (const [x, y] of gem) set(x, y, c);
-      set(7, 5, '#eaffff');
-      set(8, 7, '#eaffff');
-    } else if (it.keys.includes('seeds')) {
-      for (const [x, y] of [[5, 6], [6, 7], [8, 5], [9, 8], [7, 10], [10, 6], [4, 9]]) set(x, y, c);
-      set(6, 6, '#d8c45a');
-      set(9, 7, '#d8c45a');
-    } else if (it.keys.includes('wheat')) {
-      for (let i = 0; i < 8; i++) {
-        set(7, 4 + i, '#c6a04a');
-        set(6, 3 + (i % 5), c);
-        set(8, 4 + (i % 4), c);
-      }
-      set(5, 3, c);
-      set(9, 3, c);
-    } else if (it.kind === 'bucket' || it.keys[0].startsWith('wiadro')) {
-      for (let y = 4; y <= 12; y++) {
-        set(4, y, '#9a9aa0');
-        set(11, y, '#9a9aa0');
-      }
-      for (let x = 4; x <= 11; x++) set(x, 12, '#9a9aa0');
-      set(5, 3, '#777');
-      set(10, 3, '#777');
-      if (it.keys.includes('water_bucket')) for (let y = 6; y <= 11; y++) for (let x = 5; x <= 10; x++) set(x, y, '#3a6ad4');
-      if (it.keys.includes('lava_bucket')) for (let y = 6; y <= 11; y++) for (let x = 5; x <= 10; x++) set(x, y, y < 8 ? '#ffb040' : '#e05010');
-    } else if (it.keys.includes('leather')) {
-      // hide: rounded brown patch with darker stitches
-      for (let y = 4; y <= 11; y++) for (let x = 4; x <= 11; x++) {
-        const dx = x - 7.5, dy = y - 7.5;
-        if (dx * dx + dy * dy < 16) set(x, y, c);
-      }
-      for (const [x, y] of [[5, 5], [10, 5], [5, 10], [10, 10], [7, 6], [9, 9]]) set(x, y, '#5c3b1c');
-      set(7, 8, '#f0d8b0');
-    } else if (it.keys.includes('gunpowder')) {
-      for (let i = 0; i < 28; i++) set(4 + (i * 3) % 8, 4 + (i * 5) % 8, i % 4 === 0 ? '#aaa' : c);
-    } else if (it.keys.includes('flint')) {
-      for (const [x, y] of [[6, 3], [7, 4], [5, 5], [6, 5], [7, 5], [8, 6], [5, 7], [6, 7], [7, 8], [8, 9], [6, 10]]) set(x, y, c);
-      set(7, 6, '#aaa');
-    } else if (it.keys.includes('compass')) {
-      for (let a = 0; a < 12; a++) {
-        const t = (a / 12) * Math.PI * 2;
-        set(8 + Math.round(Math.cos(t) * 5), 8 + Math.round(Math.sin(t) * 5), '#888');
-      }
-      for (let y = 3; y <= 8; y++) set(8, y, '#e24a4a');
-      for (let y = 8; y <= 12; y++) set(8, y, '#eee');
-      set(8, 8, '#222');
-    } else if (it.keys.includes('clock')) {
-      for (let a = 0; a < 12; a++) {
-        const t = (a / 12) * Math.PI * 2;
-        set(8 + Math.round(Math.cos(t) * 5), 8 + Math.round(Math.sin(t) * 5), c);
-      }
-      set(8, 4, '#fff');
-      set(8, 5, '#fff');
-      set(8, 6, '#fff');
-      set(9, 8, '#fff');
-      set(10, 8, '#fff');
-      set(8, 8, '#5a3a10');
-    } else if (it.keys.includes('struna')) {
-      for (let i = 0; i < 10; i++) { set(3 + i, 3 + (i >> 1), c); set(3 + i, 4 + (i >> 1), '#b9b9bd'); }
-      for (let i = 0; i < 6; i++) { set(4 + i, 9 + (i >> 1), c); set(4 + i, 10 + (i >> 1), '#b9b9bd'); }
-    } else if (it.keys.includes('kosc')) {
-      for (let y = 5; y <= 10; y++) { set(7, y, c); set(8, y, '#ddd6c2'); }
-      for (const [x, y] of [[6, 3], [7, 3], [8, 3], [9, 3], [6, 4], [9, 4]]) set(x, y, c);
-      for (const [x, y] of [[6, 11], [7, 11], [8, 11], [9, 11], [6, 12], [9, 12]]) set(x, y, c);
-      set(7, 7, '#fff');
-    } else if (it.keys.includes('pioro')) {
-      for (let i = 0; i < 9; i++) { set(4 + i, 12 - i, '#8a7a5a'); set(5 + i, 12 - i, '#6a5c44'); }
-      for (let i = 0; i < 7; i++) for (let j = 0; j <= i; j++) set(4 + i - j, 3 + j, i % 2 ? c : '#ffffff');
-    } else if (it.keys.includes('strzala')) {
-      for (let i = 0; i < 9; i++) { set(4 + i, 11 - i, '#8a6a3a'); set(5 + i, 11 - i, '#6a4e28'); }
-      for (const [x, y] of [[11, 4], [12, 3], [13, 2], [10, 5], [9, 6]]) set(x, y, '#4a4a52');
-      for (let i = 0; i < 4; i++) { set(4 + i, 11 - i, '#e8e8ea'); set(3 + i, 12 - i, '#c8c8cc'); }
-    } else if (it.keys.includes('lazuryt')) {
-      // cluster of lapis shards
-      const pts = [[6, 3], [7, 3], [5, 4], [6, 4], [7, 4], [8, 4], [4, 5], [5, 5], [6, 5], [7, 5], [8, 5], [9, 5],
-        [5, 6], [6, 6], [7, 6], [8, 6], [6, 7], [7, 7], [7, 8], [6, 9], [9, 7], [10, 6]];
-      for (const [x, y] of pts) set(x, y, c);
-      set(6, 5, '#7fa4ff');
-      set(7, 4, '#7fa4ff');
-      set(5, 6, '#1e3a9a');
-      set(8, 6, '#1e3a9a');
-      set(7, 7, '#1e3a9a');
-    } else if (it.keys.includes('szmaragd')) {
-      // szmaragd: szlifowany zielony klejnot
-      const pts = [[7, 2], [8, 2], [6, 3], [7, 3], [8, 3], [9, 3], [5, 4], [6, 4], [7, 4], [8, 4], [9, 4], [10, 4],
-        [5, 5], [6, 5], [7, 5], [8, 5], [9, 5], [10, 5], [5, 6], [6, 6], [7, 6], [8, 6], [9, 6], [10, 6],
-        [6, 7], [7, 7], [8, 7], [9, 7], [6, 8], [7, 8], [8, 8], [9, 8], [7, 9], [8, 9]];
-      for (const [x, y] of pts) set(x, y, c);
-      set(6, 4, '#a8ffc8');
-      set(7, 5, '#a8ffc8');
-      set(9, 7, '#168a48');
-      set(6, 8, '#168a48');
-      set(11, 3, '#3ee07c');
-    } else if (it.keys.includes('papier')) {
-      // a sheet of paper
-      for (let y = 2; y <= 13; y++) for (let x = 3; x <= 12; x++) set(x, y, c);
-      for (let x = 3; x <= 12; x++) set(x, 13, '#c9c9c2');
-      for (let y = 2; y <= 13; y++) set(12, y, '#c9c9c2');
-      set(3, 2, '#ffffff');
-      for (const y of [5, 7, 9]) for (let x = 5; x <= 10; x++) set(x, y, '#9a9a94');
-    } else if (it.keys.includes('ksiazka')) {
-      // closed book with a red cover and pages
-      for (let y = 3; y <= 12; y++) for (let x = 4; x <= 11; x++) set(x, y, c);
-      for (let y = 4; y <= 11; y++) for (let x = 5; x <= 10; x++) set(x, y, '#f0e8d8');
-      for (let y = 3; y <= 12; y++) { set(4, y, '#6a2a20'); set(11, y, '#6a2a20'); }
-      for (let x = 4; x <= 11; x++) { set(x, 3, '#6a2a20'); set(x, 12, '#6a2a20'); }
-      set(5, 4, '#d8c8a8');
-      set(8, 7, '#d8c8a8');
-      set(7, 5, '#c9a0ff');
-      set(9, 9, '#c9a0ff');
-    } else {
-      // ingot
-      for (let y = 6; y <= 10; y++) for (let x = 3; x <= 12; x++) set(x, y, x === 3 || y === 10 ? '#555' : c);
-      set(5, 7, '#fff');
-      set(6, 7, '#fff');
-    }
-  });
-}
-
-/** Armor pieces share a painter; the slot picks the silhouette. */
-function armorIcon(it: ItemDef): string {
-  const c = it.color;
-  const dk = shade(c, -34);
-  const lite = shade(c, 46);
-  const slot = it.armor?.slot ?? 0;
-  return paint((set) => {
-    if (slot === 0) {
-      // helmet: dome with a brim
-      for (let y = 2; y <= 9; y++) for (let x = 3; x <= 12; x++) {
-        const dx = x - 7.5, dy = y - 3.5;
-        if (dx * dx + dy * dy * 1.25 < 17 && (y > 4 || Math.abs(dx) < 3)) set(x, y, c);
-      }
-      for (let x = 2; x <= 13; x++) set(x, 9, dk);
-      for (let y = 5; y <= 8; y++) set(4, y, dk);
-      set(6, 4, lite);
-      set(7, 3, lite);
-    } else if (slot === 1) {
-      // chestplate: two shoulders, V-collar, torso
-      for (let y = 3; y <= 13; y++) for (let x = 4; x <= 11; x++) {
-        if (y >= 12 && Math.abs(x - 7.5) > 2.5) continue;
-        set(x, y, y >= 3 && y <= 4 && (x < 5 || x > 10) ? dk : c);
-      }
-      for (let y = 4; y <= 7; y++) set(8, y, dk);
-      for (let y = 6; y <= 9; y++) set(7, y, dk);
-      set(5, 4, lite);
-      set(10, 4, lite);
-    } else if (slot === 2) {
-      // leggings: waistband and two legs
-      for (let x = 4; x <= 11; x++) { set(x, 3, c); set(x, 4, c); }
-      for (let y = 5; y <= 13; y++) {
-        for (let x = 4; x <= 7; x++) set(x, y, c);
-        for (let x = 9; x <= 12; x++) set(x, y, c);
-      }
-      for (let x = 4; x <= 11; x++) set(x, 4, dk);
-      set(5, 6, lite);
-      set(10, 6, lite);
-      for (let y = 5; y <= 13; y++) { set(3, y, dk); set(12, y, dk); }
-    } else {
-      // boots: two feet pointing out
-      for (let y = 5; y <= 11; y++) for (let x = 3; x <= 6; x++) set(x, y, c);
-      for (let y = 5; y <= 11; y++) for (let x = 9; x <= 12; x++) set(x, y, c);
-      for (let x = 2; x <= 6; x++) { set(x, 12, c); set(x, 13, c); }
-      for (let x = 9; x <= 13; x++) { set(x, 12, c); set(x, 13, c); }
-      for (let y = 5; y <= 11; y++) { set(6, y, dk); set(9, y, dk); }
-      for (let x = 3; x <= 6; x++) set(x, 5, dk);
-      for (let x = 9; x <= 12; x++) set(x, 5, dk);
-      set(4, 7, lite);
-      set(11, 7, lite);
-    }
-  });
-}
-
 /** Darkens/lightens a #rrggbb colour by a fixed amount (negative = darker). */
 function shade(hex: string, amt: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -325,13 +45,1290 @@ function shade(hex: string, amt: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
+// ---------------------------------------------------------------------------
+// Shared silhouettes
+// ---------------------------------------------------------------------------
+
+/** Round mound of powder/dust (gunpowder, redstone, glowstone dust…). */
+const PILE = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '.......x.x......',
+  '.....x.x.x.x....',
+  '......xxxx......',
+  '....xxXxxxxx....',
+  '...xxXxxxXxxx...',
+  '..xxxxxXxxxxxx..',
+  '..xXxxXxxxXxxX..',
+  '...dddddddddd...',
+  '................',
+  '................',
+];
+
+/** Beveled metal bar (iron & gold ingots). */
+const INGOT = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '....LLLLLLLL....',
+  '...LHHHHHHHHD...',
+  '..LHHHHHHHHHDD..',
+  '.LHHHHHHHHHHHDD.',
+  '.LHHHHHHHHHHHDD.',
+  '.HHHHHHHHHHHDDD.',
+  '.DDDDDDDDDDDDDD.',
+  '..DDDDDDDDDDDD..',
+  '................',
+  '................',
+  '................',
+];
+
+/** Cut gem with a wide table and a pointed culet (diamond, emerald…). */
+const GEM_TALL = [
+  '................',
+  '................',
+  '......LLLL......',
+  '.....LWHHHD.....',
+  '....LWHHHHDD....',
+  '....LHHHHHDD....',
+  '...LWHHHHHHDD...',
+  '...LWHHHHHHDD...',
+  '...LWHHHHHHDD...',
+  '....LHHHHHDD....',
+  '....LHHHHHDD....',
+  '.....LHHHDD.....',
+  '......LHDD......',
+  '.......DD.......',
+  '................',
+  '................',
+];
+
+// ---------------------------------------------------------------------------
+// Materials
+// ---------------------------------------------------------------------------
+
+const ART: Record<number, [Record<string, string>, string[]]> = {
+  // -- Patyk ----------------------------------------------------------------
+  100: [
+    {
+      w: '#c89058', W: '#a06a32', d: '#6e4418',
+    }, [
+      '................',
+      '................',
+      '............d...',
+      '...........wd...',
+      '..........wd....',
+      '.........wd.....',
+      '........wd......',
+      '.......wd.......',
+      '......wd........',
+      '.....wd.........',
+      '....wd..........',
+      '...wd...........',
+      '..wd............',
+      '..d.............',
+      '................',
+      '................',
+    ]],
+
+  // -- Węgiel ---------------------------------------------------------------
+  101: [
+    {
+      C: '#2e2e2e', d: '#161616', L: '#4a4a4a', W: '#606060',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '.....CCC........',
+      '...CCCCCCC......',
+      '..CCLCCCCCC.....',
+      '..CCCCCCCLCC....',
+      '.CCCCCCCCCCdC...',
+      '.CCLCCCCCCdCCd..',
+      '.CCCCCCdCCCCCd..',
+      '..CCCdCCCCCCCd..',
+      '...CCCCCdCCCd...',
+      '.....ddddddd....',
+      '................',
+      '................',
+    ]],
+
+  // -- Sztabki ---------------------------------------------------------------
+  102: [
+    {
+      H: '#d4d4d8', L: '#f4f4f6', D: '#8a8a92',
+    }, INGOT],
+  103: [
+    {
+      H: '#f2ca3c', L: '#fbe98c', D: '#b88a14',
+    }, INGOT],
+
+  // -- Diament ---------------------------------------------------------------
+  104: [
+    {
+      H: '#41e2d1', L: '#8ff2e8', D: '#1f9e90', W: '#ffffff',
+    }, [
+      '................',
+      '................',
+      '.....LLLLLL.....',
+      '....LWHHHHHD....',
+      '...LWHHHHHHDD...',
+      '..LWHHHHHHHHDD..',
+      '..LHHHHHHHHHDD..',
+      '.LWHHHHHHHHHHDD.',
+      '.LHHHHHHHHHHHDD.',
+      '..DHHHHHHHHHDD..',
+      '..DHHHHHHHHDD...',
+      '...DHHHHHHHDD...',
+      '....DHHHHHDD....',
+      '.....DHHHDD.....',
+      '......DHDD......',
+      '.......DD.......',
+    ]],
+
+  // -- Proch -----------------------------------------------------------------
+  105: [
+    {
+      x: '#7a7a80', X: '#a2a2a8', d: '#4e4e54',
+    }, PILE],
+
+  // -- Nasiona ----------------------------------------------------------------
+  106: [
+    {
+      S: '#5a9a3a', L: '#8ac45e', d: '#3a6a24',
+    }, [
+      '................',
+      '................',
+      '................',
+      '.......SS.......',
+      '......SLS..SS...',
+      '.......S..SLS...',
+      '............S...',
+      '..SS....SS......',
+      '.SLSd..SLS......',
+      '..Sd....S.......',
+      '.......SS...SS..',
+      '........S..SLS..',
+      '.............S..',
+      '................',
+      '................',
+      '................',
+    ]],
+
+  // -- Pszenica ----------------------------------------------------------------
+  107: [
+    {
+      G: '#d9b34a', L: '#eed678', d: '#a8842e', S: '#c8a03a', s: '#96762a',
+    }, [
+      '................',
+      '.LL....LL....LL.',
+      '.LG...LGL...LGL.',
+      '..G...LGL...LGL.',
+      '.LG..LGLG..LGLG.',
+      '.LG..LGLG..LGLG.',
+      '..d...LG....LG..',
+      '..s...sd...sd...',
+      '..s...s....s....',
+      '..s..s.....s....',
+      '..s..s....s.....',
+      '...ss.....s.....',
+      '...s.....ss.....',
+      '...s....s.......',
+      '................',
+      '................',
+    ]],
+
+  // -- Jabłko -----------------------------------------------------------------
+  108: [
+    {
+      R: '#d0342c', D: '#8e1f1a', L: '#f07a6a', W: '#ffd7d0', B: '#6a3a1a', G: '#3e8a32',
+    }, [
+      '................',
+      '.......BB.......',
+      '......B..GG.....',
+      '....RRRBRRR.....',
+      '...RRLLRRRRRR...',
+      '..RLLLRRRRRRRD..',
+      '..RLLRRRRRRRRD..',
+      '.RRLLRRRRRRRRDD.',
+      '.RRLRRRRRRRRRDD.',
+      '.RRRRRRRRRRRDDD.',
+      '.RRRRRRRRRRRDDD.',
+      '..RRRRRRRRRRDD..',
+      '...RRDRRRRDD....',
+      '....DDRRRDD.....',
+      '................',
+      '................',
+    ]],
+
+  // -- Chleb ------------------------------------------------------------------
+  109: [
+    {
+      C: '#c8913e', L: '#e2b56a', D: '#8a5a20', S: '#9a6a28',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '.....CCCCCCC....',
+      '...CCLLLLLCCC...',
+      '..CLLLLLLLLCDC..',
+      '..CLLCCLLLLCDD..',
+      '.CCLLCCLLCCDDD..',
+      '.CLLCCLLCCDDDD..',
+      '.CCCCCCCCCDDDD..',
+      '..DDDDDDDDDDD...',
+      '................',
+      '................',
+      '................',
+    ]],
+
+  // -- Mięsa ------------------------------------------------------------------
+  // Surowa wieprzowina: różowy kotlet z kością
+  110: [
+    {
+      M: '#f0a0a8', L: '#f9cdd2', D: '#c4737d', F: '#f7ead9',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '......MMMMMM....',
+      '....MMMMMMMMMM..',
+      '...MLLMMMLMMMMM.',
+      '..MLLMMMMMMMDMM.',
+      '..FMMMMMMMMMDD..',
+      '.FFMMMMMMMDDD...',
+      '.FFMMMMMDDDD....',
+      '..FMMDDDDD......',
+      '...DDDDDD.......',
+      '................',
+      '................',
+      '................',
+    ]],
+  // Pieczona wieprzowina
+  111: [
+    {
+      M: '#c98858', L: '#e8b27e', D: '#96603a', F: '#e8d0a8',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '......MMMMMM....',
+      '....MMMMMMMMMM..',
+      '...MLLMMMLMMMMM.',
+      '..MLLMMMMMMMDMM.',
+      '..FMMMMMMMMMDD..',
+      '.FFMMMMMMMDDD...',
+      '.FFMMMMMDDDD....',
+      '..FMMDDDDD......',
+      '...DDDDDD.......',
+      '................',
+      '................',
+      '................',
+    ]],
+  // Surowa wołowina
+  112: [
+    {
+      M: '#c1443f', L: '#e0837a', D: '#8e2f2c', F: '#f0d0c8',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '....MMMMMMMM....',
+      '...MLLMMMMMMM...',
+      '..MLLMMFMMMMMD..',
+      '..MLMMMFFMMMMD..',
+      '..MMMMMFMMMDDD..',
+      '..MMMMMMMMMDDD..',
+      '...MMMMMMDDDD...',
+      '....DDDDDDDD....',
+      '................',
+      '................',
+      '................',
+    ]],
+  // Stek
+  113: [
+    {
+      M: '#8a4a30', L: '#b06a44', D: '#5e2f1e', G: '#3a1d12', F: '#d8a066',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '....MMMMMMMM....',
+      '...MLLMMMMMMM...',
+      '..MLLMGMMMGMM...',
+      '..MLMMMGMMMGMD..',
+      '..MMMMMGMMMGMD..',
+      '..MMMMMMMMMMDD..',
+      '...FMMMMMMDDD...',
+      '....FDDDDDDD....',
+      '................',
+      '................',
+      '................',
+    ]],
+  // Surowy kurczak
+  114: [
+    {
+      M: '#f2cdbb', L: '#fae6da', D: '#cf9a84', B: '#f0ead8', b: '#c2b89a',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '......MMMM......',
+      '.....MLMMMM.....',
+      '....MLLMMMMMM...',
+      '...MLLMMMMMMMD..',
+      '...MMMMMMMMMMD..',
+      '..MMMMMMMMMMDD..',
+      '...MMMMMMMDDD...',
+      '....DMMMDDDD....',
+      '.....BDDD.......',
+      '....BbB.........',
+      '................',
+      '................',
+    ]],
+  // Pieczony kurczak (udko)
+  115: [
+    {
+      M: '#d99a4e', L: '#f2c184', D: '#a86a32', B: '#f0ead8', b: '#c2b89a',
+    }, [
+      '................',
+      '................',
+      '................',
+      '.......MMMM.....',
+      '......MMMMMMM...',
+      '.....MLMMMMMM...',
+      '....MLLMMMMMD...',
+      '....MLMMMMMDD...',
+      '....MLMMMMDD....',
+      '.....MMMMMDD....',
+      '......MDDDD.....',
+      '.......DDD......',
+      '.....BB.........',
+      '....BbBB........',
+      '................',
+      '................',
+    ]],
+
+  // -- Wiadra -----------------------------------------------------------------
+  116: [
+    {
+      M: '#b0b0b8', L: '#d8d8de', D: '#78787e', I: '#5a5a62', H: '#8a8a90',
+    }, [
+      '................',
+      '................',
+      '...H......H.....',
+      '...H......H.....',
+      '....H....H......',
+      '..MMMMMMMMMMMM..',
+      '..MIIIIIIIIIIM..',
+      '...MIIIIIIIIM...',
+      '...MLIIIIIIDM...',
+      '....MLIIIIDM....',
+      '....MLIIIDM.....',
+      '.....MLIDM......',
+      '.....MDDM.......',
+      '......MM........',
+      '................',
+      '................',
+    ]],
+  117: [
+    {
+      M: '#b0b0b8', L: '#d8d8de', D: '#78787e', I: '#3a6ad4', H: '#8a8a90', W: '#6a92f0',
+    }, [
+      '................',
+      '................',
+      '...H......H.....',
+      '...H......H.....',
+      '....H....H......',
+      '..MMMMMMMMMMMM..',
+      '..MIIIIIIIIIIM..',
+      '...MWIIIIIIIM...',
+      '...MLWIIIIIDM...',
+      '....MLWIIIDM....',
+      '....MLWIIDM.....',
+      '.....MLIDM......',
+      '.....MDDM.......',
+      '......MM........',
+      '................',
+      '................',
+    ]],
+  118: [
+    {
+      M: '#b0b0b8', L: '#d8d8de', D: '#78787e', I: '#e05010', H: '#8a8a90', W: '#ffb040',
+    }, [
+      '................',
+      '................',
+      '...H......H.....',
+      '...H......H.....',
+      '....H....H......',
+      '..MMMMMMMMMMMM..',
+      '..MIIIIIIIIIIM..',
+      '...MWIIIIIIIM...',
+      '...MLWIIIIIDM...',
+      '....MLWIIIDM....',
+      '....MLWIIDM.....',
+      '.....MLIDM......',
+      '.....MDDM.......',
+      '......MM........',
+      '................',
+      '................',
+    ]],
+
+  // -- Krzemień -----------------------------------------------------------------
+  140: [
+    {
+      G: '#4a4a52', L: '#6e6e78', D: '#2c2c33', W: '#9a9aa4',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '......GG........',
+      '.....GLLG.......',
+      '....GLLGGG......',
+      '...GLLGGGGG.....',
+      '...GLGGGGGGD....',
+      '..GGGGGGGGGDD...',
+      '..GGGGGGGGGDD...',
+      '...DGGGGGGDD....',
+      '....DDDDDDD.....',
+      '................',
+      '................',
+      '................',
+    ]],
+
+  // -- Kompas -----------------------------------------------------------------
+  143: [
+    {
+      M: '#9a9aa2', L: '#c8c8d0', D: '#5a5a62', F: '#3a3a44', R: '#e24a4a', W: '#eeeef2', P: '#e2b93c',
+    }, [
+      '................',
+      '................',
+      '.....MMMMMM.....',
+      '....MLLLLLLM....',
+      '...MLFFFFFFFLM..',
+      '...MFFFRFFFFDM..',
+      '..MFFFFRRFFFFDM.',
+      '..MFFFFRPFFFFDM.',
+      '..MFFFFWPFFFFDM.',
+      '..MFFFFWWFFFFDM.',
+      '...MFFFFFFFDDM..',
+      '...MDFFFFFDDDM..',
+      '....MDDDDD DM...',
+      '.....MDDDDM.....',
+      '......MMMM......',
+      '................',
+    ]],
+
+  // -- Zegar -----------------------------------------------------------------
+  144: [
+    {
+      M: '#e2b93c', L: '#f6dc80', D: '#a8842e', F: '#6a4a10', S: '#ffe89a', w: '#e8ecf4',
+    }, [
+      '................',
+      '................',
+      '.....MMMMMM.....',
+      '....MLLLLLLM....',
+      '...MLFFFFFFFLM..',
+      '...MFFFSSFFFDM..',
+      '..MFFFS SSFFFDM.',
+      '..MFFSSSSSSFFDM.',
+      '..MFFSS SSFFFDM.',
+      '..MFFFFSSFFFFDM.',
+      '...MFFFFFFFDDM..',
+      '...MDwFFFFDDDM..',
+      '....MDDDDDDDM...',
+      '.....MDDDDM.....',
+      '......MMMM......',
+      '................',
+    ]],
+
+  // -- Struna -----------------------------------------------------------------
+  145: [
+    {
+      W: '#e8e8ea', D: '#b9b9bd',
+    }, [
+      '................',
+      '................',
+      '......WW........',
+      '.....WDWW.......',
+      '.....W..D.......',
+      '......W.........',
+      '.......WW.......',
+      '........DW......',
+      '.........WW.....',
+      '.........D......',
+      '........WW......',
+      '.......WD.......',
+      '......WW........',
+      '......D.........',
+      '................',
+      '................',
+    ]],
+
+  // -- Kość -----------------------------------------------------------------
+  146: [
+    {
+      W: '#efe9d8', D: '#c9c0a8',
+    }, [
+      '................',
+      '................',
+      '..........WW....',
+      '.........WWWW...',
+      '........WWDDWW..',
+      '.......WWD..D...',
+      '......WWD.......',
+      '.....WWD........',
+      '....WWD.........',
+      '...WWD..........',
+      '..WWDD..........',
+      '.WWDDWW.........',
+      '.WWWWDD.........',
+      '..WW............',
+      '................',
+      '................',
+    ]],
+
+  // -- Pióro -----------------------------------------------------------------
+  147: [
+    {
+      W: '#f4f4f2', D: '#c9c9c4', S: '#c9b98a', s: '#a89868',
+    }, [
+      '................',
+      '............W...',
+      '...........WWW..',
+      '..........WWWD..',
+      '.........WWWD...',
+      '........WWWDS...',
+      '.......WWWDS....',
+      '......WWWDS.....',
+      '.....WWWDs......',
+      '....WWWDS.......',
+      '.....WWDs.......',
+      '......SD........',
+      '.....S..........',
+      '....S...........',
+      '................',
+      '................',
+    ]],
+
+  // -- Strzała -----------------------------------------------------------------
+  148: [
+    {
+      H: '#4a4a52', L: '#7a7a84', w: '#8a6a3a', d: '#6a4e28', F: '#e8e8ea', f: '#c8c8cc',
+    }, [
+      '................',
+      '............H...',
+      '...........HH...',
+      '..........HLH...',
+      '.........HLwH...',
+      '........HLww....',
+      '.......Hwwd.....',
+      '......Hwwd......',
+      '.....Fwwd.......',
+      '....FFwd........',
+      '...fFFd.........',
+      '..fFFfd.........',
+      '.fFffd..........',
+      '.ff.............',
+      '................',
+      '................',
+    ]],
+
+  // -- Łuk -----------------------------------------------------------------
+  149: [
+    {
+      w: '#8a5a2b', d: '#6a3f1c', L: '#a8783e', S: '#e8e8ea',
+    }, [
+      '................',
+      '.....www........',
+      '....wL..d.......',
+      '...wL....d......',
+      '...S.....d......',
+      '..wS......d.....',
+      '..wS......d.....',
+      '..wS......d.....',
+      '..wS......d.....',
+      '..wS......d.....',
+      '...S.....d......',
+      '...wL....d......',
+      '....wL..d.......',
+      '.....www........',
+      '................',
+      '................',
+    ]],
+
+  // -- Lazuryt -----------------------------------------------------------------
+  150: [
+    {
+      C: '#2a4cc0', L: '#6a8fe8', D: '#1a2f80', W: '#a8c4ff',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '.....CCLC.......',
+      '...CCLCCCLC.....',
+      '..CCLCCCCCCL....',
+      '..CCLCCCCCCLC...',
+      '..CCCCCCCLCCD...',
+      '...CCLCCCCCCD...',
+      '....CCLCCCCD....',
+      '......CCCCD.....',
+      '.......DDDD.....',
+      '................',
+      '................',
+      '................',
+    ]],
+
+  // -- Papier -----------------------------------------------------------------
+  151: [
+    {
+      W: '#f4f4ee', D: '#c9c9c2', S: '#9a9a94', L: '#ffffff',
+    }, [
+      '................',
+      '................',
+      '..LLLLLLLLLL....',
+      '..LWWWWWWWWD....',
+      '..LWSSSSSWWD....',
+      '..LWWWWWWWWD....',
+      '..LWSSSSSSWD....',
+      '..LWWWWWWWWD....',
+      '..LWSSSSSWWD....',
+      '..LWWWWWWWWD....',
+      '..LWWWWWWWWD....',
+      '..LDDDDDDDDD....',
+      '...DDDDDDDD.....',
+      '................',
+      '................',
+      '................',
+    ]],
+
+  // -- Książka -----------------------------------------------------------------
+  152: [
+    {
+      C: '#9a4a3a', D: '#6a2a20', L: '#b86450', P: '#f0e8d8', p: '#c9bfa4', B: '#c9a0ff',
+    }, [
+      '................',
+      '................',
+      '................',
+      '..CCCCCCCCCC....',
+      '..CLLLLLLLLCD...',
+      '..CLPPPPPPPCDD..',
+      '..CLPPPPPPPCpD..',
+      '..CLPPBPPPPCpD..',
+      '..CLPPPPPPPCpD..',
+      '..CLPPPPBPPCpD..',
+      '..CLPPPPPPPCpD..',
+      '..CLpppppppCDD..',
+      '..CDDDDDDDDD....',
+      '...DDDDDDDD.....',
+      '................',
+      '................',
+    ]],
+
+  // -- Szmaragd -----------------------------------------------------------------
+  153: [
+    {
+      H: '#2ed06a', L: '#7ce8a4', D: '#168a48', W: '#d0ffe0',
+    }, GEM_TALL],
+
+  // -- Skóra -----------------------------------------------------------------
+  200: [
+    {
+      T: '#9a6a42', L: '#c09468', D: '#6a4526',
+    }, [
+      '................',
+      '................',
+      '..D........D....',
+      '..TD......DT....',
+      '..TTD....DTT....',
+      '.DTTTTDDTTTTD...',
+      '.DTTTTTTTTTTD...',
+      '.DTTLTTTTTLTD...',
+      '.DTTTLTTTLTTD...',
+      '.DTTTTTTTTTTD...',
+      '..DTTTTTTTTD....',
+      '..DTTDDDDTTD....',
+      '...TD....DT.....',
+      '....D....D......',
+      '................',
+      '................',
+    ]],
+
+  // -- Czerwony proszek ----------------------------------------------------------
+  230: [
+    {
+      x: '#c42a2a', X: '#ff5a4a', d: '#8a1a1a',
+    }, PILE],
+
+  // -- Kwarc -----------------------------------------------------------------
+  231: [
+    {
+      W: '#f7f3ea', L: '#ffffff', D: '#c9c0ac', E: '#8a8070',
+    }, [
+      '................',
+      '................',
+      '.......LL.......',
+      '......LLL.......',
+      '......WLL.......',
+      '.....WWLL.......',
+      '.....WWLD.......',
+      '....WWWLD.......',
+      '....WWWLD.......',
+      '...WWWLDD.......',
+      '...WWWLDD.......',
+      '..WWWLDDD.......',
+      '..WWLDDD........',
+      '...EEDD.........',
+      '....EE..........',
+      '................',
+    ]],
+
+  // -- Kula szlamu -------------------------------------------------------------
+  232: [
+    {
+      S: '#6ab86a', L: '#a8e0a0', D: '#3e8a42', W: '#d0f4c8',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '.....SSSSSS.....',
+      '....SLLSSSSS....',
+      '...SLLSSSSSSS...',
+      '..SLLSSSSSSSSD..',
+      '..SLSSSSSSSSSD..',
+      '..SSSSSSSSSSSD..',
+      '..SSSSSSSSSSDD..',
+      '...SSSSSSSSDD...',
+      '....SSSSSSDD....',
+      '.....DDDDDD.....',
+      '................',
+      '................',
+    ]],
+
+  // -- Netherowa cegła -----------------------------------------------------------
+  233: [
+    {
+      F: '#4a2424', T: '#6a3430', D: '#2e1414', M: '#1e0c0c',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '....TTTTTTTTT...',
+      '...TFFFFFFFFFD..',
+      '..TFFFFFFFFFDD..',
+      '..TFFFFFFFFFDD..',
+      '..MMMMMMMMMMM...',
+      '..TFFFFFFFFFD...',
+      '..TFFFFFFFFFDD..',
+      '..FFFFFFFFFDD...',
+      '..MDDDDDDDDD....',
+      '................',
+      '................',
+      '................',
+    ]],
+
+  // -- Perła Endu ---------------------------------------------------------------
+  234: [
+    {
+      S: '#3a8a7a', L: '#6ac4b0', D: '#1e5044', W: '#c8f0e0',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '.....SSSSSS.....',
+      '....SLLSSSSS....',
+      '...SLLSSSSSSS...',
+      '..SLLSSSSLSSSD..',
+      '..SLSSSSSLSSSD..',
+      '..SSSSSSSSSSDD..',
+      '..SSSSDSSSSSDD..',
+      '...SSSDDDSSDD...',
+      '....SSDDDSDD....',
+      '.....DDDDDD.....',
+      '................',
+      '................',
+    ]],
+
+  // -- Płomienna różdżka -----------------------------------------------------------
+  235: [
+    {
+      w: '#f2b93c', L: '#ffe08a', d: '#c88a1a', S: '#fff6c8',
+    }, [
+      '..........SS....',
+      '.........wLw....',
+      '........wLwd....',
+      '.......wLwd.....',
+      '......wLwd......',
+      '.....wLwd.......',
+      '....wLwd........',
+      '...wLwd.........',
+      '..wLwd..........',
+      '..wLd...........',
+      '..wd............',
+      '..S.............',
+      '...S............',
+      '................',
+      '................',
+      '................',
+    ]],
+
+  // -- Łza Ghasta ---------------------------------------------------------------
+  236: [
+    {
+      W: '#e8f0f8', L: '#ffffff', D: '#c9d8e8', B: '#a8bcd4',
+    }, [
+      '................',
+      '................',
+      '.......WL.......',
+      '.......WL.......',
+      '......WLL.......',
+      '......WLD.......',
+      '.....WLLD.......',
+      '.....WLLD.......',
+      '....WLLLLD......',
+      '....WLLLLD......',
+      '...WLLLLLLD.....',
+      '...WLLWLLLD.....',
+      '...WLLLLLLDD....',
+      '....DLLLDDD.....',
+      '.....DDDDD......',
+      '................',
+    ]],
+
+  // -- Magmowy krem -------------------------------------------------------------
+  237: [
+    {
+      S: '#d8703a', L: '#f2b06a', D: '#8a3a1a', W: '#ffd898',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '.....SSSSSS.....',
+      '....SLLSSSSS....',
+      '...SLLWSSSSSS...',
+      '..SLLSSSDSSSSD..',
+      '..SLSSSSSSDSSD..',
+      '..SSSSDSSSSSSD..',
+      '..SSSSSSDSSSDD..',
+      '...SSDSSSSSDD...',
+      '....SSSSSSDD....',
+      '.....DDDDDD.....',
+      '................',
+      '................',
+    ]],
+
+  // -- Plaster miodu -------------------------------------------------------------
+  238: [
+    {
+      w: '#e8b040', e: '#d89c28', L: '#f8d878', D: '#b07818', W: '#ffeeb0',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '.....W..W.......',
+      '....Wew.weW.....',
+      '...wewwwwwew....',
+      '..wwewwwweww....',
+      '..wweDDDDeww....',
+      '..wwewwwweww....',
+      '...wewwwwwew....',
+      '....WeDweW......',
+      '.....W..W.......',
+      '................',
+      '................',
+      '................',
+    ]],
+
+  // -- Brodawka Netheru -----------------------------------------------------------
+  239: [
+    {
+      R: '#a82828', L: '#d84a4a', D: '#6a1414', S: '#d8c8a8', s: '#a89068',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '....LRR.........',
+      '...LRRLRR.......',
+      '..LRRRLRRLR.....',
+      '..RRRRRRRRLR....',
+      '..RRLRRRLRRR....',
+      '..RRRLRRRLRD....',
+      '...RRRRRRRDD....',
+      '....DRDDRD......',
+      '....sD..Ds......',
+      '...ss....s......',
+      '................',
+      '................',
+    ]],
+
+  // -- Jasnogłazowy pył -----------------------------------------------------------
+  240: [
+    {
+      x: '#f2d84a', X: '#fff2a8', d: '#d89020',
+    }, PILE],
+
+  // -- Odłamek pryzmarynu -----------------------------------------------------------
+  241: [
+    {
+      B: '#4ab8a8', L: '#8ae8d8', D: '#2a8074', W: '#c8fff0',
+    }, [
+      '................',
+      '................',
+      '................',
+      '.........LL.....',
+      '........LLL.....',
+      '.......WLLB.....',
+      '......WLLBB.....',
+      '.....WLLBB......',
+      '.....WLLBB......',
+      '....WLLBBD......',
+      '....WLBBD.......',
+      '...WLBBD........',
+      '..LLBBD.........',
+      '..LBBD..........',
+      '..DDD...........',
+      '................',
+    ]],
+};
+
+// ---------------------------------------------------------------------------
+// Tools – silhouettes are shared, colours come from the item tier.
+// ---------------------------------------------------------------------------
+
+const HANDLE_LIGHT = '#a06a32';
+const HANDLE_DARK = '#6e4418';
+const HANDLE_HI = '#c89058';
+
+function toolPal(it: ItemDef): Record<string, string> {
+  return {
+    H: it.color,
+    D: shade(it.color, -52),
+    L: shade(it.color, 46),
+    W: shade(it.color, 90),
+    w: HANDLE_LIGHT,
+    d: HANDLE_DARK,
+    v: HANDLE_HI,
+    S: '#e8e8ea', // bow string
+    f: '#ffd84a', // sparks
+    F: '#4a4a52', // flint
+    P: '#c44848', // pivot screw
+    B: '#c8c8d0', // iron boss
+    b: '#8a8a92',
+  };
+}
+
+function toolArt(it: ItemDef): string[] {
+  const k = it.tool;
+  if (k === 'pick') {
+    return [
+      '................',
+      '...HHHHHHHHHH...',
+      '..HLLLLLLLLLLHH.',
+      '.HHD.....vv.DHH.',
+      '.HH.....vv..DHH.',
+      '.HD....vv...DHH.',
+      '.H....vv....DH..',
+      '.....vv.....D...',
+      '....vv..........',
+      '...vv...........',
+      '..vv............',
+      '.vv.............',
+      '.v..............',
+      '................',
+      '................',
+      '................',
+    ];
+  }
+  if (k === 'axe') {
+    return [
+      '................',
+      '....HHHHH.......',
+      '...HLLLLHH......',
+      '..HLLLLHHv......',
+      '..HLLHHHv.......',
+      '..DHHHvv........',
+      '...Dvv..........',
+      '..vv............',
+      '.vv.............',
+      'vv..............',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+    ];
+  }
+  if (k === 'shovel') {
+    return [
+      '................',
+      '.....HHHH.......',
+      '....HLLLLH......',
+      '....HLLLLH......',
+      '.....HLLH.......',
+      '......vv........',
+      '.....vv.........',
+      '....vv..........',
+      '...vv...........',
+      '..vv............',
+      '.vv.............',
+      '.v..............',
+      '................',
+      '................',
+      '................',
+      '................',
+    ];
+  }
+  if (k === 'sword') {
+    return [
+      '.............HH.',
+      '............HLH.',
+      '...........HLWD.',
+      '..........HLWD..',
+      '.........HLWD...',
+      '........HLWD....',
+      '.......HLWD.....',
+      '......HLWD......',
+      '.dd..HLWD.......',
+      '..ddHLWD........',
+      '...ddd..........',
+      '..vddd..........',
+      '.vv..d..........',
+      '................',
+      '................',
+      '................',
+    ];
+  }
+  if (k === 'hoe') {
+    return [
+      '................',
+      '...HHHHHHH......',
+      '..HL....DHH.....',
+      '..HD.....vv.....',
+      '...D....vv......',
+      '.......vv.......',
+      '......vv........',
+      '.....vv.........',
+      '....vv..........',
+      '...vv...........',
+      '..vv............',
+      '.vv.............',
+      '.v..............',
+      '................',
+      '................',
+      '................',
+    ];
+  }
+  if (k === 'shears') {
+    return [
+      '................',
+      '..W..........W..',
+      '..WL........LW..',
+      '...WL......LW...',
+      '...WWL....LWW...',
+      '....WWL..LWW....',
+      '.....WWLLWW.....',
+      '......WLWL......',
+      '.....PW..WP.....',
+      '....PW....WP....',
+      '....W......W....',
+      '...PW......WP...',
+      '...WW......WW...',
+      '................',
+      '................',
+      '................',
+    ];
+  }
+  if (k === 'igniter') {
+    return [
+      '................',
+      '................',
+      '..........FFF...',
+      '.........Fffff..',
+      '........FFfff...',
+      '.......FFF......',
+      '...HHHHFFF......',
+      '..HH..HFFF......',
+      '..HH............',
+      '..H.............',
+      '..HH..H.........',
+      '...HHHHH........',
+      '................',
+      '.....f.f........',
+      '................',
+      '................',
+    ];
+  }
+  if (k === 'bow') {
+    return [
+      '................',
+      '.....wwww.......',
+      '....wL..d.......',
+      '...wL....d......',
+      '...S.....d......',
+      '..wS......d.....',
+      '..wS......d.....',
+      '..wS......d.....',
+      '..wS......d.....',
+      '..wS......d.....',
+      '...S.....d......',
+      '...wL....d......',
+      '....wL..d.......',
+      '.....wwww.......',
+      '................',
+      '................',
+    ];
+  }
+  // shield
+  return [
+    '................',
+    '...dddddddddd...',
+    '..dwwwwwwwwwwd..',
+    '..dwLLwwwwwwwd..',
+    '..dwLwwwwLwwwd..',
+    '..dwwwwwBBBwwd..',
+    '..dwwwwBHBwwd...',
+    '..dwwwwBBBwwd...',
+    '..dwwwwwLwwwd...',
+    '..dwwwwwwwwwwd..',
+    '..dwwwwwwwwwwd..',
+    '...dwwwwwwwwd...',
+    '....dwwwwwwd....',
+    '.....dwwwwd.....',
+    '......dddd......',
+    '................',
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Armor – one silhouette per slot, coloured by tier.
+// ---------------------------------------------------------------------------
+
+function armorArt(it: ItemDef): string[] {
+  const slot = it.armor?.slot ?? 0;
+  if (slot === 0) {
+    // helmet: dome with a brim and a nose guard
+    return [
+      '................',
+      '....HHHHHHHH....',
+      '...HLLLLLLLLH...',
+      '..HLLLLLLLLLLH..',
+      '..HLHHHHHHHHDH..',
+      '..HLHDDDDDHHDH..',
+      '..HHHHHHHHHHDH..',
+      '..DDDDDDDDDDDH..',
+      '...H.........H..',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+    ];
+  }
+  if (slot === 1) {
+    // chestplate: shoulders, neck notch, torso
+    return [
+      '................',
+      '.HHH........HHH.',
+      'HLLHH......HHLLH',
+      'HLHHHHHHHHHHHHLH',
+      'HLHHHHHHHHHHHHLH',
+      '.DHHHHHHHHHHHHD.',
+      '.DHHHHDHHHDHHHD.',
+      '.DHHHHDDDDHHHHD.',
+      '.DHHHHHHHHHHHHD.',
+      '.DHHHHHHHHHHHHD.',
+      '..DHHHHHHHHHHD..',
+      '..DDHHHHHHHHDD..',
+      '...DDDDDDDDDD...',
+      '................',
+      '................',
+      '................',
+    ];
+  }
+  if (slot === 2) {
+    // leggings: waistband and two legs
+    return [
+      '................',
+      '...HHHHHHHHHH...',
+      '..HLLLLLLLLLLH..',
+      '..DHHHHHHHHHHD..',
+      '..DHHH....HHHD..',
+      '..DHHH....HHHD..',
+      '..DHHH....HHHD..',
+      '..DHHH....HHHD..',
+      '..DHHH....HHHD..',
+      '..DHHD....DHHD..',
+      '...DHD....DHD...',
+      '....DD....DD....',
+      '................',
+      '................',
+      '................',
+      '................',
+    ];
+  }
+  // boots
+  return [
+    '................',
+    '................',
+    '................',
+    '................',
+    '...HHH....HHH...',
+    '...HLLH...HLLH..',
+    '...HLLH...HLLH..',
+    '...HLLH...HLLH..',
+    '...HLLH...HLLH..',
+    '..HHLLHH..HHLLHH',
+    '.HHLLLLHHHHLLLLH',
+    'HHLLLLLLLLLLLLLH',
+    'DDDDDDDDDDDDDDDD',
+    '................',
+    '................',
+    '................',
+  ];
+}
+
+function armorPal(it: ItemDef): Record<string, string> {
+  return { H: it.color, D: shade(it.color, -60), L: shade(it.color, 50), B: '#c8c8d0', b: '#8a8a92' };
+}
+
+// ---------------------------------------------------------------------------
+
 export function buildItemIcons(): Record<number, string> {
   const icons: Record<number, string> = {};
   for (const it of ITEM_LIST) {
-    if (it.kind === 'armor') icons[it.id] = armorIcon(it);
-    else if (it.kind === 'tool') icons[it.id] = toolIcon(it);
-    else if (it.kind === 'food') icons[it.id] = foodIcon(it);
-    else icons[it.id] = materialIcon(it);
+    if (it.kind === 'armor') icons[it.id] = paint(armorArt(it), armorPal(it));
+    else if (it.kind === 'tool') icons[it.id] = paint(toolArt(it), toolPal(it));
+    else if (ART[it.id]) icons[it.id] = paint(ART[it.id][1], ART[it.id][0]);
+    else if (it.kind === 'food') icons[it.id] = paint(ART[108][1], { ...ART[108][0], R: it.color });
+    else icons[it.id] = paint(INGOT, { H: it.color, L: shade(it.color, 46), D: shade(it.color, -52) });
   }
   return icons;
 }
+

@@ -43,6 +43,7 @@ export function chestLoot(seed: number, x: number, y: number, z: number): Stack[
   if (r() < 0.18) out.push({ id: I.PAPER, count: 2 + Math.floor(r() * 4) });
   if (r() < 0.10) out.push({ id: I.BOOK, count: 1 });
   if (r() < 0.06) out.push({ id: I.LAPIS, count: 2 + Math.floor(r() * 4) });
+  if (r() < 0.08) out.push({ id: I.NETHER_WART, count: 1 + Math.floor(r() * 3) });
   return out;
 }
 
