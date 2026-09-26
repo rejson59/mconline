@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { HUDState } from '../game/engine';
 import { displayName, durabilityMax } from '../game/items';
+import { enchList } from '../game/enchant';
 
 const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
 const BUBBLE = ['.XXX.', 'X..XX', 'X.XXX', 'XXXXX', '.XXX.'];
@@ -35,10 +36,11 @@ function Bubble({ pop }: { pop: boolean }) {
   );
 }
 
-function ArmorPiece({ icon, frac }: { icon: string; frac: number }) {
+function ArmorPiece({ icon, frac, enchanted }: { icon: string; frac: number; enchanted?: boolean }) {
   return (
     <div className="relative flex items-center justify-center" style={{ width: 22, height: 22, background: 'rgba(40,40,40,0.5)', border: '1px solid #1a1a1a' }}>
       <img src={icon} className="pixelated" width={18} height={18} draggable={false} />
+      {enchanted && <span className="ench-glint" />}
       {frac < 1 && <span className="dur-bar"><i style={{ width: `${frac * 100}%`, background: frac < 0.25 ? '#e04040' : '#3dba3d' }} /></span>}
     </div>
   );
@@ -80,6 +82,7 @@ export function Hotbar({ hud, icons }: { hud: HUDState; icons: Record<number, st
           >
             {s && <img src={icons[s.id]} className="pixelated" width={34} height={34} draggable={false} />}
             {s && hud.mode === 'survival' && s.count > 1 && <span className="mc-count">{s.count}</span>}
+            {s?.ench && <span className="ench-glint" />}
             {s && max > 0 && s.dur !== undefined && s.dur < max && (
               <span className="dur-bar"><i style={{ width: `${frac * 100}%`, background: frac < 0.25 ? '#e04040' : '#3dba3d' }} /></span>
             )}
@@ -98,9 +101,11 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
 
   useEffect(() => {
     if (selId < 0) { setLabel(null); return; }
-    setLabel({ text: displayName(selId), key: Date.now() });
-    const t = setTimeout(() => setLabel(null), 2000);
+    const list = sel ? enchList(sel) : [];
+    setLabel({ text: list.length ? `${displayName(selId)} · ${list.join(', ')}` : displayName(selId), key: Date.now() });
+    const t = setTimeout(() => setLabel(null), 2600);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selId, hud.selected]);
 
   useEffect(() => {
@@ -152,7 +157,7 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 1.4 (${hud.fps} fps)`,
+            `BlockCraft 1.5 (${hud.fps} fps)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -216,7 +221,7 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
               if (!s) return <div key={i} style={{ width: 22, height: 22, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,0,0,0.45)' }} />;
               const max = durabilityMax(s.id);
               const frac = s.dur !== undefined && max > 0 ? Math.max(0, s.dur / max) : 1;
-              return <ArmorPiece key={i} icon={icons[s.id]} frac={frac} />;
+              return <ArmorPiece key={i} icon={icons[s.id]} frac={frac} enchanted={!!s.ench} />;
             })}
           </div>
         )}

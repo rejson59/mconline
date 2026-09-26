@@ -7,8 +7,9 @@ dist/
 dist-ssr/
 *.local
 
-# generated harness bundles (sources live in .harness/)
+# generated harness bundles (the runner itself is committed)
 .harness/*.mjs
+!.harness/run.mjs
 
 # editors / OS
 .vscode/*

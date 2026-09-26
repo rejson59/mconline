@@ -15,6 +15,8 @@ export const T = {
   chest_top: 66, chest_side: 67, chest_front: 68, door: 69, door_top: 70,
   ladder: 71, fence: 72, trapdoor: 73, campfire: 74, campfire_side: 75,
   iron_block: 76, gold_block: 77, diamond_block: 78,
+  lapis_ore: 79, lapis_block: 80, enchant_top: 81, enchant_side: 82, enchant_bottom: 83,
+  sugarcane: 84,
 } as const;
 
 export const B = {
@@ -37,6 +39,8 @@ export const B = {
   DOOR_UN: 75, DOOR_UE: 76, DOOR_US: 77, DOOR_UW: 78,
   DOOR_UON: 79, DOOR_UOE: 80, DOOR_UOS: 81, DOOR_UOW: 82,
   IRON_BLOCK: 83, GOLD_BLOCK: 84, DIAMOND_BLOCK: 85,
+  // 1.5 „Zaklęcia" – new ids are always appended, existing saves keep working
+  LAPIS_ORE: 86, LAPIS_BLOCK: 87, ENCHANT: 88, SUGARCANE: 89,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid';
@@ -155,6 +159,11 @@ def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { har
 def(B.IRON_BLOCK, 'Blok żelaza', T.iron_block, { hardness: 5, sound: 'stone' });
 def(B.GOLD_BLOCK, 'Blok złota', T.gold_block, { hardness: 3, sound: 'stone' });
 def(B.DIAMOND_BLOCK, 'Blok diamentu', T.diamond_block, { hardness: 5, sound: 'stone' });
+// 1.5 „Zaklęcia": lapis, enchanting table, sugar cane
+def(B.LAPIS_ORE, 'Ruda lazurytu', T.lapis_ore, { hardness: 3, drop: -1 });
+def(B.LAPIS_BLOCK, 'Blok lazurytu', T.lapis_block, { hardness: 3, sound: 'stone' });
+def(B.ENCHANT, 'Stół zaklęć', [T.enchant_top, T.enchant_bottom, T.enchant_side], { hardness: 5, sound: 'stone' });
+def(B.SUGARCANE, 'Trzcina cukrowa', T.sugarcane, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;

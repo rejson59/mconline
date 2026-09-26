@@ -54,6 +54,12 @@ const FACES = [
 ];
 const AO_CURVE = [0.45, 0.62, 0.8, 1.0];
 
+// Shared BFS scratch for buildMesh (single-threaded, never nested).
+let lightScratch: Uint8Array | null = null;
+const qx: number[] = [];
+const qy: number[] = [];
+const qz: number[] = [];
+
 class MeshBuffer {
   pos: number[] = [];
   uv: number[] = [];
@@ -236,9 +242,11 @@ export class World {
           if (id === B.STONE) {
             const r = hash(wx, y, wz, s + 77);
             const cl = hash(wx >> 1, y >> 1, wz >> 1, s + 11);
+            const cl2 = hash(wx >> 1, y >> 1, wz >> 1, s + 23);
             if (y < 16 && cl < 0.012 && r < 0.6) id = B.DIAMOND_ORE;
             else if (y < 32 && cl > 0.985 && r < 0.6) id = B.GOLD_ORE;
             else if (y < 64 && cl > 0.02 && cl < 0.045 && r < 0.6) id = B.IRON_ORE;
+            else if (y < 44 && y > 8 && cl2 < 0.016 && r < 0.55) id = B.LAPIS_ORE;
             else if (y < 110 && cl > 0.5 && cl < 0.56 && r < 0.65) id = B.COAL_ORE;
             else if (hash(wx >> 2, y >> 2, wz >> 2, s + 5) < 0.02) id = B.GRAVEL;
           }
@@ -260,6 +268,20 @@ export class World {
           if (r < 0.005 && x > 0 && x < 15 && z > 0 && z < 15) {
             const hh = 1 + Math.floor(hash(wx, 5, wz, s) * 3);
             for (let i = 1; i <= hh; i++) d[idx(x, h + i, z)] = B.CACTUS;
+          }
+        }
+        // Sugar cane: grass/sand right next to water, up to 3 blocks tall.
+        if ((top === B.GRASS || top === B.SAND || top === B.DIRT) && h + 3 < CH) {
+          let nearWater = false;
+          // the stalk itself must stand on dry ground: a shore one block above sea level
+          if (h >= SEA && h <= SEA + 2) {
+            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+              if (this.surface(wx + dx, wz + dz).h < SEA) { nearWater = true; break; }
+            }
+          }
+          if (nearWater && hash(wx, 6, wz, s + 31) < 0.28) {
+            const hh = 1 + Math.floor(hash(wx, 7, wz, s + 32) * 3);
+            for (let i = 1; i <= hh; i++) d[idx(x, h + i, z)] = B.SUGARCANE;
           }
         }
       }
@@ -374,6 +396,10 @@ export class World {
         }
         const r = hash(wx, 3, wz, s + 9);
         if (r < 0.18) d[idx(x, FLAT_H + 1, z)] = B.TALLGRASS;
+        if (r > 0.9975 && x > 0 && x < 15 && z > 0 && z < 15) {
+          const hh = 1 + Math.floor(hash(wx, 7, wz, s + 32) * 3);
+          for (let i = 1; i <= hh; i++) d[idx(x, FLAT_H + i, z)] = B.SUGARCANE;
+        }
         else if (r < 0.022) d[idx(x, FLAT_H + 1, z)] = B.FLOWER_RED;
         else if (r < 0.034) d[idx(x, FLAT_H + 1, z)] = B.FLOWER_YELLOW;
         else if (r > 0.9995) d[idx(x, FLAT_H + 1, z)] = B.PUMPKIN;
@@ -502,13 +528,18 @@ export class World {
       return n.heightMap[(z - (ncz - 1) * CS) * CS + (x - (ncx - 1) * CS)];
     };
     // Block light (torches, lava, lit furnaces) spread a few blocks across chunk borders.
+    // The BFS scratch is module-level: buildMesh never runs re-entrantly, so a
+    // rebuild only fills the buffer instead of allocating 128 KB every time.
     const PAD = 8;
     const LW = CS + PAD * 2;
-    const Lmap = new Uint8Array(LW * LW * CH);
+    const need = LW * LW * CH;
+    if (!lightScratch || lightScratch.length < need) lightScratch = new Uint8Array(need);
+    else lightScratch.fill(0);
+    const Lmap = lightScratch;
     const lat = (x: number, y: number, z: number) => (y * LW + (z + PAD)) * LW + (x + PAD);
-    const qx: number[] = [];
-    const qy: number[] = [];
-    const qz: number[] = [];
+    qx.length = 0;
+    qy.length = 0;
+    qz.length = 0;
     const seed = (x: number, y: number, z: number, lv: number) => {
       if (y < 0 || y >= CH || x < -PAD || x >= CS + PAD || z < -PAD || z >= CS + PAD) return;
       const i = lat(x, y, z);

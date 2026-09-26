@@ -217,6 +217,33 @@ function materialIcon(it: ItemDef): string {
       for (let i = 0; i < 9; i++) { set(4 + i, 11 - i, '#8a6a3a'); set(5 + i, 11 - i, '#6a4e28'); }
       for (const [x, y] of [[11, 4], [12, 3], [13, 2], [10, 5], [9, 6]]) set(x, y, '#4a4a52');
       for (let i = 0; i < 4; i++) { set(4 + i, 11 - i, '#e8e8ea'); set(3 + i, 12 - i, '#c8c8cc'); }
+    } else if (it.keys.includes('lazuryt')) {
+      // cluster of lapis shards
+      const pts = [[6, 3], [7, 3], [5, 4], [6, 4], [7, 4], [8, 4], [4, 5], [5, 5], [6, 5], [7, 5], [8, 5], [9, 5],
+        [5, 6], [6, 6], [7, 6], [8, 6], [6, 7], [7, 7], [7, 8], [6, 9], [9, 7], [10, 6]];
+      for (const [x, y] of pts) set(x, y, c);
+      set(6, 5, '#7fa4ff');
+      set(7, 4, '#7fa4ff');
+      set(5, 6, '#1e3a9a');
+      set(8, 6, '#1e3a9a');
+      set(7, 7, '#1e3a9a');
+    } else if (it.keys.includes('papier')) {
+      // a sheet of paper
+      for (let y = 2; y <= 13; y++) for (let x = 3; x <= 12; x++) set(x, y, c);
+      for (let x = 3; x <= 12; x++) set(x, 13, '#c9c9c2');
+      for (let y = 2; y <= 13; y++) set(12, y, '#c9c9c2');
+      set(3, 2, '#ffffff');
+      for (const y of [5, 7, 9]) for (let x = 5; x <= 10; x++) set(x, y, '#9a9a94');
+    } else if (it.keys.includes('ksiazka')) {
+      // closed book with a red cover and pages
+      for (let y = 3; y <= 12; y++) for (let x = 4; x <= 11; x++) set(x, y, c);
+      for (let y = 4; y <= 11; y++) for (let x = 5; x <= 10; x++) set(x, y, '#f0e8d8');
+      for (let y = 3; y <= 12; y++) { set(4, y, '#6a2a20'); set(11, y, '#6a2a20'); }
+      for (let x = 4; x <= 11; x++) { set(x, 3, '#6a2a20'); set(x, 12, '#6a2a20'); }
+      set(5, 4, '#d8c8a8');
+      set(8, 7, '#d8c8a8');
+      set(7, 5, '#c9a0ff');
+      set(9, 9, '#c9a0ff');
     } else {
       // ingot
       for (let y = 6; y <= 10; y++) for (let x = 3; x <= 12; x++) set(x, y, x === 3 || y === 10 ? '#555' : c);

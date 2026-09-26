@@ -51,4 +51,19 @@ export class Xp {
   info(): XpInfo {
     return levelFromXp(this.total);
   }
+  /** Spends whole levels (enchanting table). False when the player is too low. */
+  spend(levels: number): boolean {
+    const n = Math.max(0, Math.floor(levels));
+    if (n === 0) return true;
+    const info = this.info();
+    if (info.level < n) return false;
+    const next = info.level - n;
+    // keep the in-bar progress, but never more than the new level can hold
+    this.total = totalXpForLevel(next) + Math.min(info.inLevel, Math.max(0, xpToNext(next) - 1));
+    return true;
+  }
+  /** What the spend would cost in levels – 0 when unaffordable. */
+  canSpend(levels: number): boolean {
+    return this.info().level >= Math.max(0, Math.floor(levels));
+  }
 }

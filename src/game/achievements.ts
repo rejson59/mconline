@@ -34,6 +34,12 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'armor', title: 'W pełnym zbroju', text: 'Załóż cztery elementy pancerza naraz.' },
   { id: 'xp10', title: 'Weteran', text: 'Osiągnij poziom doświadczenia 10.' },
   { id: 'guardian', title: 'Strażnik', text: 'Przyłap cios lub strzałę tarczą.' },
+  { id: 'lapis', title: 'Błękitna ruda', text: 'Zdobądź lazuryt.' },
+  { id: 'cane', title: 'Trzcinowy pole', text: 'Zetnij trzcinę cukrową.' },
+  { id: 'book', title: 'Mól książkowy', text: 'Wytwórz książkę.' },
+  { id: 'table', title: 'Zaklinacz', text: 'Postaw stół zaklęć.' },
+  { id: 'enchant', title: 'Pierwsze zaklęcie', text: 'Zaklnij przedmiot w stole zaklęć.' },
+  { id: 'enchant_master', title: 'Mistrz zaklęć', text: 'Wytwarzaj zaklęcie na poziomie 4 lub wyżej.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {
