@@ -85,6 +85,14 @@ export interface SaveData {
 
 export const SAVE_KEY = 'blockcraft-save-v1';
 
+/** A sand/gravel block tumbling down until it lands. */
+interface FallingBlock {
+  mesh: THREE.Mesh;
+  pos: THREE.Vector3;
+  vel: number;
+  id: number;
+}
+
 interface Particle {
   mesh: THREE.Mesh;
   vel: THREE.Vector3;
@@ -274,6 +282,7 @@ export class Game {
   private dropMat!: THREE.MeshBasicMaterial;
   private itemTex = new Map<number, THREE.Texture>();
   private dropGeos = new Map<number, THREE.BufferGeometry>();
+  private falling: FallingBlock[] = [];
   private growables = new Map<string, number>();
   private growAcc = 0;
   private growCursor = 0;
@@ -1654,6 +1663,64 @@ export class Game {
     }
   }
 
+  /**
+   * Sand and gravel fall. Close to the player they become a visible tumbling
+   * block; further away the column is resolved instantly (nobody can see it).
+   */
+  fallGravity(x: number, y: number, z: number) {
+    const id = this.world.getBlock(x, y, z);
+    if (id !== B.SAND && id !== B.GRAVEL) return;
+    const dx = x + 0.5 - this.body.pos.x, dz = z + 0.5 - this.body.pos.z;
+    const near = Math.hypot(dx, dz) < 40 && Math.abs(y - this.body.pos.y) < 22;
+    if (!near || this.falling.length >= 24) { this.settle(x, y, z); return; }
+    let ny = y;
+    while (ny > 0) {
+      const b = this.world.getBlock(x, ny - 1, z);
+      if (b === B.AIR || RENDER[b] === 2 || RENDER[b] === 1) ny--;
+      else break;
+    }
+    this.world.setBlock(x, y, z, B.AIR);
+    let geo = this.dropGeos.get(id);
+    if (!geo) { geo = blockGeometry(id); this.dropGeos.set(id, geo); }
+    const mesh = new THREE.Mesh(geo, this.dropMat);
+    mesh.position.set(x + 0.5, y, z + 0.5);
+    this.scene.add(mesh);
+    this.falling.push({ mesh, pos: new THREE.Vector3(x + 0.5, y, z + 0.5), vel: 0, id });
+    // the column above keeps falling too
+    this.fallGravity(x, y + 1, z);
+    if (ny !== y) this.settle(x, ny, z);
+  }
+
+  private updateFalling(dt: number) {
+    if (!this.falling.length) return;
+    const keep: FallingBlock[] = [];
+    for (const f of this.falling) {
+      f.vel = Math.min(26, f.vel + 24 * dt);
+      const step = f.vel * dt;
+      const ny = f.pos.y - step;
+      const bx = Math.floor(f.pos.x), bz = Math.floor(f.pos.z);
+      const below = Math.floor(ny - 0.5);
+      const hit = below < 0 || IS_SOLID[this.world.peekBlock(bx, below, bz)];
+      // a falling block hurts when it lands on the player's head
+      if (hit && this.ui !== 'dead' && this.mode === 'survival') {
+        const p = this.body.pos;
+        if (Math.abs(f.pos.x - (p.x + 0.5)) < 0.8 && Math.abs(f.pos.z - (p.z + 0.5)) < 0.8 && p.y < f.pos.y && p.y + this.body.h > f.pos.y - 0.5) {
+          this.damage(2);
+        }
+      }
+      if (hit) {
+        this.scene.remove(f.mesh);
+        this.world.setBlock(bx, below + 1, bz, f.id);
+        Sfx.playPlace(BLOCKS[f.id].sound);
+        continue;
+      }
+      f.pos.y = ny;
+      f.mesh.position.copy(f.pos);
+      keep.push(f);
+    }
+    this.falling = keep;
+  }
+
   breakBlock(x: number, y: number, z: number, silent = false) {
     const id = this.world.getBlock(x, y, z);
     if (id === B.AIR || BLOCKS[id].hardness < 0) return;
@@ -1698,7 +1765,7 @@ export class Game {
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
     if (RENDER[above] === 1 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
-    this.settle(x, y + 1, z);
+    this.fallGravity(x, y + 1, z);
   }
 
   igniteTNT(x: number, y: number, z: number, fuse: number) {
@@ -1821,6 +1888,7 @@ export class Game {
       this.updateInteraction(dt);
       this.updateMobs(dt);
       this.updateEntities(dt);
+      this.updateFalling(dt);
       this.updateArrows(dt);
       this.updateDrops(dt);
       this.updateGrowth(dt);
@@ -2652,6 +2720,8 @@ export class Game {
     this.tnts = [];
     for (const a of this.arrows) this.scene.remove(a.mesh);
     this.arrows = [];
+    for (const f of this.falling) this.scene.remove(f.mesh);
+    this.falling = [];
     for (const d of this.drops) {
       this.scene.remove(d.mesh);
       const mesh = d.mesh as THREE.Mesh;

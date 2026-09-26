@@ -7,8 +7,8 @@ dist/
 dist-ssr/
 *.local
 
-# local verification harness (headless engine/UI smoke tests)
-.harness/
+# generated harness bundles (sources live in .harness/)
+.harness/*.mjs
 
 # editors / OS
 .vscode/*

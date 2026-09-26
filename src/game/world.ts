@@ -306,16 +306,8 @@ export class World {
       }
     }
 
-    // Apply player modifications
-    const m = this.mods.get(World.key(c.cx, c.cz));
-    if (m) {
-      for (const [i, id] of m) {
-        d[i] = id;
-        const y = Math.floor(i / (CS * CS));
-        if (y + 2 > maxY) maxY = y + 2;
-      }
-    }
     c.maxY = Math.min(CH - 1, maxY);
+    this.applyMods(c);
     for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x, z);
   }
 
@@ -397,7 +389,20 @@ export class World {
       }
 
     c.maxY = Math.min(CH - 1, maxY);
+    this.applyMods(c);
     for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x, z);
+  }
+
+  /** Replays the player's block changes onto a freshly generated chunk. */
+  private applyMods(c: Chunk) {
+    const m = this.mods.get(World.key(c.cx, c.cz));
+    if (!m) return;
+    const d = c.data;
+    for (const [i, id] of m) {
+      d[i] = id;
+      const y = Math.floor(i / (CS * CS));
+      if (y + 2 > c.maxY) c.maxY = Math.min(CH - 1, y + 2);
+    }
   }
 
   // ---------- Access ----------
