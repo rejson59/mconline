@@ -47,6 +47,15 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'emerald', title: 'Zielone złoto', text: 'Zdobądź szmaragd.' },
   { id: 'golem', title: 'Żelazny stróż', text: 'Spotkaj żelaznego golema.' },
   { id: 'bell', title: 'Bij dzwon', text: 'Zadzwoń dzwonem na wioskowym placu.' },
+  // 1.7 „Nether & Redstone”
+  { id: 'redstone', title: 'Inżynier', text: 'Zdobądź czerwony proszek i zbuduj układ redstone.' },
+  { id: 'nether', title: 'Do Netheru', text: 'Wejdź przez portal do Netheru.' },
+  { id: 'portal', title: 'Budowniczy portali', text: 'Zbuduj i zapal portal Netheru.' },
+  { id: 'quartz', title: 'Biały kamień', text: 'Wydobądź kwarc z Netheru.' },
+  { id: 'piston', title: 'Mechanik', text: 'Wytwórz tłok.' },
+  { id: 'slime', title: 'Szlamowy skok', text: 'Odbij się na bloku szlamu.' },
+  { id: 'enderman', title: 'Spójrz mu w oczy', text: 'Pokonaj Endermana.' },
+  { id: 'ghast', title: 'Łza Ghasta', text: 'Zdobądź łzę Ghasta.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

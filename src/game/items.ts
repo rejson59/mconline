@@ -74,6 +74,18 @@ export const I = {
   DIAMOND_LEGS: 215,
   DIAMOND_BOOTS: 216,
   SHIELD: 217,
+  REDSTONE: 230,
+  QUARTZ: 231,
+  SLIME_BALL: 232,
+  NETHER_BRICK_ITEM: 233,
+  ENDER_PEARL: 234,
+  BLAZE_ROD: 235,
+  GHAST_TEAR: 236,
+  MAGMA_CREAM: 237,
+  HONEYCOMB: 238,
+  NETHER_WART: 239,
+  GLOWSTONE_DUST: 240,
+  PRISMARINE_SHARD: 241,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield';
@@ -169,6 +181,17 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.EMERALD, name: 'Szmaragd', keys: ['szmaragd', 'emerald'], kind: 'material', color: '#2ed06a' },
   { id: I.LEATHER, name: 'Skóra', keys: ['skora', 'skóra', 'leather'], kind: 'material', color: '#8a5a3b' },
   { id: I.SHIELD, name: 'Tarcza', keys: ['tarcza', 'shield'], kind: 'tool', tool: 'shield', durability: 300, color: '#8a6a3a' },
+  { id: I.REDSTONE, name: 'Czerwony proszek', keys: ['redstone', 'czerwony_proszek', 'redstone_dust'], kind: 'material', color: '#c42a2a' },
+  { id: I.QUARTZ, name: 'Kwarc', keys: ['kwarc', 'quartz'], kind: 'material', color: '#e8e0d0' },
+  { id: I.SLIME_BALL, name: 'Kula szlamu', keys: ['slime', 'kula_szlamu', 'slime_ball'], kind: 'material', color: '#7ac47a' },
+  { id: I.NETHER_BRICK_ITEM, name: 'Netherowa cegła', keys: ['nether_brick', 'netherowa_cegla'], kind: 'material', color: '#4a1a1a' },
+  { id: I.ENDER_PEARL, name: 'Perła Endu', keys: ['perla_endu', 'ender_pearl', 'perla'], kind: 'material', color: '#3a8a7a' },
+  { id: I.BLAZE_ROD, name: 'Płomienna różdżka', keys: ['blaze_rod', 'plomienna_rozdzka'], kind: 'material', color: '#e8a020' },
+  { id: I.GHAST_TEAR, name: 'Łza Ghasta', keys: ['ghast_tear', 'lza_ghasta'], kind: 'material', color: '#f0f0f0' },
+  { id: I.MAGMA_CREAM, name: 'Magmowy krem', keys: ['magma_cream', 'magmowy_krem'], kind: 'material', color: '#c85a2a' },
+  { id: I.HONEYCOMB, name: 'Plaster miodu', keys: ['plaster_miodu', 'honeycomb'], kind: 'material', color: '#e8b040' },
+  { id: I.NETHER_WART, name: 'Brodawka Netheru', keys: ['nether_wart', 'brodawka'], kind: 'material', color: '#8a2020' },
+  { id: I.GLOWSTONE_DUST, name: 'Jasnogłazowy pył', keys: ['glowstone_dust', 'jasnoglazowy_pyl'], kind: 'material', color: '#e8c85a' },
 ];
 
 const ARMOR_TIERS: {
@@ -289,14 +312,23 @@ const PICK_BLOCKS = new Set<number>([
   B.FURNACE_ON, B.OBSIDIAN, B.STONE_BRICKS, B.SANDSTONE, B.MOSSY, B.ICE, B.GLOWSTONE, B.BEDROCK,
   B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK, B.LAPIS_ORE, B.LAPIS_BLOCK, B.ENCHANT,
   B.EMERALD_ORE, B.EMERALD_BLOCK, B.LANTERN, B.BELL,
+  B.REDSTONE_ORE, B.REDSTONE_BLOCK, B.REDSTONE_LAMP, B.REDSTONE_LAMP_ON,
+  B.NETHERRACK, B.NETHER_BRICKS, B.QUARTZ_ORE, B.QUARTZ_BLOCK, B.QUARTZ_PILLAR,
+  B.MAGMA, B.END_STONE, B.END_BRICKS, B.PURPUR_BLOCK, B.PURPUR_PILLAR,
+  B.BASALT, B.BLACKSTONE, B.CRYING_OBSIDIAN, B.ANVIL, B.BREWING, B.TARGET,
+  B.CONCRETE_WHITE, B.CONCRETE_RED, B.CONCRETE_BLUE, B.CONCRETE_GREEN, B.CONCRETE_YELLOW, B.CONCRETE_BLACK,
+  B.TERRACOTTA, B.OBSERVER, B.DISPENSER, B.PISTON, B.STICKY_PISTON, B.NOTE_BLOCK,
+  B.OAK_STAIRS_N, B.COBBLE_STAIRS_N, B.BRICK_STAIRS_N, B.STONE_BRICK_STAIRS_N, B.SANDSTONE_STAIRS_N, B.NETHER_BRICK_STAIRS_N, B.QUARTZ_STAIRS_N,
+  B.OAK_SLAB, B.STONE_SLAB, B.COBBLE_SLAB, B.BRICK_SLAB, B.SANDSTONE_SLAB, B.NETHER_BRICK_SLAB, B.QUARTZ_SLAB,
 ]);
 const AXE_BLOCKS = new Set<number>([
-  B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED,
+  B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED, B.CHEST, B.LOOT_CHEST,
+  B.HAY, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N,
 ]);
 const SHOVEL_BLOCKS = new Set<number>([
-  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH,
+  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH, B.SOUL_SAND, B.SOUL_SOIL,
 ]);
-const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE]);
+const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE]);
 
 export function isOre(id: number): boolean {
   return ORES.has(id);
@@ -309,14 +341,17 @@ export function pickTier(toolId: number): number {
 
 /** 0 = any tool. 1 wood, 2 stone, 3 iron, 4 diamond. */
 export function requiredPickTier(blockId: number): number {
-  if (blockId === B.OBSIDIAN) return 4;
+  if (blockId === B.OBSIDIAN || blockId === B.CRYING_OBSIDIAN) return 4;
   if (blockId === B.DIAMOND_ORE) return 3;
   if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return 2;
   if (blockId === B.LAPIS_ORE) return 2;
+  if (blockId === B.REDSTONE_ORE || blockId === B.QUARTZ_ORE) return 2;
   if (blockId === B.EMERALD_ORE) return 3;
   if (blockId === B.EMERALD_BLOCK) return 2;
   if (blockId === B.GOLD_BLOCK || blockId === B.DIAMOND_BLOCK) return 3;
   if (blockId === B.IRON_BLOCK) return 2;
+  if (blockId === B.ANVIL) return 2;
+  if (blockId === B.NETHER_BRICKS || blockId === B.BLACKSTONE || blockId === B.BASALT) return 1;
   if (PICK_BLOCKS.has(blockId)) return 1;
   return 0;
 }
@@ -417,7 +452,20 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
   if (blockId === B.EMERALD_ORE) return tier >= 3 ? [{ id: I.EMERALD, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
   if (blockId === B.LAPIS_ORE) return tier >= 2 ? [{ id: I.LAPIS, count: 4 + Math.floor(Math.random() * 4) + (fortune ? Math.floor(Math.random() * (fortune + 1)) * 2 : 0) }] : [];
+  if (blockId === B.REDSTONE_ORE) return tier >= 2 ? [{ id: I.REDSTONE, count: 4 + Math.floor(Math.random() * 2) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
+  if (blockId === B.QUARTZ_ORE) return tier >= 2 ? [{ id: I.QUARTZ, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
+  if (blockId === B.GLOWSTONE) return [{ id: I.GLOWSTONE_DUST, count: 2 + Math.floor(Math.random() * 3) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }];
+  if (blockId === B.SLIME_BLOCK) return [{ id: I.SLIME_BALL, count: 1 }];
+  if (blockId === B.HONEY_BLOCK) return [{ id: B.HONEY_BLOCK, count: 1 }];
+  if (blockId === B.HONEYCOMB_BLOCK) return [{ id: I.HONEYCOMB, count: 4 }];
   if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return tier >= 2 ? [{ id: blockId, count: 1 }] : [];
+  // płyty: górna dropuje dolną
+  if (blockId === B.OAK_SLAB_TOP || blockId === B.STONE_SLAB_TOP || blockId === B.COBBLE_SLAB_TOP || blockId === B.BRICK_SLAB_TOP || blockId === B.SANDSTONE_SLAB_TOP || blockId === B.NETHER_BRICK_SLAB_TOP || blockId === B.QUARTZ_SLAB_TOP) {
+    const base = BLOCKS[blockId]?.drop;
+    return base ? [{ id: base, count: 1 }] : [];
+  }
+  // schody dropują siebie
+  if (blockId >= B.OAK_STAIRS_N && blockId <= B.QUARTZ_STAIRS_W) return [{ id: blockId, count: 1 }];
   if (blockId === B.LEAVES) {
     const out: Stack[] = [];
     if (Math.random() < 0.1) out.push({ id: B.SAPLING, count: 1 });
@@ -459,6 +507,14 @@ export function smeltResult(id: number): number | null {
       return B.BRICK;
     case B.COAL_ORE:
       return I.COAL;
+    case B.NETHERRACK:
+      return B.NETHER_BRICKS;
+    case B.QUARTZ_ORE:
+      return I.QUARTZ;
+    case B.BLACKSTONE:
+      return B.BLACKSTONE;
+    case B.COBBLE_STAIRS_N:
+      return B.STONE;
     case B.LOG:
     case B.BIRCH_LOG:
       return I.COAL;
@@ -468,6 +524,8 @@ export function smeltResult(id: number): number | null {
       return I.COOKED_BEEF;
     case I.RAW_CHICKEN:
       return I.COOKED_CHICKEN;
+    case B.SOUL_SAND:
+      return B.SOUL_SOIL;
     default:
       return null;
   }

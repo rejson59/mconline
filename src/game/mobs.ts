@@ -4,10 +4,10 @@ import { stepBody, type Body } from './physics';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem';
+export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 export function isHostileMob(type: MobType): boolean {
-  return type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton';
+  return type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton' || type === 'enderman' || type === 'slime' || type === 'ghast';
 }
 
 /** Mieszkańcy i golemy nie znikają tak szybko, gdy gracz odejdzie od osady. */
@@ -76,12 +76,18 @@ export class Mob {
         : type === 'chicken' ? 0.45
           : type === 'cow' ? 1.1
             : type === 'golem' ? 1.0
-              : type === 'wolf' ? 0.6 : 0.9;
+              : type === 'wolf' ? 0.6
+                : type === 'enderman' ? 0.6
+                  : type === 'slime' ? 0.9
+                    : type === 'ghast' ? 2.0 : 0.9;
     const h =
       type === 'zombie' || type === 'villager' ? 1.9
         : type === 'creeper' ? 1.7
           : type === 'golem' ? 2.2
-            : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
+            : type === 'enderman' ? 2.9
+              : type === 'slime' ? 0.9
+                : type === 'ghast' ? 2.0
+                  : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
     this.maxHealth = this.health =
       type === 'zombie' ? 20
@@ -93,7 +99,10 @@ export class Mob {
                   : type === 'spider' ? 16
                     : type === 'golem' ? 100
                       : type === 'villager' ? 20
-                        : type === 'wolf' ? 8 : 10;
+                        : type === 'wolf' ? 8
+                          : type === 'enderman' ? 40
+                            : type === 'slime' ? 12
+                              : type === 'ghast' ? 10 : 10;
     this.profession = type === 'villager' ? professionFor(profession) : 0;
     if (type === 'villager') this.trade = createVillagerState(this.profession, 0);
     this.build();
@@ -487,6 +496,69 @@ export class Mob {
       armR.position.x = 0.62;
       g.add(armL, armR);
       this.arms.push(armL, armR);
+    } else if (this.type === 'enderman') {
+      const black = 0x111111;
+      const eye = 0xaa00ff;
+      this.addLeg(-0.14, 1.4, 0, 0.18, 1.4, 0.18, black, this.legs);
+      this.addLeg(0.14, 1.4, 0, 0.18, 1.4, 0.18, black, this.legs);
+      const torso = box(0.5, 0.9, 0.28, black, sharedMats);
+      torso.position.y = 1.85;
+      g.add(torso);
+      this.meshes.push(torso);
+      const head = new THREE.Group();
+      head.position.y = 2.5;
+      const hm = box(0.5, 0.5, 0.5, black, sharedMats);
+      head.add(hm);
+      this.meshes.push(hm);
+      const eL = box(0.1, 0.08, 0.02, eye, sharedMats);
+      eL.position.set(-0.12, 0.04, 0.26);
+      const eR = eL.clone();
+      eR.position.x = 0.12;
+      head.add(eL, eR);
+      this.meshes.push(eL, eR);
+      g.add(head);
+      this.head = head;
+      const a1 = this.addLeg(-0.38, 2.2, 0, 0.14, 1.1, 0.14, black, this.arms);
+      const a2 = this.addLeg(0.38, 2.2, 0, 0.14, 1.1, 0.14, black, this.arms);
+      a1.rotation.x = -0.2;
+      a2.rotation.x = -0.2;
+    } else if (this.type === 'slime') {
+      const green = 0x5ad65a;
+      const body = box(0.9, 0.9, 0.9, green, sharedMats);
+      body.position.y = 0.5;
+      // transparent look via opacity handled in material clone later
+      g.add(body);
+      this.meshes.push(body);
+      this.head = body as any;
+      // eyes
+      const eyeL = box(0.12, 0.12, 0.02, 0x111111, sharedMats);
+      eyeL.position.set(-0.18, 0.6, 0.46);
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.18;
+      g.add(eyeL, eyeR);
+      this.meshes.push(eyeL, eyeR);
+    } else if (this.type === 'ghast') {
+      const white = 0xf0f0f0;
+      const body = box(2.0, 2.0, 2.0, white, sharedMats);
+      body.position.y = 3;
+      g.add(body);
+      this.meshes.push(body);
+      this.head = body as any;
+      // tentacles
+      for (let i = 0; i < 6; i++) {
+        const tx = (i - 2.5) * 0.35;
+        const tent = box(0.2, 0.9, 0.2, white, sharedMats);
+        tent.position.set(tx, 1.8, 0);
+        g.add(tent);
+        this.meshes.push(tent);
+        this.legs.push(tent as any);
+      }
+      const eyeL = box(0.2, 0.2, 0.05, 0x111111, sharedMats);
+      eyeL.position.set(-0.4, 3.2, 1.02);
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.4;
+      g.add(eyeL, eyeR);
+      this.meshes.push(eyeL, eyeR);
     }
     g.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
@@ -737,10 +809,10 @@ export class Mob {
       return;
     }
 
-    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : this.type === 'wolf' ? 1.6 : 1.2;
+    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : this.type === 'wolf' ? 1.6 : this.type === 'enderman' ? 3.2 : this.type === 'slime' ? 2.0 : this.type === 'ghast' ? 1.5 : 1.2;
     const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
     const dist = Math.hypot(dx, dz);
-    const hostile = this.type === 'zombie' || this.type === 'creeper' || this.type === 'spider' || this.type === 'skeleton';
+    const hostile = this.type === 'zombie' || this.type === 'creeper' || this.type === 'spider' || this.type === 'skeleton' || this.type === 'enderman' || this.type === 'slime' || this.type === 'ghast';
 
     if (this.fuse > 0) {
       this.fuse -= dt;
@@ -753,15 +825,15 @@ export class Mob {
         this.deathTime = 0;
         this.group.scale.setScalar(1);
       }
-    } else if (hostile && dist < (this.type === 'creeper' ? 14 : this.type === 'skeleton' ? 18 : 24) && Math.abs(player.y - b.pos.y) < 8 && !peaceful) {
+    } else if (hostile && dist < (this.type === 'creeper' ? 14 : this.type === 'skeleton' ? 18 : this.type === 'ghast' ? 32 : 24) && Math.abs(player.y - b.pos.y) < (this.type === 'ghast' ? 24 : 8) && !peaceful) {
       this.yaw = Math.atan2(dx, dz);
-      if (this.type === 'skeleton') {
+      if (this.type === 'skeleton' || this.type === 'ghast') {
         // ranged: keep its distance and shoot when it has a clear line
-        const tooClose = dist < 5.5;
-        this.walking = dist > 12 || tooClose;
+        const tooClose = dist < (this.type === 'ghast' ? 10 : 5.5);
+        this.walking = dist > (this.type === 'ghast' ? 18 : 12) || tooClose;
         if (tooClose) this.yaw = Math.atan2(-dx, -dz);
-        if (dist < 16 && this.attackCooldown <= 0 && this.hasLineOfSight(world, player.x, player.y + 0.9, player.z)) {
-          this.attackCooldown = 2 + Math.random() * 1.2;
+        if (dist < (this.type === 'ghast' ? 28 : 16) && this.attackCooldown <= 0 && this.hasLineOfSight(world, player.x, player.y + 0.9, player.z)) {
+          this.attackCooldown = this.type === 'ghast' ? 3 + Math.random() * 1.5 : 2 + Math.random() * 1.2;
           onShoot(this);
         }
       } else {
@@ -770,9 +842,17 @@ export class Mob {
           this.attackCooldown = 1;
           onAttack(3, this);
         }
-        if (this.type === 'zombie' && dist < 1.4 && Math.abs(player.y - b.pos.y) < 1.8 && this.attackCooldown <= 0) {
-          this.attackCooldown = 1;
-          onAttack(3, this);
+        if ((this.type === 'zombie' || this.type === 'enderman' || this.type === 'slime') && dist < 1.6 && Math.abs(player.y - b.pos.y) < 2.2 && this.attackCooldown <= 0) {
+          this.attackCooldown = this.type === 'enderman' ? 0.8 : 1;
+          onAttack(this.type === 'enderman' ? 6 : this.type === 'slime' ? 2 : 3, this);
+          if (this.type === 'enderman' && Math.random() < 0.3) {
+            // teleport
+            this.body.pos.x += (Math.random() - 0.5) * 8;
+            this.body.pos.z += (Math.random() - 0.5) * 8;
+          }
+          if (this.type === 'slime') {
+            this.body.vel.y = 6;
+          }
         }
         if (this.type === 'creeper' && dist < 2.15 && Math.abs(player.y - b.pos.y) < 2) {
           this.fuse = 1.35;
@@ -788,6 +868,14 @@ export class Mob {
         this.yaw = Math.random() * Math.PI * 2;
       }
       if (this.hurtTime > 0 || (this.aiTimer > 0 && this.health < this.maxHealth && !hostile)) speed *= 1.8;
+      // slime hopping
+      if (this.type === 'slime' && this.body.onGround && this.walking) {
+        this.body.vel.y = 5 + Math.random() * 2;
+      }
+      // ghast floating
+      if (this.type === 'ghast') {
+        this.body.vel.y += (Math.sin(performance.now() * 0.001 + this.home.x) * 0.5 - this.body.vel.y) * dt * 2;
+      }
     }
 
     this.moveAndAnimate(dt, world, player, this.walking && this.hurtTime < 0.3 ? speed : 0);

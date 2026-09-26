@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "1.6.0",
-  "description": "BlockCraft – gra sandboxowa w stylu Minecraft działająca w przeglądarce (React + TypeScript + Three.js + Vite).",
+  "version": "1.7.0",
+  "description": "BlockCraft 1.7 Nether & Redstone – gra sandboxowa w stylu Minecraft (React + TypeScript + Three.js + Vite).",
   "type": "module",
   "license": "MIT",
   "keywords": [

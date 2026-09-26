@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor } from './blocks';
+import { B, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
 import { tileUV } from './textures';
 import { CH, CS, FLAT_H, SEA } from './constants';
 import {
@@ -30,8 +30,8 @@ function hash(x: number, y: number, z: number, s: number): number {
 export class Chunk {
   cx: number;
   cz: number;
-  data = new Uint8Array(CS * CS * CH);
-  heightMap = new Uint8Array(CS * CS);
+  data = new Uint16Array(CS * CS * CH);
+  heightMap = new Uint16Array(CS * CS);
   meshes: THREE.Mesh[] = [];
   built = false;
   maxY = 0;
@@ -252,8 +252,10 @@ export class World {
             const cl = hash(wx >> 1, y >> 1, wz >> 1, s + 11);
             const cl2 = hash(wx >> 1, y >> 1, wz >> 1, s + 23);
             const cl3 = hash(wx >> 1, y >> 1, wz >> 1, s + 41);
+            const cl4 = hash(wx >> 1, y >> 1, wz >> 1, s + 59);
             if (y < 16 && cl < 0.012 && r < 0.6) id = B.DIAMOND_ORE;
             else if (y > 6 && y < 40 && cl3 > (biome === 'Góry' ? 0.986 : 0.9965) && r < 0.6) id = B.EMERALD_ORE;
+            else if (y < 16 && cl4 > 0.04 && cl4 < 0.07 && r < 0.55) id = B.REDSTONE_ORE;
             else if (y < 32 && cl > 0.985 && r < 0.6) id = B.GOLD_ORE;
             else if (y < 64 && cl > 0.02 && cl < 0.045 && r < 0.6) id = B.IRON_ORE;
             else if (y < 44 && y > 8 && cl2 < 0.016 && r < 0.55) id = B.LAPIS_ORE;
@@ -419,8 +421,10 @@ export class World {
             const cl = hash(wx >> 1, y >> 1, wz >> 1, s + 11);
             const cl2 = hash(wx >> 1, y >> 1, wz >> 1, s + 23);
             const cl3 = hash(wx >> 1, y >> 1, wz >> 1, s + 41);
+              const cl4 = hash(wx >> 1, y >> 1, wz >> 1, s + 59);
             if (y < 16 && cl < 0.012 && r < 0.6) id = B.DIAMOND_ORE;
             else if (y > 6 && y < 40 && cl3 > 0.9965 && r < 0.6) id = B.EMERALD_ORE;
+            else if (y < 16 && cl4 > 0.04 && cl4 < 0.07 && r < 0.55) id = B.REDSTONE_ORE;
             else if (y < 32 && cl > 0.985 && r < 0.6) id = B.GOLD_ORE;
             else if (cl > 0.02 && cl < 0.045 && r < 0.6) id = B.IRON_ORE;
             else if (y < 44 && y > 8 && cl2 < 0.016 && r < 0.55) id = B.LAPIS_ORE;
@@ -505,6 +509,66 @@ export class World {
   /** Najbliższa wioska – używane przez komendę /village i spawn mieszkańców. */
   nearestVillage(x: number, z: number, cells = 3) {
     return nearestVillage(x, z, this.villageContext(), cells);
+  }
+
+  /** 1.7: generuje prosty Nether wokół (cx,cz) – używane po wejściu przez portal. */
+  generateNetherArea(wx: number, wz: number) {
+    const radius = 4;
+    for (let cz = Math.floor(wz / CS) - radius; cz <= Math.floor(wz / CS) + radius; cz++) {
+      for (let cx = Math.floor(wx / CS) - radius; cx <= Math.floor(wx / CS) + radius; cx++) {
+        const c = this.getChunk(cx, cz);
+        // if already has netherrack, skip
+        let hasNether = false;
+        for (let i = 0; i < c.data.length; i++) if (c.data[i] === B.NETHERRACK) { hasNether = true; break; }
+        if (hasNether) continue;
+        // fill chunk with nether terrain
+        const ox = cx * CS, oz = cz * CS;
+        const s = this.seed;
+        for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
+          const gx = ox + x, gz = oz + z;
+          for (let y = 0; y < CH; y++) {
+            let id: number = B.AIR;
+            if (y === 0) id = B.BEDROCK;
+            else if (y < 8) id = B.LAVA;
+            else if (y < 60) {
+              const n = this.n1.fbm2D(gx / 80, gz / 80, 2) * 10 + this.nCave.noise3D(gx / 30, y / 20, gz / 30) * 20;
+              if (n > -2) {
+                id = B.NETHERRACK;
+                const r = hash(gx, y, gz, s + 99);
+                if (y < 30 && r < 0.015) id = B.QUARTZ_ORE;
+                else if (y < 50 && r < 0.008) id = B.MAGMA;
+                else if (r < 0.002) id = B.SOUL_SAND;
+              } else {
+                id = B.AIR;
+              }
+            } else if (y < 70) {
+              id = B.NETHERRACK;
+            } else if (y < 120) {
+              const n = this.nCave.noise3D(gx / 40, y / 30, gz / 40);
+              if (n > 0.2) id = B.NETHERRACK;
+              else id = B.AIR;
+              if (y > 100 && Math.random() < 0.02) id = B.GLOWSTONE;
+            } else if (y === 127) id = B.BEDROCK;
+            else id = B.AIR;
+            if (id !== B.AIR) c.data[idx(x, y, z)] = id;
+          }
+          // top soul sand patches
+          if (hash(gx, 0, gz, s + 77) < 0.05) {
+            const hy = 62 + Math.floor(hash(gx, 1, gz, s + 78) * 5);
+            c.data[idx(x, hy, z)] = B.SOUL_SAND;
+          }
+        }
+        // create some basalt pillars
+        if (hash(ox, oz, 0, s + 101) < 0.08) {
+          const px = Math.floor(CS / 2), pz = Math.floor(CS / 2);
+          for (let y = 10; y < 70; y++) {
+            c.data[idx(px, y, pz)] = B.BASALT;
+            c.data[idx(px + 1, y, pz)] = B.BASALT;
+          }
+        }
+        this.dirty.add(World.key(cx, cz));
+      }
+    }
   }
 
   // ---------- Access ----------
@@ -709,6 +773,54 @@ export class World {
               buf.ind.push(n, n + 1, n + 2, n + 2, n + 1, n + 3);
               buf.count += 4;
             }
+            continue;
+          }
+          if (rt === 3) {
+            // slab
+            const top = isSlabTop(id);
+            const y0 = top ? 0.5 : 0;
+            const y1 = top ? 1 : 0.5;
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            addBox(buf, ox + x, y, oz + z, 0, y0, 0, 1, y1, 1, tileFor(id, 0), sky, blk);
+            continue;
+          }
+          if (rt === 4) {
+            // stairs – bottom slab + top quarter
+            const facing = stairsFacing(id);
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            // bottom half
+            addBox(buf, ox + x, y, oz + z, 0, 0, 0, 1, 0.5, 1, tileFor(id, 0), sky, blk);
+            // top quarter depending on facing
+            let x0 = 0, x1 = 1, z0 = 0, z1 = 1;
+            if (facing === 0) z0 = 0; // north: top occupies north half (z 0-0.5)
+            if (facing === 0) { z0 = 0; z1 = 0.5; }
+            else if (facing === 2) { z0 = 0.5; z1 = 1; }
+            else if (facing === 1) { x0 = 0.5; x1 = 1; }
+            else if (facing === 3) { x0 = 0; x1 = 0.5; }
+            addBox(buf, ox + x, y, oz + z, x0, 0.5, z0, x1, 1, z1, tileFor(id, 0), sky, blk);
+            continue;
+          }
+          if (rt === 5) {
+            // portal – thin, wobble
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            // check orientation by neighbors: if obsidian on X sides, portal plane is Z, else X
+            const obsX = IS_OPAQUE[get(x - 1, y, z)] || IS_OPAQUE[get(x + 1, y, z)];
+            const obsZ = IS_OPAQUE[get(x, y, z - 1)] || IS_OPAQUE[get(x, y, z + 1)];
+            if (obsX && !obsZ) {
+              addBox(buf, ox + x, y, oz + z, 0.35, 0, 0, 0.65, 1, 1, tileFor(id, 0), sky, blk);
+            } else {
+              addBox(buf, ox + x, y, oz + z, 0, 0, 0.35, 1, 1, 0.65, tileFor(id, 0), sky, blk);
+            }
+            continue;
+          }
+          if (rt === 6) {
+            // rail – flat on ground
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            addBox(buf, ox + x, y, oz + z, 0, 0, 0, 1, 0.1, 1, tileFor(id, 0), sky, blk);
             continue;
           }
           const isLiquid = rt === 2;

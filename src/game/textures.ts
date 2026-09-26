@@ -552,6 +552,219 @@ export function buildAtlas(): AtlasResult {
     setPx(T.bell, 7, 12, 60, 48, 24); setPx(T.bell, 8, 12, 60, 48, 24);
   }
 
+  // ------------------------------------------------------------------- 1.7 Nether & Redstone
+  ore(T.redstone_ore, [200, 30, 30], R(93));
+  storageBlock(T.redstone_block, [180, 20, 20], R(94));
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.redstone_torch, x, y, 0, 0, 0, 0);
+    for (let y = 7; y < 15; y++) { setPx(T.redstone_torch, 7, y, 92, 64, 36); setPx(T.redstone_torch, 8, y, 70, 48, 26); }
+    for (const [x, y, c] of [[6, 3, [255, 40, 40]], [7, 2, [255, 120, 120]], [7, 3, [255, 60, 60]], [8, 3, [255, 80, 80]], [7, 4, [200, 20, 20]]] as [number, number, RGB][]) setPx(T.redstone_torch, x, y, c[0], c[1], c[2]);
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.redstone_torch_off, x, y, 0, 0, 0, 0);
+    for (let y = 7; y < 15; y++) { setPx(T.redstone_torch_off, 7, y, 92, 64, 36); setPx(T.redstone_torch_off, 8, y, 70, 48, 26); }
+    setPx(T.redstone_torch_off, 7, 3, 80, 20, 20); setPx(T.redstone_torch_off, 7, 2, 60, 15, 15);
+  }
+  {
+    const r = R(97);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([120, 100, 80], 0.9 + r() * 0.2); setPx(T.redstone_lamp, x, y, c[0], c[1], c[2]); }
+    for (let x = 2; x < 14; x++) { setPx(T.redstone_lamp, x, 2, 90, 70, 50); setPx(T.redstone_lamp, x, 13, 90, 70, 50); }
+  }
+  {
+    const r = R(98);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const glow = 0.8 + r() * 0.4; setPx(T.redstone_lamp_on, x, y, 255 * glow, 180 * glow, 80 * glow); }
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.lever, x, y, 0, 0, 0, 0);
+    for (let x = 4; x < 12; x++) for (let y = 12; y < 16; y++) setPx(T.lever, x, y, 120, 120, 120);
+    setPx(T.lever, 7, 8, 90, 90, 90); setPx(T.lever, 7, 7, 60, 60, 60); setPx(T.lever, 7, 6, 80, 80, 80);
+  }
+  {
+    const r = R(100);
+    noiseFill(T.piston_side, [160, 160, 150], 0.1, r);
+    for (let x = 0; x < 16; x++) { setPx(T.piston_side, x, 0, 80, 80, 80); setPx(T.piston_side, x, 15, 80, 80, 80); }
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.piston_top, x, y, 180, 180, 170);
+    for (let x = 3; x < 13; x++) for (let y = 3; y < 13; y++) setPx(T.piston_top, x, y, 200, 200, 190);
+    for (let x = 5; x < 11; x++) { setPx(T.piston_top, x, 5, 100, 100, 100); setPx(T.piston_top, x, 10, 100, 100, 100); }
+  }
+  {
+    const r = R(102);
+    noiseFill(T.piston_bottom, [100, 80, 60], 0.15, r);
+  }
+  {
+    copyTile(T.piston_side, T.sticky_piston_side);
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 16; x++) setPx(T.sticky_piston_side, x, y, 60, 180, 60);
+  }
+  {
+    const r = R(104);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([80, 200, 80], 0.85 + r() * 0.3); setPx(T.slime, x, y, c[0], c[1], c[2], 200); }
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.observer_top, x, y, 100, 100, 100);
+    setPx(T.observer_top, 7, 7, 200, 30, 30); setPx(T.observer_top, 8, 7, 200, 30, 30); setPx(T.observer_top, 7, 8, 200, 30, 30); setPx(T.observer_top, 8, 8, 200, 30, 30);
+  }
+  {
+    const r = R(106);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([90, 90, 90], 0.9 + r() * 0.2); setPx(T.observer_side, x, y, c[0], c[1], c[2]); }
+    for (let x = 4; x < 12; x++) { setPx(T.observer_side, x, 4, 200, 30, 30); setPx(T.observer_side, x, 11, 80, 80, 80); }
+  }
+  {
+    const r = R(107);
+    noiseFill(T.observer_bottom, [60, 60, 60], 0.1, r);
+  }
+  {
+    copyTile(T.cobble, T.dispenser_side);
+    const r = R(108);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { if (x < 2 || x > 13 || y < 2 || y > 13) { const c = shade([120, 120, 120], 0.9 + r() * 0.2); setPx(T.dispenser_front, x, y, c[0], c[1], c[2]); } else { setPx(T.dispenser_front, x, y, 40, 40, 40); } }
+    setPx(T.dispenser_front, 7, 7, 20, 20, 20); setPx(T.dispenser_front, 8, 7, 20, 20, 20);
+  }
+  {
+    const r = R(110);
+    noiseFill(T.note_block, [120, 80, 50], 0.2, r);
+    for (let x = 4; x < 12; x++) setPx(T.note_block, x, 4, 200, 200, 220);
+  }
+  {
+    const r = R(111);
+    noiseFill(T.netherrack, [110, 30, 30], 0.25, r);
+    for (let i = 0; i < 12; i++) setPx(T.netherrack, Math.floor(r() * 16), Math.floor(r() * 16), 90, 20, 20);
+  }
+  {
+    const r = R(112);
+    noiseFill(T.soul_sand, [80, 60, 50], 0.2, r);
+    for (let i = 0; i < 20; i++) { const x = Math.floor(r() * 16), y = Math.floor(r() * 16); setPx(T.soul_sand, x, y, 60, 45, 35); }
+  }
+  {
+    const r = R(113);
+    bricksPattern(T.nether_bricks, [60, 20, 30], [40, 15, 20], 8, 4, r);
+  }
+  ore(T.quartz_ore, [230, 220, 210], R(114));
+  storageBlock(T.quartz_block, [240, 230, 220], R(115));
+  {
+    const r = R(116);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([240, 230, 220], 0.9 + r() * 0.2); setPx(T.quartz_pillar, x, y, c[0], c[1], c[2]); }
+    for (let x = 5; x < 11; x++) { setPx(T.quartz_pillar, x, 0, 200, 190, 180); setPx(T.quartz_pillar, x, 15, 200, 190, 180); }
+  }
+  {
+    copyTile(T.quartz_block, T.quartz_chiseled);
+    for (let x = 4; x < 12; x++) { setPx(T.quartz_chiseled, x, 4, 200, 190, 180); setPx(T.quartz_chiseled, x, 11, 200, 190, 180); }
+  }
+  {
+    const r = R(118);
+    noiseFill(T.magma, [180, 60, 20], 0.3, r);
+    for (let i = 0; i < 16; i++) { const x = Math.floor(r() * 16), y = Math.floor(r() * 16); setPx(T.magma, x, y, 255, 120, 30); }
+  }
+  {
+    const r = R(119);
+    noiseFill(T.end_stone, [230, 230, 180], 0.12, r);
+  }
+  {
+    const r = R(120);
+    bricksPattern(T.end_bricks, [230, 230, 180], [200, 200, 150], 8, 4, r);
+  }
+  {
+    const r = R(121);
+    noiseFill(T.purpur_block, [170, 120, 170], 0.15, r);
+  }
+  {
+    const r = R(122);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([170, 120, 170], 0.9 + r() * 0.2); setPx(T.purpur_pillar, x, y, c[0], c[1], c[2]); }
+    for (let x = 5; x < 11; x++) { setPx(T.purpur_pillar, x, 0, 140, 90, 140); setPx(T.purpur_pillar, x, 15, 140, 90, 140); }
+  }
+  {
+    const r = R(123);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([80, 0, 180], 0.8 + r() * 0.4 + Math.sin(x * 0.8) * 0.2); setPx(T.nether_portal, x, y, c[0], c[1], c[2], 180); }
+  }
+  {
+    const r = R(124);
+    noiseFill(T.oak_stairs, [164, 132, 80], 0.1, r);
+  }
+  // Concrete – flat colors with slight noise
+  wool(T.concrete_white, [220, 220, 220], R(126));
+  wool(T.concrete_red, [180, 40, 40], R(127));
+  wool(T.concrete_blue, [40, 80, 180], R(128));
+  wool(T.concrete_green, [60, 140, 60], R(129));
+  wool(T.concrete_yellow, [220, 200, 40], R(130));
+  wool(T.concrete_black, [20, 20, 25], R(131));
+  {
+    const r = R(132);
+    noiseFill(T.terracotta, [180, 100, 70], 0.12, r);
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.rail, x, y, 0, 0, 0, 0);
+    for (let x = 0; x < 16; x++) { setPx(T.rail, x, 7, 100, 100, 100); setPx(T.rail, x, 8, 80, 80, 80); }
+    for (let y = 0; y < 16; y++) { setPx(T.rail, 7, y, 100, 100, 100); setPx(T.rail, 8, y, 80, 80, 80); }
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.powered_rail, x, y, 0, 0, 0, 0);
+    for (let x = 0; x < 16; x++) { setPx(T.powered_rail, x, 7, 200, 180, 50); setPx(T.powered_rail, x, 8, 180, 160, 40); }
+    for (let y = 0; y < 16; y++) { setPx(T.powered_rail, 7, y, 200, 180, 50); setPx(T.powered_rail, 8, y, 180, 160, 40); }
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.detector_rail, x, y, 0, 0, 0, 0);
+    for (let x = 0; x < 16; x++) { setPx(T.detector_rail, x, 7, 180, 50, 50); setPx(T.detector_rail, x, 8, 160, 40, 40); }
+  }
+  {
+    const r = R(136);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([120, 120, 120], 0.9 + r() * 0.2); setPx(T.anvil, x, y, c[0], c[1], c[2]); }
+    for (let x = 2; x < 14; x++) { setPx(T.anvil, x, 0, 80, 80, 80); setPx(T.anvil, x, 15, 80, 80, 80); }
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.brewing_top, x, y, 0, 0, 0, 0);
+    for (let x = 5; x < 11; x++) for (let y = 5; y < 11; y++) setPx(T.brewing_top, x, y, 60, 60, 70);
+    setPx(T.brewing_top, 7, 7, 200, 200, 220); setPx(T.brewing_top, 8, 7, 200, 200, 220);
+  }
+  {
+    const r = R(138);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([80, 60, 50], 0.9 + r() * 0.2); setPx(T.brewing_side, x, y, c[0], c[1], c[2]); }
+  }
+  {
+    const r = R(139);
+    noiseFill(T.shroomlight, [220, 120, 80], 0.2, r);
+    for (let i = 0; i < 10; i++) setPx(T.shroomlight, Math.floor(r() * 16), Math.floor(r() * 16), 255, 200, 150);
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.basalt_top, x, y, 80, 80, 85);
+  }
+  {
+    const r = R(141);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([70, 70, 75], 0.9 + r() * 0.2); setPx(T.basalt_side, x, y, c[0], c[1], c[2]); }
+  }
+  {
+    const r = R(142);
+    noiseFill(T.blackstone, [40, 40, 45], 0.15, r);
+  }
+  {
+    const r = R(143);
+    noiseFill(T.soul_soil, [70, 55, 45], 0.15, r);
+  }
+  {
+    const r = R(144);
+    noiseFill(T.crying_obsidian, [40, 10, 80], 0.3, r);
+    for (let i = 0; i < 20; i++) setPx(T.crying_obsidian, Math.floor(r() * 16), Math.floor(r() * 16), 120, 30, 200);
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.target_top, x, y, 240, 240, 240);
+    for (let x = 4; x < 12; x++) for (let y = 4; y < 12; y++) setPx(T.target_top, x, y, 200, 40, 40);
+    for (let x = 6; x < 10; x++) for (let y = 6; y < 10; y++) setPx(T.target_top, x, y, 240, 240, 240);
+    for (let x = 7; x < 9; x++) for (let y = 7; y < 9; y++) setPx(T.target_top, x, y, 200, 40, 40);
+  }
+  {
+    const r = R(146);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([240, 240, 240], 0.9 + r() * 0.1); setPx(T.target_side, x, y, c[0], c[1], c[2]); }
+    setPx(T.target_side, 7, 7, 200, 40, 40); setPx(T.target_side, 8, 7, 200, 40, 40); setPx(T.target_side, 7, 8, 200, 40, 40); setPx(T.target_side, 8, 8, 200, 40, 40);
+  }
+  {
+    const r = R(147);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([240, 180, 60], 0.9 + r() * 0.2); setPx(T.honey_block, x, y, c[0], c[1], c[2], 200); }
+  }
+  {
+    const r = R(148);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([240, 200, 80], 0.85 + r() * 0.3); setPx(T.honeycomb_block, x, y, c[0], c[1], c[2]); }
+    for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x++) setPx(T.honeycomb_block, x, y, 200, 160, 50);
+  }
+
   ctx.putImageData(img, 0, 0);
 
   // average colors

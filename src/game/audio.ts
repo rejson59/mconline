@@ -1,7 +1,7 @@
 // Procedural sound effects generated with the Web Audio API.
 // Every entry point is fail-safe: if the browser has no (or a blocked)
 // AudioContext the game keeps running silently instead of throwing.
-type Kind = 'stone' | 'wood' | 'grass' | 'sand' | 'glass' | 'cloth';
+type Kind = 'stone' | 'wood' | 'grass' | 'sand' | 'glass' | 'cloth' | 'slime';
 
 let ctx: AudioContext | null = null;
 let noiseBuf: AudioBuffer | null = null;
@@ -58,6 +58,7 @@ const KIND_FREQ: Record<Kind, [number, number]> = {
   sand: [3500, 0.5],
   glass: [4000, 4],
   cloth: [1200, 0.6],
+  slime: [600, 1.0],
 };
 
 function noiseBurst(freq: number, q: number, dur: number, gain: number) {
@@ -116,7 +117,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem') {
+export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -512,6 +513,57 @@ export function setRain(on: boolean) {
     rainSrc.disconnect();
     rainSrc = null;
   }
+}
+
+export function playNote(pitch: number, _belowId: number) {
+  const c = ensure();
+  if (!c || !master) return;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  const t = c.currentTime;
+  // different instruments based on block below (future: use _belowId)
+  const freq = 220 * Math.pow(2, (pitch % 24) / 12);
+  o.type = 'square';
+  o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0.12, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + 0.9);
+}
+
+export function playPortal() {
+  const c = ensure();
+  if (!c || !master) return;
+  const t = c.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(200 + i * 100, t + i * 0.1);
+    o.frequency.exponentialRampToValueAtTime(80, t + i * 0.1 + 1.2);
+    g.gain.setValueAtTime(0.08, t + i * 0.1);
+    g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.1 + 1.5);
+    o.connect(g).connect(master);
+    o.start(t + i * 0.1);
+    o.stop(t + i * 0.1 + 1.6);
+  }
+}
+
+export function playSlime() {
+  const c = ensure();
+  if (!c || !master) return;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  const t = c.currentTime;
+  o.type = 'sine';
+  o.frequency.setValueAtTime(180, t);
+  o.frequency.exponentialRampToValueAtTime(90, t + 0.3);
+  g.gain.setValueAtTime(0.15, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + 0.4);
 }
 
 export function unlockAudio() {
