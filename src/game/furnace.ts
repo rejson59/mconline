@@ -13,6 +13,8 @@ export interface FurnaceState {
   burn: number;
   burnMax: number;
   cook: number;
+  /** 1.8: 1 = piec stoi w Netherze (osobny klucz, obcy wymiar go nie skasuje). */
+  dim?: number;
 }
 
 export function furnaceKey(x: number, y: number, z: number): string {

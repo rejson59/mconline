@@ -16,7 +16,7 @@ import {
 // ale stare importy z world.ts nadal działają.
 export { CH, CS, FLAT_H, SEA };
 
-export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las';
+export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Nether';
 
 const idx = (x: number, y: number, z: number) => (y * CS + z) * CS + x;
 
@@ -35,11 +35,27 @@ export class Chunk {
   meshes: THREE.Mesh[] = [];
   built = false;
   maxY = 0;
+  /** Nether chunks measure height as the walkable FLOOR, never the roof. */
+  nether = false;
   constructor(cx: number, cz: number) {
     this.cx = cx;
     this.cz = cz;
   }
   recomputeHeight(x: number, z: number) {
+    if (this.nether) {
+      // Highest walkable floor: a solid block with two air blocks over it.
+      // The roof and every hanging stalactite are skipped, so spawns, the
+      // minimap and mob AI always see the actual ground under the player.
+      for (let y = CH - 3; y >= 0; y--) {
+        const i = idx(x, y, z);
+        if (IS_OPAQUE[this.data[i]] && this.data[i + CS * CS] === 0 && this.data[i + 2 * CS * CS] === 0) {
+          this.heightMap[z * CS + x] = y;
+          return;
+        }
+      }
+      this.heightMap[z * CS + x] = 0;
+      return;
+    }
     for (let y = CH - 1; y >= 0; y--) {
       if (IS_OPAQUE[this.data[idx(x, y, z)]]) {
         this.heightMap[z * CS + x] = y;
@@ -134,6 +150,12 @@ export class World {
   seed: number;
   /** Flat worlds are a single grass layer at FLAT_H – handy for building. */
   flat: boolean;
+  /**
+   * Nether worlds are a completely separate dimension: own terrain, own chunk
+   * map, own player modifications. Nothing is ever stamped onto the overworld,
+   * so the two maps can never bleed into each other.
+   */
+  readonly isNether: boolean;
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
@@ -145,9 +167,10 @@ export class World {
   private nTemp: SimplexNoise;
   private vctx: VillageContext | null = null;
 
-  constructor(seed: number, flat = false) {
+  constructor(seed: number, flat = false, nether = false) {
     this.seed = seed;
-    this.flat = flat;
+    this.flat = flat && !nether;
+    this.isNether = nether;
     this.n1 = new SimplexNoise(seed);
     this.n2 = new SimplexNoise(seed + 1);
     this.n3 = new SimplexNoise(seed + 2);
@@ -162,6 +185,7 @@ export class World {
 
   // ---------- Terrain ----------
   surface(x: number, z: number): { h: number; biome: Biome; temp: number; forest: number } {
+    if (this.isNether) return { h: this.netherFloorH(x, z), biome: 'Nether', temp: 0, forest: 0 };
     if (this.flat) return { h: FLAT_H, biome: 'Równiny', temp: 0, forest: 0 };
     const cont = this.n1.fbm2D(x / 700, z / 700, 4);
     const hills = this.n2.fbm2D(x / 160, z / 160, 4);
@@ -188,6 +212,7 @@ export class World {
     let c = this.chunks.get(k);
     if (!c) {
       c = new Chunk(cx, cz);
+      c.nether = this.isNether;
       this.generate(c);
       this.chunks.set(k, c);
     }
@@ -199,6 +224,7 @@ export class World {
   }
 
   private generate(c: Chunk) {
+    if (this.isNether) { this.generateNether(c); return; }
     if (this.flat) { this.generateFlat(c); return; }
     const d = c.data;
     const ox = c.cx * CS, oz = c.cz * CS;
@@ -498,77 +524,123 @@ export class World {
 
   /** Wioska, na której terenie stoi punkt (albo null). */
   villageAt(x: number, z: number): Village | null {
+    if (this.isNether) return null; // osady nie istnieją w Netherze
     return villageAt(x, z, this.villageContext());
   }
 
   /** Wszystkie wioski, których obszar obejmuje prostokąt. */
   villagesIn(x0: number, z0: number, x1: number, z1: number): Village[] {
+    if (this.isNether) return [];
     return villagesOverlapping(x0, z0, x1, z1, this.villageContext());
   }
 
   /** Najbliższa wioska – używane przez komendę /village i spawn mieszkańców. */
   nearestVillage(x: number, z: number, cells = 3) {
+    if (this.isNether) return null;
     return nearestVillage(x, z, this.villageContext(), cells);
   }
 
-  /** 1.7: generuje prosty Nether wokół (cx,cz) – używane po wejściu przez portal. */
-  generateNetherArea(wx: number, wz: number) {
-    const radius = 4;
-    for (let cz = Math.floor(wz / CS) - radius; cz <= Math.floor(wz / CS) + radius; cz++) {
-      for (let cx = Math.floor(wx / CS) - radius; cx <= Math.floor(wx / CS) + radius; cx++) {
-        const c = this.getChunk(cx, cz);
-        // if already has netherrack, skip
-        let hasNether = false;
-        for (let i = 0; i < c.data.length; i++) if (c.data[i] === B.NETHERRACK) { hasNether = true; break; }
-        if (hasNether) continue;
-        // fill chunk with nether terrain
-        const ox = cx * CS, oz = cz * CS;
-        const s = this.seed;
-        for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
-          const gx = ox + x, gz = oz + z;
-          for (let y = 0; y < CH; y++) {
-            let id: number = B.AIR;
-            if (y === 0) id = B.BEDROCK;
-            else if (y < 8) id = B.LAVA;
-            else if (y < 60) {
-              const n = this.n1.fbm2D(gx / 80, gz / 80, 2) * 10 + this.nCave.noise3D(gx / 30, y / 20, gz / 30) * 20;
-              if (n > -2) {
-                id = B.NETHERRACK;
-                const r = hash(gx, y, gz, s + 99);
-                if (y < 30 && r < 0.015) id = B.QUARTZ_ORE;
-                else if (y < 50 && r < 0.008) id = B.MAGMA;
-                else if (r < 0.002) id = B.SOUL_SAND;
-              } else {
-                id = B.AIR;
-              }
-            } else if (y < 70) {
-              id = B.NETHERRACK;
-            } else if (y < 120) {
-              const n = this.nCave.noise3D(gx / 40, y / 30, gz / 40);
-              if (n > 0.2) id = B.NETHERRACK;
-              else id = B.AIR;
-              if (y > 100 && Math.random() < 0.02) id = B.GLOWSTONE;
-            } else if (y === 127) id = B.BEDROCK;
-            else id = B.AIR;
-            if (id !== B.AIR) c.data[idx(x, y, z)] = id;
+  // ---------- Nether (osobny wymiar, wersja 1.7+) ----------
+
+  /** Wysokość podłogi Netheru – falujące pagórki ok. 16–72. */
+  private netherFloorH(gx: number, gz: number): number {
+    const n = this.n1.fbm2D(gx / 90, gz / 90, 3);
+    const m = this.n2.fbm2D(gx / 300, gz / 300, 2);
+    return Math.max(18, Math.min(74, Math.floor(46 + n * 13 + m * 15)));
+  }
+
+  /** Dolna krawędź skalnego stropu – zostawia ~30 bloków otwartej przestrzeni. */
+  private netherCeilH(gx: number, gz: number): number {
+    const n = this.n3.fbm2D(gx / 70, gz / 70, 3);
+    return Math.floor(102 + n * 9);
+  }
+
+  /**
+   * Pełny generator Netheru – wywoływany przy tworzeniu chunka, deterministycznie
+   * (tylko hash + szumy, zero Math.random). Osobna mapa = zero nakładania się
+   * światów; teren nigdy nie „nadpisuje" nadświatu.
+   */
+  private generateNether(c: Chunk) {
+    const d = c.data;
+    const ox = c.cx * CS, oz = c.cz * CS;
+    const s = this.seed;
+    let maxY = 0;
+
+    for (let z = 0; z < CS; z++) {
+      for (let x = 0; x < CS; x++) {
+        const gx = ox + x, gz = oz + z;
+        const fh = this.netherFloorH(gx, gz);
+        const ch = this.netherCeilH(gx, gz);
+        if (ch + 10 > maxY) maxY = ch + 10;
+        for (let y = 0; y < CH; y++) {
+          let id: number = B.AIR;
+          if (y === 0) id = B.BEDROCK;
+          else if (y <= 4) id = B.LAVA;                    // morze lawy na dnie
+          else if (y <= fh) {
+            id = B.NETHERRACK;
+            // jaskinie – tylko dobrze pod powierzchnią, żeby podłoga była płaska
+            if (y > 10 && y < fh - 5) {
+              const a = this.nCave.noise3D(gx / 42, y / 24, gz / 42);
+              const b = this.nCave2.noise3D(gx / 40, y / 22, gz / 40);
+              if (a * a + b * b < 0.010) id = y <= 13 ? B.LAVA : B.AIR;
+            }
+            // rudy: kwarc i głęboka magma
+            if (id === B.NETHERRACK && y < fh - 6 && y < 64) {
+              const r = hash(gx, y, gz, s + 99);
+              if (r < 0.014) id = B.QUARTZ_ORE;
+              else if (y < 20 && r > 0.02 && r < 0.028) id = B.MAGMA;
+            }
+          } else if (y < ch) {
+            id = B.AIR;                                    // olbrzymia jaskinia
+          } else {
+            id = B.NETHERRACK;
+            // kieszenie w pierwszych blokach stropu
+            if (y < ch + 8 && this.nCave.noise3D(gx / 34, y / 16, gz / 34) > 0.45) id = B.AIR;
+            else if (y >= 122) id = y >= 126 || hash(gx, y, gz, s + 17) < 0.35 ? B.BEDROCK : B.NETHERRACK;
           }
-          // top soul sand patches
-          if (hash(gx, 0, gz, s + 77) < 0.05) {
-            const hy = 62 + Math.floor(hash(gx, 1, gz, s + 78) * 5);
-            c.data[idx(x, hy, z)] = B.SOUL_SAND;
-          }
+          d[idx(x, y, z)] = id;
         }
-        // create some basalt pillars
-        if (hash(ox, oz, 0, s + 101) < 0.08) {
-          const px = Math.floor(CS / 2), pz = Math.floor(CS / 2);
-          for (let y = 10; y < 70; y++) {
-            c.data[idx(px, y, pz)] = B.BASALT;
-            c.data[idx(px + 1, y, pz)] = B.BASALT;
-          }
+
+        // plamy na powierzchni: piasek dusz, gleba, czernit, magma
+        if (d[idx(x, fh, z)] === B.NETHERRACK) {
+          const r = hash(gx, 0, gz, s + 31);
+          if (r < 0.05) d[idx(x, fh, z)] = B.SOUL_SAND;
+          else if (r < 0.075) d[idx(x, fh, z)] = B.SOUL_SOIL;
+          else if (r < 0.095) d[idx(x, fh, z)] = B.BLACKSTONE;
+          else if (r < 0.105) d[idx(x, fh, z)] = B.MAGMA;
         }
-        this.dirty.add(World.key(cx, cz));
+
+        // jasnogłazy zwisające pod stropem
+        let prevAir = false;
+        for (let y = fh + 1; y < CH; y++) {
+          const i = idx(x, y, z);
+          const id = d[i];
+          if (id === B.AIR) { prevAir = true; continue; }
+          if (prevAir && id === B.NETHERRACK && y > fh + 8 && hash(gx, y, gz, s + 55) < 0.07) {
+            d[i] = B.GLOWSTONE;
+            const depth = 1 + Math.floor(hash(gx, y - 1, gz, s + 56) * 3);
+            for (let k = 1; k <= depth && y - k > fh + 6; k++) {
+              if (d[idx(x, y - k, z)] !== B.AIR) break;
+              d[idx(x, y - k, z)] = B.GLOWSTONE;
+            }
+          }
+          prevAir = false;
+        }
       }
     }
+
+    // bazaltowe filary od podłogi do stropu
+    if (hash(ox, oz, 3, s + 101) < 0.10) {
+      const px = 2 + Math.floor(hash(ox, 4, oz, s + 102) * (CS - 4));
+      const pz = 2 + Math.floor(hash(ox, 5, oz, s + 103) * (CS - 4));
+      const fh = this.netherFloorH(ox + px, oz + pz);
+      const ch = this.netherCeilH(ox + px, oz + pz);
+      for (let y = fh + 1; y < ch; y++) d[idx(px, y, pz)] = B.BASALT;
+    }
+
+    c.maxY = Math.min(CH - 1, maxY);
+    this.applyMods(c);
+    for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x, z);
   }
 
   // ---------- Access ----------

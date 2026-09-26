@@ -136,6 +136,12 @@ export interface SaveData {
   armor?: (Stack | null)[];
   /** 1.6: licznik wymian (osiągnięcie „Kupiec”). */
   trades?: number;
+  /** 1.8: modyfikacje bloków w Netherze – osobny wymiar, osobny zapis. */
+  netherMods?: Record<string, number[]>;
+  /** 1.8: czy zapis jest w środku Netheru. */
+  isInNether?: boolean;
+  /** 1.8: powrót do nadświatu – pozycja portalu, przez który gracz wszedł. */
+  portalExit?: [number, number, number];
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
@@ -164,6 +170,26 @@ interface FallingBlock {
   pos: THREE.Vector3;
   vel: number;
   id: number;
+}
+
+/**
+ * Everything that lives in ONE dimension and must never leak into the other:
+ * mobs, ground items, arrows, TNT, XP orbs, falling blocks and the redstone
+ * timers. Stashed whole (meshes included) when the player uses a portal.
+ */
+interface DimStash {
+  mobs: Mob[];
+  drops: DropEntity[];
+  arrows: ArrowEntity[];
+  tnts: TNTEntity[];
+  orbs: { mesh: THREE.Mesh; pos: THREE.Vector3; vel: THREE.Vector3; value: number; age: number }[];
+  falling: FallingBlock[];
+  buttons: [string, number][];
+  redstone: string[];
+}
+
+function emptyStash(): DimStash {
+  return { mobs: [], drops: [], arrows: [], tnts: [], orbs: [], falling: [], buttons: [], redstone: [] };
 }
 
 interface Particle {
@@ -253,6 +279,14 @@ export class Game {
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
   world: World;
+  /** Nadświat – zawsze tickuje i zapisuje się niezależnie od tego, gdzie jest gracz. */
+  homeWorld: World;
+  /** Nether – osobny wymiar z własnymi chunkami i modyfikacjami. */
+  netherWorld: World;
+  /** Powrót: pozycja (stopy) portalu w nadświanie, przez który gracz wszedł. */
+  portalExit: [number, number, number] | null = null;
+  /** Obiekty odłożone na czas pobytu w drugim wymiarze. */
+  private dimStash = { home: emptyStash(), nether: emptyStash() };
   mode: GameMode;
   ui: UIState = 'paused';
   inventory = new Inventory();
@@ -431,7 +465,13 @@ export class Game {
     const worldType = opts.save?.worldType ?? opts.worldType ?? 'normal';
     this.worldType = worldType;
     this.world = new World(seed, worldType === 'flat');
-    if (opts.save) this.world.loadMods(opts.save.mods);
+    this.homeWorld = this.world;
+    // Nether istnieje od razu jako osobny wymiar – nigdy nie nadpisuje nadświatu.
+    this.netherWorld = new World(seed, false, true);
+    if (opts.save) {
+      this.world.loadMods(opts.save.mods);
+      this.netherWorld.loadMods(opts.save.netherMods ?? {});
+    }
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -555,8 +595,8 @@ export class Game {
       this.hunger = opts.save.hunger ?? 20;
       this.day = opts.save.day || 1;
       opts.save.inv.forEach((s, i) => (this.inventory.slots[i] = s ? { ...s } : null));
-      for (const f of opts.save.furnaces ?? []) this.furnaces.set(furnaceKey(f.x, f.y, f.z), { ...f, input: f.input ? { ...f.input } : null, fuel: f.fuel ? { ...f.fuel } : null, output: f.output ? { ...f.output } : null });
-      for (const c of opts.save.chests ?? []) this.chests.set(chestKey(c.x, c.y, c.z), { x: c.x, y: c.y, z: c.z, slots: (c.slots ?? []).slice(0, 27).map((s) => (s ? { ...s } : null)) });
+      for (const f of opts.save.furnaces ?? []) this.furnaces.set((f.dim ? 'n:' : '') + furnaceKey(f.x, f.y, f.z), { ...f, input: f.input ? { ...f.input } : null, fuel: f.fuel ? { ...f.fuel } : null, output: f.output ? { ...f.output } : null });
+      for (const c of opts.save.chests ?? []) this.chests.set((c.dim ? 'n:' : '') + chestKey(c.x, c.y, c.z), { x: c.x, y: c.y, z: c.z, dim: c.dim, slots: (c.slots ?? []).slice(0, 27).map((s) => (s ? { ...s } : null)) });
       for (const id of opts.save.unlocked ?? []) this.unlocked.add(id);
       this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
       this.xp = new Xp(opts.save.xp ?? 0);
@@ -570,6 +610,12 @@ export class Game {
       if ((opts.save.day || 1) >= 2) this.unlocked.add('night');
       this.findSpawn();
       if (opts.save.spawn) this.spawnPoint.set(...opts.save.spawn);
+      // Zapis w Netherze: aktywuj wymiar PRZED wczytaniem chunków wokół gracza.
+      if (opts.save.isInNether) {
+        this.world = this.netherWorld;
+        this.isInNether = true;
+        this.portalExit = opts.save.portalExit ?? null;
+      }
       this.world.getChunk(Math.floor(this.body.pos.x / CS), Math.floor(this.body.pos.z / CS));
     } else {
       this.findSpawn();
@@ -592,7 +638,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 1.6 „Wioska”: szukaj osad z mieszkańcami – PPM na mieszkańcu otwiera handel. /village pokaże najbliższą.');
+      : 'BlockCraft 1.8 „Prawdziwy Nether”: zbuduj portal z obsydianu i zapal go krzesiwem – Nether to osobny świat. A wioskę znajdziesz komendą /village.');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -910,16 +956,30 @@ export class Game {
     return true;
   }
 
+  /** Klucz pieca z prefiksem wymiaru – piec w Netherze nie koliduje z piecem w nadświecie. */
+  private fKey(x: number, y: number, z: number) {
+    return (this.isInNether ? 'n:' : '') + furnaceKey(x, y, z);
+  }
+
+  /** Klucz skrzyni z prefiksem wymiaru. */
+  private cKey(x: number, y: number, z: number) {
+    return (this.isInNether ? 'n:' : '') + chestKey(x, y, z);
+  }
+
   openFurnace(x: number, y: number, z: number) {
-    const key = furnaceKey(x, y, z);
-    if (!this.furnaces.has(key)) this.furnaces.set(key, emptyFurnace(x, y, z));
+    const key = this.fKey(x, y, z);
+    if (!this.furnaces.has(key)) {
+      const f = emptyFurnace(x, y, z);
+      f.dim = this.isInNether ? 1 : 0;
+      this.furnaces.set(key, f);
+    }
     this.furnacePos = { x, y, z };
     this.setUI('furnace');
   }
 
   currentFurnace(): FurnaceState | null {
     if (!this.furnacePos) return null;
-    return this.furnaces.get(furnaceKey(this.furnacePos.x, this.furnacePos.y, this.furnacePos.z)) ?? null;
+    return this.furnaces.get(this.fKey(this.furnacePos.x, this.furnacePos.y, this.furnacePos.z)) ?? null;
   }
 
   /** Stół zaklęć: liczba biblioteczek w pierścieniu 5×5 wokół stołu. */
@@ -975,11 +1035,12 @@ export class Game {
   }
 
   openChest(x: number, y: number, z: number) {
-    const key = chestKey(x, y, z);
+    const key = this.cKey(x, y, z);
     let chest = this.chests.get(key);
     if (!chest) {
       const id = this.world.getBlock(x, y, z);
       chest = id === B.LOOT_CHEST ? lootChest(this.world.seed, x, y, z) : emptyChest(x, y, z);
+      chest.dim = this.isInNether ? 1 : 0;
       if (id === B.LOOT_CHEST) {
         this.world.setBlock(x, y, z, B.CHEST);
         this.unlock('loot');
@@ -993,7 +1054,7 @@ export class Game {
 
   currentChest(): ChestState | null {
     if (!this.chestPos) return null;
-    return this.chests.get(chestKey(this.chestPos.x, this.chestPos.y, this.chestPos.z)) ?? null;
+    return this.chests.get(this.cKey(this.chestPos.x, this.chestPos.y, this.chestPos.z)) ?? null;
   }
 
   clickChest(i: number, right: boolean) {
@@ -1004,7 +1065,7 @@ export class Game {
   }
 
   private spillChest(x: number, y: number, z: number) {
-    const key = chestKey(x, y, z);
+    const key = this.cKey(x, y, z);
     const saved = this.chests.get(key);
     const id = this.world.getBlock(x, y, z);
     const stacks = saved ? saved.slots : id === B.LOOT_CHEST ? lootChest(this.world.seed, x, y, z).slots : [];
@@ -1466,30 +1527,180 @@ export class Game {
   }
 
   private enterPortal() {
-    if (this.portalCooldown > 0) return;
+    if (this.portalCooldown > 0 || this.ui !== 'playing') return;
+    if (this.isInNether) { this.leaveNether(); return; }
     this.message('Wkraczasz do portalu Netheru...');
-    this.portalCooldown = 3;
-    // simple nether simulation: teleport to nether-like area or show effect
-    // For now, we simulate nether by moving to far away coordinates and changing biome to nether
-    const px = this.body.pos.x;
-    const pz = this.body.pos.z;
-    // If in overworld, go to nether (divide coords by 8 and set y higher)
-    // If already in nether (y < 20 and near netherrack), return
-    const isNether = this.world.getBlock(Math.floor(px), Math.floor(this.body.pos.y - 1), Math.floor(pz)) === B.NETHERRACK || this.isInNether;
-    if (!isNether) {
-      this.isInNether = true;
-      this.body.pos.set(px / 8, 70, pz / 8);
-      this.message('Przeniesiono do Netheru! Uważaj na lawę i Ghasty.');
-      this.unlock('nether');
-      // generate nether terrain around
-      this.world.generateNetherArea(Math.floor(px / 8), Math.floor(pz / 8));
-    } else {
-      this.isInNether = false;
-      this.body.pos.set(px * 8, 80, pz * 8);
-      this.message('Wróciłeś do normalnego świata.');
-    }
-    this.spawnParticles(this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, B.NETHER_PORTAL, 20, 0.5);
+    this.portalCooldown = 4;
+    const px = this.body.pos.x, py = this.body.pos.y, pz = this.body.pos.z;
+    this.portalExit = [px, py, pz];
+    // Osobny wymiar: nadświat zostaje nietknięty w pamięci, gracz ląduje w
+    // zupełnie nowym świecie (współrzędne /8 jak w klasyku).
+    this.switchDimension(this.netherWorld);
+    const spot = this.prepareNetherArrival(px / 8, pz / 8);
+    this.body.pos.set(spot.x, spot.y, spot.z);
+    this.body.vel.set(0, 0, 0);
+    this.fallStart = spot.y;
+    this.spawnParticles(spot.x, spot.y + 1, spot.z, B.NETHER_PORTAL, 20, 0.5);
     Sfx.playPortal();
+    this.message('Przeniesiono do Netheru! Uważaj na lawę i Ghasty.');
+    this.unlock('nether');
+    this.emitHud();
+  }
+
+  /** Powrót przez portal do nadświatu – dokładnie w miejsce, z którego gracz wszedł. */
+  private leaveNether() {
+    if (!this.isInNether) return;
+    this.portalCooldown = 4;
+    this.switchDimension(this.homeWorld);
+    const [ex, ey, ez] = this.portalExit ?? [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z];
+    this.portalExit = null;
+    // Stań TUŻ OBOK portalu – w środku natychmiast odbiłbyś się z powrotem.
+    let sx = ex, sy = ey, sz = ez;
+    const inPortal = (x: number, y: number, z: number) =>
+      this.world.getBlock(Math.floor(x), Math.floor(y), Math.floor(z)) === B.NETHER_PORTAL ||
+      this.world.getBlock(Math.floor(x), Math.floor(y) + 1, Math.floor(z)) === B.NETHER_PORTAL;
+    if (inPortal(sx, sy, sz)) {
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+        const tx = sx + dx, tz = sz + dz;
+        const below = this.world.getBlock(Math.floor(tx), Math.floor(sy) - 1, Math.floor(tz));
+        if (!inPortal(tx, sy, tz) && IS_SOLID[below]) { sx = tx; sz = tz; break; }
+      }
+    }
+    this.body.pos.set(sx, sy, sz);
+    this.body.vel.set(0, 0, 0);
+    this.fallStart = sy;
+    this.spawnParticles(sx, sy + 1, sz, B.NETHER_PORTAL, 20, 0.5);
+    Sfx.playPortal();
+    this.message('Wróciłeś do normalnego świata.');
+    this.emitHud();
+  }
+
+  /**
+   * Zamienia aktywny wymiar. Chunki wymiaru, z którego wychodzimy, zostają
+   * w pamięci (raz z siatkami) – powrót jest natychmiastowy, bez regeneracji.
+   * Wszystkie żyjące obiekty (moby, przedmioty, strzały, TNT, XP) są
+   * przełączane razem ze światem, więc nigdy nie „wchodzą" na siebie.
+   */
+  private switchDimension(next: World) {
+    const prev = this.world;
+    if (prev === next) return;
+
+    // 1. odepnij siatki wymiaru, z którego wychodzimy (geometria zostaje)
+    for (const c of prev.chunks.values()) for (const m of c.meshes) this.scene.remove(m);
+    // 2. odłóż jego żyjące obiekty
+    this.stashLiveEntities();
+
+    // 3. przeskocz
+    this.world = next;
+    this.isInNether = next !== this.homeWorld;
+
+    // 4. przypnij siatki nowego wymiaru
+    for (const c of next.chunks.values()) for (const m of c.meshes) this.scene.add(m);
+    // 5. przywróć jego obiekty
+    this.restoreStashedEntities();
+
+    // 6. cache'e i stan przejściowy
+    this.biomeCache.clear();
+    this.villageName = null;
+    this.chestPos = null;
+    this.furnacePos = null;
+    this.enchantPos = null;
+    this.tradeMob = null;
+    this.breakProgress = 0;
+    this.breakKey = '';
+    this.loadingProgress = 0;
+    this.unloadTimer = 0;
+  }
+
+  private stashLiveEntities() {
+    const s = this.dimStash[this.isInNether ? 'nether' : 'home'];
+    for (const m of this.mobs) this.scene.remove(m.group);
+    for (const d of this.drops) this.scene.remove(d.mesh);
+    for (const a of this.arrows) this.scene.remove(a.mesh);
+    for (const t of this.tnts) this.scene.remove(t.mesh);
+    for (const o of this.orbs) this.scene.remove(o.mesh);
+    for (const f of this.falling) this.scene.remove(f.mesh);
+    s.mobs = this.mobs;
+    s.drops = this.drops;
+    s.arrows = this.arrows;
+    s.tnts = this.tnts;
+    s.orbs = this.orbs;
+    s.falling = this.falling;
+    s.buttons = [...this.buttonTimers.entries()];
+    s.redstone = [...this.redstoneDirty];
+    this.mobs = [];
+    this.drops = [];
+    this.arrows = [];
+    this.tnts = [];
+    this.orbs = [];
+    this.falling = [];
+    this.buttonTimers.clear();
+    this.redstoneDirty.clear();
+    this.tradeMob = null;
+    // cząstki są ulotne – znikają razem z wymiarem
+    for (const p of this.particles) this.scene.remove(p.mesh);
+    this.particles = [];
+  }
+
+  private restoreStashedEntities() {
+    const s = this.dimStash[this.isInNether ? 'nether' : 'home'];
+    for (const m of s.mobs) this.scene.add(m.group);
+    for (const d of s.drops) this.scene.add(d.mesh);
+    for (const a of s.arrows) this.scene.add(a.mesh);
+    for (const t of s.tnts) this.scene.add(t.mesh);
+    for (const o of s.orbs) this.scene.add(o.mesh);
+    for (const f of s.falling) this.scene.add(f.mesh);
+    this.mobs = s.mobs;
+    this.drops = s.drops;
+    this.arrows = s.arrows;
+    this.tnts = s.tnts;
+    this.orbs = s.orbs;
+    this.falling = s.falling;
+    this.buttonTimers.clear();
+    for (const [k, v] of s.buttons) this.buttonTimers.set(k, v);
+    this.redstoneDirty.clear();
+    for (const k of s.redstone) this.redstoneDirty.add(k);
+    s.buttons = [];
+    s.redstone = [];
+  }
+
+  /**
+   * Lądowanie w Netherze: wyrównuje mały plac, stawia ramę portalu z powrotem
+   * do nadświatu i zwraca punkt, w którym staje gracz (PRZED portalem).
+   * Maksymalnie dwa chunki generowane synchronicznie – reszta doładuje się
+   * budżetowo w pętli, więc wejście nie zawiesza klatek.
+   */
+  private prepareNetherArrival(nx: number, nz: number): { x: number; y: number; z: number } {
+    const w = this.netherWorld;
+    const cx = Math.floor(nx / CS), cz = Math.floor(nz / CS);
+    w.getChunk(cx, cz);
+    // Kandydaci na plac – w całości w środku chunka (max 2 generacje synchroniczne).
+    let bx = cx * CS + 6, bz = cz * CS + 6, h = 0;
+    for (const [ox, oz] of [[6, 6], [6, 9], [9, 6], [9, 9], [4, 4], [11, 11]]) {
+      const hh = w.heightAt(cx * CS + ox, cz * CS + oz);
+      if (hh >= 16) { bx = cx * CS + ox; bz = cz * CS + oz; h = hh; break; }
+      if (hh > h) { bx = cx * CS + ox; bz = cz * CS + oz; h = hh; }
+    }
+    h = Math.max(8, Math.min(CH - 10, h));
+    for (let dx = 0; dx <= 3; dx++) {
+      for (let dz = -1; dz <= 2; dz++) {
+        const x = bx + dx, z = bz + dz;
+        for (let y = h + 1; y <= h + 5; y++) if (w.getBlock(x, y, z) !== B.AIR) w.setBlock(x, y, z, B.AIR);
+        if (!IS_SOLID[w.getBlock(x, h, z)]) w.setBlock(x, h, z, B.NETHERRACK); // likwiduje dziury i lawę
+      }
+    }
+    // klasyczna rama 4×5 z wnętrzem 2×3
+    for (let dx = 0; dx <= 3; dx++) {
+      w.setBlock(bx + dx, h, bz, B.OBSIDIAN);
+      w.setBlock(bx + dx, h + 4, bz, B.OBSIDIAN);
+    }
+    for (let y = h + 1; y <= h + 3; y++) {
+      w.setBlock(bx, y, bz, B.OBSIDIAN);
+      w.setBlock(bx + 3, y, bz, B.OBSIDIAN);
+      w.setBlock(bx + 1, y, bz, B.NETHER_PORTAL);
+      w.setBlock(bx + 2, y, bz, B.NETHER_PORTAL);
+    }
+    return { x: bx + 1.5, y: h + 1, z: bz + 2 };
   }
 
   private onBlockChanged(x: number, y: number, z: number) {
@@ -1516,6 +1727,10 @@ export class Game {
   }
 
   private trySleep(x: number, y: number, z: number) {
+    if (this.isInNether) {
+      this.message('W Netheru nie da się spać – wróć przez portal.');
+      return;
+    }
     this.spawnPoint.set(x + 0.5, y + 1, z + 0.5);
     this.message('Punkt odrodzenia ustawiony.');
     if (this.daylight() > 0.55) {
@@ -1536,12 +1751,12 @@ export class Game {
   }
 
   private spillFurnace(x: number, y: number, z: number) {
-    const f = this.furnaces.get(furnaceKey(x, y, z));
+    const f = this.furnaces.get(this.fKey(x, y, z));
     if (!f) return;
     for (const s of [f.input, f.fuel, f.output]) {
       if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.6, z + 0.5, s.dur);
     }
-    this.furnaces.delete(furnaceKey(x, y, z));
+    this.furnaces.delete(this.fKey(x, y, z));
   }
 
   private itemTexture(id: number): THREE.Texture {
@@ -1728,6 +1943,8 @@ export class Game {
         this.message('Ziarno świata: ' + this.world.seed);
         break;
       case 'spawn':
+        // W Netherze komenda najpierw odsyła gracza do nadświatu.
+        if (this.isInNether) this.switchDimension(this.homeWorld);
         this.body.pos.copy(this.spawnPoint);
         this.body.vel.set(0, 0, 0);
         this.fallStart = this.body.pos.y;
@@ -1761,13 +1978,21 @@ export class Game {
   // ---------- Save ----------
   save() {
     try {
+      // homeWorld zawsze istnieje w pełnej grze; defensywny fallback
+      // przydaje się też testom, które budują obiekt przez Game.prototype.
+      const home = this.homeWorld ?? this.world;
       const data: SaveData = {
         id: this.worldId,
         name: this.worldName,
         worldType: this.worldType,
-        seed: this.world.seed,
+        seed: home.seed,
         mode: this.mode,
-        mods: this.world.serializeMods(),
+        mods: home.serializeMods(),
+        // 1.8: Nether zapisywany jest osobno – stare zapisy bez netherMods
+        // po prostu dostają pusty (nowy) wymiar.
+        netherMods: this.netherWorld ? this.netherWorld.serializeMods() : {},
+        isInNether: !!this.isInNether,
+        portalExit: this.portalExit ?? undefined,
         pos: [this.body.pos.x, this.body.pos.y, this.body.pos.z],
         yaw: this.yaw,
         pitch: this.pitch,
@@ -2618,6 +2843,8 @@ export class Game {
   }
 
   respawn() {
+    // Śmierć w Netherze odsyła do nadświatu (punkt odrodzenia jest zawsze tam).
+    if (this.isInNether) this.switchDimension(this.homeWorld);
     this.health = 20;
     this.hunger = 20;
     this.air = this.maxAir;
@@ -2634,6 +2861,19 @@ export class Game {
     this.mobs.push(m);
     this.scene.add(m.group);
     return m;
+  }
+
+  /** Czy prostokąt r×r wokół punktu i `hgt` bloków w górę to samo powietrze? */
+  private openAir(x: number, y: number, z: number, r: number, hgt: number): boolean {
+    const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dy = 0; dy < hgt; dy++) {
+          if (this.world.peekBlock(bx + dx, by + dy, bz + dz) !== B.AIR) return false;
+        }
+      }
+    }
+    return true;
   }
 
   // ---------- Update ----------
@@ -3015,8 +3255,8 @@ export class Game {
         m.soundTimer = 6 + Math.random() * 12;
         if (m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
       }
-      // zombies burn in daylight
-      if (m.type === 'zombie' && dl > 0.7 && !m.dead) {
+      // zombies burn in daylight (but never under the Nether roof)
+      if (m.type === 'zombie' && dl > 0.7 && !m.dead && !this.isInNether) {
         const exposed = m.body.pos.y >= this.world.heightAt(Math.floor(m.body.pos.x), Math.floor(m.body.pos.z));
         if (exposed) {
           m.health -= dt * 2;
@@ -3060,11 +3300,12 @@ export class Game {
         const x = Math.floor(p.x + Math.cos(ang) * dist), z = Math.floor(p.z + Math.sin(ang) * dist);
         if (!this.world.hasChunk(Math.floor(x / CS), Math.floor(z / CS))) return null;
         const h = this.world.heightAt(x, z);
+        if (h < 12) return null; // studnia lawy albo dziura – nigdy nie spawnuj na dnie świata
         const top = this.world.getBlock(x, h, z);
         if (IS_SOLID[this.world.getBlock(x, h + 1, z)] || IS_SOLID[this.world.getBlock(x, h + 2, z)]) return null;
         return { x: x + 0.5, y: h + 1, z: z + 0.5, top };
       };
-      if (passive < 12 && dl > 0.5) {
+      if (!this.isInNether && passive < 12 && dl > 0.5) {
         const pos = tryPos(20, 48);
         if (pos && pos.top === B.GRASS) {
           const roll = Math.random();
@@ -3073,7 +3314,21 @@ export class Game {
           for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
         }
       }
-      if (hostile < 8 && dl < 0.4) {
+      if (this.isInNether) {
+        // Nether: piwniczne bestie zawsze, a Ghasty tylko w otwartej przestrzeni.
+        if (hostile < 8) {
+          const pos = tryPos(16, 40);
+          if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES && pos.top !== B.LAVA) {
+            const roll = Math.random();
+            if (roll < 0.3 && this.openAir(pos.x, pos.y + 1, pos.z, 1, 5)) {
+              this.spawnMob('ghast', pos.x, pos.y + 3, pos.z);
+            } else {
+              const type: MobType = roll < 0.5 ? 'zombie' : roll < 0.75 ? 'creeper' : 'skeleton';
+              this.spawnMob(type, pos.x, pos.y + 0.1, pos.z);
+            }
+          }
+        }
+      } else if (hostile < 8 && dl < 0.4) {
         const pos = tryPos(18, 40);
         if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES) {
           const roll = Math.random();
@@ -3173,6 +3428,7 @@ export class Game {
   }
 
   private updateSky() {
+    const nether = this.isInNether;
     const ang = this.time * Math.PI * 2;
     const sunY = Math.sin(ang);
     const dl = this.daylight();
@@ -3182,13 +3438,19 @@ export class Game {
     const sunset = Math.max(0, 1 - Math.abs(sunY) * 4) * (Math.cos(ang) > 0 || sunY > -0.2 ? 1 : 0);
     sky.lerp(new THREE.Color(1.0, 0.5, 0.25), sunset * 0.45);
     const biome = this.biomeAt();
-    const raining = this.weather === 'rain' && biome !== 'Pustynia';
+    const raining = !nether && this.weather === 'rain' && biome !== 'Pustynia';
     if (raining) sky.multiplyScalar(0.62);
     if (this.lightning > 0) sky.lerp(new THREE.Color(0.85, 0.88, 1), Math.min(1, this.lightning));
 
     const fog = this.scene.fog as THREE.Fog;
     const eyeBlock = this.world.peekBlock(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z));
-    if (eyeBlock === B.WATER) {
+    if (nether) {
+      // Nether: stałe, czerwone mrok – bez słońca, chmur i cyklu dnia.
+      fog.color.setRGB(0.23, 0.055, 0.04);
+      fog.near = this.renderDistance * CS * 0.4;
+      fog.far = this.renderDistance * CS * 0.95;
+      this.scene.background = fog.color;
+    } else if (eyeBlock === B.WATER) {
       fog.color.setRGB(0.05 * dl, 0.15 * dl, 0.5 * dl);
       fog.near = 0.1;
       fog.far = 18;
@@ -3205,11 +3467,16 @@ export class Game {
       this.scene.background = sky;
     }
 
-    const lin = Math.pow(dl, 2.2);
+    // W Netherze oświetlenie jest stałe – bez dnia i nocy.
+    const lin = nether ? 0.72 : Math.pow(dl, 2.2);
     this.uDay.value = lin;
     this.handMat.color.setScalar(Math.max(0.35, lin));
-    this.ambient.intensity = 0.3 + dl * 1.0;
-    this.dirLight.intensity = Math.max(0, sunY) * 1.2 + 0.1;
+    this.ambient.intensity = nether ? 0.55 : 0.3 + dl * 1.0;
+    this.dirLight.intensity = nether ? 0.12 : Math.max(0, sunY) * 1.2 + 0.1;
+    this.sun.visible = !nether;
+    this.moon.visible = !nether;
+    this.stars.visible = !nether;
+    this.clouds.visible = !nether;
 
     const cp = this.camera.position;
     const sunDir = new THREE.Vector3(Math.cos(ang), Math.sin(ang), 0.25).normalize();
@@ -3536,6 +3803,9 @@ export class Game {
   }
 
   private updateGrowth(dt: number) {
+    // W Netherze nic nie rośnie – nasiona, sadzonki i trzcina potrzebują
+    // nadświatowego podłoża, a wskaźniki czasu należą do tamtego świata.
+    if (this.isInNether) return;
     this.growAcc += dt;
     if (this.growAcc < 0.45) return;
     this.growAcc = 0;
@@ -3622,13 +3892,17 @@ export class Game {
   }
 
   private updateFurnaces(dt: number) {
+    const dim = this.isInNether ? 1 : 0;
     for (const [key, f] of this.furnaces) {
+      if ((f.dim ?? 0) !== dim) continue; // piec z drugiego wymiaru – nie ruszamy
+      // Najpierw chunk: peekBlock bez chunka zwracał kamień i kasował piec
+      // wraz z zawartością, gdy gracz oddalił się o kilkanaście bloków.
+      if (!this.world.hasChunk(Math.floor(f.x / CS), Math.floor(f.z / CS))) continue;
       const id = this.world.peekBlock(f.x, f.y, f.z);
       if (id !== B.FURNACE && id !== B.FURNACE_ON) {
         this.furnaces.delete(key);
         continue;
       }
-      if (!this.world.hasChunk(Math.floor(f.x / CS), Math.floor(f.z / CS))) continue;
       const before = f.output?.count ?? 0;
       const lit = tickFurnace(f, dt);
       if ((f.output?.count ?? 0) > before && f.output?.id === I.IRON) this.unlock('iron');
@@ -3683,6 +3957,19 @@ export class Game {
         this.musicTimer = 110 + Math.random() * 190;
         Sfx.playMusic();
       }
+    }
+    // W Netherze nie pada, nie grzmi i nie ma cyklu pogody – tylko pusty szum.
+    if (this.isInNether) {
+      this.rain.visible = false;
+      Sfx.setRain(false);
+      this.lightning = 0;
+      this.weatherTimer = Math.max(this.weatherTimer, 40);
+      this.ambientTimer -= dt;
+      if (this.ambientTimer <= 0) {
+        this.ambientTimer = 16 + Math.random() * 26;
+        Sfx.playCave();
+      }
+      return;
     }
     // Ambient sound: wind and birds on the surface, drones in a cave.
     this.ambientTimer -= dt;
@@ -3793,7 +4080,11 @@ export class Game {
     Sfx.setRain(false);
     for (const [t, type, fn, opts] of this.listeners) t.removeEventListener(type, fn, opts);
     if (document.pointerLockElement) document.exitPointerLock();
-    for (const c of this.world.chunks.values()) for (const m of c.meshes) m.geometry.dispose();
+    // Oba wymiary – chunki netheru też trzymają geometrię.
+    for (const w of [this.homeWorld, this.netherWorld]) {
+      if (!w) continue;
+      for (const c of w.chunks.values()) for (const m of c.meshes) m.geometry.dispose();
+    }
     for (const m of this.mobs) m.dispose();
     for (const t of this.tnts) (t.mesh.material as THREE.Material).dispose();
     this.tnts = [];
@@ -3814,6 +4105,27 @@ export class Game {
       if (mat && !Array.isArray(mat)) mat.dispose();
     }
     this.drops = [];
+    // obiekty odłożone w drugim wymiarze
+    for (const st of [this.dimStash.home, this.dimStash.nether]) {
+      for (const m of st.mobs) m.dispose();
+      for (const t of st.tnts) (t.mesh.material as THREE.Material).dispose();
+      for (const a of st.arrows) this.scene.remove(a.mesh);
+      for (const o of st.orbs) this.scene.remove(o.mesh);
+      for (const f of st.falling) this.scene.remove(f.mesh);
+      for (const d of st.drops) {
+        this.scene.remove(d.mesh);
+        const mesh = d.mesh as THREE.Mesh;
+        mesh.geometry?.dispose();
+        const mat = mesh.material;
+        if (mat && !Array.isArray(mat)) mat.dispose();
+      }
+      st.mobs = [];
+      st.drops = [];
+      st.arrows = [];
+      st.tnts = [];
+      st.orbs = [];
+      st.falling = [];
+    }
     for (const pt of this.particles) this.scene.remove(pt.mesh);
     this.particles = [];
     for (const mat of this.particleMats.values()) mat.dispose();

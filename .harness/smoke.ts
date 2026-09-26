@@ -67,6 +67,7 @@ import {
 } from '../src/game/enchant';
 import { Xp as XpClass } from '../src/game/xp';
 import { Game, MOB_NAMES, type SaveData, type TradeRow } from '../src/game/engine';
+import { tryCreatePortal } from '../src/game/redstone';
 import { VILLAGE_CELL, villageInCell, villageSpawnSpots, type Village } from '../src/game/village';
 import {
   PROFESSIONS, VILLAGER_LEVEL_XP, applyTrade, canTrade, createVillagerState, offersFor,
@@ -1824,6 +1825,249 @@ section('engine: village helpers');
   g.mobLoot(golem);
   check('golem drops iron', drops.some((d) => d[0] === I.IRON));
   check('golem drops poppies', drops.some((d) => d[0] === B.FLOWER_RED));
+}
+
+// ============================================ world: Nether jako osobny wymiar
+section('world: nether dimension (separate map)');
+{
+  const over = new World(777);
+  const n1 = new World(777, false, true);
+  const n2 = new World(777, false, true);
+
+  check('world flags the nether dimension', n1.isNether && !over.isNether);
+  eq('nether biome label', n1.surface(10, 10).biome, 'Nether');
+
+  // determinizm: dwa przejścia przez portal dają dokładnie ten sam teren
+  let deterministic = true;
+  for (let i = 0; i < 60; i++) {
+    const x = (i * 47) % 300 - 150, z = (i * 83) % 300 - 150;
+    if (n1.heightAt(x, z) !== n2.heightAt(x, z)) deterministic = false;
+  }
+  check('same seed → identical nether terrain', deterministic);
+
+  // podłoga do chodzenia: solidny blok z dwoma blokami powietrza nad nim
+  let walkable = 0, tall = 0, samples = 0;
+  for (let i = 0; i < 60; i++) {
+    const x = (i * 37) % 200 - 100, z = (i * 61) % 200 - 100;
+    const h = n1.heightAt(x, z);
+    samples++;
+    if (h >= 16) tall++;
+    if (h > 0 && IS_SOLID[n1.getBlock(x, h, z)] && n1.getBlock(x, h + 1, z) === B.AIR && n1.getBlock(x, h + 2, z) === B.AIR) walkable++;
+  }
+  check(`floor walkable in ${walkable}/${samples} columns`, walkable === samples);
+  check(`most floors are proper nether ground (${tall}/${samples})`, tall >= samples * 0.9);
+  eq('bedrock floor', n1.getBlock(3, 0, 3), B.BEDROCK);
+  eq('sealed bedrock roof', n1.getBlock(3, CH - 1, 3), B.BEDROCK);
+  eq('nether surface is not grass', n1.getBlock(3, n1.heightAt(3, 3), 3) === B.GRASS, false);
+
+  // osady nigdy nie dotyczą Netheru (ten sam seed co nadświat!)
+  let villageSpot: [number, number] | null = null;
+  for (let r = 0; r < 60 && !villageSpot; r += 4) {
+    for (let a = 0; a < 8 && !villageSpot; a++) {
+      const x = Math.round(Math.cos(a) * r) * 16, z = Math.round(Math.sin(a) * r) * 16;
+      if (over.villageAt(x, z)) villageSpot = [x, z];
+    }
+  }
+  if (villageSpot) {
+    eq('nether has no village at overworld village coords', n1.villageAt(villageSpot[0], villageSpot[1]), null);
+    eq('nether nearestVillage is null', n1.nearestVillage(villageSpot[0], villageSpot[1]), null);
+  } else {
+    check('overworld village lookup still works', !!over.villageAt(0, 0) === false); // tylko sanity
+  }
+
+  // modyfikacje jednego wymiaru nie trafiają do drugiego
+  over.getChunk(0, 0);
+  n1.getChunk(0, 0);
+  over.setBlock(4, 80, 4, B.DIRT);
+  n1.setBlock(4, 80, 4, B.GLOWSTONE);
+  eq('overworld keeps its own mod', over.getBlock(4, 80, 4), B.DIRT);
+  eq('nether keeps its own mod', n1.getBlock(4, 80, 4), B.GLOWSTONE);
+  check('mod maps are separate objects', over.serializeMods() !== n1.serializeMods());
+  eq('overworld mod value', Object.values(over.serializeMods()).flat()[1], B.DIRT);
+  eq('nether mod value', Object.values(n1.serializeMods()).flat()[1], B.GLOWSTONE);
+}
+
+// ================================== engine: portal = pełna zmiana wymiaru
+section('engine: portal switches dimensions without touching the overworld');
+{
+  type G = Record<string, any>;
+  const ops: [string, unknown][] = [];
+  const g = Object.create(Game.prototype) as unknown as G;
+  g.scene = { add: (o: unknown) => void ops.push(['add', o]), remove: (o: unknown) => void ops.push(['remove', o]) };
+  g.ui = 'playing';
+  g.portalCooldown = 0;
+  g.isInNether = false;
+  g.portalExit = null;
+  g.homeWorld = new World(4242);
+  g.netherWorld = new World(4242, false, true);
+  g.world = g.homeWorld;
+  const stash = () => ({ mobs: [], drops: [], arrows: [], tnts: [], orbs: [], falling: [], buttons: [], redstone: [] });
+  g.dimStash = { home: stash(), nether: stash() };
+  g.mobs = []; g.drops = []; g.arrows = []; g.tnts = []; g.orbs = []; g.falling = []; g.particles = [];
+  g.buttonTimers = new Map(); g.redstoneDirty = new Set();
+  g.biomeCache = new Map(); g.villageName = null;
+  g.chestPos = null; g.furnacePos = null; g.enchantPos = null; g.tradeMob = null;
+  g.breakProgress = 0; g.breakKey = '';
+  g.loadingProgress = 1; g.unloadTimer = 2;
+  g.body = { pos: new THREE.Vector3(40.5, 70, 24.5), vel: new THREE.Vector3() };
+  g.fallStart = 70;
+  g.spawnPoint = new THREE.Vector3(5.5, 70, 5.5);
+  g.message = () => {}; g.unlock = () => {}; g.emitHud = () => {}; g.spawnParticles = () => {};
+
+  // nadświat wokół portalu + oznaczenie siatki, żeby sprawdzić detach/attach
+  for (let cx = -1; cx <= 3; cx++) for (let cz = -1; cz <= 3; cz++) g.homeWorld.getChunk(cx, cz);
+  const fakeMesh = { id: 'home-mesh' };
+  const homeChunk = g.homeWorld.getChunk(2, 1);
+  homeChunk.meshes.push(fakeMesh as never);
+  homeChunk.built = true;
+
+  // odcisk całego nadświatu PRZED wejściem – regresja „światy wchodzą na siebie”
+  const before = new Map<string, Uint16Array>();
+  for (const [k, c] of g.homeWorld.chunks as Map<string, { data: Uint16Array }>) before.set(k, c.data.slice());
+  const homeModsBefore = JSON.stringify(g.homeWorld.serializeMods());
+
+  (g as G)['enterPortal']();
+
+  check('entered the nether dimension', g.isInNether === true);
+  check('active world is the nether instance', g.world === g.netherWorld && g.world !== g.homeWorld);
+  eq('overworld mods untouched by the trip', JSON.stringify(g.homeWorld.serializeMods()), homeModsBefore);
+  let overlap = '';
+  for (const [k, data] of before) {
+    const c = (g.homeWorld.chunks as Map<string, { data: Uint16Array }>).get(k);
+    if (!c) { overlap = `chunk ${k} vanished`; break; }
+    for (let i = 0; i < data.length; i++) {
+      if (c.data[i] !== data[i]) { overlap = `chunk ${k} cell ${i}: ${data[i]}→${c.data[i]}`; break; }
+    }
+    if (overlap) break;
+  }
+  check(`overworld is bit-identical after entering the portal${overlap ? ` (${overlap})` : ''}`, overlap === '');
+  check('arrival builds ONE nether chunk (not 81)', g.netherWorld.chunks.size === 1, `${g.netherWorld.chunks.size} chunks`);
+  check('nether chunk is flagged', g.netherWorld.getChunk(0, 0).nether === true);
+  check('return portal was recorded', !!g.portalExit && g.portalExit[0] === 40.5);
+
+  // gracz stoi NA gruncie, nie w skale i nie w lawie
+  const px = Math.floor(g.body.pos.x), py = Math.floor(g.body.pos.y), pz = Math.floor(g.body.pos.z);
+  check('arrival stays inside the /8 nether chunk', px >= 0 && px < CS && pz >= 0 && pz < CS);
+  check('player stands on solid ground', IS_SOLID[g.netherWorld.getBlock(px, py - 1, pz)]);
+  eq('player feet are in open air', g.netherWorld.getBlock(px, py, pz), B.AIR);
+  eq('player head is in open air', g.netherWorld.getBlock(px, py + 1, pz), B.AIR);
+  let portalBlocks = 0;
+  for (let dx = -6; dx <= 6; dx++) for (let dy = -2; dy <= 6; dy++) for (let dz = -6; dz <= 6; dz++) {
+    if (g.netherWorld.getBlock(px + dx, py + dy, pz + dz) === B.NETHER_PORTAL) portalBlocks++;
+  }
+  check(`return portal placed (${portalBlocks} portal blocks)`, portalBlocks >= 6);
+  check('nether mods recorded (platform + portal)', Object.keys(g.netherWorld.serializeMods()).length > 0);
+  check('home mesh was detached from the scene', ops.some(([op, m]) => op === 'remove' && m === fakeMesh));
+
+  // zapis podczas pobytu w Netherze
+  g.worldId = 'nether-test';
+  g.worldName = 'Nether Test';
+  g.worldType = 'normal';
+  g.mode = 'survival';
+  g.inventory = new Inventory();
+  g.yaw = 0; g.pitch = 0;
+  g.time = 0.2; g.health = 20; g.hunger = 20; g.day = 1;
+  g.furnaces = new Map(); g.chests = new Map();
+  g.unlocked = new Set(); g.weather = 'clear';
+  g.xp = new Xp(0); g.armor = [null, null, null, null];
+  g.trades = 0;
+  g.save();
+  const stored = loadSaves().find((s) => s.id === 'nether-test') as unknown as SaveData | undefined;
+  check('save stored while in the nether', !!stored);
+  eq('save remembers the dimension', stored?.isInNether, true);
+  eq('save remembers the return portal', stored?.portalExit?.[0], 40.5);
+  check('save carries nether mods', !!(stored?.netherMods && Object.keys(stored.netherMods).length > 0));
+  eq('save keeps overworld mods separate', JSON.stringify(stored?.mods), homeModsBefore);
+  deleteSave('nether-test');
+
+  // powrót: dokładnie tam, skąd gracz wszedł, i tuż OBOK portalu
+  (g as G)['leaveNether']();
+  check('left back to the overworld', g.isInNether === false && g.world === g.homeWorld);
+  eq('return portal marker cleared', g.portalExit, null);
+  check('player is next to the entry spot', Math.abs(g.body.pos.x - 40.5) <= 1.5 && Math.abs(g.body.pos.z - 24.5) <= 1.5);
+  check('home mesh re-attached to the scene', ops.some(([op, m]) => op === 'add' && m === fakeMesh));
+  eq('nether mobs do not leak into the overworld', g.mobs.length, 0);
+  eq('nether drops do not leak into the overworld', g.drops.length, 0);
+
+  // próba snu w Netherze jest odrzucana (punkt odrodzenia zostaje w nadświecie)
+  g.isInNether = true;
+  const spawnBefore = g.spawnPoint.clone();
+  (g as G)['trySleep'](10, 60, 10);
+  check('no sleeping in the nether', g.spawnPoint.equals(spawnBefore) && g.isInNether === true);
+  g.isInNether = false;
+
+  // piec z drugiego wymiaru nigdy nie jest kasowany przez obcy świat
+  g.isInNether = false;
+  g.furnaces = new Map([['n:1,2,3', { x: 1, y: 2, z: 3, input: null, fuel: null, output: null, burn: 0, burnMax: 0, cook: 0, dim: 1 }]]);
+  (g as G)['updateFurnaces'](0.1);
+  check('nether furnace survives overworld ticks', g.furnaces.has('n:1,2,3'));
+  // …a piec w niezaładowanym chunku też nie traci zawartości (stary bug)
+  g.furnaces = new Map([['9999,60,9999', { x: 9999, y: 60, z: 9999, input: { id: I.IRON, count: 3 }, fuel: null, output: null, burn: 0, burnMax: 0, cook: 0, dim: 0 }]]);
+  (g as G)['updateFurnaces'](0.1);
+  check('furnace in an unloaded chunk is kept', g.furnaces.has('9999,60,9999'));
+}
+
+// ================================================ portal frame ignition (1.8)
+section('portal: flint & steel lights the frame from any block');
+{
+  const buildFrame = (w: World, ox: number, oy: number, oz: number, axis: 'x' | 'z') => {
+    const at = (a: number, b: number) => axis === 'x' ? [ox + a, oy + b, oz] : [ox, oy + b, oz + a];
+    for (let f = 0; f < 4; f++) {
+      let [x, y, z] = at(f, 0); w.setBlock(x, y, z, B.OBSIDIAN);
+      [x, y, z] = at(f, 4); w.setBlock(x, y, z, B.OBSIDIAN);
+    }
+    for (let fy = 0; fy < 5; fy++) {
+      let [x, y, z] = at(0, fy); w.setBlock(x, y, z, B.OBSIDIAN);
+      [x, y, z] = at(3, fy); w.setBlock(x, y, z, B.OBSIDIAN);
+    }
+    // wnętrze ramy musi być puste – tak jak po zbudowaniu portalu przez gracza
+    for (let i = 1; i <= 2; i++) for (let j = 1; j <= 3; j++) {
+      const [x, y, z] = at(i, j); w.setBlock(x, y, z, B.AIR);
+    }
+  };
+  const portalCount = (w: World, ox: number, oy: number, oz: number) => {
+    let n = 0;
+    for (let a = 0; a < 4; a++) for (let b = 0; b < 5; b++) {
+      for (const [x, y, z] of [[ox + a, oy + b, oz], [ox, oy + b, oz + a]]) {
+        if (w.getBlock(x, y, z) === B.NETHER_PORTAL) n++;
+      }
+    }
+    return n;
+  };
+
+  // rama w płaszczyźnie X – zapalana z DOŁU, GÓRY i BOKU
+  for (const [name, click] of [
+    ['bottom row', [1, 10, 20]],
+    ['top row', [2, 14, 20]],
+    ['side column', [0, 12, 20]],
+  ] as [string, number[]][]) {
+    const w = new World(99);
+    for (let cx = -1; cx <= 1; cx++) for (let cz = 1; cz <= 2; cz++) w.getChunk(cx, cz);
+    buildFrame(w, 0, 10, 20, 'x');
+    const ok = tryCreatePortal(w, click[0], click[1], click[2]);
+    check(`frame lit from the ${name}`, ok === true);
+    eq(`portal filled from the ${name} (6 blocks)`, portalCount(w, 0, 10, 20), 6);
+  }
+
+  // rama w płaszczyźnie Z
+  {
+    const w = new World(99);
+    for (let cx = -1; cx <= 1; cx++) for (let cz = 1; cz <= 2; cz++) w.getChunk(cx, cz);
+    buildFrame(w, 5, 10, 20, 'z');
+    const ok = tryCreatePortal(w, 5, 13, 23);
+    check('z-plane frame lit from the side', ok === true);
+    eq('z-plane portal filled', portalCount(w, 5, 10, 20), 6);
+  }
+
+  // bez ramy ani przy niekompletnej ramie – nic się nie dzieje
+  {
+    const w = new World(99);
+    w.getChunk(0, 1);
+    eq('no frame → no portal', tryCreatePortal(w, 1, 10, 20), false);
+    w.setBlock(1, 10, 20, B.OBSIDIAN);
+    w.setBlock(2, 10, 20, B.OBSIDIAN); // tylko dwa bloki – za mało
+    eq('incomplete frame → no portal', tryCreatePortal(w, 1, 10, 20), false);
+  }
 }
 
 // =================================================================== report

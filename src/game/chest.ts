@@ -7,6 +7,8 @@ export interface ChestState {
   y: number;
   z: number;
   slots: (Stack | null)[];
+  /** 1.8: 1 = skrzynia stoi w Netherze (osobny klucz, obcy wymiar jej nie przejmie). */
+  dim?: number;
 }
 
 export const CHEST_SLOTS = 27;

@@ -13,6 +13,7 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  'Prawdziwy Nether czeka za portalem!',
   'Aktualizacja 1.6: Wioski!',
   'Zaklnij kilof w stole zaklęć!',
   'Trzcina rośnie nad wodą!',
@@ -326,7 +327,7 @@ export function MainMenu({
           </div>
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.6</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.8</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>
