@@ -13,9 +13,12 @@ import { MainMenu, Controls, AchievementsPanel, PauseMenu } from '../src/compone
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS } from '../src/utils/settings';
 import EnchantScreen from '../src/components/EnchantScreen';
+import TradeScreen from '../src/components/TradeScreen';
 import { Inventory } from '../src/game/inventory';
 import { I } from '../src/game/items';
 import { rollEnchantOptions } from '../src/game/enchant';
+import { createVillagerState, offersFor } from '../src/game/trading';
+import type { Game, TradeRow } from '../src/game/engine';
 
 // ------------------------------------------------------------------- runner
 let pass = 0;
@@ -41,6 +44,36 @@ if (typeof globalThis.localStorage === 'undefined') {
 const noop = () => {};
 
 // ============================================================ static renders
+section('trade screen: static render');
+{
+  const inv = new Inventory();
+  inv.add(I.WHEAT, 20);
+  inv.add(I.EMERALD, 3);
+  const state = createVillagerState(0, 0); // rolnik
+  const rows = (): TradeRow[] =>
+    offersFor(state).map((offer, index) => ({ index, offer, left: offer.uses, max: offer.uses, blocked: 'ok' }));
+  const fake = {
+    inventory: inv,
+    tradeMob: { trade: state },
+    tradeTitle: () => 'Rolnik',
+    tradeLevel: () => 1,
+    tradeProgress: () => 0.25,
+    tradeRestockIn: () => 149,
+    tradeRows: rows,
+    tradeWith: () => true,
+    closeTrade: noop,
+  };
+  const html = renderToStaticMarkup(
+    <TradeScreen game={fake as unknown as Game} icons={{}} onChange={noop} />
+  );
+  check('trader name is shown', html.includes('Rolnik'));
+  check('restock countdown is shown', html.includes('149'));
+  check('offer row shows a wheat price', html.includes('20'));
+  check('offer row shows emeralds', html.includes('Szmaragd') || html.includes('szmaragd'));
+  check('close hint is shown', html.includes('Esc'));
+  check('player inventory is rendered', html.includes('Ekwipunek'));
+}
+
 section('menus: static render');
 {
   const menu = renderToStaticMarkup(

@@ -227,6 +227,17 @@ function materialIcon(it: ItemDef): string {
       set(5, 6, '#1e3a9a');
       set(8, 6, '#1e3a9a');
       set(7, 7, '#1e3a9a');
+    } else if (it.keys.includes('szmaragd')) {
+      // szmaragd: szlifowany zielony klejnot
+      const pts = [[7, 2], [8, 2], [6, 3], [7, 3], [8, 3], [9, 3], [5, 4], [6, 4], [7, 4], [8, 4], [9, 4], [10, 4],
+        [5, 5], [6, 5], [7, 5], [8, 5], [9, 5], [10, 5], [5, 6], [6, 6], [7, 6], [8, 6], [9, 6], [10, 6],
+        [6, 7], [7, 7], [8, 7], [9, 7], [6, 8], [7, 8], [8, 8], [9, 8], [7, 9], [8, 9]];
+      for (const [x, y] of pts) set(x, y, c);
+      set(6, 4, '#a8ffc8');
+      set(7, 5, '#a8ffc8');
+      set(9, 7, '#168a48');
+      set(6, 8, '#168a48');
+      set(11, 3, '#3ee07c');
     } else if (it.keys.includes('papier')) {
       // a sheet of paper
       for (let y = 2; y <= 13; y++) for (let x = 3; x <= 12; x++) set(x, y, c);

@@ -6,6 +6,7 @@ import InventoryScreen from './InventoryScreen';
 import FurnaceScreen from './FurnaceScreen';
 import ChestScreen from './ChestScreen';
 import EnchantScreen from './EnchantScreen';
+import TradeScreen from './TradeScreen';
 import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
 import TouchControls, { isTouchDevice } from './TouchControls';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
@@ -134,6 +135,7 @@ export default function GameView({
       {game && ui === 'furnace' && <FurnaceScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'chat' && (
         <ChatInput
           onSubmit={(t) => game.command(t)}
@@ -154,7 +156,9 @@ export default function GameView({
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-6" style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div className="text-4xl font-bold mc-text">Świat gotowy!</div>
           <div className="text-center text-gray-200 mc-text">
-            {game.mode === 'creative' ? 'Tryb kreatywny – buduj bez ograniczeń. Pochodnie, ognisko i lawa świecą.' : 'Tryb przetrwania – zetnij drzewo, wytwórz kilof, postaw drzwi i skrzynię.'}
+            {game.mode === 'creative'
+              ? 'Tryb kreatywny – buduj bez ograniczeń. Wioski czekają na odkrycie (komenda /village).'
+              : 'Tryb przetrwania – zetnij drzewo, wytwórz kilof, znajdź wioskę i handluj z mieszkańcami.'}
           </div>
           <div className="w-[360px]">
             <button className="mc-btn" onClick={resume}>
@@ -164,7 +168,7 @@ export default function GameView({
           <div className="px-6 text-center text-sm text-gray-300 mc-text">
             {touch
               ? 'Lewy drążek – ruch · przeciągnij po ekranie – rozglądanie · przyciski po prawej – skok, kopanie, stawianie'
-              : 'Esc – pauza · E – ekwipunek · T – czat · M – minimapa · F3 – debug'}
+              : 'Esc – pauza · E – ekwipunek · T – czat · M – minimapa · F3 – debug · PPM na mieszkańcu – handel'}
           </div>
         </div>
       )}

@@ -470,6 +470,88 @@ export function buildAtlas(): AtlasResult {
     }
   }
 
+  // ------------------------------------------------------------------- 1.6
+  // Ścieżka: ubita ziemia z kamykami, boki jak ziemia z ciemniejszą krawędzią.
+  {
+    const r = R(85);
+    noiseFill(T.path_top, [150, 122, 82], 0.16, r);
+    for (let i = 0; i < 9; i++) {
+      const x = 2 + Math.floor(r() * 12), y = 2 + Math.floor(r() * 12);
+      setPx(T.path_top, x, y, 176, 152, 108);
+      setPx(T.path_top, x, y + 1, 118, 92, 60);
+    }
+    for (let i = 0; i < 6; i++) {
+      const x = Math.floor(r() * 16), y = Math.floor(r() * 16);
+      const s = 120 + r() * 60;
+      setPx(T.path_top, x, y, s, s * 0.96, s * 0.9);
+    }
+    copyTile(T.dirt, T.path_side);
+    for (let x = 0; x < 16; x++) {
+      const h = 3 + Math.floor(r() * 2);
+      for (let y = 0; y < h; y++) setPx(T.path_side, x, y, 0, 0, 0, 0);
+      setPx(T.path_side, x, h, 128, 100, 66);
+    }
+  }
+  // Bela siana: górna strona to ścięte źdźbła, boki przeplecione sznurkiem.
+  {
+    const r = R(87);
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const c = shade([196, 164, 62], 0.85 + r() * 0.3);
+        setPx(T.hay_top, x, y, c[0], c[1], c[2]);
+        if ((x % 4 === 0 && y % 4 === 0) || (x % 5 === 2 && y === 7)) setPx(T.hay_top, x, y, 148, 116, 40);
+      }
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const c = shade([214, 182, 74], 0.86 + r() * 0.26);
+        setPx(T.hay_side, x, y, c[0], c[1], c[2]);
+        if (y % 3 === 2) setPx(T.hay_side, x, y, 168, 134, 46);
+      }
+    for (let y = 1; y < 15; y++) {
+      setPx(T.hay_side, 3, y, 122, 88, 40);
+      setPx(T.hay_side, 12, y, 122, 88, 40);
+    }
+    for (let y = 5; y < 8; y++) for (let x = 0; x < 16; x++) setPx(T.hay_side, x, y, 138, 104, 42);
+  }
+  // Latarnia: mosiężna rama z blaskiem w środku (emituje światło).
+  {
+    const r = R(89);
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const frame = x < 2 || x > 13 || y < 2 || y > 14;
+        if (frame) {
+          const c = shade([96, 92, 86], 0.9 + r() * 0.2);
+          setPx(T.lantern, x, y, c[0], c[1], c[2]);
+        } else {
+          const glow = 0.8 + r() * 0.4 - Math.abs(x - 7.5) * 0.03;
+          setPx(T.lantern, x, y, 255 * glow, 226 * glow, 150 * glow);
+        }
+      }
+    for (let x = 2; x < 14; x++) { setPx(T.lantern, x, 2, 120, 116, 110); setPx(T.lantern, x, 14, 66, 62, 58); }
+    for (const [x, y] of [[4, 8], [7, 6], [10, 9], [8, 11]]) setPx(T.lantern, x, y, 255, 255, 214);
+    setPx(T.lantern, 7, 0, 96, 92, 86); setPx(T.lantern, 8, 0, 96, 92, 86);
+  }
+  // Ruda szmaragdu i blok szmaragdu
+  ore(T.emerald_ore, [42, 214, 106], R(90));
+  storageBlock(T.emerald_block, [56, 216, 112], R(91));
+  // Dzwon: brązowy dzwon z sercem i złotym pasem
+  {
+    const r = R(92);
+    noiseFill(T.bell, [176, 148, 74], 0.12, r);
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const edge = Math.abs(x - 7.5) / 7.5;
+        const inside = edge < 0.9 - y * 0.02;
+        if (inside) {
+          const c = shade([198, 166, 84], 0.86 + r() * 0.28);
+          setPx(T.bell, x, y, c[0], c[1], c[2]);
+        } else if (edge > 0.95) setPx(T.bell, x, y, 96, 78, 38);
+      }
+    for (let x = 3; x < 13; x++) { setPx(T.bell, x, 1, 236, 216, 140); setPx(T.bell, x, 14, 120, 96, 44); }
+    for (let y = 4; y < 12; y++) setPx(T.bell, 8, y, 130, 106, 48);
+    setPx(T.bell, 7, 12, 60, 48, 24); setPx(T.bell, 8, 12, 60, 48, 24);
+  }
+
   ctx.putImageData(img, 0, 0);
 
   // average colors

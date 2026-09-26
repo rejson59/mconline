@@ -2,12 +2,19 @@ import * as THREE from 'three';
 import { SimplexNoise } from './noise';
 import { B, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor } from './blocks';
 import { tileUV } from './textures';
+import { CH, CS, FLAT_H, SEA } from './constants';
+import {
+  applyVillages,
+  nearestVillage,
+  villageAt,
+  villagesOverlapping,
+  type Village,
+  type VillageContext,
+} from './village';
 
-export const CS = 16; // chunk size
-export const CH = 128; // chunk height
-export const SEA = 62;
-/** Surface height of a flat world. */
-export const FLAT_H = 64;
+// Metryki świata mieszkają w constants.ts (generator wsi też ich potrzebuje),
+// ale stare importy z world.ts nadal działają.
+export { CH, CS, FLAT_H, SEA };
 
 export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las';
 
@@ -136,6 +143,7 @@ export class World {
   private nCave: SimplexNoise;
   private nCave2: SimplexNoise;
   private nTemp: SimplexNoise;
+  private vctx: VillageContext | null = null;
 
   constructor(seed: number, flat = false) {
     this.seed = seed;
@@ -243,7 +251,9 @@ export class World {
             const r = hash(wx, y, wz, s + 77);
             const cl = hash(wx >> 1, y >> 1, wz >> 1, s + 11);
             const cl2 = hash(wx >> 1, y >> 1, wz >> 1, s + 23);
+            const cl3 = hash(wx >> 1, y >> 1, wz >> 1, s + 41);
             if (y < 16 && cl < 0.012 && r < 0.6) id = B.DIAMOND_ORE;
+            else if (y > 6 && y < 40 && cl3 > (biome === 'Góry' ? 0.986 : 0.9965) && r < 0.6) id = B.EMERALD_ORE;
             else if (y < 32 && cl > 0.985 && r < 0.6) id = B.GOLD_ORE;
             else if (y < 64 && cl > 0.02 && cl < 0.045 && r < 0.6) id = B.IRON_ORE;
             else if (y < 44 && y > 8 && cl2 < 0.016 && r < 0.55) id = B.LAPIS_ORE;
@@ -253,7 +263,21 @@ export class World {
           d[idx(x, y, z)] = id;
         }
 
-        // Surface decoration
+      }
+
+    // Wioski: wyrównują teren i stawiają budynki, zanim pojawią się dekoracje.
+    const village = applyVillages(d, c.cx, c.cz, this.villageContext());
+    const vmask = village.mask;
+    if (village.top > maxY) maxY = village.top;
+
+    // Surface decoration (pomija kolumny zajęte przez wioskę)
+    for (let z = 0; z < CS; z++)
+      for (let x = 0; x < CS; x++) {
+        if (vmask[z * CS + x]) continue;
+        const wx = ox + x, wz = oz + z;
+        const info = surf[z * CS + x];
+        const h = info.h;
+        const biome = info.biome;
         const top = d[idx(x, h, z)];
         if (top === B.GRASS && h + 1 < CH) {
           const r = hash(wx, 3, wz, s + 9);
@@ -292,6 +316,7 @@ export class World {
         const r = hash(tx, 1, tz, s + 3);
         if (r > 0.04) continue;
         const inside = tx >= ox && tx < ox + CS && tz >= oz && tz < oz + CS;
+        if (inside && vmask[(tz - oz) * CS + (tx - ox)]) continue;
         const info = inside ? surf[(tz - oz) * CS + (tx - ox)] : this.surface(tx, tz);
         let chance = 0;
         if (info.biome === 'Las') chance = 0.035;
@@ -302,7 +327,7 @@ export class World {
         if (r > chance) continue;
         if (info.h <= SEA) continue;
         const birch = info.biome === 'Brzozowy las' ? hash(tx, 2, tz, s) < 0.8 : hash(tx, 2, tz, s) < 0.15;
-        const top = this.growTree(c, tx, tz, info.h + 1, birch);
+        const top = this.growTree(c, tx, tz, info.h + 1, birch, vmask);
         if (top > maxY) maxY = top;
       }
 
@@ -311,6 +336,7 @@ export class World {
       if (hash(ox + n, 80, oz, s) > 0.42) continue;
       const lx = 1 + Math.floor(hash(ox, 81 + n, oz, s) * 14);
       const lz = 1 + Math.floor(hash(ox, 91 + n, oz, s) * 14);
+      if (vmask[lz * CS + lx]) continue;
       const colH = surf[lz * CS + lx].h;
       for (let y = 8; y < colH - 3 && y < 52; y++) {
         if (d[idx(lx, y, lz)] !== B.AIR || d[idx(lx, y + 1, lz)] !== B.AIR) continue;
@@ -331,13 +357,17 @@ export class World {
     c.maxY = Math.min(CH - 1, maxY);
     this.applyMods(c);
     for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x, z);
+    // Wyrównany grunt wioski wygrywa z „najwyższym blokiem”: dach domu ani
+    // tafla wody w studni nie mogą udawać poziomu terenu, bo po nim stawiamy
+    // mieszkańców i moby.
+    for (let i = 0; i < vmask.length; i++) if (vmask[i]) c.heightMap[i] = village.ground[i];
   }
 
   /**
    * Places an oak or birch trunk with its canopy, clipping to this chunk only.
    * Returns the highest y the tree reaches (for maxY bookkeeping).
    */
-  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean): number {
+  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean, skip?: Uint8Array): number {
     const d = c.data;
     const ox = c.cx * CS, oz = c.cz * CS;
     const s = this.seed;
@@ -349,6 +379,7 @@ export class World {
     const put = (x: number, y: number, z: number, id: number, force: boolean) => {
       const lx = x - ox, lz = z - oz;
       if (lx < 0 || lx >= CS || lz < 0 || lz >= CS || y < 0 || y >= CH) return;
+      if (skip && skip[lz * CS + lx]) return;
       const i = idx(lx, y, lz);
       const cur = d[i];
       if (force || cur === B.AIR || cur === B.TALLGRASS || cur === B.FLOWER_RED || cur === B.FLOWER_YELLOW) d[i] = id;
@@ -386,14 +417,29 @@ export class World {
             id = B.STONE;
             const r = hash(wx, y, wz, s + 77);
             const cl = hash(wx >> 1, y >> 1, wz >> 1, s + 11);
+            const cl2 = hash(wx >> 1, y >> 1, wz >> 1, s + 23);
+            const cl3 = hash(wx >> 1, y >> 1, wz >> 1, s + 41);
             if (y < 16 && cl < 0.012 && r < 0.6) id = B.DIAMOND_ORE;
+            else if (y > 6 && y < 40 && cl3 > 0.9965 && r < 0.6) id = B.EMERALD_ORE;
             else if (y < 32 && cl > 0.985 && r < 0.6) id = B.GOLD_ORE;
             else if (cl > 0.02 && cl < 0.045 && r < 0.6) id = B.IRON_ORE;
+            else if (y < 44 && y > 8 && cl2 < 0.016 && r < 0.55) id = B.LAPIS_ORE;
             else if (cl > 0.5 && cl < 0.56 && r < 0.65) id = B.COAL_ORE;
           } else if (y < FLAT_H) id = B.DIRT;
           else id = B.GRASS;
           d[idx(x, y, z)] = id;
         }
+      }
+
+    // Wioski także na płaskim świecie – tam zawsze jest równina.
+    const village = applyVillages(d, c.cx, c.cz, this.villageContext());
+    const vmask = village.mask;
+    let maxY = Math.max(FLAT_H + 8, village.top);
+
+    for (let z = 0; z < CS; z++)
+      for (let x = 0; x < CS; x++) {
+        if (vmask[z * CS + x]) continue;
+        const wx = ox + x, wz = oz + z;
         const r = hash(wx, 3, wz, s + 9);
         if (r < 0.18) d[idx(x, FLAT_H + 1, z)] = B.TALLGRASS;
         if (r > 0.9975 && x > 0 && x < 15 && z > 0 && z < 15) {
@@ -406,17 +452,22 @@ export class World {
       }
 
     // sparse trees so wood is still obtainable
-    let maxY = FLAT_H + 8;
     for (let tz = oz - 2; tz < oz + CS + 2; tz++)
       for (let tx = ox - 2; tx < ox + CS + 2; tx++) {
         if (hash(tx, 1, tz, s + 3) > 0.006) continue;
-        const top = this.growTree(c, tx, tz, FLAT_H + 1, hash(tx, 2, tz, s) < 0.3);
+        const inside = tx >= ox && tx < ox + CS && tz >= oz && tz < oz + CS;
+        if (inside && vmask[(tz - oz) * CS + (tx - ox)]) continue;
+        const top = this.growTree(c, tx, tz, FLAT_H + 1, hash(tx, 2, tz, s) < 0.3, vmask);
         if (top > maxY) maxY = top;
       }
 
     c.maxY = Math.min(CH - 1, maxY);
     this.applyMods(c);
     for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x, z);
+    // Wyrównany grunt wioski wygrywa z „najwyższym blokiem”: dach domu ani
+    // tafla wody w studni nie mogą udawać poziomu terenu, bo po nim stawiamy
+    // mieszkańców i moby.
+    for (let i = 0; i < vmask.length; i++) if (vmask[i]) c.heightMap[i] = village.ground[i];
   }
 
   /** Replays the player's block changes onto a freshly generated chunk. */
@@ -429,6 +480,31 @@ export class World {
       const y = Math.floor(i / (CS * CS));
       if (y + 2 > c.maxY) c.maxY = Math.min(CH - 1, y + 2);
     }
+  }
+
+  // ---------- Wioski (1.6) ----------
+
+  /** Deterministyczny kontekst generatora wsi (ten sam dla całego świata). */
+  villageContext(): VillageContext {
+    if (!this.vctx) {
+      this.vctx = { seed: this.seed, flat: this.flat, sea: SEA, surface: (x, z) => this.surface(x, z) };
+    }
+    return this.vctx;
+  }
+
+  /** Wioska, na której terenie stoi punkt (albo null). */
+  villageAt(x: number, z: number): Village | null {
+    return villageAt(x, z, this.villageContext());
+  }
+
+  /** Wszystkie wioski, których obszar obejmuje prostokąt. */
+  villagesIn(x0: number, z0: number, x1: number, z1: number): Village[] {
+    return villagesOverlapping(x0, z0, x1, z1, this.villageContext());
+  }
+
+  /** Najbliższa wioska – używane przez komendę /village i spawn mieszkańców. */
+  nearestVillage(x: number, z: number, cells = 3) {
+    return nearestVillage(x, z, this.villageContext(), cells);
   }
 
   // ---------- Access ----------

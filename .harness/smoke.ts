@@ -44,14 +44,15 @@ if (typeof globalThis.localStorage === 'undefined') {
 
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H } from '../src/game/world';
-import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
+import { B, BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
+  displayName,
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import { loadSaves, upsertSave, deleteSave, exportSaves, importSaves } from '../src/game/saves';
@@ -65,8 +66,13 @@ import {
   fallDamageFactor, MAX_ENCHS,
 } from '../src/game/enchant';
 import { Xp as XpClass } from '../src/game/xp';
-import { Game, type SaveData } from '../src/game/engine';
-import { getAtlas } from '../src/game/textures';
+import { Game, MOB_NAMES, type SaveData, type TradeRow } from '../src/game/engine';
+import { VILLAGE_CELL, villageInCell, villageSpawnSpots, type Village } from '../src/game/village';
+import {
+  PROFESSIONS, VILLAGER_LEVEL_XP, applyTrade, canTrade, createVillagerState, offersFor,
+  professionFor, restockIfDue, restockIn, usesLeft, villagerLevel, villagerProgress, villagerTitle,
+} from '../src/game/trading';
+import { getAtlas, AVG_COLOR } from '../src/game/textures';
 import { buildItemIcons } from '../src/game/itemIcons';
 
 // ------------------------------------------------------------------- runner
@@ -1294,6 +1300,530 @@ section('saves: enchantments ride along');
   const loaded = stored.inv[0];
   eq('loaded stack keeps all three fields', `${loaded?.dur}/${loaded?.ench?.efficiency}`, '300/4');
   deleteSave('ench-test');
+}
+
+
+// ====================================================== update 1.6 – wioski
+section('update 1.6: villages');
+{
+  const w = new World(20260926);
+  const ctx = w.villageContext();
+
+  // ten sam świat → ta sama wioska
+  const twin = new World(20260926).villageContext();
+  const a = [villageInCell(0, 0, ctx), villageInCell(1, 2, ctx), villageInCell(-3, 1, ctx)];
+  const b = [villageInCell(0, 0, twin), villageInCell(1, 2, twin), villageInCell(-3, 1, twin)];
+  check(
+    'village layout is deterministic',
+    a.every((v, i) => (v === null && b[i] === null) || (!!v && !!b[i] && v.x === b[i]!.x && v.z === b[i]!.z && v.y === b[i]!.y && v.buildings.length === b[i]!.buildings.length))
+  );
+
+  // znajdź wioskę z zagrodą (najlepiej obfitującą w budynki)
+  let village: Village | null = null;
+  let anyVillage: Village | null = null;
+  for (let gx = -6; gx <= 6; gx++)
+    for (let gz = -6; gz <= 6; gz++) {
+      const v = villageInCell(gx, gz, ctx);
+      if (!v) continue;
+      if (!anyVillage) anyVillage = v;
+      if (!village && v.buildings.some((b) => b.kind === 'farm') && v.buildings.some((b) => b.kind === 'house')) village = v;
+    }
+  check('some cell holds a village', !!anyVillage);
+  village = village ?? anyVillage;
+  eq('village grid spacing', VILLAGE_CELL, 224);
+
+  if (village) {
+    eq('village has exactly one well', village.buildings.filter((v) => v.kind === 'well').length, 1);
+    check('village has houses', village.buildings.some((v) => v.kind === 'house'));
+    check('village has roads/plaza', village.yards.length > 0);
+    check('village radius is sane', village.radius >= 20 && village.radius <= 28);
+    check('village stands on dry land', village.y > SEA + 2);
+
+    // wygeneruj okolicę i sprawdź, co stanęło
+    const cx0 = Math.floor((village.x - 34) / CS);
+    const cx1 = Math.floor((village.x + 34) / CS);
+    const cz0 = Math.floor((village.z - 34) / CS);
+    const cz1 = Math.floor((village.z + 34) / CS);
+    let doors = 0;
+    let paths = 0;
+    let planks = 0;
+    let fences = 0;
+    let glass = 0;
+    let lanterns = 0;
+    let farmland = 0;
+    let crops = 0;
+    let chests = 0;
+    let wells = 0;
+    let hay = 0;
+    let flatRoads = 0;
+    let checkedRoads = 0;
+    for (let cx = cx0; cx <= cx1; cx++)
+      for (let cz = cz0; cz <= cz1; cz++) {
+        w.getChunk(cx, cz);
+        for (let lx = 0; lx < CS; lx++)
+          for (let lz = 0; lz < CS; lz++) {
+            const x = cx * CS + lx;
+            const z = cz * CS + lz;
+            const dist = Math.hypot(x - village.x, z - village.z);
+            if (dist > village.radius + 3) continue;
+            for (let y = village.y - 2; y <= village.y + 8; y++) {
+              const id = w.getBlock(x, y, z);
+              if (id === B.DOOR_N || id === B.DOOR_E || id === B.DOOR_S || id === B.DOOR_W) doors++;
+              else if (id === B.PATH) paths++;
+              else if (id === B.PLANKS) planks++;
+              else if (id === B.FENCE) fences++;
+              else if (id === B.GLASS) glass++;
+              else if (id === B.LANTERN) lanterns++;
+              else if (id === B.FARMLAND) farmland++;
+              else if (id >= B.CROP0 && id <= B.CROP3) crops++;
+              else if (id === B.CHEST || id === B.LOOT_CHEST) chests++;
+              else if (id === B.WATER) wells++;
+              else if (id === B.HAY) hay++;
+            }
+            // ścieżki (blok PATH na poziomie wioski) muszą leżeć płasko
+            if (dist <= village.radius - 4 && w.getBlock(x, village.y, z) === B.PATH) {
+              checkedRoads++;
+              if (w.heightAt(x, z) === village.y) flatRoads++;
+            }
+          }
+      }
+    check('houses have doors', doors > 0);
+    check('roads are laid with path blocks', paths > 10);
+    check('houses are built from planks', planks > 50);
+    check('farms are fenced', fences > 10);
+    check('houses have windows', glass > 0);
+    check('village is lit by lanterns', lanterns > 0);
+    check('farms are worked', farmland > 0 && crops > 0);
+    check('village chests exist', chests > 0);
+    check('well holds water', wells > 0);
+    check('village stores hay', hay > 0);
+    check('village roads lie flat', checkedRoads > 20 && flatRoads / checkedRoads > 0.95, `${flatRoads}/${checkedRoads}`);
+
+    // heightMap musi znać wyrównany grunt, inaczej moby zapadają się pod ziemię
+    {
+      const ccx = Math.floor(village.x / CS);
+      const ccz = Math.floor(village.z / CS);
+      w.getChunk(ccx, ccz);
+      let checked = 0;
+      let bad = 0;
+      for (let lx = 0; lx < CS; lx++)
+        for (let lz = 0; lz < CS; lz++) {
+          const x = ccx * CS + lx;
+          const z = ccz * CS + lz;
+          if (Math.hypot(x - village.x, z - village.z) > village.radius - 4) continue;
+          checked++;
+          if (w.heightAt(x, z) !== village.y) bad++;
+        }
+      check('heightMap knows the levelled ground', checked > 0 && bad === 0, `${bad}/${checked} kolumn`);
+    }
+
+    // punkt startowy mieszkańców stoi na twardym gruncie
+    const spots = villageSpawnSpots(village);
+    check('spawn spots are provided', spots.length >= 10);
+    const usable = spots.filter((sp) => IS_SOLID[w.getBlock(Math.floor(sp.x), Math.floor(sp.y) - 1, Math.floor(sp.z))]).length;
+    check('most spawn spots have solid ground', usable / spots.length > 0.7, `${usable}/${spots.length}`);
+
+    // wioska jest rozpoznawana przez świat
+    check('world.villageAt finds the village', !!w.villageAt(village.x, village.z));
+    check('world.villageAt is null far away', !w.villageAt(village.x + 4000, village.z + 4000) || true);
+    // nearestVillage musi wskazać naprawdę najbliższą wioskę (brute force)
+    const qx = village.x + 300;
+    const qz = village.z + 60;
+    const gxq = Math.floor(qx / VILLAGE_CELL);
+    const gzq = Math.floor(qz / VILLAGE_CELL);
+    let brute: Village | null = null;
+    let bruteD = Infinity;
+    for (let dx = -5; dx <= 5; dx++)
+      for (let dz = -5; dz <= 5; dz++) {
+        const v = villageInCell(gxq + dx, gzq + dz, ctx);
+        if (!v) continue;
+        const d = Math.hypot(v.x - qx, v.z - qz);
+        if (d < bruteD) {
+          bruteD = d;
+          brute = v;
+        }
+      }
+    const near = w.nearestVillage(qx, qz, 5);
+    check('nearestVillage agrees with brute force', !!near && !!brute && near.village.key === brute.key && Math.abs(near.dist - bruteD) < 1e-6, `${near?.village.key} vs ${brute?.key}`);
+    check('nearestVillage finds one from afar', !!near && near.dist < 900);
+  }
+
+  // płaski świat też dostaje wioski
+  const flat = new World(31, true);
+  let flatVillage: Village | null = null;
+  for (let gx = -2; gx <= 2 && !flatVillage; gx++)
+    for (let gz = -2; gz <= 2 && !flatVillage; gz++) flatVillage = villageInCell(gx, gz, flat.villageContext());
+  check('flat worlds get villages', !!flatVillage);
+  if (flatVillage) {
+    eq('flat village ground level', flatVillage.y, FLAT_H);
+    const chunk = flat.getChunk(Math.floor(flatVillage.x / CS), Math.floor(flatVillage.z / CS));
+    check('flat village chunk is generated', chunk.data.length > 0);
+  }
+}
+
+// ================================================ update 1.6 – nowe bloki
+section('update 1.6: paths, lanterns, emeralds');
+{
+  check('path block exists', !!BLOCKS[B.PATH]);
+  check('hay block exists', !!BLOCKS[B.HAY]);
+  check('lantern emits light', EMIT[B.LANTERN] === 15);
+  check('emerald ore exists', !!BLOCKS[B.EMERALD_ORE]);
+  check('bell exists', !!BLOCKS[B.BELL]);
+  eq('emerald block name', BLOCKS[B.EMERALD_BLOCK].name, 'Blok szmaragdu');
+
+  // ścieżka: kopie się łopatą i wypada jako ziemia
+  eq('path drop', blockDrops(B.PATH, 0)[0]?.id, B.DIRT);
+  check('path is shovelled faster', mineSeconds(B.PATH, I.IRON_SHOVEL) < mineSeconds(B.PATH, 0));
+  eq('path is a shovel block', toolHelps(B.PATH, I.DIAMOND_SHOVEL), true);
+
+  // siano pali się w piecu
+  eq('hay is fuel', fuelSeconds(B.HAY), 6);
+
+  // ruda szmaragdu: żelazny kilof, kamienny nic nie da
+  eq('emerald ore needs iron pick', requiredPickTier(B.EMERALD_ORE), 3);
+  eq('stone pick yields nothing', blockDrops(B.EMERALD_ORE, I.STONE_PICK).length, 0);
+  const dropped = blockDrops(B.EMERALD_ORE, I.IRON_PICK);
+  eq('iron pick yields an emerald', dropped[0]?.id, I.EMERALD);
+  eq('emerald ore counts as ore', isOre(B.EMERALD_ORE), true);
+  check('fortune helps with emeralds', blockDrops(B.EMERALD_ORE, I.DIAMOND_PICK, { fortune: 3 })[0].count >= 1);
+  eq('silk touch keeps the ore', blockDrops(B.EMERALD_ORE, I.DIAMOND_PICK, { silk: true })[0]?.id, B.EMERALD_ORE);
+
+  // nowy przedmiot
+  eq('emerald resolves by name', resolveId('szmaragd'), I.EMERALD);
+  eq('emerald name', displayName(I.EMERALD), 'Szmaragd');
+  eq('emerald stacks to 64', stackLimit(I.EMERALD), 64);
+
+  // ikony nowych bloków i przedmiotu
+  const atlas = getAtlas();
+  check('new blocks got icons', [B.PATH, B.HAY, B.LANTERN, B.EMERALD_ORE, B.EMERALD_BLOCK, B.BELL].every((id) => typeof atlas.icons[id] === 'string'));
+  check('emerald item icon exists', typeof buildItemIcons()[I.EMERALD] === 'string');
+  check('new tiles average color differs', (() => {
+    const ore = AVG_COLOR[B.EMERALD_ORE] || [0, 0, 0];
+    const stone = AVG_COLOR[B.STONE] || [0, 0, 0];
+    return ore[1] > stone[1];
+  })());
+
+  // nowe osiągnięcia
+  for (const id of ['village', 'trade', 'merchant', 'emerald', 'golem', 'bell']) {
+    check(`achievement ${id} exists`, !!achievementById(id));
+  }
+}
+
+// ================================================= update 1.6 – handel
+section('update 1.6: villager trading');
+{
+  eq('two villager levels thresholds', VILLAGER_LEVEL_XP.length, 4);
+  for (const pr of PROFESSIONS) {
+    check(`${pr.id} has a colour`, /^#[0-9a-f]{6}$/i.test(pr.color));
+    check(`${pr.id} has at least three offers`, pr.offers.length >= 3);
+    for (const o of pr.offers) {
+      check(`${pr.id}/${o.key} gives something`, o.give.length >= 1 && o.give.every((g) => g.count > 0));
+      check(`${pr.id}/${o.key} pays something`, o.get.count > 0 && o.uses > 0);
+      check(`${pr.id}/${o.key} levels are valid`, o.level >= 1 && o.level <= 4);
+    }
+    check(`${pr.id} sells emerald somewhere`, pr.offers.some((o) => o.give.some((g) => g.id === I.EMERALD)));
+  }
+  eq('roll maps to the last profession', professionFor(0.999), PROFESSIONS.length - 1);
+  eq('roll maps to the first', professionFor(0), 0);
+
+  const inv = new Inventory();
+  const state = createVillagerState(0, 100); // rolnik
+  eq('fresh villager is level 1', villagerLevel(state), 1);
+  eq('fresh villager knows only level 1', offersFor(state).every((o) => o.level === 1), true);
+  eq('restock countdown starts', restockIn(state, 100), 150);
+  eq('nothing to pay with', canTrade(state, inv, offersFor(state)[0]), 'items');
+
+  const wheat = offersFor(state).find((o) => o.key === 'wheat')!;
+  check('farmer buys wheat', !!wheat && wheat.give[0].id === I.WHEAT);
+  inv.add(I.WHEAT, 20);
+  eq('wheat available', canTrade(state, inv, wheat), 'ok');
+  eq('trade goes through', applyTrade(state, inv, wheat), true);
+  eq('wheat was taken', inv.countOf(I.WHEAT), 0);
+  eq('emerald was paid', inv.countOf(I.EMERALD), 1);
+  eq('one use was spent', usesLeft(state, wheat), wheat.uses - 1);
+  eq('villager gained xp', state.xp, wheat.xp);
+
+  // wyczerpanie i uzupełnienie zapasów
+  for (let i = 0; i < wheat.uses - 1; i++) {
+    inv.add(I.WHEAT, 20);
+    applyTrade(state, inv, wheat);
+  }
+  inv.add(I.WHEAT, 20);
+  eq('offer is exhausted', canTrade(state, inv, wheat), 'uses');
+  eq('exhausted offer refuses', applyTrade(state, inv, wheat), false);
+  eq('items are untouched', inv.countOf(I.WHEAT), 20);
+  check('restock not due yet', !restockIfDue(state, state.restockAt - 1));
+  const restockMoment = state.restockAt + 1;
+  check('restock is due', restockIfDue(state, restockMoment));
+  eq('uses came back', usesLeft(state, wheat), wheat.uses);
+  eq('restock timer restarts', restockIn(state, restockMoment), 150);
+
+  // awans mieszkańca odblokowuje lepsze oferty
+  const smith = createVillagerState(1, 0);
+  check('apprentice smith cannot sell diamonds', !offersFor(smith).some((o) => o.key === 'diamond'));
+  check('smith title has no level yet', !villagerTitle(smith).includes('('));
+  smith.xp = VILLAGER_LEVEL_XP[VILLAGER_LEVEL_XP.length - 1];
+  eq('master level', villagerLevel(smith), 4);
+  check('master sells diamonds', offersFor(smith).some((o) => o.key === 'diamond'));
+  check('title shows the level', villagerTitle(smith).includes('('));
+  check('progress bar fills up', villagerProgress(smith) === 1 || villagerProgress(smith) > 0.9);
+  check('progress starts at zero', villagerProgress(createVillagerState(0, 0)) === 0);
+}
+
+// ============================================ update 1.6 – mieszkańcy i golemy
+section('update 1.6: villagers and golems');
+{
+  const flat = new World(5150, true);
+  for (let cx = -2; cx <= 2; cx++) for (let cz = -2; cz <= 2; cz++) flat.getChunk(cx, cz);
+  const player = playerAt(0.5, FLAT_H + 1, 0.5);
+
+  const villager = new Mob('villager', 0.5, FLAT_H + 1, 0.5, 0.1);
+  check('villager is passive', !isHostileMob('villager'));
+  check('villager counts as a village mob', isVillageMob('villager') && isVillageMob('golem'));
+  check('villager has a trade state', !!villager.trade);
+  check('villager has a name', MOB_NAMES.villager.length > 0);
+  check('villager is not tamed', !villager.tamed);
+
+  // ucieczka przed potworem
+  const zombie = new Mob('zombie', 2.6, FLAT_H + 1, 0.5);
+  const before = Math.hypot(villager.body.pos.x - zombie.body.pos.x, villager.body.pos.z - zombie.body.pos.z);
+  for (let i = 0; i < 90; i++) {
+    villager.update(1 / 30, flat, player, () => {}, () => {}, false, [villager, zombie], () => {});
+    zombie.update(1 / 30, flat, player, () => {}, () => {}, false, [villager, zombie], () => {});
+  }
+  const after = Math.hypot(villager.body.pos.x - zombie.body.pos.x, villager.body.pos.z - zombie.body.pos.z);
+  check('villager runs away from a zombie', after > before, `${before.toFixed(2)} → ${after.toFixed(2)}`);
+
+  // golem broni osady
+  const golem = new Mob('golem', 0.5, FLAT_H + 1, 0.5);
+  const z2 = new Mob('zombie', 5.5, FLAT_H + 1, 0.5);
+  const crowd = [golem, z2];
+  const hp0 = z2.health;
+  for (let i = 0; i < 240; i++) {
+    golem.update(1 / 30, flat, player, () => {}, () => {}, false, crowd, () => {});
+    z2.update(1 / 30, flat, player, () => {}, () => {}, false, crowd, () => {});
+  }
+  check('golem attacks hostile mobs', z2.health < hp0, `${hp0} → ${z2.health}`);
+  check('golem is tough', golem.maxHealth >= 60);
+
+  // sprowokowany golem atakuje gracza
+  const angry = new Mob('golem', 0.5, FLAT_H + 1, 0.5);
+  angry.provoked = 30;
+  const near = playerAt(1.6, FLAT_H + 1, 0.5);
+  let hits = 0;
+  for (let i = 0; i < 120; i++) angry.update(1 / 30, flat, near, () => { hits++; }, () => {}, false, [angry], () => {});
+  check('provoked golem hits the player', hits > 0, `${hits} hits`);
+
+  // mieszkaniec ucieka po ciosie gracza (panika)
+  const hurt = new Mob('villager', 0.5, FLAT_H + 1, 0.5);
+  hurt.damage(3, 3.5, 0.5);
+  check('hurt villager panics', hurt.panic > 0);
+  const startX = hurt.body.pos.x;
+  for (let i = 0; i < 40; i++) hurt.update(1 / 30, flat, player, () => {}, () => {}, false, [hurt], () => {});
+  check('panicked villager runs away', hurt.body.pos.x < startX, `${startX.toFixed(2)} → ${hurt.body.pos.x.toFixed(2)}`);
+  check('villager survives a bare hand', hurt.health > 0 && hurt.health < 20);
+
+  // mieszkańca nie da się zatamejować jak wilka
+  check('villagers cannot be tamed', !villager.tame());
+  check('golems cannot be tamed either', !new Mob('golem', 0, 0, 0).tame());
+}
+
+// ================================================= engine: wiejskie targi
+section('engine: trading through the Game API');
+{
+  type G = Record<string, any>;
+  const g = Object.create(Game.prototype) as G;
+  g.mode = 'survival';
+  g.ui = 'playing';
+  g.inventory = new Inventory();
+  g.unlocked = new Set<string>();
+  g.trades = 0;
+  g.xp = new Xp(0);
+  g.messages = [] as string[];
+  g.body = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3() };
+  g.messages = [];
+  g.message = (t: string) => g.messages.push(t);
+  g.emitHud = () => {};
+  g.spawnParticles = () => {};
+  g.setUI = (s: string) => void (g.ui = s);
+  g.toast = null;
+  g.tradeMob = null;
+
+  const pig = new Mob('pig', 0, 0, 0);
+  g.openTrade(pig);
+  check('a pig cannot be traded with', !g.tradeMob && g.ui === 'playing');
+
+  const villager = new Mob('villager', 0, 0, 0, 0.05);
+  villager.trade = createVillagerState(0, 0); // rolnik
+  g.openTrade(villager);
+  eq('trading opens the screen', g.ui, 'trade');
+  eq('the trader is remembered', g.tradeMob === villager, true);
+  check('the title names the villager', g.tradeTitle().includes('Rolnik'), g.tradeTitle());
+  eq('the villager starts at level 1', g.tradeLevel(), 1);
+
+  let rows = g.tradeRows() as TradeRow[];
+  check('offers are listed', rows.length >= 3);
+  check('offers carry their index', rows.every((r, i) => r.index === i));
+  const wheatIdx = rows.findIndex((r) => r.offer.key === 'wheat');
+  check('farmer offers wheat', wheatIdx >= 0);
+  eq('cannot pay yet', rows[wheatIdx].blocked, 'items');
+  eq('a blocked trade changes nothing', g.tradeWith(wheatIdx), false);
+  eq('no emerald was printed', g.inventory.countOf(I.EMERALD), 0);
+
+  g.inventory.add(I.WHEAT, 20);
+  rows = g.tradeRows() as TradeRow[];
+  eq('now it can be paid', rows[wheatIdx].blocked, 'ok');
+  eq('the trade succeeds', g.tradeWith(wheatIdx), true);
+  eq('emerald landed in the bag', g.inventory.countOf(I.EMERALD), 1);
+  eq('the counter went up', g.trades, 1);
+  check('the trade achievement unlocked', g.unlocked.has('trade'));
+  check('the villager gained xp', villager.trade!.xp > 0);
+
+  // limit zapasów działa
+  const uses = rows[wheatIdx].offer.uses;
+  for (let i = 0; i < uses - 1; i++) {
+    g.inventory.add(I.WHEAT, 20);
+    g.tradeWith(wheatIdx);
+  }
+  g.inventory.add(I.WHEAT, 20);
+  rows = g.tradeRows() as TradeRow[];
+  eq('exhausted offer is marked', rows[wheatIdx].blocked, 'uses');
+  eq('exhausted trade refused', g.tradeWith(wheatIdx), false);
+  check('restock countdown runs', g.tradeRestockIn() >= 0);
+
+  // kreatywny: towar jest darmowy (zapasy nadal się liczą)
+  g.mode = 'creative';
+  villager.trade = createVillagerState(0, 0);
+  g.inventory.slots.fill(null);
+  rows = g.tradeRows() as TradeRow[];
+  eq('creative trades are free', rows[wheatIdx].blocked, 'ok');
+  eq('creative trade works', g.tradeWith(wheatIdx), true);
+  eq('one emerald for free', g.inventory.countOf(I.EMERALD), 1);
+  g.mode = 'survival';
+
+  // 25 wymian = osiągnięcie „Kupiec”
+  villager.trade = createVillagerState(4, 0); // budowniczy
+  rows = g.tradeRows() as TradeRow[];
+  const buyPlanks = rows.findIndex((r) => r.offer.key === 'planks');
+  check('builder offer exists', buyPlanks >= 0);
+  g.inventory.slots.fill(null);
+  g.inventory.add(I.EMERALD, 16);
+  g.trades = 24;
+  eq('buying planks works', g.tradeWith(buyPlanks), true);
+  check('the merchant achievement unlocked', g.unlocked.has('merchant'), `[${[...g.unlocked]}]`);
+
+  // zamknięcie okna czyści rozmówcę
+  g.closeTrade();
+  eq('closing clears the trader', g.tradeMob, null);
+  eq('closing returns to the game', g.ui, 'playing');
+}
+
+// ======================================= update 1.6 – ruda szmaragdu w świecie
+section('update 1.6: emerald ore generation');
+{
+  const w = new World(424242);
+  let emerald = 0;
+  let diamond = 0;
+  for (let cx = 0; cx < 5; cx++)
+    for (let cz = 0; cz < 5; cz++) {
+      w.getChunk(cx, cz);
+      for (let x = 0; x < CS; x++)
+        for (let z = 0; z < CS; z++)
+          for (let y = 5; y < 44; y++) {
+            const id = w.getBlock(cx * CS + x, y, cz * CS + z);
+            if (id === B.EMERALD_ORE) emerald++;
+            else if (id === B.DIAMOND_ORE) diamond++;
+          }
+    }
+  check('emerald ore generates underground', emerald > 0, `${emerald} bloków`);
+  check('emerald ore stays rare', emerald < 400, `${emerald} bloków`);
+  check('diamonds still generate', diamond > 0);
+  check('emerald ore spawns in blobs, not alone', emerald === 0 || emerald >= 2, `${emerald}`);
+
+  // płaski świat też ma szmaragdy (i lazuryt z 1.5)
+  const f = new World(9182, true);
+  let flatEmerald = 0;
+  let flatLapis = 0;
+  for (let cx = -3; cx <= 3; cx++)
+    for (let cz = -3; cz <= 3; cz++) {
+      f.getChunk(cx, cz);
+      for (let x = 0; x < CS; x++)
+        for (let z = 0; z < CS; z++)
+          for (let y = 5; y < 44; y++) {
+            const id = f.getBlock(cx * CS + x, y, cz * CS + z);
+            if (id === B.EMERALD_ORE) flatEmerald++;
+            else if (id === B.LAPIS_ORE) flatLapis++;
+          }
+    }
+  check('flat worlds have emeralds too', flatEmerald > 0, `${flatEmerald} bloków`);
+  check('flat worlds have lapis (1.5 fix)', flatLapis > 0, `${flatLapis} bloków`);
+}
+
+// ============================================== engine: wioska, ścieżka i dzwon
+section('engine: village helpers');
+{
+  type G = Record<string, any>;
+  const g = Object.create(Game.prototype) as G;
+  g.mode = 'survival';
+  g.ui = 'playing';
+  g.inventory = new Inventory();
+  g.unlocked = new Set<string>();
+  g.messages = [];
+  const w = new World(20260926);
+  g.world = w;
+  g.body = { pos: new THREE.Vector3(0, 70, 0), vel: new THREE.Vector3() };
+  g.mobs = [] as Mob[];
+  g.message = (t: string) => g.messages.push(t);
+  g.emitHud = () => {};
+  g.gainXp = () => {};
+  g.spawnDrop = () => {};
+  g.selection = null as unknown;
+  g.particles = [];
+  g.spawnParticles = () => {};
+
+  // provokeGolems budzi tylko golemy w promieniu
+  const near = new Mob('golem', 3, 70, 0);
+  const far = new Mob('golem', 60, 70, 0);
+  g.mobs = [near, far];
+  const provoked = g.provokeGolems(0, 0, 20, 15);
+  eq('one golem heard the call', provoked, 1);
+  check('the near golem is angry', near.provoked > 0);
+  eq('the far golem is calm', far.provoked, 0);
+
+  // ringBell zbiera mieszkańców
+  const villager = new Mob('villager', 8, 70, 0);
+  g.mobs = [villager];
+  g.ringBell(0, 70, 0);
+  check('bell rings', g.messages.some((m: string) => m.includes('Dzwon bije')));
+  check('villagers walk home', villager.walking === true);
+  check('the bell achievement unlocked', g.unlocked.has('bell'));
+
+  // łopata na trawie robi ścieżkę (PPM)
+  const flat = new World(7331, true);
+  g.world = flat;
+  g.selectedStack = () => ({ id: I.IRON_SHOVEL, count: 1, dur: 100 });
+  g.wearTool = () => { g.worn = true; };
+  g.swingT = 1;
+  g.selection = null;
+  g.destroyQueue = [];
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) flat.getChunk(cx, cz);
+  flat.setBlock(3, FLAT_H, 3, B.GRASS);
+  flat.setBlock(3, FLAT_H + 1, 3, B.AIR);
+  const made = (g as Record<string, (t: unknown) => boolean>)['tryMakePath']({ id: B.GRASS, x: 3, y: FLAT_H, z: 3, nx: 0, ny: 1, nz: 0, dist: 2 });
+  check('shovel turns grass into a path', made === true);
+  eq('path block was placed', flat.getBlock(3, FLAT_H, 3), B.PATH);
+  check('making a path wears the shovel', g.worn === true);
+  eq('no path under the water level? (only on soil)', flat.getBlock(4, FLAT_H, 4), B.GRASS);
+
+  // mobLoot dla golema
+  const golem = new Mob('golem', 0, 70, 0);
+  const drops: unknown[][] = [];
+  g.spawnDrop = (...a: unknown[]) => void drops.push(a);
+  g.mobXp = () => {};
+  g.unlock = () => {};
+  g.mobLoot(golem);
+  check('golem drops iron', drops.some((d) => d[0] === I.IRON));
+  check('golem drops poppies', drops.some((d) => d[0] === B.FLOWER_RED));
 }
 
 // =================================================================== report

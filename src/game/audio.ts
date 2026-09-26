@@ -116,7 +116,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf') {
+export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -157,6 +157,17 @@ export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | '
     o.frequency.setValueAtTime(110, t);
     o.frequency.linearRampToValueAtTime(170, t + 0.28);
     o.frequency.exponentialRampToValueAtTime(520, t + 0.42);
+  } else if (type === 'villager') {
+    // mieszkaniec: miękkie „hmmm” z opadającą intonacją
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(320, t);
+    o.frequency.linearRampToValueAtTime(268, t + 0.3);
+    o.frequency.setValueAtTime(300, t + 0.38);
+  } else if (type === 'golem') {
+    // żelazny golem: ciężki, metaliczny pomruk
+    o.type = 'square';
+    o.frequency.setValueAtTime(96, t);
+    o.frequency.linearRampToValueAtTime(62, t + 0.5);
   } else {
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(110, t);
@@ -172,6 +183,26 @@ export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | '
   o.start(t);
   o.stop(t + 0.65);
 }
+/** Dzwon wioski: dwa szybkie, metaliczne uderzenia. */
+export function playBell() {
+  const c = ensure();
+  if (!c || !master) return;
+  const t = c.currentTime;
+  for (const [delay, freq] of [[0, 1180], [0.18, 880]] as [number, number][]) {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(freq, t + delay);
+    o.frequency.exponentialRampToValueAtTime(freq * 0.82, t + delay + 0.6);
+    g.gain.setValueAtTime(0.0001, t + delay);
+    g.gain.linearRampToValueAtTime(0.12, t + delay + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.9);
+    o.connect(g).connect(master);
+    o.start(t + delay);
+    o.stop(t + delay + 1);
+  }
+}
+
 export function playExplosion() {
   const c = ensure();
   if (!c || !master || !noiseBuf) return;

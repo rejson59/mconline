@@ -17,6 +17,9 @@ export const T = {
   iron_block: 76, gold_block: 77, diamond_block: 78,
   lapis_ore: 79, lapis_block: 80, enchant_top: 81, enchant_side: 82, enchant_bottom: 83,
   sugarcane: 84,
+  // 1.6 „Wioska”
+  path_top: 85, path_side: 86, hay_top: 87, hay_side: 88, lantern: 89,
+  emerald_ore: 90, emerald_block: 91, bell: 92,
 } as const;
 
 export const B = {
@@ -41,6 +44,8 @@ export const B = {
   IRON_BLOCK: 83, GOLD_BLOCK: 84, DIAMOND_BLOCK: 85,
   // 1.5 „Zaklęcia" – new ids are always appended, existing saves keep working
   LAPIS_ORE: 86, LAPIS_BLOCK: 87, ENCHANT: 88, SUGARCANE: 89,
+  // 1.6 „Wioska" – ścieżka, siano, latarnia, szmaragd i dzwon
+  PATH: 90, HAY: 91, LANTERN: 92, EMERALD_ORE: 93, EMERALD_BLOCK: 94, BELL: 95,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid';
@@ -164,6 +169,13 @@ def(B.LAPIS_ORE, 'Ruda lazurytu', T.lapis_ore, { hardness: 3, drop: -1 });
 def(B.LAPIS_BLOCK, 'Blok lazurytu', T.lapis_block, { hardness: 3, sound: 'stone' });
 def(B.ENCHANT, 'Stół zaklęć', [T.enchant_top, T.enchant_bottom, T.enchant_side], { hardness: 5, sound: 'stone' });
 def(B.SUGARCANE, 'Trzcina cukrowa', T.sugarcane, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
+// 1.6 „Wioska”: ścieżki, siano, latarnie, szmaragd i dzwon
+def(B.PATH, 'Ścieżka', [T.path_top, T.dirt, T.path_side], { hardness: 0.65, drop: B.DIRT, sound: 'grass' });
+def(B.HAY, 'Bela siana', [T.hay_top, T.hay_top, T.hay_side], { hardness: 0.5, sound: 'grass' });
+def(B.LANTERN, 'Latarnia', T.lantern, { hardness: 3.5, opaque: false, sound: 'glass' });
+def(B.EMERALD_ORE, 'Ruda szmaragdu', T.emerald_ore, { hardness: 3 });
+def(B.EMERALD_BLOCK, 'Blok szmaragdu', T.emerald_block, { hardness: 5 });
+def(B.BELL, 'Dzwon', T.bell, { hardness: 4, sound: 'stone' });
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;
@@ -188,6 +200,7 @@ EMIT[B.GLOWSTONE] = 15;
 EMIT[B.TORCH] = 14;
 EMIT[B.FURNACE_ON] = 12;
 EMIT[B.CAMPFIRE] = 15;
+EMIT[B.LANTERN] = 15;
 
 // Face order: -x, +x, -y, +y, -z, +z
 export function tileFor(id: number, face: number): number {

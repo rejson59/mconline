@@ -153,11 +153,18 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
         <div style={{ position: 'absolute', left: -1.5, top: -10, width: 3, height: 20, background: '#fff' }} />
       </div>
 
+      {/* wskazówka o istocie pod celownikiem (1.6) */}
+      {hud.mobHint && !hud.debug && (
+        <div className="absolute left-1/2 top-[54%] -translate-x-1/2 px-2 py-0.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          {hud.mobHint}
+        </div>
+      )}
+
       {/* debug */}
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 1.5 (${hud.fps} fps)`,
+            `BlockCraft 1.6 (${hud.fps} fps)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -166,6 +173,7 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
             `Czas: dzień ${hud.day}, ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`,
             `Świat: ${hud.worldName} (${hud.worldType === 'flat' ? 'płaski' : 'normalny'})`,
             `Moby: ${hud.mobs}`,
+            `Wioska: ${hud.village ?? 'brak'}  ·  wymiany: ${hud.trades}`,
             `Cel: ${hud.target}`,
             `Ziarno: ${hud.seed}`,
             `Tryb: ${hud.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'}${hud.flying ? ' (lot)' : ''}${hud.sprinting ? ' sprint' : ''}`,
