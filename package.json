@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.1.0",
-  "description": "BlockCraft 2.1 „Dziennik przygód” – gra sandboxowa w stylu Minecraft (React + TypeScript + Three.js + Vite) z celami przygód, automatyczną grafiką i sterowaniem dotykowym.",
+  "version": "2.2.0",
+  "description": "BlockCraft 2.2 „Szlak odkrywcy” – przeglądarkowa gra sandboxowa (React + TypeScript + Three.js + Vite) z punktami podróży, mobilnym sterowaniem i rozbudowanym zarządzaniem światami.",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -38,10 +38,10 @@
     "@types/react-dom": "19.2.3",
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "5.1.1",
-    "esbuild": "^0.27.7",
+    "esbuild": "^0.28.2",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
-    "vite": "7.3.2",
+    "vite": "^7.3.6",
     "vite-plugin-singlefile": "2.3.0"
   },
   "engines": {

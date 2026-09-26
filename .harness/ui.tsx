@@ -16,6 +16,7 @@ import SettingsScreen from '../src/components/SettingsScreen';
 import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/components/JournalScreen';
 import EnchantScreen from '../src/components/EnchantScreen';
 import TradeScreen from '../src/components/TradeScreen';
+import WaypointsScreen from '../src/components/WaypointsScreen';
 import { Inventory } from '../src/game/inventory';
 import { I } from '../src/game/items';
 import { rollEnchantOptions } from '../src/game/enchant';
@@ -107,6 +108,7 @@ section('world list: search and sorting');
   check('recent sorting puts newest save first', filterAndSortWorlds(worlds, '', 'recent').map((w) => w.id).join() === 'b,z,a');
   check('day sorting puts longest worlds first', filterAndSortWorlds(worlds, '', 'day').map((w) => w.id).join() === 'a,z,b');
   check('name sorting uses Polish locale', filterAndSortWorlds(worlds, '', 'name').map((w) => w.id).join() === 'a,b,z');
+  check('pinned worlds stay above the selected sort', filterAndSortWorlds([{ ...worlds[0], favorite: true }, worlds[1], worlds[2]], '', 'day').map((w) => w.id).join() === 'z,a,b');
 }
 
 section('menus: static render');
@@ -172,6 +174,21 @@ section('menus: static render');
   check('unlocked achievements are revealed', ach.includes('Pierwsze drewno') && ach.includes('Diamenty!'));
   check('locked achievements stay hidden', ach.includes('???'));
   check('achievement counter', ach.includes(`2 / ${ACHIEVEMENTS.length}`));
+}
+
+section('2.2 travel waypoints: static render');
+{
+  const fake = {
+    waypoints: [{ id: 'home', name: 'Baza', x: 12, y: 65, z: -4, dimension: 'overworld', kind: 'custom' }],
+    activeWaypointId: 'home', isInNether: false,
+    body: { pos: { x: 10, y: 65, z: -2 } },
+    currentDimension: () => 'overworld', addWaypoint: () => null,
+    activateWaypoint: noop, removeWaypoint: noop,
+  };
+  const html = renderToStaticMarkup(<WaypointsScreen game={fake as unknown as Game} onClose={noop} />);
+  check('waypoint screen describes navigation', html.includes('Punkty podróży') && html.includes('minimapie'));
+  check('waypoint screen lists coordinates and tracking state', html.includes('Baza') && html.includes('12, 65, -4') && html.includes('Nie śledź'));
+  check('waypoint screen supports creating points at the current position', html.includes('Dodaj tutaj'));
 }
 
 // ======================================================= enchanting screen

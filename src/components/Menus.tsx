@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameMode } from '../game/engine';
 import { ACHIEVEMENTS } from '../game/achievements';
-import { exportSaves, importSaves } from '../game/saves';
+import { exportSave, exportSaves, importSaves, MAX_SAVES } from '../game/saves';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
 import SettingsScreen from './SettingsScreen';
 
@@ -15,7 +15,8 @@ export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
   'Teraz też na telefonach!',
-  'Aktualizacja 2.1: zapisz własną historię!',
+  'Aktualizacja 2.2: twoje światy pod kontrolą!',
+  'Przypinaj, kopiuj i nazywaj swoje światy!',
   'Dziennik przygód pokaże ci kolejny cel!',
   'Automatyczna grafika dopasuje się do twojego sprzętu!',
   'Tapnij, aby postawić blok!',
@@ -52,7 +53,7 @@ export function Title() {
           className="px-2 py-0.5 text-sm font-bold"
           style={{ background: '#3c8527', color: '#fff', border: '2px solid #1c1c1c', boxShadow: '2px 2px 0 rgba(0,0,0,0.6)' }}
         >
-          WERSJA 2.1
+          WERSJA 2.2
         </span>
         <span className="splash text-lg font-semibold sm:text-xl" style={{ color: '#ffff00', textShadow: '2px 2px 0 #3f3f00' }}>
           {splash}
@@ -95,6 +96,7 @@ export function Controls() {
     ['Sloty pancerza (w E)', 'Załóż pancerz (4 elementy)'],
     ['M', 'Minimapa'],
     ['J', 'Dziennik przygód i postęp celów'],
+    ['K', 'Punkty podróży: baza, kopalnia i znacznik śmierci'],
     ['F3', 'Informacje debugowania'],
     ['Esc', 'Pauza'],
   ];
@@ -109,6 +111,7 @@ export function Controls() {
     ['✈ (kreatywny)', 'Włącz / wyłącz latanie'],
     ['Pasek na dole', 'Tapnij slot, aby go wybrać'],
     ['💬', 'Czat i komendy'],
+    ['📍', 'Punkty podróży i znacznik bazy'],
   ];
   return (
     <div className="flex flex-col gap-4 text-[15px]">
@@ -169,6 +172,7 @@ export interface WorldCard {
   day?: number;
   updated?: number;
   worldType?: WorldType;
+  favorite?: boolean;
 }
 
 export type WorldSort = 'recent' | 'name' | 'day';
@@ -186,6 +190,9 @@ export function filterAndSortWorlds(worlds: WorldCard[], query: string, sort: Wo
   });
 
   return filtered.sort((a, b) => {
+    // Favorites stay visible at the top regardless of the selected secondary sort.
+    const pinned = Number(!!b.favorite) - Number(!!a.favorite);
+    if (pinned) return pinned;
     if (sort === 'name') return (a.name ?? '').localeCompare(b.name ?? '', 'pl', { sensitivity: 'base' });
     if (sort === 'day') return (b.day ?? 1) - (a.day ?? 1) || (b.updated ?? 0) - (a.updated ?? 0);
     return (b.updated ?? 0) - (a.updated ?? 0);
@@ -199,6 +206,9 @@ export function MainMenu({
   onPlay,
   onNew,
   onDelete,
+  onRename,
+  onDuplicate,
+  onToggleFavorite,
   onImported,
 }: {
   saves: WorldCard[];
@@ -210,12 +220,18 @@ export function MainMenu({
   onPlay: (id: string) => void;
   onNew: (seed: number, mode: GameMode, name: string, worldType: WorldType) => void;
   onDelete: (id: string) => void;
+  onRename?: (id: string, name: string) => void;
+  onDuplicate?: (id: string) => boolean;
+  onToggleFavorite?: (id: string) => void;
 }) {
   const [view, setView] = useState<'main' | 'new' | 'controls' | 'options'>(sharedSeed != null ? 'new' : 'main');
   const [seedText, setSeedText] = useState(sharedSeed != null ? String(sharedSeed) : '');
   const [worldName, setWorldName] = useState('');
   const [mode, setMode] = useState<GameMode>(sharedMode ?? 'survival');
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [manageId, setManageId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState('');
+  const [menuNotice, setMenuNotice] = useState('');
   const [worldQuery, setWorldQuery] = useState('');
   const [worldSort, setWorldSort] = useState<WorldSort>('recent');
   const [worldType, setWorldType] = useState<WorldType>('normal');
@@ -245,6 +261,27 @@ export function MainMenu({
     } catch {
       window.alert('Nie udało się pobrać pliku z zapisami.');
     }
+  };
+
+  const downloadWorld = (world: WorldCard) => {
+    const json = exportSave(world.id);
+    if (!json) return;
+    try {
+      const blob = new Blob([json], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const safeName = (world.name || 'swiat').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+      a.download = `blockcraft-${safeName || 'swiat'}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch {
+      setMenuNotice('Nie udało się wyeksportować tego świata.');
+    }
+  };
+
+  const showNotice = (text: string) => {
+    setMenuNotice(text);
+    window.setTimeout(() => setMenuNotice(''), 2500);
   };
 
   const pickSavesFile = (file: File | undefined) => {
@@ -277,6 +314,7 @@ export function MainMenu({
           <div className="flex w-full flex-col gap-3">
             {saves.length > 0 && (
               <section aria-label="Zapisane światy" className="bg-black/40 p-2">
+                <p className="sr-only">W menu zarządzania możesz zmienić nazwę, utworzyć kopię, wyeksportować świat albo wybrać Usuń.</p>
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <h2 className="text-base text-yellow-200 mc-text">Twoje światy <span className="text-xs text-white/70">{saves.length}/8</span></h2>
                   <label className="sr-only" htmlFor="world-sort">Sortuj światy</label>
@@ -303,27 +341,94 @@ export function MainMenu({
                 />
                 <div className="max-h-[25vh] space-y-2 overflow-y-auto">
                   {visibleWorlds.map((s) => (
-                    <div key={s.id} className="flex gap-2">
-                      <button className="mc-btn min-w-0 flex-1 !py-2 text-left" onClick={() => onPlay(s.id)}>
-                        {s.name || 'Świat'}
-                        <span className="block text-xs font-normal opacity-80">
-                          dzień {s.day ?? 1} · {s.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'} · {s.worldType === 'flat' ? 'płaski' : 'normalny'} · ziarno {s.seed}
-                        </span>
-                        {s.updated ? <span className="block text-[11px] font-normal opacity-65">Zapisano: {new Date(s.updated).toLocaleDateString('pl-PL')}</span> : null}
-                      </button>
-                      <button
-                        className="mc-btn !w-24 !px-2 !text-sm"
-                        onClick={() => {
-                          if (confirmId === s.id) onDelete(s.id);
-                          else setConfirmId(s.id);
-                        }}
-                      >
-                        {confirmId === s.id ? 'Na pewno?' : 'Usuń'}
-                      </button>
+                    <div key={s.id} className="bg-black/25 p-1">
+                      <div className="flex gap-1.5">
+                        <button
+                          className="mc-btn !w-10 !px-1 !py-2 text-lg"
+                          aria-label={s.favorite ? `Odepnij świat ${s.name || 'Świat'}` : `Przypnij świat ${s.name || 'Świat'}`}
+                          aria-pressed={!!s.favorite}
+                          title={s.favorite ? 'Odepnij świat' : 'Przypnij świat na górze'}
+                          onClick={() => onToggleFavorite?.(s.id)}
+                        >
+                          {s.favorite ? '★' : '☆'}
+                        </button>
+                        <button className="mc-btn min-w-0 flex-1 !py-2 text-left" onClick={() => onPlay(s.id)}>
+                          {s.name || 'Świat'}
+                          <span className="block text-xs font-normal opacity-80">
+                            dzień {s.day ?? 1} · {s.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'} · {s.worldType === 'flat' ? 'płaski' : 'normalny'} · ziarno {s.seed}
+                          </span>
+                          {s.updated ? <span className="block text-[11px] font-normal opacity-65">Zapisano: {new Date(s.updated).toLocaleDateString('pl-PL')}</span> : null}
+                        </button>
+                        <button
+                          className="mc-btn !w-10 !px-1 !py-2 text-lg"
+                          aria-expanded={manageId === s.id}
+                          aria-label={`Zarządzaj światem ${s.name || 'Świat'}`}
+                          title="Zarządzaj światem"
+                          onClick={() => {
+                            const opening = manageId !== s.id;
+                            setManageId(opening ? s.id : null);
+                            setRenameText(opening ? (s.name || 'Świat') : '');
+                            setConfirmId(null);
+                          }}
+                        >
+                          ⋯
+                        </button>
+                      </div>
+                      {manageId === s.id && (
+                        <div className="mt-1.5 space-y-1.5 border border-white/20 bg-black/40 p-2">
+                          <form
+                            className="flex gap-1.5"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              onRename?.(s.id, renameText);
+                              setManageId(null);
+                              showNotice('Nazwa świata została zmieniona.');
+                            }}
+                          >
+                            <label className="sr-only" htmlFor={`rename-${s.id}`}>Nowa nazwa świata</label>
+                            <input
+                              id={`rename-${s.id}`}
+                              className="mc-input min-w-0 flex-1 !py-1 !text-sm"
+                              value={renameText}
+                              maxLength={40}
+                              onChange={(e) => setRenameText(e.target.value)}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            />
+                            <button className="mc-btn !w-auto !px-3 !py-1 !text-sm" type="submit">Zapisz nazwę</button>
+                          </form>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <button
+                              className="mc-btn !px-1 !py-1 !text-xs"
+                              onClick={() => {
+                                if (onDuplicate?.(s.id)) showNotice('Utworzono niezależną kopię świata.');
+                                else showNotice(`Brak wolnego miejsca — limit to ${MAX_SAVES} światów.`);
+                                setManageId(null);
+                              }}
+                            >
+                              Utwórz kopię
+                            </button>
+                            <button className="mc-btn !px-1 !py-1 !text-xs" onClick={() => downloadWorld(s)}>
+                              Eksportuj
+                            </button>
+                            <button
+                              className="mc-btn !px-1 !py-1 !text-xs"
+                              onClick={() => {
+                                if (confirmId === s.id) {
+                                  onDelete(s.id);
+                                  setManageId(null);
+                                } else setConfirmId(s.id);
+                              }}
+                            >
+                              {confirmId === s.id ? 'Na pewno?' : 'Usuń'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                   {visibleWorlds.length === 0 && <div className="py-3 text-center text-sm text-white/75">Brak światów pasujących do wyszukiwania.</div>}
                 </div>
+                <div className="min-h-4 pt-1 text-center text-xs text-green-200" role="status" aria-live="polite">{menuNotice}</div>
               </section>
             )}
             <button className="mc-btn" onClick={() => setView('new')}>
@@ -409,7 +514,7 @@ export function MainMenu({
           />
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.1 „Dziennik przygód”</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.2 „Szlak odkrywcy”</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>
@@ -439,6 +544,7 @@ export function PauseMenu({
   onSettings,
   onResume,
   onJournal,
+  onWaypoints,
   onQuit,
   onSave,
 }: {
@@ -449,6 +555,7 @@ export function PauseMenu({
   onSettings: (s: Settings) => void;
   onResume: () => void;
   onJournal: () => void;
+  onWaypoints?: () => void;
   onQuit: () => void;
   onSave: () => void;
 }) {
@@ -488,6 +595,11 @@ export function PauseMenu({
             <button className="mc-btn" onClick={onJournal}>
               Dziennik przygód · J
             </button>
+            {onWaypoints && (
+              <button className="mc-btn" onClick={onWaypoints}>
+                Punkty podróży · K
+              </button>
+            )}
             <button className="mc-btn" onClick={() => setView('achievements')}>
               Osiągnięcia ({unlocked?.length ?? 0}/{ACHIEVEMENTS.length})
             </button>

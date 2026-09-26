@@ -57,7 +57,10 @@ import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
-import { loadSaves, upsertSave, deleteSave, exportSaves, importSaves } from '../src/game/saves';
+import {
+  cleanWorldName, deleteSave, duplicateSave, exportSave, exportSaves, importSaves,
+  loadSaves, renameSave, toggleFavoriteSave, upsertSave,
+} from '../src/game/saves';
 import { ACHIEVEMENTS, achievementById } from '../src/game/achievements';
 import { Xp, xpToNext, totalXpForLevel, levelFromXp } from '../src/game/xp';
 import { ARMOR, isArmor, armorPoints, damageReduction, armorSlotOf } from '../src/game/armor';
@@ -527,6 +530,23 @@ section('saves: storage, limits, transfer');
   upsertSave({ id: 'w9', name: 'Zmieniony', seed: 9, mode: 'creative', day: 2 });
   eq('upsert updates in place', loadSaves().filter((s) => s.id === 'w9').length, 1);
   eq('updated fields are stored', loadSaves()[0].mode, 'creative');
+
+  // 2.2 save manager metadata and operations
+  check('rename updates an existing world', renameSave('w9', '  Moja   baza  '));
+  eq('rename normalizes whitespace', loadSaves().find((s) => s.id === 'w9')?.name, 'Moja baza');
+  check('world can be pinned', toggleFavoriteSave('w9') === true);
+  upsertSave({ id: 'w9', name: 'Moja baza', seed: 9, mode: 'creative', day: 3 });
+  check('pin survives an engine autosave', loadSaves().find((s) => s.id === 'w9')?.favorite === true);
+  eq('control characters are removed from names', cleanWorldName(' A\n\tB '), 'A B');
+  check('one world can be exported', exportSave('w9')?.includes('Moja baza'));
+  check('missing world cannot be exported', exportSave('missing') === null);
+
+  // Free one slot and verify that duplication creates an independent id.
+  deleteSave(loadSaves().find((s) => s.id !== 'w9')!.id);
+  const copyId = duplicateSave('w9');
+  check('world can be duplicated when a slot is free', !!copyId && copyId !== 'w9');
+  check('copy has an explanatory name', loadSaves().find((s) => s.id === copyId)?.name?.includes('kopia') === true);
+  check('duplicate respects the 8-world limit', duplicateSave('w9') === null);
 
   // export / import round trip
   const json = exportSaves();
@@ -2139,6 +2159,31 @@ section('2.1: adventure journal keyboard controls');
   onKeyDown.call(fake, event('Escape'));
   eq('Escape closes the journal back to the game', fake.ui, 'playing');
   eq('journal controls make the expected transitions', transitions.join(','), 'journal,playing');
+}
+
+// ======================================================= 2.2: waypoints
+section('2.2: travel waypoints');
+{
+  let hudUpdates = 0;
+  const fake = Object.assign(Object.create(Game.prototype), {
+    body: { pos: new THREE.Vector3(12.8, 65.2, -4.1) },
+    waypoints: [],
+    activeWaypointId: null,
+    isInNether: false,
+    emitHud() { hudUpdates++; },
+  }) as Game;
+  const home = fake.addWaypoint('  Moja   baza  ');
+  check('waypoint can be created at the player position', !!home && home.x === 12 && home.y === 65 && home.z === -5);
+  eq('waypoint name is normalized', home?.name, 'Moja baza');
+  eq('new waypoint becomes active', fake.activeWaypointId, home?.id);
+  fake.isInNether = true;
+  const portal = fake.addWaypoint('Portal');
+  eq('waypoints remember their dimension', portal?.dimension, 'nether');
+  fake.activateWaypoint(home?.id ?? null);
+  eq('an existing waypoint can be activated', fake.activeWaypointId, home?.id);
+  fake.removeWaypoint(home?.id ?? '');
+  check('removing the active waypoint clears navigation', fake.waypoints.length === 1 && fake.activeWaypointId === null);
+  check('waypoint changes refresh the HUD', hudUpdates >= 4);
 }
 
 // ================================================== 2.0: quality auto-pilot

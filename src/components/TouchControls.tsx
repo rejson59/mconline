@@ -7,7 +7,7 @@ import type { Settings } from '../utils/settings';
 export function isTouchDevice(): boolean {
   if (typeof window === 'undefined') return false;
   const nav = navigator as Navigator & { msMaxTouchPoints?: number };
-  return 'ontouchstart' in window || (nav.maxTouchPoints ?? nav.msMaxTouchPoints ?? 0) > 0;
+  return 'ontouchstart' in window || (nav.maxTouchPoints ?? nav.msMaxTouchPoints ?? 0) > 0 || window.matchMedia?.('(pointer: coarse)').matches === true;
 }
 
 const STICK_RADIUS = 62;
@@ -108,16 +108,17 @@ export default function TouchControls({
   onInventory,
   onPause,
   onChat,
+  onWaypoints,
 }: {
   game: Game;
   settings: Settings;
   onInventory: () => void;
   onPause: () => void;
   onChat: () => void;
+  onWaypoints: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const pointers = useRef(new Map<number, PointerInfo>());
-  const stickBase = useRef({ x: JOINT_BASE.x, y: 0 }); // y liczone od dołu przy renderze
   const lastForwardTap = useRef(0);
   const [stick, setStick] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
   const [sprintPush, setSprintPush] = useState(false);
@@ -166,7 +167,13 @@ export default function TouchControls({
       game.mouseRight = false;
       game.touchAim = null;
     };
-    return stop;
+    window.addEventListener('blur', stop);
+    document.addEventListener('visibilitychange', stop);
+    return () => {
+      window.removeEventListener('blur', stop);
+      document.removeEventListener('visibilitychange', stop);
+      stop();
+    };
   }, [game]);
 
   const setMoveKeys = (dx: number, dy: number) => {
@@ -233,16 +240,21 @@ export default function TouchControls({
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
     const el = rootRef.current;
-    if (!el) return;
+    if (!el || game.ui !== 'playing') return;
     const rect = el.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const base = settings.joystickFixed ? fixedBase : { x: 0, y: 0 };
-    stickBase.current = base;
+    // Licz od faktycznej warstwy gry, nie od window.innerHeight — mobilny pasek
+    // adresu potrafi zmienić te wartości w środku gestu.
+    const base = settings.joystickFixed ? { x: JOINT_BASE.x + 10, y: rect.height + JOINT_BASE.y - 24 } : { x: 0, y: 0 };
+    // W trybie stałym cała dolna lewa ćwiartka aktywuje drążek. Wcześniej
+    // trzeba było trafić w mały okrąg, co na telefonie wyglądało jak całkiem
+    // zepsuty ruch (szczególnie przy pasku adresu zmieniającym wysokość ekranu).
     const moveZone = settings.joystickFixed
-      ? Math.hypot(x - base.x, y - base.y) < STICK_RADIUS * 1.9
-      : x < rect.width * 0.42 && y > rect.height * 0.32;
+      ? (x < Math.min(rect.width * 0.46, base.x + STICK_RADIUS * 2.25) && y > rect.height * 0.42)
+      : x < rect.width * 0.46 && y > rect.height * 0.32;
     const info: PointerInfo = {
       kind: moveZone ? 'move' : 'look',
       originX: moveZone && !settings.joystickFixed ? x : base.x,
@@ -266,10 +278,13 @@ export default function TouchControls({
         if (pointers.current.get(e.pointerId) === info && !info.moved && game.ui === 'playing') startHold(info);
       }, HOLD_MS);
     }
-    el.setPointerCapture?.(e.pointerId);
+    // Capture on the actual event owner (not a stale ref) keeps multi-touch
+    // stable in Safari when its address bar appears/disappears.
+    e.currentTarget.setPointerCapture?.(e.pointerId);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
     const info = pointers.current.get(e.pointerId);
     const el = rootRef.current;
     if (!info || !el) return;
@@ -534,6 +549,19 @@ export default function TouchControls({
           }}
         >
           💬
+        </button>
+        <button
+          aria-label="Punkty podróży"
+          className={btn}
+          style={{ ...btnStyle, width: 50, height: 50, fontSize: 18, opacity: 0.75 }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            buzz(6, settings.haptics);
+            onWaypoints();
+          }}
+        >
+          📍
         </button>
         <button
           className={btn}

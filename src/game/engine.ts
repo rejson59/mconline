@@ -48,7 +48,17 @@ import { villageSpawnSpots } from './village';
 import { isVillageMob } from './mobs';
 
 export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal';
+export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints';
+
+export interface Waypoint {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  dimension: 'overworld' | 'nether';
+  kind?: 'custom' | 'death';
+}
 
 export interface HUDState {
   hotbar: (Stack | null)[];
@@ -105,6 +115,8 @@ export interface HUDState {
   showFps: boolean;
   /** 2.0: wywołania rysowania w ostatniej klatce (debug). */
   drawCalls: number;
+  /** 2.2: aktywny cel nawigacji w tym wymiarze. */
+  waypoint: { name: string; distance: number; direction: string; bearing: number } | null;
 }
 
 export interface TradeRow {
@@ -148,6 +160,9 @@ export interface SaveData {
   isInNether?: boolean;
   /** 1.8: powrót do nadświatu – pozycja portalu, przez który gracz wszedł. */
   portalExit?: [number, number, number];
+  /** 2.2: własne punkty nawigacyjne i aktualnie śledzony punkt. */
+  waypoints?: Waypoint[];
+  activeWaypointId?: string | null;
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
@@ -323,6 +338,8 @@ export class Game {
   haptics = false;
   viewBobbing = true;
   showFps = false;
+  /** Telefon nie używa Pointer Lock — blokował on gesty w części mobilnych przeglądarek. */
+  touchInput = false;
   /** Cel dotyku w NDC (-1..1) – gdy ustawione, celownik podąża za palcem. */
   touchAim: { x: number; y: number } | null = null;
   /** Kierunek celowania z ostatniej klatki (crosshair albo palec). */
@@ -440,6 +457,9 @@ export class Game {
   unlocked = new Set<string>();
   toast: { title: string; text: string; at: number } | null = null;
   showMinimap = true;
+  /** 2.2: maksymalnie 12 znaczników na świat, w tym automatyczny punkt śmierci. */
+  waypoints: Waypoint[] = [];
+  activeWaypointId: string | null = null;
   minimapCanvas!: HTMLCanvasElement;
   private minimapCtx!: CanvasRenderingContext2D;
   private minimapImg: ImageData | null = null;
@@ -639,6 +659,12 @@ export class Game {
       this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
       this.xp = new Xp(opts.save.xp ?? 0);
       this.trades = opts.save.trades ?? 0;
+      this.waypoints = (opts.save.waypoints ?? []).filter((w) =>
+        w && typeof w.id === 'string' && typeof w.name === 'string' &&
+        Number.isFinite(w.x) && Number.isFinite(w.y) && Number.isFinite(w.z) &&
+        (w.dimension === 'overworld' || w.dimension === 'nether')
+      ).slice(0, 12).map((w) => ({ ...w, name: w.name.slice(0, 32) }));
+      this.activeWaypointId = this.waypoints.some((w) => w.id === opts.save?.activeWaypointId) ? (opts.save.activeWaypointId ?? null) : null;
       if (opts.save.armor) {
         for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
           const s = opts.save.armor[i];
@@ -676,7 +702,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 2.1: J – dziennik przygód. Na telefonie tapnij, aby postawić blok, przytrzymaj, aby kopać. Nether i wioski czekają (/village).');
+      : 'BlockCraft 2.2: K – punkty podróży, J – dziennik. Na telefonie użyj 📍, aby zaznaczyć bazę; tapnij, aby użyć, przytrzymaj, aby kopać.');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -856,8 +882,10 @@ export class Game {
     });
     this.on(document, 'pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked && this.ui === 'playing') this.setUI('paused');
-      if (!this.locked) { this.mouseLeft = false; this.mouseRight = false; this.keys.clear(); }
+      // Sterowanie dotykowe nie korzysta z Pointer Lock. Na części telefonów
+      // jego nieudana aktywacja natychmiast pauzowała grę i zerowała gesty.
+      if (!this.touchInput && !this.locked && this.ui === 'playing') this.setUI('paused');
+      if (!this.locked && !this.touchInput) { this.mouseLeft = false; this.mouseRight = false; this.keys.clear(); }
     });
     this.on(canvas, 'mousedown', ((e: MouseEvent) => {
       if (this.ui !== 'playing') return;
@@ -897,8 +925,8 @@ export class Game {
 
   private onKeyDown(e: KeyboardEvent) {
     if (this.ui === 'chat') return;
-    if (this.ui === 'journal') {
-      if (e.code === 'Escape') {
+    if (this.ui === 'journal' || this.ui === 'waypoints') {
+      if (e.code === 'Escape' || (this.ui === 'waypoints' && e.code === 'KeyK')) {
         e.preventDefault();
         this.setUI('playing');
       }
@@ -915,6 +943,7 @@ export class Game {
     if (e.code === 'F3') { e.preventDefault(); this.debug = !this.debug; this.emitHud(); return; }
     if (e.code === 'KeyM') { this.showMinimap = !this.showMinimap; this.emitHud(); return; }
     if (e.code === 'KeyJ') { e.preventDefault(); this.setUI('journal'); return; }
+    if (e.code === 'KeyK') { e.preventDefault(); this.setUI('waypoints'); return; }
     if (e.code.startsWith('Digit')) {
       const n = parseInt(e.code.slice(5));
       if (n >= 1 && n <= 9) { this.selected = n - 1; this.emitHud(); }
@@ -938,6 +967,7 @@ export class Game {
   }
 
   lockPointer() {
+    if (this.touchInput) return;
     const c = this.renderer.domElement as HTMLCanvasElement & { requestPointerLock: () => unknown };
     try {
       const p = c.requestPointerLock();
@@ -1955,7 +1985,8 @@ export class Game {
         this.message(
           'Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, ' +
             '/give <nazwa|id> [ilość], /summon <mob> [zawód], /village (najbliższa wioska), ' +
-            '/xp <ilość>, /enchant <nazwa> [poziom], /heal, /kill, /seed, /spawn, /clear, /blocks'
+            '/waypoint <add|list|select|remove> [nazwa], /xp <ilość>, /enchant <nazwa> [poziom], ' +
+            '/heal, /kill, /seed, /spawn, /clear, /blocks'
         );
         break;
       case 'enchant': {
@@ -1968,6 +1999,26 @@ export class Game {
         addEnch(held, ench, lvl);
         this.message(`${displayName(held.id)}: ${enchName(ench, lvl)}.`);
         this.unlock('enchant');
+        break;
+      }
+      case 'waypoint': case 'punkt': {
+        const action = (args.shift() || 'list').toLowerCase();
+        if (['add', 'dodaj'].includes(action)) {
+          const point = this.addWaypoint(args.join(' ') || `Punkt ${this.waypoints.length + 1}`);
+          this.message(point ? `Dodano punkt „${point.name}” (${point.x}, ${point.y}, ${point.z}).` : 'Nie można dodać punktu — limit to 12.');
+        } else if (['list', 'lista'].includes(action)) {
+          this.message(this.waypoints.length ? this.waypoints.map((w, i) => `${i + 1}:${w.name}${w.id === this.activeWaypointId ? '*' : ''}`).join(', ') : 'Nie masz jeszcze punktów. Użyj /waypoint add <nazwa>.');
+        } else if (['select', 'wybierz'].includes(action)) {
+          const index = parseInt(args[0] || '', 10) - 1;
+          const point = this.waypoints[index];
+          if (point) { this.activateWaypoint(point.id); this.message(`Śledzisz punkt „${point.name}”.`); }
+          else this.message('Podaj numer z /waypoint list.');
+        } else if (['remove', 'usun', 'usuń'].includes(action)) {
+          const index = parseInt(args[0] || '', 10) - 1;
+          const point = this.waypoints[index];
+          if (point) { this.removeWaypoint(point.id); this.message(`Usunięto punkt „${point.name}”.`); }
+          else this.message('Podaj numer z /waypoint list.');
+        } else this.message('Użycie: /waypoint <add|list|select|remove> [nazwa/numer]');
         break;
       }
       case 'gamemode': case 'gm': {
@@ -2097,6 +2148,45 @@ export class Game {
     this.emitHud();
   }
 
+  currentDimension(): Waypoint['dimension'] {
+    return this.isInNether ? 'nether' : 'overworld';
+  }
+
+  addWaypoint(name: string, kind: Waypoint['kind'] = 'custom', at: { x: number; y: number; z: number } = this.body.pos): Waypoint | null {
+    // Some embedders/tests create a lightweight Game-shaped object without
+    // running the constructor; keep this helper defensive as the rest of API.
+    if (!Array.isArray(this.waypoints)) this.waypoints = [];
+    const clean = name.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 32);
+    if (!clean) return null;
+    if (kind === 'death') {
+      this.waypoints = this.waypoints.filter((w) => w.kind !== 'death');
+      if (this.waypoints.length >= 12) this.waypoints.shift();
+    }
+    if (this.waypoints.length >= 12) return null;
+    const waypoint: Waypoint = {
+      id: `p${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      name: clean,
+      x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z),
+      dimension: this.currentDimension(), kind,
+    };
+    this.waypoints.push(waypoint);
+    this.activeWaypointId = waypoint.id;
+    if (kind === 'custom' && this.unlocked instanceof Set) this.unlock('cartographer');
+    this.emitHud();
+    return waypoint;
+  }
+
+  activateWaypoint(id: string | null) {
+    this.activeWaypointId = id && this.waypoints.some((w) => w.id === id) ? id : null;
+    this.emitHud();
+  }
+
+  removeWaypoint(id: string) {
+    this.waypoints = this.waypoints.filter((w) => w.id !== id);
+    if (this.activeWaypointId === id) this.activeWaypointId = null;
+    this.emitHud();
+  }
+
   /** Toggle creative flight (used by F, double-space and the touch controls). */
   toggleFly() {
     if (this.mode !== 'creative') return;
@@ -2146,6 +2236,8 @@ export class Game {
         weather: this.weather,
         xp: this.xp.total,
         trades: this.trades,
+        waypoints: (this.waypoints ?? []).map((w) => ({ ...w })),
+        activeWaypointId: this.activeWaypointId ?? null,
         armor: this.armor.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
         updated: Date.now(),
       };
@@ -3016,11 +3108,14 @@ export class Game {
     }
     if (this.health <= 0) {
       this.health = 0;
-      this.message('Gracz zginął. Przedmioty leżą w miejscu śmierci.');
+      const voidDeath = this.body.pos.y < 1;
+      const deathPos = voidDeath ? this.spawnPoint : this.body.pos;
+      this.addWaypoint('Ostatnia śmierć', 'death', deathPos);
+      this.message('Gracz zginął. Punkt ostatniej śmierci zaznaczono na mapie.');
       if (this.mode === 'survival') {
-        const y = this.body.pos.y < 1 ? this.spawnPoint.y : this.body.pos.y + 0.4;
-        const x = this.body.pos.y < 1 ? this.spawnPoint.x : this.body.pos.x;
-        const z = this.body.pos.y < 1 ? this.spawnPoint.z : this.body.pos.z;
+        const y = deathPos.y + 0.4;
+        const x = deathPos.x;
+        const z = deathPos.z;
         for (const s of this.inventory.slots) {
           if (s) this.spawnDrop(s.id, s.count, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench);
         }
@@ -3790,6 +3885,17 @@ export class Game {
       resScale: this.resScale,
       showFps: this.showFps,
       drawCalls: this.renderer.info.render.calls,
+      waypoint: (() => {
+        const w = this.waypoints.find((point) => point.id === this.activeWaypointId);
+        if (!w || w.dimension !== this.currentDimension()) return null;
+        const dx = w.x + 0.5 - p.x, dz = w.z + 0.5 - p.z;
+        const distance = Math.hypot(dx, dz);
+        const worldAngle = Math.atan2(-dx, -dz);
+        const bearing = Math.atan2(Math.sin(worldAngle - this.yaw), Math.cos(worldAngle - this.yaw));
+        const directions = ['przed tobą', 'w prawo', 'za tobą', 'w lewo'];
+        const index = ((Math.round(bearing / (Math.PI / 2)) % 4) + 4) % 4;
+        return { name: w.name, distance, direction: directions[index], bearing };
+      })(),
     });
   }
 
@@ -4318,6 +4424,19 @@ export class Game {
         ctx.fillRect(sx - 1, sy - 1, 3, 3);
         ctx.strokeRect(sx - 1.5, sy - 1.5, 4, 4);
       }
+    }
+    // 2.2: własne punkty; aktywny jest większy, punkt śmierci czerwony.
+    for (const w of this.waypoints) {
+      if (w.dimension !== this.currentDimension()) continue;
+      const dx = w.x - px, dz = w.z - pz;
+      const sx = Math.round(cos * dx - sin * dz + S / 2);
+      const sy = Math.round(sin * dx + cos * dz + S / 2);
+      if (sx < 2 || sy < 2 || sx > S - 3 || sy > S - 3) continue;
+      const active = w.id === this.activeWaypointId;
+      ctx.fillStyle = w.kind === 'death' ? '#ff4545' : active ? '#ffe45c' : '#ff9d35';
+      ctx.fillRect(sx - (active ? 2 : 1), sy - (active ? 2 : 1), active ? 5 : 3, active ? 5 : 3);
+      ctx.strokeStyle = '#281400';
+      ctx.strokeRect(sx - 2.5, sy - 2.5, 5, 5);
     }
     ctx.fillStyle = '#fff';
     ctx.fillRect(S / 2 - 1, S / 2 - 1, 3, 3);
