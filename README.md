@@ -1,6 +1,15 @@
-# BlockCraft 🟩
+# BlockCraft 2.0 🟩
 
-Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci.
+Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci. Teraz także **w pełni przemyślana dla telefonów i tabletów**.
+
+**Wersja 2.0 „Mobilny skok”** to potężny update skupiony na interfejsie i urządzeniach mobilnych:
+
+* **Automat ustawień graficznych** – gra poznaje twoje urządzenie (rdzenie CPU, pamięć, model GPU przez `WEBGL_debug_renderer_info`, gęstość pikseli) i wybiera jeden z trzech profili: **Niskie / Średnie / Wysokie**. W trybie **Auto** dobiera je przy każdym uruchomieniu – słaby telefon dostanie krótszy zasięg, niższą rozdzielczość, mniej cząsteczek, brak chmur i limit 30 FPS, a mocny komputer pełne ustawienia. Profil urządzenia podejrzyszysz w opcjach („Twoje urządzenie: …”).
+* **Dynamiczna rozdzielczość (DRS)** – silnik stale mierzy FPS i sam obniża skalę renderowania do 55%, gdy klatki zaczynają spadać, i podnosi ją z powrotem, gdy jest zapas. Płynność trzyma się sama, bez grzebania w opcjach.
+* **Pełne sterowanie dotykowe w stylu wersji kieszonkowej**: drążek ruchu (stały albo pojawiający się pod palcem) z **sprintem przez pchnięcie do oporu**, rozglądanie przeciągnięciem, **tapnięcie = postaw blok / użyj / zjedz / atakuj moba**, **przytrzymanie = kopanie** z celownikiem podążającym za palcem i pierścieniem postępu, duże przyciski skoku/skradania, przycisk latania w trybie kreatywnym, pasek górny (pauza, ekwipunek, czat, pełny ekran) i **tapowalny pasek ekwipunku**. Alternatywnie klasyczny tryb „Przyciski” z ⛏ i ▣ celującymi w środek ekranu.
+* **Automatyczne ułatwienia mobilne**: **auto-skok** na 1-blokowe schodki, **wibracje** przy kopaniu i obrażeniach, **Wake Lock** (ekran nie gaśnie w trakcie gry), podpowiedź „obróć telefon”, safe-area dla ekranów z nacięciem oraz łuk naciągany przytrzymaniem palca.
+* **Nowy ekran opcji** (wspólny dla menu i pauzy) z zakładkami **Grafika / Sterowanie / Dźwięk i HUD**: presety jakości, suwaki zasięgu, rozdzielczości i cząsteczek, limit klatek (bez / 30 / 60), dynamiczna rozdzielczość, chmury, kołysanie kamery, czułość, FOV, tryb dotyku, drążek, auto-skok, wibracje, minimapa i rozbudowany licznik FPS (pokazuje też skalę renderowania i liczbę wywołań rysowania).
+* **Wydajność pod kontrolą**: budżet czasu na generowanie chunków i ich liczba na klatkę zależą od profilu (na „Niskich” 6 ms i 2 chunki), deszcz i cząsteczki są skalowane budżetem, a margines zwalniania chunków kurczy się na urządzeniach z małą ilością pamięci.
 
 **Wersja 1.9 „Czysty ekwipunek”**: wszystkie **ikony przedmiotów zostały narysowane od nowa** – każdy przedmiot wygląda teraz jak to, czym naprawdę jest: mięso to mięso (kotlety z żyłką tłuszczu, udko z kością), sztabki mają fazy, diament i szmaragd są szlifowane, kompasy i zegary mają tarcze, nożyce są skrzyżowane, krzesiwo ma krzemień i iskry, a wiadra trzymają wodę i lawę z uchwytem na uchu. Ikony są spójne w ekwipunku, na pasku, u stołów, w okienkach handlu i na upuszczonych przedmiotach w świecie 3D. Do tego **perła Endu jest rzucana** (PPM): leci jak pocisk, a gracz teleportuje się w miejsce upadku (2 obrażenia, krótki odstęp między rzutami). Netherowa gospodarka ma wreszcie sens: **pył jasnogłazu składa się w jasnogłaz**, **magmowy krem w blok magmy**, **płomienna różdżka** (rzadki łup Ghasta, paliwo na 60 s) buduje **statyw alchemiczny** z brukiem, **łza Ghasta + obsydian = płaczący obsydian**, **brodawka Netheru** (skrzynie w jaskiniach) farbuje wełnę na czerwono, a netherrack wytapia się na netherową cegłę. Nowe osiągnięcie: „Skok przez wymiar”.
 
@@ -62,15 +71,21 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | `F3` | informacje debugowania |
 | `Esc` | pauza |
 
-### Na telefonie i tablecie
+### Na telefonie i tablecie (2.0)
 
-Gra wykrywa ekran dotykowy i włącza sterowanie dotykowe:
+Gra wykrywa ekran dotykowy i włącza pełne sterowanie kieszonkowe:
 
-* **lewy drążek** (dolna-lewa część ekranu) – ruch,
-* **przeciąganie palcem** po pozostałej części ekranu – rozglądanie się,
-* przyciski po prawej – **skok / lot**, **kopanie**, **stawianie**,
-* przyciski w lewym górnym rogu – **pauza** i **ekwipunek**,
-* dwukrotne dotknięcie przycisku skoku w trybie kreatywnym – latanie.
+* **drążek ruchu** w lewym dolnym rogu – ruch; **pchnij do oporu = sprint**, dwa szybkie pchnięcia = zablokowany sprint; w opcjach wybierasz drążek stały albo pojawiający się pod palcem,
+* **przeciągnięcie palcem** po reszcie ekranu – rozglądanie się,
+* **tapnięcie w blok** – postawienie / użycie / jedzenie / atakowanie moba (tryb *Tapnij*),
+* **przytrzymanie bloku** – kopanie; celownik podąża za palcem, a pierścień pokazuje postęp,
+* **przytrzymanie i puszczenie z łukiem** – naciągnięcie i strzał,
+* duże przyciski po prawej – **skok** (2× tap w trybie kreatywnym = latanie), **skradanie / lot w dół**, **✈ latanie**; w trybie *Przyciski* także **⛏** i **▣** celujące w środek ekranu,
+* **pasek górny** – pauza, ekwipunek, czat i pełny ekran,
+* **tap w slot paska** na dole wybiera przedmiot,
+* **auto-skok** wskakuje na 1-blokowe schodki, gdy idziesz w przeszkodę (można wyłączyć),
+* **wibracje** potwierdzają kopanie i obrażenia, a **Wake Lock** nie pozwala ekranowi zgasnąć,
+* w pionie pojawia się dyskretna podpowiedź „obróć telefon”.
 
 ### Komendy czatu
 
@@ -191,12 +206,16 @@ src/
   index.css                # styl w klimacie Minecrafta (Tailwind 4)
   components/
     Menus.tsx              # menu główne, pauza, ekran śmierci, czat
+    SettingsScreen.tsx     # 2.0: opcje w zakładkach (grafika/sterowanie/dźwięk)
     GameView.tsx           # montowanie silnika, HUD, obsługa błędów
     HUD.tsx                # serca, głód powietrza, pasek, komunikaty, F3
     InventoryScreen.tsx    # ekwipunek i crafting
     EnchantScreen.tsx      # stół zaklęć (1.5)
     TradeScreen.tsx        # handel z mieszkańcami (1.6)
-    TouchControls.tsx      # sterowanie dotykowe (telefony/tablety)
+    TouchControls.tsx      # 2.0: pełne sterowanie dotykowe (drążek, tapnij/przytrzymaj)
+  utils/
+    settings.ts            # ustawienia gracza + presety jakości
+    performance.ts         # 2.0: profil urządzenia i automat graficzny
   game/
     engine.ts              # pętla gry, gracz, interakcje, zapis
     world.ts               # chunk'i, generator terenu, meshowanie
@@ -240,7 +259,7 @@ Runner `.harness/run.mjs` bundluje testy przez **esbuild** i uruchamia je w Node
 | Brak tła w menu | Sprawdź, czy plik `menu-bg.jpg` został wgrany razem z `index.html` (build kopiuje go z `public/`). |
 | Brak dźwięku | Gra działa bez dźwięku, jeśli przeglądarka blokuje Web Audio – kliknij w ekran gry, aby odblokować dźwięk. |
 | „Kliknij, aby kontynuować” i brak reakcji na klawiaturę | Kliknij w ekran gry – przeglądarka musi ponownie przejąć blokadę kursora. |
-| Zbyt wolno na słabym sprzęcie | Zmniejsz *Zasięg renderowania* w **Esc → Opcje**. |
+| Zbyt wolno na słabym sprzęcie | Wybierz profil **Niskie** (albo zostaw **Auto**) w opcjach – zasięg, rozdzielczość, cząsteczki i limit FPS dostosują się same. Dynamiczna rozdzielczość dodatkowo utrzymuje płynność w ruchu. |
 | Chcę przenieść światy na inny komputer | Menu główne → *Eksport zapisów*, a na drugim urządzeniu *Import zapisów*. |
 
 ## 📜 Licencja

@@ -3,6 +3,7 @@ import type { GameMode } from '../game/engine';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { exportSaves, importSaves } from '../game/saves';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
+import SettingsScreen from './SettingsScreen';
 
 export type WorldType = 'normal' | 'flat';
 
@@ -13,21 +14,19 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  'Teraz też na telefonach!',
+  'Aktualizacja 2.0: Mobilny skok!',
+  'Automatyczna grafika dopasuje się do twojego sprzętu!',
+  'Tapnij, aby postawić blok!',
+  'Niskie ustawienia? I tak pójdzie gładko!',
   'Prawdziwy Nether czeka za portalem!',
-  'Aktualizacja 1.6: Wioski!',
   'Zaklnij kilof w stole zaklęć!',
-  'Trzcina rośnie nad wodą!',
-  'Aktualizacja 1.4: Pancerz!',
-  'Aktualizacja 1.3: Łowy!',
-  'Aktualizacja 1.2: Zbuduj dom!',
-  'Aktualizacja 1.1: Przetrwanie!',
+  'Zatamej wilka mięsem!',
+  'Wioski, handel i golemy!',
   'Uważaj na creepery!',
-  'Wytop żelazo w piecu!',
   'Nie kop prosto w dół!',
   'Pochodnie świecą w jaskiniach!',
-  'Głód to nie żart!',
   'Wyhoduj własne drzewo!',
-  'Zatamej wilka mięsem!',
   'Diamentowy pancerz to moc!',
   'Zbieraj doświadczenie!',
   'Polska wersja!',
@@ -47,8 +46,16 @@ export function Title() {
       >
         BLOCKCRAFT
       </h1>
-      <div className="splash absolute -bottom-4 right-0 text-lg font-semibold sm:text-xl" style={{ color: '#ffff00', textShadow: '2px 2px 0 #3f3f00' }}>
-        {splash}
+      <div className="absolute -bottom-5 right-0 flex items-center gap-2">
+        <span
+          className="px-2 py-0.5 text-sm font-bold"
+          style={{ background: '#3c8527', color: '#fff', border: '2px solid #1c1c1c', boxShadow: '2px 2px 0 rgba(0,0,0,0.6)' }}
+        >
+          WERSJA 2.0
+        </span>
+        <span className="splash text-lg font-semibold sm:text-xl" style={{ color: '#ffff00', textShadow: '2px 2px 0 #3f3f00' }}>
+          {splash}
+        </span>
       </div>
     </div>
   );
@@ -69,7 +76,6 @@ export function Controls() {
     ['E', 'Ekwipunek / wytwarzanie'],
     ['Q', 'Wyrzuć przedmiot'],
     ['T lub /', 'Czat i komendy'],
-    ['/help', 'Lista komend (np. /summon <mob>)'],
     ['PPM na jedzeniu', 'Jedzenie'],
     ['PPM na piecu', 'Przetapianie'],
     ['PPM na łóżku', 'Sen i punkt odrodzenia'],
@@ -90,14 +96,39 @@ export function Controls() {
     ['F3', 'Informacje debugowania'],
     ['Esc', 'Pauza'],
   ];
+  const touchRows: [string, string][] = [
+    ['Drążek (lewy dół)', 'Ruch · pchnij do oporu = sprint'],
+    ['Przeciągnij ekran', 'Rozglądanie się'],
+    ['Tapnij w blok', 'Postaw / użyj / zjedz (tryb Tapnij)'],
+    ['Przytrzymaj blok', 'Kopanie – celownik podąża za palcem'],
+    ['Tapnij w moba', 'Atak'],
+    ['⬆', 'Skok · 2× w kreatywnym = latanie'],
+    ['⇣', 'Skradanie / lot w dół'],
+    ['✈ (kreatywny)', 'Włącz / wyłącz latanie'],
+    ['Pasek na dole', 'Tapnij slot, aby go wybrać'],
+    ['💬', 'Czat i komendy'],
+  ];
   return (
-    <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-[15px]">
-      {rows.map(([k, v]) => (
-        <div key={k} className="contents">
-          <div className="text-yellow-300 mc-text">{k}</div>
-          <div className="text-gray-200 mc-text">{v}</div>
+    <div className="flex flex-col gap-4 text-[15px]">
+      <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <div className="text-yellow-300 mc-text">{k}</div>
+            <div className="text-gray-200 mc-text">{v}</div>
+          </div>
+        ))}
+      </div>
+      <div>
+        <div className="mb-1 text-base text-green-300 mc-text">Telefon i tablet</div>
+        <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+          {touchRows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <div className="text-yellow-300 mc-text">{k}</div>
+              <div className="text-gray-200 mc-text">{v}</div>
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
     </div>
   );
 }
@@ -218,7 +249,7 @@ export function MainMenu({
         {view === 'main' && (
           <div className="flex w-full flex-col gap-3">
             {saves.length > 0 && (
-              <div className="max-h-[34vh] space-y-2 overflow-y-auto bg-black/40 p-2">
+              <div className="max-h-[30vh] space-y-2 overflow-y-auto bg-black/40 p-2">
                 {saves.map((s) => (
                   <div key={s.id} className="flex gap-2">
                     <button className="mc-btn min-w-0 flex-1 !py-2 text-left" onClick={() => onPlay(s.id)}>
@@ -292,6 +323,7 @@ export function MainMenu({
                   ? 'Zetnij drzewo, wytwórz kilof, postaw drzwi i skrzynię. W jaskiniach leżą skrzynie.'
                   : 'Nieograniczone bloki, latanie, natychmiastowe niszczenie, brak obrażeń.'}
             </div>
+            <div className="text-xs text-gray-300">Grafika dobierze się automatycznie do twojego urządzenia (zmienisz w opcjach).</div>
             <div className="text-xs text-gray-300">Nowy świat nie kasuje pozostałych zapisów. Maksymalnie 8 światów.</div>
             <div className="flex gap-3">
               <button className="mc-btn" onClick={() => setView('main')}>
@@ -312,22 +344,17 @@ export function MainMenu({
           </div>
         )}
         {view === 'options' && (
-          <div className="flex w-full flex-col gap-3 bg-black/55 p-5">
-            <div className="text-lg mc-text">Opcje</div>
-            <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={12} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => { const n = { ...settings, renderDistance: v }; setSettings(n); saveSettings(n); }} />
-            <OptionSlider label="Czułość myszy" value={settings.sensitivity} min={0.2} max={3} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => { const n = { ...settings, sensitivity: v }; setSettings(n); saveSettings(n); }} />
-            <OptionSlider label="Pole widzenia" value={settings.fov} min={50} max={110} step={1} fmt={(v) => `${v}°`} onChange={(v) => { const n = { ...settings, fov: v }; setSettings(n); saveSettings(n); }} />
-            <OptionSlider label="Głośność" value={settings.volume} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => { const n = { ...settings, volume: v }; setSettings(n); saveSettings(n); }} />
-            <button className="mc-btn" onClick={() => { const n = { ...settings, minimap: !settings.minimap }; setSettings(n); saveSettings(n); }}>
-              Minimapa: {settings.minimap ? 'włączona' : 'wyłączona'}
-            </button>
-            <button className="mc-btn" onClick={() => setView('main')}>
-              Gotowe
-            </button>
-          </div>
+          <SettingsScreen
+            settings={settings}
+            onChange={(n) => {
+              setSettings(n);
+              saveSettings(n);
+            }}
+            onClose={() => setView('main')}
+          />
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.9</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.0 „Mobilny skok”</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>
@@ -426,19 +453,7 @@ export function PauseMenu({
           </>
         )}
         {view === 'options' && (
-          <>
-            <div className="mb-2 text-2xl mc-text">Opcje</div>
-            <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={14} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => onSettings({ ...settings, renderDistance: v })} />
-            <OptionSlider label="Czułość myszy" value={settings.sensitivity} min={0.2} max={3} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => onSettings({ ...settings, sensitivity: v })} />
-            <OptionSlider label="Pole widzenia" value={settings.fov} min={50} max={110} step={1} fmt={(v) => `${v}°`} onChange={(v) => onSettings({ ...settings, fov: v })} />
-            <OptionSlider label="Głośność" value={settings.volume} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => onSettings({ ...settings, volume: v })} />
-            <button className="mc-btn" onClick={() => onSettings({ ...settings, minimap: !settings.minimap })}>
-              Minimapa: {settings.minimap ? 'włączona' : 'wyłączona'}
-            </button>
-            <button className="mc-btn mt-2" onClick={() => setView('main')}>
-              Gotowe
-            </button>
-          </>
+          <SettingsScreen settings={settings} onChange={onSettings} onClose={() => setView('main')} />
         )}
         {view === 'controls' && (
           <div className="flex w-full flex-col gap-4 bg-black/60 p-5">
@@ -462,39 +477,12 @@ export function PauseMenu({
   );
 }
 
-function OptionSlider({
-  label,
-  value,
-  min,
-  max,
-  step,
-  fmt,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  fmt: (v: number) => string;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className="relative w-full">
-      <input type="range" className="mc-range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} />
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[16px] mc-text">
-        {label}: {fmt(value)}
-      </div>
-    </div>
-  );
-}
-
 export function DeathScreen({ onRespawn, onQuit }: { onRespawn: () => void; onQuit: () => void }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4" style={{ background: 'rgba(120,0,0,0.5)' }}>
       <div className="mb-2 text-5xl font-bold mc-text">Zginąłeś!</div>
       <div className="mb-6 text-lg mc-text">Ekwipunek wypadł w miejscu śmierci.</div>
-      <div className="flex w-[360px] flex-col gap-3">
+      <div className="flex w-[360px] max-w-[92vw] flex-col gap-3">
         <button className="mc-btn" onClick={onRespawn}>
           Odrodzenie
         </button>

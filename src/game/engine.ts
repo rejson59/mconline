@@ -99,6 +99,12 @@ export interface HUDState {
   village: string | null;
   /** 1.6: liczba udanych wymian z mieszkańcami. */
   trades: number;
+  /** 2.0: bieżąca skala rozdzielczości (dynamiczna rozdzielczość). */
+  resScale: number;
+  /** 2.0: czy pokazywać wzmocniony licznik FPS w HUD. */
+  showFps: boolean;
+  /** 2.0: wywołania rysowania w ostatniej klatce (debug). */
+  drawCalls: number;
 }
 
 export interface TradeRow {
@@ -299,6 +305,31 @@ export class Game {
   sensitivity = 1;
   fovBase = 72;
 
+  // ——— 2.0: automat graficzny ———
+  /** Sprzętowy pixel ratio ograniczony do 2 – punkt wyjścia dla skalowania. */
+  basePixelRatio = 1;
+  /** Bieżąca skala rozdzielczości (dynamiczna rozdzielczość, 0.55–1). */
+  resScale = 1;
+  /** Czy silnik może sam zmieniać rozdzielczość (DRS). */
+  drEnabled = true;
+  private drCooldown = 2;
+  /** Twardy limit klatek (0 = bez limitu). Oszczędza baterię na telefonach. */
+  fpsCap = 0;
+  /** Budżety jakości ustawiane przez applyGfx(). */
+  gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, clouds: true };
+  /** Automatyczne wskakiwanie na 1-blokowe schodki (sterowanie mobilne). */
+  autoJump = false;
+  /** Krótkie wibracje przy kopaniu i obrażeniach. */
+  haptics = false;
+  viewBobbing = true;
+  showFps = false;
+  /** Cel dotyku w NDC (-1..1) – gdy ustawione, celownik podąża za palcem. */
+  touchAim: { x: number; y: number } | null = null;
+  /** Kierunek celowania z ostatniej klatki (crosshair albo palec). */
+  aimDir: THREE.Vector3 | null = null;
+  /** Ostatni automatyczny skok – anty-drganiowa przerwa. */
+  private autoJumpCd = 0;
+
   // player
   body: Body = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: false, hitWall: false };
   yaw = 0;
@@ -480,7 +511,8 @@ export class Game {
     }
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    this.renderer.setPixelRatio(Math.min(this.basePixelRatio, 1.5));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.domElement.style.display = 'block';
     container.appendChild(this.renderer.domElement);
@@ -644,7 +676,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 1.8 „Prawdziwy Nether”: zbuduj portal z obsydianu i zapal go krzesiwem – Nether to osobny świat. A wioskę znajdziesz komendą /village.');
+      : 'BlockCraft 2.0: na telefonie tapnij, aby postawić blok, przytrzymaj, aby kopać. Nether i wioski jak zawsze czekają (/village).');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -715,6 +747,97 @@ export class Game {
   setRenderDistance(r: number) {
     this.renderDistance = r;
     this.computeOffsets();
+  }
+
+  /**
+   * 2.0: nakłada ustawienia graficzne w czasie rzeczywistym – wywoływane
+   * przez ekran opcji i automat ustawień. Nie wymaga restartu świata.
+   */
+  applyGfx(o: {
+    renderDistance?: number;
+    pixelRatio?: number;
+    particles?: number;
+    clouds?: boolean;
+    dynamicResolution?: boolean;
+    fpsCap?: number;
+    chunkBudgetMs?: number;
+    chunksPerFrame?: number;
+    unloadMargin?: number;
+    autoJump?: boolean;
+    haptics?: boolean;
+    viewBobbing?: boolean;
+    showFps?: boolean;
+  }) {
+    if (o.renderDistance !== undefined && o.renderDistance !== this.renderDistance) this.setRenderDistance(o.renderDistance);
+    if (o.pixelRatio !== undefined) {
+      this.basePixelRatio = Math.max(0.6, Math.min(3, o.pixelRatio));
+      this.applyResScale();
+    }
+    if (o.particles !== undefined) {
+      this.gfx.particleScale = Math.max(0, Math.min(1, o.particles));
+      if (this.rainGeo) this.rainGeo.setDrawRange(0, Math.floor(420 * this.gfx.particleScale));
+    }
+    if (o.clouds !== undefined) this.gfx.clouds = o.clouds;
+    if (o.dynamicResolution !== undefined) {
+      this.drEnabled = o.dynamicResolution;
+      if (!this.drEnabled && this.resScale !== 1) {
+        this.resScale = 1;
+        this.applyResScale();
+      }
+    }
+    if (o.fpsCap !== undefined) this.fpsCap = o.fpsCap > 0 ? Math.max(10, Math.min(240, o.fpsCap)) : 0;
+    if (o.chunkBudgetMs !== undefined) this.gfx.chunkBudgetMs = Math.max(3, Math.min(24, o.chunkBudgetMs));
+    if (o.chunksPerFrame !== undefined) this.gfx.chunksPerFrame = Math.max(1, Math.min(6, o.chunksPerFrame));
+    if (o.unloadMargin !== undefined) this.gfx.unloadMargin = Math.max(1, Math.min(4, o.unloadMargin));
+    if (o.autoJump !== undefined) this.autoJump = o.autoJump;
+    if (o.haptics !== undefined) this.haptics = o.haptics;
+    if (o.viewBobbing !== undefined) this.viewBobbing = o.viewBobbing;
+    if (o.showFps !== undefined) this.showFps = o.showFps;
+    this.emitHud();
+  }
+
+  /** Stosuje bieżącą skalę rozdzielczości do renderera. */
+  private applyResScale() {
+    try {
+      this.renderer.setPixelRatio(this.basePixelRatio * this.resScale);
+    } catch {
+      /* renderer może być już zniszczony przy wyłączaniu gry */
+    }
+  }
+
+  /** Krótkie wibracje (jeśli urządzenie wspiera i gracz ich chce). */
+  private buzz(ms: number) {
+    if (!this.haptics) return;
+    try {
+      navigator.vibrate?.(ms);
+    } catch {
+      /* brak wsparcia – ignoruj */
+    }
+  }
+
+  /** Publiczne: przelicza cel (crosshair albo palec) bez czekania na klatkę. */
+  refreshTarget() {
+    this.updateInteraction(0);
+  }
+
+  /**
+   * 2.0: tapnięcie palcem (tryb „Tapnij”). Najpierw sprawdzamy, czy pod
+   * palcem jest mob (atak), a gdy nie – używamy/postawiamy jak PPM.
+   */
+  touchTap(nx: number, ny: number) {
+    if (this.ui !== 'playing') return;
+    const prev = this.touchAim;
+    this.touchAim = { x: nx, y: ny };
+    this.refreshTarget();
+    const { mob, dist } = this.findMobTarget(3.5);
+    const blockDist = this.target ? this.target.dist : Infinity;
+    if (mob && dist < blockDist && this.attackCooldown <= 0) {
+      this.tryAttack();
+    } else {
+      this.placeCooldown = 0;
+      this.tryUse();
+    }
+    this.touchAim = prev;
   }
 
   // ---------- Events ----------
@@ -849,6 +972,7 @@ export class Game {
     this.keys.clear();
     this.mouseLeft = this.mouseRight = false;
     this.bowDraw = -1;
+    this.touchAim = null;
     this.onUI(s);
   }
 
@@ -2060,7 +2184,8 @@ export class Game {
       total++;
       const c = this.world.chunks.get(World.key(pcx + dx, pcz + dz));
       if (c && c.built) { done++; continue; }
-      if (built < 3 && performance.now() - t0 < 12) {
+      // 2.0: budżet zależny od jakości (na słabych telefonach mniejszy).
+      if (built < this.gfx.chunksPerFrame && performance.now() - t0 < this.gfx.chunkBudgetMs) {
         this.buildChunk(pcx + dx, pcz + dz);
         built++;
         done++;
@@ -2070,7 +2195,7 @@ export class Game {
     this.unloadTimer -= 1 / 60;
     if (this.unloadTimer <= 0) {
       this.unloadTimer = 2;
-      const lim = this.renderDistance + 2;
+      const lim = this.renderDistance + this.gfx.unloadMargin;
       for (const [k, c] of this.world.chunks) {
         if (Math.abs(c.cx - pcx) > lim || Math.abs(c.cz - pcz) > lim) {
           for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
@@ -2112,6 +2237,10 @@ export class Game {
   }
 
   spawnParticles(x: number, y: number, z: number, id: number, n = 12, spread = 0.5) {
+    // 2.0: budżet cząsteczek zależy od jakości (na „Niskich” leci ~35%).
+    const scale = this.gfx.particleScale;
+    if (scale <= 0.01) return;
+    n = Math.max(1, Math.round(n * scale));
     let mat = this.particleMats.get(id);
     if (!mat) {
       const c = AVG_COLOR[id] || [128, 128, 128];
@@ -2119,7 +2248,7 @@ export class Game {
       this.particleMats.set(id, mat);
     }
     for (let i = 0; i < n; i++) {
-      if (this.particles.length > 400) break;
+      if (this.particles.length > Math.floor(400 * Math.max(0.35, scale))) break;
       const m = new THREE.Mesh(this.particleGeo, mat);
       const s = 0.06 + Math.random() * 0.08;
       m.scale.setScalar(s);
@@ -2130,13 +2259,16 @@ export class Game {
   }
 
   spawnSmoke(x: number, y: number, z: number, n: number, spread: number) {
+    const scale = this.gfx.particleScale;
+    if (scale <= 0.01) return;
+    n = Math.max(1, Math.round(n * scale));
     let mat = this.particleMats.get(-1);
     if (!mat) {
       mat = new THREE.MeshBasicMaterial({ color: 0xdddddd, transparent: true, opacity: 0.8 });
       this.particleMats.set(-1, mat);
     }
     for (let i = 0; i < n; i++) {
-      if (this.particles.length > 500) break;
+      if (this.particles.length > Math.floor(500 * Math.max(0.35, scale))) break;
       const m = new THREE.Mesh(this.particleGeo, mat);
       m.scale.setScalar(0.3 + Math.random() * 0.4);
       m.position.set(x + (Math.random() - 0.5) * spread, y + (Math.random() - 0.5) * spread, z + (Math.random() - 0.5) * spread);
@@ -2872,6 +3004,7 @@ export class Game {
       this.lastHurt = performance.now();
       this.shake = Math.max(this.shake, 0.25);
       Sfx.playHurt();
+      this.buzz(35);
     }
     if (this.health <= 0) {
       this.health = 0;
@@ -2932,6 +3065,9 @@ export class Game {
   // ---------- Update ----------
   private loop(now: number) {
     this.raf = requestAnimationFrame(this.loop);
+    // 2.0: limit klatek – klatka jest po prostu pomijana, liczniki czasu
+    // ruszają dopiero przy realnym renderze (ruch zostaje prawidłowy).
+    if (this.fpsCap > 0 && now - this.lastTime < 1000 / this.fpsCap - 0.6) return;
     let dt = (now - this.lastTime) / 1000;
     this.lastTime = now;
     if (dt > 0.1) dt = 0.1;
@@ -2941,6 +3077,24 @@ export class Game {
       this.fps = Math.round(this.fpsFrames / this.fpsTime);
       this.fpsFrames = 0;
       this.fpsTime = 0;
+    }
+
+    // 2.0: dynamiczna rozdzielczość – trzyma płynność na słabszych GPU.
+    if (this.drEnabled && this.ui === 'playing') {
+      this.drCooldown -= dt;
+      if (this.drCooldown <= 0 && this.fps > 0) {
+        if (this.fps < 26 && this.resScale > 0.55) {
+          this.resScale = Math.max(0.55, this.resScale - 0.15);
+          this.applyResScale();
+          this.drCooldown = 1.4;
+        } else if (this.fps > 56 && this.resScale < 1) {
+          this.resScale = Math.min(1, this.resScale + 0.1);
+          this.applyResScale();
+          this.drCooldown = 2.4;
+        } else {
+          this.drCooldown = 0.4;
+        }
+      }
     }
 
     const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
@@ -2985,6 +3139,17 @@ export class Game {
 
   private blockAt(p: THREE.Vector3, yoff: number) {
     return this.world.peekBlock(Math.floor(p.x), Math.floor(p.y + yoff), Math.floor(p.z));
+  }
+
+  /** 2.0: czy przed graczem stoi dokładnie 1 blok, na który można wejść? */
+  private canAutoStep(p: THREE.Vector3, dx: number, dz: number): boolean {
+    const x = Math.floor(p.x + dx * 0.7);
+    const z = Math.floor(p.z + dz * 0.7);
+    const y = Math.floor(p.y + 0.05);
+    const step = this.world.peekBlock(x, y, z);
+    const above = this.world.peekBlock(x, y + 1, z);
+    const head = this.world.peekBlock(x, y + 2, z);
+    return IS_SOLID[step] !== 0 && !IS_SOLID[above] && !IS_SOLID[head] && RENDER[above] !== 1;
   }
 
   private updatePlayer(dt: number) {
@@ -3061,6 +3226,16 @@ export class Game {
     stepBody(this.world, b, dt, sneaking);
     if (this.flying && b.onGround && this.mode === 'creative' && b.vel.y <= 0 && !jump) {
       this.flying = false;
+    }
+
+    // 2.0: automatyczne wskakiwanie na 1-blokowe schodki – obowiązkowe na dotyku.
+    if (this.autoJump && playing && b.onGround && b.hitWall && !this.flying && !inWater && !inLava && !onLadder && !sneaking) {
+      this.autoJumpCd -= dt;
+      const mvx = Math.sign(b.vel.x), mvz = Math.sign(b.vel.z);
+      if ((mvx !== 0 || mvz !== 0) && this.autoJumpCd <= 0 && this.canAutoStep(b.pos, mvx, mvz)) {
+        b.vel.y = 8.6;
+        this.autoJumpCd = 0.35;
+      }
     }
 
     // fall damage
@@ -3194,7 +3369,15 @@ export class Game {
     if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * 4);
 
     const e = this.eyePos();
-    const d = this.lookDir();
+    // 2.0: na dotyku celownik podąża za palcem (touchAim w NDC).
+    if (this.touchAim && this.ui === 'playing') {
+      const v = new THREE.Vector3(this.touchAim.x, this.touchAim.y, 0.5).unproject(this.camera);
+      const dir = v.sub(e).normalize();
+      this.aimDir = dir;
+    } else {
+      this.aimDir = null;
+    }
+    const d = this.aimDir ?? this.lookDir();
     const reach = this.mode === 'creative' ? 7 : 5;
     this.target = this.ui === 'playing' || this.ui === 'dead' ? this.world.raycast(e.x, e.y, e.z, d.x, d.y, d.z, reach) : null;
     const t = this.target;
@@ -3530,7 +3713,7 @@ export class Game {
     this.sun.visible = !nether;
     this.moon.visible = !nether;
     this.stars.visible = !nether;
-    this.clouds.visible = !nether;
+    this.clouds.visible = !nether && this.gfx.clouds;
 
     const cp = this.camera.position;
     const sunDir = new THREE.Vector3(Math.cos(ang), Math.sin(ang), 0.25).normalize();
@@ -3596,6 +3779,9 @@ export class Game {
       mobHint: this.mobHint(),
       village: this.villageName,
       trades: this.trades,
+      resScale: this.resScale,
+      showFps: this.showFps,
+      drawCalls: this.renderer.info.render.calls,
     });
   }
 
