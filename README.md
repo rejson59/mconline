@@ -1,6 +1,19 @@
-# BlockCraft 2.3 🟩
+# BlockCraft 2.4 🟩
 
 Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci. Teraz także **w pełni przemyślana dla telefonów i tabletów**.
+
+**Wersja 2.4 „Godzina alchemika”** dociera wreszcie do statywu alchemicznego, który od 1.9 stał w świecie jako ozdobny krzyż – teraz warzy prawdziwe eliksiry:
+
+* **Działający statyw alchemiczny** – `PPM` przy bloku otwiera ekran z trzema slotami na fiolki, kubkiem na składnik i podstawą na paliwo. Warzenie jednej partii trwa **8 s**, a **jedna płomienność różdżki** (z Netheru) utrzymuje ogień przez **3 partii**. Składnik nie zużywa się – jak w klasyku. Stan statywu (także w Netherze) zapisuje się ze światem, a rozbicie bloku wysypuje fiolki, składnik i paliwo na ziemię.
+* **Fiolki** (3 szkła w literę V) – pusta fiolka napełnia się **nad wodą** (`PPM` na fiolce przy źródełku; źródło wody zostaje). To punkt wyjścia każdego eliksiru.
+* **Siedem napojów** – **zaczarowany napój** (woda + brodawka Netheru) to baza; dalej: **leczenie** (+7 serc od razu, łza ghaasta), **ognioodporność** (45 s – lawa, ogniska i magma nie ranią), **szybkość** (+30% biegu, 20 s, cukier), **nocne widzenie** (30 s, pył miodu/żarłoczny kamień), **siła** (+4 obrażeń, 15 s, różdżka) oraz **regeneracja** (+1 serce co 2 s przez 10 s, zaczarowany + pył). Cukier powstaje z trzciny cukrowej, a miód z plastry **butelka miodu** (8 pkt głodu).
+* **Wzmocnienia na HUD-zie** – aktywne efekty z ikonami i odliczaniem sekund nad paskiem pancerza.
+* **Nowe przedmioty** – cukier, szklana fiolka, fiolka z wodą, butelka miodu i siedem napojów, każda z własną ikoną w stylu piksel-art.
+* **Osiągnięcia i dziennik** – cztery nowe cele: „Pierwsze warzenie”, „Ziołowy tonik”, „Ognioodporny” (wymaga wejścia do lawy pod ochroną) i „Mistrz eliksirów” (6 różnych napojów), oraz dziewiąty rozdział dziennika „Godzina alchemika”.
+* **Naprawione błędy**:
+  * **Wiadro w trybie kreatywnym niszczowało wodę.** Zużycie pustego wiadra na źródle wody/lawy usuwało blok bez wręczenia pełnego wiadra; w kreatywie wiadro zamienia się teraz w pełne, a źródło zostaje nietknięte.
+  * **Martwy kod w stawianiu płyt.** `(t as any).hitY` nie istniał w wyniku raycastu – płyta górna/dolna dobierana jest teraz czysto po normalnym uderzenia (`ny === -1`).
+  * **Mylący komentarz o sezonach.** `cookOnCampfire` sugerowało „ryby tylko latem”, choć żadnego systemu pór roku nie ma.
 
 **Wersja 2.3 „Wyprawa i ratunek”** dokłada wędkarstwo, naprawę narzędzi i drugie życie:
 

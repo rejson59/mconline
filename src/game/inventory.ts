@@ -160,6 +160,10 @@ export const RECIPES: Recipe[] = [
   // Lorneta: krzyż ze szkła złoconego oczkiem pośrodku (4 szkła + 1 sztabka złota).
   { out: { id: I.SPYGLASS, count: 1 }, inputs: [{ id: B.GLASS, count: 4 }, { id: I.GOLD, count: 1 }], table: true, pattern: [' G ', 'GYG', ' G '], key: { G: B.GLASS, Y: I.GOLD } },
   { out: { id: I.TOTEM, count: 1 }, inputs: [{ id: I.EMERALD, count: 4 }, { id: I.GOLD, count: 1 }], table: true, pattern: [' E ', 'EGE', ' E '], key: { E: I.EMERALD, G: I.GOLD } },
+  // 2.4 „Godzina alchemika”: cukier, fiolki i miodek
+  { out: { id: I.SUGAR, count: 1 }, inputs: [{ id: B.SUGARCANE, count: 1 }], table: false },
+  { out: { id: I.BOTTLE, count: 3 }, inputs: [{ id: B.GLASS, count: 3 }], table: false, pattern: ['G G', ' G '], key: { G: B.GLASS } },
+  { out: { id: I.HONEY_BOTTLE, count: 1 }, inputs: [{ id: I.BOTTLE, count: 1 }, { id: I.HONEYCOMB, count: 1 }], table: false },
 ];
 
 /**

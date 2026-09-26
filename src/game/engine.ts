@@ -4,6 +4,11 @@ import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, is
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
+import {
+  BREW_FUELS, BREWING_INGREDIENTS, HEAL_AMOUNT, SPEED_FACTOR, STRENGTH_DAMAGE, POTIONS,
+  brewingKey, emptyBrewing, tickBrewing,
+  type BrewingState, type PotionEffectId,
+} from './brewing';
 import { getAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { Mob, isHostileMob, type MobType } from './mobs';
@@ -21,7 +26,7 @@ import * as Sfx from './audio';
 import { patchChunkMaterial } from './lighting';
 import { buildItemIcons } from './itemIcons';
 import {
-  ITEMS, I, displayName, isItem, isFood, isHoe, mineSeconds, attackDamage, attackCooldown,
+  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown,
   blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
@@ -50,7 +55,7 @@ import { villageSpawnSpots } from './village';
 import { isVillageMob } from './mobs';
 
 export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'anvil';
+export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'anvil' | 'brewing';
 
 export interface Waypoint {
   id: string;
@@ -123,6 +128,8 @@ export interface HUDState {
   zoom: boolean;
   /** 2.3: stan wędkarstwa: 'idle' | 'cast' | 'waiting' | 'bite'. */
   fishing: 'idle' | 'cast' | 'waiting' | 'bite';
+  /** 2.4: aktywne efekty napojów (ikona, nazwa, sekundy pozostałe). */
+  effects: { id: string; icon: string; name: string; left: number }[];
 }
 
 export interface TradeRow {
@@ -173,9 +180,23 @@ export interface SaveData {
   anvils?: AnvilState[];
   /** 2.3: ile ryb udało się złowić (osiągnięcie „Wędkarz”). */
   fishCaught?: number;
+  /** 2.4: zawartość statywów alchemicznych (fiolki, składnik, paliwo). */
+  brewings?: BrewingState[];
+  /** 2.4: wypiłe typy napojów (osiągnięcie „Mistrz eliksirów”). */
+  potionsDrunk?: number[];
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
+
+/** 2.4: ikona i nazwa wzmocnienia dla HUD-u (klucz = PotionEffectId bez 'none'). */
+const EFFECT_META: Record<Exclude<PotionEffectId, 'none'>, { icon: string; name: string }> = {
+  heal: { icon: '❤', name: 'Leczenie' },
+  fire: { icon: '🔥', name: 'Ognioodporność' },
+  speed: { icon: '🏃', name: 'Szybkość' },
+  night: { icon: '👁', name: 'Nocne widzenie' },
+  strength: { icon: '💪', name: 'Siła' },
+  regen: { icon: '✚', name: 'Regeneracja' },
+};
 
 /** Polskie nazwy mobów – używane w podpowiedzi pod celownikiem. */
 export const MOB_NAMES: Record<MobType, string> = {
@@ -450,6 +471,15 @@ export class Game {
   /** 2.3: kowadła – PPM otwiera ekran scalania i przemianowywania. */
   anvils = new Map<string, AnvilState>();
   anvilPos: { x: number; y: number; z: number } | null = null;
+  /** 2.4: statywy alchemiczne – PPM otwiera ekran warzenia napojów. */
+  brewings = new Map<string, BrewingState>();
+  brewingPos: { x: number; y: number; z: number } | null = null;
+  /** 2.4: aktywne efekty napojów (id → pozostałe ms). Krótkie – nie zapisują się. */
+  private effects = new Map<PotionEffectId, number>();
+  /** 2.4: odliczanie leczenia z napoju regeneracji. */
+  private potionRegenAcc = 0;
+  /** 2.4: jakie butelki gracz kiedykolwiek wypił (osiągnięcie „Mistrz eliksirów”). */
+  potionsDrunk = new Set<number>();
   /** 2.3: aktywna wędka (spławik w locie / w wodzie). */
   private bobber: Bobber | null = null;
   private bobberGeo: THREE.BoxGeometry | null = null;
@@ -704,7 +734,23 @@ export class Game {
           burn: a.burn ?? 0, burnMax: a.burnMax ?? 0,
         });
       }
+      // 2.4: statywy alchemiczne – fiolki, składnik i paliwo wracają do kotła.
+      for (const b of opts.save.brewings ?? []) {
+        if (!b || typeof b.x !== 'number' || typeof b.y !== 'number' || typeof b.z !== 'number') continue;
+        const clean = emptyBrewing(b.x, b.y, b.z);
+        clean.dim = b.dim;
+        clean.bottles = (Array.isArray(b.bottles) ? b.bottles : []).slice(0, 3).map((s) => (s && typeof s.id === 'number' ? { ...s } : null));
+        while (clean.bottles.length < 3) clean.bottles.push(null);
+        clean.ingredient = b.ingredient && typeof b.ingredient.id === 'number' ? { ...b.ingredient } : null;
+        clean.fuel = b.fuel && typeof b.fuel.id === 'number' ? { ...b.fuel } : null;
+        clean.fuelLeft = Math.max(0, Math.min(BREW_FUELS, Math.floor(b.fuelLeft ?? 0)));
+        clean.progress = Math.max(0, Math.min(8, b.progress ?? 0));
+        this.brewings.set((b.dim ? 'n:' : '') + brewingKey(b.x, b.y, b.z), clean);
+      }
       this.fishCaught = Math.max(0, Math.floor(opts.save.fishCaught ?? 0));
+      for (const id of Array.isArray(opts.save.potionsDrunk) ? opts.save.potionsDrunk : []) {
+        if (typeof id === 'number' && POTIONS[id]) this.potionsDrunk.add(id);
+      }
       for (const id of opts.save.unlocked ?? []) this.unlocked.add(id);
       this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
       this.xp = new Xp(opts.save.xp ?? 0);
@@ -752,7 +798,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 2.3: wędka (PPM), lorneta (przytrzymaj PPM) i kowadło (PPM) czekają. K – punkty podróży, J – dziennik. Na telefonie użyj 📍, aby zaznaczyć bazę; tapnij, aby użyć, przytrzymaj, aby kopać.');
+      : 'BlockCraft 2.4: statyw alchemiczny warzy napoje (PPM przy bloku), a fiolka napełnia się nad wodą. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -987,7 +1033,7 @@ export class Game {
       }
       return;
     }
-    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'anvil') {
+    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'anvil' || this.ui === 'brewing') {
       if (e.code === 'KeyE' || e.code === 'Escape') {
         e.preventDefault();
         this.closeInventory();
@@ -1068,6 +1114,7 @@ export class Game {
     this.zooming = false;
     this.touchAim = null;
     if (s !== 'anvil') this.anvilPos = null;
+    if (s !== 'brewing') this.brewingPos = null;
     if (s === 'anvil' && this.anvilPos) this.inventory.returnCursor();
     this.onUI(s);
   }
@@ -1394,6 +1441,167 @@ export class Game {
       if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.6, z + 0.5, s.dur, undefined, undefined, undefined, s.ench, s.name);
     }
     this.anvils.delete(key);
+  }
+
+  // ---------- 2.4: statyw alchemiczny ----------
+  private bKey(x: number, y: number, z: number) {
+    return (this.isInNether ? 'n:' : '') + brewingKey(x, y, z);
+  }
+
+  openBrewing(x: number, y: number, z: number) {
+    const key = this.bKey(x, y, z);
+    let stand = this.brewings.get(key);
+    if (!stand) {
+      stand = emptyBrewing(x, y, z);
+      stand.dim = this.isInNether ? 1 : 0;
+      this.brewings.set(key, stand);
+    }
+    while (stand.bottles.length < 3) stand.bottles.push(null);
+    this.brewingPos = { x, y, z };
+    this.setUI('brewing');
+    this.emitHud();
+  }
+
+  currentBrewing(): BrewingState | null {
+    if (!this.brewingPos) return null;
+    return this.brewings.get(this.bKey(this.brewingPos.x, this.brewingPos.y, this.brewingPos.z)) ?? null;
+  }
+
+  /**
+   * Move stacks between the cursor and a stand slot. `slot` is one of the
+   * three bottles, the ingredient cup or the fuel tray. The fuel tray only
+   * accepts blaze rods; the cup only accepts real brewing ingredients.
+   */
+  clickBrewing(slot: 'b0' | 'b1' | 'b2' | 'ingredient' | 'fuel', right: boolean) {
+    const s = this.currentBrewing();
+    if (!s) return;
+    const cur = this.inventory.cursor;
+    if (slot === 'fuel' && cur && cur.id !== I.BLAZE_ROD) {
+      this.message('Statyw pali się tylko płomienną różdżką.');
+      return;
+    }
+    if (slot === 'ingredient' && cur && !BREWING_INGREDIENTS.has(cur.id)) {
+      this.message('To nie jest składnik do warzenia.');
+      return;
+    }
+    const get = () => (slot === 'b0' ? s.bottles[0] : slot === 'b1' ? s.bottles[1] : slot === 'b2' ? s.bottles[2] : slot === 'ingredient' ? s.ingredient : s.fuel);
+    const set = (v: Stack | null) => {
+      if (slot === 'b0') s.bottles[0] = v;
+      else if (slot === 'b1') s.bottles[1] = v;
+      else if (slot === 'b2') s.bottles[2] = v;
+      else if (slot === 'ingredient') s.ingredient = v;
+      else s.fuel = v;
+    };
+    this.transfer(get, set, right);
+    if (this.inventory.cursor) this.notePickup(this.inventory.cursor.id);
+    // a touched slot restarts the batch, so a new mix re-brews from zero
+    s.progress = 0;
+    this.emitHud();
+  }
+
+  /** Spills bottles, ingredient and fuel when the stand block is gone. */
+  private spillBrewing(x: number, y: number, z: number) {
+    const key = this.bKey(x, y, z);
+    const s = this.brewings.get(key);
+    if (!s) return;
+    for (const stack of [...s.bottles, s.ingredient, s.fuel]) {
+      if (stack) this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.6, z + 0.5, stack.dur, undefined, undefined, undefined, stack.ench, stack.name);
+    }
+    this.brewings.delete(key);
+  }
+
+  /** Ticks every stand in the current dimension; a vanished block spills. */
+  private updateBrewings(dt: number) {
+    const dim = this.isInNether ? 1 : 0;
+    for (const s of this.brewings.values()) {
+      if ((s.dim ?? 0) !== dim) continue;
+      if (!this.world.hasChunk(Math.floor(s.x / CS), Math.floor(s.z / CS))) continue;
+      if (this.world.peekBlock(s.x, s.y, s.z) !== B.BREWING) {
+        if (this.brewingPos && this.brewingPos.x === s.x && this.brewingPos.y === s.y && this.brewingPos.z === s.z) this.closeInventory();
+        this.spillBrewing(s.x, s.y, s.z);
+        continue;
+      }
+      const before = s.bottles.map((b) => (b ? b.id : 0));
+      const { done } = tickBrewing(s, dt);
+      if (done) {
+        const after = s.bottles.map((b) => (b ? b.id : 0));
+        const first = after.findIndex((id, i) => id !== before[i] && id !== 0);
+        if (first >= 0) {
+          Sfx.playEnchant();
+          this.spawnParticles(s.x + 0.5, s.y + 0.8, s.z + 0.5, POTIONS[after[first]] ? B.GLOWSTONE : B.WOOL_WHITE, 14, 0.7);
+          this.message(`Zawarzone: ${displayName(after[first])}.`);
+          this.unlock('alchemist');
+        }
+      }
+    }
+  }
+
+  /** 2.4: applies (or refreshes) a potion buff. Durations never stack. */
+  applyEffect(id: PotionEffectId, seconds: number) {
+    if (id === 'none') return;
+    const cur = this.effects.get(id) ?? 0;
+    this.effects.set(id, Math.max(cur, seconds * 1000));
+  }
+
+  effectLeft(id: PotionEffectId): number {
+    return Math.max(0, this.effects.get(id) ?? 0) / 1000;
+  }
+
+  hasEffect(id: PotionEffectId): boolean {
+    return this.effectLeft(id) > 0;
+  }
+
+  /** Ticks buffs down; regeneration heals on its own rhythm.
+   *  The HUD refresh rides on the main 10 Hz emit, no extra calls needed. */
+  private updateEffects(dt: number) {
+    if (!this.effects.size) {
+      if (this.potionRegenAcc > 0) this.potionRegenAcc = 0;
+      return;
+    }
+    for (const [id, ms] of [...this.effects.entries()]) {
+      const next = ms - dt * 1000;
+      if (next <= 0) this.effects.delete(id);
+      else this.effects.set(id, next);
+    }
+    if (this.hasEffect('regen') && this.mode === 'survival') {
+      this.potionRegenAcc += dt;
+      if (this.potionRegenAcc >= 2) {
+        this.potionRegenAcc = 0;
+        if (this.health < 20 && this.health > 0) {
+          this.health = Math.min(20, this.health + 1);
+          Sfx.playEat();
+          this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.4, this.body.pos.z, B.WOOL_RED, 8, 0.8);
+        }
+      }
+    }
+  }
+
+  /** 2.4: drinks the selected bottle. Awkward brews taste like dirt. */
+  private drinkPotion(s: Stack) {
+    const def = POTIONS[s.id];
+    if (!def) return;
+    if (this.mode === 'survival') this.consumeSelected();
+    Sfx.playDrink();
+    this.swingT = 0;
+    // Mistrz eliksirów: only real (non-awkward) potions count, once per type.
+    if (def.effect !== 'none') {
+      this.potionsDrunk.add(s.id);
+      if (this.potionsDrunk.size >= 6) this.unlock('potioneer');
+    }
+    if (def.effect === 'none') {
+      this.message('Mętny smak. Potrzebny składnik do pełnej mocy.');
+      return;
+    }
+    if (def.effect === 'heal') {
+      this.health = Math.min(20, this.health + HEAL_AMOUNT);
+      this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, B.WOOL_RED, 16, 1);
+      this.message(`Wypito: ${def.name}. +${HEAL_AMOUNT} zdrowia.`);
+      this.unlock('tonic');
+    } else {
+      this.applyEffect(def.effect, def.duration);
+      this.message(`Wypito: ${def.name} (${def.duration} s).`);
+    }
+    this.emitHud();
   }
 
   /** Move stacks between the cursor and a furnace slot. Output can only be taken. */
@@ -1751,13 +1959,22 @@ export class Game {
         return;
       }
       const filled = t.id === B.WATER ? I.WATER_BUCKET : I.LAVA_BUCKET;
-      if (this.mode === 'survival' && !this.inventory.add(filled, 1)) {
-        this.message('Brak miejsca na wiadro.');
-        return;
+      if (this.mode === 'survival') {
+        if (!this.inventory.add(filled, 1)) {
+          this.message('Brak miejsca na wiadro.');
+          return;
+        }
+        this.world.setBlock(t.x, t.y, t.z, B.AIR);
+        Sfx.playSplash();
+        this.consumeSelected();
+      } else {
+        // 2.4 fix: w trybie kreatywnym wiadro nie rozbierało już źródła wody
+        // ani lawy – a samo zamieniało się w pełne wiadro.
+        s.id = filled;
+        Sfx.playSplash();
+        this.updateHand();
+        this.emitHud();
       }
-      this.world.setBlock(t.x, t.y, t.z, B.AIR);
-      Sfx.playSplash();
-      this.consumeSelected();
       return;
     }
     const fluid = s.id === I.WATER_BUCKET ? B.WATER : B.LAVA;
@@ -2038,7 +2255,7 @@ export class Game {
   }
 
   private cookOnCampfire(s: Stack): boolean {
-    // mięso zawsze, ryby tylko latem 2.3 – wspólna funkcja z pieca
+    // mięso i ryby piecze się tu jak w piecu – cookedOf() łączy reguły 2.3
     const meats: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN };
     const out = meats[s.id] ?? cookedOf(s.id);
     if (!out) return false;
@@ -2146,6 +2363,7 @@ export class Game {
         this.message(
           'Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, ' +
             '/give <nazwa|id> [ilość], /summon <mob> [zawód], /village (najbliższa wioska), ' +
+            '2.4: statyw alchemiczny (PPM), fiolka nad wodą, napoje, ' +
             '2.3: wędka (PPM), lorneta (przytrzymaj PPM), kowadło (PPM), ' +
             '/waypoint <add|list|select|remove> [nazwa], /xp <ilość>, /enchant <nazwa> [poziom], ' +
             '/heal, /kill, /seed, /spawn, /clear, /blocks'
@@ -2395,6 +2613,8 @@ export class Game {
         furnaces: [...this.furnaces.values()],
         chests: [...this.chests.values()],
         anvils: this.anvils ? [...this.anvils.values()] : [],
+        brewings: this.brewings ? [...this.brewings.values()] : [],
+        potionsDrunk: this.potionsDrunk ? [...this.potionsDrunk] : [],
         unlocked: [...this.unlocked],
         weather: this.weather,
         xp: this.xp.total,
@@ -2612,7 +2832,9 @@ export class Game {
       }
       this.attackCooldown = attackCooldown(toolId);
       const held = this.selectedStack();
-      const dmg = attackDamage(toolId, this.sprinting, sharpnessDamage(enchLevel(held, 'sharpness')));
+      let dmg = attackDamage(toolId, this.sprinting, sharpnessDamage(enchLevel(held, 'sharpness')));
+      // 2.4: napój siły dorzuca obrażenia do każdego trafienia
+      if (this.hasEffect('strength')) dmg += STRENGTH_DAMAGE;
       const kb = knockbackFactor(enchLevel(held, 'knockback'));
       if (mob.damage(dmg, this.body.pos.x, this.body.pos.z)) {
         if (kb > 1) {
@@ -2990,9 +3212,21 @@ export class Game {
       if (t.id === B.NETHER_PORTAL) { this.enterPortal(); return; }
       // 2.3: kowadło wreszcie działa – naprawa, scalanie i nazwy przedmiotów.
       if (t.id === B.ANVIL) { this.openAnvil(t.x, t.y, t.z); return; }
+      // 2.4: statyw alchemiczny – PPM otwiera kocioł, a woda leci do fiolki.
+      if (t.id === B.BREWING) { this.openBrewing(t.x, t.y, t.z); return; }
     }
     const s = this.selectedStack();
     if (!s) return;
+    // 2.4: fiolka nad wodą staje się fiolką z wodą (źródło wody zostaje).
+    if (s.id === I.BOTTLE && t && t.id === B.WATER) {
+      s.id = I.WATER_BOTTLE;
+      Sfx.playSplash();
+      this.message('Napełniono fiolkę wodą.');
+      this.updateHand();
+      this.emitHud();
+      this.swingT = 0;
+      return;
+    }
     if (t && s.id === I.FLINT_STEEL) {
       if (t.id === B.TNT) {
         this.igniteTNT(t.x, t.y, t.z, 3.2);
@@ -3042,6 +3276,8 @@ export class Game {
       return;
     }
     if (isFood(s.id)) { this.tryEat(s); return; }
+    // 2.4: fiolki pije się dokładnie tak jak jedzenie – PPM w powietrzu.
+    if (isPotion(s.id)) { this.drinkPotion(s); return; }
     if (!t) return;
     if (isHoe(s.id) && this.tryTill(t)) return;
     if (this.tryMakePath(t)) return;
@@ -3090,8 +3326,10 @@ export class Game {
       placeId = placed;
     } else if (isSlab(id)) {
       // płyta górna / dolna, a dwie płyty tego samego typu łączą się w pełny blok
+      // (normal z raycastu wskazuje od klikniętego bloku w stronę gracza,
+      //  więc ny === -1 oznacza, że uderzono wierzch – stawiamy płytę górną)
       const base = slabBase(id);
-      const isTop = t.ny === -1 || (t as any).hitY > 0.5;
+      const isTop = t.ny === -1;
       const existing = this.world.getBlock(px, py, pz);
       if (existing === base || existing === base + 1) placeId = slabFullBlock(base);
       else placeId = isTop ? base + 1 : base;
@@ -3325,6 +3563,7 @@ export class Game {
     if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
     if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
     if (id === B.ANVIL) this.spillAnvil(x, y, z);
+    if (id === B.BREWING) this.spillBrewing(x, y, z);
     this.world.setBlock(x, y, z, fill);
     if (isDoor(id)) {
       const face = doorFacing(id);
@@ -3395,6 +3634,7 @@ export class Game {
           if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
           if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
           if (id === B.ANVIL) this.spillAnvil(x, y, z);
+          if (id === B.BREWING) this.spillBrewing(x, y, z);
           this.world.setBlock(x, y, z, B.AIR);
           if (Math.random() < 0.05) this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 3, 0.4);
         }
@@ -3583,6 +3823,8 @@ export class Game {
       this.updateGrowth(dt);
       this.updateFurnaces(dt);
       this.updateAnvils(dt);
+      this.updateBrewings(dt);
+      this.updateEffects(dt);
       this.updateFishing(dt);
       this.updateRedstone(dt);
       this.updateTotem(dt);
@@ -3655,6 +3897,8 @@ export class Game {
     let speed = this.flying ? (this.sprinting ? 22 : 11) : sneaking ? 1.3 : this.sprinting ? 5.6 : 4.3;
     if (inWater && !this.flying) speed *= 0.55;
     if (inLava && !this.flying) speed *= 0.35;
+    // 2.4: napój szybkości przyspiesza bieg (nie wpływa na latanie w trybie kreatywnym)
+    if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
 
     const len = Math.hypot(fx, fz) || 1;
     fx /= len; fz /= len;
@@ -3766,16 +4010,21 @@ export class Game {
       b.vel.x *= 0.6;
       b.vel.z *= 0.6;
     }
-    if (under === B.MAGMA && b.onGround && this.mode === 'survival' && !this.flying) {
+    // 2.4: ognioodporność – żar, lawa i ogniska nie ruszają odpornego gracza
+    const fireImmune = this.hasEffect('fire');
+    if (!fireImmune && under === B.MAGMA && b.onGround && this.mode === 'survival' && !this.flying) {
       this.campfireHurt += dt;
       if (this.campfireHurt > 0.6) { this.campfireHurt = 0; this.damage(1); this.message('Blok magmy parzy!'); }
     }
-    if (under === B.CAMPFIRE && b.onGround && this.mode === 'survival' && !this.flying) {
+    if (!fireImmune && under === B.CAMPFIRE && b.onGround && this.mode === 'survival' && !this.flying) {
       this.campfireHurt += dt;
       if (this.campfireHurt > 0.45) { this.campfireHurt = 0; this.damage(1); }
     }
     // lava
-    if (inLava && this.mode === 'survival') {
+    if (fireImmune && inLava && this.mode === 'survival') {
+      // 2.4: osiągnięcie wymaga wejścia do lawy PODCZAS ognioodporności
+      this.unlock('fireproof');
+    } else if (inLava && this.mode === 'survival') {
       this.lavaAcc += dt;
       if (this.lavaAcc > 0.5) { this.lavaAcc = 0; this.damage(4); }
     }
@@ -4190,9 +4439,12 @@ export class Game {
 
     // W Netherze oświetlenie jest stałe – bez dnia i nocy.
     const lin = nether ? 0.72 : Math.pow(dl, 2.2);
-    this.uDay.value = lin;
-    this.handMat.color.setScalar(Math.max(0.35, lin));
-    this.ambient.intensity = nether ? 0.55 : 0.3 + dl * 1.0;
+    // 2.4: nocne widzenie podnosi podłogę światła, więc jaskinie nie są już czarne.
+    const night = this.hasEffect('night');
+    const light = night ? Math.max(lin, 0.55) : lin;
+    this.uDay.value = light;
+    this.handMat.color.setScalar(Math.max(0.35, light));
+    this.ambient.intensity = nether ? 0.55 : night ? Math.max(0.3 + dl * 1.0, 0.72) : 0.3 + dl * 1.0;
     this.dirLight.intensity = nether ? 0.12 : Math.max(0, sunY) * 1.2 + 0.1;
     this.sun.visible = !nether;
     this.moon.visible = !nether;
@@ -4268,6 +4520,13 @@ export class Game {
       drawCalls: this.renderer.info.render.calls,
       zoom: this.zooming && this.ui === 'playing',
       fishing: this.fishingState(),
+      // 2.4: aktywne wzmocnienia napojów (ikona + nazwa + sekundy)
+      effects: [...this.effects.entries()]
+        .filter(([id]) => id !== 'none')
+        .map(([id, ms]) => {
+          const def = EFFECT_META[id as Exclude<PotionEffectId, 'none'>];
+          return { id, icon: def.icon, name: def.name, left: ms / 1000 };
+        }),
       waypoint: (() => {
         const w = this.waypoints.find((point) => point.id === this.activeWaypointId);
         if (!w || w.dimension !== this.currentDimension()) return null;
@@ -4286,6 +4545,9 @@ export class Game {
     const sel = this.selectedStack();
     const id = sel?.id;
     const ench = sel?.ench ? enchList(sel) : null;
+    // 2.4: fiolki i napoje mają krótką podpowiedź pod celownikiem
+    if (id === I.BOTTLE) return 'Fiolka: PPM nad wodą, aby napełnić';
+    if (id !== undefined && isPotion(id)) return 'Napój: PPM, aby wypić';
     if (id === I.COMPASS) {
       const dx = this.spawnPoint.x - this.body.pos.x;
       const dz = this.spawnPoint.z - this.body.pos.z;

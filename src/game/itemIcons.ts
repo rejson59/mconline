@@ -1147,7 +1147,131 @@ const ART: Record<number, [Record<string, string>, string[]]> = {
       '................',
     ]],
 
+  // -- 2.4 „Godzina alchemika” ----------------------------------------------------
+  // Szklana fiolka: wąska szyjka, zaokrąglone dno, błysk po lewej.
+  342: [
+    { G: '#cfeaf5', g: '#8fb8cc', W: '#ffffff', D: '#5c8499' }, [
+      '................',
+      '.....GGGGGG.....',
+      '.....GWW..G.....',
+      '.....GWW..G.....',
+      '....GGWW..GG....',
+      '....GGW....GG...',
+      '...GGWW....GG...',
+      '...GGW......GG..',
+      '...GGW......GG..',
+      '..GGWW......GG..',
+      '..GGW........GG.',
+      '..GGW........GG.',
+      '..GGGGGGGGGGGG..',
+      '..GGGGGGGGGGGG..',
+      '...GGGGGGGGGG...',
+      '....GGGGGGGG....',
+    ]],
+  // Fiolka z wodą: woda wypełnia dół szyjki i dno.
+  343: [
+    { G: '#cfeaf5', W: '#ffffff', w: '#3a6ad4', W2: '#6a9ae8' }, [
+      '................',
+      '.....GGGGGG.....',
+      '.....GWW..G.....',
+      '.....GWW..G.....',
+      '....GGWW..GG....',
+      '....GGWW..GG....',
+      '...GGWWWWGGG....',
+      '...GGWWWWWWGG...',
+      '..GGWWWWWWWWGG..',
+      '..GGWWWWWWWWGG..',
+      '..GGWWWWWWWWGG..',
+      '..GGWWWWWWWWGG..',
+      '..GGGGGGGGGGGG..',
+      '..GGGGGGGGGGGG..',
+      '...GGGGGGGGGG...',
+      '....GGGGGGGG....',
+    ]],
+  // Cukier: biała kostka cukru z drobinami.
+  341: [
+    { W: '#ffffff', w: '#e8e4da', D: '#c4beb0', d: '#a8a294' }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+      '.....WWWWWW.....',
+      '....WWWWWWWW....',
+      '...WWWWdWWWWWW..',
+      '..WWWWWWWWWWWW..',
+      '..WWWdWWWWWWWW..',
+      '..WWWWWWWWWWWW..',
+      '...WWWWWWWWWW...',
+      '....dWWWWWWd....',
+      '.....dddddd.....',
+      '................',
+      '................',
+    ]],
+  // Butelka miodu: bursztynowy miód prawie po szyjkę.
+  344: [
+    { G: '#cfeaf5', W: '#ffffff', m: '#e8a020', M: '#c07810', y: '#f8c848' }, [
+      '................',
+      '.....GGGGGG.....',
+      '.....GWW..G.....',
+      '.....GWW..G.....',
+      '....GGWW..GG....',
+      '....GGWW..GG....',
+      '...GGWWWWWGG....',
+      '...GGWmmmmmGG...',
+      '..GGWmyyymGGG...',
+      '..GGWmmmmmmGG...',
+      '..GGWmmmmmmGG...',
+      '..GGWmmMMmmGG...',
+      '..GGGGGGGGGGGG..',
+      '..GGGGGGGGGGGG..',
+      '...GGGGGGGGGG...',
+      '....GGGGGGGG....',
+    ]],
 };
+
+/** 2.4: sylwetka fiolki z barwioną cieczą – wspólna dla wszystkich napojów. */
+function potionArt(liquid: string, light: string, dark: string): [Record<string, string>, string[]] {
+  return [
+    { G: '#cfeaf5', W: '#ffffff', L: liquid, H: light, D: dark },
+    [
+      '................',
+      '.....GGGGGG.....',
+      '.....GWW..G.....',
+      '.....GWW..G.....',
+      '....GGWW..GG....',
+      '....GGWW..GG....',
+      '...GGWWWWWGG....',
+      '...GGWLLLLLGG...',
+      '..GGWLLLLLLLGG..',
+      '..GGWLLLLLLLGG..',
+      '..GGWHLLLLLGG...',
+      '..GGWHLLLLLGG...',
+      '..GGWLLLLLLGG...',
+      '..GGWDDDDLLGG...',
+      '..GGGGGGGGGGGG..',
+      '....GGGGGGGG....',
+    ],
+  ];
+}
+
+const POTION_ART: Record<number, [Record<string, string>, string[]]> = {
+  // zaczarowany napój: mętna, kremowa esencja
+  345: potionArt('#c8b8a8', '#e8dcc8', '#9a8a76'),
+  // leczący: krwisty róż
+  346: potionArt('#d44a5a', '#f08a94', '#8a2030'),
+  // ognioodporność: rozgrzany bursztyn
+  347: potionArt('#e07820', '#f8a848', '#9a4a10'),
+  // szybkość: świeża limonka
+  348: potionArt('#b8e04a', '#d8f08a', '#7a9a28'),
+  // nocne widzenie: luminescencyjna zieleń
+  349: potionArt('#4ad0a8', '#8af0d0', '#28907a'),
+  // siła: rozgrzana miedź
+  350: potionArt('#e0a030', '#f8c858', '#9a6414'),
+  // regeneracja: różowy korzeń
+  351: potionArt('#e06090', '#f898bc', '#9a3058'),
+};
+Object.assign(ART, POTION_ART);
 
 // ---------------------------------------------------------------------------
 // Tools – silhouettes are shared, colours come from the item tier.

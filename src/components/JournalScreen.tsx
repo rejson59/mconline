@@ -14,6 +14,7 @@ export const JOURNAL_CHAPTERS = [
   { title: 'Za portalem', text: 'Zbuduj przejście i poznaj niebezpieczeństwa Netheru.', goals: ['portal', 'nether', 'quartz', 'ghast'] },
   { title: 'Dalsze horyzonty', text: 'Staw czoła Endermanowi i wykorzystaj moc jego perły.', goals: ['enderman', 'pearl'] },
   { title: 'Wyprawa i ratunek', text: 'Złów rybę, przyjrzyj się okolicy i zadbaj o narzędzia.', goals: ['fisher', 'surveyor', 'smith', 'undying'] },
+  { title: 'Godzina alchemika', text: 'Napełnij fiolki, rozpal statyw i warzy swoje pierwsze eliksiry.', goals: ['alchemist', 'tonic', 'fireproof', 'potioneer'] },
 ] as const;
 
 export function journalProgress(unlocked: string[]) {

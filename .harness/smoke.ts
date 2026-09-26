@@ -73,6 +73,7 @@ import {
 import { Xp as XpClass } from '../src/game/xp';
 import { Game, MOB_NAMES, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
 import { tryCreatePortal } from '../src/game/redstone';
+import { brewingKey, emptyBrewing } from '../src/game/brewing';
 import { VILLAGE_CELL, villageInCell, villageSpawnSpots, type Village } from '../src/game/village';
 import {
   PROFESSIONS, VILLAGER_LEVEL_XP, applyTrade, canTrade, createVillagerState, offersFor,
@@ -1313,6 +1314,8 @@ section('saves: enchantments ride along');
   g.inventory.slots[0] = { id: I.DIAMOND_PICK, count: 1, dur: 300, ench: { efficiency: 4, unbreaking: 2 } };
   g.spawnPoint = new THREE.Vector3(1, 70, 2);
   g.furnaces = new Map(); g.chests = new Map();
+  g.brewings = new Map();
+  g.potionsDrunk = new Set<number>();
   g.unlocked = new Set(['wood']);
   g.weather = 'clear';
   g.xp = new Xp(42);
@@ -2545,6 +2548,160 @@ section('2.3: bug fixes');
   eq('emerald ore is the richest of the three', oreXp(B.EMERALD_ORE) > oreXp(B.REDSTONE_ORE), true);
   eq('quartz ore needs a stone pick at least', requiredPickTier(B.QUARTZ_ORE), 2);
   check('and it is still an ore', isOre(B.QUARTZ_ORE) && isOre(B.EMERALD_ORE));
+}
+
+section('2.4: brewing inside the engine');
+{
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.mode = 'survival';
+  g.isInNether = false;
+  g.inventory = new Inventory();
+  g.inventory.slots[0] = { id: I.WATER_BOTTLE, count: 3 };
+  g.inventory.slots[1] = { id: I.NETHER_WART, count: 4 };
+  g.inventory.slots[2] = { id: I.BLAZE_ROD, count: 2 };
+  g.brewings = new Map();
+  g.brewingPos = { x: 1, y: 2, z: 3 };
+  g.body = { pos: new THREE.Vector3(1, 2, 3) };
+  g.emitHud = () => {};
+  g.message = () => {};
+  g.unlocked = new Set();
+  g.toast = null;
+  g.notePickup = () => {};
+  g.spawnParticles = () => {};
+  g.world = {
+    hasChunk: () => true,
+    peekBlock: (x: number, y: number, z: number) => (x === 1 && y === 2 && z === 3 ? B.BREWING : B.AIR),
+  };
+  g.brewings.set(brewingKey(1, 2, 3), emptyBrewing(1, 2, 3));
+
+  // items flow into the stand through the cursor
+  g.inventory.cursor = { id: I.WATER_BOTTLE, count: 1 };
+  g.clickBrewing('b0', false);
+  g.inventory.cursor = { id: I.NETHER_WART, count: 1 };
+  g.clickBrewing('ingredient', false);
+  g.inventory.cursor = { id: I.BLAZE_ROD, count: 1 };
+  g.clickBrewing('fuel', false);
+  const stand = g.brewings.get(brewingKey(1, 2, 3));
+  eq('the bottle lands in slot one', stand.bottles[0]?.id, I.WATER_BOTTLE);
+  eq('the ingredient sits in the cup', stand.ingredient?.id, I.NETHER_WART);
+  eq('the fuel rests on the tray', stand.fuel?.id, I.BLAZE_ROD);
+  // a random item is not a brewing ingredient
+  g.inventory.cursor = { id: I.STICK, count: 1 };
+  g.clickBrewing('ingredient', false);
+  eq('the cup keeps the wart', stand.ingredient?.id, I.NETHER_WART);
+  eq('the stick stayed in the cursor', g.inventory.cursor?.id, I.STICK);
+  // the full 8 s batch
+  for (let t = 0; t < 8.2; t += 0.5) g.updateBrewings(0.5);
+  eq('water + wart = awkward potion', stand.bottles[0]?.id, I.POTION_AWKWARD);
+  eq('one brew was consumed from the rod', stand.fuelLeft, 2);
+  eq('the ingredient survived the brew', stand.ingredient?.id, I.NETHER_WART);
+  check('the alchemist achievement fired', (g.unlocked as Set<string>).has('alchemist'));
+
+  // breaking the stand spills everything
+  g.world.peekBlock = () => B.AIR;
+  g.closeInventory = () => {};
+  const droppedIds: number[] = [];
+  g.spawnDrop = ((id: number, n: number) => { g.dropped = (g.dropped ?? 0) + n; droppedIds.push(id); });
+  g.updateBrewings(0.1);
+  check('the stand state is gone after the block vanished', !g.brewings.get(brewingKey(1, 2, 3)));
+  // the rod was already spent by the brew, so potion + wart are all that spill
+  check('the contents spilled to the ground', (g.dropped ?? 0) === 2, String(g.dropped));
+  check('the brewed potion survived the spill', droppedIds.includes(I.POTION_AWKWARD));
+  check('the ingredient spilled too', droppedIds.includes(I.NETHER_WART));
+}
+
+section('2.4: potion effects inside the engine');
+{
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.mode = 'survival';
+  g.effects = new Map();
+  g.potionRegenAcc = 0;
+  g.potionsDrunk = new Set();
+  g.body = { pos: new THREE.Vector3(0, 64, 0) };
+  g.health = 5;
+  g.inventory = new Inventory();
+  g.selected = 0;
+  g.swingT = 1;
+  g.unlocked = new Set();
+  g.toast = null;
+  g.emitHud = () => {};
+  g.message = () => {};
+  g.spawnParticles = () => {};
+
+  // healing potion: instant, consumed
+  g.inventory.slots[0] = { id: I.POTION_HEAL, count: 1 };
+  g.drinkPotion({ id: I.POTION_HEAL, count: 1 });
+  eq('healing restores seven points', g.health, 12);
+  eq('the bottle was consumed', g.inventory.slots[0], null);
+  check('the tonic achievement fired', (g.unlocked as Set<string>).has('tonic'));
+
+  // timed buff: speed
+  g.applyEffect('speed', 20);
+  check('the speed buff is active', g.hasEffect('speed') === true);
+  check('a fresh buff reports its full duration', Math.abs(g.effectLeft('speed') - 20) < 1e-9);
+  g.updateEffects(5);
+  check('the buff decays with time', Math.abs(g.effectLeft('speed') - 15) < 1e-9);
+  g.updateEffects(20);
+  check('the buff expires', g.hasEffect('speed') === false);
+
+  // regeneration heals on its own 2 s rhythm
+  g.health = 6;
+  g.applyEffect('regen', 10);
+  g.updateEffects(1.9);
+  eq('no heal before the 2 s mark', g.health, 6);
+  g.updateEffects(0.2);
+  eq('one heart after two seconds', g.health, 7);
+  g.updateEffects(100);
+  check('the effect ends and the timer resets', g.hasEffect('regen') === false && g.potionRegenAcc < 2);
+
+  // the awkward brew is harmless but still drunk
+  g.inventory.slots[0] = { id: I.POTION_AWKWARD, count: 1 };
+  g.drinkPotion({ id: I.POTION_AWKWARD, count: 1 });
+  eq('awkward tastes like dirt', g.inventory.slots[0], null);
+  check('and no effect sticks', g.effects.size === 0);
+  check('it does not count toward mastery', (g.potionsDrunk as Set<number>).size === 1);
+}
+
+section('2.4: bug fixes');
+{
+  // (1) the creative bucket must not eat water sources
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.mode = 'creative';
+  g.swingT = 0;
+  g.message = () => {};
+  g.updateHand = () => {};
+  g.emitHud = () => {};
+  g.inventory = new Inventory();
+  g.selected = 0;
+  const s: Stack = { id: I.BUCKET, count: 1 };
+  g.inventory.slots[0] = s;
+  let deleted: boolean = false;
+  g.world = { setBlock: (_x: number, _y: number, _z: number, id: number) => { if (id === B.AIR) deleted = true; } };
+  g.tryBucket({ x: 5, y: 5, z: 5, nx: 0, ny: 1, nz: 0, id: B.WATER }, s);
+  eq('the held bucket turns into a water bucket', s.id, I.WATER_BUCKET);
+  check('the water source is left alone in creative', deleted === false);
+
+  const sv = Object.create(Game.prototype) as unknown as Record<string, any>;
+  sv.mode = 'survival';
+  sv.swingT = 0;
+  sv.message = () => {};
+  sv.updateHand = () => {};
+  sv.emitHud = () => {};
+  sv.inventory = new Inventory();
+  sv.selected = 0;
+  const ss: Stack = { id: I.BUCKET, count: 1 };
+  sv.inventory.slots[0] = ss;
+  let svDeleted: boolean = false;
+  sv.world = { setBlock: (_x: number, _y: number, _z: number, id: number) => { if (id === B.AIR) svDeleted = true; } };
+  sv.consumeSelected = (n: number) => { const st = sv.inventory.slots[sv.selected]; if (st) { st.count -= n; if (st.count <= 0) sv.inventory.slots[sv.selected] = null; } };
+  sv.tryBucket({ x: 5, y: 5, z: 5, nx: 0, ny: 1, nz: 0, id: B.WATER }, ss);
+  check('survival still scoops the source', svDeleted);
+  eq('survival receives the filled bucket', sv.inventory.countOf(I.WATER_BUCKET), 1);
+
+  // (2) the potion is addressable by its Polish chat name
+  eq('napoj_leczacy resolves to the healing potion', resolveId('napoj_leczacy'), I.POTION_HEAL);
+  eq('fiolka resolves to the glass bottle', resolveId('fiolka'), I.BOTTLE);
+  eq('cukier resolves to sugar', resolveId('cukier'), I.SUGAR);
 }
 
 // =================================================================== report

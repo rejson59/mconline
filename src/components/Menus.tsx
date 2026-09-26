@@ -15,6 +15,9 @@ export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
   'Teraz też na telefonach!',
+  'Aktualizacja 2.4: warzy własne eliksiry!',
+  'Nowe w 2.4: statyw alchemiczny i napoje!',
+  'Ognioodporność: wejdź do lawy bez obrażeń!',
   'Aktualizacja 2.3: złów rybę i napraw narzędzia!',
   'Nowe w 2.3: wędkarstwo, lorneta i kowadło!',
   'Totem Ratowania uratuje cię od śmierci!',
@@ -56,7 +59,7 @@ export function Title() {
           className="px-2 py-0.5 text-sm font-bold"
           style={{ background: '#3c8527', color: '#fff', border: '2px solid #1c1c1c', boxShadow: '2px 2px 0 rgba(0,0,0,0.6)' }}
         >
-          WERSJA 2.3
+          WERSJA 2.4
         </span>
         <span className="splash text-lg font-semibold sm:text-xl" style={{ color: '#ffff00', textShadow: '2px 2px 0 #3f3f00' }}>
           {splash}
@@ -93,6 +96,8 @@ export function Controls() {
     ['Wędka: PPM', 'Zarzuć przynętę i zaciągnij brań'],
     ['Lorneta: przytrzymaj PPM', 'Przybliżenie (2.3)'],
     ['PPM na kowadle', 'Scal dwa narzędzia i nadaj nazwę (2.3)'],
+    ['PPM na statywie alchemicznym', 'Warzy napoje (2.4)'],
+    ['PPM na fiolce przy wodzie', 'Napełnij fiolkę (2.4)'],
     ['Kompas / zegar', 'Kierunek odrodzenia i pora dnia'],
     ['Motyka + PPM', 'Grządka'],
     ['PPM na wilku z surowym mięsem', 'Zatamej wilka (strzeże gracza)'],
@@ -520,7 +525,7 @@ export function MainMenu({
           />
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.3 „Wyprawa i ratunek”</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.4 „Godzina alchemika”</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>

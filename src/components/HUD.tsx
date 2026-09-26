@@ -193,7 +193,7 @@ export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDSta
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 2.3 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
+            `BlockCraft 2.4 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -255,6 +255,22 @@ export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDSta
         {label && (
           <div key={label.key} className="mb-2 text-lg mc-text">
             {label.text}
+          </div>
+        )}
+        {/* 2.4: aktywne wzmocnienia napojów */}
+        {hud.effects.length > 0 && (
+          <div className="mb-0.5 flex flex-wrap justify-center gap-1">
+            {hud.effects.map((e) => (
+              <div
+                key={e.id}
+                className="flex items-center gap-1 px-1.5 py-0.5 text-[12px] mc-text"
+                style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(120,220,120,0.5)' }}
+              >
+                <span className="text-[13px] leading-none">{e.icon}</span>
+                <span className="leading-none">{e.name}</span>
+                <span className="leading-none text-green-300">{Math.ceil(e.left)}s</span>
+              </div>
+            ))}
           </div>
         )}
         {hud.armor.some((s) => s) && (
