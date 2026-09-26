@@ -91,7 +91,33 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.DIAMOND, count: 9 }, inputs: [{ id: B.DIAMOND_BLOCK, count: 1 }], table: false },
   { out: { id: I.BOW, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 3 }], table: true, pattern: [' #S', '# S', ' #S'], key: { '#': I.STICK, S: I.STRING } },
   { out: { id: I.ARROW, count: 4 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.STICK, count: 1 }, { id: I.FEATHER, count: 1 }], table: false },
+  { out: { id: I.SHIELD, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.IRON, count: 1 }], table: true, pattern: ['PIP', 'PPP', 'PPP'], key: { P: B.PLANKS, I: I.IRON } },
 ];
+
+/**
+ * Armor sets, Minecraft-style patterns at the crafting table:
+ * helmet 5, chestplate 8, leggings 7, boots 4 pieces of the material.
+ */
+const HELMET_PATTERN = ['LLL', 'L L'];
+const CHEST_PATTERN = ['L L', 'LLL', 'LLL'];
+const LEGS_PATTERN = ['LLL', 'L L', 'L L'];
+const BOOTS_PATTERN = ['L L', 'L L'];
+
+function addArmor(mat: number, ids: [number, number, number, number]) {
+  const key = { L: mat };
+  const counts = [5, 8, 7, 4];
+  const patterns = [HELMET_PATTERN, CHEST_PATTERN, LEGS_PATTERN, BOOTS_PATTERN];
+  RECIPES.push(
+    { out: { id: ids[0], count: 1 }, inputs: [{ id: mat, count: counts[0] }], table: true, pattern: patterns[0], key },
+    { out: { id: ids[1], count: 1 }, inputs: [{ id: mat, count: counts[1] }], table: true, pattern: patterns[1], key },
+    { out: { id: ids[2], count: 1 }, inputs: [{ id: mat, count: counts[2] }], table: true, pattern: patterns[2], key },
+    { out: { id: ids[3], count: 1 }, inputs: [{ id: mat, count: counts[3] }], table: true, pattern: patterns[3], key }
+  );
+}
+addArmor(I.LEATHER, [I.LEATHER_HELMET, I.LEATHER_CHEST, I.LEATHER_LEGS, I.LEATHER_BOOTS]);
+addArmor(I.IRON, [I.IRON_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS]);
+addArmor(I.GOLD, [I.GOLD_HELMET, I.GOLD_CHEST, I.GOLD_LEGS, I.GOLD_BOOTS]);
+addArmor(I.DIAMOND, [I.DIAMOND_HELMET, I.DIAMOND_CHEST, I.DIAMOND_LEGS, I.DIAMOND_BOOTS]);
 
 function addTools(mat: number, pick: number, axe: number, shovel: number, sword: number, hoe: number) {
   // 'M' is the material (planks / cobble / ingot / gem), 'S' a stick

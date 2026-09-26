@@ -3,7 +3,11 @@ import type { World } from './world';
 import { stepBody, type Body } from './physics';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 
-export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton';
+export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf';
+
+export function isHostileMob(type: MobType): boolean {
+  return type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton';
+}
 
 function box(w: number, h: number, d: number, color: number, mats: Map<number, THREE.Material>) {
   let m = mats.get(color);
@@ -37,6 +41,8 @@ export class Mob {
   exploded = false;
   looted = false;
   sheared = false;
+  /** Tamed wolves follow the player and fight hostiles for them. */
+  tamed = false;
   /** True while a spider crawls up a wall (drives the leg animation). */
   climbing = false;
   private woolMesh: THREE.Mesh | null = null;
@@ -47,11 +53,27 @@ export class Mob {
 
   constructor(type: MobType, x: number, y: number, z: number) {
     this.type = type;
-    const w = type === 'zombie' || type === 'creeper' ? 0.6 : type === 'chicken' ? 0.45 : type === 'cow' ? 1.1 : 0.9;
-    const h = type === 'zombie' ? 1.9 : type === 'creeper' ? 1.7 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : 0.9;
+    const w = type === 'zombie' || type === 'creeper' ? 0.6 : type === 'chicken' ? 0.45 : type === 'cow' ? 1.1 : type === 'wolf' ? 0.6 : 0.9;
+    const h = type === 'zombie' ? 1.9 : type === 'creeper' ? 1.7 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
-    this.maxHealth = this.health = type === 'zombie' ? 20 : type === 'creeper' ? 16 : type === 'cow' ? 10 : type === 'chicken' ? 4 : type === 'sheep' ? 8 : type === 'skeleton' ? 20 : type === 'spider' ? 16 : 10;
+    this.maxHealth = this.health = type === 'zombie' ? 20 : type === 'creeper' ? 16 : type === 'cow' ? 10 : type === 'chicken' ? 4 : type === 'sheep' ? 8 : type === 'skeleton' ? 20 : type === 'spider' ? 16 : type === 'wolf' ? 8 : 10;
     this.build();
+  }
+
+  /** Marks a wild wolf as tamed (friendly coat, full health). */
+  tame(): boolean {
+    if (this.type !== 'wolf' || this.tamed || this.dead) return false;
+    this.tamed = true;
+    this.health = this.maxHealth;
+    this.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const m = mesh.material as THREE.MeshLambertMaterial;
+      const hex = m.color.getHex();
+      if (hex === 0x7a8089) m.color.setHex(0xa05a48); // coat turns rust-red
+      else if (hex === 0x5d626b) m.color.setHex(0x7a4238);
+    });
+    return true;
   }
 
   private addLeg(x: number, y: number, z: number, w: number, h: number, d: number, color: number, arr: THREE.Object3D[]) {
@@ -285,6 +307,55 @@ export class Mob {
       string.position.set(0.42, 1.0, 0.3);
       g.add(bow1, bow2, string);
       this.meshes.push(bow1, bow2, string);
+    } else if (this.type === 'wolf') {
+      const fur = 0x7a8089;
+      const furDk = 0x5d626b;
+      const light = 0xd8dade;
+      const legH = 0.42;
+      const body = box(0.55, 0.48, 1.05, fur, sharedMats);
+      body.position.set(0, legH + 0.24, 0);
+      g.add(body);
+      this.meshes.push(body);
+      const chest = box(0.5, 0.34, 0.4, light, sharedMats);
+      chest.position.set(0, legH + 0.2, 0.42);
+      g.add(chest);
+      this.meshes.push(chest);
+      const tail = box(0.14, 0.14, 0.42, furDk, sharedMats);
+      tail.position.set(0, legH + 0.34, -0.62);
+      tail.rotation.x = 0.5;
+      g.add(tail);
+      this.meshes.push(tail);
+      const head = new THREE.Group();
+      head.position.set(0, legH + 0.52, 0.66);
+      const hm = box(0.4, 0.38, 0.4, fur, sharedMats);
+      head.add(hm);
+      this.meshes.push(hm);
+      const muzzle = box(0.2, 0.18, 0.22, light, sharedMats);
+      muzzle.position.set(0, -0.06, 0.28);
+      head.add(muzzle);
+      this.meshes.push(muzzle);
+      const nose = box(0.1, 0.1, 0.06, 0x1a1a1a, sharedMats);
+      nose.position.set(0, -0.04, 0.4);
+      head.add(nose);
+      this.meshes.push(nose);
+      const earL = box(0.12, 0.16, 0.08, furDk, sharedMats);
+      earL.position.set(-0.12, 0.24, -0.05);
+      const earR = earL.clone();
+      earR.position.x = 0.12;
+      head.add(earL, earR);
+      this.meshes.push(earL, earR);
+      const eyeL = box(0.07, 0.07, 0.02, 0x111111, sharedMats);
+      eyeL.position.set(-0.11, 0.06, 0.21);
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.11;
+      head.add(eyeL, eyeR);
+      this.meshes.push(eyeL, eyeR);
+      g.add(head);
+      this.head = head;
+      this.addLeg(-0.16, legH, 0.32, 0.16, legH, 0.16, furDk, this.legs);
+      this.addLeg(0.16, legH, 0.32, 0.16, legH, 0.16, furDk, this.legs);
+      this.addLeg(-0.16, legH, -0.32, 0.16, legH, 0.16, fur, this.legs);
+      this.addLeg(0.16, legH, -0.32, 0.16, legH, 0.16, fur, this.legs);
     }
     g.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
@@ -324,13 +395,63 @@ export class Mob {
       this.deathTime = 0;
       this.fuse = -1;
     }
-    if (this.type !== 'zombie') {
+    if (this.type !== 'zombie' && !this.tamed) {
       // panic
       this.aiTimer = 3;
       this.walking = true;
       this.yaw = Math.atan2(dx, dz);
     }
     return true;
+  }
+
+  /**
+   * Tamed wolf AI: follow the player, stand by when close, and attack the
+   * nearest hostile mob on the player's behalf.
+   */
+  private updateTamed(dt: number, world: World, player: THREE.Vector3, allies: Mob[], onBite: (mob: Mob) => void): void {
+    const b = this.body;
+    // pick a target: hostile, within 16 of the wolf, within 24 of the player
+    let target: Mob | null = null;
+    let best = 16;
+    for (const o of allies) {
+      if (o === this || o.dead || !isHostileMob(o.type)) continue;
+      if (o.body.pos.distanceTo(player) > 24) continue;
+      const d = o.body.pos.distanceTo(b.pos);
+      if (d < best) { best = d; target = o; }
+    }
+    if (target) {
+      const dx = target.body.pos.x - b.pos.x, dz = target.body.pos.z - b.pos.z;
+      this.yaw = Math.atan2(dx, dz);
+      const stop = target.body.w / 2 + 0.7;
+      if (best <= stop) {
+        this.walking = false;
+        if (this.attackCooldown <= 0) {
+          this.attackCooldown = 1.1;
+          onBite(target);
+        }
+      } else {
+        this.walking = true;
+      }
+    } else {
+      // Loyal pet: stay at the player's feet; only a short, occasional stroll
+      // when right next to them.
+      const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 1.6) {
+        this.yaw = Math.atan2(dx, dz);
+        this.walking = true;
+      } else {
+        this.walking = false; // sit at the player's feet
+        this.aiTimer -= dt;
+        if (this.aiTimer <= 0) {
+          this.aiTimer = 2 + Math.random() * 4;
+          this.walking = Math.random() < 0.3;
+          this.yaw = Math.random() * Math.PI * 2;
+        }
+      }
+      if (this.hurtTime <= 0) this.health = Math.min(this.maxHealth, this.health + dt * 0.5);
+    }
+    this.moveAndAnimate(dt, world, player, this.walking ? 4.6 : 0);
   }
 
   /** Removes a sheep's wool once. Returns false if it was already sheared or isn't a sheep. */
@@ -341,7 +462,16 @@ export class Mob {
     return true;
   }
 
-  update(dt: number, world: World, player: THREE.Vector3, onAttack: (dmg: number, mob: Mob) => void, onShoot: (mob: Mob) => void, peaceful: boolean) {
+  update(
+    dt: number,
+    world: World,
+    player: THREE.Vector3,
+    onAttack: (dmg: number, mob: Mob) => void,
+    onShoot: (mob: Mob) => void,
+    peaceful: boolean,
+    allies: Mob[] = [],
+    onBite: (mob: Mob) => void = () => {}
+  ) {
     const b = this.body;
     if (this.hurtTime > 0) {
       this.hurtTime -= dt;
@@ -355,8 +485,12 @@ export class Mob {
     this.attackCooldown -= dt;
     this.soundTimer -= dt;
 
-    const inWater = RENDER[world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y + 0.4), Math.floor(b.pos.z))] === 2;
-    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : 1.2;
+    if (this.tamed) {
+      this.updateTamed(dt, world, player, allies, onBite);
+      return;
+    }
+
+    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : this.type === 'wolf' ? 1.6 : 1.2;
     const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
     const dist = Math.hypot(dx, dz);
     const hostile = this.type === 'zombie' || this.type === 'creeper' || this.type === 'spider' || this.type === 'skeleton';
@@ -409,7 +543,17 @@ export class Mob {
       if (this.hurtTime > 0 || (this.aiTimer > 0 && this.health < this.maxHealth && !hostile)) speed *= 1.8;
     }
 
-    if (this.walking && this.hurtTime < 0.3) {
+    this.moveAndAnimate(dt, world, player, this.walking && this.hurtTime < 0.3 ? speed : 0);
+  }
+
+  /**
+   * Shared movement + physics (gravity, water, collisions, wall hops) and
+   * walking animation. `speed` > 0 steers the body toward `this.yaw` at that
+   * rate; 0 applies ground friction instead.
+   */
+  private moveAndAnimate(dt: number, world: World, player: THREE.Vector3, speed = 0): void {
+    const b = this.body;
+    if (speed > 0) {
       const tx = Math.sin(this.yaw) * speed, tz = Math.cos(this.yaw) * speed;
       b.vel.x += (tx - b.vel.x) * Math.min(1, dt * 10);
       b.vel.z += (tz - b.vel.z) * Math.min(1, dt * 10);
@@ -417,7 +561,7 @@ export class Mob {
       b.vel.x *= Math.max(0, 1 - dt * 10);
       b.vel.z *= Math.max(0, 1 - dt * 10);
     }
-
+    const inWater = RENDER[world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y + 0.4), Math.floor(b.pos.z))] === 2;
     if (inWater) {
       b.vel.y = Math.min(b.vel.y + 20 * dt, 2.5);
     } else {

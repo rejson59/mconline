@@ -52,21 +52,41 @@ export const I = {
   FEATHER: 147,
   ARROW: 148,
   BOW: 149,
+  LEATHER: 200,
+  LEATHER_HELMET: 201,
+  LEATHER_CHEST: 202,
+  LEATHER_LEGS: 203,
+  LEATHER_BOOTS: 204,
+  IRON_HELMET: 205,
+  IRON_CHEST: 206,
+  IRON_LEGS: 207,
+  IRON_BOOTS: 208,
+  GOLD_HELMET: 209,
+  GOLD_CHEST: 210,
+  GOLD_LEGS: 211,
+  GOLD_BOOTS: 212,
+  DIAMOND_HELMET: 213,
+  DIAMOND_CHEST: 214,
+  DIAMOND_LEGS: 215,
+  DIAMOND_BOOTS: 216,
+  SHIELD: 217,
 } as const;
 
-export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow';
+export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield';
 
 export interface ItemDef {
   id: number;
   name: string;
   /** Short aliases accepted by /give (Polish, without diacritics, and English). */
   keys: string[];
-  kind: 'material' | 'tool' | 'food' | 'bucket';
+  kind: 'material' | 'tool' | 'food' | 'bucket' | 'armor';
   tool?: ToolKind;
   tier?: 1 | 2 | 3 | 4;
   durability?: number;
   hunger?: number;
   heal?: number;
+  /** Armor metadata: which slot it occupies and how many armor points it adds. */
+  armor?: { slot: 0 | 1 | 2 | 3; points: number };
   /** Flat color used by drop entities and the icon painter. */
   color: string;
 }
@@ -139,7 +159,64 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.FEATHER, name: 'Pióro', keys: ['pioro', 'piórko', 'feather'], kind: 'material', color: '#f2f2f0' },
   { id: I.ARROW, name: 'Strzała', keys: ['strzala', 'strzała', 'arrow'], kind: 'material', color: '#c8b08a' },
   { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
+  { id: I.LEATHER, name: 'Skóra', keys: ['skora', 'skóra', 'leather'], kind: 'material', color: '#8a5a3b' },
+  { id: I.SHIELD, name: 'Tarcza', keys: ['tarcza', 'shield'], kind: 'tool', tool: 'shield', durability: 300, color: '#8a6a3a' },
 ];
+
+const ARMOR_TIERS: {
+  prefix: string; keys: [string, string]; color: string;
+  points: [number, number, number, number]; // head, chest, legs, feet
+  durability: [number, number, number, number];
+  names: [string, string, string, string];
+}[] = [
+  {
+    prefix: 'skorzany', keys: ['skorzany', 'leather'], color: '#8a5a3b',
+    points: [1, 3, 2, 1], durability: [55, 70, 75, 55],
+    names: ['Skórzany kaptur', 'Skórzany napierśnik', 'Skórzane nogawice', 'Skórzane buty'],
+  },
+  {
+    prefix: 'zelazny', keys: ['zelazny', 'iron'], color: '#d8d8d8',
+    points: [2, 5, 6, 2], durability: [165, 240, 275, 165],
+    names: ['Żelazny kaptur', 'Żelazny napierśnik', 'Żelazne nogawice', 'Żelazne buty'],
+  },
+  {
+    prefix: 'zloty', keys: ['zloty', 'gold'], color: '#f6d34a',
+    points: [2, 5, 6, 2], durability: [75, 100, 105, 75],
+    names: ['Złoty kaptur', 'Złoty napierśnik', 'Złote nogawice', 'Złote buty'],
+  },
+  {
+    prefix: 'diamontowy', keys: ['diamontowy', 'diamond'], color: '#3ee0d0',
+    points: [3, 8, 6, 3], durability: [365, 480, 540, 365],
+    names: ['Diamentowy kaptur', 'Diamentowy napierśnik', 'Diamentowe nogawice', 'Diamentowe buty'],
+  },
+];
+
+const SLOT_KEYS = [
+  ['kaptur', 'helmet'],
+  ['napiersnik', 'chestplate', 'chest'],
+  ['nogawice', 'leggings', 'legs'],
+  ['buty', 'boots'],
+];
+const SLOT_ORDER: (0 | 1 | 2 | 3)[] = [0, 1, 2, 3];
+
+const armorItems: ItemDef[] = [];
+ARMOR_TIERS.forEach((tier, ti) => {
+  const baseId = [I.LEATHER_HELMET, I.IRON_HELMET, I.GOLD_HELMET, I.DIAMOND_HELMET][ti];
+  SLOT_ORDER.forEach((slot, si) => {
+    const id = baseId + si;
+    const en = SLOT_KEYS[si][1];
+    armorItems.push({
+      id,
+      name: tier.names[si],
+      keys: [`${tier.keys[0]}_${SLOT_KEYS[si][0]}`, `${tier.keys[1]}_${en}`],
+      kind: 'armor',
+      durability: tier.durability[si],
+      armor: { slot, points: tier.points[si] },
+      color: tier.color,
+    });
+  });
+});
+ITEM_LIST.push(...armorItems);
 
 export const ITEMS: (ItemDef | undefined)[] = [];
 for (const it of ITEM_LIST) ITEMS[it.id] = it;
@@ -186,7 +263,7 @@ export function displayName(id: number): string {
 export function stackLimit(id: number): number {
   const it = ITEMS[id];
   if (!it) return 64;
-  if (it.kind === 'tool') return 1;
+  if (it.kind === 'tool' || it.kind === 'armor') return 1;
   if (it.kind === 'bucket') return 16;
   return 64;
 }
@@ -283,6 +360,7 @@ export function attackDamage(toolId: number, sprinting: boolean): number {
   const tool = ITEMS[toolId];
   let d = 3;
   if (tool?.tool === 'sword') d = [0, 5, 6, 7, 9][tool.tier ?? 1];
+  else if (tool?.tool === 'shield') d = 2;
   else if (tool?.tool === 'shears' || tool?.tool === 'igniter' || tool?.tool === 'bow') d = 1;
   else if (tool?.tool) d = 4;
   if (sprinting) d += 2;

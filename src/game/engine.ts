@@ -3,7 +3,7 @@ import { World, CS, CH, SEA, plantTree, type Biome } from './world';
 import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal } from './blocks';
 import { getAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, type Body } from './physics';
-import { Mob, type MobType } from './mobs';
+import { Mob, isHostileMob, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider']);
@@ -19,6 +19,8 @@ import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furn
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
 import { achievementById } from './achievements';
 import { upsertSave } from './saves';
+import { Xp } from './xp';
+import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT } from './armor';
 
 export type GameMode = 'survival' | 'creative';
 export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest';
@@ -58,6 +60,14 @@ export interface HUDState {
   heldHint: string | null;
   /** -1 when the bow is idle, otherwise the draw charge 0–1. */
   bow: number;
+  /** Experience level (bar above the hotbar). */
+  level: number;
+  /** 0–1 progress inside the current level. */
+  xpFrac: number;
+  /** Four equipped armor pieces (head, chest, legs, feet). */
+  armor: (Stack | null)[];
+  /** Sum of armor points of the equipped pieces. */
+  armorPoints: number;
 }
 
 export interface SaveData {
@@ -81,6 +91,8 @@ export interface SaveData {
   chests?: ChestState[];
   unlocked?: string[];
   weather?: 'clear' | 'rain';
+  xp?: number;
+  armor?: (Stack | null)[];
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
@@ -267,6 +279,14 @@ export class Game {
   private arrows: ArrowEntity[] = [];
   private arrowGeo!: THREE.BufferGeometry;
   private arrowMat!: THREE.MeshBasicMaterial;
+  /** Experience – persisted as a total, level derived from the curve. */
+  xp = new Xp(0);
+  /** Equipped armor: [head, chest, legs, feet]. */
+  armor: (Stack | null)[] = new Array(ARMOR_SLOT_COUNT).fill(null);
+  /** Floating XP orbs dropped by mobs and ores. */
+  private orbs: { mesh: THREE.Mesh; pos: THREE.Vector3; vel: THREE.Vector3; value: number; age: number }[] = [];
+  private orbGeo!: THREE.BufferGeometry;
+  private orbMat!: THREE.MeshBasicMaterial;
   /** Seconds the bow has been drawn, -1 when idle. */
   private bowDraw = -1;
   private biomeCache = new Map<string, Biome>();
@@ -442,6 +462,8 @@ export class Game {
     this.tntGeo = blockGeometry(B.TNT);
     this.arrowGeo = new THREE.BoxGeometry(0.09, 0.09, 0.78);
     this.arrowMat = new THREE.MeshBasicMaterial({ color: 0x9a7a4a });
+    this.orbGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+    this.orbMat = new THREE.MeshBasicMaterial({ color: 0x8ef55a });
 
     this.computeOffsets();
 
@@ -459,6 +481,13 @@ export class Game {
       for (const c of opts.save.chests ?? []) this.chests.set(chestKey(c.x, c.y, c.z), { x: c.x, y: c.y, z: c.z, slots: (c.slots ?? []).slice(0, 27).map((s) => (s ? { ...s } : null)) });
       for (const id of opts.save.unlocked ?? []) this.unlocked.add(id);
       this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
+      this.xp = new Xp(opts.save.xp ?? 0);
+      if (opts.save.armor) {
+        for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
+          const s = opts.save.armor[i];
+          this.armor[i] = s ? { id: s.id, count: s.count, dur: s.dur } : null;
+        }
+      }
       if ((opts.save.day || 1) >= 2) this.unlocked.add('night');
       this.findSpawn();
       if (opts.save.spawn) this.spawnPoint.set(...opts.save.spawn);
@@ -484,7 +513,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 1.3: zetnij drzewo, wytwórz kilof, a potem łuk. Po zmroku grasują nieumarli, a w jaskiniach pająki.');
+      : 'BlockCraft 1.4: pancerz, doświadczenie, tarcza i wilk. Wilka zatamej mięsem (PPM)!');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -878,6 +907,151 @@ export class Game {
     this.emitHud();
   }
 
+  // ---------- Experience ----------
+
+  /** Grants XP; a level-up plays a chime and pops green particles. */
+  gainXp(n: number) {
+    const before = this.xp.info().level;
+    this.xp.add(n);
+    const after = this.xp.info().level;
+    if (after > before) {
+      Sfx.playLevelUp();
+      this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.1, this.body.pos.z, B.WOOL_GREEN, 24, 1.4);
+      this.message(`Poziom doświadczenia: ${after}!`);
+      if (after >= 10) this.unlock('xp10');
+      this.emitHud();
+    }
+  }
+
+  /** One XP orb; mobs and ores scatter 1–3 of them around the kill site. */
+  spawnOrb(x: number, y: number, z: number, value: number) {
+    if (this.orbs.length > 48) return;
+    const pos = new THREE.Vector3(x, y, z);
+    const mesh = new THREE.Mesh(this.orbGeo, this.orbMat);
+    mesh.position.copy(pos);
+    this.scene.add(mesh);
+    this.orbs.push({
+      mesh,
+      pos,
+      vel: new THREE.Vector3((Math.random() - 0.5) * 1.6, 1.4 + Math.random() * 1.6, (Math.random() - 0.5) * 1.6),
+      value,
+      age: 0,
+    });
+  }
+
+  /** Splits `total` XP into 1–3 orbs around a point. */
+  private dropXpOrbs(total: number, x: number, y: number, z: number) {
+    const n = total > 4 ? 3 : total > 2 ? 2 : 1;
+    let left = total;
+    for (let i = 0; i < n; i++) {
+      const v = i === n - 1 ? left : Math.max(1, Math.round(left / (n - i)));
+      left -= v;
+      this.spawnOrb(x + (Math.random() - 0.5) * 0.9, y, z + (Math.random() - 0.5) * 0.9, Math.max(1, v));
+    }
+  }
+
+  /** Mobs drop XP worth their type: hostiles 3–7, passives 1–3, wolves 2–5. */
+  private mobXp(m: Mob, x: number, y: number, z: number) {
+    const total = m.type === 'wolf'
+      ? 2 + Math.floor(Math.random() * 4)
+      : isHostileMob(m.type)
+        ? 3 + Math.floor(Math.random() * 5)
+        : 1 + Math.floor(Math.random() * 3);
+    this.dropXpOrbs(total, x, y, z);
+  }
+
+  private updateOrbs(dt: number) {
+    const p = this.body.pos;
+    this.orbs = this.orbs.filter((o) => {
+      o.age += dt;
+      if (o.age > 300) { this.scene.remove(o.mesh); return false; }
+      o.vel.y -= 22 * dt;
+      o.pos.addScaledVector(o.vel, dt);
+      const bx = Math.floor(o.pos.x), by = Math.floor(o.pos.y), bz = Math.floor(o.pos.z);
+      if (this.world.isSolid(bx, by, bz)) {
+        o.pos.y = by + 1.02;
+        o.vel.y = Math.max(0, -o.vel.y * 0.25);
+        o.vel.x *= 0.82;
+        o.vel.z *= 0.82;
+      }
+      const dist = Math.hypot(o.pos.x - p.x, o.pos.z - p.z, o.pos.y - (p.y + 0.9));
+      if (o.age > 0.5 && dist < 5 && dist > 0.2) {
+        o.vel.x += ((p.x - o.pos.x) / dist) * dt * 16;
+        o.vel.z += ((p.z - o.pos.z) / dist) * dt * 16;
+        o.vel.y += ((p.y + 0.6 - o.pos.y) / dist) * dt * 10;
+      }
+      if (o.age > 0.4 && dist < 1.4 && this.ui !== 'dead') {
+        this.gainXp(o.value);
+        Sfx.playPop();
+        this.scene.remove(o.mesh);
+        return false;
+      }
+      o.mesh.position.set(o.pos.x, o.pos.y + 0.12 + Math.sin(o.age * 3.2) * 0.06, o.pos.z);
+      o.mesh.rotation.y += dt * 3;
+      return true;
+    });
+  }
+
+  // ---------- Armor ----------
+
+  /** Inventory-screen click on one of the four armor slots. */
+  clickArmorSlot(i: number) {
+    if (i < 0 || i >= ARMOR_SLOT_COUNT) return;
+    const cur = this.inventory.cursor;
+    const slot = this.armor[i];
+    if (!cur) {
+      if (!slot) return;
+      this.inventory.cursor = slot;
+      this.armor[i] = null;
+    } else if (armorSlotOf(cur.id) === i) {
+      this.armor[i] = cur;
+      this.inventory.cursor = slot ?? null;
+      this.emitHud();
+    } else return;
+    if (this.armor.every((s) => s)) this.unlock('armor');
+    this.emitHud();
+  }
+
+  /** Every equipped piece takes a quarter of the hit; broken pieces fall off. */
+  private wearArmor(dealt: number) {
+    if (this.mode !== 'survival') return;
+    const wear = Math.max(1, Math.ceil(dealt / 4));
+    for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
+      const s = this.armor[i];
+      if (!s) continue;
+      const max = ITEMS[s.id]?.durability;
+      if (!max) continue;
+      if (s.dur === undefined) s.dur = max;
+      s.dur -= wear;
+      if (s.dur <= 0) {
+        this.armor[i] = null;
+        Sfx.playBreak('cloth');
+        this.message(`${displayName(s.id)} się zniszczyło.`);
+      }
+    }
+  }
+
+  /** Shield takes durability damage; used by parried hits and blocked arrows. */
+  private wearShield(n: number) {
+    if (this.mode !== 'survival') return;
+    const s = this.selectedStack();
+    if (!s || ITEMS[s.id]?.tool !== 'shield') return;
+    const max = ITEMS[s.id]?.durability ?? 1;
+    if (s.dur === undefined) s.dur = max;
+    s.dur -= n;
+    if (s.dur <= 0) {
+      this.inventory.slots[this.selected] = null;
+      Sfx.playBreak('wood');
+      this.message('Tarcza się zniszczyła.');
+    }
+    this.emitHud();
+  }
+
+  private holdingShield(): boolean {
+    const s = this.selectedStack();
+    return !!s && ITEMS[s.id]?.tool === 'shield';
+  }
+
   private tryEat(s: Stack) {
     const food = ITEMS[s.id];
     if (!food || food.kind !== 'food') return;
@@ -1104,7 +1278,7 @@ export class Game {
     const [cmd, ...args] = txt.slice(1).split(/\s+/);
     switch (cmd.toLowerCase()) {
       case 'help':
-        this.message('Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, /give <nazwa|id> [ilość], /summon <pig|sheep|cow|chicken|zombie|creeper|spider|skeleton>, /heal, /kill, /seed, /spawn, /clear, /blocks');
+        this.message('Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, /give <nazwa|id> [ilość], /summon <pig|sheep|cow|chicken|wolf|zombie|creeper|spider|skeleton>, /xp <ilość>, /heal, /kill, /seed, /spawn, /clear, /blocks');
         break;
       case 'gamemode': case 'gm': {
         const m = (args[0] || '').toLowerCase();
@@ -1149,6 +1323,13 @@ export class Game {
         else this.message('Użycie: /weather <clear|rain>');
         break;
       }
+      case 'xp': {
+        const n = parseInt(args[0] || '', 10);
+        if (Number.isNaN(n) || n <= 0) { this.message('Użycie: /xp <ilość>  (np. /xp 50)'); break; }
+        this.gainXp(Math.min(5000, n));
+        this.message(`Dodano ${Math.min(5000, n)} doświadczenia. Poziom: ${this.xp.info().level}.`);
+        break;
+      }
       case 'heal':
         this.health = 20;
         this.hunger = 20;
@@ -1164,9 +1345,10 @@ export class Game {
           pig: 'pig', swinia: 'pig', świnia: 'pig', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
+          wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
         };
         const t = map[raw];
-        if (!t) { this.message('Moby: pig, sheep, cow, chicken, zombie, creeper, spider, skeleton'); break; }
+        if (!t) { this.message('Moby: pig, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton'); break; }
         const d = this.lookDir();
         this.spawnMob(t, this.body.pos.x + d.x * 3, this.body.pos.y + 1, this.body.pos.z + d.z * 3);
         this.message('Przyzwano: ' + t);
@@ -1232,6 +1414,8 @@ export class Game {
         chests: [...this.chests.values()],
         unlocked: [...this.unlocked],
         weather: this.weather,
+        xp: this.xp.total,
+        armor: this.armor.map((s) => (s ? { ...s } : null)),
         updated: Date.now(),
       };
       upsertSave({ ...data, id: this.worldId });
@@ -1426,6 +1610,7 @@ export class Game {
         this.spawnDrop(B.WOOL_WHITE, n, mob.body.pos.x, mob.body.pos.y + 0.6, mob.body.pos.z, undefined, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2);
         this.wearTool();
         this.unlock('shear');
+        this.gainXp(1);
         Sfx.playPlace('cloth');
         this.message(n > 1 ? 'Ostrzyżono owcę. Dwie wełny.' : 'Ostrzyżono owcę.');
         return;
@@ -1496,16 +1681,22 @@ export class Game {
         const block = this.world.peekBlock(Math.floor(a.pos.x), Math.floor(a.pos.y), Math.floor(a.pos.z));
         if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) { spent = true; break; }
         if (a.from) {
-          // hostile arrow vs player
+          // hostile arrow vs player – a shield in hand parries it
           const p = this.body.pos;
           if (
             a.pos.x > p.x - 0.45 && a.pos.x < p.x + 0.45 &&
             a.pos.y > p.y - 0.1 && a.pos.y < p.y + this.body.h + 0.1 &&
             a.pos.z > p.z - 0.45 && a.pos.z < p.z + 0.45
           ) {
-            this.damage(a.power);
-            this.body.vel.x += dir.x * 2.5;
-            this.body.vel.z += dir.z * 2.5;
+            if (this.holdingShield()) {
+              Sfx.playShield();
+              this.wearShield(12);
+              this.unlock('guardian');
+            } else {
+              this.damage(a.power);
+              this.body.vel.x += dir.x * 2.5;
+              this.body.vel.z += dir.z * 2.5;
+            }
             spent = true;
             break;
           }
@@ -1564,6 +1755,20 @@ export class Game {
       return;
     }
     if (t && t.id === B.CAMPFIRE && this.cookOnCampfire(s)) return;
+    // Taming: right-click a wild wolf while holding raw meat.
+    if (s.id === I.RAW_PORK || s.id === I.RAW_BEEF || s.id === I.RAW_CHICKEN) {
+      const wt = this.findMobTarget(4.5);
+      if (wt.mob && wt.mob.type === 'wolf' && !wt.mob.tamed) {
+        if (this.mode === 'survival') this.consumeSelected();
+        wt.mob.tame();
+        Sfx.playEat();
+        Sfx.playPop();
+        this.message('Wilk przyjął mięso i od tej pory jest posłuszny.');
+        this.unlock('wolf');
+        this.swingT = 0;
+        return;
+      }
+    }
     if (s.id === I.BOW) {
       // holding RMB keeps drawing; only a fresh press starts a new draw
       if (this.bowDraw < 0) this.bowDraw = 0.0001;
@@ -1827,8 +2032,12 @@ export class Game {
         this.toldPick = true;
         this.message('Ruda wymaga kilofa – inaczej nic nie wypadnie.');
       }
-      for (const drop of blockDrops(id, toolId)) this.spawnDrop(drop.id, drop.count, x + 0.5, y + 0.45, z + 0.5);
+      const drops = blockDrops(id, toolId);
+      for (const drop of drops) this.spawnDrop(drop.id, drop.count, x + 0.5, y + 0.45, z + 0.5);
       if (isDoorTop(id)) this.spawnDrop(B.DOOR_N, 1, x + 0.5, y + 0.2, z + 0.5);
+      // ores that actually yielded something also drop XP
+      const ORE_XP: Record<number, number> = { [B.COAL_ORE]: 2, [B.IRON_ORE]: 5, [B.GOLD_ORE]: 6, [B.DIAMOND_ORE]: 7 };
+      if (drops.length > 0 && ORE_XP[id] > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, ORE_XP[id]);
     }
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
@@ -1893,11 +2102,16 @@ export class Game {
     if (amount <= 0) return;
     if (this.mode === 'creative' && !force) return;
     if (this.ui === 'dead') return;
-    this.health -= amount;
-    this.hurtCount++;
-    this.lastHurt = performance.now();
-    this.shake = Math.max(this.shake, 0.25);
-    Sfx.playHurt();
+    // Armor soaks damage; force kills (void, /kill) ignore it and don't break the gear.
+    const dealt = force ? amount : Math.max(0, Math.round(amount * (1 - damageReduction(armorPoints(this.armor)))));
+    if (dealt > 0) {
+      if (!force) this.wearArmor(dealt);
+      this.health -= dealt;
+      this.hurtCount++;
+      this.lastHurt = performance.now();
+      this.shake = Math.max(this.shake, 0.25);
+      Sfx.playHurt();
+    }
     if (this.health <= 0) {
       this.health = 0;
       this.message('Gracz zginął. Przedmioty leżą w miejscu śmierci.');
@@ -1908,6 +2122,10 @@ export class Game {
         for (const s of this.inventory.slots) {
           if (s) this.spawnDrop(s.id, s.count, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3);
         }
+        for (const s of this.armor) {
+          if (s) this.spawnDrop(s.id, 1, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3);
+        }
+        this.armor.fill(null);
       }
       this.inventory.slots.fill(null);
       this.inventory.cursor = null;
@@ -1960,6 +2178,7 @@ export class Game {
       this.updateLeafDecay(dt);
       this.updateArrows(dt);
       this.updateDrops(dt);
+      this.updateOrbs(dt);
       this.updateGrowth(dt);
       this.updateFurnaces(dt);
       this.updateWeather(dt);
@@ -2250,13 +2469,20 @@ export class Game {
     for (const m of this.mobs) {
       m.update(dt, this.world, p, (dmg, mob) => {
         if (this.ui === 'dead') return;
-        this.damage(dmg);
+        // A raised shield halves the hit and absorbs most of the knockback.
+        const shielded = this.holdingShield();
+        if (shielded) {
+          Sfx.playShield();
+          this.wearShield(8);
+          this.unlock('guardian');
+        }
+        this.damage(shielded ? Math.ceil(dmg / 2) : dmg);
         if (this.mode === 'survival') {
           const dx = p.x - mob.body.pos.x, dz = p.z - mob.body.pos.z;
           const l = Math.hypot(dx, dz) || 1;
-          this.body.vel.x += (dx / l) * 8;
-          this.body.vel.z += (dz / l) * 8;
-          this.body.vel.y = 5;
+          this.body.vel.x += (dx / l) * (shielded ? 4 : 8);
+          this.body.vel.z += (dz / l) * (shielded ? 4 : 8);
+          this.body.vel.y = shielded ? 2 : 5;
         }
       }, (mob) => {
         // skeleton shot: aim slightly above the player's chest
@@ -2264,7 +2490,11 @@ export class Game {
         const to = new THREE.Vector3(p.x, p.y + 1.0, p.z);
         const dir = to.sub(from).normalize();
         this.spawnArrow(from.addScaledVector(dir, 0.6), dir, 24, mob, 4);
-      }, peaceful);
+      }, peaceful, this.mobs, (target) => {
+        // tamed wolf's bite
+        target.damage(4, m.body.pos.x, m.body.pos.z);
+        Sfx.playHurt();
+      });
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
         if (m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
@@ -2321,7 +2551,7 @@ export class Game {
         const pos = tryPos(20, 48);
         if (pos && pos.top === B.GRASS) {
           const roll = Math.random();
-          const type: MobType = roll < 0.3 ? 'cow' : roll < 0.55 ? 'chicken' : roll < 0.78 ? 'pig' : 'sheep';
+          const type: MobType = roll < 0.1 ? 'wolf' : roll < 0.4 ? 'cow' : roll < 0.65 ? 'chicken' : roll < 0.88 ? 'pig' : 'sheep';
           const n = type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
           for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
         }
@@ -2520,6 +2750,10 @@ export class Game {
       minimap: this.showMinimap,
       heldHint: this.heldHint(),
       bow: this.bowDraw,
+      level: this.xp.info().level,
+      xpFrac: (() => { const i = this.xp.info(); return i.need > 0 ? i.inLevel / i.need : 0; })(),
+      armor: this.armor.map((s) => (s ? { ...s } : null)),
+      armorPoints: armorPoints(this.armor),
     });
   }
 
@@ -2555,7 +2789,11 @@ export class Game {
   private mobLoot(m: Mob) {
     const x = m.body.pos.x, y = m.body.pos.y + 0.4, z = m.body.pos.z;
     if (m.type === 'pig') this.spawnDrop(I.RAW_PORK, 1, x, y, z);
-    else if (m.type === 'cow') this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
+    else if (m.type === 'cow') {
+      this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
+      const hide = Math.floor(Math.random() * 3);
+      for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
     else if (m.type === 'chicken') {
       this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
       if (Math.random() < 0.4) this.spawnDrop(I.FEATHER, 1, x, y, z);
@@ -2566,11 +2804,14 @@ export class Game {
       this.spawnDrop(I.BONE, 1 + (Math.random() < 0.5 ? 1 : 0), x, y, z);
       if (Math.random() < 0.5) this.spawnDrop(I.ARROW, 1 + Math.floor(Math.random() * 3), x, y, z);
       if (Math.random() < 0.08) this.spawnDrop(I.BOW, 1, x, y, z);
+    } else if (m.type === 'wolf') {
+      if (Math.random() < 0.6) this.spawnDrop(I.BONE, 1, x, y, z);
     }
     if (m.type === 'zombie') this.unlock('zombie');
     if (m.type === 'creeper') this.unlock('creeper');
     if (m.type === 'spider') this.unlock('string');
     if (m.type === 'skeleton') this.unlock('skeleton');
+    this.mobXp(m, x, y, z);
   }
 
   private updateDrops(dt: number) {
@@ -2681,6 +2922,7 @@ export class Game {
       const before = f.output?.count ?? 0;
       const lit = tickFurnace(f, dt);
       if ((f.output?.count ?? 0) > before && f.output?.id === I.IRON) this.unlock('iron');
+      if (before === 0 && f.output) this.gainXp(1); // a finished smelt pays 1 XP
       const want = lit ? B.FURNACE_ON : B.FURNACE;
       if (id !== want) this.world.setBlock(f.x, f.y, f.z, want);
     }
@@ -2800,6 +3042,10 @@ export class Game {
     this.tnts = [];
     for (const a of this.arrows) this.scene.remove(a.mesh);
     this.arrows = [];
+    for (const o of this.orbs) this.scene.remove(o.mesh);
+    this.orbs = [];
+    this.orbGeo.dispose();
+    this.orbMat.dispose();
     for (const f of this.falling) this.scene.remove(f.mesh);
     this.falling = [];
     this.leafDecay = [];

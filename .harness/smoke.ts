@@ -56,6 +56,8 @@ import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import { loadSaves, upsertSave, deleteSave, exportSaves, importSaves } from '../src/game/saves';
 import { ACHIEVEMENTS, achievementById } from '../src/game/achievements';
+import { Xp, xpToNext, totalXpForLevel, levelFromXp } from '../src/game/xp';
+import { ARMOR, isArmor, armorPoints, damageReduction, armorSlotOf } from '../src/game/armor';
 import { Game } from '../src/game/engine';
 import { getAtlas } from '../src/game/textures';
 import { buildItemIcons } from '../src/game/itemIcons';
@@ -735,6 +737,179 @@ section('textures and icons');
     return true;
   })());
   check('1.3 items have icons', [I.STRING, I.BONE, I.FEATHER, I.ARROW, I.BOW].every((id) => id in icons));
+}
+
+// ================================================================ experience
+section('xp: level curve');
+{
+  eq('level 0 needs 7', xpToNext(0), 7);
+  eq('level 15 needs 22', xpToNext(15), 22);
+  eq('level 16 needs 20', xpToNext(16), 20);
+  eq('level 30 needs 62', xpToNext(30), 62);
+  eq('level 31 needs 65', xpToNext(31), 65);
+  eq('zero xp is level 0', levelFromXp(0).level, 0);
+  eq('7 xp is level 1', levelFromXp(7).level, 1);
+  eq('6 xp is level 0', levelFromXp(6).level, 0);
+  const x = new Xp(0);
+  eq('add(7) levels up once', x.add(7), 1);
+  eq('add returns 0 below threshold', x.add(7), 0); // 14 total -> still level 1 (needs 8, has 7)
+  eq('add(1) crosses to level 2', x.add(1), 1);
+  eq('level derives from total', x.info().level, 2);
+  const big = new Xp(totalXpForLevel(40));
+  eq('round-trip reaches level 40', big.info().level, 40);
+  eq('inLevel resets at a boundary', big.info().inLevel, 0);
+}
+
+// ======================================================================= armor
+section('armor: stats, recipes, equipping');
+{
+  const ids = [
+    I.LEATHER_HELMET, I.LEATHER_CHEST, I.LEATHER_LEGS, I.LEATHER_BOOTS,
+    I.IRON_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS,
+    I.GOLD_HELMET, I.GOLD_CHEST, I.GOLD_LEGS, I.GOLD_BOOTS,
+    I.DIAMOND_HELMET, I.DIAMOND_CHEST, I.DIAMOND_LEGS, I.DIAMOND_BOOTS,
+  ];
+  check('all 16 armor pieces registered', ids.every((id) => isArmor(id)));
+  eq('diamond chest gives 8 points', ARMOR[I.DIAMOND_CHEST]?.points, 8);
+  eq('leather boots give 1 point', ARMOR[I.LEATHER_BOOTS]?.points, 1);
+  eq('gold and iron share points', ARMOR[I.GOLD_CHEST]?.points, ARMOR[I.IRON_CHEST]?.points);
+  eq('armor is unstackable', stackLimit(I.IRON_HELMET), 1);
+  eq('shield is unstackable', stackLimit(I.SHIELD), 1);
+  eq('boots occupy slot 3', armorSlotOf(I.IRON_BOOTS), 3);
+  eq('helmet occupies slot 0', armorSlotOf(I.LEATHER_HELMET), 0);
+  const fullDiamond = [
+    { id: I.DIAMOND_HELMET, count: 1 }, { id: I.DIAMOND_CHEST, count: 1 },
+    { id: I.DIAMOND_LEGS, count: 1 }, { id: I.DIAMOND_BOOTS, count: 1 },
+  ];
+  eq('full diamond set = 20 points', armorPoints(fullDiamond), 20);
+  eq('empty set = 0 points', armorPoints([null, null, null, null]), 0);
+  eq('no points = no reduction', damageReduction(0), 0);
+  eq('reduction grows with points', damageReduction(15), 0.6);
+  check('reduction capped at 80%', damageReduction(100) <= 0.8);
+
+  // /give aliases
+  eq('alias: skorzany_kaptur', resolveId('skorzany_kaptur'), I.LEATHER_HELMET);
+  eq('alias: leather_helmet', resolveId('leather_helmet'), I.LEATHER_HELMET);
+  eq('alias: diamontowy_kaptur', resolveId('diamontowy_kaptur'), I.DIAMOND_HELMET);
+  eq('alias: tarcza', resolveId('tarcza'), I.SHIELD);
+  eq('alias: skora', resolveId('skora'), I.LEATHER);
+
+  // recipes
+  const outs = new Set(RECIPES.map((r) => r.out.id));
+  check('all 16 armor recipes exist', ids.every((id) => outs.has(id)));
+  check('shield recipe exists', outs.has(I.SHIELD));
+  const helmetRecipe = RECIPES.find((r) => r.out.id === I.IRON_HELMET);
+  check('armor needs the crafting table', helmetRecipe?.table === true);
+  check('armor recipes have patterns', ids.every((id) => RECIPES.find((r) => r.out.id === id)?.pattern != null));
+  const sh = RECIPES.find((r) => r.out.id === I.SHIELD);
+  check('shield recipe is 6 planks + 1 iron', sh ? sh.inputs.some((i) => i.id === B.PLANKS && i.count === 6) && sh.inputs.some((i) => i.id === I.IRON && i.count === 1) : false);
+}
+
+// ============================================== engine: armor + xp + shield
+section('engine: armor damage, equipping, xp');
+{
+  type G = Record<string, any>;
+  const g = Object.create(Game.prototype) as unknown as G;
+  g.mode = 'survival';
+  g.ui = 'playing';
+  g.health = 20;
+  g.hunger = 20;
+  g.hurtCount = 0;
+  g.shake = 0;
+  g.inventory = new Inventory();
+  g.body = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3() };
+  g.spawnPoint = new THREE.Vector3(0, 0, 0);
+  g.selected = 0;
+  const drops: unknown[][] = [];
+  const msgs: string[] = [];
+  g.spawnDrop = (...a: unknown[]) => void drops.push(a);
+  g.message = (t: string) => void msgs.push(t);
+  g.setUI = (s: string) => void (g.ui = s);
+  g.emitHud = () => {};
+  g.spawnParticles = () => {};
+  g.selectedStack = () => g.inventory.slots[g.selected] ?? null;
+  g.unlocked = new Set<string>();
+
+  // full iron set: 15 points -> 60% reduction; 4 damage becomes 2
+  g.armor = [
+    { id: I.IRON_HELMET, count: 1 }, { id: I.IRON_CHEST, count: 1 },
+    { id: I.IRON_LEGS, count: 1 }, { id: I.IRON_BOOTS, count: 1 },
+  ];
+  g.damage(4);
+  eq('iron armor reduces 4 to 2', g.health, 18);
+  eq('each piece wears by 1', g.armor[0].dur, 164);
+  check('all pieces wore', g.armor.every((s: any) => s.dur !== undefined));
+
+  // equipping: swap boots with leather
+  g.inventory.cursor = { id: I.LEATHER_BOOTS, count: 1 };
+  g.clickArmorSlot(3);
+  eq('leather boots equipped', g.armor[3].id, I.LEATHER_BOOTS);
+  eq('iron boots return to cursor', g.inventory.cursor?.id, I.IRON_BOOTS);
+
+  // wrong slot: cursor unchanged
+  g.clickArmorSlot(1);
+  eq('wrong slot keeps the cursor', g.inventory.cursor?.id, I.IRON_BOOTS);
+
+  // unarmouring
+  g.inventory.cursor = null;
+  g.clickArmorSlot(3);
+  eq('unequip to cursor', g.inventory.cursor?.id, I.LEATHER_BOOTS);
+  eq('slot cleared', g.armor[3], null);
+
+  // full-set achievement: re-put the boots, then equip the last piece
+  g.armor[3] = { id: I.IRON_BOOTS, count: 1 };
+  g.inventory.cursor = { id: I.LEATHER_HELMET, count: 1 };
+  g.clickArmorSlot(0);
+  eq('helmet equipped over iron', g.armor[0].id, I.LEATHER_HELMET);
+  check('full-set achievement unlocked', g.unlocked.has('armor'), `[${[...g.unlocked]}]`);
+
+  // XP
+  g.xp = new Xp(0);
+  g.gainXp(7);
+  eq('7 xp is level 1', g.xp.info().level, 1);
+  g.gainXp(8);
+  eq('15 xp is level 2', g.xp.info().level, 2);
+  g.gainXp(9);
+  eq('24 xp is level 3', g.xp.info().level, 3);
+
+  // death: armor drops with the inventory
+  g.health = 1;
+  g.ui = 'playing';
+  g.damage(1000, true);
+  eq('force kill ends the game', g.ui, 'dead');
+  const droppedIds = drops.map((d) => d[0]);
+  check('armor dropped on death', [I.LEATHER_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS].every((id) => droppedIds.includes(id)), JSON.stringify(droppedIds));
+  eq('armor cleared on death', g.armor.every((s: any) => s === null), true);
+}
+
+// ======================================================================== wolf
+section('mobs: wolf taming and defence');
+{
+  const w = new World(777, true);
+  w.getChunk(0, 0);
+  const gy = w.heightAt(2, 2);
+  const wolf = new Mob('wolf', 2.5, gy + 1.0, 2.5);
+  check('wolf has four legs', wolf.legs.length === 4, `${wolf.legs.length}`);
+  eq('wolf has 8 hp', wolf.maxHealth, 8);
+  check('wild wolf is not tamed', !wolf.tamed);
+  check('tame succeeds', wolf.tame());
+  check('second tame refused', !wolf.tame());
+
+  const player = new THREE.Vector3(12.5, gy + 1, 2.5);
+  const allies: Mob[] = [wolf];
+  for (let i = 0; i < 240; i++) wolf.update(1 / 30, w, player, () => {}, () => {}, false, allies);
+  const distAfter = player.distanceTo(wolf.body.pos);
+  check('tamed wolf follows the player', distAfter < 6, `${distAfter.toFixed(1)}`);
+
+  // a hostile nearby the player gets bitten
+  const zombie = new Mob('zombie', 14.5, gy + 1, 2.5);
+  let bites = 0;
+  for (let i = 0; i < 90; i++) {
+    // the engine's onBite callback damages the target; mirror that here
+    wolf.update(1 / 30, w, player, () => {}, () => {}, false, [wolf, zombie], (t) => { bites++; t.damage(4, wolf.body.pos.x, wolf.body.pos.z); });
+  }
+  check('wolf attacks the hostile', bites > 0, `${bites} bites`);
+  check('zombie took damage', zombie.health < zombie.maxHealth, `hp ${zombie.health}`);
 }
 
 // =================================================================== report

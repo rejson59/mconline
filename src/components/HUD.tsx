@@ -35,6 +35,15 @@ function Bubble({ pop }: { pop: boolean }) {
   );
 }
 
+function ArmorPiece({ icon, frac }: { icon: string; frac: number }) {
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: 22, height: 22, background: 'rgba(40,40,40,0.5)', border: '1px solid #1a1a1a' }}>
+      <img src={icon} className="pixelated" width={18} height={18} draggable={false} />
+      {frac < 1 && <span className="dur-bar"><i style={{ width: `${frac * 100}%`, background: frac < 0.25 ? '#e04040' : '#3dba3d' }} /></span>}
+    </div>
+  );
+}
+
 function Drumstick({ fill }: { fill: 0 | 1 | 2 }) {
   const meat = fill === 0 ? '#4a2a12' : '#c47a32';
   const bone = fill === 0 ? '#3a3a3a' : '#f2efe6';
@@ -143,7 +152,7 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 1.3 (${hud.fps} fps)`,
+            `BlockCraft 1.4 (${hud.fps} fps)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -156,6 +165,7 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
             `Ziarno: ${hud.seed}`,
             `Tryb: ${hud.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'}${hud.flying ? ' (lot)' : ''}${hud.sprinting ? ' sprint' : ''}`,
             `Głód: ${hud.hunger.toFixed(1)}  Pogoda: ${hud.weather === 'rain' ? 'deszcz' : 'jasno'}`,
+            `Poziom: ${hud.level} (${Math.round(hud.xpFrac * 100)}% do następnego)  Pancerz: ${hud.armorPoints} pkt`,
           ].map((l, i) => (
             <div key={i} className="w-fit px-1" style={{ background: 'rgba(0,0,0,0.45)' }}>
               {l}
@@ -200,6 +210,16 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
             {label.text}
           </div>
         )}
+        {hud.armor.some((s) => s) && (
+          <div className="mb-0.5 flex justify-center gap-[2px]">
+            {hud.armor.map((s, i) => {
+              if (!s) return <div key={i} style={{ width: 22, height: 22, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,0,0,0.45)' }} />;
+              const max = durabilityMax(s.id);
+              const frac = s.dur !== undefined && max > 0 ? Math.max(0, s.dur / max) : 1;
+              return <ArmorPiece key={i} icon={icons[s.id]} frac={frac} />;
+            })}
+          </div>
+        )}
         {hud.mode === 'survival' && (
           <div className="mb-1 flex w-full flex-col gap-0.5 px-1" style={{ width: 9 * 48 }}>
             <div className="flex justify-between">
@@ -220,6 +240,15 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
         )}
         {hud.sprinting && <div className="mb-1 text-sm opacity-80 mc-text">Sprint</div>}
         {hud.mode === 'creative' && hud.flying && <div className="mb-1 text-sm opacity-80 mc-text">✈ Latanie</div>}
+        <div className="relative mb-1 h-[10px]" style={{ width: 9 * 48, background: 'rgba(0,0,0,0.55)', border: '2px solid #1a1a1a' }}>
+          <div className="h-full" style={{ width: `${Math.round(hud.xpFrac * 100)}%`, background: '#7ec850' }} />
+          <span
+            className="absolute inset-0 flex items-center justify-center text-[11px] font-bold"
+            style={{ color: '#ffe97a', textShadow: '1px 1px 0 #000, -1px -1px 0 #000' }}
+          >
+            {hud.level}
+          </span>
+        </div>
         <Hotbar hud={hud} icons={icons} />
       </div>
 

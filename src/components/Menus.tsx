@@ -13,6 +13,7 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  'Aktualizacja 1.4: Pancerz!',
   'Aktualizacja 1.3: Łowy!',
   'Aktualizacja 1.2: Zbuduj dom!',
   'Aktualizacja 1.1: Przetrwanie!',
@@ -22,6 +23,9 @@ const SPLASHES = [
   'Pochodnie świecą w jaskiniach!',
   'Głód to nie żart!',
   'Wyhoduj własne drzewo!',
+  'Zatamej wilka mięsem!',
+  'Diamentowy pancerz to moc!',
+  'Zbieraj doświadczenie!',
   'Polska wersja!',
 ];
 
@@ -73,6 +77,9 @@ export function Controls() {
     ['Łuk: przytrzymaj PPM, puść', 'Wystrzał ze strzałą'],
     ['Kompas / zegar', 'Kierunek odrodzenia i pora dnia'],
     ['Motyka + PPM', 'Grządka'],
+    ['PPM na wilku z surowym mięsem', 'Zatamej wilka (strzeże gracza)'],
+    ['Tarcza w ręku', 'Przyłap strzały i osłabia ciosy'],
+    ['Sloty pancerza (w E)', 'Załóż pancerz (4 elementy)'],
     ['M', 'Minimapa'],
     ['F3', 'Informacje debugowania'],
     ['Esc', 'Pauza'],
@@ -314,7 +321,7 @@ export function MainMenu({
           </div>
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.3</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.4</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>
