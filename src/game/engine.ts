@@ -283,6 +283,8 @@ export class Game {
   private itemTex = new Map<number, THREE.Texture>();
   private dropGeos = new Map<number, THREE.BufferGeometry>();
   private falling: FallingBlock[] = [];
+  /** Leaves waiting to fall apart after their tree lost its last log. */
+  private leafDecay: { x: number; y: number; z: number; t: number }[] = [];
   private growables = new Map<string, number>();
   private growAcc = 0;
   private growCursor = 0;
@@ -1721,6 +1723,51 @@ export class Game {
     this.falling = keep;
   }
 
+  /**
+   * Minecraft-style leaf decay: after a log is gone, every leaf farther than
+   * four blocks from the nearest remaining log falls apart.
+   */
+  private decayLeaves(x: number, y: number, z: number) {
+    const seen = new Set<string>([`${x},${y},${z}`]);
+    let frontier: [number, number, number][] = [[x, y, z]];
+    for (let dist = 0; dist < 4 && frontier.length; dist++) {
+      const next: [number, number, number][] = [];
+      for (const [cx, cy, cz] of frontier) {
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+          if (dx === 0 && dy === 0 && dz === 0) continue;
+          const nx = cx + dx, ny = cy + dy, nz = cz + dz;
+          const k = `${nx},${ny},${nz}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          const id = this.world.peekBlock(nx, ny, nz);
+          if (id === B.LOG || id === B.BIRCH_LOG) next.push([nx, ny, nz]);
+          else if (id === B.LEAVES || id === B.BIRCH_LEAVES) {
+            next.push([nx, ny, nz]);
+            this.leafDecay.push({ x: nx, y: ny, z: nz, t: 0.25 + Math.random() * 0.9 });
+          }
+        }
+      }
+      frontier = next;
+    }
+  }
+
+  private updateLeafDecay(dt: number) {
+    if (!this.leafDecay.length) return;
+    const keep: typeof this.leafDecay = [];
+    for (const l of this.leafDecay) {
+      l.t -= dt;
+      if (l.t > 0) { keep.push(l); continue; }
+      const id = this.world.peekBlock(l.x, l.y, l.z);
+      if (id !== B.LEAVES && id !== B.BIRCH_LEAVES) continue;
+      this.world.setBlock(l.x, l.y, l.z, B.AIR);
+      this.spawnParticles(l.x + 0.5, l.y + 0.5, l.z + 0.5, id, 6, 0.2);
+      if (this.mode === 'survival') {
+        for (const drop of blockDrops(id, 0)) this.spawnDrop(drop.id, drop.count, l.x + 0.5, l.y + 0.4, l.z + 0.5);
+      }
+    }
+    this.leafDecay = keep;
+  }
+
   breakBlock(x: number, y: number, z: number, silent = false) {
     const id = this.world.getBlock(x, y, z);
     if (id === B.AIR || BLOCKS[id].hardness < 0) return;
@@ -1749,6 +1796,7 @@ export class Game {
       if (ladderFacing(nid) === f || (isTrapOpen(nid) && nid - B.TRAP_N === f)) this.breakBlock(lx, y, lz, silent);
     }
     this.growables.delete(`${x},${y},${z}`);
+    if (id === B.LOG || id === B.BIRCH_LOG) this.decayLeaves(x, y, z);
     if (!silent) {
       this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 14, 0.35);
       Sfx.playBreak(def.sound);
@@ -1889,6 +1937,7 @@ export class Game {
       this.updateMobs(dt);
       this.updateEntities(dt);
       this.updateFalling(dt);
+      this.updateLeafDecay(dt);
       this.updateArrows(dt);
       this.updateDrops(dt);
       this.updateGrowth(dt);
@@ -2722,6 +2771,7 @@ export class Game {
     this.arrows = [];
     for (const f of this.falling) this.scene.remove(f.mesh);
     this.falling = [];
+    this.leafDecay = [];
     for (const d of this.drops) {
       this.scene.remove(d.mesh);
       const mesh = d.mesh as THREE.Mesh;

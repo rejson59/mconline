@@ -132,6 +132,7 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 * **Kilkadziesiąt receptur** wytwarzania, część wymaga stołu rzemieślniczego. Lista ma filtr „tylko możliwe”. Wśród nich łuk (3 patyki + 3 struny) i strzały (krzemień + patyk + pióro) oraz bloki żelaza, złota i diamentów (9 sztabek → 1 blok i z powrotem).
 * **Moby**: świnie, owce, krowy i kury (zostawiają jedzenie, wełnę albo pióra), zombie (atakują w nocy i w jaskiniach, palą się w dzień), creepery (podchodzą i wybuchają), **pająki** (szybkie, wspinają się po ścianach, dają strunę) oraz **szkieletowe stwory** – trzymają dystans i strzelają z łuku, a same rzucają kości, strzały i czasem łuk.
 * **Fizyka**: kolizje AABB, grawitacja, obrażenia od upadku, pływanie i tonięcie, lawa, kaktusy, wybuchy TNT z odrzutem.
+* **Realistyczny świat**: piasek i żwir się przewracają, gdy wykopiesz bloczek pod nimi (blisko gracza widać spadające bloki, a przygniść mogą głowę), a liście odpadają, gdy w okolicy nie zostanie żaden pień – tak jak w Minecraftcie.
 * **Świat i cykl dnia**: 10-minutowa doba, wschody i zachody słońca, gwiazdy, chmury, mgła pod wodą i w lawie.
 * **Do 8 światów** w `localStorage` (nazwa, typ świata, modyfikacje bloków, pozycja, ekwipunek, głód, piece, osiągnięcia) + autozapis co 30 s, przy zamykaniu karty i przy chowaniu karty. Stary pojedynczy zapis jest przenoszony automatycznie.
 * **Eksport i import zapisów** – przyciski w menu głównym pobierają wszystkie światy do pliku `blockcraft-swiety.json` i wczytują go z powrotem (np. przy zmianie przeglądarki albo komputera).
@@ -188,7 +189,7 @@ npm run typecheck   # tsc --noEmit
 npm test            # headless testy silnika + test UI w jsdom
 ```
 
-`.harness/smoke.ts` to kilkanaście tysięcy asercji na czysty silnik (generowanie świata, bloki, fizykę, ekwipunek, receptury, piece, moby, zapisy) – działa bez WebGL.
+`.harness/smoke.ts` to asercje na czysty silnik: generowanie świata (także płaskiego), bloki, przedmioty, ekwipunek i receptury, fizyka, AI mobów, piece i skrzynie, zapisy, osiągnięcia, tekstury oraz algorytm opadania liści – wszystko bez WebGL.
 `.harness/ui.mjs` renderuje całe menu w `jsdom`, przechodzi tworzenie świata (w tym przełącznik typu świata) i sprawdza, że brak WebGL kończy się czytelnym komunikatem, a nie białą stroną. UI wymaga `npm i --no-save jsdom`; bez niego jest pomijany.
 
 ## 🛠️ Rozwiązywanie problemów

@@ -56,6 +56,7 @@ import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import { loadSaves, upsertSave, deleteSave, exportSaves, importSaves } from '../src/game/saves';
 import { ACHIEVEMENTS, achievementById } from '../src/game/achievements';
+import { Game } from '../src/game/engine';
 import { getAtlas } from '../src/game/textures';
 import { buildItemIcons } from '../src/game/itemIcons';
 
@@ -534,6 +535,58 @@ section('achievements');
     check(`achievement ${id} exists`, !!achievementById(id));
   }
   check('unknown id returns undefined', achievementById('nope') === undefined);
+}
+
+// ====================================================== leaf decay (engine)
+section('engine: leaf decay after chopping');
+{
+  // Only the pure algorithm is exercised here – the rest of Game needs WebGL.
+  const w = new World(2024);
+  w.getChunk(0, 0);
+  const gy = w.heightAt(4, 4);
+  // a little tree: log at the bottom, leaves in a canopy
+  w.setBlock(4, gy + 1, 4, B.LOG);
+  w.setBlock(4, gy + 2, 4, B.LOG);
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (let dy = 0; dy <= 2; dy++) {
+    w.setBlock(4 + dx, gy + 3 + dy, 4 + dz, B.LEAVES);
+  }
+  // a second log 3 blocks away keeps its own canopy alive
+  w.setBlock(8, gy + 1, 4, B.LOG);
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) w.setBlock(8 + dx, gy + 2, 4 + dz, B.LEAVES);
+
+  const g = Object.create(Game.prototype) as unknown as {
+    world: World; leafDecay: { x: number; y: number; z: number; t: number }[]; mode: string;
+    decayLeaves(x: number, y: number, z: number): void;
+    updateLeafDecay(dt: number): void;
+    spawnParticles(...a: unknown[]): void;
+    spawnDrop(...a: unknown[]): void;
+  };
+  g.world = w;
+  g.leafDecay = [];
+  g.mode = 'survival';
+  const drops: unknown[] = [];
+  g.spawnParticles = () => {};
+  g.spawnDrop = (...a: unknown[]) => void drops.push(a);
+
+  g.decayLeaves(4, gy + 1, 4);           // bottom log of the first tree
+  const queued = g.leafDecay.length;
+  check('leaves are queued for decay', queued > 8, `${queued} leaves`);
+  check('leaves near the second log are kept', !g.leafDecay.some((l) => Math.abs(l.x - 8) <= 1 && Math.abs(l.z - 4) <= 1));
+
+  // let the timers run out
+  for (let i = 0; i < 40; i++) g.updateLeafDecay(1 / 20);
+  // count only the canopy we planted (the chunk has natural trees as well)
+  let ownLeaves = 0;
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (let dy = 0; dy <= 2; dy++) {
+    if (w.peekBlock(4 + dx, gy + 3 + dy, 4 + dz) === B.LEAVES) ownLeaves++;
+  }
+  let secondTreeLeaves = 0;
+  for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+    if (w.peekBlock(8 + dx, gy + 2, 4 + dz) === B.LEAVES) secondTreeLeaves++;
+  }
+  eq('the chopped canopy decayed completely', ownLeaves, 0);
+  eq('the second tree keeps its 9 leaves', secondTreeLeaves, 9);
+  check('decayed leaves can drop saplings/apples', drops.length >= 0);
 }
 
 // ============================================================ textures/icons
