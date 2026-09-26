@@ -516,7 +516,7 @@ function writeBuilding(v: Village, b: VillageBuilding, set: SetBlock) {
  * Wypisuje wycinek wsi należący do chunka (cx, cz).
  * `data` to surowa tablica chunka: (y * CS + z) * CS + x.
  */
-export function applyVillages(data: Uint8Array, ccx: number, ccz: number, ctx: VillageContext): VillageApplyResult {
+export function applyVillages(data: Uint16Array | Uint8Array, ccx: number, ccz: number, ctx: VillageContext): VillageApplyResult {
   const mask = new Uint8Array(CS * CS);
   const ground = new Uint8Array(CS * CS);
   let top = 0;

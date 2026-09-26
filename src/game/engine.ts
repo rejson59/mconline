@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, type Biome } from './world';
-import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal } from './blocks';
+import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, isPiston } from './blocks';
+import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { getAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, type Body } from './physics';
 import { Mob, isHostileMob, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
-const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider']);
+const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
 import { Inventory, RECIPES, type Stack } from './inventory';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
@@ -152,6 +153,9 @@ export const MOB_NAMES: Record<MobType, string> = {
   skeleton: 'Szkielet',
   villager: 'Mieszkaniec',
   golem: 'Żelazny golem',
+  enderman: 'Enderman',
+  slime: 'Slime',
+  ghast: 'Ghast',
 };
 
 /** A sand/gravel block tumbling down until it lands. */
@@ -376,6 +380,10 @@ export class Game {
   /** Leaves waiting to fall apart after their tree lost its last log. */
   private leafDecay: { x: number; y: number; z: number; t: number }[] = [];
   private growables = new Map<string, number>();
+  private buttonTimers = new Map<string, number>();
+  private redstoneDirty = new Set<string>();
+  portalCooldown = 0;
+  isInNether = false;
   private growAcc = 0;
   private growCursor = 0;
   private eatCooldown = 0;
@@ -1430,6 +1438,68 @@ export class Game {
     this.swingT = 0;
   }
 
+  private toggleLever(x: number, y: number, z: number) {
+    if (rsToggleLever(this.world, x, y, z)) {
+      Sfx.playPlace('stone');
+      this.swingT = 0;
+      this.onBlockChanged(x, y, z);
+      this.unlock('redstone');
+    }
+  }
+
+  private pressButton(x: number, y: number, z: number) {
+    if (rsPressButton(this.world, x, y, z)) {
+      Sfx.playPlace('stone');
+      this.swingT = 0;
+      this.onBlockChanged(x, y, z);
+      this.buttonTimers.set(`${x},${y},${z}`, 1.2);
+      this.unlock('redstone');
+    }
+  }
+
+  private playNoteBlock(x: number, y: number, z: number) {
+    const below = this.world.getBlock(x, y - 1, z);
+    const pitch = (x + z) % 24;
+    Sfx.playNote(pitch, below);
+    this.spawnParticles(x + 0.5, y + 1, z + 0.5, B.NOTE_BLOCK, 4, 0.2);
+    this.swingT = 0;
+  }
+
+  private enterPortal() {
+    if (this.portalCooldown > 0) return;
+    this.message('Wkraczasz do portalu Netheru...');
+    this.portalCooldown = 3;
+    // simple nether simulation: teleport to nether-like area or show effect
+    // For now, we simulate nether by moving to far away coordinates and changing biome to nether
+    const px = this.body.pos.x;
+    const pz = this.body.pos.z;
+    // If in overworld, go to nether (divide coords by 8 and set y higher)
+    // If already in nether (y < 20 and near netherrack), return
+    const isNether = this.world.getBlock(Math.floor(px), Math.floor(this.body.pos.y - 1), Math.floor(pz)) === B.NETHERRACK || this.isInNether;
+    if (!isNether) {
+      this.isInNether = true;
+      this.body.pos.set(px / 8, 70, pz / 8);
+      this.message('Przeniesiono do Netheru! Uważaj na lawę i Ghasty.');
+      this.unlock('nether');
+      // generate nether terrain around
+      this.world.generateNetherArea(Math.floor(px / 8), Math.floor(pz / 8));
+    } else {
+      this.isInNether = false;
+      this.body.pos.set(px * 8, 80, pz * 8);
+      this.message('Wróciłeś do normalnego świata.');
+    }
+    this.spawnParticles(this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, B.NETHER_PORTAL, 20, 0.5);
+    Sfx.playPortal();
+  }
+
+  private onBlockChanged(x: number, y: number, z: number) {
+    this.redstoneDirty.add(`${x},${y},${z}`);
+    // also add neighbors
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as [number, number, number][]) {
+      this.redstoneDirty.add(`${x + dx},${y + dy},${z + dz}`);
+    }
+  }
+
   private cookOnCampfire(s: Stack): boolean {
     const cooked: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN };
     const out = cooked[s.id];
@@ -1615,10 +1685,13 @@ export class Game {
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
           villager: 'villager', mieszkaniec: 'villager', wieśniak: 'villager', wiesniak: 'villager',
           golem: 'golem', zelazny_golem: 'golem', 'żelazny_golem': 'golem',
+          enderman: 'enderman', endermen: 'enderman', enderman_pl: 'enderman',
+          slime: 'slime', szlam: 'slime',
+          ghast: 'ghast',
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem');
+          this.message('Moby: pig, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -2065,15 +2138,31 @@ export class Game {
       if (t.id === B.FURNACE || t.id === B.FURNACE_ON) { this.openFurnace(t.x, t.y, t.z); return; }
       if (t.id === B.ENCHANT) { this.openEnchant(t.x, t.y, t.z); return; }
       if (t.id === B.BED) { this.trySleep(t.x, t.y, t.z); return; }
+      if (t.id === B.LEVER || t.id === B.LEVER_ON) { this.toggleLever(t.x, t.y, t.z); return; }
+      if (t.id === B.BUTTON || t.id === B.BUTTON_ON) { this.pressButton(t.x, t.y, t.z); return; }
+      if (t.id === B.NOTE_BLOCK) { this.playNoteBlock(t.x, t.y, t.z); return; }
+      if (t.id === B.NETHER_PORTAL) { this.enterPortal(); return; }
     }
     const s = this.selectedStack();
     if (!s) return;
-    if (t && s.id === I.FLINT_STEEL && t.id === B.TNT) {
-      this.igniteTNT(t.x, t.y, t.z, 3.2);
-      this.unlock('boom');
-      this.wearTool();
-      this.swingT = 0;
-      return;
+    if (t && s.id === I.FLINT_STEEL) {
+      if (t.id === B.TNT) {
+        this.igniteTNT(t.x, t.y, t.z, 3.2);
+        this.unlock('boom');
+        this.wearTool();
+        this.swingT = 0;
+        return;
+      }
+      if (t.id === B.OBSIDIAN || t.id === B.CRYING_OBSIDIAN) {
+        if (tryCreatePortal(this.world, t.x, t.y, t.z)) {
+          this.message('Portal do Netheru został aktywowany!');
+          Sfx.playPlace('glass');
+          this.wearTool();
+          this.swingT = 0;
+          this.unlock('portal');
+          return;
+        }
+      }
     }
     if (t && t.id === B.CAMPFIRE && this.cookOnCampfire(s)) return;
     // Taming: right-click a wild wolf while holding raw meat.
@@ -2127,9 +2216,61 @@ export class Game {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.FARMLAND) return;
     } else if (id === B.CROP0 || id === B.CROP1 || id === B.CROP2 || id === B.CROP3) {
       if (below !== B.FARMLAND) return;
-    } else if (id === B.TORCH) {
+    } else if (id === B.TORCH || id === B.REDSTONE_TORCH) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
       if (!IS_SOLID[attached] && !IS_SOLID[below]) return;
+    } else if (id === B.LEVER || id === B.BUTTON || id === B.REDSTONE_TORCH || id === B.REDSTONE_TORCH_OFF) {
+      const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
+      if (!IS_SOLID[attached]) { this.message('Dźwignia/przycisk musi być na solidnej ścianie.'); return; }
+    } else if (id === B.RAIL || id === B.POWERED_RAIL || id === B.DETECTOR_RAIL) {
+      if (!IS_SOLID[below]) { this.message('Tory kładzie się na solidnym podłożu.'); return; }
+    } else if (isStairs(id)) {
+      // stairs facing opposite to player
+      const dir = this.lookDir();
+      const facing = facingFromNormal(-dir.x, -dir.z);
+      const base = stairsBase(id);
+      const placed = base + facing;
+      // check if valid
+      if (!BLOCKS[placed]) return;
+      // use placed id
+      (s as any)._placedId = placed;
+    } else if (isSlab(id)) {
+      // if clicking on top half of block or placing on top slab, make top slab
+      const base = slabBase(id);
+      const isTop = t.ny === -1 || (t as any).hitY > 0.5;
+      // if existing slab same type, combine to full block
+      const existing = this.world.getBlock(px, py, pz);
+      if (existing === base && !isTop) {
+        // bottom + top = full block – determine full block type
+        let full: number = B.STONE;
+        if (base === B.OAK_SLAB) full = B.PLANKS;
+        else if (base === B.STONE_SLAB) full = B.STONE;
+        else if (base === B.COBBLE_SLAB) full = B.COBBLE;
+        else if (base === B.BRICK_SLAB) full = B.BRICK;
+        else if (base === B.SANDSTONE_SLAB) full = B.SANDSTONE;
+        else if (base === B.NETHER_BRICK_SLAB) full = B.NETHER_BRICKS;
+        else if (base === B.QUARTZ_SLAB) full = B.QUARTZ_BLOCK;
+        (s as any)._placedId = full;
+      } else if (existing === base && isTop) {
+        // already bottom, placing top on same spot -> full
+        let full: number = B.STONE;
+        if (base === B.OAK_SLAB) full = B.PLANKS;
+        else if (base === B.STONE_SLAB) full = B.STONE;
+        else if (base === B.COBBLE_SLAB) full = B.COBBLE;
+        else if (base === B.BRICK_SLAB) full = B.BRICK;
+        else if (base === B.SANDSTONE_SLAB) full = B.SANDSTONE;
+        else if (base === B.NETHER_BRICK_SLAB) full = B.NETHER_BRICKS;
+        else if (base === B.QUARTZ_SLAB) full = B.QUARTZ_BLOCK;
+        (s as any)._placedId = full;
+      } else {
+        // normal slab placement
+        const placed = isTop ? base + 1 : base;
+        (s as any)._placedId = placed;
+      }
+    } else if (isPiston(id)) {
+      // piston facing toward player (place facing opposite to look)
+      // for simplicity store facing in block id? We use same id but remember direction via placement normal
+      // future: directional pistons – for now just place
     } else if (id === B.SUGARCANE) {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.SAND && below !== B.SUGARCANE) {
         this.message('Trzcina rośnie na trawie, ziemi lub piasku.');
@@ -2168,11 +2309,16 @@ export class Game {
     } else if (RENDER[id] === 1) {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && below !== B.FARMLAND) return;
     }
-    this.world.setBlock(px, py, pz, id);
+    const finalId = (s as any)._placedId ?? id;
+    delete (s as any)._placedId;
+    this.world.setBlock(px, py, pz, finalId);
     this.settle(px, py, pz);
-    if (id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SUGARCANE || (id >= B.CROP0 && id <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
-    if (id === B.TORCH) this.unlock('torch');
-    Sfx.playPlace(BLOCKS[id].sound);
+    // redstone update
+    this.onBlockChanged(px, py, pz);
+    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
+    if (finalId === B.TORCH || finalId === B.REDSTONE_TORCH) this.unlock('torch');
+    if (finalId === B.NETHER_BRICKS || finalId === B.QUARTZ_BLOCK) this.unlock('nether');
+    Sfx.playPlace(BLOCKS[finalId].sound);
     this.swingT = 0;
     this.consumeSelected();
   }
@@ -2518,6 +2664,7 @@ export class Game {
       this.updateOrbs(dt);
       this.updateGrowth(dt);
       this.updateFurnaces(dt);
+      this.updateRedstone(dt);
       this.updateWeather(dt);
       this.checkUnderground();
       this.villageCheck -= dt;
@@ -2659,6 +2806,28 @@ export class Game {
       this.air = Math.min(this.maxAir, this.air + dt * 4);
     }
     const under = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.05), Math.floor(b.pos.z));
+    // 1.7 special blocks effects
+    if (under === B.SLIME_BLOCK && b.onGround && this.mode !== 'creative') {
+      // bounce
+      if (wasGround === false || b.vel.y < -2) {
+        b.vel.y = Math.max(6, -b.vel.y * 0.8);
+        this.fallStart = b.pos.y + 6;
+        Sfx.playStep('slime');
+      }
+    }
+    if (under === B.HONEY_BLOCK) {
+      b.vel.x *= 0.4;
+      b.vel.z *= 0.4;
+      if (b.vel.y < 0) b.vel.y *= 0.4;
+    }
+    if (under === B.SOUL_SAND || under === B.SOUL_SOIL) {
+      b.vel.x *= 0.6;
+      b.vel.z *= 0.6;
+    }
+    if (under === B.MAGMA && b.onGround && this.mode === 'survival' && !this.flying) {
+      this.campfireHurt += dt;
+      if (this.campfireHurt > 0.6) { this.campfireHurt = 0; this.damage(1); this.message('Blok magmy parzy!'); }
+    }
     if (under === B.CAMPFIRE && b.onGround && this.mode === 'survival' && !this.flying) {
       this.campfireHurt += dt;
       if (this.campfireHurt > 0.45) { this.campfireHurt = 0; this.damage(1); }
@@ -3279,13 +3448,20 @@ export class Game {
     } else if (m.type === 'wolf') {
       if (Math.random() < 0.6) this.spawnDrop(I.BONE, 1, x, y, z);
     } else if (m.type === 'golem') {
-      // Żelazny golem sypie sztabkami żelaza i makami.
       const iron = 3 + Math.floor(Math.random() * 3);
       for (let i = 0; i < iron; i++) this.spawnDrop(I.IRON, 1, x, y, z);
       const poppies = 1 + Math.floor(Math.random() * 2);
       for (let i = 0; i < poppies; i++) this.spawnDrop(B.FLOWER_RED, 1, x, y, z);
+    } else if (m.type === 'enderman') {
+      if (Math.random() < 0.5) this.spawnDrop(I.ENDER_PEARL, 1, x, y, z);
+      if (Math.random() < 0.3) this.spawnDrop(B.GRASS, 1, x, y, z);
+    } else if (m.type === 'slime') {
+      const balls = Math.floor(Math.random() * 3);
+      for (let i = 0; i < balls; i++) this.spawnDrop(I.SLIME_BALL, 1, x, y, z);
+    } else if (m.type === 'ghast') {
+      if (Math.random() < 0.6) this.spawnDrop(I.GHAST_TEAR, 1, x, y, z);
+      if (Math.random() < 0.8) this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
     } else if (m.type === 'villager') {
-      // Mieszkańcy nie upuszczają łupów – lepiej ich nie krzywdzić.
       this.message('Mieszkańcy nie zostawiają po sobie niczego. Golem zapamięta ten cios.');
     }
     // Grabież: each level reruns one drop roll from the same table
@@ -3459,6 +3635,36 @@ export class Game {
       if (before === 0 && f.output) this.gainXp(1); // a finished smelt pays 1 XP
       const want = lit ? B.FURNACE_ON : B.FURNACE;
       if (id !== want) this.world.setBlock(f.x, f.y, f.z, want);
+    }
+  }
+
+  private updateRedstone(dt: number) {
+    if (this.portalCooldown > 0) this.portalCooldown -= dt;
+    // button timers
+    for (const [key, t] of this.buttonTimers) {
+      const nt = t - dt;
+      if (nt <= 0) {
+        const [x, y, z] = key.split(',').map(Number);
+        const id = this.world.getBlock(x, y, z);
+        if (id === B.BUTTON_ON) {
+          this.world.setBlock(x, y, z, B.BUTTON);
+          this.onBlockChanged(x, y, z);
+        }
+        this.buttonTimers.delete(key);
+      } else {
+        this.buttonTimers.set(key, nt);
+      }
+    }
+    if (this.redstoneDirty.size > 0) {
+      tickRedstone(this.world, this.redstoneDirty);
+      this.redstoneDirty.clear();
+    }
+    // check player standing on portal
+    const px = Math.floor(this.body.pos.x), py = Math.floor(this.body.pos.y), pz = Math.floor(this.body.pos.z);
+    const b = this.world.getBlock(px, py, pz);
+    const b2 = this.world.getBlock(px, py + 1, pz);
+    if ((b === B.NETHER_PORTAL || b2 === B.NETHER_PORTAL) && this.portalCooldown <= 0) {
+      this.enterPortal();
     }
   }
 
