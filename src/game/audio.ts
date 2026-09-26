@@ -279,6 +279,27 @@ export function playLevelUp() {
   }
 }
 
+/** Enchanting table: a shimmering, rising chime. */
+export function playEnchant() {
+  const c = ensure();
+  if (!c || !master) return;
+  const t0 = c.currentTime;
+  const notes = [659.25, 830.61, 987.77, 1318.51];
+  notes.forEach((f, i) => {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    const t = t0 + i * 0.07;
+    o.type = 'sine';
+    o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    o.connect(g).connect(master!);
+    o.start(t);
+    o.stop(t + 0.75);
+  });
+}
+
 /** Shield parry: a dull metallic clank. */
 export function playShield() {
   const c = ensure();

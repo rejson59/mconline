@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
-import { displayName } from '../game/items';
+import { stackTooltip, TooltipBody } from '../utils/tooltip';
 import type { Stack } from '../game/inventory';
 
 function Slot({
@@ -25,7 +25,7 @@ function Slot({
           onClick?.(e.button === 2);
         }}
         onContextMenu={(e) => e.preventDefault()}
-        onMouseEnter={() => onHover?.(stack ? displayName(stack.id) : label ?? null)}
+        onMouseEnter={() => onHover?.(stackTooltip(stack, label ?? ''))}
         onMouseLeave={() => onHover?.(null)}
       >
         {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
@@ -99,7 +99,7 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
                 refresh();
               }}
               onContextMenu={(e) => e.preventDefault()}
-              onMouseEnter={() => setHover(s ? displayName(s.id) : null)}
+              onMouseEnter={() => setHover(stackTooltip(s))}
               onMouseLeave={() => setHover(null)}
             >
               {s && <img src={icons[s.id]} width={32} height={32} className="pixelated" draggable={false} />}
@@ -109,8 +109,8 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
         </div>
       </div>
       {hover && !inv.cursor && (
-        <div className="pointer-events-none fixed z-50 px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f' }}>
-          {hover}
+        <div className="pointer-events-none fixed z-50 max-w-[320px] px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', whiteSpace: 'pre-line' }}>
+          <TooltipBody text={hover} />
         </div>
       )}
       {inv.cursor && (

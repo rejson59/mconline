@@ -6,6 +6,13 @@ export interface Stack {
   count: number;
   /** Remaining uses. Absent means the tool is undamaged. */
   dur?: number;
+  /** Enchantment id → level (update 1.5). Absent = plain item. */
+  ench?: Record<string, number>;
+}
+
+/** True when two stacks can merge (same id, no durability, no enchantments). */
+export function mergeable(a: Stack, b: Stack): boolean {
+  return a.id === b.id && a.dur === undefined && b.dur === undefined && !a.ench && !b.ench;
 }
 
 export const MAX_STACK = 64;
@@ -55,6 +62,14 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.BRICK, count: 2 }, inputs: [{ id: B.CLAY, count: 4 }, { id: I.COAL, count: 1 }], table: true },
   { out: { id: B.SANDSTONE, count: 1 }, inputs: [{ id: B.SAND, count: 4 }], table: false },
   { out: { id: B.BOOKSHELF, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: B.WOOL_WHITE, count: 1 }], table: true },
+  // 1.5 „Zaklęcia": papier → książka → biblioteczka (modyfikuje ten sam blok)
+  { out: { id: B.BOOKSHELF, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.BOOK, count: 3 }], table: true, pattern: ['PPP', 'BBB', 'PPP'], key: { P: B.PLANKS, B: I.BOOK } },
+  // Papier i książka są bezpostaciowe – mieści się je także w siatce 2×2.
+  { out: { id: I.PAPER, count: 3 }, inputs: [{ id: B.SUGARCANE, count: 3 }], table: false },
+  { out: { id: I.BOOK, count: 1 }, inputs: [{ id: I.PAPER, count: 3 }, { id: I.LEATHER, count: 1 }], table: false },
+  { out: { id: B.ENCHANT, count: 1 }, inputs: [{ id: B.OBSIDIAN, count: 4 }, { id: I.DIAMOND, count: 2 }, { id: I.BOOK, count: 1 }], table: true, pattern: [' D ', 'DBD', 'OOO'], key: { D: I.DIAMOND, B: I.BOOK, O: B.OBSIDIAN } },
+  { out: { id: B.LAPIS_BLOCK, count: 1 }, inputs: [{ id: I.LAPIS, count: 9 }], table: true, pattern: ['LLL', 'LLL', 'LLL'], key: { L: I.LAPIS } },
+  { out: { id: I.LAPIS, count: 9 }, inputs: [{ id: B.LAPIS_BLOCK, count: 1 }], table: false },
   { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.COAL, count: 5 }], table: true },
   { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.GUNPOWDER, count: 5 }], table: true },
   { out: { id: B.GLOWSTONE, count: 1 }, inputs: [{ id: B.GOLD_ORE, count: 1 }, { id: B.GLASS, count: 1 }], table: true },
@@ -68,6 +83,7 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.OBSIDIAN, count: 1 }, inputs: [{ id: B.STONE, count: 4 }, { id: I.DIAMOND, count: 1 }], table: true },
   { out: { id: I.COAL, count: 1 }, inputs: [{ id: B.COAL_ORE, count: 1 }], table: false },
   { out: { id: I.DIAMOND, count: 1 }, inputs: [{ id: B.DIAMOND_ORE, count: 1 }], table: false },
+  { out: { id: I.LAPIS, count: 4 }, inputs: [{ id: B.LAPIS_ORE, count: 1 }], table: false },
   { out: { id: I.STICK, count: 4 }, inputs: [{ id: B.PLANKS, count: 2 }], table: false, pattern: ['P', 'P'], key: { P: B.PLANKS } },
   { out: { id: B.TORCH, count: 4 }, inputs: [{ id: I.COAL, count: 1 }, { id: I.STICK, count: 1 }], table: false, pattern: ['C', 'S'], key: { C: I.COAL, S: I.STICK } },
   { out: { id: I.BREAD, count: 1 }, inputs: [{ id: I.WHEAT, count: 3 }], table: false },
@@ -141,13 +157,13 @@ export class Inventory {
   /** 3x3 crafting grid; only the top-left 2x2 is used without a table. */
   grid: (Stack | null)[] = new Array(9).fill(null);
 
-  add(id: number, count = 1, dur?: number): boolean {
+  add(id: number, count = 1, dur?: number, ench?: Record<string, number>): boolean {
     const limit = stackLimit(id);
-    // Damaged or unstackable items each take their own slot.
-    if (dur !== undefined || limit === 1) {
+    // Damaged, enchanted or unstackable items each take their own slot.
+    if (dur !== undefined || ench || limit === 1) {
       for (let i = 0; i < 36 && count > 0; i++) {
         if (!this.slots[i]) {
-          this.slots[i] = dur !== undefined ? { id, count: 1, dur } : { id, count: 1 };
+          this.slots[i] = { id, count: 1, ...(dur !== undefined ? { dur } : {}), ...(ench ? { ench } : {}) };
           count--;
         }
       }
@@ -155,7 +171,7 @@ export class Inventory {
     }
     for (let i = 0; i < 36 && count > 0; i++) {
       const s = this.slots[i];
-      if (s && s.id === id && s.dur === undefined && s.count < limit) {
+      if (s && s.id === id && s.dur === undefined && !s.ench && s.count < limit) {
         const n = Math.min(limit - s.count, count);
         s.count += n;
         count -= n;
@@ -249,7 +265,7 @@ export class Inventory {
       if (!cell) {
         // right click drops a single item – the natural way to fill a pattern
         if (right && this.cursor.count > 1) {
-          this.grid[i] = { id: this.cursor.id, count: 1, dur: this.cursor.dur };
+          this.grid[i] = { id: this.cursor.id, count: 1, dur: this.cursor.dur, ench: this.cursor.ench ? { ...this.cursor.ench } : undefined };
           this.cursor.count -= 1;
         } else {
           this.grid[i] = this.cursor;
@@ -257,7 +273,7 @@ export class Inventory {
         }
         return;
       }
-      if (cell.id === this.cursor.id && cell.dur === undefined && this.cursor.dur === undefined) {
+      if (mergeable(cell, this.cursor)) {
         const limit = stackLimit(cell.id);
         const n = right ? Math.min(1, this.cursor.count) : this.cursor.count;
         const move = Math.min(n, limit - cell.count, this.cursor.count);
@@ -287,7 +303,6 @@ export class Inventory {
     const r = this.gridMatch(table);
     if (!r) return null;
     const out: Stack = { ...r.out };
-    if (out.dur === undefined && r.out.dur !== undefined) out.dur = r.out.dur;
     for (let i = 0; i < 9; i++) {
       const cell = this.grid[i];
       if (!cell) continue;
@@ -303,7 +318,7 @@ export class Inventory {
     for (let i = 0; i < 9; i++) {
       const cell = this.grid[i];
       if (!cell) continue;
-      if (!this.add(cell.id, cell.count, cell.dur)) leftovers.push(cell);
+      if (!this.add(cell.id, cell.count, cell.dur, cell.ench)) leftovers.push(cell);
       this.grid[i] = null;
     }
     return leftovers;
@@ -337,7 +352,8 @@ export class Inventory {
     }
     if (!s) {
       if (right) {
-        this.slots[i] = { id: c.id, count: 1 };
+        // carry durability/enchantments with the single taken unit
+        this.slots[i] = { id: c.id, count: 1, ...(c.dur !== undefined ? { dur: c.dur } : {}), ...(c.ench ? { ench: { ...c.ench } } : {}) };
         c.count--;
         if (c.count <= 0) this.cursor = null;
       } else {
@@ -346,7 +362,7 @@ export class Inventory {
       }
       return;
     }
-    if (s.id === c.id && s.dur === undefined && c.dur === undefined) {
+    if (mergeable(s, c)) {
       const amount = right ? 1 : c.count;
       const n = Math.min(stackLimit(s.id) - s.count, amount);
       s.count += n;

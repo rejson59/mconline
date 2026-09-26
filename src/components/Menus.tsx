@@ -13,6 +13,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  'Aktualizacja 1.5: Zaklęcia!',
+  'Zaklnij kilof w stole zaklęć!',
+  'Trzcina rośnie nad wodą!',
   'Aktualizacja 1.4: Pancerz!',
   'Aktualizacja 1.3: Łowy!',
   'Aktualizacja 1.2: Zbuduj dom!',
@@ -78,6 +81,8 @@ export function Controls() {
     ['Kompas / zegar', 'Kierunek odrodzenia i pora dnia'],
     ['Motyka + PPM', 'Grządka'],
     ['PPM na wilku z surowym mięsem', 'Zatamej wilka (strzeże gracza)'],
+    ['PPM na stole zaklęć', 'Zaklnij narzędzie, broń lub pancerz'],
+    ['Stół zaklęć + biblioteczki', 'Wyższe poziomy zaklęć (do 30)'],
     ['Tarcza w ręku', 'Przyłap strzały i osłabia ciosy'],
     ['Sloty pancerza (w E)', 'Załóż pancerz (4 elementy)'],
     ['M', 'Minimapa'],
@@ -321,7 +326,7 @@ export function MainMenu({
           </div>
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.4</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 1.5</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>

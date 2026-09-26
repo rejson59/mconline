@@ -414,6 +414,62 @@ export function buildAtlas(): AtlasResult {
   storageBlock(T.gold_block, [250, 214, 74], R(77));
   storageBlock(T.diamond_block, [93, 236, 245], R(78));
 
+  // 1.5 „Zaklęcia": lapis, enchanting table, sugar cane
+  ore(T.lapis_ore, [36, 66, 190], R(79));
+  storageBlock(T.lapis_block, [42, 74, 196], R(80));
+  {
+    const r = R(83);
+    noiseFill(T.enchant_bottom, [26, 20, 42], 0.3, r);
+    copyTile(T.enchant_bottom, T.enchant_side);
+    // glowing runes carved into the obsidian sides
+    const runes: [number, number][][] = [
+      [[2, 4], [2, 5], [2, 6], [3, 5], [4, 4], [4, 5], [4, 6]],
+      [[6, 4], [7, 5], [8, 4], [8, 6], [9, 5]],
+      [[11, 4], [11, 6], [12, 5], [13, 4], [13, 6], [13, 5]],
+      [[3, 9], [4, 10], [5, 9], [6, 10], [7, 9]],
+      [[9, 9], [10, 10], [11, 9], [12, 10], [12, 9]],
+      [[5, 12], [6, 12], [7, 13], [8, 12], [9, 12], [10, 13]],
+    ];
+    for (const glyph of runes) {
+      for (const [x, y] of glyph) {
+        setPx(T.enchant_side, x, y, 150, 60, 220);
+        if (r() < 0.5) setPx(T.enchant_side, x, y + 1, 96, 34, 150);
+      }
+    }
+    for (let x = 0; x < 16; x++) { setPx(T.enchant_side, x, 0, 12, 8, 22); setPx(T.enchant_side, x, 15, 12, 8, 22); }
+    // top: an open book on a dark cloth
+    copyTile(T.enchant_bottom, T.enchant_top);
+    for (let x = 1; x < 15; x++) for (let y = 1; y < 15; y++) {
+      if (x === 1 || y === 1 || x === 14 || y === 14) setPx(T.enchant_top, x, y, 78, 44, 26);
+    }
+    for (let y = 4; y < 12; y++) for (let x = 3; x < 13; x++) {
+      const page = x < 8 ? 236 : 228;
+      setPx(T.enchant_top, x, y, page, page - 6, page - 30);
+      if (y % 2 === 0 && x > 3 && x < 12 && x !== 7 && x !== 8) setPx(T.enchant_top, x, y, 150, 140, 120);
+    }
+    for (let y = 3; y < 13; y++) setPx(T.enchant_top, 7, y, 120, 40, 40);
+    for (let y = 3; y < 13; y++) setPx(T.enchant_top, 8, y, 150, 54, 54);
+    setPx(T.enchant_top, 7, 3, 200, 170, 60); setPx(T.enchant_top, 8, 3, 200, 170, 60);
+  }
+  {
+    const r = R(84);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.sugarcane, x, y, 0, 0, 0, 0);
+    // three stalks with joints and a couple of leaves
+    for (const [sx, col] of [[3, [96, 168, 74]], [7, [122, 190, 92]], [11, [86, 152, 66]]] as [number, RGB][]) {
+      for (let y = 0; y < 16; y++) {
+        const joint = y % 5 === 0;
+        const lit = shade(col, joint ? 0.7 : 0.9 + r() * 0.25);
+        const dark = shade(col, joint ? 0.55 : 0.72);
+        setPx(T.sugarcane, sx, y, lit[0], lit[1], lit[2]);
+        setPx(T.sugarcane, sx + 1, y, dark[0], dark[1], dark[2]);
+      }
+    }
+    for (const [x, y] of [[5, 3], [6, 2], [9, 6], [10, 5], [2, 8], [13, 9], [12, 10]]) {
+      setPx(T.sugarcane, x, y, 130, 196, 96);
+      setPx(T.sugarcane, x, y + 1, 104, 168, 74);
+    }
+  }
+
   ctx.putImageData(img, 0, 0);
 
   // average colors

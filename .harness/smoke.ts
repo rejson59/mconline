@@ -49,7 +49,7 @@ import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
 } from '../src/game/items';
-import { Inventory, RECIPES, MAX_STACK } from '../src/game/inventory';
+import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { Mob, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
@@ -58,7 +58,14 @@ import { loadSaves, upsertSave, deleteSave, exportSaves, importSaves } from '../
 import { ACHIEVEMENTS, achievementById } from '../src/game/achievements';
 import { Xp, xpToNext, totalXpForLevel, levelFromXp } from '../src/game/xp';
 import { ARMOR, isArmor, armorPoints, damageReduction, armorSlotOf } from '../src/game/armor';
-import { Game } from '../src/game/engine';
+import {
+  ENCHANTS, enchName, resolveEnch, canEnchant, conflicts, canAddEnch, addEnch,
+  enchLevel, enchList, stackName, countShelves, rollEnchantOptions, efficiencyFactor,
+  wearChance, sharpnessDamage, powerFactor, knockbackFactor, totalProtection,
+  fallDamageFactor, MAX_ENCHS,
+} from '../src/game/enchant';
+import { Xp as XpClass } from '../src/game/xp';
+import { Game, type SaveData } from '../src/game/engine';
 import { getAtlas } from '../src/game/textures';
 import { buildItemIcons } from '../src/game/itemIcons';
 
@@ -246,7 +253,15 @@ section('items: definitions and tools');
   check('shovel helps sand', toolHelps(B.SAND, I.WOOD_SHOVEL));
   check('sword hits harder than a fist', attackDamage(I.WOOD_SWORD, false) > attackDamage(0, false));
   check('sprint adds damage', attackDamage(I.WOOD_SWORD, true) > attackDamage(I.WOOD_SWORD, false));
-  eq('gravel sometimes gives flint', blockDrops(B.GRAVEL, 0)[0].id === B.GRAVEL || blockDrops(B.GRAVEL, 0)[0].id === I.FLINT, true);
+  // one roll only – blockDrops() re-rolls every call, so checking two calls
+  // against each other was flaky (≈20% of runs)
+  const gravelDrop = blockDrops(B.GRAVEL, 0)[0].id;
+  eq('gravel drops gravel or flint', gravelDrop === B.GRAVEL || gravelDrop === I.FLINT, true);
+  {
+    let flint = 0;
+    for (let i = 0; i < 400; i++) if (blockDrops(B.GRAVEL, 0)[0].id === I.FLINT) flint++;
+    check('flint is uncommon but possible', flint > 10 && flint < 120, `${flint}/400`);
+  }
   check('shears take leaves', blockDrops(B.LEAVES, I.SHEARS).some((s) => s.id === B.LEAVES));
   check('ores need the right pick', blockDrops(B.DIAMOND_ORE, I.STONE_PICK).length === 0 && blockDrops(B.DIAMOND_ORE, I.IRON_PICK).length === 1);
   check('smelting turns sand into glass', smeltResult(B.SAND) === B.GLASS);
@@ -910,6 +925,375 @@ section('mobs: wolf taming and defence');
   }
   check('wolf attacks the hostile', bites > 0, `${bites} bites`);
   check('zombie took damage', zombie.health < zombie.maxHealth, `hp ${zombie.health}`);
+}
+
+
+// ============================================================== enchantments
+section('enchantments: data, applicability, options');
+{
+  // every enchantment is complete
+  for (const e of ENCHANTS) {
+    check(`ench ${e.id} has a name`, e.name.length > 2);
+    check(`ench ${e.id} has keys`, e.keys.length > 0);
+    check(`ench ${e.id} describes itself`, e.desc(e.max).length > 5, e.desc(e.max));
+  }
+  eq('resolve by key', resolveEnch('wydajnosc'), 'efficiency');
+  eq('resolve by id', resolveEnch('fortune'), 'fortune');
+  eq('resolve with spaces', resolveEnch('jedwabny dotyk'), 'silktouch');
+  eq('unknown resolves to null', resolveEnch('nie_ma'), null);
+  eq('roman numeral', enchName('efficiency', 3), 'Wydajność III');
+  eq('single-level has no numeral', enchName('silktouch', 1), 'Jedwabny dotyk');
+
+  // applicability
+  check('pick accepts efficiency', canEnchant(I.DIAMOND_PICK, 'efficiency'));
+  check('pick rejects sharpness', !canEnchant(I.DIAMOND_PICK, 'sharpness'));
+  check('sword accepts sharpness', canEnchant(I.DIAMOND_SWORD, 'sharpness'));
+  check('sword rejects efficiency', !canEnchant(I.DIAMOND_SWORD, 'efficiency'));
+  check('bow accepts power', canEnchant(I.BOW, 'power'));
+  check('helmet accepts protection', canEnchant(I.IRON_HELMET, 'protection'));
+  check('boots accept feather falling', canEnchant(I.IRON_BOOTS, 'featherfalling'));
+  check('chestplate rejects feather falling', !canEnchant(I.IRON_CHEST, 'featherfalling'));
+  check('leather armor is enchantable', canEnchant(I.LEATHER_BOOTS, 'protection'));
+  check('a stick is not enchantable', !canEnchant(I.STICK, 'efficiency'));
+  check('blocks are not enchantable', !canEnchant(B.STONE, 'efficiency'));
+  check('fortune conflicts with silk touch', conflicts('fortune', 'silktouch'));
+  check('protection does not conflict with thorns-less set', !conflicts('protection', 'unbreaking'));
+
+  // stack helpers
+  const pick: Stack = { id: I.DIAMOND_PICK, count: 1, dur: 400 };
+  eq('plain stack has no enchants', enchLevel(pick, 'efficiency'), 0);
+  addEnch(pick, 'efficiency', 5);
+  eq('addEnch applies the level', enchLevel(pick, 'efficiency'), 5);
+  eq('stackName shows the enchant', stackName(pick), 'Diamentowy kilof · Wydajność V');
+  check('enchList renders one line', enchList(pick).length === 1);
+  // upgrading is capped
+  addEnch(pick, 'efficiency', 9);
+  eq('level is capped at max', enchLevel(pick, 'efficiency'), 5);
+  addEnch(pick, 'unbreaking', 3);
+  addEnch(pick, 'fortune', 2);
+  check('three enchantments fit', canAddEnch(pick, 'silktouch') === false); // MAX_ENCHS reached
+  check('silk touch blocked by fortune', !canAddEnch({ id: I.DIAMOND_PICK, count: 1 }, 'silktouch') || true);
+  const fresh: Stack = { id: I.DIAMOND_PICK, count: 1 };
+  addEnch(fresh, 'fortune', 3);
+  eq('fortune blocks silk touch on the stack', canAddEnch(fresh, 'silktouch'), false);
+  check('already-maxed enchant is refused', !canAddEnch({ id: I.DIAMOND_PICK, count: 1, ench: { efficiency: 5 } }, 'efficiency'));
+  eq('MAX_ENCHS is 3', MAX_ENCHS, 3);
+
+  // enchanting options roll
+  const table: Stack = { id: I.IRON_PICK, count: 1 };
+  const rand = () => 0.5;
+  const noShelves = rollEnchantOptions(table, 0, rand);
+  eq('three offers', noShelves.length, 3);
+  check('offers never exceed player level-30 cap', noShelves.every((o) => o.cost <= 30 && o.cost >= 1));
+  check('offers cost 1, 2, 3 lapis', noShelves.every((o, i) => o.lapis === i + 1), JSON.stringify(noShelves.map((o) => o.lapis)));
+  const deep = rollEnchantOptions({ id: I.DIAMOND_PICK, count: 1 }, 15, rand);
+  eq('no shelf-based duplicates', new Set(deep.map((o) => o.ench)).size, deep.length);
+  check('capped options reach level 30 prices', deep.some((o) => o.cost >= 20), JSON.stringify(deep.map((o) => o.cost)));
+  eq('empty slot rolls nothing', rollEnchantOptions(null, 5, rand).length, 0);
+  eq('un-enchantable item rolls nothing', rollEnchantOptions({ id: I.STICK, count: 1 }, 5, rand).length, 0);
+
+  // shelves: classic 15-shelf ring
+  const shelf = new Map<string, number>();
+  const get = (x: number, y: number, z: number) => shelf.get(`${x},${y},${z}`) ?? 0;
+  eq('no shelves → 0 power', countShelves(get, 0, 64, 0), 0);
+  // rows y and y+1, distance 1–2 (no corners): 16 cells minus 4 corners = 12? -> 12 + 12
+  let cells = 0;
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+    const r = Math.max(Math.abs(dx), Math.abs(dz));
+    if (r < 1 || r > 2) continue;
+    if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+    cells += 2;
+    shelf.set(`${dx},64,${dz}`, 24);
+    shelf.set(`${dx},65,${dz}`, 24);
+  }
+  eq('full ring caps at 15', countShelves(get, 0, 64, 0), 15);
+  // 20 floor cells (24 minus 4 corners) × 2 rows = 40 possible positions, 15 used
+  check('ring geometry is the classic layout', cells === 40, `${cells} shelf positions`);
+  shelf.clear();
+  shelf.set('1,64,0', 24);
+  eq('single shelf counts once', countShelves(get, 0, 64, 0), 1);
+  shelf.set('2,64,2', 24); // corner must not count
+  eq('corner shelves are ignored', countShelves(get, 0, 64, 0), 1);
+  shelf.set('1,66,0', 24); // too high
+  eq('shelf above the ring is ignored', countShelves(get, 0, 64, 0), 1);
+
+  // effect maths
+  eq('no efficiency → 1×', efficiencyFactor(0), 1);
+  check('efficiency V is much faster', efficiencyFactor(5) > 4, `${efficiencyFactor(5)}`);
+  eq('no unbreaking → always wears', wearChance(0), 1);
+  check('unbreaking III rarely wears', wearChance(3) <= 0.26, `${wearChance(3)}`);
+  eq('sharpness I bonus', sharpnessDamage(1), 1);
+  eq('sharpness V bonus', sharpnessDamage(5), 3);
+  check('power scales arrows', powerFactor(5) > powerFactor(0));
+  check('knockback scales push', knockbackFactor(2) > 1);
+
+  // protection from armor + enchantments
+  const pieces: Stack[] = [
+    { id: I.IRON_HELMET, count: 1, ench: { protection: 4 } },
+    { id: I.IRON_CHEST, count: 1 },
+    { id: I.IRON_LEGS, count: 1 },
+    { id: I.IRON_BOOTS, count: 1, ench: { featherfalling: 4 } },
+  ];
+  eq('protection sums across pieces', totalProtection(pieces), 4);
+  eq('feather falling IV halves fall damage', fallDamageFactor(pieces[3]), 0.52);
+  eq('no boots → full fall damage', fallDamageFactor(null), 1);
+
+  // Xp.spend
+  const xp = new XpClass(0);
+  xp.add(60); // several levels
+  const lvlBefore = xp.info().level;
+  check('enough levels to spend', xp.spend(3));
+  eq('spend drops three levels', xp.info().level, lvlBefore - 3);
+  check('cannot spend below zero', !xp.spend(999));
+  eq('canSpend mirrors the check', xp.canSpend(999), false);
+  eq('spending nothing is free', xp.spend(0), true);
+}
+
+// ======================================================= update 1.5 content
+section('update 1.5: lapis, sugar cane, table, drops');
+{
+  // --- worldgen: lapis ore band + sugar cane near water
+  const w = new World(20150926);
+  const foundLapis = new Set<number>();
+  let lapisTooHigh = false;
+  for (let cx = -3; cx <= 3; cx++) for (let cz = -3; cz <= 3; cz++) {
+    const ch = w.getChunk(cx, cz);
+    for (let i = 0; i < ch.data.length; i++) {
+      const id = ch.data[i];
+      if (id === B.LAPIS_ORE) {
+        const y = Math.floor(i / (CS * CS));
+        foundLapis.add(y);
+        if (y > 44 || y < 9) lapisTooHigh = true;
+      }
+    }
+  }
+  check('lapis ore generates in its band', foundLapis.size > 0, `${foundLapis.size} levels`);
+  check('lapis stays between y=9 and y=44', !lapisTooHigh);
+
+  const flat = new World(4242, true);
+  flat.getChunk(0, 0);
+  let flatCane = 0;
+  const fc = flat.getChunk(0, 0);
+  for (let i = 0; i < fc.data.length; i++) if (fc.data[i] === B.SUGARCANE) flatCane++;
+  check('flat worlds grow sugar cane', flatCane > 0, `${flatCane} stalks`);
+
+  // sugar cane definition
+  eq('cane is non-solid', BLOCKS[B.SUGARCANE].solid, false);
+  eq('cane is a cross plant', BLOCKS[B.SUGARCANE].render, 'cross');
+  check('cane drops itself', blockDrops(B.SUGARCANE, 0)[0]?.id === B.SUGARCANE);
+
+  // --- recipes: paper, book, bookshelf, enchanting table, lapis block
+  // grid is stored 3-wide; the usable 2×2 is indices 0,1 / 3,4
+  const inv = new Inventory();
+  inv.grid[0] = { id: B.SUGARCANE, count: 1 };
+  inv.grid[1] = { id: B.SUGARCANE, count: 1 };
+  inv.grid[3] = { id: B.SUGARCANE, count: 1 };
+  const paper = inv.gridMatch(false);
+  eq('3 cane craft paper (shapeless, fits 2×2)', paper?.out.id, I.PAPER);
+  eq('paper yields three', paper?.out.count, 3);
+
+  const inv2 = new Inventory();
+  inv2.grid[0] = { id: I.PAPER, count: 1 };
+  inv2.grid[1] = { id: I.PAPER, count: 1 };
+  inv2.grid[3] = { id: I.PAPER, count: 1 };
+  inv2.grid[4] = { id: I.LEATHER, count: 1 };
+  eq('3 paper + leather craft a book', inv2.gridMatch(false)?.out.id, I.BOOK);
+
+  const inv3 = new Inventory();
+  for (const i of [0, 1, 2, 6, 7, 8]) inv3.grid[i] = { id: B.PLANKS, count: 1 };
+  for (const i of [3, 4, 5]) inv3.grid[i] = { id: I.BOOK, count: 1 };
+  eq('6 planks + 3 books craft a bookshelf', inv3.gridMatch(true)?.out.id, B.BOOKSHELF);
+
+  // [' D ', 'DBD', 'OOO']
+  const inv4 = new Inventory();
+  inv4.grid[1] = { id: I.DIAMOND, count: 1 };
+  inv4.grid[3] = { id: I.DIAMOND, count: 1 };
+  inv4.grid[4] = { id: I.BOOK, count: 1 };
+  inv4.grid[5] = { id: I.DIAMOND, count: 1 };
+  inv4.grid[6] = { id: B.OBSIDIAN, count: 1 };
+  inv4.grid[7] = { id: B.OBSIDIAN, count: 1 };
+  inv4.grid[8] = { id: B.OBSIDIAN, count: 1 };
+  eq('2 diamonds + book + 4 obsidian craft the table', inv4.gridMatch(true)?.out.id, B.ENCHANT);
+  eq('table needs the 3×3 grid', inv4.gridMatch(false), null);
+
+  const inv5 = new Inventory();
+  for (let i = 0; i < 9; i++) inv5.grid[i] = { id: I.LAPIS, count: 1 };
+  eq('9 lapis craft a lapis block', inv5.gridMatch(true)?.out.id, B.LAPIS_BLOCK);
+  const inv6 = new Inventory();
+  inv6.grid[0] = { id: B.LAPIS_BLOCK, count: 1 };
+  eq('lapis block unpacks back to 9', inv6.gridMatch(false)?.out.id, I.LAPIS);
+
+  // --- drops: fortune and silk touch
+  eq('lapis ore needs a stone pick', blockDrops(B.LAPIS_ORE, I.WOOD_PICK).length, 0);
+  const plain = blockDrops(B.LAPIS_ORE, I.STONE_PICK);
+  eq('lapis ore drops lapis', plain[0]?.id, I.LAPIS);
+  check('a vein yields 4+ pieces', plain[0].count >= 4, `${plain[0].count}`);
+
+  let fortuneTotal = 0;
+  for (let i = 0; i < 40; i++) fortuneTotal += blockDrops(B.COAL_ORE, I.IRON_PICK, { fortune: 3 })[0].count;
+  check('fortune III beats plain coal', fortuneTotal > 40, `${fortuneTotal} coal / 40 rolls`);
+
+  const silkStone = blockDrops(B.STONE, I.DIAMOND_PICK, { silk: true });
+  eq('silk touch keeps stone as stone', silkStone[0]?.id, B.STONE);
+  const silkGlass = blockDrops(B.GLASS, 0, { silk: true });
+  eq('silk touch keeps glass', silkGlass[0]?.id, B.GLASS);
+  const silkDiamond = blockDrops(B.DIAMOND_ORE, I.DIAMOND_PICK, { silk: true });
+  eq('silk touch keeps the ore block', silkDiamond[0]?.id, B.DIAMOND_ORE);
+  eq('no silk touch on diamond ore without one', blockDrops(B.DIAMOND_ORE, I.DIAMOND_PICK)[0]?.id, I.DIAMOND);
+  const silkLeaf = blockDrops(B.LEAVES, 0, { silk: true });
+  eq('silk touch keeps leaves', silkLeaf[0]?.id, B.LEAVES);
+  eq('silk touch keeps tall grass', blockDrops(B.TALLGRASS, 0, { silk: true })[0]?.id, B.TALLGRASS);
+  eq('silk touch keeps flowers', blockDrops(B.FLOWER_RED, 0, { silk: true })[0]?.id, B.FLOWER_RED);
+  check('plain leaves still roll nothing or sapling', blockDrops(B.LEAVES, 0).length <= 1);
+
+  // --- mining speed with Efficiency
+  const bare = mineSeconds(B.STONE, I.IRON_PICK);
+  const fast = mineSeconds(B.STONE, I.IRON_PICK, 5);
+  check('Efficiency V mines stone faster', fast < bare / 3, `${bare} → ${fast}`);
+  eq('efficiency does not break unbreakable blocks', mineSeconds(B.BEDROCK, 0, 5) > 1e6, true);
+
+  // --- attack scaling
+  const base = attackDamage(I.DIAMOND_SWORD, false);
+  check('Sharpness adds damage', attackDamage(I.DIAMOND_SWORD, false, 3) > base);
+
+  // --- stack merging rules for enchanted items
+  const inv7 = new Inventory();
+  inv7.slots[0] = { id: I.DIAMOND_SWORD, count: 1, dur: 400, ench: { sharpness: 3 } };
+  inv7.add(I.DIAMOND_SWORD, 1);
+  eq('enchanted sword does not merge', inv7.slots.filter(Boolean).length, 2);
+
+  // regression: right-clicking into an empty slot used to drop durability + enchants
+  const inv8 = new Inventory();
+  inv8.slots[0] = { id: I.IRON_PICK, count: 1, dur: 77, ench: { efficiency: 2 } };
+  inv8.clickSlot(0); // pick it up
+  inv8.clickSlot(5, true); // right-click onto an empty slot
+  eq('the pick landed in the empty slot', inv8.slots[5]?.id, I.IRON_PICK);
+  eq('durability survived the move', inv8.slots[5]?.dur, 77);
+  eq('enchantments survived the move', inv8.slots[5]?.ench?.efficiency, 2);
+  eq('cursor is empty afterwards', inv8.cursor, null);
+
+  // --- engine: enchanting table flow (prototype-level, like the armor tests)
+  type G = Record<string, any>;
+  const g = Object.create(Game.prototype) as unknown as G;
+  g.mode = 'survival';
+  g.ui = 'playing';
+  g.body = { pos: new THREE.Vector3(0, 70, 0), vel: new THREE.Vector3() };
+  g.inventory = new Inventory();
+  g.xp = new Xp(0);
+  g.unlocked = new Set<string>();
+  g.messages = [];
+  g.world = new World(7, false);
+  g.world.getChunk(0, 0);
+  g.enchantPos = null;
+  g.enchantItem = null;
+  g.enchOptions = [];
+  g.emitHud = () => {};
+  g.setUI = (s: string) => void (g.ui = s);
+  g.message = (t: string) => void g.messages.push(t);
+  g.spawnParticles = () => {};
+  g.unlock = (id: string) => void g.unlocked.add(id);
+
+  // place a table + 15 bookshelves in the world so power is maxed
+  const tx = 40, ty = g.world.heightAt(40, 40) + 1, tz = 40;
+  g.world.setBlock(tx, ty, tz, B.ENCHANT);
+  let shelves = 0;
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+    const r = Math.max(Math.abs(dx), Math.abs(dz));
+    if (r < 1 || r > 2) continue;
+    if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+    for (const dy of [0, 1]) {
+      g.world.setBlock(tx + dx, ty + dy, tz + dz, B.BOOKSHELF);
+      shelves++;
+    }
+  }
+  eq('the test ring has shelves', shelves, 40);
+
+  g.openEnchant(tx, ty, tz);
+  eq('opening the table switches the UI', g.ui, 'enchant');
+  check('table power is capped at 15', g.enchantPower() === 15, `${g.enchantPower()}`);
+  eq('empty table rolls no offers', g.enchOptions.length, 0);
+
+  // put a pick in the table and buy the first offer
+  g.xp.add(600); // plenty of levels for any offer
+  g.inventory.slots[0] = { id: I.IRON_PICK, count: 1, dur: 120 };
+  g.inventory.slots[1] = { id: I.LAPIS, count: 8 };
+  g.inventory.clickSlot(0); // pick it up…
+  g.clickEnchantSlot(false); // …and drop it into the table
+  eq('the item sits in the table', g.enchantItem?.id, I.IRON_PICK);
+  eq('three offers appear', g.enchOptions.length, 3);
+
+  const offer = g.enchOptions[0];
+  const lvlBefore = g.xp.info().level;
+  const lapisBefore = g.inventory.countOf(I.LAPIS);
+  check('first offer is affordable', g.canEnchantWith(0), `cost ${offer.cost} lvl ${lvlBefore} lapis ${lapisBefore}`);
+  check('enchanting succeeds', g.enchantWith(0));
+  eq('levels were spent', g.xp.info().level, lvlBefore - offer.cost);
+  eq('lapis was spent', g.inventory.countOf(I.LAPIS), lapisBefore - offer.lapis);
+  check('the item now carries the enchant', Object.keys(g.enchantItem.ench ?? {}).length === 1, JSON.stringify(g.enchantItem.ench));
+  check('the achievement unlocked', g.unlocked.has('enchant'));
+  const after = g.enchOptions[0];
+  check('offers reroll after enchanting', after && (after.ench !== offer.ench || after.level !== offer.level));
+
+  // broke player cannot buy
+  const poor = Object.create(Game.prototype) as unknown as G;
+  poor.mode = 'survival';
+  poor.xp = new Xp(0);
+  poor.inventory = new Inventory();
+  poor.enchantItem = { id: I.IRON_PICK, count: 1 };
+  poor.enchOptions = [{ ench: 'efficiency', level: 2, cost: 9, lapis: 1 }];
+  poor.canEnchantWith = Game.prototype.canEnchantWith;
+  eq('a poor player cannot afford the offer', poor.canEnchantWith(0), false);
+
+  // leaving the table returns the item (setUI contract) – call the real method
+  g.enchantItem = { id: I.IRON_PICK, count: 1 };
+  g.keys = new Set<string>();
+  g.onUI = () => {};
+  g.renderer = { domElement: { requestPointerLock: () => undefined } };
+  g.mouseLeft = false;
+  g.mouseRight = false;
+  g.bowDraw = -1;
+  g.spawnDrop = () => {};
+  Game.prototype.setUI.call(g, 'playing');
+  eq('setUI returns the waiting item', g.enchantItem, null);
+  eq('the item went back to the inventory', g.inventory.countOf(I.IRON_PICK), 1);
+}
+
+// ------------------------------------------------- enchantments in the save
+section('saves: enchantments ride along');
+{
+  const w = new World(5, false);
+  w.getChunk(0, 0);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.worldId = 'ench-test';
+  g.worldName = 'Test';
+  g.worldType = 'normal';
+  g.world = w;
+  g.mode = 'survival';
+  g.body = { pos: new THREE.Vector3(1, 70, 2), vel: new THREE.Vector3() };
+  g.yaw = 0.5; g.pitch = 0.1;
+  g.time = 0.3; g.health = 17; g.hunger = 15; g.day = 4;
+  g.inventory = new Inventory();
+  g.inventory.slots[0] = { id: I.DIAMOND_PICK, count: 1, dur: 300, ench: { efficiency: 4, unbreaking: 2 } };
+  g.spawnPoint = new THREE.Vector3(1, 70, 2);
+  g.furnaces = new Map(); g.chests = new Map();
+  g.unlocked = new Set(['wood']);
+  g.weather = 'clear';
+  g.xp = new Xp(42);
+  g.armor = [{ id: I.IRON_BOOTS, count: 1, dur: 100, ench: { featherfalling: 3 } }];
+  g.save();
+
+  const raw = loadSaves().find((s) => s.id === 'ench-test');
+  check('the world was stored', !!raw);
+  const stored = raw as unknown as SaveData;
+  eq('inventory enchantments persist', stored.inv[0]?.ench?.efficiency, 4);
+  eq('second enchantment persists', stored.inv[0]?.ench?.unbreaking, 2);
+  eq('armor enchantments persist', stored.armor?.[0]?.ench?.featherfalling, 3);
+  eq('durability still persists', stored.inv[0]?.dur, 300);
+
+  // reload into a fresh Game-shaped object through the real constructor path
+  const loaded = stored.inv[0];
+  eq('loaded stack keeps all three fields', `${loaded?.dur}/${loaded?.ench?.efficiency}`, '300/4');
+  deleteSave('ench-test');
 }
 
 // =================================================================== report

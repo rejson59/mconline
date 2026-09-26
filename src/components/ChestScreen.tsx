@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
-import { displayName } from '../game/items';
+import { stackTooltip, TooltipBody } from '../utils/tooltip';
 import type { Stack } from '../game/inventory';
 
 function Slot({
@@ -22,11 +22,12 @@ function Slot({
         onClick?.(e.button === 2);
       }}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseEnter={() => onHover?.(stack ? displayName(stack.id) : null)}
+      onMouseEnter={() => onHover?.(stackTooltip(stack))}
       onMouseLeave={() => onHover?.(null)}
     >
       {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={32} height={32} draggable={false} />}
       {stack && stack.count > 1 && <span className="mc-count">{stack.count}</span>}
+      {stack?.ench && <span className="ench-glint" />}
     </div>
   );
 }
@@ -83,8 +84,8 @@ export default function ChestScreen({ game, icons, onChange }: { game: Game; ico
         </div>
       </div>
       {hover && !inv.cursor && (
-        <div className="pointer-events-none fixed z-50 px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f' }}>
-          {hover}
+        <div className="pointer-events-none fixed z-50 max-w-[320px] px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', whiteSpace: 'pre-line' }}>
+          <TooltipBody text={hover} />
         </div>
       )}
       {inv.cursor && (

@@ -1,6 +1,8 @@
 # BlockCraft 🟩
 
 Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci.
+**Wersja 1.5 „Zaklęcia”**: nowy system **zaklęć** – **ruda lazurytu** w jaskiniach, **trzcina cukrowa** nad wodą (→ papier → książka), **stół zaklęć** z recepturą z 2 diamentów, 4 obsydianów i książki, a obok niego pierścień **biblioteczek** (do 15), które podbijają poziom ofert do 30. Jedenaście zaklęć podzielonych na narzędzia, broń i pancerz: **Wydajność**, **Szczęście**, **Jedwabny dotyk**, **Niezniszczalność**, **Ostrość**, **Moc**, **Nieskończoność**, **Odrzut**, **Grabież**, **Ochrona** i **Lekki krok**. Każdy wybór zużywa punkty doświadczenia oraz **1–3 lazurytu**, a przedmiot w stole czeka na ciebie, aż wrócisz. Zaklęte przedmioty świecą animowaną poświatą, mają fioletowe nazwy w podpowiedziach i nowe osiągnięcia („Pierwsze zaklęcie”, „Mistrz zaklęć”). Comenda `/enchant <nazwa> [poziom]` pozwala zaklnąć trzymany przedmiot od ręki.
+
 **Wersja 1.4 „Pancerz”**: system **doświadczenia** (kule XP od mobów i rud, poziomy, pasek nad paskiem), **pancerz** w czterech zestawach (skóra, żelazo, złoto, diament × kaptur/napierśnik/nogawice/buty) ze slotami w ekwipunku, wytrzymałością i redukcją obrażeń, **tarcza** przyłapująca strzały i osłabiająca ciosy, oraz nowy mob – **wilk**, którego zatamej surowym mięsem; wierny piesek podąża za graczem i broni go przed potworami. Krowy dają skórę.
 Wersja 1.3 „Łowy” zostaje: łuk i strzały, szkieletowe stwory strzelają z dystansu, pająki wspinają się po ścianach i dają strunę, kury dają pióra, a z 9 sztabek żelaza, złota lub diamentów można wykonać bloki magazynowe. Nowy typ świata – **płaski** – do budowania bez przeszkód, oraz **eksport i import zapisów** do pliku JSON.
 Wersja 1.2 „Dom” zostaje: skrzynie (także w jaskiniach), dwublokowe drzwi, drabiny, płot, właz, ognisko, nożyce, krzesiwo, kompas i zegar.
@@ -40,6 +42,7 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | kompas / zegar w ręce | kierunek odrodzenia i pora dnia |
 | motyka + `PPM` | grządka pod pszenicę |
 | `PPM` na wilku z surowym mięsem | zatamej wilka (podąża i broni gracza) |
+| `PPM` na stole zaklęć | ekran zaklęć (wrzuć przedmiot, wybierz ofertę) |
 | tarcza w ręku | przyłap strzały, ciosy tracą połowę mocy |
 | sloty pancerza (w `E`) | załóż / zdejmij pancerz (4 elementy) |
 | `M` | minimapa |
@@ -67,6 +70,7 @@ Gra wykrywa ekran dotykowy i włącza sterowanie dotykowe:
 /give <nazwa|id> [ilość]   np. /give wegiel 16, /give drewniany_kilof, /give zelazny_kaptur
 /summon <pig|sheep|cow|chicken|wolf|zombie|creeper|spider|skeleton>
 /xp <ilość>               dodaj doświadczenie (np. /xp 50)
+/enchant <nazwa> [poziom]  zaklnij trzymany przedmiot (np. /enchant wydajnosc 5)
 /heal  /kill  /seed  /spawn  /clear  /blocks
 ```
 
@@ -127,7 +131,7 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 ## 🧱 Co jest w grze
 
 * **Proceduralny świat** – kontynenty, wzgórza, góry, jaskinie, rudy (węgiel, żelazo, złoto, diament), biomy: równiny, las, las brzozowy, pustynia z kaktusami, tundra, góry, plaża, ocean.
-* **Ponad 55 bloków** (trawa, rudy, wełna, TNT, obsydian, pochodnia, sadzonki, grządka, pszenica, łóżko, rozpalony piec) z proceduralnie rysowaną teksturą 16×16 px – atlas + ikony 3D do ekwipunku.
+* **Ponad 60 bloków** (teraz także ruda lazurytu, blok lazurytu, stół zaklęć i trzcina) (trawa, rudy, wełna, TNT, obsydian, pochodnia, sadzonki, grządka, pszenica, łóżko, rozpalony piec) z proceduralnie rysowaną teksturą 16×16 px – atlas + ikony 3D do ekwipunku.
 * **Światło blokowe**: pochodnie, lawa i rozpalony piec rozjaśniają jaskinie także w nocy.
 * **Narzędzia** (drewno, kamień, żelazo, diament): kilof, siekiera, łopata, miecz i motyka. Mają wytrzymałość i przyspieszają kopanie właściwych bloków. Węgiel chce dowolnego kilofa, żelazo i złoto – kamiennego, diamenty – żelaznego, obsydian – diamentowego.
 * **Głód i jedzenie**: jabłka z liści, surowe i pieczone mięso, chleb z pszenicy. Regeneracja działa tylko przy pełnym brzuchu; sprint wymaga jedzenia.
@@ -137,6 +141,7 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 * **Prawdziwe craftowanie wzorowe** – siatka 2×2 w ekwipunku i 3×3 u stołu rzemieślniczego. Kilof to trzy bloki nad dwoma patykami, łuk to patyki na ukos ze struną, a skrzynia to osiem desek w ramie. Wzory pasują w dowolnym miejscu siatki, a PPM kładzie po jednym przedmiocie. Lista receptur (z filtrem „tylko możliwe”) działa nadal – szybciej, gdy wiesz czego chcesz. Wśród nich łuk (3 patyki + 3 struny) i strzały (krzemień + patyk + pióro) oraz bloki żelaza, złota i diamentów (9 sztabek → 1 blok i z powrotem).
 * **Moby**: świnie, owce, krowy (dają też skórę) i kury (zostawiają jedzenie, wełnę albo pióra), zombie (atakują w nocy i w jaskiniach, palą się w dzień), creepery (podchodzą i wybuchają), **pająki** (szybkie, wspinają się po ścianach – nawet kilka bloków w górę, dają strunę), **szkieletowe stwory** – trzymają dystans i strzelają z łuku, a same rzucają kości, strzały i czasem łuk – oraz **wilki**: dzikie kręcą się po łąkach, a surowym mięsem (PPM) zatamej je; przybrane wilki (czerwona grzywa) podążają za graczem, regenerują się i atakują potwory w jego obronie.
 * **Pancerz i tarcza**: cztery zestawy (skóra, żelazo, złoto, diament) po cztery elementy – kaptur, napierśnik, nogawice, buty. Wytwarzasz je wzorowo u stołu (5/8/7/4 kawałki materiału), zakładasz w slotach nad ekwipunkiem (E), a każdy punkt pancerza redukuje obrażenia o 4% (do 80%). Zbroja ma wytrzymałość, pęka przy silnych ciosach i wypada z Ciebie przy śmierci. **Tarcza** (6 desek + żelazo) w dłoni przyłapuje strzały szkieletów i osłabia ciosy wręcz o połowę.
+* **Zaklęcia (1.5)**: ruda lazurytu (pas y = 9–44, potrzebny kamienny kilof, 4–8 kryształów), trzcina cukrowa rosnąca w kępach przy brzegach wody i w światach płaskich (ścina się samą, rośnie dalej przy wodzie, maks. 3 segmenty), papier z trzech trzcin i książka z papieru ze skórą. **Stół zaklęć** (2 diamenty + 4 obsydiany + książka, tylko przy stole 3×3) daje trzy oferty; każda kosztuje punkty doświadczenia i lazuryt (1–3), a jakość rośnie z liczbą **biblioteczek w pierścieniu wokół stołu** (maks. 15 → poziom 30). Zaklęcia: Wydajność (szybsze kopanie), Szczęście (więcej rud i plonów), Jedwabny dotyk (blok w oryginalnej formie), Niezniszczalność (rzadsze zużycie), Ostrość (obrażenia), Moc (strzały), Nieskończoność (łuk bez strzał), Odrzut, Grabież (dodatkowe łupy), Ochrona (pancerz) i Lekki krok (mniejszy upadek). Zaklęte przedmioty mają poświatę, fioletowe nazwy w podpowiedziach i przeżywają śmierć razem z ekwipunkiem.
 * **Doświadczenie**: moby i rudy (węgiel, żelazo, złoto, diament) zrzucają zielone kule XP, które przyciąga do gracza; pieczenie w piecu i strzyżenie owiec też dają punkty. Pasek nad paskiem pokazuje postęp, a poziom 10 to osiągnięcie „Weteran”. Doświadczenie zapisuje się razem ze światem.
 * **Fizyka**: kolizje AABB, grawitacja, obrażenia od upadku, pływanie i tonięcie, lawa, kaktusy, wybuchy TNT z odrzutem.
 * **Realistyczny świat**: piasek i żwir się przewracają, gdy wykopiesz bloczek pod nimi (blisko gracza widać spadające bloki, a przygniść mogą głowę), a liście odpadają, gdy w okolicy nie zostanie żaden pień – tak jak w Minecraftcie.
@@ -150,7 +155,7 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 * **Dom**: dwublokowe drzwi (PPM otwiera), skrzynia na 27 slotów, drabina, płot, właz i ognisko, na którym piecze się mięso. Moby nie przeskakują płotu ani zamkniętych drzwi.
 * **Jaskinie** czasem kryją starą skrzynię z pochodniami, jedzeniem i rzadziej żelazem albo diamentem.
 * **Nożyce** zbierają liście i wełnę z żywej owcy. Żwir czasem daje krzemień, a krzesiwo podpala TNT. Kompas wskazuje punkt odrodzenia, zegar porę dnia.
-* **Osiągnięcia** za drewno, kilof, diament, sen, creepera, dom, łuk, strunę i inne pierwsze razy.
+* **Osiągnięcia** za drewno, kilof, diament, sen, creepera, dom, łuk, strunę, lazuryt, książkę, stół zaklęć i pierwsze zaklęcie.
 * **Linki do świata**: w pauzie przycisk *„Kopiuj link do świata”* zapisuje ziarno i tryb w adresie (`#seed=1234&mode=creative`) – po otwarciu takiego linku menu jest już wypełnione.
 * **Pełny ekran** jednym przyciskiem (menu główne i pauza) oraz **usuwanie zapisu** z menu głównego.
 * **Awaryjne komunikaty**: brak WebGL, błąd inicjalizacji czy zablokowany dźwięk nie zostawiają czarnej strony.
@@ -173,6 +178,7 @@ src/
     GameView.tsx           # montowanie silnika, HUD, obsługa błędów
     HUD.tsx                # serca, głód powietrza, pasek, komunikaty, F3
     InventoryScreen.tsx    # ekwipunek i crafting
+    EnchantScreen.tsx      # stół zaklęć (1.5)
     TouchControls.tsx      # sterowanie dotykowe (telefony/tablety)
   game/
     engine.ts              # pętla gry, gracz, interakcje, zapis
@@ -183,23 +189,28 @@ src/
     mobs.ts                # moby i ich AI (w tym tamed wilki)
     inventory.ts           # ekwipunek i receptury
     armor.ts               # statystyki pancerza i redukcja obrażeń
+    enchant.ts             # zaklęcia: dane, oferty stołu, efekty (1.5)
     xp.ts                  # krzywa poziomu doświadczenia
     noise.ts               # szum Simplexa
     audio.ts               # dźwięki generowane przez Web Audio
 .github/workflows/
   deploy-pages.yml         # automatyczna publikacja na GitHub Pages
-.harness/                  # (poza gitem) headless testy silnika: node .harness/run.mjs
+.harness/                  # headless testy: node .harness/run.mjs (smoke.ts + ui.tsx)
 ```
 
 ## 🧪 Testy (bez przeglądarki)
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm test            # headless testy silnika + test UI w jsdom
+npm test            # obie suity (silnik + UI)
+npm run test:engine # tylko asercje na silnik
+npm run test:ui     # tylko test interfejsu React
 ```
 
-`.harness/smoke.ts` to asercje na czysty silnik: generowanie świata (także płaskiego), bloki, przedmioty, ekwipunek i receptury, fizyka, AI mobów, piece i skrzynie, zapisy, osiągnięcia, tekstury oraz algorytm opadania liści – wszystko bez WebGL.
-`.harness/ui.mjs` renderuje całe menu w `jsdom`, przechodzi tworzenie świata (w tym przełącznik typu świata) i sprawdza, że brak WebGL kończy się czytelnym komunikatem, a nie białą stroną. UI wymaga `npm i --no-save jsdom`; bez niego jest pomijany.
+Runner `.harness/run.mjs` bundluje testy przez **esbuild** i uruchamia je w Node – nie trzeba niczego instalować dodatkowo.
+
+`.harness/smoke.ts` to asercje na czysty silnik: generowanie świata (także płaskiego), bloki, przedmioty, ekwipunek i receptury (w tym papier, książka, biblioteczka i stół zaklęć), **system zaklęć** (dopasowanie, oferty, pierścień biblioteczek, zużycie XP i lazurytu, dropy ze Szczęściem i Jedwabnym Dotykiem), fizyka, AI mobów, piece i skrzynie, zapisy, osiągnięcia, tekstury oraz algorytm opadania liści – wszystko bez WebGL.
+`.harness/ui.tsx` renderuje menu przez `react-dom/server` (bez przeglądarki), a gdy zainstalowany jest `jsdom` (`npm i --no-save jsdom`) montuje całe `<App/>`, przechodzi tworzenie świata i sprawdza, że brak WebGL kończy się czytelnym komunikatem, a nie białą stroną. Bez jsdom ten drugi krok jest pomijany.
 
 ## 🛠️ Rozwiązywanie problemów
 

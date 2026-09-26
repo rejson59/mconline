@@ -52,6 +52,9 @@ export const I = {
   FEATHER: 147,
   ARROW: 148,
   BOW: 149,
+  LAPIS: 150,
+  PAPER: 151,
+  BOOK: 152,
   LEATHER: 200,
   LEATHER_HELMET: 201,
   LEATHER_CHEST: 202,
@@ -159,6 +162,9 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.FEATHER, name: 'Pióro', keys: ['pioro', 'piórko', 'feather'], kind: 'material', color: '#f2f2f0' },
   { id: I.ARROW, name: 'Strzała', keys: ['strzala', 'strzała', 'arrow'], kind: 'material', color: '#c8b08a' },
   { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
+  { id: I.LAPIS, name: 'Lazuryt', keys: ['lazuryt', 'lapis', 'lapis_lazuli'], kind: 'material', color: '#3a5fd0' },
+  { id: I.PAPER, name: 'Papier', keys: ['papier', 'paper'], kind: 'material', color: '#f2f2ee' },
+  { id: I.BOOK, name: 'Książka', keys: ['ksiazka', 'książka', 'book'], kind: 'material', color: '#9a4a3a' },
   { id: I.LEATHER, name: 'Skóra', keys: ['skora', 'skóra', 'leather'], kind: 'material', color: '#8a5a3b' },
   { id: I.SHIELD, name: 'Tarcza', keys: ['tarcza', 'shield'], kind: 'tool', tool: 'shield', durability: 300, color: '#8a6a3a' },
 ];
@@ -279,7 +285,7 @@ const TIER_SPEED = [0, 2, 4, 6, 8];
 const PICK_BLOCKS = new Set<number>([
   B.STONE, B.COBBLE, B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.BRICK, B.FURNACE,
   B.FURNACE_ON, B.OBSIDIAN, B.STONE_BRICKS, B.SANDSTONE, B.MOSSY, B.ICE, B.GLOWSTONE, B.BEDROCK,
-  B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK,
+  B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK, B.LAPIS_ORE, B.LAPIS_BLOCK, B.ENCHANT,
 ]);
 const AXE_BLOCKS = new Set<number>([
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED,
@@ -287,7 +293,7 @@ const AXE_BLOCKS = new Set<number>([
 const SHOVEL_BLOCKS = new Set<number>([
   B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND,
 ]);
-const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE]);
+const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE]);
 
 export function isOre(id: number): boolean {
   return ORES.has(id);
@@ -303,6 +309,7 @@ export function requiredPickTier(blockId: number): number {
   if (blockId === B.OBSIDIAN) return 4;
   if (blockId === B.DIAMOND_ORE) return 3;
   if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return 2;
+  if (blockId === B.LAPIS_ORE) return 2;
   if (blockId === B.GOLD_BLOCK || blockId === B.DIAMOND_BLOCK) return 3;
   if (blockId === B.IRON_BLOCK) return 2;
   if (PICK_BLOCKS.has(blockId)) return 1;
@@ -319,8 +326,9 @@ export function pickHint(blockId: number, toolId: number): string | null {
   return null;
 }
 
-/** Seconds of holding LMB to break this block with the given tool (0 = hand). */
-export function mineSeconds(blockId: number, toolId: number): number {
+/** Seconds of holding LMB to break this block with the given tool (0 = hand).
+ *  `eff` is the Efficiency level of the held item (update 1.5). */
+export function mineSeconds(blockId: number, toolId: number, eff = 0): number {
   const def = BLOCKS[blockId];
   if (!def || def.hardness < 0) return 1e9;
   if (def.hardness === 0) return 0.05;
@@ -342,6 +350,7 @@ export function mineSeconds(blockId: number, toolId: number): number {
   } else if (tool?.tool === 'sword' && (RENDER[blockId] === 1 || blockId === B.LEAVES || blockId === B.BIRCH_LEAVES)) {
     speed = 5;
   }
+  if (eff > 0) speed *= 1 + eff * 0.35 + eff * eff * 0.12;
   return ((def.hardness * 0.5 + 0.06) * penalty) / speed;
 }
 
@@ -356,10 +365,12 @@ export function toolHelps(blockId: number, toolId: number): boolean {
   return tool.tool === 'hoe' && (blockId === B.DIRT || blockId === B.GRASS);
 }
 
-export function attackDamage(toolId: number, sprinting: boolean): number {
+/** `sharp` is the Sharpness level of the held weapon (update 1.5). */
+export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): number {
   const tool = ITEMS[toolId];
   let d = 3;
   if (tool?.tool === 'sword') d = [0, 5, 6, 7, 9][tool.tier ?? 1];
+  if (sharp > 0) d += sharp * 0.5 + 0.5;
   else if (tool?.tool === 'shield') d = 2;
   else if (tool?.tool === 'shears' || tool?.tool === 'igniter' || tool?.tool === 'bow') d = 1;
   else if (tool?.tool) d = 4;
@@ -371,14 +382,35 @@ export function attackCooldown(toolId: number): number {
   return ITEMS[toolId]?.tool === 'sword' ? 0.42 : 0.5;
 }
 
-/** What a broken block yields. Empty array = nothing (wrong tool on ore, leaves that rolled nothing). */
-export function blockDrops(blockId: number, toolId: number): Stack[] {
+/** What a broken block yields. Empty array = nothing (wrong tool on ore, leaves that rolled nothing).
+ *  `opts.fortune` (Szczęście) multiplies ore/crop yields, `opts.silk`
+ *  (Jedwabny dotyk) makes the block drop in its original form. */
+export interface DropOpts { fortune?: number; silk?: boolean }
+export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {}): Stack[] {
   const tier = pickTier(toolId);
   const shears = ITEMS[toolId]?.tool === 'shears';
+  const fortune = Math.max(0, Math.floor(opts.fortune ?? 0));
+  // Jedwabny dotyk: blok wypada taki, jaki stał (kamień, szkło, ruda, liście…)
+  if (opts.silk) {
+    if (blockId === B.AIR || BLOCKS[blockId]?.hardness < 0) return [];
+    if (RENDER[blockId] === 1 && (blockId < B.CROP0 || blockId > B.CROP3)) {
+      // cross plants (flowers, saplings, tall grass, torch) drop as themselves
+      return [{ id: blockId, count: 1 }];
+    }
+    if (blockId === B.COAL_ORE || blockId === B.DIAMOND_ORE || blockId === B.IRON_ORE || blockId === B.GOLD_ORE ||
+        blockId === B.LAPIS_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.ICE ||
+        blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
+        blockId === B.FARMLAND || (blockId >= B.CROP0 && blockId <= B.CROP3)) {
+      return [{ id: blockId, count: 1 }];
+    }
+    if (BLOCKS[blockId]?.drop >= 0) return [{ id: blockId, count: 1 }];
+    return [];
+  }
   if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
   if (blockId === B.GRAVEL) return Math.random() < 0.12 ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
-  if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 }] : [];
-  if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 }] : [];
+  if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
+  if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
+  if (blockId === B.LAPIS_ORE) return tier >= 2 ? [{ id: I.LAPIS, count: 4 + Math.floor(Math.random() * 4) + (fortune ? Math.floor(Math.random() * (fortune + 1)) * 2 : 0) }] : [];
   if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return tier >= 2 ? [{ id: blockId, count: 1 }] : [];
   if (blockId === B.LEAVES) {
     const out: Stack[] = [];
@@ -395,9 +427,10 @@ export function blockDrops(blockId: number, toolId: number): Stack[] {
   }
   if (blockId === B.CROP0 || blockId === B.CROP1 || blockId === B.CROP2) return [{ id: I.SEEDS, count: 1 }];
   if (blockId === B.CROP3) {
+    const extra = fortune ? Math.floor(Math.random() * (fortune + 1)) : 0;
     return [
-      { id: I.WHEAT, count: 1 },
-      { id: I.SEEDS, count: 1 + (Math.random() < 0.45 ? 1 : 0) },
+      { id: I.WHEAT, count: 1 + extra },
+      { id: I.SEEDS, count: 1 + (Math.random() < 0.45 ? 1 : 0) + extra },
     ];
   }
   if (blockId === B.FURNACE_ON) return [{ id: B.FURNACE, count: 1 }];

@@ -43,6 +43,8 @@ export class Mob {
   sheared = false;
   /** Tamed wolves follow the player and fight hostiles for them. */
   tamed = false;
+  /** Grabież (Looting): extra drops rolled when this mob's loot is collected. */
+  bonusLoot = 0;
   /** True while a spider crawls up a wall (drives the leg animation). */
   climbing = false;
   private woolMesh: THREE.Mesh | null = null;

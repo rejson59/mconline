@@ -8,6 +8,12 @@ import { Mob, isHostileMob, type MobType } from './mobs';
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider']);
 import { Inventory, RECIPES, type Stack } from './inventory';
+import {
+  rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
+  canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
+  sharpnessDamage, knockbackFactor, powerFactor, totalProtection, fallDamageFactor,
+  type EnchOption,
+} from './enchant';
 import * as Sfx from './audio';
 import { patchChunkMaterial } from './lighting';
 import { buildItemIcons } from './itemIcons';
@@ -23,7 +29,7 @@ import { Xp } from './xp';
 import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT } from './armor';
 
 export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest';
+export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant';
 
 export interface HUDState {
   hotbar: (Stack | null)[];
@@ -134,6 +140,7 @@ interface DropEntity {
   id: number;
   count: number;
   dur?: number;
+  ench?: Record<string, number>;
   mesh: THREE.Object3D;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
@@ -290,6 +297,10 @@ export class Game {
   /** Seconds the bow has been drawn, -1 when idle. */
   private bowDraw = -1;
   private biomeCache = new Map<string, Biome>();
+  /** Stół zaklęć: gdzie stoi i co właśnie w nim siedzi. */
+  enchantPos: { x: number; y: number; z: number } | null = null;
+  enchantItem: Stack | null = null;
+  enchOptions: EnchOption[] = [];
   worldId = '';
   worldName = 'Świat';
   worldType: 'normal' | 'flat' = 'normal';
@@ -298,6 +309,7 @@ export class Game {
   showMinimap = true;
   minimapCanvas!: HTMLCanvasElement;
   private minimapCtx!: CanvasRenderingContext2D;
+  private minimapImg: ImageData | null = null;
   private uDay = { value: 1 };
   private dropMat!: THREE.MeshBasicMaterial;
   private itemTex = new Map<number, THREE.Texture>();
@@ -485,7 +497,7 @@ export class Game {
       if (opts.save.armor) {
         for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
           const s = opts.save.armor[i];
-          this.armor[i] = s ? { id: s.id, count: s.count, dur: s.dur } : null;
+          this.armor[i] = s ? { id: s.id, count: s.count, dur: s.dur, ench: s.ench ? { ...s.ench } : undefined } : null;
         }
       }
       if ((opts.save.day || 1) >= 2) this.unlocked.add('night');
@@ -513,7 +525,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 1.4: pancerz, doświadczenie, tarcza i wilk. Wilka zatamej mięsem (PPM)!');
+      : 'BlockCraft 1.5 „Zaklęcia”: ruda lazurytu, papier, książki i stół zaklęć. Szukaj trzciny nad wodą!');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -643,7 +655,7 @@ export class Game {
 
   private onKeyDown(e: KeyboardEvent) {
     if (this.ui === 'chat') return;
-    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest') {
+    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant') {
       if (e.code === 'KeyE' || e.code === 'Escape') {
         e.preventDefault();
         this.closeInventory();
@@ -699,9 +711,18 @@ export class Game {
     }
     if (s === 'paused') this.save();
     // Leaving the inventory must never eat the items sitting in the grid.
-    if (s !== 'inventory' && s !== 'chest' && s !== 'furnace') {
+    if (s !== 'inventory' && s !== 'chest' && s !== 'furnace' && s !== 'enchant') {
       for (const left of this.inventory.returnGrid()) {
-        if (left) this.spawnDrop(left.id, left.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, left.dur);
+        if (left) this.spawnDrop(left.id, left.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, left.dur, undefined, undefined, undefined, left.ench);
+      }
+    }
+    // …same for the item waiting in the enchanting table.
+    if (s !== 'enchant' && this.enchantItem) {
+      const it = this.enchantItem;
+      this.enchantItem = null;
+      this.enchOptions = [];
+      if (!this.inventory.add(it.id, it.count, it.dur, it.ench)) {
+        this.spawnDrop(it.id, it.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, it.dur, undefined, undefined, undefined, it.ench);
       }
     }
     this.keys.clear();
@@ -718,6 +739,7 @@ export class Game {
     this.inventory.returnCursor();
     this.furnacePos = null;
     this.chestPos = null;
+    this.enchantPos = null;
     this.setUI('playing');
     this.emitHud();
   }
@@ -732,6 +754,58 @@ export class Game {
   currentFurnace(): FurnaceState | null {
     if (!this.furnacePos) return null;
     return this.furnaces.get(furnaceKey(this.furnacePos.x, this.furnacePos.y, this.furnacePos.z)) ?? null;
+  }
+
+  /** Stół zaklęć: liczba biblioteczek w pierścieniu 5×5 wokół stołu. */
+  enchantPower(): number {
+    if (!this.enchantPos) return 0;
+    const { x, y, z } = this.enchantPos;
+    return countShelves((bx, by, bz) => this.world.peekBlock(bx, by, bz), x, y, z);
+  }
+
+  openEnchant(x: number, y: number, z: number) {
+    this.enchantPos = { x, y, z };
+    this.enchOptions = rollEnchantOptions(this.enchantItem, this.enchantPower(), Math.random);
+    this.setUI('enchant');
+    this.emitHud();
+  }
+
+  /** Moves the item between the cursor and the table's single slot. */
+  clickEnchantSlot(right: boolean) {
+    this.transfer(() => this.enchantItem, (s) => { this.enchantItem = s; }, right);
+    this.enchOptions = rollEnchantOptions(this.enchantItem, this.enchantPower(), Math.random);
+    this.emitHud();
+  }
+
+  /** True when the offer can be bought right now (levels, lapis, room on the stack). */
+  canEnchantWith(i: number): boolean {
+    const opt = this.enchOptions[i];
+    if (!opt || !this.enchantItem) return false;
+    if (!canAddEnch(this.enchantItem, opt.ench)) return false;
+    if (this.mode === 'creative') return true;
+    return this.xp.canSpend(opt.cost) && this.inventory.countOf(I.LAPIS) >= opt.lapis;
+  }
+
+  /** Buys offer `i`: spends levels + lapis, stamps the enchantment on the item. */
+  enchantWith(i: number): boolean {
+    const opt = this.enchOptions[i];
+    const item = this.enchantItem;
+    if (!opt || !item || !canAddEnch(item, opt.ench)) return false;
+    if (this.mode !== 'creative') {
+      if (!this.xp.spend(opt.cost)) { this.message('Za mało doświadczenia.'); return false; }
+      if (this.inventory.countOf(I.LAPIS) < opt.lapis) { this.message('Potrzebny jest lazuryt.'); return false; }
+      this.inventory.remove(I.LAPIS, opt.lapis);
+    }
+    addEnch(item, opt.ench, opt.level);
+    Sfx.playEnchant();
+    this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.4, this.body.pos.z, B.GLOWSTONE, 18, 1.1);
+    this.message(`Zaklęcie: ${enchName(opt.ench, opt.level)}.`);
+    this.unlock('enchant');
+    if (opt.level >= 4) this.unlock('enchant_master');
+    // nowa partia ofert na tym samym przedmiocie
+    this.enchOptions = rollEnchantOptions(item, this.enchantPower(), Math.random);
+    this.emitHud();
+    return true;
   }
 
   openChest(x: number, y: number, z: number) {
@@ -769,7 +843,7 @@ export class Game {
     const id = this.world.getBlock(x, y, z);
     const stacks = saved ? saved.slots : id === B.LOOT_CHEST ? lootChest(this.world.seed, x, y, z).slots : [];
     for (const s of stacks) {
-      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.dur, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2);
+      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.dur, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2, s.ench);
     }
     this.chests.delete(key);
   }
@@ -833,7 +907,7 @@ export class Game {
     }
     if (!s) {
       if (right) {
-        set({ id: c.id, count: 1, dur: c.dur });
+        set({ id: c.id, count: 1, dur: c.dur, ench: c.ench ? { ...c.ench } : undefined });
         c.count--;
         if (c.count <= 0) this.inventory.cursor = null;
       } else {
@@ -842,7 +916,7 @@ export class Game {
       }
       return;
     }
-    if (s.id === c.id && s.dur === undefined && c.dur === undefined) {
+    if (s.id === c.id && s.dur === undefined && c.dur === undefined && !s.ench && !c.ench) {
       const n = Math.min(stackLimit(s.id) - s.count, right ? 1 : c.count);
       s.count += n;
       c.count -= n;
@@ -857,6 +931,8 @@ export class Game {
     this.unlock('craft');
     if (ITEMS[outId]?.tool === 'pick') this.unlock('pick');
     if (outId === B.IRON_BLOCK) this.unlock('foundry');
+    if (outId === I.BOOK) this.unlock('book');
+    if (outId === B.ENCHANT) this.unlock('table');
     this.notePickup(outId);
   }
 
@@ -880,6 +956,8 @@ export class Game {
     if (id === I.DIAMOND) this.unlock('diamond');
     if (id === I.IRON) this.unlock('iron');
     if (id === I.WHEAT) this.unlock('farm');
+    if (id === I.LAPIS) this.unlock('lapis');
+    if (id === B.SUGARCANE) this.unlock('cane');
   }
 
   private consumeSelected(n = 1) {
@@ -897,6 +975,13 @@ export class Game {
     if (!s) return;
     const max = ITEMS[s.id]?.durability;
     if (!max) return;
+    // Niezniszczalność: część użyć nie kosztuje wytrzymałości
+    const lvl = enchLevel(s, 'unbreaking');
+    if (lvl > 0 && Math.random() > wearChance(lvl)) {
+      if (s.dur === undefined) s.dur = max;
+      this.emitHud();
+      return;
+    }
     if (s.dur === undefined) s.dur = max;
     s.dur--;
     if (s.dur <= 0) {
@@ -1019,6 +1104,8 @@ export class Game {
     for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
       const s = this.armor[i];
       if (!s) continue;
+      const lvl = enchLevel(s, 'unbreaking');
+      if (lvl > 0 && Math.random() > wearChance(lvl)) continue;
       const max = ITEMS[s.id]?.durability;
       if (!max) continue;
       if (s.dur === undefined) s.dur = max;
@@ -1036,6 +1123,8 @@ export class Game {
     if (this.mode !== 'survival') return;
     const s = this.selectedStack();
     if (!s || ITEMS[s.id]?.tool !== 'shield') return;
+    const lvl = enchLevel(s, 'unbreaking');
+    if (lvl > 0 && Math.random() > wearChance(lvl)) return;
     const max = ITEMS[s.id]?.durability ?? 1;
     if (s.dur === undefined) s.dur = max;
     s.dur -= n;
@@ -1237,7 +1326,7 @@ export class Game {
     return t;
   }
 
-  spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2) {
+  spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2, ench?: Record<string, number>) {
     if (count <= 0) return;
     // The oldest drop makes room instead of silently eating the new item.
     while (this.drops.length >= 120) {
@@ -1261,7 +1350,7 @@ export class Game {
     }
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
-    this.drops.push({ id, count, dur, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0 });
+    this.drops.push({ id, count, dur, ench, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0 });
   }
 
   // ---------- Messages & commands ----------
@@ -1278,8 +1367,20 @@ export class Game {
     const [cmd, ...args] = txt.slice(1).split(/\s+/);
     switch (cmd.toLowerCase()) {
       case 'help':
-        this.message('Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, /give <nazwa|id> [ilość], /summon <pig|sheep|cow|chicken|wolf|zombie|creeper|spider|skeleton>, /xp <ilość>, /heal, /kill, /seed, /spawn, /clear, /blocks');
+        this.message('Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, /give <nazwa|id> [ilość], /summon <pig|sheep|cow|chicken|wolf|zombie|creeper|spider|skeleton>, /xp <ilość>, /enchant <nazwa> [poziom], /heal, /kill, /seed, /spawn, /clear, /blocks');
         break;
+      case 'enchant': {
+        const ench = resolveEnch(args[0] || '');
+        const held = this.selectedStack();
+        if (!ench) { this.message(`Zaklęcia: ${ENCHANTS.map((e) => e.id).join(', ')}`); break; }
+        if (!held) { this.message('Trzymaj przedmiot w ręce.'); break; }
+        if (!canEnchant(held.id, ench)) { this.message(`${displayName(held.id)} nie przyjmuje tego zaklęcia.`); break; }
+        const lvl = Math.max(1, Math.min(10, parseInt(args[1] || '1', 10) || 1));
+        addEnch(held, ench, lvl);
+        this.message(`${displayName(held.id)}: ${enchName(ench, lvl)}.`);
+        this.unlock('enchant');
+        break;
+      }
       case 'gamemode': case 'gm': {
         const m = (args[0] || '').toLowerCase();
         if (['creative', 'c', '1', 'kreatywny'].includes(m)) this.setMode('creative');
@@ -1404,7 +1505,7 @@ export class Game {
         pos: [this.body.pos.x, this.body.pos.y, this.body.pos.z],
         yaw: this.yaw,
         pitch: this.pitch,
-        inv: this.inventory.slots,
+        inv: this.inventory.slots.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
         time: this.time,
         health: this.health,
         hunger: this.hunger,
@@ -1415,7 +1516,7 @@ export class Game {
         unlocked: [...this.unlocked],
         weather: this.weather,
         xp: this.xp.total,
-        armor: this.armor.map((s) => (s ? { ...s } : null)),
+        armor: this.armor.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
         updated: Date.now(),
       };
       upsertSave({ ...data, id: this.worldId });
@@ -1616,12 +1717,21 @@ export class Game {
         return;
       }
       this.attackCooldown = attackCooldown(toolId);
-      const dmg = attackDamage(toolId, this.sprinting);
+      const held = this.selectedStack();
+      const dmg = attackDamage(toolId, this.sprinting, sharpnessDamage(enchLevel(held, 'sharpness')));
+      const kb = knockbackFactor(enchLevel(held, 'knockback'));
       if (mob.damage(dmg, this.body.pos.x, this.body.pos.z)) {
+        if (kb > 1) {
+          mob.body.vel.x *= kb;
+          mob.body.vel.z *= kb;
+          mob.body.vel.y = Math.max(mob.body.vel.y, 6 * kb);
+        }
         Sfx.playHurt();
         Sfx.playMob(mob.type);
         this.wearTool();
         if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
+        // Grabież: remember the level so mobLoot() can roll extras once
+        mob.bonusLoot = Math.max(mob.bonusLoot, enchLevel(held, 'looting'));
       }
       this.mouseLeft = false;
       return;
@@ -1642,14 +1752,18 @@ export class Game {
   private releaseBow() {
     const charge = Math.max(0.12, Math.min(1, this.bowDraw));
     this.bowDraw = -1;
+    const bow = this.selectedStack();
+    const power = powerFactor(enchLevel(bow, 'power'));
+    const infinite = enchLevel(bow, 'infinity') > 0;
     if (this.mode === 'survival' && this.inventory.countOf(I.ARROW) <= 0) {
       this.message('Brak strzał. Wytwórz je z krzemienia, patyka i pióra.');
       return;
     }
-    if (this.mode === 'survival') this.inventory.remove(I.ARROW, 1);
+    // Nieskończoność: jedna strzała w ekwipunku wystarczy na wiele wystrzałów
+    if (this.mode === 'survival' && !infinite) this.inventory.remove(I.ARROW, 1);
     const eye = this.eyePos();
     const d = this.lookDir();
-    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, 4 + charge * 5);
+    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, (4 + charge * 5) * power);
     Sfx.playBow();
     this.swingT = 0;
     this.wearTool();
@@ -1743,6 +1857,7 @@ export class Game {
       if (t.id === B.CHEST || t.id === B.LOOT_CHEST) { this.openChest(t.x, t.y, t.z); return; }
       if (t.id === B.CRAFTING) { this.openInventory(true); return; }
       if (t.id === B.FURNACE || t.id === B.FURNACE_ON) { this.openFurnace(t.x, t.y, t.z); return; }
+      if (t.id === B.ENCHANT) { this.openEnchant(t.x, t.y, t.z); return; }
       if (t.id === B.BED) { this.trySleep(t.x, t.y, t.z); return; }
     }
     const s = this.selectedStack();
@@ -1808,6 +1923,16 @@ export class Game {
     } else if (id === B.TORCH) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
       if (!IS_SOLID[attached] && !IS_SOLID[below]) return;
+    } else if (id === B.SUGARCANE) {
+      if (below !== B.GRASS && below !== B.DIRT && below !== B.SAND && below !== B.SUGARCANE) {
+        this.message('Trzcina rośnie na trawie, ziemi lub piasku.');
+        return;
+      }
+      // only the base of a stack needs water, like in the classic game
+      if (below !== B.SUGARCANE && !this.waterNear(px, py, pz)) {
+        this.message('Trzcyna chce wody w pobliżu.');
+        return;
+      }
     } else if (isDoor(id)) {
       if (!this.placeDoor(px, py, pz, t.nx, t.ny, t.nz)) return;
       Sfx.playPlace('wood');
@@ -1838,7 +1963,7 @@ export class Game {
     }
     this.world.setBlock(px, py, pz, id);
     this.settle(px, py, pz);
-    if (id === B.SAPLING || id === B.BIRCH_SAPLING || (id >= B.CROP0 && id <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
+    if (id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SUGARCANE || (id >= B.CROP0 && id <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
     if (id === B.TORCH) this.unlock('torch');
     Sfx.playPlace(BLOCKS[id].sound);
     this.swingT = 0;
@@ -1863,11 +1988,11 @@ export class Game {
     const d = this.lookDir();
     const dur = s.dur;
     if (this.mode === 'survival') {
-      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4);
+      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench);
       s.count--;
       if (s.count <= 0) this.inventory.slots[this.selected] = null;
     } else {
-      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4);
+      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench);
       this.inventory.slots[this.selected] = null;
     }
     this.emitHud();
@@ -2032,11 +2157,14 @@ export class Game {
         this.toldPick = true;
         this.message('Ruda wymaga kilofa – inaczej nic nie wypadnie.');
       }
-      const drops = blockDrops(id, toolId);
+      const drops = blockDrops(id, toolId, {
+        fortune: enchLevel(this.selectedStack(), 'fortune'),
+        silk: enchLevel(this.selectedStack(), 'silktouch') > 0,
+      });
       for (const drop of drops) this.spawnDrop(drop.id, drop.count, x + 0.5, y + 0.45, z + 0.5);
       if (isDoorTop(id)) this.spawnDrop(B.DOOR_N, 1, x + 0.5, y + 0.2, z + 0.5);
       // ores that actually yielded something also drop XP
-      const ORE_XP: Record<number, number> = { [B.COAL_ORE]: 2, [B.IRON_ORE]: 5, [B.GOLD_ORE]: 6, [B.DIAMOND_ORE]: 7 };
+      const ORE_XP: Record<number, number> = { [B.COAL_ORE]: 2, [B.IRON_ORE]: 5, [B.GOLD_ORE]: 6, [B.DIAMOND_ORE]: 7, [B.LAPIS_ORE]: 4 };
       if (drops.length > 0 && ORE_XP[id] > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, ORE_XP[id]);
     }
     // things above that need support
@@ -2103,7 +2231,9 @@ export class Game {
     if (this.mode === 'creative' && !force) return;
     if (this.ui === 'dead') return;
     // Armor soaks damage; force kills (void, /kill) ignore it and don't break the gear.
-    const dealt = force ? amount : Math.max(0, Math.round(amount * (1 - damageReduction(armorPoints(this.armor)))));
+    // Zaklęcie Ochrona dodaje 3% redukcji za każdy poziom (do 90% łącznie).
+    const reduction = Math.min(0.9, damageReduction(armorPoints(this.armor)) + totalProtection(this.armor) * 0.03);
+    const dealt = force ? amount : Math.max(0, Math.round(amount * (1 - reduction)));
     if (dealt > 0) {
       if (!force) this.wearArmor(dealt);
       this.health -= dealt;
@@ -2120,10 +2250,10 @@ export class Game {
         const x = this.body.pos.y < 1 ? this.spawnPoint.x : this.body.pos.x;
         const z = this.body.pos.y < 1 ? this.spawnPoint.z : this.body.pos.z;
         for (const s of this.inventory.slots) {
-          if (s) this.spawnDrop(s.id, s.count, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3);
+          if (s) this.spawnDrop(s.id, s.count, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench);
         }
         for (const s of this.armor) {
-          if (s) this.spawnDrop(s.id, 1, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3);
+          if (s) this.spawnDrop(s.id, 1, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench);
         }
         this.armor.fill(null);
       }
@@ -2167,7 +2297,7 @@ export class Game {
       this.fpsTime = 0;
     }
 
-    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'chat' || this.ui === 'dead';
+    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'chat' || this.ui === 'dead';
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);
@@ -2286,7 +2416,11 @@ export class Game {
     else if (!b.onGround) this.fallStart = Math.max(this.fallStart, b.pos.y);
     if (b.onGround && !wasGround) {
       const fall = this.fallStart - b.pos.y;
-      if (fall > 3.4 && this.mode === 'survival' && !inWater) this.damage(Math.floor(fall - 3));
+      if (fall > 3.4 && this.mode === 'survival' && !inWater) {
+        // Lekki krok na butach tłumi upadek
+        const raw = Math.floor(fall - 3);
+        this.damage(Math.max(raw > 0 ? 1 : 0, Math.round(raw * fallDamageFactor(this.armor[3]))));
+      }
       if (fall > 1) {
         const below = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));
         if (below) Sfx.playStep(BLOCKS[below].sound);
@@ -2415,7 +2549,8 @@ export class Game {
           if (hint && !Number.isFinite(mineSeconds(t.id, this.selectedStack()?.id ?? 0))) this.message(hint);
         }
         const def = BLOCKS[t.id];
-        const time = mineSeconds(t.id, this.selectedStack()?.id ?? 0);
+        const held = this.selectedStack();
+        const time = mineSeconds(t.id, held?.id ?? 0, enchLevel(held, 'efficiency'));
         if (def.hardness >= 0 && Number.isFinite(time)) {
           let mult = 1;
           if (this.blockAt(this.body.pos, this.eyeHeight) === B.WATER) mult *= 0.25;
@@ -2758,7 +2893,9 @@ export class Game {
   }
 
   private heldHint(): string | null {
-    const id = this.selectedStack()?.id;
+    const sel = this.selectedStack();
+    const id = sel?.id;
+    const ench = sel?.ench ? enchList(sel) : null;
     if (id === I.COMPASS) {
       const dx = this.spawnPoint.x - this.body.pos.x;
       const dz = this.spawnPoint.z - this.body.pos.z;
@@ -2779,6 +2916,7 @@ export class Game {
       const m = Math.floor((hour * 60) % 60);
       return `Zegar: ${label}, ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
+    if (ench && ench.length) return `Zaklęcia: ${ench.join(', ')}`;
     return null;
   }
 
@@ -2806,6 +2944,27 @@ export class Game {
       if (Math.random() < 0.08) this.spawnDrop(I.BOW, 1, x, y, z);
     } else if (m.type === 'wolf') {
       if (Math.random() < 0.6) this.spawnDrop(I.BONE, 1, x, y, z);
+    }
+    // Grabież: each level reruns one drop roll from the same table
+    if (m.bonusLoot > 0) {
+      const reroll = () => {
+        if (m.type === 'pig') this.spawnDrop(I.RAW_PORK, 1, x, y, z);
+        else if (m.type === 'cow') {
+          this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
+          if (Math.random() < 0.6) this.spawnDrop(I.LEATHER, 1, x, y, z);
+        } else if (m.type === 'chicken') {
+          this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
+          if (Math.random() < 0.6) this.spawnDrop(I.FEATHER, 1, x, y, z);
+        } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
+        else if (m.type === 'creeper') this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
+        else if (m.type === 'spider') this.spawnDrop(I.STRING, 1, x, y, z);
+        else if (m.type === 'skeleton') {
+          this.spawnDrop(I.BONE, 1, x, y, z);
+          if (Math.random() < 0.5) this.spawnDrop(I.ARROW, 1, x, y, z);
+        } else if (m.type === 'wolf') this.spawnDrop(I.BONE, 1, x, y, z);
+      };
+      for (let i = 0; i < m.bonusLoot; i++) if (Math.random() < 0.6) reroll();
+      m.bonusLoot = 0;
     }
     if (m.type === 'zombie') this.unlock('zombie');
     if (m.type === 'creeper') this.unlock('creeper');
@@ -2838,7 +2997,7 @@ export class Game {
         d.vel.y += ((p.y + 0.6 - d.pos.y) / dist) * dt * 10;
       }
       if (d.age > 0.4 && dist < 1.35 && this.ui !== 'dead') {
-        if (this.inventory.add(d.id, d.count, d.dur)) {
+        if (this.inventory.add(d.id, d.count, d.dur, d.ench)) {
           Sfx.playPop();
           this.notePickup(d.id);
           this.scene.remove(d.mesh);
@@ -2871,7 +3030,7 @@ export class Game {
     const ox = c.cx * CS, oz = c.cz * CS;
     for (let i = 0; i < c.data.length; i++) {
       const id = c.data[i];
-      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && (id < B.CROP0 || id > B.CROP2)) continue;
+      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2)) continue;
       const y = (i / (CS * CS)) | 0;
       const rem = i % (CS * CS);
       const z = (rem / CS) | 0;
@@ -2888,6 +3047,24 @@ export class Game {
           this.unlock('tree');
           Sfx.playPlace('grass');
         } else this.growables.set(key, performance.now());
+      } else if (id === B.SUGARCANE) {
+        // Trzcina: rośnie w górę, dopóki jest woda przy PODSTAWIE i miejsce nad nią.
+        if (elapsed < 16 + ((x * 7 + z) % 9)) continue;
+        this.growables.delete(key);
+        if (this.world.getBlock(ox + x, y + 1, oz + z) !== B.AIR) continue;
+        // find the ground-level base of this stalk
+        let base = y;
+        for (let k = 1; k <= 8 && this.world.getBlock(ox + x, base - 1, oz + z) === B.SUGARCANE; k++) base--;
+        const ground = this.world.getBlock(ox + x, base - 1, oz + z);
+        if (ground !== B.GRASS && ground !== B.DIRT && ground !== B.SAND) continue;
+        if (!this.waterNear(ox + x, base, oz + z)) continue;
+        // max 3 segments per stalk
+        let height = 0;
+        for (let k = 0; k <= 6 && this.world.getBlock(ox + x, base + k, oz + z) === B.SUGARCANE; k++) height++;
+        if (height >= 3) continue;
+        this.world.setBlock(ox + x, y + 1, oz + z, B.SUGARCANE);
+        this.growables.set(`${ox + x},${y + 1},${oz + z}`, performance.now());
+        Sfx.playPlace('grass');
       } else if (elapsed > (this.cropWatered(ox + x, y, oz + z) ? 9 : 18)) {
         this.world.setBlock(ox + x, y, oz + z, id + 1);
         if (id + 1 >= B.CROP3) this.growables.delete(key);
@@ -2900,6 +3077,20 @@ export class Game {
         if (!this.world.hasChunk(Math.floor(x / CS), Math.floor(z / CS))) this.growables.delete(k);
       }
     }
+  }
+
+  /** Water within one block horizontally (used by sugar cane). */
+  private waterNear(x: number, y: number, z: number): boolean {
+    return (
+      this.world.peekBlock(x + 1, y, z) === B.WATER ||
+      this.world.peekBlock(x - 1, y, z) === B.WATER ||
+      this.world.peekBlock(x, y, z + 1) === B.WATER ||
+      this.world.peekBlock(x, y, z - 1) === B.WATER ||
+      this.world.peekBlock(x + 1, y - 1, z) === B.WATER ||
+      this.world.peekBlock(x - 1, y - 1, z) === B.WATER ||
+      this.world.peekBlock(x, y - 1, z + 1) === B.WATER ||
+      this.world.peekBlock(x, y - 1, z - 1) === B.WATER
+    );
   }
 
   private cropWatered(x: number, y: number, z: number): boolean {
@@ -2998,7 +3189,8 @@ export class Game {
     if (!ctx) return;
     const S = 96;
     const scale = 1; // 1 pixel = 1 block
-    const img = ctx.createImageData(S, S);
+    if (!this.minimapImg || this.minimapImg.width !== S) this.minimapImg = ctx.createImageData(S, S);
+    const img = this.minimapImg;
     const px = this.body.pos.x, pz = this.body.pos.z;
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     const fx = -sin, fz = -cos;

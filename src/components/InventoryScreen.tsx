@@ -3,6 +3,7 @@ import type { Game } from '../game/engine';
 import { CREATIVE_BLOCKS } from '../game/blocks';
 import { RECIPES, type Stack } from '../game/inventory';
 import { CREATIVE_ITEMS, displayName, stackLimit } from '../game/items';
+import { stackTooltip, TooltipBody } from '../utils/tooltip';
 import { ARMOR, armorPoints, ARMOR_SLOT_NAMES } from '../game/armor';
 
 function Slot({
@@ -29,11 +30,12 @@ function Slot({
         onClick?.(e.button === 2);
       }}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseEnter={() => onHover?.(stack ? displayName(stack.id) : null)}
+      onMouseEnter={() => onHover?.(stackTooltip(stack))}
       onMouseLeave={() => onHover?.(null)}
     >
       {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
       {stack && showCount && stack.count > 1 && <span className="mc-count">{stack.count}</span>}
+      {stack?.ench && <span className="ench-glint" />}
     </div>
   );
 }
@@ -138,13 +140,12 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                         game.clickArmorSlot(i);
                         refresh();
                       }}
-                      onHover={(name) =>
-                        setHover(
-                          name
-                            ? `${name} · ${ARMOR_SLOT_NAMES[i]}${ARMOR[s!.id]?.points ? ` (+${ARMOR[s!.id]!.points} pkt pancerza)` : ''}`
-                            : ARMOR_SLOT_NAMES[i]
-                        )
-                      }
+                      onHover={(name) => {
+                        if (!name) { setHover(ARMOR_SLOT_NAMES[i]); return; }
+                        const [title, ...enchLines] = name.split('\n');
+                        const slot = `${title} · ${ARMOR_SLOT_NAMES[i]}${ARMOR[s!.id]?.points ? ` (+${ARMOR[s!.id]!.points} pkt pancerza)` : ''}`;
+                        setHover(enchLines.length ? `${slot}\n§5${enchLines.join('\n').replace(/^§5/, '')}` : slot);
+                      }}
                     />
                   ))}
                 </div>
@@ -255,8 +256,8 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
       </div>
 
       {hover && !inv.cursor && (
-        <div className="pointer-events-none fixed z-50 px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', color: '#fff' }}>
-          {hover}
+        <div className="pointer-events-none fixed z-50 max-w-[320px] px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', color: '#fff', whiteSpace: 'pre-line' }}>
+          <TooltipBody text={hover} />
         </div>
       )}
       {inv.cursor && (

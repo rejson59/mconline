@@ -118,6 +118,26 @@ body {
   border-color: #fff;
 }
 
+/* Animated shimmer on enchanted items (slot overlay). */
+.ench-glint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 30%, rgba(190, 120, 255, 0.75) 45%, rgba(120, 90, 255, 0.75) 55%, transparent 70%);
+  background-size: 260% 100%;
+  mix-blend-mode: screen;
+  animation: ench-glint 1.6s linear infinite;
+}
+@keyframes ench-glint {
+  0% { background-position: 180% 0; }
+  100% { background-position: -80% 0; }
+}
+
+/* Purple item name in tooltips when the stack carries enchantments. */
+.ench-name {
+  color: #c9a0ff;
+}
+
 @keyframes splash {
   0%, 100% { transform: rotate(-18deg) scale(1); }
   50% { transform: rotate(-18deg) scale(1.08); }

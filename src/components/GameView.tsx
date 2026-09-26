@@ -5,6 +5,7 @@ import HUD from './HUD';
 import InventoryScreen from './InventoryScreen';
 import FurnaceScreen from './FurnaceScreen';
 import ChestScreen from './ChestScreen';
+import EnchantScreen from './EnchantScreen';
 import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
 import TouchControls, { isTouchDevice } from './TouchControls';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
@@ -132,6 +133,7 @@ export default function GameView({
       {game && ui === 'inventory' && <InventoryScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'furnace' && <FurnaceScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'chat' && (
         <ChatInput
           onSubmit={(t) => game.command(t)}
