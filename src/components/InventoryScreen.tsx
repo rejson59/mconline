@@ -3,6 +3,7 @@ import type { Game } from '../game/engine';
 import { CREATIVE_BLOCKS } from '../game/blocks';
 import { RECIPES, type Stack } from '../game/inventory';
 import { CREATIVE_ITEMS, displayName, stackLimit } from '../game/items';
+import { ARMOR, armorPoints, ARMOR_SLOT_NAMES } from '../game/armor';
 
 function Slot({
   stack,
@@ -126,6 +127,29 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
           ) : (
             <>
               <div className="mb-2 text-lg font-semibold">Ekwipunek</div>
+              <div className="mb-3 flex items-center gap-3">
+                <div className="flex gap-0">
+                  {game.armor.map((s, i) => (
+                    <Slot
+                      key={i}
+                      stack={s}
+                      icons={icons}
+                      onClick={() => {
+                        game.clickArmorSlot(i);
+                        refresh();
+                      }}
+                      onHover={(name) =>
+                        setHover(
+                          name
+                            ? `${name} · ${ARMOR_SLOT_NAMES[i]}${ARMOR[s!.id]?.points ? ` (+${ARMOR[s!.id]!.points} pkt pancerza)` : ''}`
+                            : ARMOR_SLOT_NAMES[i]
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+                <span className="text-xs opacity-70">Pancerz: {armorPoints(game.armor)} pkt</span>
+              </div>
               <div className="mb-3 grid grid-cols-9">
                 {inv.slots.slice(9, 36).map((s, i) => (
                   <Slot key={i + 9} stack={s} icons={icons} onClick={(r) => clickSlot(i + 9, r)} onHover={setHover} />

@@ -30,6 +30,10 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'archer', title: 'Łucznik', text: 'Wystrzel strzałę z łuku.' },
   { id: 'skeleton', title: 'Kościany łowca', text: 'Pokonaj szkieletowego strzelca.' },
   { id: 'foundry', title: 'Hutnik', text: 'Wytwórz blok żelaza.' },
+  { id: 'wolf', title: 'Watahą silniejszy', text: 'Zatamej wilka kawałkiem mięsa.' },
+  { id: 'armor', title: 'W pełnym zbroju', text: 'Załóż cztery elementy pancerza naraz.' },
+  { id: 'xp10', title: 'Weteran', text: 'Osiągnij poziom doświadczenia 10.' },
+  { id: 'guardian', title: 'Strażnik', text: 'Przyłap cios lub strzałę tarczą.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

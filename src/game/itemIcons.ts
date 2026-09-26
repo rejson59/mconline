@@ -84,6 +84,19 @@ function toolIcon(it: ItemDef): string {
       }
       for (let y = 3; y <= 13; y++) set(4, y, '#e8e8ea');
       set(10, 8, head);
+    } else if (k === 'shield') {
+      // wooden shield with an iron boss
+      for (let y = 2; y <= 12; y++) {
+        const half = y < 7 ? 4 : y < 10 ? 3 : 2;
+        for (let x = 8 - half; x <= 8 + half; x++) {
+          if (y === 12 && Math.abs(x - 8) > 1) continue;
+          set(x, y, head);
+        }
+      }
+      for (let y = 3; y <= 11; y++) set(5, y, '#5c3b1c');
+      for (let y = 4; y <= 7; y++) set(9, y, '#c8c8d0');
+      set(9, 5, '#f0f0f4');
+      set(10, 6, '#9a9aa2');
     } else {
       // hoe
       for (let x = 3; x <= 10; x++) set(x, 2, head);
@@ -157,6 +170,14 @@ function materialIcon(it: ItemDef): string {
       set(10, 3, '#777');
       if (it.keys.includes('water_bucket')) for (let y = 6; y <= 11; y++) for (let x = 5; x <= 10; x++) set(x, y, '#3a6ad4');
       if (it.keys.includes('lava_bucket')) for (let y = 6; y <= 11; y++) for (let x = 5; x <= 10; x++) set(x, y, y < 8 ? '#ffb040' : '#e05010');
+    } else if (it.keys.includes('leather')) {
+      // hide: rounded brown patch with darker stitches
+      for (let y = 4; y <= 11; y++) for (let x = 4; x <= 11; x++) {
+        const dx = x - 7.5, dy = y - 7.5;
+        if (dx * dx + dy * dy < 16) set(x, y, c);
+      }
+      for (const [x, y] of [[5, 5], [10, 5], [5, 10], [10, 10], [7, 6], [9, 9]]) set(x, y, '#5c3b1c');
+      set(7, 8, '#f0d8b0');
     } else if (it.keys.includes('gunpowder')) {
       for (let i = 0; i < 28; i++) set(4 + (i * 3) % 8, 4 + (i * 5) % 8, i % 4 === 0 ? '#aaa' : c);
     } else if (it.keys.includes('flint')) {
@@ -205,10 +226,74 @@ function materialIcon(it: ItemDef): string {
   });
 }
 
+/** Armor pieces share a painter; the slot picks the silhouette. */
+function armorIcon(it: ItemDef): string {
+  const c = it.color;
+  const dk = shade(c, -34);
+  const lite = shade(c, 46);
+  const slot = it.armor?.slot ?? 0;
+  return paint((set) => {
+    if (slot === 0) {
+      // helmet: dome with a brim
+      for (let y = 2; y <= 9; y++) for (let x = 3; x <= 12; x++) {
+        const dx = x - 7.5, dy = y - 3.5;
+        if (dx * dx + dy * dy * 1.25 < 17 && (y > 4 || Math.abs(dx) < 3)) set(x, y, c);
+      }
+      for (let x = 2; x <= 13; x++) set(x, 9, dk);
+      for (let y = 5; y <= 8; y++) set(4, y, dk);
+      set(6, 4, lite);
+      set(7, 3, lite);
+    } else if (slot === 1) {
+      // chestplate: two shoulders, V-collar, torso
+      for (let y = 3; y <= 13; y++) for (let x = 4; x <= 11; x++) {
+        if (y >= 12 && Math.abs(x - 7.5) > 2.5) continue;
+        set(x, y, y >= 3 && y <= 4 && (x < 5 || x > 10) ? dk : c);
+      }
+      for (let y = 4; y <= 7; y++) set(8, y, dk);
+      for (let y = 6; y <= 9; y++) set(7, y, dk);
+      set(5, 4, lite);
+      set(10, 4, lite);
+    } else if (slot === 2) {
+      // leggings: waistband and two legs
+      for (let x = 4; x <= 11; x++) { set(x, 3, c); set(x, 4, c); }
+      for (let y = 5; y <= 13; y++) {
+        for (let x = 4; x <= 7; x++) set(x, y, c);
+        for (let x = 9; x <= 12; x++) set(x, y, c);
+      }
+      for (let x = 4; x <= 11; x++) set(x, 4, dk);
+      set(5, 6, lite);
+      set(10, 6, lite);
+      for (let y = 5; y <= 13; y++) { set(3, y, dk); set(12, y, dk); }
+    } else {
+      // boots: two feet pointing out
+      for (let y = 5; y <= 11; y++) for (let x = 3; x <= 6; x++) set(x, y, c);
+      for (let y = 5; y <= 11; y++) for (let x = 9; x <= 12; x++) set(x, y, c);
+      for (let x = 2; x <= 6; x++) { set(x, 12, c); set(x, 13, c); }
+      for (let x = 9; x <= 13; x++) { set(x, 12, c); set(x, 13, c); }
+      for (let y = 5; y <= 11; y++) { set(6, y, dk); set(9, y, dk); }
+      for (let x = 3; x <= 6; x++) set(x, 5, dk);
+      for (let x = 9; x <= 12; x++) set(x, 5, dk);
+      set(4, 7, lite);
+      set(11, 7, lite);
+    }
+  });
+}
+
+/** Darkens/lightens a #rrggbb colour by a fixed amount (negative = darker). */
+function shade(hex: string, amt: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => Math.max(0, Math.min(255, v + amt));
+  const r = ch((n >> 16) & 255), g = ch((n >> 8) & 255), b = ch(n & 255);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
 export function buildItemIcons(): Record<number, string> {
   const icons: Record<number, string> = {};
   for (const it of ITEM_LIST) {
-    icons[it.id] = it.kind === 'tool' ? toolIcon(it) : it.kind === 'food' ? foodIcon(it) : materialIcon(it);
+    if (it.kind === 'armor') icons[it.id] = armorIcon(it);
+    else if (it.kind === 'tool') icons[it.id] = toolIcon(it);
+    else if (it.kind === 'food') icons[it.id] = foodIcon(it);
+    else icons[it.id] = materialIcon(it);
   }
   return icons;
 }

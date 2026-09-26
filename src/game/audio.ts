@@ -116,7 +116,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton') {
+export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -151,6 +151,12 @@ export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | '
     o.type = 'square';
     o.frequency.setValueAtTime(900, t);
     for (let i = 0; i < 6; i++) o.frequency.setValueAtTime(i % 2 ? 700 : 1100, t + i * 0.03);
+  } else if (type === 'wolf') {
+    // wolf: a low growl that rises into a short yip
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(110, t);
+    o.frequency.linearRampToValueAtTime(170, t + 0.28);
+    o.frequency.exponentialRampToValueAtTime(520, t + 0.42);
   } else {
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(110, t);
@@ -251,6 +257,55 @@ export function playArrowHit() {
   src.connect(f).connect(g).connect(master);
   src.start(t, Math.random() * 0.4);
   src.stop(t + 0.16);
+}
+
+/** Level-up chime: two quick rising notes with a soft tail. */
+export function playLevelUp() {
+  const c = ensure();
+  if (!c || !master) return;
+  const t0 = c.currentTime;
+  for (const [i, f] of [523.25, 783.99].entries()) {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    const t = t0 + i * 0.11;
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    o.connect(g).connect(master);
+    o.start(t);
+    o.stop(t + 0.55);
+  }
+}
+
+/** Shield parry: a dull metallic clank. */
+export function playShield() {
+  const c = ensure();
+  if (!c || !master || !noiseBuf) return;
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf;
+  src.playbackRate.value = 2.4;
+  const f = c.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = 1400;
+  f.Q.value = 6;
+  const g = c.createGain();
+  const t = c.currentTime;
+  g.gain.setValueAtTime(0.5, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  src.connect(f).connect(g).connect(master);
+  src.start(t, Math.random() * 0.3);
+  src.stop(t + 0.18);
+  const o = c.createOscillator();
+  const og = c.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(220, t);
+  og.gain.setValueAtTime(0.05, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+  o.connect(og).connect(master);
+  o.start(t);
+  o.stop(t + 0.1);
 }
 
 /** A short wind gust – filtered noise that slowly opens up. */
