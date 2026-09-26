@@ -159,6 +159,15 @@ export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDSta
         <div style={{ position: 'absolute', left: -1.5, top: -10, width: 3, height: 20, background: '#fff' }} />
       </div>
 
+      {/* 2.2: aktywny punkt podróży — strzałka obraca się względem kierunku patrzenia. */}
+      {hud.waypoint && !hud.debug && (
+        <div className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 border border-black bg-black/60 px-3 py-1 text-sm mc-text">
+          <span className="inline-block text-lg text-yellow-300" style={{ transform: `rotate(${hud.waypoint.bearing}rad)` }}>↑</span>
+          <span className="max-w-[45vw] truncate text-yellow-100">{hud.waypoint.name}</span>
+          <span className="whitespace-nowrap text-white/80">{Math.round(hud.waypoint.distance)} m · {hud.waypoint.direction}</span>
+        </div>
+      )}
+
       {/* wskazówka o istocie pod celownikiem (1.6) */}
       {hud.mobHint && !hud.debug && (
         <div className="absolute left-1/2 top-[54%] -translate-x-1/2 px-2 py-0.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
@@ -170,7 +179,7 @@ export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDSta
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 2.1 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
+            `BlockCraft 2.2 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,

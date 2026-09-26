@@ -1,6 +1,14 @@
-# BlockCraft 2.1 🟩
+# BlockCraft 2.2 🟩
 
 Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci. Teraz także **w pełni przemyślana dla telefonów i tabletów**.
+
+**Wersja 2.2 „Szlak odkrywcy”** rozbudowuje właściwą rozgrywkę i naprawia sterowanie na telefonach:
+
+* **Punkty podróży** (`K`, przycisk w pauzie lub 📍 na telefonie) pozwalają zaznaczyć bazę, kopalnię, portal i inne ważne miejsca. Wybrany cel ma kierunkową strzałkę oraz odległość na HUD-zie, wszystkie punkty są widoczne na minimapie i zapisywane osobno dla Nadświata oraz Netheru. Po śmierci gra automatycznie tworzy czerwony znacznik **„Ostatnia śmierć”**, żeby łatwiej odzyskać ekwipunek. Dostępne są także komendy `/waypoint` i `/punkt`.
+* **Naprawione sterowanie mobilne** – gra nie próbuje już uruchamiać Pointer Lock na telefonie, obsługuje urządzenia z grubym wskaźnikiem, stabilniej przechwytuje wielodotyk w Safari i Androidzie, a strefa drążka obejmuje całą lewą dolną część ekranu. Gesty są czyszczone po schowaniu karty, więc klawisze nie zostają „wciśnięte”.
+* **Przypinanie światów** – ulubione zapisy można oznaczyć gwiazdką; pozostają na górze listy niezależnie od wybranego sortowania, a przypięcie nie znika po autozapisie.
+* **Zarządzanie zapisem** – z menu świata można zmienić jego nazwę, utworzyć niezależną kopię, usunąć go albo wyeksportować tylko ten jeden świat. Kopiowanie pilnuje limitu 8 slotów, a import i eksport pozostają zgodne ze starszym formatem kopii zapasowych.
+* **Bezpieczniejsze metadane** – nazwy są czyszczone i ograniczane do 40 znaków, kopie otrzymują unikalne identyfikatory, a import przekraczający limit zachowuje najnowsze światy.
 
 **Wersja 2.1 „Dziennik przygód”** rozbudowuje eksplorację i ułatwia ogarnianie zapisów:
 

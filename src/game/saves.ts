@@ -10,7 +10,18 @@ export interface StoredWorld {
   mode?: string;
   day?: number;
   updated?: number;
+  /** Menu-only metadata is preserved when the engine overwrites the save. */
+  favorite?: boolean;
   [key: string]: unknown;
+}
+
+export const MAX_SAVES = 8;
+export const MAX_WORLD_NAME = 40;
+
+/** Keeps player-provided names readable and safe for the compact world cards. */
+export function cleanWorldName(name: string, fallback = 'Świat'): string {
+  const clean = name.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  return clean.slice(0, MAX_WORLD_NAME) || fallback;
 }
 
 function readList(): StoredWorld[] {
@@ -53,18 +64,72 @@ export function loadSaves(): StoredWorld[] {
 }
 
 export function upsertSave(data: StoredWorld) {
-  const list = readList().filter((s) => s.id !== data.id);
-  list.unshift({ ...data, updated: Date.now() });
-  writeList(list.slice(0, 8));
+  const current = readList();
+  const previous = current.find((s) => s.id === data.id);
+  const list = current.filter((s) => s.id !== data.id);
+  // `favorite` belongs to the save manager, not the engine's SaveData. Without
+  // carrying it over every autosave would silently unpin the world.
+  const favorite = data.favorite ?? previous?.favorite;
+  list.unshift({ ...data, ...(favorite ? { favorite: true } : {}), name: cleanWorldName(data.name ?? previous?.name ?? 'Świat'), updated: Date.now() });
+  writeList(list.slice(0, MAX_SAVES));
 }
 
 export function deleteSave(id: string) {
   writeList(readList().filter((s) => s.id !== id));
 }
 
+/** Renames a save without loading the (potentially large) world into the game. */
+export function renameSave(id: string, name: string): boolean {
+  const list = readList();
+  const world = list.find((s) => s.id === id);
+  if (!world) return false;
+  world.name = cleanWorldName(name, world.name || 'Świat');
+  writeList(list);
+  return true;
+}
+
+/** Pins/unpins a world in the menu. The timestamp intentionally stays intact. */
+export function toggleFavoriteSave(id: string): boolean | null {
+  const list = readList();
+  const world = list.find((s) => s.id === id);
+  if (!world) return null;
+  world.favorite = !world.favorite;
+  writeList(list);
+  return world.favorite;
+}
+
+/**
+ * Creates an independent copy of a world. Returns its id, or null when the
+ * world does not exist / all slots are occupied.
+ */
+export function duplicateSave(id: string): string | null {
+  const list = readList();
+  const source = list.find((s) => s.id === id);
+  if (!source || list.length >= MAX_SAVES) return null;
+  const now = Date.now();
+  let copyId = `w${now.toString(36)}-copy`;
+  let suffix = 2;
+  while (list.some((s) => s.id === copyId)) copyId = `w${now.toString(36)}-copy${suffix++}`;
+  const copy: StoredWorld = {
+    ...source,
+    id: copyId,
+    name: cleanWorldName(`${source.name || 'Świat'} — kopia`),
+    updated: now,
+    favorite: false,
+  };
+  writeList([copy, ...list]);
+  return copyId;
+}
+
 /** Every world as one JSON blob – lets players back up or move their saves. */
 export function exportSaves(): string {
-  return JSON.stringify({ blockcraft: 1, saves: readList() }, null, 1);
+  return JSON.stringify({ blockcraft: 1, exportedAt: new Date().toISOString(), saves: readList() }, null, 1);
+}
+
+/** One world in the same format accepted by importSaves(). */
+export function exportSave(id: string): string | null {
+  const world = readList().find((s) => s.id === id);
+  return world ? JSON.stringify({ blockcraft: 1, exportedAt: new Date().toISOString(), saves: [world] }, null, 1) : null;
 }
 
 /**
@@ -92,6 +157,9 @@ export function importSaves(json: string): number {
     if (i >= 0) list[i] = entry;
     else list.push(entry);
   }
-  writeList(list.slice(0, 8));
+  // Keep the newest saves when an import would exceed the browser slot limit.
+  list.sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  writeList(list.slice(0, MAX_SAVES));
+  // Report all valid records seen in the file; storage still enforces MAX_SAVES.
   return valid.length;
 }

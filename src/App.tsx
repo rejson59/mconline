@@ -2,7 +2,7 @@ import { useState } from 'react';
 import GameView from './components/GameView';
 import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
 import { type GameMode, type SaveData } from './game/engine';
-import { deleteSave, loadSaves } from './game/saves';
+import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
 
 interface Session {
   seed: number;
@@ -26,6 +26,7 @@ function cards(): WorldCard[] {
     mode: s.mode,
     day: s.day,
     updated: s.updated,
+    favorite: s.favorite,
     worldType: s.worldType === 'flat' ? 'flat' : 'normal',
   }));
 }
@@ -78,6 +79,19 @@ export default function App() {
         deleteSave(id);
         refresh();
       }}
+      onRename={(id, name) => {
+        renameSave(id, name);
+        refresh();
+      }}
+      onDuplicate={(id) => {
+        const copied = duplicateSave(id) !== null;
+        if (copied) refresh();
+        return copied;
+      }}
+      onToggleFavorite={(id) => {
+        toggleFavoriteSave(id);
+        refresh();
+      }}
       onImported={refresh}
       onPlay={(id) => {
         const s = loadSaves().find((w) => w.id === id);
@@ -94,8 +108,8 @@ export default function App() {
         });
       }}
       onNew={(seed, mode, name, worldType) => {
-        if (saves.length >= 8) {
-          window.alert('Możesz mieć najwyżej 8 światów. Usuń jeden, żeby utworzyć nowy.');
+        if (saves.length >= MAX_SAVES) {
+          window.alert(`Możesz mieć najwyżej ${MAX_SAVES} światów. Usuń jeden, żeby utworzyć nowy.`);
           return;
         }
         try {

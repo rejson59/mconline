@@ -8,6 +8,7 @@ import ChestScreen from './ChestScreen';
 import EnchantScreen from './EnchantScreen';
 import TradeScreen from './TradeScreen';
 import JournalScreen from './JournalScreen';
+import WaypointsScreen from './WaypointsScreen';
 import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
 import TouchControls, { isTouchDevice } from './TouchControls';
 import {
@@ -74,6 +75,9 @@ export default function GameView({
       );
       return;
     }
+    // Ustaw przed pierwszym wznowieniem: telefon nie może próbować przejąć
+    // wskaźnika myszy, bo Android/iOS potrafią wtedy zgubić wszystkie gesty.
+    game.touchInput = touch;
     game.sensitivity = s.sensitivity;
     game.fovBase = s.fov;
     game.showMinimap = s.minimap;
@@ -222,6 +226,7 @@ export default function GameView({
           onInventory={() => game.openInventory(false)}
           onPause={() => game.setUI('paused')}
           onChat={() => game.setUI('chat')}
+          onWaypoints={() => game.setUI('waypoints')}
         />
       )}
       {touch && portraitHint && ui === 'playing' && (
@@ -238,6 +243,7 @@ export default function GameView({
       {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && hud && ui === 'journal' && <JournalScreen hud={hud} unlocked={game.achievementIds()} onClose={() => game.setUI('playing')} />}
+      {game && ui === 'waypoints' && <WaypointsScreen game={game} onClose={() => game.setUI('playing')} />}
       {game && ui === 'chat' && (
         <ChatInput
           onSubmit={(t) => game.command(t)}
@@ -264,7 +270,7 @@ export default function GameView({
           </div>
           <div className="w-[360px] max-w-[86vw]">
             <button className="mc-btn" onClick={resume}>
-              Kliknij, aby grać
+              {touch ? 'Dotknij, aby grać' : 'Kliknij, aby grać'}
             </button>
           </div>
           <div className="px-6 text-center text-sm text-gray-300 mc-text">
@@ -283,6 +289,7 @@ export default function GameView({
           onSettings={setSettings}
           onResume={resume}
           onJournal={() => game.setUI('journal')}
+          onWaypoints={() => game.setUI('waypoints')}
           onSave={() => game.save()}
           onQuit={() => {
             game.save();

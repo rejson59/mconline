@@ -58,6 +58,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'ghast', title: 'Łza Ghasta', text: 'Zdobądź łzę Ghasta.' },
   // 1.9 „Czysty ekwipunek”
   { id: 'pearl', title: 'Skok przez wymiar', text: 'Zteleportuj się perłą Endu.' },
+  // 2.2 „Szlak odkrywcy”
+  { id: 'cartographer', title: 'Kartograf', text: 'Zaznacz swój pierwszy punkt podróży.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {
