@@ -85,10 +85,17 @@ export const I = {
   HONEYCOMB: 238,
   NETHER_WART: 239,
   GLOWSTONE_DUST: 240,
-  PRISMARINE_SHARD: 241,
+  // 2.3 „Wyprawa i ratunek” – wędkarstwo, obserwacja i ratunek
+  FISHING_ROD: 242,
+  RAW_FISH: 243,
+  COOKED_FISH: 244,
+  RAW_SALMON: 245,
+  COOKED_SALMON: 246,
+  SPYGLASS: 247,
+  TOTEM: 248,
 } as const;
 
-export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield';
+export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
 
 export interface ItemDef {
   id: number;
@@ -105,6 +112,8 @@ export interface ItemDef {
   armor?: { slot: 0 | 1 | 2 | 3; points: number };
   /** Flat color used by drop entities and the icon painter. */
   color: string;
+  /** Stack size override (1 = never merges, e.g. totems). */
+  stack?: number;
 }
 
 const DUR = [0, 40, 90, 180, 420];
@@ -192,6 +201,14 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.HONEYCOMB, name: 'Plaster miodu', keys: ['plaster_miodu', 'honeycomb'], kind: 'material', color: '#e8b040' },
   { id: I.NETHER_WART, name: 'Brodawka Netheru', keys: ['nether_wart', 'brodawka'], kind: 'material', color: '#8a2020' },
   { id: I.GLOWSTONE_DUST, name: 'Jasnogłazowy pył', keys: ['glowstone_dust', 'jasnoglazowy_pyl'], kind: 'material', color: '#e8c85a' },
+  // 2.3 „Wyprawa i ratunek”
+  { id: I.FISHING_ROD, name: 'Wędka', keys: ['wedka', 'fishing_rod'], kind: 'tool', tool: 'rod', durability: 64, color: '#9a6a34' },
+  { id: I.RAW_FISH, name: 'Surowa ryba', keys: ['surowa_ryba', 'ryba', 'raw_fish', 'cod'], kind: 'food', hunger: 2, color: '#c9ab84' },
+  { id: I.COOKED_FISH, name: 'Pieczona ryba', keys: ['pieczona_ryba', 'cooked_fish'], kind: 'food', hunger: 6, heal: 1, color: '#d29a58' },
+  { id: I.RAW_SALMON, name: 'Surowy łosoś', keys: ['surowy_losos', 'losos', 'raw_salmon', 'salmon'], kind: 'food', hunger: 2, color: '#e08a6a' },
+  { id: I.COOKED_SALMON, name: 'Pieczony łosoś', keys: ['pieczony_losos', 'cooked_salmon'], kind: 'food', hunger: 6, heal: 2, color: '#e0703a' },
+  { id: I.SPYGLASS, name: 'Lorneta', keys: ['lorneta', 'spyglass'], kind: 'tool', tool: 'spyglass', color: '#c8a43c' },
+  { id: I.TOTEM, name: 'Totem Ratowania', keys: ['totem', 'totem_ratowania', 'totem_ratownictwa'], kind: 'material', stack: 1, color: '#e8c85a' },
 ];
 
 const ARMOR_TIERS: {
@@ -294,6 +311,7 @@ export function displayName(id: number): string {
 export function stackLimit(id: number): number {
   const it = ITEMS[id];
   if (!it) return 64;
+  if (it.stack) return it.stack;
   if (it.kind === 'tool' || it.kind === 'armor') return 1;
   if (it.kind === 'bucket') return 16;
   return 64;
@@ -330,8 +348,28 @@ const SHOVEL_BLOCKS = new Set<number>([
 ]);
 const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE]);
 
+/** Experience orbs dropped when an ore block is mined. 0 = no experience. */
+const ORE_XP: Record<number, number> = {
+  [B.COAL_ORE]: 2,
+  [B.IRON_ORE]: 5,
+  [B.GOLD_ORE]: 6,
+  [B.DIAMOND_ORE]: 7,
+  [B.LAPIS_ORE]: 4,
+  [B.REDSTONE_ORE]: 5,
+  [B.QUARTZ_ORE]: 2,
+  [B.EMERALD_ORE]: 6,
+};
+
 export function isOre(id: number): boolean {
   return ORES.has(id);
+}
+
+/**
+ * Experience an ore block gives when broken. 2.3: redstone, quartz and
+ * emerald ore used to drop nothing at all.
+ */
+export function oreXp(id: number): number {
+  return ORE_XP[id] ?? 0;
 }
 
 export function pickTier(toolId: number): number {
@@ -413,7 +451,11 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
   if (sharp > 0) d += sharp * 0.5 + 0.5;
   else if (tool?.tool === 'shield') d = 2;
   else if (tool?.tool === 'shears' || tool?.tool === 'igniter' || tool?.tool === 'bow') d = 1;
-  else if (tool?.tool) d = 4;
+  // 2.3: wędka i lorneta to narzędzia obserwacyjne – nie biją jak topór.
+  else if (tool?.tool === 'rod' || tool?.tool === 'spyglass') d = 1;
+  // 2.3: ten `else if` kasował wcześniej obrażenia miecza (trafiał tu każdy
+  // miecz), więc diamentowy miecz bił jak drewniany topór – 4 zamiast 9.
+  else if (tool?.tool && tool.tool !== 'sword') d = 4;
   if (sprinting) d += 2;
   return d;
 }
@@ -524,6 +566,10 @@ export function smeltResult(id: number): number | null {
       return I.COOKED_BEEF;
     case I.RAW_CHICKEN:
       return I.COOKED_CHICKEN;
+    case I.RAW_FISH:
+      return I.COOKED_FISH;
+    case I.RAW_SALMON:
+      return I.COOKED_SALMON;
     case B.SOUL_SAND:
       return B.SOUL_SOIL;
     default:

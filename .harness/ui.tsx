@@ -17,6 +17,8 @@ import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/compone
 import EnchantScreen from '../src/components/EnchantScreen';
 import TradeScreen from '../src/components/TradeScreen';
 import WaypointsScreen from '../src/components/WaypointsScreen';
+import AnvilScreen from '../src/components/AnvilScreen';
+import { anvilResult } from '../src/game/anvil';
 import { Inventory } from '../src/game/inventory';
 import { I } from '../src/game/items';
 import { rollEnchantOptions } from '../src/game/enchant';
@@ -225,6 +227,87 @@ section('enchant screen: static render');
   check('lapis cost shown', html.includes('1◆'));
   check('inventory grid rendered', html.includes('mc-slot'));
 }
+
+
+// ============================================================ 2.3: kowadło + dziennik
+section('2.3: anvil screen: static render');
+{
+  const inv = new Inventory();
+  inv.slots[0] = { id: I.IRON_PICK, count: 1, dur: 40 };
+  inv.slots[1] = { id: I.FISHING_ROD, count: 1, dur: 30, name: 'Wędka dziadka' };
+  const state = { x: 1, y: 2, z: 3, a: null as any, b: null as any, name: '', burn: 0, burnMax: 0 };
+  const make = (level: number, a: any, b: any, name = '') => {
+    state.a = a;
+    state.b = b;
+    state.name = name;
+    return {
+      inventory: inv,
+      xp: { info: () => ({ level, inLevel: 0, need: 1 }) },
+      currentAnvil: () => state,
+      anvilOffer: () => anvilResult(state.a, state.b, state.name),
+      canAnvilTake: () => level >= 1,
+      takeAnvilResult: () => false,
+      clickAnvilSlot: () => {},
+      setAnvilName: () => {},
+      closeInventory: () => {},
+      emitHud: () => {},
+    };
+  };
+
+  const merge = renderToStaticMarkup(
+    <AnvilScreen game={make(12, { id: I.IRON_PICK, count: 1, dur: 40 }, { id: I.IRON_PICK, count: 1, dur: 25 }) as never} icons={{}} onChange={() => {}} />
+  );
+  check('the anvil panel has a title', merge.includes('Kowadło'));
+  check('the player level is shown', merge.includes('Poziom: 12'));
+  check('the merge is described', merge.includes('Scal dwa przedmioty'));
+  check('the result slot shows its cost', merge.includes('Wynik · 1 pkt'));
+  check('both input slots are rendered', (merge.match(/mc-slot/g) ?? []).length >= 38);
+  check('the durability bar is drawn', merge.includes('dur-bar'));
+  check('the name field is rendered', merge.includes('max 28 znaków'));
+  check('the how-to text is on screen', merge.includes('wytrzymałości się sumują'));
+
+  const poor = renderToStaticMarkup(
+    <AnvilScreen game={make(0, { id: I.IRON_PICK, count: 1, dur: 40 }, { id: I.IRON_PICK, count: 1, dur: 25 }) as never} icons={{}} onChange={() => {}} />
+  );
+  check('a broke player is warned', poor.includes('za mało poziomów'));
+
+  const renamed = renderToStaticMarkup(
+    <AnvilScreen game={make(3, { id: I.DIAMOND_SWORD, count: 1, dur: 1500 }, null, 'Szabla wędrowca') as never} icons={{}} onChange={() => {}} />
+  );
+  check('the typed name lands in the input', renamed.includes('value="Szabla wędrowca"'));
+  check('renaming is announced', renamed.includes('Zmień nazwę'));
+
+  const empty = { ...make(12, null, null), currentAnvil: () => null };
+  const none = renderToStaticMarkup(<AnvilScreen game={empty as never} icons={{}} onChange={() => {}} />);
+  check('a closed anvil renders nothing', none === '', none);
+}
+
+section('2.3: journal chapter and menus');
+{
+  check('the journal has eight chapters', JOURNAL_CHAPTERS.length === 8, String(JOURNAL_CHAPTERS.length));
+  const last = JOURNAL_CHAPTERS[JOURNAL_CHAPTERS.length - 1];
+  check('the new chapter is about the expedition', last.title === 'Wyprawa i ratunek', last.title);
+  check('it covers fishing, the spyglass, the anvil and the totem', ['fisher', 'surveyor', 'smith', 'undying'].every((id) => last.goals.includes(id as never)), last.goals.join(','));
+  check('every 2.3 goal is a real achievement', ['fisher', 'surveyor', 'smith', 'undying'].every((id) => ACHIEVEMENTS.some((a) => a.id === id)));
+  check('earlier chapters are untouched', JOURNAL_CHAPTERS[0].title === 'Pierwsze kroki' && JOURNAL_CHAPTERS[0].goals.join() === 'wood,craft,pick');
+  // a chapter of new goals is not complete from the first catch
+  const progress = journalProgress(['fisher']);
+  const chapter = progress[progress.length - 1];
+  check('the first 2.3 goal is done', chapter.done === 1, String(chapter.done));
+  check('but the chapter is not complete', chapter.complete === false);
+  const done = journalProgress(['fisher', 'surveyor', 'smith', 'undying']);
+  check('the whole chapter can be completed', done[done.length - 1].complete === true);
+
+  const controls = renderToStaticMarkup(<Controls />);
+  check('controls mention the rod', controls.includes('Wędka'));
+  check('controls mention the spyglass', controls.includes('Lorneta'));
+  check('controls mention the anvil', controls.includes('kowadle'));
+  const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
+  check('the menu announces 2.3', menu.includes('2.3'));
+  // the splash line is picked at random, so check the fixed 2.3 badge instead
+  check('the menu names the 2.3 release', menu.includes('Wyprawa i ratunek'));
+}
+
 
 // ============================================================ jsdom mounting
 async function mountWithJsdom(): Promise<boolean> {

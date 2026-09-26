@@ -456,6 +456,20 @@ export function slabBase(id: number): number {
   if (id === B.QUARTZ_SLAB || id === B.QUARTZ_SLAB_TOP) return B.QUARTZ_SLAB;
   return id;
 }
+
+/** Full block that a pair of slabs turns into (2.3 – one place, no if-chains). */
+const SLAB_FULL: Record<number, number> = {
+  [B.OAK_SLAB]: B.PLANKS,
+  [B.STONE_SLAB]: B.STONE,
+  [B.COBBLE_SLAB]: B.COBBLE,
+  [B.BRICK_SLAB]: B.BRICK,
+  [B.SANDSTONE_SLAB]: B.SANDSTONE,
+  [B.NETHER_BRICK_SLAB]: B.NETHER_BRICKS,
+  [B.QUARTZ_SLAB]: B.QUARTZ_BLOCK,
+};
+export function slabFullBlock(base: number): number {
+  return SLAB_FULL[base] ?? base;
+}
 export function isLever(id: number): boolean {
   return id === B.LEVER || id === B.LEVER_ON;
 }

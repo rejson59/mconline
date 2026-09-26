@@ -153,7 +153,9 @@ export function importSaves(json: string): number {
   const list = readList();
   for (const s of valid) {
     const i = list.findIndex((w) => w.id === s.id);
-    const entry = { ...s, updated: s.updated || Date.now() };
+    // 2.3: import nie może wstrzyknąć dziwnej nazwy – czyscimy ją tak samo,
+    // jak nazwę wpisaną ręcznie (sterowniki, długość, spacje).
+    const entry = { ...s, name: cleanWorldName(s.name ?? 'Świat'), updated: s.updated || Date.now() };
     if (i >= 0) list[i] = entry;
     else list.push(entry);
   }

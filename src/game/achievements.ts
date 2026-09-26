@@ -60,6 +60,14 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'pearl', title: 'Skok przez wymiar', text: 'Zteleportuj się perłą Endu.' },
   // 2.2 „Szlak odkrywcy”
   { id: 'cartographer', title: 'Kartograf', text: 'Zaznacz swój pierwszy punkt podróży.' },
+  // 2.3 „Wyprawa i ratunek”
+  { id: 'fisher', title: 'Pierwszy zarobek', text: 'Złów pierwszą rybę na wędkę.' },
+  { id: 'angler', title: 'Wędkarz', text: 'Złów pięć sztuk na wędkę.' },
+  { id: 'chef', title: 'Smażenie ryb', text: 'Upiecz rybę w piecu lub na ognisku.' },
+  { id: 'surveyor', title: 'Obserwator', text: 'Przyjrzyj się okolicy przez lornetę.' },
+  { id: 'smith', title: 'Kowal', text: 'Scal dwa uszkodzone narzędzia w kowadle.' },
+  { id: 'namer', title: 'Nadany imię', text: 'Zmień nazwę przedmiotu w kowadle.' },
+  { id: 'undying', title: 'Nieśmiertelny', text: 'Totem Ratowania uratuje cię od śmierci.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

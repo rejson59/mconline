@@ -28,6 +28,17 @@ export function aabbIntersectsBlock(px: number, py: number, pz: number, w: numbe
   return px + hw > bx && px - hw < bx + 1 && py + h > by && py < by + 1 && pz + hw > bz && pz - hw < bz + 1;
 }
 
+/**
+ * 2.3: odbicie od bloku szlamu. Zwraca nową prędkość pionową albo null,
+ * gdy odbicia nie było. Odrębna funkcja, bo warunek „byłem w powietrzu”
+ * łatwo było napisać tak, że nigdy nie zachodził.
+ */
+export function slimeBounce(wasGround: boolean, onGround: boolean, velY: number): number | null {
+  if (!onGround) return null;
+  if (wasGround && velY >= -2) return null;
+  return Math.max(6, -velY * 0.8);
+}
+
 function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, d: number): boolean {
   if (d === 0) return false;
   const p = b.pos;

@@ -138,6 +138,12 @@ body {
   color: #c9a0ff;
 }
 
+/* 2.3: własna nazwa nadana w kowadle (złota, pochylona – jak w klasyku). */
+.item-name {
+  color: #f2d45a;
+  font-style: italic;
+}
+
 @keyframes splash {
   0%, 100% { transform: rotate(-18deg) scale(1); }
   50% { transform: rotate(-18deg) scale(1.08); }
