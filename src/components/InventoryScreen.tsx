@@ -46,6 +46,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
   const [onlyReady, setOnlyReady] = useState(false);
   const inv = game.inventory;
   const creative = game.mode === 'creative';
+  const gridMatch = creative ? null : inv.gridMatch(!!game.craftingTable);
   const refresh = () => {
     setTick((t) => t + 1);
     onChange();
@@ -141,6 +142,53 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
             <div className="mb-1 flex items-center justify-between text-lg font-semibold">
               <span>{game.craftingTable ? 'Stół rzemieślniczy' : 'Wytwarzanie'}</span>
               <button type="button" className="text-xs underline" onClick={() => setOnlyReady((v) => !v)}>{onlyReady ? 'Wszystkie' : 'Tylko możliwe'}</button>
+            </div>
+
+            {/* crafting grid: 2x2 by hand, 3x3 at the table */}
+            <div className="mb-3 flex items-center gap-3">
+              <div className="grid grid-cols-3 gap-0" style={{ width: 3 * 44 }}>
+                {inv.grid.map((cell, i) => {
+                  const row = Math.floor(i / 3), col = i % 3;
+                  const enabled = game.craftingTable || (row < 2 && col < 2);
+                  return (
+                    <div key={i} style={{ opacity: enabled ? 1 : 0.25 }}>
+                      <Slot
+                        stack={enabled ? cell : null}
+                        icons={icons}
+                        onHover={setHover}
+                        onClick={(r) => { if (enabled) { inv.clickGrid(i, r); refresh(); } }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <span className="text-2xl">→</span>
+              <Slot
+                stack={gridMatch ? { ...gridMatch.out } : null}
+                icons={icons}
+                showCount
+                onHover={setHover}
+                onClick={() => {
+                  if (!gridMatch) return;
+                  const cur = inv.cursor;
+                  if (cur && (cur.id !== gridMatch.out.id || cur.dur !== undefined)) return;
+                  const room = cur ? stackLimit(cur.id) - cur.count : stackLimit(gridMatch.out.id);
+                  if (room <= 0) return;
+                  const made = inv.craftGrid(!!game.craftingTable);
+                  if (!made) return;
+                  const take = Math.min(made.count, room);
+                  if (cur) { cur.count += take; }
+                  else inv.cursor = { id: made.id, count: take, dur: made.dur };
+                  if (made.count > take) inv.add(made.id, made.count - take, made.dur);
+                  game.onCraft(made.id);
+                  refresh();
+                }}
+              />
+            </div>
+            <div className="mb-2 text-xs opacity-80">
+              {game.craftingTable
+                ? 'Ułóż składniki wzorem w siatce 3×3 i weź wynik. Pasują też wzory narzędzi: np. 3 deski nad 2 patykami = kilof.'
+                : 'Siatka 2×2 – ułóż składniki i weź wynik. Stoł rzemieślniczy (4 deski) odblokowuje siatkę 3×3.'}
             </div>
             {!game.craftingTable && <div className="mb-2 text-xs">Narzędzia, łóżko i piec wymagają stołu (PPM na stół). Piec przetapia rudy – PPM na piec.</div>}
             <div className="max-h-[380px] space-y-1 overflow-y-auto pr-1">

@@ -126,6 +126,12 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
       {hud.underwater && <div className="absolute inset-0" style={{ background: 'rgba(20,60,160,0.35)' }} />}
       {hud.inLava && <div className="absolute inset-0" style={{ background: 'rgba(230,90,10,0.6)' }} />}
       {hud.hurtCount > 0 && <div key={hud.hurtCount} className="hurt-flash absolute inset-0" style={{ background: 'radial-gradient(circle, rgba(255,0,0,0.1) 30%, rgba(200,0,0,0.7))' }} />}
+      {hud.mode === 'survival' && hud.health <= 6 && hud.health > 0 && (
+        <div
+          className="low-health absolute inset-0"
+          style={{ background: 'radial-gradient(circle, rgba(120,0,0,0) 45%, rgba(190,0,0,0.55) 100%)' }}
+        />
+      )}
 
       {/* crosshair */}
       <div className="absolute left-1/2 top-1/2" style={{ transform: 'translate(-50%,-50%)', mixBlendMode: 'difference' }}>

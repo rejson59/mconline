@@ -134,6 +134,16 @@ body {
   animation: hurt 0.45s ease-out forwards;
 }
 
+/* Red edges while the player is close to death – a classic danger cue. */
+.low-health {
+  animation: lowhp 1.1s ease-in-out infinite;
+}
+
+@keyframes lowhp {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.6; }
+}
+
 input[type=range].mc-range {
   -webkit-appearance: none;
   appearance: none;

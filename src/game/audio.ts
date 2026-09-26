@@ -253,6 +253,83 @@ export function playArrowHit() {
   src.stop(t + 0.16);
 }
 
+/** A short wind gust – filtered noise that slowly opens up. */
+export function playWind() {
+  const c = ensure();
+  if (!c || !master || !noiseBuf) return;
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf;
+  src.loop = true;
+  const f = c.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = 320;
+  f.Q.value = 0.8;
+  const g = c.createGain();
+  const t = c.currentTime;
+  const len = 2.5 + Math.random() * 2;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.05, t + len * 0.45);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  f.frequency.linearRampToValueAtTime(520 + Math.random() * 300, t + len);
+  src.connect(f).connect(g).connect(master);
+  src.start(t);
+  src.stop(t + len + 0.05);
+}
+
+/** A few bird chirps – daytime ambience on the surface. */
+export function playBird() {
+  const c = ensure();
+  if (!c || !master) return;
+  const notes = 2 + Math.floor(Math.random() * 3);
+  const base = 1900 + Math.random() * 1400;
+  for (let i = 0; i < notes; i++) {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    const t = c.currentTime + i * (0.09 + Math.random() * 0.13);
+    o.type = 'sine';
+    o.frequency.setValueAtTime(base * (1 + Math.random() * 0.25), t);
+    o.frequency.exponentialRampToValueAtTime(base * (0.7 + Math.random() * 0.3), t + 0.06);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.045, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    o.connect(g).connect(master);
+    o.start(t);
+    o.stop(t + 0.13);
+  }
+}
+
+/** Low cave drone plus a water drop – tells the player they are underground. */
+export function playCave() {
+  const c = ensure();
+  if (!c || !master) return;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  const t = c.currentTime;
+  o.type = 'sine';
+  o.frequency.setValueAtTime(55 + Math.random() * 45, t);
+  o.frequency.linearRampToValueAtTime(48 + Math.random() * 30, t + 3);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.06, t + 0.9);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
+  o.connect(g).connect(master);
+  o.start(t);
+  o.stop(t + 3.3);
+  if (Math.random() < 0.6) {
+    const d = c.createOscillator();
+    const dg = c.createGain();
+    const dt = t + 0.6 + Math.random() * 1.6;
+    d.type = 'sine';
+    d.frequency.setValueAtTime(900 + Math.random() * 700, dt);
+    d.frequency.exponentialRampToValueAtTime(400, dt + 0.09);
+    dg.gain.setValueAtTime(0.0001, dt);
+    dg.gain.exponentialRampToValueAtTime(0.05, dt + 0.008);
+    dg.gain.exponentialRampToValueAtTime(0.0001, dt + 0.14);
+    d.connect(dg).connect(master);
+    d.start(dt);
+    d.stop(dt + 0.16);
+  }
+}
+
 /**
  * Ambient music: a slow, quiet pentatonic phrase. Minecraft-like games use it to
  * fill the silence while exploring; kept sparse and soft so it never fights the

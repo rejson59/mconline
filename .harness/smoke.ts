@@ -537,6 +537,117 @@ section('achievements');
   check('unknown id returns undefined', achievementById('nope') === undefined);
 }
 
+// ================================================== shaped crafting grid
+section('inventory: shaped crafting grid');
+{
+  // 2x2 by hand: two planks stacked vertically = sticks
+  const inv = new Inventory();
+  inv.grid[0] = { id: B.PLANKS, count: 1 };
+  inv.grid[3] = { id: B.PLANKS, count: 1 };
+  eq('2 planks in the grid match sticks', inv.gridMatch(false)?.out.id, I.STICK);
+  eq('craftGrid yields 4 sticks', inv.craftGrid(false)?.count, 4);
+  eq('ingredients are consumed', inv.grid.filter(Boolean).length, 0);
+
+  // a mix that matches nothing
+  const inv2 = new Inventory();
+  inv2.grid[0] = { id: B.PLANKS, count: 1 };
+  inv2.grid[1] = { id: B.STONE, count: 1 };
+  eq('a plank next to stone matches nothing', inv2.gridMatch(false), null);
+  eq('nothing to take from a bad shape', inv2.craftGrid(false), null);
+
+  // 2x2 crafting table
+  const inv3 = new Inventory();
+  for (const i of [0, 1, 3, 4]) inv3.grid[i] = { id: B.PLANKS, count: 1 };
+  eq('4 planks in 2x2 make a crafting table', inv3.gridMatch(false)?.out.id, B.CRAFTING);
+  inv3.grid[8] = { id: B.PLANKS, count: 1 };
+  eq('cells outside the 2x2 are ignored without a table', inv3.gridMatch(false)?.out.id, B.CRAFTING);
+
+  // 3x3 patterns need a table
+  const inv4 = new Inventory();
+  for (const i of [0, 1, 2]) inv4.grid[i] = { id: B.COBBLE, count: 1 };
+  inv4.grid[4] = { id: I.STICK, count: 1 };
+  inv4.grid[7] = { id: I.STICK, count: 1 };
+  check('a pickaxe pattern needs the table', inv4.gridMatch(false) === null);
+  eq('...and matches at the table', inv4.gridMatch(true)?.out.id, I.STONE_PICK);
+  eq('craftGrid at the table gives the pickaxe', inv4.craftGrid(true)?.id, I.STONE_PICK);
+  eq('all five cells are consumed', inv4.grid.filter(Boolean).length, 0);
+
+  // removing one ingredient breaks the match
+  const broken = new Inventory();
+  for (const i of [0, 1, 2]) broken.grid[i] = { id: B.COBBLE, count: 1 };
+  broken.grid[4] = { id: I.STICK, count: 1 };
+  eq('a pickaxe missing a stick matches nothing', broken.gridMatch(true), null);
+
+  // the bow: sticks on the diagonal, string in the right column
+  const bow = new Inventory();
+  for (const i of [1, 3, 7]) bow.grid[i] = { id: I.STICK, count: 1 };
+  for (const i of [2, 5, 8]) bow.grid[i] = { id: I.STRING, count: 1 };
+  eq('the bow pattern matches', bow.gridMatch(true)?.out.id, I.BOW);
+  eq('craftGrid makes the bow', bow.craftGrid(true)?.id, I.BOW);
+
+  // patterns are matched anywhere in the grid
+  const shifted = new Inventory();
+  shifted.grid[1] = { id: B.PLANKS, count: 1 };
+  shifted.grid[4] = { id: B.PLANKS, count: 1 };
+  eq('a shifted stick pattern still matches', shifted.gridMatch(false)?.out.id, I.STICK);
+
+  // grid <-> cursor interaction
+  const inv5 = new Inventory();
+  inv5.cursor = { id: B.PLANKS, count: 5 };
+  inv5.clickGrid(0, false);
+  eq('clicking an empty grid cell places the cursor', inv5.grid[0]?.count, 5);
+  eq('cursor is emptied', inv5.cursor, null);
+  inv5.clickGrid(0, true);
+  eq('right click takes half', inv5.cursor?.count, 3);
+  eq('half stays in the grid', inv5.grid[0]?.count, 2);
+  inv5.clickGrid(0, false);
+  eq('left click merges into the same cell', inv5.grid[0]?.count, 5);
+  eq('cursor is empty after merging', inv5.cursor, null);
+  inv5.clickGrid(0, false);
+  eq('left click on a lone cell takes it all', inv5.cursor?.count, 5);
+  inv5.clickGrid(1, false);
+  eq('the stack moved to the second cell', inv5.grid[1]?.count, 5);
+  inv5.cursor = { id: B.PLANKS, count: 3 };
+  inv5.clickGrid(1, false);
+  eq('dropping onto the same cell merges', inv5.grid[1]?.count, 8);
+  inv5.cursor = { id: B.STONE, count: 1 };
+  inv5.clickGrid(1, false);
+  eq('a different item swaps instead of merging', inv5.grid[1]?.id, B.STONE);
+  eq('the old stack is back on the cursor', inv5.cursor?.id, B.PLANKS);
+
+  // closing the screen returns everything
+  const inv6 = new Inventory();
+  inv6.grid[0] = { id: I.DIAMOND, count: 3 };
+  inv6.grid[8] = { id: B.STONE, count: 2 };
+  const leftovers = inv6.returnGrid();
+  eq('returnGrid hands the items back', inv6.countOf(I.DIAMOND), 3);
+  eq('nothing is left over when there is room', leftovers.length, 0);
+  eq('the grid is empty afterwards', inv6.grid.filter(Boolean).length, 0);
+  const full = new Inventory();
+  for (let i = 0; i < 36; i++) full.slots[i] = { id: B.STONE, count: 64 };
+  full.grid[0] = { id: I.DIAMOND, count: 1 };
+  eq('a full inventory reports leftovers', full.returnGrid().length, 1);
+
+  // every shaped recipe really has a matching pattern in the grid
+  let brokenPattern = 0;
+  for (const r of RECIPES) {
+    if (!r.pattern) continue;
+    const test = new Inventory();
+    for (let y = 0; y < r.pattern.length; y++) {
+      for (let x = 0; x < r.pattern[y].length; x++) {
+        const ch = r.pattern[y][x];
+        if (ch === ' ' || ch === '.') continue;
+        const id = r.key?.[ch];
+        if (id === undefined) { brokenPattern++; continue; }
+        test.grid[y * 3 + x] = { id, count: 1 };
+      }
+    }
+    if (test.gridMatch(true)?.out.id !== r.out.id) brokenPattern++;
+  }
+  eq('every shaped recipe matches its own pattern', brokenPattern, 0);
+  check('there are shaped recipes to find', RECIPES.filter((r) => r.pattern).length >= 20, `${RECIPES.filter((r) => r.pattern).length} shaped`);
+}
+
 // ====================================================== leaf decay (engine)
 section('engine: leaf decay after chopping');
 {

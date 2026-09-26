@@ -295,6 +295,8 @@ export class Game {
   private weatherTimer = 70;
   private lightning = 0;
   private musicTimer = 90 + Math.random() * 150;
+  private ambientTimer = 12 + Math.random() * 18;
+  private underground = false;
   private nextBolt = 12;
   private rain!: THREE.Points;
   private rainGeo!: THREE.BufferGeometry;
@@ -485,6 +487,18 @@ export class Game {
       : 'BlockCraft 1.3: zetnij drzewo, wytwórz kilof, a potem łuk. Po zmroku grasują nieumarli, a w jaskiniach pająki.');
   }
 
+  /** True when solid rock covers the player – used for cave ambience. */
+  private checkUnderground() {
+    const x = Math.floor(this.body.pos.x), y = Math.floor(this.body.pos.y), z = Math.floor(this.body.pos.z);
+    for (let dy = 1; dy <= 26; dy++) {
+      const id = this.world.peekBlock(x, y + dy, z);
+      if (id === B.AIR) continue;
+      this.underground = IS_SOLID[id] !== 0 || RENDER[id] === 1;
+      return;
+    }
+    this.underground = false;
+  }
+
   private initWeather() {
     const N = 420;
     const pos = new Float32Array(N * 3);
@@ -655,6 +669,12 @@ export class Game {
       console.warn('setUI side effect failed', e);
     }
     if (s === 'paused') this.save();
+    // Leaving the inventory must never eat the items sitting in the grid.
+    if (s !== 'inventory' && s !== 'chest' && s !== 'furnace') {
+      for (const left of this.inventory.returnGrid()) {
+        if (left) this.spawnDrop(left.id, left.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, left.dur);
+      }
+    }
     this.keys.clear();
     this.mouseLeft = this.mouseRight = false;
     this.bowDraw = -1;
@@ -1943,6 +1963,7 @@ export class Game {
       this.updateGrowth(dt);
       this.updateFurnaces(dt);
       this.updateWeather(dt);
+      this.checkUnderground();
       this.time = (this.time + dt / 600) % 1;
       if (this.time < dt / 600) {
         this.day++;
@@ -2680,6 +2701,16 @@ export class Game {
         this.musicTimer = 110 + Math.random() * 190;
         Sfx.playMusic();
       }
+    }
+    // Ambient sound: wind and birds on the surface, drones in a cave.
+    this.ambientTimer -= dt;
+    if (this.ambientTimer <= 0) {
+      this.ambientTimer = this.underground ? 18 + Math.random() * 26 : 16 + Math.random() * 30;
+      const roll = Math.random();
+      if (this.underground) Sfx.playCave();
+      else if (this.weather === 'rain') { if (roll < 0.6) Sfx.playWind(); }
+      else if (this.daylight() > 0.55) { if (roll < 0.45) Sfx.playBird(); else if (roll < 0.8) Sfx.playWind(); }
+      else if (roll < 0.5) Sfx.playWind();
     }
     this.weatherTimer -= dt;
     if (this.weatherTimer <= 0) this.setWeather(this.weather === 'clear' ? 'rain' : 'clear');
