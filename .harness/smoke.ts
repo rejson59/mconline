@@ -8,6 +8,8 @@
  * the top of this file so the real modules can be imported unchanged.
  */
 import * as THREE from 'three';
+import { PRESETS, detectDeviceProfile, recommendPreset, describeProfile, type DeviceProfile } from '../src/utils/performance';
+import { DEFAULT_SETTINGS, applyPreset, effectiveSettings } from '../src/utils/settings';
 
 // ---------------------------------------------------------------- DOM stubs
 const ctx2d = {
@@ -2116,6 +2118,51 @@ section('items: nether economy (1.9)');
 
   // płomienna różdżka pali dłużej niż węgiel
   check('blaze rod outburns coal', fuelSeconds(I.BLAZE_ROD) > fuelSeconds(I.COAL), `${fuelSeconds(I.BLAZE_ROD)}s vs ${fuelSeconds(I.COAL)}s`);
+}
+
+// ================================================== 2.0: quality auto-pilot
+section('2.0: automatic graphics and settings');
+{
+  // presety mają sensowne, rosnące wartości
+  check('preset low renders closer than medium', PRESETS.low.renderDistance < PRESETS.medium.renderDistance);
+  check('preset medium renders closer than high', PRESETS.medium.renderDistance < PRESETS.high.renderDistance);
+  check('low preset caps FPS to save battery', PRESETS.low.fpsCap === 30);
+  check('low preset disables clouds', PRESETS.low.clouds === false);
+  check('low preset scales particles down', PRESETS.low.particles < PRESETS.medium.particles && PRESETS.medium.particles < PRESETS.high.particles);
+  check('dynamic resolution on for low/medium', PRESETS.low.dynamicResolution && PRESETS.medium.dynamicResolution);
+  check('high preset keeps full resolution', PRESETS.high.pixelRatio >= 2);
+
+  // profil urządzenia w Node (brak DOM) => bezpieczny, „wydajny” domyślny
+  const nodeProfile = detectDeviceProfile();
+  check('node profile falls back gracefully', nodeProfile.tier === 'high' && nodeProfile.mobile === false, JSON.stringify(nodeProfile));
+
+  // rekomendacje dla fikcyjnych urządzeń
+  const weakPhone: DeviceProfile = { mobile: true, tier: 'low', cores: 4, memoryGB: 2, gpu: 'Adreno 506', dpr: 2, minScreen: 360 };
+  const midPhone: DeviceProfile = { mobile: true, tier: 'mid', cores: 8, memoryGB: 6, gpu: 'Mali-G77', dpr: 2.6, minScreen: 390 };
+  const gamingPC: DeviceProfile = { mobile: false, tier: 'high', cores: 16, memoryGB: 32, gpu: 'RTX 4070', dpr: 1, minScreen: 1080 };
+  eq('weak phone -> low preset', recommendPreset(weakPhone), 'low');
+  eq('mid phone -> medium preset', recommendPreset(midPhone), 'medium');
+  eq('gaming PC -> high preset', recommendPreset(gamingPC), 'high');
+  check('describeProfile mentions the GPU', describeProfile(gamingPC).includes('RTX 4070'));
+
+  // applyPreset kopiuje grafikę, zostawiając preferencje gracza
+  const s = applyPreset({ ...DEFAULT_SETTINGS, fov: 95, sensitivity: 2 }, 'low');
+  eq('applyPreset applies render distance', s.renderDistance, PRESETS.low.renderDistance);
+  eq('applyPreset applies fps cap', s.fpsCap, PRESETS.low.fpsCap);
+  eq('applyPreset keeps player fov', s.fov, 95);
+  eq('applyPreset switches quality mode', s.quality, 'low');
+
+  // effectiveSettings w trybie Auto korzysta z rekomendacji, ale zachowuje wybór
+  const auto = effectiveSettings({ ...DEFAULT_SETTINGS, quality: 'auto' }, weakPhone);
+  eq('effective auto uses recommended render distance', auto.renderDistance, PRESETS.low.renderDistance);
+  eq('effective auto keeps quality=auto flag', auto.quality, 'auto');
+  const manual = effectiveSettings({ ...DEFAULT_SETTINGS, quality: 'high', renderDistance: 10 }, weakPhone);
+  eq('manual quality wins over recommendation', manual.renderDistance, 10);
+
+  // nowe klucze ustawień mają domyślne wartości (migracja starych zapisów)
+  check('defaults contain touch mode tap', DEFAULT_SETTINGS.touchMode === 'tap');
+  check('defaults enable auto-jump and haptics', DEFAULT_SETTINGS.autoJump === true && DEFAULT_SETTINGS.haptics === true);
+  check('defaults enable dynamic resolution', DEFAULT_SETTINGS.dynamicResolution === true);
 }
 
 // =================================================================== report

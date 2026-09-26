@@ -11,7 +11,8 @@ import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MainMenu, Controls, AchievementsPanel, PauseMenu } from '../src/components/Menus';
 import { ACHIEVEMENTS } from '../src/game/achievements';
-import { DEFAULT_SETTINGS } from '../src/utils/settings';
+import { DEFAULT_SETTINGS, applyPreset } from '../src/utils/settings';
+import SettingsScreen from '../src/components/SettingsScreen';
 import EnchantScreen from '../src/components/EnchantScreen';
 import TradeScreen from '../src/components/TradeScreen';
 import { Inventory } from '../src/game/inventory';
@@ -114,6 +115,19 @@ section('menus: static render');
   );
   check('pause menu offers resume and save', pause.includes('Wróć do gry') && pause.includes('Zapisz świat'));
   check('pause menu counts achievements', pause.includes(`/${ACHIEVEMENTS.length}`));
+
+  // 2.0: ekran opcji (zakładki, presety jakości, sterowanie dotykowe)
+  const settingsHtml = renderToStaticMarkup(
+    <SettingsScreen settings={DEFAULT_SETTINGS} onChange={noop} onClose={noop} />
+  );
+  check('settings screen shows quality presets', settingsHtml.includes('Niskie') && settingsHtml.includes('Wysokie'));
+  check('settings screen shows auto mode', settingsHtml.includes('Auto'));
+  check('settings screen shows touch options', settingsHtml.includes('Ekran dotykowy') && settingsHtml.includes('Wibracje'));
+  check('settings screen shows fps cap option', settingsHtml.includes('Limit klatek'));
+  const medium = renderToStaticMarkup(
+    <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
+  );
+  check('settings highlight the active preset', medium.includes('ring-yellow-300'));
 
   const ach = renderToStaticMarkup(<AchievementsPanel unlocked={['wood', 'diamond']} />);
   check('unlocked achievements are revealed', ach.includes('Pierwsze drewno') && ach.includes('Diamenty!'));

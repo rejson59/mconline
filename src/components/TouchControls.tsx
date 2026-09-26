@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/engine';
+import { I } from '../game/items';
+import type { Settings } from '../utils/settings';
 
 /** True on phones/tablets (or any device with a touchscreen). */
 export function isTouchDevice(): boolean {
@@ -8,33 +10,148 @@ export function isTouchDevice(): boolean {
   return 'ontouchstart' in window || (nav.maxTouchPoints ?? nav.msMaxTouchPoints ?? 0) > 0;
 }
 
-const STICK_RADIUS = 58;
+const STICK_RADIUS = 62;
+const JOINT_BASE = { x: 96, y: -118 }; // środek stałego drążka (od lewej / od dołu)
+const TAP_MS = 260;
+const HOLD_MS = 250;
+const TAP_MOVE_PX = 14;
 
 interface PointerInfo {
-  kind: 'move' | 'look' | 'button';
-  id: string;
+  kind: 'move' | 'look';
   originX: number;
   originY: number;
   lastX: number;
   lastY: number;
+  startX: number;
+  startY: number;
+  downAt: number;
+  moved: boolean;
+  /** tryb gestu dla 'look': '' nic, 'break' kopanie, 'draw' naciąganie łuku */
+  gesture: '' | 'break' | 'draw';
+  holdTimer: number | null;
+}
+
+function buzz(ms: number, enabled: boolean) {
+  if (!enabled) return;
+  try {
+    navigator.vibrate?.(ms);
+  } catch {
+    /* brak wsparcia */
+  }
+}
+
+interface BtnProps {
+  label: string;
+  size?: number;
+  active?: boolean;
+  opacity?: number;
+  fontSize?: number;
+  hint?: string;
+  onDown: () => void;
+  onUp?: () => void;
+  haptics: boolean;
+}
+
+/** Okrągły przycisk akcji – duży, półprzezroczysty, „majstrowany” pod palec. */
+function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22, onDown, onUp, haptics }: BtnProps) {
+  const [held, setHeld] = useState(false);
+  return (
+    <button
+      className="pointer-events-auto flex select-none items-center justify-center border-2 border-black mc-text"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 9999,
+        fontSize,
+        touchAction: 'none',
+        opacity: held ? 0.95 : active ? 0.92 : opacity,
+        background: active ? 'rgba(110,160,90,0.65)' : 'rgba(70,70,70,0.55)',
+        transform: held ? 'scale(0.93)' : 'scale(1)',
+        transition: 'transform 60ms',
+      }}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        setHeld(true);
+        buzz(8, haptics);
+        onDown();
+      }}
+      onPointerUp={(e) => {
+        e.stopPropagation();
+        setHeld(false);
+        onUp?.();
+      }}
+      onPointerCancel={() => {
+        setHeld(false);
+        onUp?.();
+      }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {label}
+    </button>
+  );
 }
 
 /**
- * On-screen controls for phones and tablets: a virtual thumbstick on the left,
- * drag-to-look on the right and action buttons in the bottom-right corner.
- * Everything is driven through the public Game API, so the desktop path is
- * untouched.
+ * BlockCraft 2.0 – sterowanie dotykowe inspirowane wersją kieszonkową:
+ *  • drążek ruchu (stały albo pojawiający się pod palcem), pchnięcie do oporu = sprint,
+ *  • przeciąganie po ekranie = rozglądanie się,
+ *  • tryb „Tapnij”: krótkie tapnięcie stawia blok / używa przedmiotu / atakuje moba,
+ *    przytrzymanie kopie blok pod palcem (celownik leci za palcem, nie na środek),
+ *  • tryb „Przyciski”: klasyczne ⛏ i ▣ celujące w środek ekranu,
+ *  • łuk: przytrzymaj i puść w obu trybach,
+ *  • podwójne tapnięcie skoku w trybie kreatywnym = latanie.
  */
-export default function TouchControls({ game, onInventory, onPause }: { game: Game; onInventory: () => void; onPause: () => void }) {
+export default function TouchControls({
+  game,
+  settings,
+  onInventory,
+  onPause,
+  onChat,
+}: {
+  game: Game;
+  settings: Settings;
+  onInventory: () => void;
+  onPause: () => void;
+  onChat: () => void;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
   const pointers = useRef(new Map<number, PointerInfo>());
+  const stickBase = useRef({ x: JOINT_BASE.x, y: 0 }); // y liczone od dołu przy renderze
+  const lastForwardTap = useRef(0);
   const [stick, setStick] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
+  const [sprintPush, setSprintPush] = useState(false);
   const [jumping, setJumping] = useState(false);
   const [breaking, setBreaking] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [sneaking, setSneaking] = useState(false);
+  const [flying, setFlying] = useState(game.flying);
+  const [creative, setCreative] = useState(game.mode === 'creative');
+  const [holdRing, setHoldRing] = useState<{ x: number; y: number; p: number } | null>(null);
   const lastJumpTap = useRef(0);
+  // Wysokość viewportu dla stałej podkładki drążka (zanim gracz dotknie ekranu).
+  const [vh, setVh] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
+  useEffect(() => {
+    const onResize = () => setVh(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, []);
+  const fixedBase = { x: JOINT_BASE.x + 10, y: vh + JOINT_BASE.y - 24 };
 
+  // Odświeżaj stan latania / trybu gry (silnik zmienia je bez wiedzy Reacta).
+  useEffect(() => {
+    const t = setInterval(() => {
+      setFlying(game.flying);
+      setCreative(game.mode === 'creative');
+    }, 250);
+    return () => clearInterval(t);
+  }, [game]);
+
+  // Opuszczanie ekranu nigdy nie może zostawić „wciśniętych” klawiszy.
   useEffect(() => {
     const stop = () => {
       pointers.current.clear();
@@ -43,25 +160,76 @@ export default function TouchControls({ game, onInventory, onPause }: { game: Ga
       setBreaking(false);
       setPlacing(false);
       setSneaking(false);
+      setHoldRing(null);
       game.keys.clear();
       game.mouseLeft = false;
       game.mouseRight = false;
+      game.touchAim = null;
     };
     return stop;
   }, [game]);
 
   const setMoveKeys = (dx: number, dy: number) => {
     const k = game.keys;
-    const dead = 0.28;
+    const dead = 0.25;
     if (dy < -dead) k.add('KeyW');
     else k.delete('KeyW');
-    game.sprinting = dy < -0.86;
     if (dy > dead) k.add('KeyS');
     else k.delete('KeyS');
     if (dx < -dead) k.add('KeyA');
     else k.delete('KeyA');
     if (dx > dead) k.add('KeyD');
     else k.delete('KeyD');
+    // Pchnięcie drążka do oporu = sprint (jak w wersji kieszonkowej).
+    const deep = dy < -0.92;
+    game.sprinting = deep || (game.sprinting && dy < -0.55);
+    setSprintPush(deep);
+  };
+
+  const ndc = (x: number, y: number) => {
+    const rect = rootRef.current!.getBoundingClientRect();
+    return { x: (x / rect.width) * 2 - 1, y: -(y / rect.height) * 2 + 1 };
+  };
+
+  const startHold = (info: PointerInfo) => {
+    const sel = game.selectedStack();
+    // Łuk w dłoni: przytrzymanie naciąga, puszczenie strzela – oba tryby.
+    if (sel?.id === I.BOW) {
+      info.gesture = 'draw';
+      game.touchAim = ndc(info.lastX, info.lastY);
+      game.mouseRight = true;
+      return;
+    }
+    info.gesture = 'break';
+    game.mouseLeft = true;
+    game.touchAim = ndc(info.lastX, info.lastY);
+    game.refreshTarget();
+    game.tryAttack(); // najpierw cios – mob pod palcem, potem zwykłe kopanie
+    setBreaking(true);
+    setHoldRing({ x: info.lastX, y: info.lastY, p: 0 });
+  };
+
+  const endGesture = (info: PointerInfo) => {
+    if (info.holdTimer !== null) {
+      clearTimeout(info.holdTimer);
+      info.holdTimer = null;
+    }
+    if (info.gesture === 'break') {
+      game.mouseLeft = false;
+      game.breakProgress = 0;
+      game.touchAim = null;
+      setBreaking(false);
+      setHoldRing(null);
+    } else if (info.gesture === 'draw') {
+      game.mouseRight = false; // wypuszcza naciągniętą strzałę
+      game.touchAim = null;
+    } else if (info.gesture === '' && settings.touchMode === 'tap' && !info.moved && performance.now() - info.downAt < TAP_MS) {
+      // Krótkie tapnięcie: postaw blok / użyj / zjedz / zaatakuj moba.
+      const n = ndc(info.lastX, info.lastY);
+      game.touchTap(n.x, n.y);
+      buzz(6, settings.haptics);
+    }
+    info.gesture = '';
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -70,15 +238,35 @@ export default function TouchControls({ game, onInventory, onPause }: { game: Ga
     const rect = el.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    const moveZone = x < rect.width * 0.45 && y > rect.height * 0.35;
-    if (moveZone) {
-      pointers.current.set(e.pointerId, { kind: 'move', id: e.pointerId.toString(), originX: x, originY: y, lastX: x, lastY: y });
-      setStick({ x, y, dx: 0, dy: 0 });
-    } else {
-      pointers.current.set(e.pointerId, { kind: 'look', id: e.pointerId.toString(), originX: x, originY: y, lastX: x, lastY: y });
+    const base = settings.joystickFixed ? fixedBase : { x: 0, y: 0 };
+    stickBase.current = base;
+    const moveZone = settings.joystickFixed
+      ? Math.hypot(x - base.x, y - base.y) < STICK_RADIUS * 1.9
+      : x < rect.width * 0.42 && y > rect.height * 0.32;
+    const info: PointerInfo = {
+      kind: moveZone ? 'move' : 'look',
+      originX: moveZone && !settings.joystickFixed ? x : base.x,
+      originY: moveZone && !settings.joystickFixed ? y : base.y,
+      lastX: x,
+      lastY: y,
+      startX: x,
+      startY: y,
+      downAt: performance.now(),
+      moved: false,
+      gesture: '',
+      holdTimer: null,
+    };
+    pointers.current.set(e.pointerId, info);
+    if (info.kind === 'move') {
+      setStick({ x: info.originX, y: info.originY, dx: 0, dy: 0 });
+      buzz(5, settings.haptics);
+    } else if (settings.touchMode === 'tap') {
+      // Timer przytrzymania – dopiero wtedy zaczyna się kopanie.
+      info.holdTimer = window.setTimeout(() => {
+        if (pointers.current.get(e.pointerId) === info && !info.moved && game.ui === 'playing') startHold(info);
+      }, HOLD_MS);
     }
     el.setPointerCapture?.(e.pointerId);
-    game.sprinting = false;
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -96,13 +284,30 @@ export default function TouchControls({ game, onInventory, onPause }: { game: Ga
         dx = (dx / len) * STICK_RADIUS;
         dy = (dy / len) * STICK_RADIUS;
       }
+      // Drugie szybkie pchnięcie do przodu = zablokowany sprint.
+      if (dy < -STICK_RADIUS * 0.9) {
+        const now = performance.now();
+        if (now - lastForwardTap.current < 320) game.sprinting = true;
+        lastForwardTap.current = now;
+      }
       setMoveKeys(dx / STICK_RADIUS, dy / STICK_RADIUS);
       setStick({ x: info.originX, y: info.originY, dx, dy });
     } else if (info.kind === 'look') {
-      const s = 0.006 * game.sensitivity;
+      const s = 0.006 * settings.sensitivity;
       game.yaw -= (x - info.lastX) * s;
       game.pitch -= (y - info.lastY) * s;
       game.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, game.pitch));
+      const travel = Math.hypot(x - info.startX, y - info.startY);
+      if (travel > TAP_MOVE_PX) info.moved = true;
+      if (info.gesture === 'break') {
+        info.lastX = x;
+        info.lastY = y;
+        game.touchAim = ndc(x, y); // celownik podąża za palcem
+        if (holdRing) setHoldRing({ x, y, p: game.breakProgress });
+      } else if (info.gesture === 'draw') {
+        info.lastX = x;
+        info.lastY = y;
+      }
     }
     info.lastX = x;
     info.lastY = y;
@@ -114,15 +319,28 @@ export default function TouchControls({ game, onInventory, onPause }: { game: Ga
     if (!info) return;
     if (info.kind === 'move') {
       setStick(null);
+      setSprintPush(false);
       setMoveKeys(0, 0);
+      game.sprinting = false;
+    } else {
+      endGesture(info);
     }
   };
+
+  // Podgląd postępu kopania dla pierścienia pod palcem.
+  useEffect(() => {
+    if (!breaking) return;
+    const t = setInterval(() => {
+      setHoldRing((r) => (r ? { ...r, p: game.breakProgress } : r));
+    }, 90);
+    return () => clearInterval(t);
+  }, [breaking, game]);
 
   const pressJump = (down: boolean) => {
     setJumping(down);
     if (down) {
       const now = performance.now();
-      if (game.mode === 'creative' && now - lastJumpTap.current < 350) {
+      if (creative && now - lastJumpTap.current < 350) {
         game.toggleFly();
         lastJumpTap.current = 0;
         game.keys.delete('Space');
@@ -139,15 +357,20 @@ export default function TouchControls({ game, onInventory, onPause }: { game: Ga
   const pressBreak = (down: boolean) => {
     setBreaking(down);
     game.mouseLeft = down;
-    if (!down) game.breakProgress = 0;
+    if (down) {
+      game.refreshTarget();
+      game.tryAttack();
+    } else game.breakProgress = 0;
   };
 
   const pressPlace = (down: boolean) => {
     setPlacing(down);
     game.mouseRight = down;
     if (down) {
+      // refreshTarget natychmiast przelicza cel, a updateInteraction (już
+      // z wciśniętym mouseRight) wykonuje tryUse dokładnie raz.
       game.placeCooldown = 0;
-      game.tryUse();
+      game.refreshTarget();
     }
   };
 
@@ -157,51 +380,184 @@ export default function TouchControls({ game, onInventory, onPause }: { game: Ga
     else game.keys.delete('ShiftLeft');
   };
 
-  const btn = 'pointer-events-auto flex select-none items-center justify-center border-2 border-black text-[15px] font-bold mc-text';
-  const btnStyle = { background: 'rgba(90,90,90,0.55)', borderRadius: 9999, width: 64, height: 64, touchAction: 'none' as const };
+  const btn = 'pointer-events-auto flex select-none items-center justify-center border-2 border-black mc-text';
+  const btnStyle = { background: 'rgba(70,70,70,0.55)', borderRadius: 9999, touchAction: 'none' as const };
 
   return (
     <div
       ref={rootRef}
-      className="pointer-events-auto absolute inset-0 z-20"
+      className="pointer-events-auto absolute inset-0 z-10"
       style={{ touchAction: 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endPointer}
       onPointerCancel={endPointer}
+      onContextMenu={(e) => e.preventDefault()}
     >
-      {/* thumbstick */}
-      {stick && (
-        <div className="pointer-events-none absolute" style={{ left: stick.x - STICK_RADIUS, top: stick.y - STICK_RADIUS, width: STICK_RADIUS * 2, height: STICK_RADIUS * 2, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.35)', background: 'rgba(0,0,0,0.25)' }}>
-          <div style={{ position: 'absolute', left: STICK_RADIUS + stick.dx - 22, top: STICK_RADIUS + stick.dy - 22, width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.55)' }} />
+      {/* drążek – stała podkładka zawsze widoczna */}
+      {settings.joystickFixed && !stick && (
+        <div
+          className="pointer-events-none absolute flex items-center justify-center"
+          style={{
+            left: fixedBase.x - STICK_RADIUS,
+            top: fixedBase.y - STICK_RADIUS,
+            width: STICK_RADIUS * 2,
+            height: STICK_RADIUS * 2,
+            borderRadius: '50%',
+            border: '2px solid rgba(255,255,255,0.30)',
+            background: 'rgba(0,0,0,0.22)',
+          }}
+        >
+          <div className="text-[11px] opacity-50 mc-text">RUCH</div>
         </div>
       )}
 
-      {/* action buttons */}
-      <div className="pointer-events-none absolute bottom-4 right-4 grid grid-cols-2 gap-3">
-        <button className={btn} style={{ ...btnStyle, opacity: sneaking ? 1 : 0.7 }} onPointerDown={(e) => { e.stopPropagation(); pressSneak(true); }} onPointerUp={() => pressSneak(false)} onPointerCancel={() => pressSneak(false)}>
-          ↑↓
+      {/* wizualizacja drążka */}
+      {stick && (
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            left: stick.x - STICK_RADIUS,
+            top: stick.y - STICK_RADIUS,
+            width: STICK_RADIUS * 2,
+            height: STICK_RADIUS * 2,
+            borderRadius: '50%',
+            border: '2px solid rgba(255,255,255,0.4)',
+            background: 'rgba(0,0,0,0.25)',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              left: STICK_RADIUS + stick.dx - 24,
+              top: STICK_RADIUS + stick.dy - 24,
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              background: sprintPush ? 'rgba(255,230,120,0.75)' : 'rgba(255,255,255,0.55)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: sprintPush ? 16 : 12,
+              fontWeight: 700,
+              color: '#222',
+            }}
+          >
+            {sprintPush ? '>>' : ''}
+          </div>
+        </div>
+      )}
+
+      {/* pierścień postępu kopania pod palcem */}
+      {holdRing && (
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            left: holdRing.x - 30,
+            top: holdRing.y - 30,
+            width: 60,
+            height: 60,
+            borderRadius: '50%',
+            border: '3px dashed rgba(255,255,255,0.35)',
+            background: `conic-gradient(rgba(255,255,255,0.45) ${Math.round(holdRing.p * 360)}deg, rgba(255,255,255,0.06) 0deg)`,
+          }}
+        />
+      )}
+
+      {/* przyciski akcji – diament pod prawym kciukiem */}
+      <div
+        className="pointer-events-none absolute"
+        style={{ right: 12, bottom: 96 + 30, width: 160, height: settings.touchMode === 'buttons' ? 216 : 148 }}
+      >
+        <div className="absolute" style={{ right: 0, bottom: 0 }}>
+          <ActionButton label={flying ? '⤒' : '⬆'} size={72} fontSize={26} opacity={jumping ? 1 : 0.7} onDown={() => pressJump(true)} onUp={() => pressJump(false)} haptics={settings.haptics} />
+        </div>
+        <div className="absolute" style={{ right: 84, bottom: 6 }}>
+          <ActionButton label={sneaking ? '⇩' : '⇣'} size={56} active={sneaking} onDown={() => pressSneak(!sneaking)} haptics={settings.haptics} />
+        </div>
+        {creative && (
+          <div className="absolute" style={{ right: 94, bottom: 76 }}>
+            <ActionButton
+              label="✈"
+              size={54}
+              active={flying}
+              onDown={() => {
+                game.toggleFly();
+                setFlying(game.flying);
+              }}
+              haptics={settings.haptics}
+            />
+          </div>
+        )}
+        {settings.touchMode === 'buttons' && (
+          <>
+            <div className="absolute" style={{ right: 86, bottom: 148 }}>
+              <ActionButton label="▣" size={58} opacity={placing ? 1 : 0.66} onDown={() => pressPlace(true)} onUp={() => pressPlace(false)} haptics={settings.haptics} />
+            </div>
+            <div className="absolute" style={{ right: 8, bottom: 148 }}>
+              <ActionButton label="⛏" size={58} opacity={breaking ? 1 : 0.66} onDown={() => pressBreak(true)} onUp={() => pressBreak(false)} haptics={settings.haptics} />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* pasek górny: pauza, ekwipunek, czat, pełny ekran */}
+      <div className="pointer-events-none absolute left-3 flex gap-2" style={{ top: 34 }}>
+        <button
+          className={btn}
+          style={{ ...btnStyle, width: 50, height: 50, fontSize: 20, opacity: 0.75 }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            buzz(6, settings.haptics);
+            onPause();
+          }}
+        >
+          ⏸
         </button>
-        <button className={btn} style={{ ...btnStyle, opacity: jumping ? 1 : 0.7 }} onPointerDown={(e) => { e.stopPropagation(); pressJump(true); }} onPointerUp={() => pressJump(false)} onPointerCancel={() => pressJump(false)}>
-          ⤒
+        <button
+          className={btn}
+          style={{ ...btnStyle, width: 50, height: 50, fontSize: 19, opacity: 0.75 }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            buzz(6, settings.haptics);
+            onInventory();
+          }}
+        >
+          🎒
         </button>
-        <button className={btn} style={{ ...btnStyle, opacity: breaking ? 1 : 0.7 }} onPointerDown={(e) => { e.stopPropagation(); pressBreak(true); }} onPointerUp={() => pressBreak(false)} onPointerCancel={() => pressBreak(false)}>
-          ⛏
+        <button
+          className={btn}
+          style={{ ...btnStyle, width: 50, height: 50, fontSize: 18, opacity: 0.75 }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            onChat();
+          }}
+        >
+          💬
         </button>
-        <button className={btn} style={{ ...btnStyle, opacity: placing ? 1 : 0.7 }} onPointerDown={(e) => { e.stopPropagation(); pressPlace(true); }} onPointerUp={() => pressPlace(false)} onPointerCancel={() => pressPlace(false)}>
-          ▣
+        <button
+          className={btn}
+          style={{ ...btnStyle, width: 50, height: 50, fontSize: 17, opacity: 0.75 }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            try {
+              if (document.fullscreenElement) void document.exitFullscreen?.();
+              else void document.documentElement.requestFullscreen?.();
+            } catch {
+              /* niektóre przeglądarki mobilne nie pozwalają */
+            }
+          }}
+        >
+          ⛶
         </button>
       </div>
 
-      {/* top-left buttons */}
-      <div className="pointer-events-none absolute left-3 top-3 flex gap-2">
-        <button className={btn} style={{ ...btnStyle, width: 52, height: 52, fontSize: 22 }} onPointerDown={(e) => { e.stopPropagation(); onPause(); }}>
-          ⏸
-        </button>
-        <button className={btn} style={{ ...btnStyle, width: 52, height: 52, fontSize: 20 }} onPointerDown={(e) => { e.stopPropagation(); onInventory(); }}>
-          🎒
-        </button>
-      </div>
+      {/* krótka ściągka trybu tap – pod paskiem górnym, żeby nie zasłaniać HUD-u */}
+      {settings.touchMode === 'tap' && (
+        <div className="pointer-events-none absolute left-3 max-w-[240px] text-[12px] leading-tight opacity-55 mc-text" style={{ top: 92 }}>
+          tapnij = postaw / użyj<br />przytrzymaj = kop<br />przeciągnij = rozglądaj się
+        </div>
+      )}
     </div>
   );
 }

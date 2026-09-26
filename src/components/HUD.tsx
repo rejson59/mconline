@@ -60,9 +60,12 @@ function Drumstick({ fill }: { fill: 0 | 1 | 2 }) {
   );
 }
 
-export function Hotbar({ hud, icons }: { hud: HUDState; icons: Record<number, string> }) {
+export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<number, string>; onSelect?: (i: number) => void }) {
   return (
-    <div className="flex" style={{ background: 'rgba(0,0,0,0.35)', border: '2px solid #1a1a1a', padding: 2 }}>
+    <div
+      className="flex"
+      style={{ background: 'rgba(0,0,0,0.35)', border: '2px solid #1a1a1a', padding: 2, pointerEvents: onSelect ? 'auto' : undefined, marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
       {hud.hotbar.map((s, i) => {
         const max = s ? durabilityMax(s.id) : 0;
         const frac = s && max && s.dur !== undefined ? Math.max(0, s.dur / max) : 1;
@@ -70,6 +73,7 @@ export function Hotbar({ hud, icons }: { hud: HUDState; icons: Record<number, st
           <div
             key={i}
             className="relative flex items-center justify-center"
+            onPointerDown={onSelect ? (e) => { e.stopPropagation(); onSelect(i); } : undefined}
             style={{
               width: 48,
               height: 48,
@@ -78,6 +82,8 @@ export function Hotbar({ hud, icons }: { hud: HUDState; icons: Record<number, st
               zIndex: i === hud.selected ? 2 : 1,
               background: 'rgba(40,40,40,0.35)',
               margin: -1,
+              cursor: onSelect ? 'pointer' : undefined,
+              touchAction: onSelect ? 'none' : undefined,
             }}
           >
             {s && <img src={icons[s.id]} className="pixelated" width={34} height={34} draggable={false} />}
@@ -93,7 +99,7 @@ export function Hotbar({ hud, icons }: { hud: HUDState; icons: Record<number, st
   );
 }
 
-export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Record<number, string>; minimap?: HTMLCanvasElement | null }) {
+export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDState; icons: Record<number, string>; minimap?: HTMLCanvasElement | null; onSelectSlot?: (i: number) => void }) {
   const [label, setLabel] = useState<{ text: string; key: number } | null>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
   const sel = hud.hotbar[hud.selected];
@@ -135,7 +141,7 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
   const mins = Math.floor(((hud.time * 24 * 60) % 60));
 
   return (
-    <div className="pointer-events-none absolute inset-0 select-none">
+    <div className="pointer-events-none absolute inset-0 z-30 select-none">
       {/* overlays */}
       {hud.underwater && <div className="absolute inset-0" style={{ background: 'rgba(20,60,160,0.35)' }} />}
       {hud.inLava && <div className="absolute inset-0" style={{ background: 'rgba(230,90,10,0.6)' }} />}
@@ -164,7 +170,7 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 1.8 (${hud.fps} fps)`,
+            `BlockCraft 2.0 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -184,6 +190,11 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
               {l}
             </div>
           ))}
+        </div>
+      ) : hud.showFps ? (
+        <div className="absolute left-2 top-2 px-1.5 py-0.5 text-[13px] leading-tight mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div>{hud.fps} FPS{hud.resScale < 1 ? ` · skala ${Math.round(hud.resScale * 100)}%` : ''}</div>
+          <div className="opacity-70">chunki: {hud.chunks} · kresl.: {hud.drawCalls}</div>
         </div>
       ) : (
         <div className="absolute left-2 top-2 text-sm opacity-70 mc-text">{hud.fps} FPS</div>
@@ -217,7 +228,7 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
       </div>
 
       {/* bottom HUD */}
-      <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 flex-col items-center">
+      <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 flex-col items-center" style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         {label && (
           <div key={label.key} className="mb-2 text-lg mc-text">
             {label.text}
@@ -262,7 +273,7 @@ export default function HUD({ hud, icons, minimap }: { hud: HUDState; icons: Rec
             {hud.level}
           </span>
         </div>
-        <Hotbar hud={hud} icons={icons} />
+        <Hotbar hud={hud} icons={icons} onSelect={onSelectSlot} />
       </div>
 
       {hud.loading < 0.5 && (
