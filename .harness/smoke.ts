@@ -68,7 +68,7 @@ import {
   fallDamageFactor, MAX_ENCHS,
 } from '../src/game/enchant';
 import { Xp as XpClass } from '../src/game/xp';
-import { Game, MOB_NAMES, type SaveData, type TradeRow } from '../src/game/engine';
+import { Game, MOB_NAMES, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
 import { tryCreatePortal } from '../src/game/redstone';
 import { VILLAGE_CELL, villageInCell, villageSpawnSpots, type Village } from '../src/game/village';
 import {
@@ -2118,6 +2118,27 @@ section('items: nether economy (1.9)');
 
   // płomienna różdżka pali dłużej niż węgiel
   check('blaze rod outburns coal', fuelSeconds(I.BLAZE_ROD) > fuelSeconds(I.COAL), `${fuelSeconds(I.BLAZE_ROD)}s vs ${fuelSeconds(I.COAL)}s`);
+}
+
+// ====================================================== 2.1: journal controls
+section('2.1: adventure journal keyboard controls');
+{
+  const onKeyDown = (Game.prototype as unknown as { onKeyDown: (event: KeyboardEvent) => void }).onKeyDown;
+  const event = (code: string) => ({ code, repeat: false, preventDefault() {} }) as KeyboardEvent;
+  const transitions: UIState[] = [];
+  const fake = Object.assign(Object.create(Game.prototype), {
+    ui: 'playing' as UIState,
+    locked: true,
+    setUI(next: UIState) { this.ui = next; transitions.push(next); },
+  }) as Game;
+
+  onKeyDown.call(fake, event('KeyJ'));
+  eq('J opens the journal while playing', fake.ui, 'journal');
+  onKeyDown.call(fake, event('KeyJ'));
+  eq('typing J inside the journal does not close it', fake.ui, 'journal');
+  onKeyDown.call(fake, event('Escape'));
+  eq('Escape closes the journal back to the game', fake.ui, 'playing');
+  eq('journal controls make the expected transitions', transitions.join(','), 'journal,playing');
 }
 
 // ================================================== 2.0: quality auto-pilot

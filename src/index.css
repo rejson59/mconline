@@ -189,3 +189,33 @@ input[type=range].mc-range::-moz-range-thumb {
   border-radius: 0;
   cursor: pointer;
 }
+
+/* Clear keyboard focus without changing the pixel-art look. */
+.mc-btn:focus-visible,
+.mc-input:focus-visible,
+.mc-slot:focus-visible,
+select:focus-visible {
+  outline: 3px solid #ffff70;
+  outline-offset: 2px;
+  z-index: 2;
+}
+
+.mc-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

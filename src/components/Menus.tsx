@@ -15,7 +15,8 @@ export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
   'Teraz też na telefonach!',
-  'Aktualizacja 2.0: Mobilny skok!',
+  'Aktualizacja 2.1: zapisz własną historię!',
+  'Dziennik przygód pokaże ci kolejny cel!',
   'Automatyczna grafika dopasuje się do twojego sprzętu!',
   'Tapnij, aby postawić blok!',
   'Niskie ustawienia? I tak pójdzie gładko!',
@@ -51,7 +52,7 @@ export function Title() {
           className="px-2 py-0.5 text-sm font-bold"
           style={{ background: '#3c8527', color: '#fff', border: '2px solid #1c1c1c', boxShadow: '2px 2px 0 rgba(0,0,0,0.6)' }}
         >
-          WERSJA 2.0
+          WERSJA 2.1
         </span>
         <span className="splash text-lg font-semibold sm:text-xl" style={{ color: '#ffff00', textShadow: '2px 2px 0 #3f3f00' }}>
           {splash}
@@ -93,6 +94,7 @@ export function Controls() {
     ['Tarcza w ręku', 'Przyłap strzały i osłabia ciosy'],
     ['Sloty pancerza (w E)', 'Załóż pancerz (4 elementy)'],
     ['M', 'Minimapa'],
+    ['J', 'Dziennik przygód i postęp celów'],
     ['F3', 'Informacje debugowania'],
     ['Esc', 'Pauza'],
   ];
@@ -165,7 +167,29 @@ export interface WorldCard {
   seed: number;
   mode?: string;
   day?: number;
+  updated?: number;
   worldType?: WorldType;
+}
+
+export type WorldSort = 'recent' | 'name' | 'day';
+
+/** Search across the most useful world details, ignoring Polish diacritics. */
+export function filterAndSortWorlds(worlds: WorldCard[], query: string, sort: WorldSort): WorldCard[] {
+  const normalize = (value: string) => value.replace(/[łŁ]/g, 'l').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pl');
+  const needle = normalize(query.trim());
+  const filtered = worlds.filter((world) => {
+    if (!needle) return true;
+    const haystack = [world.name ?? 'Swiat', String(world.seed), world.mode === 'creative' ? 'kreatywny' : 'przetrwanie', world.worldType === 'flat' ? 'plaski' : 'normalny']
+      .map(normalize)
+      .join(' ');
+    return haystack.includes(needle);
+  });
+
+  return filtered.sort((a, b) => {
+    if (sort === 'name') return (a.name ?? '').localeCompare(b.name ?? '', 'pl', { sensitivity: 'base' });
+    if (sort === 'day') return (b.day ?? 1) - (a.day ?? 1) || (b.updated ?? 0) - (a.updated ?? 0);
+    return (b.updated ?? 0) - (a.updated ?? 0);
+  });
 }
 
 export function MainMenu({
@@ -192,7 +216,10 @@ export function MainMenu({
   const [worldName, setWorldName] = useState('');
   const [mode, setMode] = useState<GameMode>(sharedMode ?? 'survival');
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [worldQuery, setWorldQuery] = useState('');
+  const [worldSort, setWorldSort] = useState<WorldSort>('recent');
   const [worldType, setWorldType] = useState<WorldType>('normal');
+  const visibleWorlds = filterAndSortWorlds(saves, worldQuery, worldSort);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -244,35 +271,63 @@ export function MainMenu({
         }}
       />
       <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
-      <div className="relative z-10 flex w-full max-w-[440px] flex-col items-center px-4">
+      <div className="relative z-10 flex max-h-[calc(100dvh-2rem)] w-full max-w-[440px] flex-col items-center overflow-y-auto px-4 py-3">
         <Title />
         {view === 'main' && (
           <div className="flex w-full flex-col gap-3">
             {saves.length > 0 && (
-              <div className="max-h-[30vh] space-y-2 overflow-y-auto bg-black/40 p-2">
-                {saves.map((s) => (
-                  <div key={s.id} className="flex gap-2">
-                    <button className="mc-btn min-w-0 flex-1 !py-2 text-left" onClick={() => onPlay(s.id)}>
-                      {s.name || 'Świat'}
-                      <span className="block text-xs font-normal opacity-80">
-                        dzień {s.day ?? 1} · {s.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'} · {s.worldType === 'flat' ? 'płaski' : 'normalny'} · ziarno {s.seed}
-                      </span>
-                    </button>
-                    <button
-                      className="mc-btn !w-24 !px-2 !text-sm"
-                      onClick={() => {
-                        if (confirmId === s.id) onDelete(s.id);
-                        else setConfirmId(s.id);
-                      }}
-                    >
-                      {confirmId === s.id ? 'Na pewno?' : 'Usuń'}
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <section aria-label="Zapisane światy" className="bg-black/40 p-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h2 className="text-base text-yellow-200 mc-text">Twoje światy <span className="text-xs text-white/70">{saves.length}/8</span></h2>
+                  <label className="sr-only" htmlFor="world-sort">Sortuj światy</label>
+                  <select
+                    id="world-sort"
+                    aria-label="Sortuj światy"
+                    className="mc-input !w-auto !py-1 !text-sm"
+                    value={worldSort}
+                    onChange={(e) => setWorldSort(e.target.value as WorldSort)}
+                  >
+                    <option value="recent">Ostatnio grane</option>
+                    <option value="name">Nazwa A–Z</option>
+                    <option value="day">Najdłuższa rozgrywka</option>
+                  </select>
+                </div>
+                <label className="sr-only" htmlFor="world-search">Szukaj zapisanych światów</label>
+                <input
+                  id="world-search"
+                  className="mc-input mb-2 !py-1 !text-sm"
+                  type="search"
+                  value={worldQuery}
+                  onChange={(e) => setWorldQuery(e.target.value)}
+                  placeholder="Szukaj nazwy, ziarna lub trybu…"
+                />
+                <div className="max-h-[25vh] space-y-2 overflow-y-auto">
+                  {visibleWorlds.map((s) => (
+                    <div key={s.id} className="flex gap-2">
+                      <button className="mc-btn min-w-0 flex-1 !py-2 text-left" onClick={() => onPlay(s.id)}>
+                        {s.name || 'Świat'}
+                        <span className="block text-xs font-normal opacity-80">
+                          dzień {s.day ?? 1} · {s.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'} · {s.worldType === 'flat' ? 'płaski' : 'normalny'} · ziarno {s.seed}
+                        </span>
+                        {s.updated ? <span className="block text-[11px] font-normal opacity-65">Zapisano: {new Date(s.updated).toLocaleDateString('pl-PL')}</span> : null}
+                      </button>
+                      <button
+                        className="mc-btn !w-24 !px-2 !text-sm"
+                        onClick={() => {
+                          if (confirmId === s.id) onDelete(s.id);
+                          else setConfirmId(s.id);
+                        }}
+                      >
+                        {confirmId === s.id ? 'Na pewno?' : 'Usuń'}
+                      </button>
+                    </div>
+                  ))}
+                  {visibleWorlds.length === 0 && <div className="py-3 text-center text-sm text-white/75">Brak światów pasujących do wyszukiwania.</div>}
+                </div>
+              </section>
             )}
             <button className="mc-btn" onClick={() => setView('new')}>
-              Nowy świat
+              {saves.length >= 8 ? 'Nowy świat · limit 8' : 'Nowy świat'}
             </button>
             <button className="mc-btn" onClick={() => setView('controls')}>
               Sterowanie
@@ -354,7 +409,7 @@ export function MainMenu({
           />
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.0 „Mobilny skok”</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.1 „Dziennik przygód”</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>
@@ -383,6 +438,7 @@ export function PauseMenu({
   unlocked,
   onSettings,
   onResume,
+  onJournal,
   onQuit,
   onSave,
 }: {
@@ -392,6 +448,7 @@ export function PauseMenu({
   unlocked?: string[];
   onSettings: (s: Settings) => void;
   onResume: () => void;
+  onJournal: () => void;
   onQuit: () => void;
   onSave: () => void;
 }) {
@@ -427,6 +484,9 @@ export function PauseMenu({
             </button>
             <button className="mc-btn" onClick={() => setView('controls')}>
               Sterowanie
+            </button>
+            <button className="mc-btn" onClick={onJournal}>
+              Dziennik przygód · J
             </button>
             <button className="mc-btn" onClick={() => setView('achievements')}>
               Osiągnięcia ({unlocked?.length ?? 0}/{ACHIEVEMENTS.length})

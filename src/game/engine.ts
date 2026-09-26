@@ -48,7 +48,7 @@ import { villageSpawnSpots } from './village';
 import { isVillageMob } from './mobs';
 
 export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade';
+export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal';
 
 export interface HUDState {
   hotbar: (Stack | null)[];
@@ -675,8 +675,8 @@ export class Game {
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
-      ? 'Tryb kreatywny. T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 2.0: na telefonie tapnij, aby postawić blok, przytrzymaj, aby kopać. Nether i wioski jak zawsze czekają (/village).');
+      ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
+      : 'BlockCraft 2.1: J – dziennik przygód. Na telefonie tapnij, aby postawić blok, przytrzymaj, aby kopać. Nether i wioski czekają (/village).');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -897,6 +897,13 @@ export class Game {
 
   private onKeyDown(e: KeyboardEvent) {
     if (this.ui === 'chat') return;
+    if (this.ui === 'journal') {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        this.setUI('playing');
+      }
+      return;
+    }
     if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade') {
       if (e.code === 'KeyE' || e.code === 'Escape') {
         e.preventDefault();
@@ -907,6 +914,7 @@ export class Game {
     if (this.ui !== 'playing' || !this.locked) return;
     if (e.code === 'F3') { e.preventDefault(); this.debug = !this.debug; this.emitHud(); return; }
     if (e.code === 'KeyM') { this.showMinimap = !this.showMinimap; this.emitHud(); return; }
+    if (e.code === 'KeyJ') { e.preventDefault(); this.setUI('journal'); return; }
     if (e.code.startsWith('Digit')) {
       const n = parseInt(e.code.slice(5));
       if (n >= 1 && n <= 9) { this.selected = n - 1; this.emitHud(); }

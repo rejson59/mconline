@@ -7,6 +7,7 @@ import FurnaceScreen from './FurnaceScreen';
 import ChestScreen from './ChestScreen';
 import EnchantScreen from './EnchantScreen';
 import TradeScreen from './TradeScreen';
+import JournalScreen from './JournalScreen';
 import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
 import TouchControls, { isTouchDevice } from './TouchControls';
 import {
@@ -236,6 +237,7 @@ export default function GameView({
       {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
+      {game && hud && ui === 'journal' && <JournalScreen hud={hud} unlocked={game.achievementIds()} onClose={() => game.setUI('playing')} />}
       {game && ui === 'chat' && (
         <ChatInput
           onSubmit={(t) => game.command(t)}
@@ -268,7 +270,7 @@ export default function GameView({
           <div className="px-6 text-center text-sm text-gray-300 mc-text">
             {touch
               ? 'Drążek – ruch (pchnij do oporu = sprint) · tapnij – postaw / użyj · przytrzymaj – kop · ⬆ – skok (2× = latanie)'
-              : 'Esc – pauza · E – ekwipunek · T – czat · M – minimapa · F3 – debug · PPM na mieszkańcu – handel'}
+              : 'Esc – pauza · J – dziennik · E – ekwipunek · T – czat · M – minimapa · F3 – debug'}
           </div>
         </div>
       )}
@@ -280,6 +282,7 @@ export default function GameView({
           unlocked={game.achievementIds()}
           onSettings={setSettings}
           onResume={resume}
+          onJournal={() => game.setUI('journal')}
           onSave={() => game.save()}
           onQuit={() => {
             game.save();

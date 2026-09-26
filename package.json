@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.0.0",
-  "description": "BlockCraft 2.0 „Mobilny skok” – gra sandboxowa w stylu Minecraft (React + TypeScript + Three.js + Vite) z automatyczną grafiką i pełnym sterowaniem dotykowym.",
+  "version": "2.1.0",
+  "description": "BlockCraft 2.1 „Dziennik przygód” – gra sandboxowa w stylu Minecraft (React + TypeScript + Three.js + Vite) z celami przygód, automatyczną grafiką i sterowaniem dotykowym.",
   "type": "module",
   "license": "MIT",
   "keywords": [
