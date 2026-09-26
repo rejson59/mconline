@@ -48,7 +48,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 import { World, CS, CH, SEA, FLAT_H } from '../src/game/world';
 import { B, BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
-  ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, pickTier, requiredPickTier,
+  ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
   displayName,
 } from '../src/game/items';
@@ -59,7 +59,7 @@ import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
   cleanWorldName, deleteSave, duplicateSave, exportSave, exportSaves, importSaves,
-  loadSaves, renameSave, toggleFavoriteSave, upsertSave,
+  loadSaves, renameSave, toggleFavoriteSave, upsertSave, MAX_WORLD_NAME,
 } from '../src/game/saves';
 import { ACHIEVEMENTS, achievementById } from '../src/game/achievements';
 import { Xp, xpToNext, totalXpForLevel, levelFromXp } from '../src/game/xp';
@@ -79,6 +79,14 @@ import {
   professionFor, restockIfDue, restockIn, usesLeft, villagerLevel, villagerProgress, villagerTitle,
 } from '../src/game/trading';
 import { getAtlas, AVG_COLOR } from '../src/game/textures';
+import { BITE_MAX, BITE_MIN, BITE_WINDOW, PATIENCE, biteDelay, cookedOf, isFishStack, rollCatch } from '../src/game/fishing';
+import {
+  MERGE_COST, RENAME_COST, anvilKey, anvilResult, canMerge, cleanItemName, emptyAnvil,
+  mergeEnchants, mergeStacks, type AnvilResult,
+} from '../src/game/anvil';
+import { mergeable } from '../src/game/inventory';
+import { slabFullBlock } from '../src/game/blocks';
+import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 
 // ------------------------------------------------------------------- runner
@@ -2229,6 +2237,314 @@ section('2.0: automatic graphics and settings');
   check('defaults contain touch mode tap', DEFAULT_SETTINGS.touchMode === 'tap');
   check('defaults enable auto-jump and haptics', DEFAULT_SETTINGS.autoJump === true && DEFAULT_SETTINGS.haptics === true);
   check('defaults enable dynamic resolution', DEFAULT_SETTINGS.dynamicResolution === true);
+}
+
+
+// ============================================ 2.3: wyprawa i ratunek
+section('2.3: fishing tables and timing');
+{
+  // rollCatch: 70% ryb, reszta to śmieci z plaży; wynik zawsze jest stosem.
+  const fishRoll = () => 0.1;   // < FISH_CHANCE -> ryba
+  const junkRoll = () => 0.95;  // -> śmieci
+  const fish = rollCatch(fishRoll);
+  check('a lucky cast returns a fish', isFishStack(fish), JSON.stringify(fish));
+  const junk = rollCatch(junkRoll);
+  check('an unlucky cast returns shoreline junk', !isFishStack(junk), JSON.stringify(junk));
+  check('a catch is never empty', rollCatch().count >= 1);
+  eq('every fish is cookable', `${cookedOf(I.RAW_FISH)}/${cookedOf(I.RAW_SALMON)}`, `${I.COOKED_FISH}/${I.COOKED_SALMON}`);
+  eq('junk is never cookable', cookedOf(I.STRING), null);
+  // wałek losowy: po 1000 zarzuceniach widać i ryby, i śmieci
+  let fishy = 0, junky = 0;
+  for (let i = 0; i < 1000; i++) {
+    if (isFishStack(rollCatch())) fishy++;
+    else junky++;
+  }
+  check('fish show up on the hook', fishy > 500 && fishy < 900, `fish=${fishy}`);
+  check('junk shows up on the hook', junky > 100 && junky < 500, `junk=${junky}`);
+  // czas do brań mieści się w zadeklarowanych granicach
+  let fast = Infinity, slow = -Infinity;
+  for (let i = 0; i < 500; i++) {
+    const d = biteDelay();
+    fast = Math.min(fast, d);
+    slow = Math.max(slow, d);
+  }
+  check('bite delay stays within BITE_MIN..BITE_MAX', fast >= BITE_MIN && slow <= BITE_MAX, `${fast}..${slow}`);
+  check('the bite window is short', BITE_WINDOW <= 2, String(BITE_WINDOW));
+  check('the hook is patient but not forever', PATIENCE > 20 && PATIENCE < 90);
+  eq('a cooked fish is worth more than a raw one', (ITEMS[I.COOKED_FISH]?.hunger ?? 0) > (ITEMS[I.RAW_FISH]?.hunger ?? 0), true);
+  eq('salmon heals a little extra', ITEMS[I.COOKED_SALMON]?.heal ?? 0, 2);
+  // surowa ryba w piecu -> pieczona
+  eq('raw fish smelts into cooked fish', smeltResult(I.RAW_FISH), I.COOKED_FISH);
+  eq('raw salmon smelts into cooked salmon', smeltResult(I.RAW_SALMON), I.COOKED_SALMON);
+  const f = emptyFurnace(1, 2, 3);
+  f.input = { id: I.RAW_FISH, count: 1 };
+  f.fuel = { id: I.COAL, count: 1 };
+  let cooked = 0;
+  for (let i = 0; i < 60 * 20; i++) if (tickFurnace(f, 1 / 30)) cooked++;
+  eq('the furnace cooks a fish', f.output?.id, I.COOKED_FISH);
+  check('cooking a fish takes real time, not a single tick', cooked > COOK_TIME * 30 * 0.9, String(cooked));
+  // narzędzia 2.3
+  eq('the rod has durability', durabilityMax(I.FISHING_ROD), 64);
+  eq('the rod never stacks', stackLimit(I.FISHING_ROD), 1);
+  eq('a totem never stacks', stackLimit(I.TOTEM), 1);
+  eq('the spyglass never stacks', stackLimit(I.SPYGLASS), 1);
+  eq('fish stack up to 64', stackLimit(I.RAW_FISH), 64);
+  eq('the rod is harmless', attackDamage(I.FISHING_ROD, false), 1);
+  check('a rod cannot be enchanted', !canEnchant(I.FISHING_ROD, 'unbreaking'));
+  check('a spyglass cannot be enchanted', !canEnchant(I.SPYGLASS, 'unbreaking'));
+  check('a pick still can be enchanted', canEnchant(I.IRON_PICK, 'efficiency'));
+  eq('the spyglass is not a weapon', attackDamage(I.SPYGLASS, false), 1);
+  eq('a sword still hits hard', attackDamage(I.DIAMOND_SWORD, false) >= 9, true);
+  // receptury 2.3
+  const rod = new Inventory();
+  for (const i of [0, 1, 2]) rod.grid[i] = { id: I.STICK, count: 1 };
+  rod.grid[4] = { id: I.STRING, count: 1 };
+  rod.grid[8] = { id: I.STRING, count: 1 };
+  eq('three sticks and two strings make a rod', rod.gridMatch(true)?.out.id, I.FISHING_ROD);
+  const spy = new Inventory();
+  for (const [i, id] of [[1, B.GLASS], [3, B.GLASS], [5, B.GLASS], [7, B.GLASS], [4, I.GOLD]] as [number, number][]) spy.grid[i] = { id, count: 1 };
+  check('four glass and one ingot are consumed', spy.gridMatch(true) !== null);
+  eq('glass and gold make a spyglass', spy.gridMatch(true)?.out.id, I.SPYGLASS);
+  const totem = new Inventory();
+  for (const [i, id] of [[1, I.EMERALD], [3, I.EMERALD], [5, I.EMERALD], [7, I.EMERALD], [4, I.GOLD]] as [number, number][]) totem.grid[i] = { id, count: 1 };
+  eq('emeralds and gold make a totem', totem.gridMatch(true)?.out.id, I.TOTEM);
+  eq('the rod recipe needs a workbench', RECIPES.find((r) => r.out.id === I.FISHING_ROD)?.table, true);
+  const small = new Inventory();
+  small.grid[0] = { id: B.GLASS, count: 1 };
+  small.grid[1] = { id: B.GLASS, count: 1 };
+  small.grid[2] = { id: B.GLASS, count: 1 };
+  small.grid[3] = { id: I.GOLD, count: 1 };
+  check('the spyglass needs the full 3x3 grid', small.gridMatch(false)?.out.id !== I.SPYGLASS);
+  // 2×2 nadal robi szpadle i wymagające tylko dwóch sztuk
+  const table2 = new Inventory();
+  table2.grid[0] = { id: B.PLANKS, count: 1 };
+  table2.grid[1] = { id: B.PLANKS, count: 1 };
+  table2.grid[3] = { id: B.PLANKS, count: 1 };
+  table2.grid[4] = { id: B.PLANKS, count: 1 };
+  eq('the 2x2 grid still makes a workbench', table2.gridMatch(false)?.out.id, B.CRAFTING);
+}
+
+section('2.3: anvil rules');
+{
+  const a: Stack = { id: I.IRON_PICK, count: 1, dur: 30 };
+  const b: Stack = { id: I.IRON_PICK, count: 1, dur: 50, ench: { sharpness: 2 } };
+  check('two matching tools can be merged', canMerge(a, b));
+  const merged = mergeStacks(a, b)!;
+  eq('durability is summed', merged.dur, 80);
+  eq('the better enchantment survives', merged.ench?.sharpness, 2);
+  eq('merging costs one level', MERGE_COST, 1);
+  check('merging is refused above the maximum', mergeStacks({ id: I.IRON_PICK, count: 1, dur: 1700 }, { id: I.IRON_PICK, count: 1, dur: 1700 }) === null);
+  check('different tools never merge', mergeStacks(a, { id: I.STONE_PICK, count: 1, dur: 10 }) === null);
+  check('cobblestone blocks never merge', mergeStacks({ id: B.STONE, count: 1 }, { id: B.STONE, count: 1 }) === null);
+  eq('enchantment maps keep the best level', mergeEnchants({ efficiency: 3 }, { efficiency: 1, fortune: 2 })?.efficiency, 3);
+  eq('and add what the other one had', mergeEnchants({ efficiency: 3 }, { fortune: 2 })?.fortune, 2);
+
+  // przemianowanie
+  eq('names are trimmed', cleanItemName('  Miecz   Wędrowca  '), 'Miecz Wędrowca');
+  eq('control characters never reach a name', cleanItemName('Kilof zła'), 'Kilof zła');
+  eq('a long name is cut to 28 characters', cleanItemName('x'.repeat(60)).length, 28);
+  const rename = anvilResult({ id: I.IRON_SWORD, count: 1, dur: 100 }, null, 'Żelazny miec');
+  eq('renaming produces the item', rename.out?.name, 'Żelazny miec');
+  eq('renaming is announced as a rename', rename.action, 'rename');
+  eq('renaming keeps durability', rename.out?.dur, 100);
+  eq('renaming charges one level', rename.cost, RENAME_COST);
+  eq('an empty field renames nothing', anvilResult({ id: I.IRON_SWORD, count: 1 }, null, '   ').out, null);
+  eq('the same name is not a rename', anvilResult({ id: I.IRON_SWORD, count: 1, name: 'Miecz' }, null, 'Miecz').out, null);
+  eq('a merge is announced as a merge', anvilResult(a, b, '').action, 'merge');
+  eq('a merge costs a level', anvilResult(a, b, '').cost, 1);
+  eq('two full tools are refused', anvilResult({ id: I.IRON_PICK, count: 1, dur: 1700 }, { id: I.IRON_PICK, count: 1, dur: 1700 }, '').out, null);
+  eq('a renamed merged tool keeps the first name', anvilResult({ ...a, name: 'Stary' }, b, '').out?.name, 'Stary');
+}
+
+section('2.3: anvil inside the engine');
+{
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.mode = 'survival';
+  g.inventory = new Inventory();
+  g.inventory.slots[0] = { id: I.IRON_PICK, count: 1, dur: 20 };
+  g.inventory.slots[1] = { id: I.IRON_PICK, count: 1, dur: 30 };
+  g.xp = new XpClass(totalXpForLevel(5));
+  g.anvils = new Map();
+  g.anvilPos = { x: 4, y: 5, z: 6 };
+  g.body = { pos: new THREE.Vector3(4, 5, 6) };
+  g.emitHud = () => {};
+  g.message = () => {};
+  g.unlocked = new Set();
+  g.anvils.set(anvilKey(4, 5, 6), emptyAnvil(4, 5, 6));
+  // 1) włożenie przedmiotów kursorem
+  g.inventory.cursor = { id: I.IRON_PICK, count: 1, dur: 20 };
+  g.clickAnvilSlot('a', false);
+  g.inventory.cursor = { id: I.IRON_PICK, count: 1, dur: 30 };
+  g.clickAnvilSlot('b', false);
+  const offer = g.anvilOffer() as AnvilResult;
+  eq('the anvil offers a merged pickaxe', offer.out?.dur, 50);
+  eq('the offer is affordable with enough xp', g.canAnvilTake(), true);
+  eq('taking the result succeeds', g.takeAnvilResult(), true);
+  check('the merged pickaxe landed in the inventory', g.inventory.slots.some((s: Stack | null) => s?.id === I.IRON_PICK && s.dur === 50));
+  eq('one level was spent', g.xp.info().level, 4);
+  const anvil = g.anvils.get(anvilKey(4, 5, 6));
+  check('both inputs are consumed', anvil.a === null && anvil.b === null, JSON.stringify(anvil));
+  check('the smith achievement fired', (g.unlocked as Set<string>).has('smith'));
+
+  // 2) za mało poziomów
+  g.xp = new XpClass(0);
+  const poor = emptyAnvil(4, 5, 6);
+  poor.a = { id: I.IRON_PICK, count: 1, dur: 10 };
+  poor.b = { id: I.IRON_PICK, count: 1, dur: 10 };
+  g.anvils.set(anvilKey(4, 5, 6), poor);
+  eq('a level 0 player cannot pay', g.canAnvilTake(), false);
+  eq('and the anvil refuses the operation', g.takeAnvilResult(), false);
+  check('the inputs stay in the anvil', g.anvils.get(anvilKey(4, 5, 6)).a !== null);
+
+  // 3) przemianowanie przez pole nazwy
+  g.xp = new XpClass(totalXpForLevel(3));
+  const named = emptyAnvil(4, 5, 6);
+  named.a = { id: I.DIAMOND_SWORD, count: 1, dur: 1200 };
+  g.anvils.set(anvilKey(4, 5, 6), named);
+  g.setAnvilName('  Szabla  wędrowca ');
+  eq('the typed name is cleaned', g.anvils.get(anvilKey(4, 5, 6)).name, 'Szabla wędrowca');
+  eq('the renamed sword is offered', g.anvilOffer().out?.name, 'Szabla wędrowca');
+  eq('and it costs a level', g.anvilOffer().cost, 1);
+  g.takeAnvilResult();
+  check('the renamed item keeps id and durability', g.inventory.slots.some((s: Stack | null) => s?.name === 'Szabla wędrowca' && s.id === I.DIAMOND_SWORD && s.dur === 1200));
+}
+
+section('2.3: totem of undying');
+{
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.mode = 'survival';
+  g.ui = 'playing';
+  g.health = 4;
+  g.hunger = 12;
+  g.inventory = new Inventory();
+  g.inventory.slots[0] = { id: I.TOTEM, count: 1 };
+  g.unlocked = new Set();
+  g.totemHeal = 0;
+  g.armor = [null, null, null, null];
+  g.messages = [];
+  g.emitHud = () => {};
+  g.spawnParticles = () => {};
+  g.gainXp = () => {};
+  g.keys = new Set();
+  g.onUI = () => {};
+  g.lockPointer = () => {};
+  g.spawnDrop = () => {};
+  g.body = { pos: new THREE.Vector3(1, 70, 1) };
+  g.spawnPoint = new THREE.Vector3(1, 70, 1);
+  g.damage(30);
+  check('the totem saves the player', g.health > 0, `health=${g.health}`);
+  eq('the totem is consumed', g.inventory.countOf(I.TOTEM), 0);
+  check('the undying achievement fired', (g.unlocked as Set<string>).has('undying'));
+  eq('the player stays in the world', g.ui, 'playing');
+  check('healing starts right away', g.totemHeal > 0, String(g.totemHeal));
+  // bez totemu śmier działa normalnie
+  const plain = Object.create(Game.prototype) as unknown as Record<string, any>;
+  plain.mode = 'survival';
+  plain.ui = 'playing';
+  plain.health = 4;
+  plain.hunger = 12;
+  plain.inventory = new Inventory();
+  plain.unlocked = new Set();
+  plain.totemHeal = 0;
+  plain.armor = [null, null, null, null];
+  plain.emitHud = () => {};
+  plain.body = { pos: new THREE.Vector3(1, 70, 1) };
+  plain.spawnPoint = new THREE.Vector3(1, 70, 1);
+  plain.messages = [];
+  plain.keys = new Set();
+  plain.onUI = () => {};
+  plain.lockPointer = () => {};
+  plain.spawnDrop = () => {};
+  plain.spawnParticles = () => {};
+  plain.damage(30);
+  eq('without a totem a lethal hit is fatal', plain.health, 0);
+  check('and the death screen opens', plain.ui === 'dead' || plain.ui === 'respawn', String(plain.ui));
+}
+
+section('2.3: bug fixes');
+{
+  // (1) połówka stosu nie może gubić zaklęć, wytrzymałości ani nazwy
+  const inv = new Inventory();
+  inv.slots[0] = { id: I.IRON_PICK, count: 4, dur: 50, ench: { efficiency: 2 }, name: 'Stary kilof' };
+  inv.clickSlot(0, true);
+  eq('half a stack keeps the durability', inv.cursor?.dur, 50);
+  eq('half a stack keeps the enchantment', inv.cursor?.ench?.efficiency, 2);
+  eq('half a stack keeps the custom name', inv.cursor?.name, 'Stary kilof');
+  const inv2 = new Inventory();
+  inv2.grid[0] = { id: B.STONE, count: 10 };
+  inv2.clickGrid(0, true);
+  eq('the crafting grid splits stacks too', inv2.cursor?.count, 5);
+  check('renamed stacks never merge', !mergeable({ id: B.STONE, count: 1, name: 'A' }, { id: B.STONE, count: 1 }));
+  check('two identically named stacks merge', mergeable({ id: B.STONE, count: 1, name: 'A' }, { id: B.STONE, count: 1, name: 'A' }));
+  const named = new Inventory();
+  named.add(I.IRON_SWORD, 1, 100, undefined, 'Wędrowiec');
+  eq('add() carries the custom name', named.slots[0]?.name, 'Wędrowiec');
+  const named2 = new Inventory();
+  named2.add(B.STONE, 1);
+  named2.add(B.STONE, 1, undefined, undefined, 'Inny');
+  check('plain and renamed stacks stay apart', named2.slots[0]?.name === undefined && named2.slots[1]?.name === 'Inny');
+
+  // (1b) przenoszenie między slotami (kowadło, skrzynia, piec) nie gubi nazwy
+  const t = Object.create(Game.prototype) as unknown as Record<string, any>;
+  t.inventory = new Inventory();
+  t.inventory.slots[0] = { id: B.STONE, count: 8, name: 'Kamień podróżnika' };
+  t.chests = new Map();
+  t.chestPos = { x: 1, y: 2, z: 3 };
+  t.isInNether = false;
+  t.chests.set(chestKey(1, 2, 3), { x: 1, y: 2, z: 3, slots: [null] });
+  t.notePickup = () => {};
+  t.inventory.clickSlot(0, true);     // połowa z ekwipunku na kursor
+  eq('taking half keeps the name', t.inventory.cursor?.name, 'Kamień podróżnika');
+  eq('taking half keeps the count', t.inventory.cursor?.count, 4);
+  t.clickChest(0, false);             // cały slot z kursora do skrzyni
+  eq('the whole named stack moves', t.chests.get(chestKey(1, 2, 3)).slots[0]?.name, 'Kamień podróżnika');
+  t.clickChest(0, true);              // z powrotem połowa ze skrzyni
+  eq('and back again, still named', t.inventory.cursor?.name, 'Kamień podróżnika');
+  eq('and still half the count', t.inventory.cursor?.count, 2);
+
+  // (2) ŚPM przenosi przedmiot z głębi ekwipunku na pasek
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory();
+  g.inventory.slots[20] = { id: B.PLANKS, count: 12 };
+  g.inventory.slots[3] = { id: B.DIRT, count: 5 };
+  g.selected = 3;
+  g.target = { id: B.PLANKS };
+  g.emitHud = () => {};
+  g.updateHand = () => {};
+  g.pickBlock();
+  eq('middle click swaps the block into the hotbar', g.inventory.slots[3]?.id, B.PLANKS);
+  eq('and the hotbar slot lands where the block was', g.inventory.slots[20]?.id, B.DIRT);
+  eq('nothing is lost', g.inventory.slots[3]?.count, 12);
+
+  // (3) import zapisów czyści nazwy świata
+  const junk = JSON.stringify({
+    blockcraft: 1,
+    saves: [{ id: 'evil', seed: 7, name: '  Źle zerwany\t nazwa\n', updated: 5 }],
+  });
+  eq('the world was imported', importSaves(junk), 1);
+  const stored = loadSaves().find((s) => s.id === 'evil');
+  eq('the name has no control characters', stored?.name, 'Źle zerwany nazwa');
+  check('a name is still clamped', cleanWorldName('y'.repeat(80)).length <= MAX_WORLD_NAME);
+  eq('a name always has a fallback', cleanWorldName('   '), 'Świat');
+
+  // (4) płyty łączą się w pełny blok bez osobnych przypadków
+  eq('two oak slabs become planks', slabFullBlock(B.OAK_SLAB), B.PLANKS);
+  eq('two quartz slabs become a quartz block', slabFullBlock(B.QUARTZ_SLAB), B.QUARTZ_BLOCK);
+  eq('an unknown block is left alone', slabFullBlock(B.STONE), B.STONE);
+
+  // (5) blok szlamu naprawdę odbija
+  eq('landing on slime bounces up', slimeBounce(false, true, 0), 6);
+  check('a hard landing bounces higher', Math.abs((slimeBounce(false, true, -12) ?? 0) - 9.6) < 1e-9);
+  eq('standing still on slime does not bounce', slimeBounce(true, true, 0), null);
+  eq('a small hop does not bounce', slimeBounce(true, true, -1), null);
+  eq('no bounce in mid-air', slimeBounce(false, false, -20), null);
+
+  // (6) rudy z 1.7/1.9 dają doświadczenie i wymagają narzędzi
+  check('redstone ore gives experience', oreXp(B.REDSTONE_ORE) > 0, String(oreXp(B.REDSTONE_ORE)));
+  check('quartz ore gives experience', oreXp(B.QUARTZ_ORE) > 0, String(oreXp(B.QUARTZ_ORE)));
+  eq('emerald ore is the richest of the three', oreXp(B.EMERALD_ORE) > oreXp(B.REDSTONE_ORE), true);
+  eq('quartz ore needs a stone pick at least', requiredPickTier(B.QUARTZ_ORE), 2);
+  check('and it is still an ore', isOre(B.QUARTZ_ORE) && isOre(B.EMERALD_ORE));
 }
 
 // =================================================================== report

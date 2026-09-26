@@ -153,11 +153,25 @@ export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDSta
         />
       )}
 
+      {/* 2.3: przy lornetcie celownik znika, a ramka zasłania kąty widzenia */}
+      {hud.zoom && (
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 34%, rgba(0,0,0,0.85) 72%)' }} />
+      )}
+
       {/* crosshair */}
-      <div className="absolute left-1/2 top-1/2" style={{ transform: 'translate(-50%,-50%)', mixBlendMode: 'difference' }}>
-        <div style={{ position: 'absolute', left: -10, top: -1.5, width: 20, height: 3, background: '#fff' }} />
-        <div style={{ position: 'absolute', left: -1.5, top: -10, width: 3, height: 20, background: '#fff' }} />
-      </div>
+      {!hud.zoom && (
+        <div className="absolute left-1/2 top-1/2" style={{ transform: 'translate(-50%,-50%)', mixBlendMode: 'difference' }}>
+          <div style={{ position: 'absolute', left: -10, top: -1.5, width: 20, height: 3, background: '#fff' }} />
+          <div style={{ position: 'absolute', left: -1.5, top: -10, width: 3, height: 20, background: '#fff' }} />
+        </div>
+      )}
+
+      {/* 2.3: stan wędkarstwa nad celownikiem */}
+      {hud.fishing !== 'idle' && (
+        <div className="absolute left-1/2 top-[58%] -translate-x-1/2 px-2 py-0.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          {hud.fishing === 'bite' ? '🎣 Brań! Kliknij, aby zaciągnąć' : hud.fishing === 'waiting' ? '🎣 Przynęta czeka…' : '🎣 Przynęta leci…'}
+        </div>
+      )}
 
       {/* 2.2: aktywny punkt podróży — strzałka obraca się względem kierunku patrzenia. */}
       {hud.waypoint && !hud.debug && (
@@ -179,7 +193,7 @@ export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDSta
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 2.2 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
+            `BlockCraft 2.3 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,

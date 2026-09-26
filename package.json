@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.2.0",
-  "description": "BlockCraft 2.2 „Szlak odkrywcy” – przeglądarkowa gra sandboxowa (React + TypeScript + Three.js + Vite) z punktami podróży, mobilnym sterowaniem i rozbudowanym zarządzaniem światami.",
+  "version": "2.3.0",
+  "description": "BlockCraft 2.3 „Wyprawa i ratunek” – przeglądarkowa gra sandboxowa (React + TypeScript + Three.js + Vite) z wędkarstwem, lornetą, działającym kowadłem i Totemem Ratowania.",
   "type": "module",
   "license": "MIT",
   "keywords": [

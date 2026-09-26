@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, type Biome } from './world';
-import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, isPiston } from './blocks';
+import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
+import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
+import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
 import { getAtlas, tileUV, AVG_COLOR } from './textures';
-import { stepBody, aabbIntersectsBlock, type Body } from './physics';
+import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { Mob, isHostileMob, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
@@ -20,7 +22,7 @@ import { patchChunkMaterial } from './lighting';
 import { buildItemIcons } from './itemIcons';
 import {
   ITEMS, I, displayName, isItem, isFood, isHoe, mineSeconds, attackDamage, attackCooldown,
-  blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint,
+  blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
@@ -48,7 +50,7 @@ import { villageSpawnSpots } from './village';
 import { isVillageMob } from './mobs';
 
 export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints';
+export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'anvil';
 
 export interface Waypoint {
   id: string;
@@ -117,6 +119,10 @@ export interface HUDState {
   drawCalls: number;
   /** 2.2: aktywny cel nawigacji w tym wymiarze. */
   waypoint: { name: string; distance: number; direction: string; bearing: number } | null;
+  /** 2.3: lorneta w dłoni – pole widzenia jest zwężone. */
+  zoom: boolean;
+  /** 2.3: stan wędkarstwa: 'idle' | 'cast' | 'waiting' | 'bite'. */
+  fishing: 'idle' | 'cast' | 'waiting' | 'bite';
 }
 
 export interface TradeRow {
@@ -163,6 +169,10 @@ export interface SaveData {
   /** 2.2: własne punkty nawigacyjne i aktualnie śledzony punkt. */
   waypoints?: Waypoint[];
   activeWaypointId?: string | null;
+  /** 2.3: zawartość kowadeł (scalanie i przemianowywanie narzędzi). */
+  anvils?: AnvilState[];
+  /** 2.3: ile ryb udało się złowić (osiągnięcie „Wędkarz”). */
+  fishCaught?: number;
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
@@ -245,10 +255,26 @@ interface DropEntity {
   count: number;
   dur?: number;
   ench?: Record<string, number>;
+  name?: string;
   mesh: THREE.Object3D;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   age: number;
+}
+
+/** 2.3: spławik wędkarstwa – lekki, tonie w wodzie i czeka na brań. */
+interface Bobber {
+  mesh: THREE.Mesh;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  /** flying – w locie, rest – leży, water – czeka, bite – brań, reeling – wraca. */
+  state: 'flying' | 'rest' | 'water' | 'bite' | 'reeling';
+  /** Ile przynęta czeka (s) – po tym czasie woda ją zmywa. */
+  wait: number;
+  /** Kiedy nadeszła brań – czas oczekiwania na branie (s). */
+  biteAt: number;
+  /** Ile zostało na branie (s). */
+  window: number;
 }
 
 function blockGeometry(id: number): THREE.BufferGeometry {
@@ -421,6 +447,19 @@ export class Game {
   furnacePos: { x: number; y: number; z: number } | null = null;
   chests = new Map<string, ChestState>();
   chestPos: { x: number; y: number; z: number } | null = null;
+  /** 2.3: kowadła – PPM otwiera ekran scalania i przemianowywania. */
+  anvils = new Map<string, AnvilState>();
+  anvilPos: { x: number; y: number; z: number } | null = null;
+  /** 2.3: aktywna wędka (spławik w locie / w wodzie). */
+  private bobber: Bobber | null = null;
+  private bobberGeo: THREE.BoxGeometry | null = null;
+  private bobberMat: THREE.MeshBasicMaterial | null = null;
+  /** 2.3: licznik złowionych ryb (zapisuje się ze światem). */
+  fishCaught = 0;
+  /** 2.3: lorneta – prawy przycisk myszy w dłoni. */
+  private zooming = false;
+  /** 2.3: sekundy regeneracji po uratowaniu przez totem. */
+  private totemHeal = 0;
   private campfireHurt = 0;
   private arrows: ArrowEntity[] = [];
   private arrowGeo!: THREE.BufferGeometry;
@@ -655,6 +694,17 @@ export class Game {
       opts.save.inv.forEach((s, i) => (this.inventory.slots[i] = s ? { ...s } : null));
       for (const f of opts.save.furnaces ?? []) this.furnaces.set((f.dim ? 'n:' : '') + furnaceKey(f.x, f.y, f.z), { ...f, input: f.input ? { ...f.input } : null, fuel: f.fuel ? { ...f.fuel } : null, output: f.output ? { ...f.output } : null });
       for (const c of opts.save.chests ?? []) this.chests.set((c.dim ? 'n:' : '') + chestKey(c.x, c.y, c.z), { x: c.x, y: c.y, z: c.z, dim: c.dim, slots: (c.slots ?? []).slice(0, 27).map((s) => (s ? { ...s } : null)) });
+      for (const a of opts.save.anvils ?? []) {
+        if (!a || typeof a.x !== 'number' || typeof a.y !== 'number' || typeof a.z !== 'number') continue;
+        this.anvils.set((a.dim ? 'n:' : '') + anvilKey(a.x, a.y, a.z), {
+          x: a.x, y: a.y, z: a.z, dim: a.dim,
+          a: a.a ? { ...a.a, ench: a.a.ench ? { ...a.a.ench } : undefined } : null,
+          b: a.b ? { ...a.b, ench: a.b.ench ? { ...a.b.ench } : undefined } : null,
+          name: cleanItemName(a.name ?? ''),
+          burn: a.burn ?? 0, burnMax: a.burnMax ?? 0,
+        });
+      }
+      this.fishCaught = Math.max(0, Math.floor(opts.save.fishCaught ?? 0));
       for (const id of opts.save.unlocked ?? []) this.unlocked.add(id);
       this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
       this.xp = new Xp(opts.save.xp ?? 0);
@@ -702,7 +752,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 2.2: K – punkty podróży, J – dziennik. Na telefonie użyj 📍, aby zaznaczyć bazę; tapnij, aby użyć, przytrzymaj, aby kopać.');
+      : 'BlockCraft 2.3: wędka (PPM), lorneta (przytrzymaj PPM) i kowadło (PPM) czekają. K – punkty podróży, J – dziennik. Na telefonie użyj 📍, aby zaznaczyć bazę; tapnij, aby użyć, przytrzymaj, aby kopać.');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -902,7 +952,8 @@ export class Game {
     this.on(canvas, 'contextmenu', (e) => e.preventDefault());
     this.on(window, 'mousemove', ((e: MouseEvent) => {
       if (!this.locked) return;
-      const s = 0.0022 * this.sensitivity;
+      // 2.3: przy lornetcie celownik musi dać się ustawić precyzyjnie.
+      const s = 0.0022 * this.sensitivity * (this.zooming ? 0.4 : 1);
       this.yaw -= e.movementX * s;
       this.pitch -= e.movementY * s;
       this.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, this.pitch));
@@ -925,6 +976,10 @@ export class Game {
 
   private onKeyDown(e: KeyboardEvent) {
     if (this.ui === 'chat') return;
+    // 2.3: pole nazwy w kowadle (i każdy inny input) ma pierwszeństwo –
+    // inaczej litera „e” zamykałaby ekran w trakcie pisania.
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
     if (this.ui === 'journal' || this.ui === 'waypoints') {
       if (e.code === 'Escape' || (this.ui === 'waypoints' && e.code === 'KeyK')) {
         e.preventDefault();
@@ -932,7 +987,7 @@ export class Game {
       }
       return;
     }
-    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade') {
+    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'anvil') {
       if (e.code === 'KeyE' || e.code === 'Escape') {
         e.preventDefault();
         this.closeInventory();
@@ -1010,7 +1065,10 @@ export class Game {
     this.keys.clear();
     this.mouseLeft = this.mouseRight = false;
     this.bowDraw = -1;
+    this.zooming = false;
     this.touchAim = null;
+    if (s !== 'anvil') this.anvilPos = null;
+    if (s === 'anvil' && this.anvilPos) this.inventory.returnCursor();
     this.onUI(s);
   }
 
@@ -1238,9 +1296,104 @@ export class Game {
     const id = this.world.getBlock(x, y, z);
     const stacks = saved ? saved.slots : id === B.LOOT_CHEST ? lootChest(this.world.seed, x, y, z).slots : [];
     for (const s of stacks) {
-      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.dur, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2, s.ench);
+      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.dur, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2, s.ench, s.name);
     }
     this.chests.delete(key);
+  }
+
+  // ---------- 2.3: kowadło ----------
+  private aKey(x: number, y: number, z: number) {
+    return (this.isInNether ? 'n:' : '') + anvilKey(x, y, z);
+  }
+
+  openAnvil(x: number, y: number, z: number) {
+    const key = this.aKey(x, y, z);
+    let anvil = this.anvils.get(key);
+    if (!anvil) {
+      anvil = emptyAnvil(x, y, z);
+      anvil.dim = this.isInNether ? 1 : 0;
+      this.anvils.set(key, anvil);
+    }
+    this.anvilPos = { x, y, z };
+    this.setUI('anvil');
+    this.emitHud();
+  }
+
+  currentAnvil(): AnvilState | null {
+    if (!this.anvilPos) return null;
+    return this.anvils.get(this.aKey(this.anvilPos.x, this.anvilPos.y, this.anvilPos.z)) ?? null;
+  }
+
+  /** What the anvil would hand over right now (pure – see game/anvil.ts). */
+  anvilOffer(): AnvilResult {
+    const a = this.currentAnvil();
+    return a ? anvilResult(a.a, a.b, a.name) : { out: null, action: 'none', cost: 0, label: '' };
+  }
+
+  /** True when the player can afford the offered operation. */
+  canAnvilTake(): boolean {
+    const offer = this.anvilOffer();
+    if (!offer.out) return false;
+    if (this.mode === 'creative') return true;
+    return this.xp.canSpend(offer.cost);
+  }
+
+  /**
+   * Takes the result: charges levels, clears the inputs it consumed and hands
+   * the stack to the cursor (or drops it when the inventory is full).
+   */
+  takeAnvilResult(): boolean {
+    const a = this.currentAnvil();
+    const offer = this.anvilOffer();
+    if (!a || !offer.out) return false;
+    if (this.mode !== 'creative' && !this.xp.spend(offer.cost)) {
+      this.message('Za mało poziomów doświadczenia.');
+      return false;
+    }
+    if (this.inventory.cursor) {
+      if (this.inventory.cursor.id === offer.out.id) this.inventory.cursor.count += offer.out.count;
+      else if (!this.giveOrDrop(offer.out)) return false;
+    } else if (!this.giveOrDrop(offer.out)) return false;
+    if (offer.action === 'merge') { a.a = null; a.b = null; this.unlock('smith'); }
+    if (offer.action === 'rename') { a.a = null; a.name = ''; this.unlock('namer'); }
+    a.burn = offer.cost;
+    a.burnMax = Math.max(a.burnMax, offer.cost * 8);
+    Sfx.playPlace('stone');
+    this.message(offer.action === 'merge' ? 'Przedmioty połączone.' : 'Nowa nazwa nadana.');
+    this.emitHud();
+    return true;
+  }
+
+  /** Cursor → inventory, or onto the ground when everything else is full. */
+  private giveOrDrop(stack: Stack): boolean {
+    if (this.inventory.add(stack.id, stack.count, stack.dur, stack.ench, stack.name)) return true;
+    this.spawnDrop(stack.id, stack.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, stack.dur, undefined, undefined, undefined, stack.ench, stack.name);
+    this.message('Brak miejsca – przedmiot upadł na ziemię.');
+    return true;
+  }
+
+  /** Rename field: the screen keeps the text, the rules live in game/anvil.ts. */
+  setAnvilName(name: string) {
+    const a = this.currentAnvil();
+    if (a) a.name = cleanItemName(name);
+  }
+
+  clickAnvilSlot(slot: 'a' | 'b', right: boolean) {
+    const a = this.currentAnvil();
+    if (!a) return;
+    this.transfer(() => (slot === 'a' ? a.a : a.b), (s) => { if (slot === 'a') a.a = s; else a.b = s; }, right);
+    if (slot === 'a' && a.a && !a.name) a.name = '';
+  }
+
+  /** Returns both inputs to the player when the screen is closed. */
+  private spillAnvil(x: number, y: number, z: number) {
+    const key = this.aKey(x, y, z);
+    const anvil = this.anvils.get(key);
+    if (!anvil) return;
+    for (const s of [anvil.a, anvil.b]) {
+      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.6, z + 0.5, s.dur, undefined, undefined, undefined, s.ench, s.name);
+    }
+    this.anvils.delete(key);
   }
 
   /** Move stacks between the cursor and a furnace slot. Output can only be taken. */
@@ -1292,7 +1445,8 @@ export class Game {
       if (!s) return;
       if (right && s.count > 1) {
         const half = Math.ceil(s.count / 2);
-        this.inventory.cursor = { id: s.id, count: half, dur: s.dur };
+        // 2.3: połówka musi zachować zaklęcia i własną nazwę (jak w ekwipunku).
+        this.inventory.cursor = { id: s.id, count: half, dur: s.dur, ench: s.ench ? { ...s.ench } : undefined, name: s.name };
         s.count -= half;
       } else {
         this.inventory.cursor = s;
@@ -1302,7 +1456,7 @@ export class Game {
     }
     if (!s) {
       if (right) {
-        set({ id: c.id, count: 1, dur: c.dur, ench: c.ench ? { ...c.ench } : undefined });
+        set({ id: c.id, count: 1, dur: c.dur, ench: c.ench ? { ...c.ench } : undefined, name: c.name });
         c.count--;
         if (c.count <= 0) this.inventory.cursor = null;
       } else {
@@ -1311,7 +1465,8 @@ export class Game {
       }
       return;
     }
-    if (s.id === c.id && s.dur === undefined && c.dur === undefined && !s.ench && !c.ench) {
+    // 2.3: stosy o różnej nazwie (albo o zaklęciach/wytrzymałości) nigdy się nie łączą.
+    if (s.id === c.id && s.dur === undefined && c.dur === undefined && !s.ench && !c.ench && s.name === c.name) {
       const n = Math.min(stackLimit(s.id) - s.count, right ? 1 : c.count);
       s.count += n;
       c.count -= n;
@@ -1773,6 +1928,9 @@ export class Game {
     this.chestPos = null;
     this.furnacePos = null;
     this.enchantPos = null;
+    this.anvilPos = null;
+    // 2.3: przynęta i tak nie przeżyłaby zmiany wymiaru.
+    this.removeBobber();
     this.tradeMob = null;
     this.breakProgress = 0;
     this.breakKey = '';
@@ -1880,8 +2038,9 @@ export class Game {
   }
 
   private cookOnCampfire(s: Stack): boolean {
-    const cooked: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN };
-    const out = cooked[s.id];
+    // mięso zawsze, ryby tylko latem 2.3 – wspólna funkcja z pieca
+    const meats: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN };
+    const out = meats[s.id] ?? cookedOf(s.id);
     if (!out) return false;
     this.consumeSelected();
     if (!this.inventory.add(out, 1)) {
@@ -1890,6 +2049,7 @@ export class Game {
     } else this.message(`Upieczono: ${displayName(out)}.`);
     Sfx.playEat();
     this.unlock('food');
+    if (out === I.COOKED_FISH || out === I.COOKED_SALMON) this.unlock('chef');
     this.swingT = 0;
     return true;
   }
@@ -1922,7 +2082,8 @@ export class Game {
     const f = this.furnaces.get(this.fKey(x, y, z));
     if (!f) return;
     for (const s of [f.input, f.fuel, f.output]) {
-      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.6, z + 0.5, s.dur);
+      // 2.3: zaklęty przedmiot w rozbitym piecu nie może stracić zaklęć ani nazwy.
+      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.6, z + 0.5, s.dur, undefined, undefined, undefined, s.ench, s.name);
     }
     this.furnaces.delete(this.fKey(x, y, z));
   }
@@ -1941,7 +2102,7 @@ export class Game {
     return t;
   }
 
-  spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2, ench?: Record<string, number>) {
+  spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2, ench?: Record<string, number>, name?: string) {
     if (count <= 0) return;
     // The oldest drop makes room instead of silently eating the new item.
     while (this.drops.length >= 120) {
@@ -1965,7 +2126,7 @@ export class Game {
     }
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
-    this.drops.push({ id, count, dur, ench, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0 });
+    this.drops.push({ id, count, dur, ench, name, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0 });
   }
 
   // ---------- Messages & commands ----------
@@ -1985,6 +2146,7 @@ export class Game {
         this.message(
           'Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, ' +
             '/give <nazwa|id> [ilość], /summon <mob> [zawód], /village (najbliższa wioska), ' +
+            '2.3: wędka (PPM), lorneta (przytrzymaj PPM), kowadło (PPM), ' +
             '/waypoint <add|list|select|remove> [nazwa], /xp <ilość>, /enchant <nazwa> [poziom], ' +
             '/heal, /kill, /seed, /spawn, /clear, /blocks'
         );
@@ -2049,7 +2211,7 @@ export class Game {
       case 'give': {
         const id = resolveId(args[0] || '');
         if (id == null) { this.message('Nie znam takiego przedmiotu. Np. /give kilof, /give wegiel 16, /give 5'); break; }
-        const fallback = ITEMS[id]?.kind === 'tool' || ITEMS[id]?.kind === 'bucket' ? 1 : 64;
+        const fallback = ITEMS[id]?.kind === 'tool' || ITEMS[id]?.kind === 'bucket' || ITEMS[id]?.stack === 1 ? 1 : 64;
         const n = args[1] ? parseInt(args[1], 10) : fallback;
         const count = Number.isNaN(n) ? fallback : Math.max(1, Math.min(fallback === 1 ? 1 : 256, n));
         this.inventory.add(id, count);
@@ -2232,6 +2394,7 @@ export class Game {
         spawn: [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z],
         furnaces: [...this.furnaces.values()],
         chests: [...this.chests.values()],
+        anvils: this.anvils ? [...this.anvils.values()] : [],
         unlocked: [...this.unlocked],
         weather: this.weather,
         xp: this.xp.total,
@@ -2239,6 +2402,7 @@ export class Game {
         waypoints: (this.waypoints ?? []).map((w) => ({ ...w })),
         activeWaypointId: this.activeWaypointId ?? null,
         armor: this.armor.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
+        fishCaught: this.fishCaught,
         updated: Date.now(),
       };
       upsertSave({ ...data, id: this.worldId });
@@ -2522,6 +2686,182 @@ export class Game {
     this.swingT = 0;
   }
 
+  // ---------- 2.3: wędkarstwo ----------
+
+  /** PPM z wędką: rzuca przynętę albo zwina haczyk. */
+  useRod() {
+    if (this.bobber) {
+      this.reelRod();
+      return;
+    }
+    if (this.ui !== 'playing') return;
+    if (!this.bobberGeo) this.bobberGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+    if (!this.bobberMat) this.bobberMat = new THREE.MeshBasicMaterial({ color: 0xd83a3a });
+    const mesh = new THREE.Mesh(this.bobberGeo, this.bobberMat);
+    const eye = this.eyePos();
+    const d = this.lookDir();
+    mesh.position.copy(eye);
+    this.scene.add(mesh);
+    this.bobber = {
+      mesh,
+      pos: eye.clone(),
+      vel: d.clone().multiplyScalar(16 + (this.sprinting ? 6 : 0)),
+      state: 'flying',
+      wait: 0,
+      biteAt: 0,
+      window: 0,
+    };
+    Sfx.playPop();
+    this.swingT = 0;
+    this.wearTool();
+    this.emitHud();
+  }
+
+  /** Druga wędkarstwo: branie, wyciągnięcie albo strata przynęty. */
+  private reelRod() {
+    const b = this.bobber;
+    if (!b) return;
+    if (b.state === 'bite') {
+      this.landFish();
+    } else if (b.state === 'water') {
+      this.message('Nic nie brało. Zostaw przynętę dłużej w wodzie.');
+    } else if (b.state === 'reeling') {
+      return;
+    } else {
+      this.message('Wciągasz wędkę.');
+    }
+    this.pullBobberBack();
+  }
+
+  /** Wynik zakończonego haczenia. */
+  private landFish() {
+    const haul = rollCatch();
+    if (this.mode === 'survival') this.giveOrDrop({ ...haul });
+    Sfx.playPop();
+    this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, isFishStack(haul) ? I.RAW_FISH : I.STRING, 8, 0.4);
+    const howmany = haul.count > 1 ? ` ×${haul.count}` : '';
+    this.message(`Złowiono: ${displayName(haul.id)}${howmany}.`);
+    if (isFishStack(haul)) {
+      this.fishCaught++;
+      this.gainXp(3);
+      this.unlock('fisher');
+      if (this.fishCaught >= 5) this.unlock('angler');
+    } else {
+      this.gainXp(1);
+    }
+    this.wearTool();
+  }
+
+  /** Spławik wraca do gracza i znika w ręce. */
+  private pullBobberBack() {
+    const b = this.bobber;
+    if (!b) return;
+    b.state = 'reeling';
+    this.wearTool();
+  }
+
+  private removeBobber() {
+    const b = this.bobber;
+    if (!b) return;
+    this.scene.remove(b.mesh);
+    this.bobber = null;
+    this.emitHud();
+  }
+
+  /** Stan wędkarstwa na HUD. */
+  fishingState(): 'idle' | 'cast' | 'waiting' | 'bite' {
+    const b = this.bobber;
+    if (!b) return 'idle';
+    if (b.state === 'bite') return 'bite';
+    if (b.state === 'water' || b.state === 'rest') return 'waiting';
+    return 'cast';
+  }
+
+  /** 2.3: lot, tonięcie, branie i zmywanie przynęty. */
+  private updateFishing(dt: number) {
+    const b = this.bobber;
+    if (!b || this.ui !== 'playing') return;
+    const eye = this.eyePos();
+    if (b.state === 'reeling') {
+      b.vel.subVectors(eye, b.pos).normalize().multiplyScalar(26);
+      b.pos.addScaledVector(b.vel, dt);
+      b.mesh.position.copy(b.pos);
+      if (b.pos.distanceTo(eye) < 0.7) this.removeBobber();
+      return;
+    }
+    if (b.state === 'flying' || b.state === 'rest') {
+      b.vel.y -= 20 * dt;
+      b.pos.addScaledVector(b.vel, dt);
+      b.mesh.position.copy(b.pos);
+      if (b.pos.y < 0) { this.removeBobber(); return; }
+      const x = Math.floor(b.pos.x), y = Math.floor(b.pos.y), z = Math.floor(b.pos.z);
+      const block = this.world.peekBlock(x, y, z);
+      if (block === B.LAVA) {
+        this.message('Przynęta spaliła się w lawie.');
+        this.removeBobber();
+        return;
+      }
+      if (block === B.WATER) {
+        b.state = 'water';
+        b.pos.y = y + 0.9;
+        b.vel.set(0, 0, 0);
+        b.wait = 0;
+        b.biteAt = biteDelay();
+        this.message('Przynęta w wodzie. Czekaj na brań…');
+        return;
+      }
+      if (b.state === 'flying' && this.world.isSolid(x, y, z)) {
+        b.state = 'rest';
+        b.pos.y = y + 1.05;
+        b.vel.set(0, 0, 0);
+      }
+    }
+    // spławik leży w wodzie, na ziemi albo właśnie bierze
+    const x = Math.floor(b.pos.x), y = Math.floor(b.pos.y), z = Math.floor(b.pos.z);
+    const inWater = this.world.peekBlock(x, y, z) === B.WATER;
+    b.wait += dt;
+    if (b.state === 'bite') {
+      b.window -= dt;
+      b.mesh.position.set(b.pos.x, b.pos.y + Math.abs(Math.sin(b.window * 9)) * -0.35 + 0.1, b.pos.z);
+      if (b.window <= 0) {
+        this.message('Ryba uciekła z przynęty.');
+        this.removeBobber();
+      }
+      return;
+    }
+    if (b.state === 'rest' && inWater) {
+      b.state = 'water';
+      b.pos.y = y + 0.9;
+      b.wait = 0;
+      b.biteAt = biteDelay();
+      this.message('Przynęta w wodzie. Czekaj na brań…');
+      return;
+    }
+    if (b.state === 'rest') {
+      b.mesh.position.set(b.pos.x, b.pos.y, b.pos.z);
+      if (b.wait > PATIENCE) {
+        this.message('Przynęta zgniła – wyrzuć wędkę dalej od brzegu.');
+        this.removeBobber();
+      }
+      return;
+    }
+    // water
+    b.pos.y = y + 0.9 - Math.sin(b.wait * 2.2) * 0.06;
+    b.mesh.position.set(b.pos.x, b.pos.y, b.pos.z);
+    if (this.bobberMat) this.bobberMat.color.setHex(0xd83a3a);
+    if (b.wait >= b.biteAt) {
+      b.state = 'bite';
+      b.window = BITE_WINDOW;
+      if (this.bobberMat) this.bobberMat.color.setHex(0xf2f2f2);
+      Sfx.playPop();
+      this.spawnParticles(b.pos.x, b.pos.y, b.pos.z, B.WATER, 6, 0.3);
+      this.message('Brań! PPM, aby zaciągnąć.');
+    } else if (b.wait > PATIENCE) {
+      this.message('Woda zmyła przynętę.');
+      this.removeBobber();
+    }
+  }
+
   /** Perła wylądowała: gracz pojawia się w ostatnim wolnym punkcie lotu. */
   private pearlTeleport(to: THREE.Vector3) {
     if (this.ui === 'dead') return;
@@ -2648,6 +2988,8 @@ export class Game {
       if (t.id === B.BUTTON || t.id === B.BUTTON_ON) { this.pressButton(t.x, t.y, t.z); return; }
       if (t.id === B.NOTE_BLOCK) { this.playNoteBlock(t.x, t.y, t.z); return; }
       if (t.id === B.NETHER_PORTAL) { this.enterPortal(); return; }
+      // 2.3: kowadło wreszcie działa – naprawa, scalanie i nazwy przedmiotów.
+      if (t.id === B.ANVIL) { this.openAnvil(t.x, t.y, t.z); return; }
     }
     const s = this.selectedStack();
     if (!s) return;
@@ -2691,6 +3033,10 @@ export class Game {
       this.swingT = 0;
       return;
     }
+    // 2.3: wędka rzuca lub zwina przynętę, lorneta przybliża (trzymana w PPM).
+    if (s.id === I.FISHING_ROD) { this.useRod(); return; }
+    // 2.3: bez przytrzymania (telefon) lorneta działa jak przełącznik.
+    if (s.id === I.SPYGLASS) { this.zooming = this.touchInput ? !this.zooming : true; return; }
     if (s.id === I.ENDER_PEARL) {
       this.throwPearl();
       return;
@@ -2705,6 +3051,8 @@ export class Game {
       return;
     }
     if (isItem(s.id) || !BLOCKS[s.id]) return;
+    // 2.3: schody i płyty potrafią zmienić to, co faktycznie zostanie postawione.
+    let placeId: number | undefined;
     let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
     if (RENDER[t.id] === 1) { px = t.x; py = t.y; pz = t.z; }
     if (py < 0 || py >= CH) return;
@@ -2735,48 +3083,18 @@ export class Game {
     } else if (id === B.RAIL || id === B.POWERED_RAIL || id === B.DETECTOR_RAIL) {
       if (!IS_SOLID[below]) { this.message('Tory kładzie się na solidnym podłożu.'); return; }
     } else if (isStairs(id)) {
-      // stairs facing opposite to player
+      // schody stawiane tyłem do gracza
       const dir = this.lookDir();
-      const facing = facingFromNormal(-dir.x, -dir.z);
-      const base = stairsBase(id);
-      const placed = base + facing;
-      // check if valid
+      const placed = stairsBase(id) + facingFromNormal(-dir.x, -dir.z);
       if (!BLOCKS[placed]) return;
-      // use placed id
-      (s as any)._placedId = placed;
+      placeId = placed;
     } else if (isSlab(id)) {
-      // if clicking on top half of block or placing on top slab, make top slab
+      // płyta górna / dolna, a dwie płyty tego samego typu łączą się w pełny blok
       const base = slabBase(id);
       const isTop = t.ny === -1 || (t as any).hitY > 0.5;
-      // if existing slab same type, combine to full block
       const existing = this.world.getBlock(px, py, pz);
-      if (existing === base && !isTop) {
-        // bottom + top = full block – determine full block type
-        let full: number = B.STONE;
-        if (base === B.OAK_SLAB) full = B.PLANKS;
-        else if (base === B.STONE_SLAB) full = B.STONE;
-        else if (base === B.COBBLE_SLAB) full = B.COBBLE;
-        else if (base === B.BRICK_SLAB) full = B.BRICK;
-        else if (base === B.SANDSTONE_SLAB) full = B.SANDSTONE;
-        else if (base === B.NETHER_BRICK_SLAB) full = B.NETHER_BRICKS;
-        else if (base === B.QUARTZ_SLAB) full = B.QUARTZ_BLOCK;
-        (s as any)._placedId = full;
-      } else if (existing === base && isTop) {
-        // already bottom, placing top on same spot -> full
-        let full: number = B.STONE;
-        if (base === B.OAK_SLAB) full = B.PLANKS;
-        else if (base === B.STONE_SLAB) full = B.STONE;
-        else if (base === B.COBBLE_SLAB) full = B.COBBLE;
-        else if (base === B.BRICK_SLAB) full = B.BRICK;
-        else if (base === B.SANDSTONE_SLAB) full = B.SANDSTONE;
-        else if (base === B.NETHER_BRICK_SLAB) full = B.NETHER_BRICKS;
-        else if (base === B.QUARTZ_SLAB) full = B.QUARTZ_BLOCK;
-        (s as any)._placedId = full;
-      } else {
-        // normal slab placement
-        const placed = isTop ? base + 1 : base;
-        (s as any)._placedId = placed;
-      }
+      if (existing === base || existing === base + 1) placeId = slabFullBlock(base);
+      else placeId = isTop ? base + 1 : base;
     } else if (isPiston(id)) {
       // piston facing toward player (place facing opposite to look)
       // for simplicity store facing in block id? We use same id but remember direction via placement normal
@@ -2819,8 +3137,7 @@ export class Game {
     } else if (RENDER[id] === 1) {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && below !== B.FARMLAND) return;
     }
-    const finalId = (s as any)._placedId ?? id;
-    delete (s as any)._placedId;
+    const finalId = placeId ?? id;
     this.world.setBlock(px, py, pz, finalId);
     this.settle(px, py, pz);
     // redstone update
@@ -2836,10 +3153,22 @@ export class Game {
   pickBlock() {
     if (!this.target) return;
     const id = this.target.id;
-    const idx = this.inventory.slots.findIndex((s, i) => i < 9 && s && s.id === id);
-    if (idx >= 0) { this.selected = idx; this.emitHud(); return; }
+    const hot = this.inventory.slots.findIndex((s, i) => i < 9 && s && s.id === id);
+    if (hot >= 0) { this.selected = hot; this.emitHud(); return; }
+    // 2.3: ŚPM działa też dla przedmiotu leżącego poza paskiem – przenosimy
+    // go w wybrany slot, zamiast cicho nic nie robić.
+    const any = this.inventory.slots.findIndex((s) => s && s.id === id);
+    if (any >= 0) {
+      const held = this.inventory.slots[this.selected];
+      this.inventory.slots[this.selected] = this.inventory.slots[any];
+      this.inventory.slots[any] = held;
+      this.updateHand();
+      this.emitHud();
+      return;
+    }
     if (this.mode === 'creative') {
       this.inventory.slots[this.selected] = { id, count: 64 };
+      this.updateHand();
       this.emitHud();
     }
   }
@@ -2851,11 +3180,11 @@ export class Game {
     const d = this.lookDir();
     const dur = s.dur;
     if (this.mode === 'survival') {
-      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench);
+      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
       s.count--;
       if (s.count <= 0) this.inventory.slots[this.selected] = null;
     } else {
-      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench);
+      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
       this.inventory.slots[this.selected] = null;
     }
     this.emitHud();
@@ -2995,6 +3324,7 @@ export class Game {
     }
     if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
     if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
+    if (id === B.ANVIL) this.spillAnvil(x, y, z);
     this.world.setBlock(x, y, z, fill);
     if (isDoor(id)) {
       const face = doorFacing(id);
@@ -3027,8 +3357,8 @@ export class Game {
       for (const drop of drops) this.spawnDrop(drop.id, drop.count, x + 0.5, y + 0.45, z + 0.5);
       if (isDoorTop(id)) this.spawnDrop(B.DOOR_N, 1, x + 0.5, y + 0.2, z + 0.5);
       // ores that actually yielded something also drop XP
-      const ORE_XP: Record<number, number> = { [B.COAL_ORE]: 2, [B.IRON_ORE]: 5, [B.GOLD_ORE]: 6, [B.DIAMOND_ORE]: 7, [B.LAPIS_ORE]: 4 };
-      if (drops.length > 0 && ORE_XP[id] > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, ORE_XP[id]);
+      const xp = oreXp(id);
+      if (drops.length > 0 && xp > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, xp);
     }
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
@@ -3064,6 +3394,7 @@ export class Game {
           if (id === B.TNT) { this.igniteTNT(x, y, z, 0.3 + Math.random() * 0.6); continue; }
           if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
           if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
+          if (id === B.ANVIL) this.spillAnvil(x, y, z);
           this.world.setBlock(x, y, z, B.AIR);
           if (Math.random() < 0.05) this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 3, 0.4);
         }
@@ -3106,6 +3437,11 @@ export class Game {
       Sfx.playHurt();
       this.buzz(35);
     }
+    // 2.3: Totem Ratowania kupuje drugie życie – raz na 5 sekund.
+    if (this.health <= 0 && !force && this.tryTotem()) {
+      this.emitHud();
+      return;
+    }
     if (this.health <= 0) {
       this.health = 0;
       const voidDeath = this.body.pos.y < 1;
@@ -3117,7 +3453,7 @@ export class Game {
         const x = deathPos.x;
         const z = deathPos.z;
         for (const s of this.inventory.slots) {
-          if (s) this.spawnDrop(s.id, s.count, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench);
+          if (s) this.spawnDrop(s.id, s.count, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench, s.name);
         }
         for (const s of this.armor) {
           if (s) this.spawnDrop(s.id, 1, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench);
@@ -3129,6 +3465,38 @@ export class Game {
       this.setUI('dead');
     }
     this.emitHud();
+  }
+
+  /**
+   * 2.3: jeśli gracz ma totem ratowania, zużywa go zamiast umrzeć.
+   * Zwraca true, gdy śmierć została odwołana.
+   */
+  private tryTotem(): boolean {
+    if (this.mode !== 'survival' || this.totemHeal > 0) return false;
+    if (this.inventory.countOf(I.TOTEM) <= 0) return false;
+    this.inventory.remove(I.TOTEM, 1);
+    this.health = 6;
+    this.hunger = Math.min(20, this.hunger + 4);
+    this.totemHeal = 6;
+    this.lastHurt = performance.now() - 4000;
+    Sfx.playEnchant();
+    Sfx.playLevelUp();
+    this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, B.GLOWSTONE, 26, 0.9);
+    this.message('Totem Ratowania rozpadł się i ocalił cię!');
+    this.unlock('undying');
+    return true;
+  }
+
+  /** Regeneracja po uratowaniu przez totem. */
+  private updateTotem(dt: number) {
+    if (this.totemHeal <= 0) return;
+    this.totemHeal = Math.max(0, this.totemHeal - dt);
+    if (this.health >= 20) return;
+    this.regenAcc += dt;
+    if (this.regenAcc >= 0.4) {
+      this.regenAcc = 0;
+      this.health = Math.min(20, this.health + 1);
+    }
   }
 
   respawn() {
@@ -3214,7 +3582,10 @@ export class Game {
       this.updateOrbs(dt);
       this.updateGrowth(dt);
       this.updateFurnaces(dt);
+      this.updateAnvils(dt);
+      this.updateFishing(dt);
       this.updateRedstone(dt);
+      this.updateTotem(dt);
       this.updateWeather(dt);
       this.checkUnderground();
       this.villageCheck -= dt;
@@ -3378,13 +3749,13 @@ export class Game {
     }
     const under = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.05), Math.floor(b.pos.z));
     // 1.7 special blocks effects
-    if (under === B.SLIME_BLOCK && b.onGround && this.mode !== 'creative') {
-      // bounce
-      if (wasGround === false || b.vel.y < -2) {
-        b.vel.y = Math.max(6, -b.vel.y * 0.8);
-        this.fallStart = b.pos.y + 6;
-        Sfx.playStep('slime');
-      }
+    // 2.3: 2.0 pisało `wasGround === false`, co nigdy nie zachodzi – blok szlamu
+    // nie odbijał przy lądowaniu. Reguła żyje teraz w physics.slimeBounce().
+    const bounce = slimeBounce(wasGround, b.onGround, b.vel.y);
+    if (under === B.SLIME_BLOCK && bounce !== null && this.mode !== 'creative') {
+      b.vel.y = bounce;
+      this.fallStart = b.pos.y + bounce;
+      Sfx.playSlime();
     }
     if (under === B.HONEY_BLOCK) {
       b.vel.x *= 0.4;
@@ -3546,7 +3917,15 @@ export class Game {
       if (mat.map !== this.crackTex[stage]) { mat.map = this.crackTex[stage]; mat.needsUpdate = true; }
     } else this.crackMesh.visible = false;
 
-    if (this.mouseRight && this.placeCooldown <= 0) this.tryUse();
+    if (this.mouseRight && this.placeCooldown <= 0) {
+      // 2.3: wędka i lorneta reagują wyłącznie na naciśnięcie (mousedown sam
+      // woła tryUse). Bez tego przytrzymane PPM wciągało świeżo zarzuconą
+      // przynętę, a lorneta stale restartowała przybliżenie.
+      const held = this.selectedStack();
+      if (!held || (held.id !== I.FISHING_ROD && held.id !== I.SPYGLASS)) this.tryUse();
+    }
+    // 2.3: lorneta działa, dopóki prawy przycisk jest wciśnięty.
+    if (!this.mouseRight && !this.touchInput) this.zooming = false;
     if (this.bowDraw >= 0) {
       if (this.selectedStack()?.id === I.BOW && this.ui === 'playing') {
         if (this.mouseRight) {
@@ -3758,6 +4137,8 @@ export class Game {
     let targetFov = this.fovBase;
     if (this.sprinting) targetFov += 10;
     if (this.flying && this.sprinting) targetFov += 5;
+    // 2.3: lorneta zwęża pole widzenia do szpilkowatego „dalekiego oka”.
+    if (this.zooming && this.ui === 'playing') targetFov = Math.min(targetFov, 24);
     cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 8);
     cam.updateProjectionMatrix();
 
@@ -3885,6 +4266,8 @@ export class Game {
       resScale: this.resScale,
       showFps: this.showFps,
       drawCalls: this.renderer.info.render.calls,
+      zoom: this.zooming && this.ui === 'playing',
+      fishing: this.fishingState(),
       waypoint: (() => {
         const w = this.waypoints.find((point) => point.id === this.activeWaypointId);
         if (!w || w.dimension !== this.currentDimension()) return null;
@@ -3915,6 +4298,16 @@ export class Game {
       const names = ['przed tobą', 'w prawo', 'za tobą', 'w lewo'];
       const idx = ((Math.round(rel / (Math.PI / 2)) % 4) + 4) % 4;
       return `Kompas: odrodzenie ${names[idx]} · ${Math.round(dist)} m`;
+    }
+    if (id === I.SPYGLASS) {
+      return this.zooming ? 'Lorneta: przybliżenie – puść PPM, aby wrócić' : 'Lorneta: przytrzymaj PPM, aby przyjrzeć się okolicy';
+    }
+    if (id === I.FISHING_ROD) {
+      const f = this.fishingState();
+      if (f === 'bite') return 'Wędka: brań! Kliknij, aby zaciągnąć';
+      if (f === 'waiting') return 'Wędka: przynęta czeka w wodzie…';
+      if (f === 'cast') return 'Wędka: przynęta leci…';
+      return 'Wędka: PPM, aby zarzucić';
     }
     if (id === I.CLOCK) {
       const hour = (this.time * 24 + 6) % 24;
@@ -4139,7 +4532,7 @@ export class Game {
         d.vel.y += ((p.y + 0.6 - d.pos.y) / dist) * dt * 10;
       }
       if (d.age > 0.4 && dist < 1.35 && this.ui !== 'dead') {
-        if (this.inventory.add(d.id, d.count, d.dur, d.ench)) {
+        if (this.inventory.add(d.id, d.count, d.dur, d.ench, d.name)) {
           Sfx.playPop();
           this.notePickup(d.id);
           this.scene.remove(d.mesh);
@@ -4262,9 +4655,26 @@ export class Game {
       const before = f.output?.count ?? 0;
       const lit = tickFurnace(f, dt);
       if ((f.output?.count ?? 0) > before && f.output?.id === I.IRON) this.unlock('iron');
+      if ((f.output?.count ?? 0) > before && (f.output?.id === I.COOKED_FISH || f.output?.id === I.COOKED_SALMON)) this.unlock('chef');
       if (before === 0 && f.output) this.gainXp(1); // a finished smelt pays 1 XP
       const want = lit ? B.FURNACE_ON : B.FURNACE;
       if (id !== want) this.world.setBlock(f.x, f.y, f.z, want);
+    }
+  }
+
+  /**
+   * 2.3: kowadło trzyma zawartość tak długo, jak stoi blok. Zniknięte
+   * kowadło wypada na ziemię razem z przedmiotami (jak skrzynia i piec).
+   */
+  private updateAnvils(dt: number) {
+    for (const a of this.anvils.values()) {
+      if ((a.dim ?? 0) !== (this.isInNether ? 1 : 0)) continue;
+      if (a.burn > 0) a.burn = Math.max(0, a.burn - dt);
+      if (!this.world.hasChunk(Math.floor(a.x / CS), Math.floor(a.z / CS))) continue;
+      if (this.world.peekBlock(a.x, a.y, a.z) !== B.ANVIL) {
+        if (this.anvilPos && this.anvilPos.x === a.x && this.anvilPos.y === a.y && this.anvilPos.z === a.z) this.closeInventory();
+        this.spillAnvil(a.x, a.y, a.z);
+      }
     }
   }
 
@@ -4513,6 +4923,9 @@ export class Game {
     for (const t of this.crackTex) t.dispose();
     for (const t of this.itemTex.values()) t.dispose();
     this.itemTex.clear();
+    this.removeBobber();
+    this.bobberGeo?.dispose();
+    this.bobberMat?.dispose();
     this.renderer.dispose();
     // Browsers cap the number of live WebGL contexts – release this one for good.
     try { this.renderer.forceContextLoss(); } catch { /* not supported everywhere */ }

@@ -8,11 +8,18 @@ export interface Stack {
   dur?: number;
   /** Enchantment id → level (update 1.5). Absent = plain item. */
   ench?: Record<string, number>;
+  /** Custom name given at the anvil (2.3). Absent = the default one. */
+  name?: string;
 }
 
 /** True when two stacks can merge (same id, no durability, no enchantments). */
 export function mergeable(a: Stack, b: Stack): boolean {
-  return a.id === b.id && a.dur === undefined && b.dur === undefined && !a.ench && !b.ench;
+  return (
+    a.id === b.id &&
+    a.dur === undefined && b.dur === undefined &&
+    !a.ench && !b.ench &&
+    a.name === b.name
+  );
 }
 
 export const MAX_STACK = 64;
@@ -146,6 +153,13 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.OAK_SLAB, count: 6 }, inputs: [{ id: B.PLANKS, count: 3 }], table: true, pattern: ['PPP'], key: { P: B.PLANKS } },
   { out: { id: B.STONE_SLAB, count: 6 }, inputs: [{ id: B.STONE, count: 3 }], table: true, pattern: ['SSS'], key: { S: B.STONE } },
   { out: { id: B.QUARTZ_SLAB, count: 6 }, inputs: [{ id: B.QUARTZ_BLOCK, count: 3 }], table: true, pattern: ['QQQ'], key: { Q: B.QUARTZ_BLOCK } },
+  // 2.3 „Wyprawa i ratunek”: wędka, lorneta i totem
+  // Wędka jest bezpostaciowa (3 patyki + 2 struny) – inaczej jej wzór kolidowałby
+  // ze wzorem łuku i w siatce dawałoby się zawsze zrobić łuk.
+  { out: { id: I.FISHING_ROD, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 2 }], table: true },
+  // Lorneta: krzyż ze szkła złoconego oczkiem pośrodku (4 szkła + 1 sztabka złota).
+  { out: { id: I.SPYGLASS, count: 1 }, inputs: [{ id: B.GLASS, count: 4 }, { id: I.GOLD, count: 1 }], table: true, pattern: [' G ', 'GYG', ' G '], key: { G: B.GLASS, Y: I.GOLD } },
+  { out: { id: I.TOTEM, count: 1 }, inputs: [{ id: I.EMERALD, count: 4 }, { id: I.GOLD, count: 1 }], table: true, pattern: [' E ', 'EGE', ' E '], key: { E: I.EMERALD, G: I.GOLD } },
 ];
 
 /**
@@ -195,13 +209,13 @@ export class Inventory {
   /** 3x3 crafting grid; only the top-left 2x2 is used without a table. */
   grid: (Stack | null)[] = new Array(9).fill(null);
 
-  add(id: number, count = 1, dur?: number, ench?: Record<string, number>): boolean {
+  add(id: number, count = 1, dur?: number, ench?: Record<string, number>, name?: string): boolean {
     const limit = stackLimit(id);
     // Damaged, enchanted or unstackable items each take their own slot.
-    if (dur !== undefined || ench || limit === 1) {
+    if (dur !== undefined || ench || name || limit === 1) {
       for (let i = 0; i < 36 && count > 0; i++) {
         if (!this.slots[i]) {
-          this.slots[i] = { id, count: 1, ...(dur !== undefined ? { dur } : {}), ...(ench ? { ench } : {}) };
+          this.slots[i] = { id, count: 1, ...(dur !== undefined ? { dur } : {}), ...(ench ? { ench } : {}), ...(name ? { name } : {}) };
           count--;
         }
       }
@@ -327,7 +341,7 @@ export class Inventory {
     if (!cell) return;
     if (right && cell.count > 1) {
       const half = Math.ceil(cell.count / 2);
-      this.cursor = { id: cell.id, count: half, dur: cell.dur };
+      this.cursor = { id: cell.id, count: half, dur: cell.dur, ench: cell.ench ? { ...cell.ench } : undefined, name: cell.name };
       cell.count -= half;
       if (cell.count <= 0) this.grid[i] = null;
     } else {
@@ -380,7 +394,8 @@ export class Inventory {
       if (!s) return;
       if (right && s.count > 1) {
         const half = Math.ceil(s.count / 2);
-        this.cursor = { id: s.id, count: half };
+        // 2.3: połówka musi zabrać ze sobą wytrzymałość, zaklęcia i nazwę.
+        this.cursor = { id: s.id, count: half, dur: s.dur, ench: s.ench ? { ...s.ench } : undefined, name: s.name };
         s.count -= half;
       } else {
         this.cursor = s;
@@ -390,8 +405,8 @@ export class Inventory {
     }
     if (!s) {
       if (right) {
-        // carry durability/enchantments with the single taken unit
-        this.slots[i] = { id: c.id, count: 1, ...(c.dur !== undefined ? { dur: c.dur } : {}), ...(c.ench ? { ench: { ...c.ench } } : {}) };
+        // carry durability/enchantments/name with the single taken unit
+        this.slots[i] = { id: c.id, count: 1, ...(c.dur !== undefined ? { dur: c.dur } : {}), ...(c.ench ? { ench: { ...c.ench } } : {}), ...(c.name ? { name: c.name } : {}) };
         c.count--;
         if (c.count <= 0) this.cursor = null;
       } else {

@@ -7,6 +7,7 @@ import FurnaceScreen from './FurnaceScreen';
 import ChestScreen from './ChestScreen';
 import EnchantScreen from './EnchantScreen';
 import TradeScreen from './TradeScreen';
+import AnvilScreen from './AnvilScreen';
 import JournalScreen from './JournalScreen';
 import WaypointsScreen from './WaypointsScreen';
 import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
@@ -241,6 +242,7 @@ export default function GameView({
       {game && ui === 'furnace' && <FurnaceScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'anvil' && <AnvilScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && hud && ui === 'journal' && <JournalScreen hud={hud} unlocked={game.achievementIds()} onClose={() => game.setUI('playing')} />}
       {game && ui === 'waypoints' && <WaypointsScreen game={game} onClose={() => game.setUI('playing')} />}

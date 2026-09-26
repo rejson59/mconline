@@ -96,7 +96,10 @@ function targetsOf(itemId: number): Target[] {
     if (it.tool === 'bow') return ['bow'];
     if (it.tool === 'shield') return ['shield'];
     if (it.tool === 'sword') return ['sword'];
-    return [it.tool as Target]; // pick | axe | shovel | hoe
+    if (it.tool === 'pick' || it.tool === 'axe' || it.tool === 'shovel' || it.tool === 'hoe') return [it.tool];
+    // 2.3: wędka i lorneta to narzędzia obserwacyjne – nie poddają się
+    // zaklęciom, a wcześniejsze `as Target` przemycało je jako cel.
+    return [];
   }
   if (it?.kind === 'armor') return ['armor'];
   return [];

@@ -1,6 +1,25 @@
-# BlockCraft 2.2 🟩
+# BlockCraft 2.3 🟩
 
 Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci. Teraz także **w pełni przemyślana dla telefonów i tabletów**.
+
+**Wersja 2.3 „Wyprawa i ratunek”** dokłada wędkarstwo, naprawę narzędzi i drugie życie:
+
+* **Wędkarstwo** – nowa **wędka** (3 patyki + 2 struny u stołu). `PPM` zarzuca pływak: przy brzegu, na rzece albo na oceanie czeka **4–11 s**, potem ryba bierze i masz **1,7 s** na kliknięcie. Wyciągnięty łup ląduje w ekwipunku – **70% to ryby** (surowa ryba 2 pkt głodu, surowy łosoś 2 pkt + regeneracja), a **30% to śmieci z plaży** (struna, skóra, kość, patyk, krzemień, nasiona). `PPM` w powietrzu **wciąga przynętę**, a zbyt długo zignorowany pływak przepływa. Piec i ognisko pieczą ryby tak samo jak mięso, a ugotowana ryba jest dwukrotnie sycąca.
+* **Lorneta** (4 szkła + sztabka złota) – przytrzymane `PPM` **zwęża pole widzenia do 24°** (czarne winiety, celownik znika) i spowalnia rozglądanie do 0,4×, więc można wypatrzyć jaskinię albo wioskę z drugiego końca plaży. Nie da się jej zakląć ani użyć jako broni.
+* **Działające kowadło** – `PPM` przy bloku otwiera ekran z trzema slotami. **Dwa zniszczone narzędzia tego samego typu** dają jeden przedmiot, w którym wytrzymałości się sumują, a zaklęcia zachowują najlepszy poziom (maks. 3). W polu nazwy nadajesz przedmiotowi **własne imię** (do 28 znaków) – wskazówka, ekwipunek, skrzynie, skrzynie TNT i wszystkie okna pokazują je złotą kursywą, a nazwa nie znika przy łączeniu, dzieleniu stosu ani po śmierci. Operacja kosztuje **1 poziom doświadczenia**; stan kowadła (także w Netherze) zapisuje się ze światem, a zniszczenie bloku wysypuje jego zawartość na ziemię. Nowe osiągnięcie: „Kowal”.
+* **Totem Ratowania** (4 szmaragdy + sztabka złota) – **zabity w ostatnim zdrowiu nie ginie**: totem w ekwipunku zużywa się, wstajesz z 6 sercami, zapełnionym brzuchem i 6 sekundami regeneracji, a ekran śmierci w ogóle się nie pojawia. Nowe osiągnięcie: „Nieśmiertelny”.
+* **HUD podczas wędkowania** – pasek brań nad ekwipunkiem pokazuje, czy przynęta czeka, „🎣 Brań!” (biały błysk pływaka i drganie), czy właśnie leci z wodą, a pasek cierpliwości odlicza ostatnie sekundy.
+* **Osiągnięcia i dziennik** – cztery nowe cele (rybak, geodeta, kowal, nieśmiertelny) i ósmy rozdział dziennika przygód, „Wyprawa i ratunek”.
+* **Naprawione błędy**:
+  * **Miecz bije jak topór.** `attackDamage()` kasował obrażenia zależne od poziomu miecza – diamentowy miecz zadawał 4 zamiast 9 obrażeń, dopóki nie trafił na zaklęcie Ostrość.
+  * **Blok szlamu nie odbijał.** Warunek `wasGround === false` nigdy nie był prawdą, więc wskoczenie na szlam kończyło się jak zwykłe lądowanie. Reguła odbicia żyje teraz w `physics.slimeBounce()` i ma testy.
+  * **Połówka stosu gubiła zaklęcia i nazwę.** `Shift + LPM` dzielił stos, zrzucając wytrzymałość, zaklęcia i własną nazwę – teraz wszystko jest zachowywane (także w siatce rzemieślniczej i przy przenoszeniu między skrzynią, piecem a kowadłem). Stosy o różnych nazwach nie łączą się już w jeden.
+  * **ŚPM działał tylko na pasku.** Wybranie bloku, który leżał głębiej w ekwipunku, nic nie robiło; teraz przedmiot zamienia się miejscami z trzymanym.
+  * **Rudy bez doświadczenia.** Ruda czerwonego kamienia, kwarcu i szmaragdu nie zrzucała kulek XP (teraz 5 / 2 / 6).
+  * **Klawiatura „jadła” znaki.** Naciskanie klawiszy w polu nazwy przedmiotu (kowadło) albo w czacie nie działało – obsługa klawiatury ignoruje teraz aktywne `input`/`textarea`.
+  * **Import zapisów nie czyścił nazw.** Nazwa świata z pliku `.json` mogła zawierać znaki sterujące – import oczyszcza ją i skraca tak samo jak wpis w menu.
+  * **Płyty łączone magiczną zmienną.** Kod stawiał blok „na szczycie” przez podmienną prywatnego pola silnika – teraz jest czysta funkcja `slabFullBlock()`.
+  * **Wędka i lorneta były zaklęwalne.** `targetsOf()` przemycał je jako cel zaklęcia (dzięki `as Target`); teraz zaklęcia ich nie dotyczą.
 
 **Wersja 2.2 „Szlak odkrywcy”** rozbudowuje właściwą rozgrywkę i naprawia sterowanie na telefonach:
 
@@ -12,7 +31,7 @@ Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce �
 
 **Wersja 2.1 „Dziennik przygód”** rozbudowuje eksplorację i ułatwia ogarnianie zapisów:
 
-* **Dziennik przygód** (`J` lub przycisk w pauzie) śledzi postęp w siedmiu rozdziałach: od pierwszych narzędzi i schronienia, przez wioskę i zaklinanie, aż po wyprawę do Netheru. Cele aktualizują się na podstawie odblokowanych osiągnięć, a dziennik pokazuje pasek postępu, współrzędne, biom, dzień, poziom, seed i pełną listę osiągnięć. Wpisy można filtrować i wyszukiwać.
+* **Dziennik przygód** (`J` lub przycisk w pauzie) śledzi postęp w rozdziałach: od pierwszych narzędzi i schronienia, przez wioskę i zaklinanie, aż po wyprawę do Netheru (w 2.3 doszedł ósmy rozdział „Wyprawa i ratunek”). Cele aktualizują się na podstawie odblokowanych osiągnięć, a dziennik pokazuje pasek postępu, współrzędne, biom, dzień, poziom, seed i pełną listę osiągnięć. Wpisy można filtrować i wyszukiwać.
 * **Usprawnione menu światów** – wyszukiwanie po nazwie, ziarnie i trybie (z obsługą polskich znaków), sortowanie według ostatniego zapisu, nazwy albo długości rozgrywki oraz widoczny limit 8 zapisów. Menu i lista światów przewijają się na małych ekranach; elementy mają czytelne obramowanie fokusu klawiatury i respektują ustawienie ograniczenia animacji systemu.
 
 **Wersja 2.0 „Mobilny skok”** to potężny update skupiony na interfejsie i urządzeniach mobilnych:
@@ -75,6 +94,10 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | motyka + `PPM` | grządka pod pszenicę |
 | `PPM` na wilku z surowym mięsem | zatamej wilka (podąża i broni gracza) |
 | `PPM` na stole zaklęć | ekran zaklęć (wrzuć przedmiot, wybierz ofertę) |
+| `PPM` na kowadle | ekran kowadła (scal dwa narzędzia, nadaj nazwę) (2.3) |
+| wędka: `PPM` | zarzuć przynętę; `PPM` przy brań łapie rybę (2.3) |
+| wędka: `PPM` w powietrzu | wciągnij przynętę (2.3) |
+| lorneta: przytrzymaj `PPM` | przybliżenie 24° (2.3) |
 | `PPM` na mieszkańcu | ekran handlu (wymiana towarów na szmaragdy i odwrotnie) |
 | `PPM` na dzwonie | zwołanie mieszkańców na plac |
 | łopata + `PPM` na trawie | ścieżka (jak w wioskach) |
@@ -97,6 +120,7 @@ Gra wykrywa ekran dotykowy i włącza pełne sterowanie kieszonkowe:
 * duże przyciski po prawej – **skok** (2× tap w trybie kreatywnym = latanie), **skradanie / lot w dół**, **✈ latanie**; w trybie *Przyciski* także **⛏** i **▣** celujące w środek ekranu,
 * **pasek górny** – pauza, ekwipunek, czat i pełny ekran,
 * **tap w slot paska** na dole wybiera przedmiot,
+* **wędka i lorneta na dotyku** – tap wędką zarzuca (i wciąga) przynętę, a lorneta działa jak przełącznik: pierwsze dotknięcie przybliża, drugie wraca (2.3),
 * **auto-skok** wskakuje na 1-blokowe schodki, gdy idziesz w przeszkodę (można wyłączyć),
 * **wibracje** potwierdzają kopanie i obrażenia, a **Wake Lock** nie pozwala ekranowi zgasnąć,
 * w pionie pojawia się dyskretna podpowiedź „obróć telefon”.
@@ -179,6 +203,10 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 * **Ponad 60 bloków** (teraz także ruda lazurytu, blok lazurytu, stół zaklęć, trzcina, ścieżka, siano, latarnia, ruda i blok szmaragdu oraz dzwon) (trawa, rudy, wełna, TNT, obsydian, pochodnia, sadzonki, grządka, pszenica, łóżko, rozpalony piec) z proceduralnie rysowaną teksturą 16×16 px – atlas + ikony 3D do ekwipunku.
 * **Światło blokowe**: pochodnie, lawa i rozpalony piec rozjaśniają jaskinie także w nocy.
 * **Narzędzia** (drewno, kamień, żelazo, diament): kilof, siekiera, łopata, miecz i motyka. Mają wytrzymałość i przyspieszają kopanie właściwych bloków. Węgiel chce dowolnego kilofa, żelazo i złoto – kamiennego, diamenty – żelaznego, obsydian – diamentowego.
+* **Wędkarstwo (2.3)**: **wędka** (3 patyki + 2 struny) zanurza pływak, ryba bierze po 4–11 s, a kliknięcie `PPM` w 1,7-sekundowym oknie wciąga zdobycz. 70% zarzuceń to ryba albo łosoś (do pieczenia w piecu lub na ognisku), 30% to śmieci z plaży, a po 45 s pływak przepływa. Pływak znika przy zmianie wymiaru i przy zamknięciu karty, a jego stan zapisuje się ze światem.
+* **Lorneta (2.3)**: 4 szkła i sztabka złota dają przybliżenie 24° z winietą i spowolnionym rozglądaniem (0,4× czułości) – do wypatrywania jaskiń, wioskek i mobów.
+* **Kowadło (2.3)**: blok stawiany jak każdy inny otwiera ekran z dwoma wejściami i wynikiem. Dwa zniszczone narzędzia tego samego typu łączą się (suma wytrzymałości, najlepsze zaklęcia, maks. 3), a pole nazwy pozwala nadać przedmiotowi własne imię do 28 znaków. Każda operacja kosztuje 1 poziom doświadczenia, zawartość kowadła zapisuje się ze światem (także w Netherze), a po rozbiciu bloku wypada na ziemię razem z jego wytrzymałością i zaklęciami.
+* **Totem Ratowania (2.3)**: 4 szmaragdy i sztabka złota. Pierwszy cios, który zabiłby gracza, zużywa totem zamiast wersji ze śmiercią – 6 serc, pełny brzuch i 6 s regeneracji. W trybie kreatywnym nie działa, bo tam nie ma obrażeń.
 * **Głód i jedzenie**: jabłka z liści, surowe i pieczone mięso, chleb z pszenicy. Regeneracja działa tylko przy pełnym brzuchu; sprint wymaga jedzenia.
 * **Piec**: PPM otwiera przetapianie (ruda → sztabka, piasek → szkło, pień → węgiel drzewny, mięso). Paliwem jest węgiel, deski, patyki albo pnie.
 * **Uprawa**: motyka robi grządkę, nasiona (z trawy) rosną w pszenicę szybciej przy wodzie. Sadzonki z liści wyrastają w drzewa.
@@ -200,7 +228,7 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 * **Dom**: dwublokowe drzwi (PPM otwiera), skrzynia na 27 slotów, drabina, płot, właz i ognisko, na którym piecze się mięso. Moby nie przeskakują płotu ani zamkniętych drzwi.
 * **Jaskinie** czasem kryją starą skrzynię z pochodniami, jedzeniem i rzadziej żelazem albo diamentem.
 * **Nożyce** zbierają liście i wełnę z żywej owcy. Żwir czasem daje krzemień, a krzesiwo podpala TNT. Kompas wskazuje punkt odrodzenia, zegar porę dnia.
-* **Osiągnięcia** za drewno, kilof, diament, sen, creepera, dom, łuk, strunę, lazuryt, książkę, stół zaklęć, pierwsze zaklęcie, a od 1.6 także za odkrycie wioski, pierwszą wymianę, 25 wymian („Kupiec”), szmaragd, spotkanie golema i dzwon, a od 1.9 za teleportację perłą Endu.
+* **Osiągnięcia** za drewno, kilof, diament, sen, creepera, dom, łuk, strunę, lazuryt, książkę, stół zaklęć, pierwsze zaklęcie, a od 1.6 także za odkrycie wioski, pierwszą wymianę, 25 wymian („Kupiec”), szmaragd, spotkanie golema i dzwon, a od 1.9 za teleportację perłą Endu, a od 2.3 za złowioną rybę, rozpoznanie okolicy lornetą, scalenie narzędzi i ocalenie z Totemem Ratowania.
 * **Linki do świata**: w pauzie przycisk *„Kopiuj link do świata”* zapisuje ziarno i tryb w adresie (`#seed=1234&mode=creative`) – po otwarciu takiego linku menu jest już wypełnione.
 * **Pełny ekran** jednym przyciskiem (menu główne i pauza) oraz **usuwanie zapisu** z menu głównego.
 * **Awaryjne komunikaty**: brak WebGL, błąd inicjalizacji czy zablokowany dźwięk nie zostawiają czarnej strony.
@@ -227,6 +255,7 @@ src/
     InventoryScreen.tsx    # ekwipunek i crafting
     EnchantScreen.tsx      # stół zaklęć (1.5)
     TradeScreen.tsx        # handel z mieszkańcami (1.6)
+    AnvilScreen.tsx        # 2.3: ekran kowadła (scalanie i nazwy przedmiotów)
     TouchControls.tsx      # 2.0: pełne sterowanie dotykowe (drążek, tapnij/przytrzymaj)
   utils/
     settings.ts            # ustawienia gracza + presety jakości
@@ -241,7 +270,9 @@ src/
     textures.ts            # proceduralny atlas tekstur i ikony
     physics.ts             # kolizje i ruch
     mobs.ts                # moby i ich AI (w tym tamed wilki)
-    inventory.ts           # ekwipunek i receptury
+    inventory.ts           # ekwipunek, stosy z nazwami i receptury
+    fishing.ts             # 2.3: tabele połowu, czas brań, pieczenie ryb
+    anvil.ts               # 2.3: reguły kowadła (scalanie, nazwy, koszt)
     armor.ts               # statystyki pancerza i redukcja obrażeń
     enchant.ts             # zaklęcia: dane, oferty stołu, efekty (1.5)
     xp.ts                  # krzywa poziomu doświadczenia
@@ -263,8 +294,8 @@ npm run test:ui     # tylko test interfejsu React
 
 Runner `.harness/run.mjs` bundluje testy przez **esbuild** i uruchamia je w Node – nie trzeba niczego instalować dodatkowo.
 
-`.harness/smoke.ts` to asercje na czysty silnik: generowanie świata (także płaskiego), bloki, przedmioty, ekwipunek i receptury (w tym papier, książka, biblioteczka i stół zaklęć), **system zaklęć** (dopasowanie, oferty, pierścień biblioteczek, zużycie XP i lazurytu, dropy ze Szczęściem i Jedwabnym Dotykiem), fizyka, AI mobów, piece i skrzynie, zapisy, osiągnięcia, tekstury oraz algorytm opadania liści – wszystko bez WebGL.
-`.harness/ui.tsx` renderuje menu przez `react-dom/server` (bez przeglądarki), a gdy zainstalowany jest `jsdom` (`npm i --no-save jsdom`) montuje całe `<App/>`, przechodzi tworzenie świata i sprawdza, że brak WebGL kończy się czytelnym komunikatem, a nie białą stroną. Bez jsdom ten drugi krok jest pomijany.
+`.harness/smoke.ts` to asercje na czysty silnik: generowanie świata (także płaskiego), bloki, przedmioty, ekwipunek i receptury (w tym papier, książka, biblioteczka i stół zaklęć), **system zaklęć** (dopasowanie, oferty, pierścień biblioteczek, zużycie XP i lazurytu, dropy ze Szczęściem i Jedwabnym Dotykiem), fizyka, AI mobów, piece i skrzynie, zapisy, osiągnięcia, tekstury oraz algorytm opadania liści – wszystko bez WebGL. Od 2.3 dołączyły **tabele połowu i czas brań, receptury wędki/lornety/totemu, reguły kowadła (scalanie, nazwy, koszt poziomu) razem z kowadłem w silniku, Totem Ratowania w `damage()` oraz zestaw naprawionych błędów** (dzielenie stosu, ŚPM poza paskiem, import nazw, odbicie szlamu, obrażenia miecza, XP z rud).
+`.harness/ui.tsx` renderuje menu przez `react-dom/server` (bez przeglądarki), a gdy zainstalowany jest `jsdom` (`npm i --no-save jsdom`) montuje całe `<App/>`, przechodzi tworzenie świata i sprawdza, że brak WebGL kończy się czytelnym komunikatem, a nie białą stroną. Bez jsdom ten drugi krok jest pomijany. Od 2.3 renderuje też **ekran kowadła** (oba wejścia, wynik z kosztem, ostrzeżenie o braku poziomów, pole nazwy) i sprawdza **nowy rozdział dziennika przygód**.
 
 ## 🛠️ Rozwiązywanie problemów
 

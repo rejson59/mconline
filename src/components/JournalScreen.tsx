@@ -13,6 +13,7 @@ export const JOURNAL_CHAPTERS = [
   { title: 'Sztuka zaklinania', text: 'Zbierz składniki i ulepsz wyposażenie magią.', goals: ['lapis', 'book', 'table', 'enchant'] },
   { title: 'Za portalem', text: 'Zbuduj przejście i poznaj niebezpieczeństwa Netheru.', goals: ['portal', 'nether', 'quartz', 'ghast'] },
   { title: 'Dalsze horyzonty', text: 'Staw czoła Endermanowi i wykorzystaj moc jego perły.', goals: ['enderman', 'pearl'] },
+  { title: 'Wyprawa i ratunek', text: 'Złów rybę, przyjrzyj się okolicy i zadbaj o narzędzia.', goals: ['fisher', 'surveyor', 'smith', 'undying'] },
 ] as const;
 
 export function journalProgress(unlocked: string[]) {

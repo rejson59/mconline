@@ -6,7 +6,9 @@ import { enchList } from '../game/enchant';
 export function stackTooltip(s: Stack | null | undefined, fallback = ''): string {
   if (!s) return fallback;
   const list = enchList(s);
-  return list.length ? `${displayName(s.id)}\n§5${list.join('\n')}` : displayName(s.id);
+  // 2.3: przedmiot przemieniony w kowadle ma własną nazwę (jak w klasyku).
+  const name = s.name ? `§e${s.name}§r\n${displayName(s.id)}` : displayName(s.id);
+  return list.length ? `${name}\n§5${list.join('\n')}` : name;
 }
 
 /** Renders the §5 marker as a purple span; everything else stays default. */
@@ -16,7 +18,7 @@ export function TooltipBody({ text }: { text: string }) {
     <>
       {parts.map((part, i) =>
         i === 0 ? (
-          <span key={i}>{part}</span>
+          <span key={i}>{renderNames(part)}</span>
         ) : (
           <span key={i} className="ench-name">
             {i > 1 ? '\n' : ''}
@@ -25,5 +27,12 @@ export function TooltipBody({ text }: { text: string }) {
         )
       )}
     </>
+  );
+}
+
+/** Splits a chunk on the §e / §r markers used for anvil item names. */
+function renderNames(text: string) {
+  return text.split(/§[er]/).map((part, i) =>
+    i === 1 ? <span key={i} className="item-name">{part}</span> : <span key={i}>{part}</span>
   );
 }

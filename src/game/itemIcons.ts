@@ -1013,6 +1013,140 @@ const ART: Record<number, [Record<string, string>, string[]]> = {
       '..DDD...........',
       '................',
     ]],
+
+  // -- 2.3 „Wyprawa i ratunek” ---------------------------------------------------------
+  // Surowa ryba: srebrno-zielona, spiczony ogon
+  243: [
+    {
+      M: '#b9a184',
+      L: '#e2d2bb',
+      D: '#7e6a52',
+      W: '#3f6f6a',
+      E: '#c4453f',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '..D...DDDDDDDD..',
+      '.DD..DWWWWWWWWD.',
+      'DD..DMMMMMMMEEMM',
+      'DD..DMMMMMMDMMMM',
+      'DD..DMMMMMMMMMMM',
+      'DD...DLLLLLLLLD.',
+      '.DD...DDDDDDDD..',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+    ]],
+  // Pieczona ryba: zlota skorka i przypalony ogon
+  244: [
+    {
+      M: '#d29a58',
+      L: '#f0c184',
+      D: '#8a5c2c',
+      W: '#7a4a22',
+      E: '#c4453f',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '..D...DDDDDDDD..',
+      '.DD..DWWWWWWWWD.',
+      'DD..DMMMMMMMEEMM',
+      'DD..DMMMMMMDMMMM',
+      'DD..DMMMMMMMMMMM',
+      'DD...DLLLLLLLLD.',
+      '.DD...DDDDDDDD..',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+    ]],
+  // Surowy losos: rozowy z jasnym grzbietem
+  245: [
+    {
+      M: '#e08a6a',
+      L: '#f6bda6',
+      D: '#a4563c',
+      W: '#f2d9cf',
+      E: '#c4453f',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '..D...DDDDDDDD..',
+      '.DD..DWWWWWWWWD.',
+      'DD..DMMMMMMMEEMM',
+      'DD..DMMMMMMDMMMM',
+      'DD..DMMMMMMMMMMM',
+      'DD...DLLLLLLLLD.',
+      '.DD...DDDDDDDD..',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+    ]],
+  // Pieczony losos: ciemniejszy, z przypaleniem
+  246: [
+    {
+      M: '#e0703a',
+      L: '#f5a06a',
+      D: '#94441e',
+      W: '#6d2f14',
+      E: '#c4453f',
+    }, [
+      '................',
+      '................',
+      '................',
+      '................',
+      '..D...DDDDDDDD..',
+      '.DD..DWWWWWWWWD.',
+      'DD..DMMMMMMMEEMM',
+      'DD..DMMMMMMDMMMM',
+      'DD..DMMMMMMMMMMM',
+      'DD...DLLLLLLLLD.',
+      '.DD...DDDDDDDD..',
+      '................',
+      '................',
+      '................',
+      '................',
+      '................',
+    ]],
+  // Totem Ratowania: glowka z nasadia, swiecace oczy i klejnot
+  248: [
+    {
+      M: '#c9963a',
+      L: '#f0d27a',
+      D: '#8a5f18',
+      W: '#fff4c0',
+      K: '#241808',
+      G: '#3aa87a',
+    }, [
+      '................',
+      '....DDDDDDDD....',
+      '..DDMMMMMMMMDD..',
+      '.DMMMMMMMMMMMMD.',
+      '.DLMMMMMMMMMMMD.',
+      '.DLMWWW.WW.LD...',
+      '.DLMWKK.KK.LD...',
+      '.DLMWKK.KK.LD...',
+      '.DLMWWW.WW.LD...',
+      '.DLMMMMMMMMMMMD.',
+      '.DMMMMMMMMMMMMD.',
+      '..DMMMMMMMMMMD..',
+      '..DDMMGGGGMMDD..',
+      '....MMGGGGMM....',
+      '...DDDDDDDDDDD..',
+      '................',
+    ]],
+
 };
 
 // ---------------------------------------------------------------------------
@@ -1201,6 +1335,46 @@ function toolArt(it: ItemDef): string[] {
       '.....wwww.......',
       '................',
       '................',
+    ];
+  }
+  if (k === 'rod') {
+    return [
+      '................',
+      '................',
+      '.........ww.....',
+      '........ww......',
+      '.......ww.......',
+      '......ww........',
+      '.....ww.........',
+      '....ww..........',
+      '...ww...........',
+      '..ww............',
+      '.ww.............',
+      'wwd.............',
+      'ww..............',
+      '..vv............',
+      '...vv...........',
+      '....vv..........',
+    ];
+  }
+  if (k === 'spyglass') {
+    return [
+      '................',
+      '................',
+      '................',
+      '...DDD...DDD....',
+      '..DLLD..DLLD....',
+      '..DLLD..DLLD....',
+      '..DLLD..DLLD....',
+      '...DDHDHDDD.....',
+      '.....DHD........',
+      '....DHHHD.......',
+      '...DHHLLHD......',
+      '...DHLLLHD......',
+      '...DHLLLHD......',
+      '...DHHLLHD......',
+      '....DHHHD.......',
+      '.....DDD........',
     ];
   }
   // shield
