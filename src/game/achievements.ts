@@ -40,6 +40,13 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'table', title: 'Zaklinacz', text: 'Postaw stół zaklęć.' },
   { id: 'enchant', title: 'Pierwsze zaklęcie', text: 'Zaklnij przedmiot w stole zaklęć.' },
   { id: 'enchant_master', title: 'Mistrz zaklęć', text: 'Wytwarzaj zaklęcie na poziomie 4 lub wyżej.' },
+  // 1.6 „Wioska”
+  { id: 'village', title: 'Osada', text: 'Traf na wioskę i poznaj jej mieszkańców.' },
+  { id: 'trade', title: 'Handlarz', text: 'Wymień coś z mieszkańcem.' },
+  { id: 'merchant', title: 'Kupiec', text: 'Dokonaj 25 wymian.' },
+  { id: 'emerald', title: 'Zielone złoto', text: 'Zdobądź szmaragd.' },
+  { id: 'golem', title: 'Żelazny stróż', text: 'Spotkaj żelaznego golema.' },
+  { id: 'bell', title: 'Bij dzwon', text: 'Zadzwoń dzwonem na wioskowym placu.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

@@ -55,6 +55,7 @@ export const I = {
   LAPIS: 150,
   PAPER: 151,
   BOOK: 152,
+  EMERALD: 153,
   LEATHER: 200,
   LEATHER_HELMET: 201,
   LEATHER_CHEST: 202,
@@ -165,6 +166,7 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.LAPIS, name: 'Lazuryt', keys: ['lazuryt', 'lapis', 'lapis_lazuli'], kind: 'material', color: '#3a5fd0' },
   { id: I.PAPER, name: 'Papier', keys: ['papier', 'paper'], kind: 'material', color: '#f2f2ee' },
   { id: I.BOOK, name: 'Książka', keys: ['ksiazka', 'książka', 'book'], kind: 'material', color: '#9a4a3a' },
+  { id: I.EMERALD, name: 'Szmaragd', keys: ['szmaragd', 'emerald'], kind: 'material', color: '#2ed06a' },
   { id: I.LEATHER, name: 'Skóra', keys: ['skora', 'skóra', 'leather'], kind: 'material', color: '#8a5a3b' },
   { id: I.SHIELD, name: 'Tarcza', keys: ['tarcza', 'shield'], kind: 'tool', tool: 'shield', durability: 300, color: '#8a6a3a' },
 ];
@@ -286,14 +288,15 @@ const PICK_BLOCKS = new Set<number>([
   B.STONE, B.COBBLE, B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.BRICK, B.FURNACE,
   B.FURNACE_ON, B.OBSIDIAN, B.STONE_BRICKS, B.SANDSTONE, B.MOSSY, B.ICE, B.GLOWSTONE, B.BEDROCK,
   B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK, B.LAPIS_ORE, B.LAPIS_BLOCK, B.ENCHANT,
+  B.EMERALD_ORE, B.EMERALD_BLOCK, B.LANTERN, B.BELL,
 ]);
 const AXE_BLOCKS = new Set<number>([
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED,
 ]);
 const SHOVEL_BLOCKS = new Set<number>([
-  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND,
+  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH,
 ]);
-const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE]);
+const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE]);
 
 export function isOre(id: number): boolean {
   return ORES.has(id);
@@ -310,6 +313,8 @@ export function requiredPickTier(blockId: number): number {
   if (blockId === B.DIAMOND_ORE) return 3;
   if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return 2;
   if (blockId === B.LAPIS_ORE) return 2;
+  if (blockId === B.EMERALD_ORE) return 3;
+  if (blockId === B.EMERALD_BLOCK) return 2;
   if (blockId === B.GOLD_BLOCK || blockId === B.DIAMOND_BLOCK) return 3;
   if (blockId === B.IRON_BLOCK) return 2;
   if (PICK_BLOCKS.has(blockId)) return 1;
@@ -398,7 +403,7 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
       return [{ id: blockId, count: 1 }];
     }
     if (blockId === B.COAL_ORE || blockId === B.DIAMOND_ORE || blockId === B.IRON_ORE || blockId === B.GOLD_ORE ||
-        blockId === B.LAPIS_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.ICE ||
+        blockId === B.LAPIS_ORE || blockId === B.EMERALD_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.ICE ||
         blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
         blockId === B.FARMLAND || (blockId >= B.CROP0 && blockId <= B.CROP3)) {
       return [{ id: blockId, count: 1 }];
@@ -410,6 +415,7 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   if (blockId === B.GRAVEL) return Math.random() < 0.12 ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
   if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
   if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
+  if (blockId === B.EMERALD_ORE) return tier >= 3 ? [{ id: I.EMERALD, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
   if (blockId === B.LAPIS_ORE) return tier >= 2 ? [{ id: I.LAPIS, count: 4 + Math.floor(Math.random() * 4) + (fortune ? Math.floor(Math.random() * (fortune + 1)) * 2 : 0) }] : [];
   if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return tier >= 2 ? [{ id: blockId, count: 1 }] : [];
   if (blockId === B.LEAVES) {
@@ -472,6 +478,7 @@ export function fuelSeconds(id: number): number {
   if (id === I.COAL || id === B.COAL_ORE) return 32;
   if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || id === B.CHEST || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
   if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || isLadder(id)) return 2;
+  if (id === B.HAY) return 6;
   if (id === B.WOOL_WHITE || id === B.WOOL_RED || id === B.WOOL_BLUE || id === B.WOOL_GREEN || id === B.WOOL_YELLOW || id === B.WOOL_BLACK) return 3;
   const it = ITEMS[id];
   if (it?.tool && it.tier === 1) return 4;

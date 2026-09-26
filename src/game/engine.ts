@@ -27,9 +27,27 @@ import { achievementById } from './achievements';
 import { upsertSave } from './saves';
 import { Xp } from './xp';
 import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT } from './armor';
+import {
+  applyTrade,
+  canTrade,
+  offersFor,
+  professionFor,
+  restockIfDue,
+  restockIn,
+  usesLeft,
+  villagerLevel,
+  villagerProgress,
+  villagerTitle,
+  PROFESSIONS,
+  createVillagerState,
+  type TradeOffer,
+  type VillagerState,
+} from './trading';
+import { villageSpawnSpots } from './village';
+import { isVillageMob } from './mobs';
 
 export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant';
+export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade';
 
 export interface HUDState {
   hotbar: (Stack | null)[];
@@ -74,6 +92,22 @@ export interface HUDState {
   armor: (Stack | null)[];
   /** Sum of armor points of the equipped pieces. */
   armorPoints: number;
+  /** 1.6: co jest pod celownikiem (mob) – nazwa i wskazówka. */
+  mobHint: string | null;
+  /** 1.6: opis najbliższej wioski, gdy gracz jest na jej terenie. */
+  village: string | null;
+  /** 1.6: liczba udanych wymian z mieszkańcami. */
+  trades: number;
+}
+
+export interface TradeRow {
+  /** Pozycja oferty w liście – podawana do tradeWith(). */
+  index: number;
+  offer: TradeOffer;
+  /** Ile wymian zostało do wyczerpania zapasów. */
+  left: number;
+  max: number;
+  blocked: 'ok' | 'uses' | 'items';
 }
 
 export interface SaveData {
@@ -99,9 +133,26 @@ export interface SaveData {
   weather?: 'clear' | 'rain';
   xp?: number;
   armor?: (Stack | null)[];
+  /** 1.6: licznik wymian (osiągnięcie „Kupiec”). */
+  trades?: number;
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
+
+/** Polskie nazwy mobów – używane w podpowiedzi pod celownikiem. */
+export const MOB_NAMES: Record<MobType, string> = {
+  pig: 'Świnia',
+  sheep: 'Owca',
+  cow: 'Krowa',
+  chicken: 'Kurczak',
+  wolf: 'Wilk',
+  zombie: 'Zombie',
+  creeper: 'Creeper',
+  spider: 'Pająk',
+  skeleton: 'Szkielet',
+  villager: 'Mieszkaniec',
+  golem: 'Żelazny golem',
+};
 
 /** A sand/gravel block tumbling down until it lands. */
 interface FallingBlock {
@@ -301,6 +352,13 @@ export class Game {
   enchantPos: { x: number; y: number; z: number } | null = null;
   enchantItem: Stack | null = null;
   enchOptions: EnchOption[] = [];
+  /** 1.6: mieszkaniec, z którym właśnie handlujemy. */
+  tradeMob: Mob | null = null;
+  /** 1.6: liczba udanych wymian i wioski już odwiedzone w tej sesji. */
+  trades = 0;
+  private villageSeen = new Set<string>();
+  private villageName: string | null = null;
+  private villageCheck = 0;
   worldId = '';
   worldName = 'Świat';
   worldType: 'normal' | 'flat' = 'normal';
@@ -494,6 +552,7 @@ export class Game {
       for (const id of opts.save.unlocked ?? []) this.unlocked.add(id);
       this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
       this.xp = new Xp(opts.save.xp ?? 0);
+      this.trades = opts.save.trades ?? 0;
       if (opts.save.armor) {
         for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
           const s = opts.save.armor[i];
@@ -525,7 +584,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 1.5 „Zaklęcia”: ruda lazurytu, papier, książki i stół zaklęć. Szukaj trzciny nad wodą!');
+      : 'BlockCraft 1.6 „Wioska”: szukaj osad z mieszkańcami – PPM na mieszkańcu otwiera handel. /village pokaże najbliższą.');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -655,7 +714,7 @@ export class Game {
 
   private onKeyDown(e: KeyboardEvent) {
     if (this.ui === 'chat') return;
-    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant') {
+    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade') {
       if (e.code === 'KeyE' || e.code === 'Escape') {
         e.preventDefault();
         this.closeInventory();
@@ -716,6 +775,8 @@ export class Game {
         if (left) this.spawnDrop(left.id, left.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, left.dur, undefined, undefined, undefined, left.ench);
       }
     }
+    // …i dla mieszkańca, z którym właśnie handlowano.
+    if (s !== 'trade' && this.tradeMob) this.tradeMob = null;
     // …same for the item waiting in the enchanting table.
     if (s !== 'enchant' && this.enchantItem) {
       const it = this.enchantItem;
@@ -742,6 +803,103 @@ export class Game {
     this.enchantPos = null;
     this.setUI('playing');
     this.emitHud();
+  }
+
+  // ---------- Handel z mieszkańcami (1.6) ----------
+
+  openTrade(mob: Mob) {
+    if (mob.type !== 'villager' || mob.dead) return;
+    if (!mob.trade) mob.trade = createVillagerState(mob.profession, this.nowSeconds());
+    this.tradeMob = mob;
+    this.setUI('trade');
+  }
+
+  closeTrade() {
+    this.tradeMob = null;
+    this.setUI('playing');
+    this.emitHud();
+  }
+
+  /** Czas w sekundach – używany do uzupełniania zapasów mieszkańców. */
+  private nowSeconds(): number {
+    return performance.now() / 1000;
+  }
+
+  /** Nazwa rozmówcy razem z jego poziomem („Rolnik (Czeladnik)”). */
+  tradeTitle(): string {
+    const st = this.tradeMob?.trade;
+    return st ? villagerTitle(st) : 'Mieszkaniec';
+  }
+
+  tradeLevel(): number {
+    const st = this.tradeMob?.trade;
+    return st ? villagerLevel(st) : 1;
+  }
+
+  tradeProgress(): number {
+    const st = this.tradeMob?.trade;
+    return st ? villagerProgress(st) : 0;
+  }
+
+  /** Ile sekund zostało do uzupełnienia zapasów. */
+  tradeRestockIn(): number {
+    const st = this.tradeMob?.trade;
+    return st ? restockIn(st, this.nowSeconds()) : 0;
+  }
+
+  /** Bieżące oferty mieszkańca, gotowe do wyświetlenia. */
+  tradeRows(): TradeRow[] {
+    const st = this.tradeMob?.trade;
+    if (!st) return [];
+    restockIfDue(st, this.nowSeconds());
+    return offersFor(st).map((offer, index) => ({
+      index,
+      offer,
+      left: usesLeft(st, offer),
+      max: offer.uses,
+      blocked: this.tradeBlocked(st, offer),
+    }));
+  }
+
+  private tradeBlocked(st: VillagerState, offer: TradeOffer): 'ok' | 'uses' | 'items' {
+    if (usesLeft(st, offer) <= 0) return 'uses';
+    // W trybie kreatywnym towar jest darmowy (zapasy nadal obowiązują).
+    if (this.mode === 'creative') return 'ok';
+    return canTrade(st, this.inventory, offer);
+  }
+
+  /** Wykonuje wymianę o podanym numerze. Zwraca false, gdy się nie udała. */
+  tradeWith(i: number): boolean {
+    const st = this.tradeMob?.trade;
+    if (!st) return false;
+    const row = this.tradeRows()[i];
+    if (!row) return false;
+    if (row.blocked === 'uses') {
+      this.message('Zapasy tej oferty się wyczerpały – mieszkaniec uzupełni je po chwili.');
+      return false;
+    }
+    if (row.blocked === 'items') {
+      this.message('Nie masz dość towaru na tę wymianę.');
+      return false;
+    }
+    const before = villagerLevel(st);
+    if (this.mode === 'creative') {
+      this.inventory.add(row.offer.get.id, row.offer.get.count);
+      st.used[row.offer.key] = (st.used[row.offer.key] ?? 0) + 1;
+      st.xp += row.offer.xp;
+    } else if (!applyTrade(st, this.inventory, row.offer)) {
+      return false;
+    }
+    this.trades++;
+    this.gainXp(row.offer.xp);
+    this.unlock('trade');
+    if (this.trades >= 25) this.unlock('merchant');
+    Sfx.playPop();
+    const got = `${displayName(row.offer.get.id)} ×${row.offer.get.count}`;
+    const after = villagerLevel(st);
+    this.message(after > before ? `${got} – mieszkańcowi przybyło doświadczenia (poziom ${after}).` : `${got} w zamian za towar.`);
+    this.emitHud();
+    return true;
   }
 
   openFurnace(x: number, y: number, z: number) {
@@ -957,6 +1115,7 @@ export class Game {
     if (id === I.IRON) this.unlock('iron');
     if (id === I.WHEAT) this.unlock('farm');
     if (id === I.LAPIS) this.unlock('lapis');
+    if (id === I.EMERALD) this.unlock('emerald');
     if (id === B.SUGARCANE) this.unlock('cane');
   }
 
@@ -1037,7 +1196,10 @@ export class Game {
 
   /** Mobs drop XP worth their type: hostiles 3–7, passives 1–3, wolves 2–5. */
   private mobXp(m: Mob, x: number, y: number, z: number) {
-    const total = m.type === 'wolf'
+    if (m.type === 'villager') return; // wieśniak nie daje doświadczenia
+    const total = m.type === 'golem'
+      ? 5 + Math.floor(Math.random() * 4)
+      : m.type === 'wolf'
       ? 2 + Math.floor(Math.random() * 4)
       : isHostileMob(m.type)
         ? 3 + Math.floor(Math.random() * 5)
@@ -1367,7 +1529,11 @@ export class Game {
     const [cmd, ...args] = txt.slice(1).split(/\s+/);
     switch (cmd.toLowerCase()) {
       case 'help':
-        this.message('Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, /give <nazwa|id> [ilość], /summon <pig|sheep|cow|chicken|wolf|zombie|creeper|spider|skeleton>, /xp <ilość>, /enchant <nazwa> [poziom], /heal, /kill, /seed, /spawn, /clear, /blocks');
+        this.message(
+          'Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, ' +
+            '/give <nazwa|id> [ilość], /summon <mob> [zawód], /village (najbliższa wioska), ' +
+            '/xp <ilość>, /enchant <nazwa> [poziom], /heal, /kill, /seed, /spawn, /clear, /blocks'
+        );
         break;
       case 'enchant': {
         const ench = resolveEnch(args[0] || '');
@@ -1447,12 +1613,39 @@ export class Game {
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
+          villager: 'villager', mieszkaniec: 'villager', wieśniak: 'villager', wiesniak: 'villager',
+          golem: 'golem', zelazny_golem: 'golem', 'żelazny_golem': 'golem',
         };
         const t = map[raw];
-        if (!t) { this.message('Moby: pig, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton'); break; }
+        if (!t) {
+          this.message('Moby: pig, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem');
+          break;
+        }
         const d = this.lookDir();
-        this.spawnMob(t, this.body.pos.x + d.x * 3, this.body.pos.y + 1, this.body.pos.z + d.z * 3);
-        this.message('Przyzwano: ' + t);
+        // Zawód mieszkańca można wybrać: /summon villager kowal
+        let profession = Math.random();
+        if (t === 'villager' && args[1]) {
+          const want = args[1].toLowerCase();
+          const idx = PROFESSIONS.findIndex((pr) => pr.id === want || pr.name.toLowerCase() === want);
+          if (idx < 0) {
+            this.message(`Zawody: ${PROFESSIONS.map((pr) => `${pr.id} (${pr.name})`).join(', ')}`);
+            break;
+          }
+          profession = (idx + 0.5) / PROFESSIONS.length;
+        }
+        const mob = this.spawnMob(t, this.body.pos.x + d.x * 3, this.body.pos.y + 1, this.body.pos.z + d.z * 3, profession);
+        if (t === 'golem') this.unlock('golem');
+        this.message('Przyzwano: ' + (t === 'villager' ? `mieszkańca (${villagerTitle(mob.trade ?? createVillagerState(professionFor(profession), this.nowSeconds()))})` : t));
+        break;
+      }
+      case 'village': case 'wioska': {
+        const near = this.world.nearestVillage(this.body.pos.x, this.body.pos.z, 4);
+        if (!near) { this.message('Nie znalazłem wioski w pobliżu – spróbuj w innym miejscu albo w nowym świecie.'); break; }
+        const v = near.village;
+        this.body.pos.set(v.x + 4.5, v.y + 1.4, v.z + 4.5);
+        this.body.vel.set(0, 0, 0);
+        this.fallStart = this.body.pos.y;
+        this.message(`Wioska ${Math.round(v.x)} ${Math.round(v.z)} – ${Math.round(near.dist)} bloków stąd, ${v.buildings.length} budynków.`);
         break;
       }
       case 'kill':
@@ -1516,6 +1709,7 @@ export class Game {
         unlocked: [...this.unlocked],
         weather: this.weather,
         xp: this.xp.total,
+        trades: this.trades,
         armor: this.armor.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
         updated: Date.now(),
       };
@@ -1732,6 +1926,11 @@ export class Game {
         if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
         // Grabież: remember the level so mobLoot() can roll extras once
         mob.bonusLoot = Math.max(mob.bonusLoot, enchLevel(held, 'looting'));
+        // 1.6: krzywda mieszkańca budzi okoliczne golemy
+        if (mob.type === 'villager') {
+          const n = this.provokeGolems(mob.body.pos.x, mob.body.pos.z, 26, 20);
+          if (n > 0) this.message(n === 1 ? 'Golem w okolicy to zauważył!' : 'Golemy w okolicy to zauważyły!');
+        }
       }
       this.mouseLeft = false;
       return;
@@ -1851,7 +2050,14 @@ export class Game {
     const t = this.target;
     this.placeCooldown = 0.22;
     const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    // Mieszkaniec ma pierwszeństwo – PPM otwiera okno handlu.
+    const vt = this.findMobTarget(4.5);
+    if (vt.mob && vt.mob.type === 'villager' && !vt.mob.dead) {
+      this.openTrade(vt.mob);
+      return;
+    }
     if (t && !sneaking) {
+      if (t.id === B.BELL) { this.ringBell(t.x, t.y, t.z); return; }
       if (isDoor(t.id)) { this.toggleDoor(t.x, t.y, t.z); return; }
       if (isTrap(t.id)) { this.toggleTrap(t.x, t.y, t.z, t.nx, t.nz); return; }
       if (t.id === B.CHEST || t.id === B.LOOT_CHEST) { this.openChest(t.x, t.y, t.z); return; }
@@ -1893,6 +2099,7 @@ export class Game {
     if (isFood(s.id)) { this.tryEat(s); return; }
     if (!t) return;
     if (isHoe(s.id) && this.tryTill(t)) return;
+    if (this.tryMakePath(t)) return;
     if (s.id === I.SEEDS && this.tryPlant(t, s)) return;
     if (s.id === I.BUCKET || s.id === I.WATER_BUCKET || s.id === I.LAVA_BUCKET) {
       this.tryBucket(t, s);
@@ -2276,8 +2483,8 @@ export class Game {
     this.emitHud();
   }
 
-  spawnMob(type: MobType, x: number, y: number, z: number) {
-    const m = new Mob(type, x, y, z);
+  spawnMob(type: MobType, x: number, y: number, z: number, profession = 0) {
+    const m = new Mob(type, x, y, z, profession);
     this.mobs.push(m);
     this.scene.add(m.group);
     return m;
@@ -2297,7 +2504,7 @@ export class Game {
       this.fpsTime = 0;
     }
 
-    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'chat' || this.ui === 'dead';
+    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);
@@ -2313,6 +2520,11 @@ export class Game {
       this.updateFurnaces(dt);
       this.updateWeather(dt);
       this.checkUnderground();
+      this.villageCheck -= dt;
+      if (this.villageCheck <= 0) {
+        this.villageCheck = 1.5;
+        this.checkVillage();
+      }
       this.time = (this.time + dt / 600) % 1;
       if (this.time < dt / 600) {
         this.day++;
@@ -2655,7 +2867,8 @@ export class Game {
       }
     }
     this.mobs = this.mobs.filter((m) => {
-      const far = m.body.pos.distanceTo(p) > 90;
+      // Mieszkańcy i golemy trzymają się osady – nie znikają tuż za jej granicą.
+      const far = m.body.pos.distanceTo(p) > (isVillageMob(m.type) ? 240 : 90);
       const gone = (m.dead && m.deathTime > 0.9) || far || m.body.pos.y < -10;
       if (gone) {
         if (m.dead && !far) this.spawnSmoke(m.body.pos.x, m.body.pos.y + 0.5, m.body.pos.z, 10, 1);
@@ -2699,6 +2912,7 @@ export class Game {
           this.spawnMob(type, pos.x, pos.y + 0.1, pos.z);
         }
       }
+      this.spawnVillageFolk();
       if (hostile < 6) {
         const ang = Math.random() * Math.PI * 2;
         const dist = 14 + Math.random() * 22;
@@ -2889,6 +3103,9 @@ export class Game {
       xpFrac: (() => { const i = this.xp.info(); return i.need > 0 ? i.inLevel / i.need : 0; })(),
       armor: this.armor.map((s) => (s ? { ...s } : null)),
       armorPoints: armorPoints(this.armor),
+      mobHint: this.mobHint(),
+      village: this.villageName,
+      trades: this.trades,
     });
   }
 
@@ -2920,6 +3137,123 @@ export class Game {
     return null;
   }
 
+  /** Nazwa i wskazówka dla istoty pod celownikiem (1.6). */
+  private mobHint(): string | null {
+    const { mob } = this.findMobTarget(4.5);
+    if (!mob || mob.dead) return null;
+    if (mob.type === 'villager') {
+      const st = mob.trade ?? null;
+      return st ? `${villagerTitle(st)} – PPM, aby handlować` : 'Mieszkaniec – PPM, aby handlować';
+    }
+    if (mob.type === 'golem') return mob.provoked > 0 ? 'Żelazny golem (rozgniewany!)' : 'Żelazny golem – stróż osady';
+    return `${MOB_NAMES[mob.type] ?? mob.type} · ${Math.max(0, Math.round(mob.health))}/${mob.maxHealth} HP`;
+  }
+
+  /** Rozgląda się, czy gracz stoi w wiosce; pierwsze wejście to osiągnięcie. */
+  private checkVillage() {
+    const p = this.body.pos;
+    const v = this.world.villageAt(Math.floor(p.x), Math.floor(p.z));
+    if (!v) {
+      this.villageName = null;
+      return;
+    }
+    const folk = this.mobs.filter((m) => !m.dead && m.type === 'villager' && Math.hypot(m.body.pos.x - v.x, m.body.pos.z - v.z) < 60).length;
+    this.villageName = `Wioska · ${v.buildings.length} budynków${folk ? ` · mieszkańcy: ${folk}` : ''}`;
+    if (this.villageSeen.has(v.key)) return;
+    this.villageSeen.add(v.key);
+    this.message('Trafiłeś na wioskę! Mieszkańcy handlują – kliknij na nich PPM.');
+    this.unlock('village');
+    this.emitHud();
+  }
+
+  /** Dzwon na placu: mieszkańcy wracają na środek osady. */
+  private ringBell(x: number, _y: number, z: number) {
+    Sfx.playBell();
+    let n = 0;
+    for (const m of this.mobs) {
+      if (m.type !== 'villager' || m.dead) continue;
+      if (Math.hypot(m.body.pos.x - x, m.body.pos.z - z) > 32) continue;
+      m.yaw = Math.atan2(x - m.body.pos.x, z - m.body.pos.z);
+      m.walking = true;
+      m.aiTimer = 3.5;
+      n++;
+    }
+    this.swingT = 0;
+    this.unlock('bell');
+    this.message(n > 0 ? `Dzwon bije – ${n} mieszkańców wraca na plac.` : 'Dzwon bije nad pustym placem.');
+  }
+
+  /** Łopata na trawie lub ziemi robi ścieżkę (jak w klasyku). */
+  private tryMakePath(t: NonNullable<ReturnType<World['raycast']>>): boolean {
+    const sel = this.selectedStack();
+    if (!sel || ITEMS[sel.id]?.tool !== 'shovel') return false;
+    if (t.ny !== 1) return false;
+    if (t.id !== B.GRASS && t.id !== B.DIRT) return false;
+    const above = this.world.getBlock(t.x, t.y + 1, t.z);
+    if (above !== B.AIR) return false;
+    this.world.setBlock(t.x, t.y, t.z, B.PATH);
+    Sfx.playDig('grass');
+    this.wearTool();
+    this.swingT = 0;
+    return true;
+  }
+
+  /** Golemy w promieniu wpadają w gniew na podany czas. Zwraca ich liczbę. */
+  private provokeGolems(x: number, z: number, radius: number, seconds: number): number {
+    let n = 0;
+    for (const m of this.mobs) {
+      if (m.type !== 'golem' || m.dead) continue;
+      if (Math.hypot(m.body.pos.x - x, m.body.pos.z - z) > radius) continue;
+      m.provoked = Math.max(m.provoked, seconds);
+      n++;
+    }
+    return n;
+  }
+
+  /**
+   * Mieszkańcy i golem pojawiają się na terenie wioski, gdy gracz jest blisko.
+   * Bez tego osada byłaby tylko dekoracją.
+   */
+  private spawnVillageFolk() {
+    const p = this.body.pos;
+    const v = this.world.villageAt(Math.floor(p.x), Math.floor(p.z));
+    if (!v) return;
+    const near = this.mobs.filter((m) => !m.dead && isVillageMob(m.type) && Math.hypot(m.body.pos.x - v.x, m.body.pos.z - v.z) < 64);
+    const villagers = near.filter((m) => m.type === 'villager').length;
+    const golems = near.filter((m) => m.type === 'golem').length;
+    const spots = villageSpawnSpots(v);
+    const free = (x: number, y: number, z: number) => {
+      if (this.world.peekBlock(Math.floor(x), Math.floor(y), Math.floor(z)) !== B.AIR) return false;
+      if (this.world.peekBlock(Math.floor(x), Math.floor(y) + 1, Math.floor(z)) !== B.AIR) return false;
+      const below = this.world.peekBlock(Math.floor(x), Math.floor(y) - 1, Math.floor(z));
+      if (!IS_SOLID[below]) return false;
+      return !this.mobs.some((m) => !m.dead && Math.hypot(m.body.pos.x - x, m.body.pos.z - z) < 1.4);
+    };
+    if (villagers < 7) {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const spot = spots[Math.floor(Math.random() * spots.length)];
+        const x = spot.x + 0.5;
+        const z = spot.z + 0.5;
+        const y = this.world.heightAt(Math.floor(x), Math.floor(z)) + 1;
+        if (!free(x, y, z)) continue;
+        const mob = this.spawnMob('villager', x, y, z, Math.random());
+        mob.trade = createVillagerState(mob.profession, this.nowSeconds());
+        break;
+      }
+    }
+    if (golems < 1 && Math.random() < 0.5) {
+      const spot = spots[Math.floor(Math.random() * spots.length)];
+      const x = spot.x + 0.5;
+      const z = spot.z + 0.5;
+      const y = this.world.heightAt(Math.floor(x), Math.floor(z)) + 1;
+      if (free(x, y, z)) {
+        this.spawnMob('golem', x, y, z);
+        this.unlock('golem');
+        this.message('Żelazny golem patroluje osadę.');
+      }
+    }
+  }
+
   get recipes() {
     return RECIPES;
   }
@@ -2944,6 +3278,15 @@ export class Game {
       if (Math.random() < 0.08) this.spawnDrop(I.BOW, 1, x, y, z);
     } else if (m.type === 'wolf') {
       if (Math.random() < 0.6) this.spawnDrop(I.BONE, 1, x, y, z);
+    } else if (m.type === 'golem') {
+      // Żelazny golem sypie sztabkami żelaza i makami.
+      const iron = 3 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < iron; i++) this.spawnDrop(I.IRON, 1, x, y, z);
+      const poppies = 1 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < poppies; i++) this.spawnDrop(B.FLOWER_RED, 1, x, y, z);
+    } else if (m.type === 'villager') {
+      // Mieszkańcy nie upuszczają łupów – lepiej ich nie krzywdzić.
+      this.message('Mieszkańcy nie zostawiają po sobie niczego. Golem zapamięta ten cios.');
     }
     // Grabież: each level reruns one drop roll from the same table
     if (m.bonusLoot > 0) {
@@ -3217,6 +3560,22 @@ export class Game {
       }
     }
     ctx.putImageData(img, 0, 0);
+    // 1.6: zielone znaczniki wiosek (obrócone razem z mapą)
+    const villages = this.world.villagesIn(px - S / 2 - 40, pz - S / 2 - 40, px + S / 2 + 40, pz + S / 2 + 40);
+    if (villages.length) {
+      ctx.fillStyle = '#2ed06a';
+      ctx.strokeStyle = '#0c3a1c';
+      for (const v of villages) {
+        const dx = v.x - px, dz = v.z - pz;
+        const ox = cos * dx - sin * dz;
+        const oy = sin * dx + cos * dz;
+        const sx = Math.round(ox + S / 2);
+        const sy = Math.round(oy + S / 2);
+        if (sx < 1 || sy < 1 || sx > S - 2 || sy > S - 2) continue;
+        ctx.fillRect(sx - 1, sy - 1, 3, 3);
+        ctx.strokeRect(sx - 1.5, sy - 1.5, 4, 4);
+      }
+    }
     ctx.fillStyle = '#fff';
     ctx.fillRect(S / 2 - 1, S / 2 - 1, 3, 3);
     ctx.fillStyle = '#ff5555';
