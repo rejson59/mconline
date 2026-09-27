@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "3.0.0",
-  "description": "BlockCraft 3.0 „Nowy rozdział” – polska gra sandboxowa w przeglądarce z rozbudowanym światem, zapisem lokalnym, sterowaniem dotykowym i skalowalną grafiką.",
+  "version": "2.7.0",
+  "description": "BlockCraft 2.7 „Nowe horyzonty” – polska gra sandboxowa w przeglądarce z nowymi biomami, blokami, zapisem lokalnym i sterowaniem dotykowym.",
   "type": "module",
   "license": "MIT",
   "keywords": [
