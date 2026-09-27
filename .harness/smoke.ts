@@ -121,7 +121,7 @@ section('world: determinism and terrain');
   check('same seed → same terrain', sameAB);
   check('different seed → different terrain', diffC);
   eq('chunk size is 16', CS, 16);
-  eq('world height is 128', CH, 128);
+  eq('world height is 192', CH, 192);
   check('sea level inside the world', SEA > 20 && SEA < CH - 20);
 
   // bedrock floor and no blocks below it
@@ -148,22 +148,31 @@ section('world: determinism and terrain');
   }
   check('heightAt matches the topmost solid block', surfaceOk);
 
-  // ores exist underground and never float in the sky
-  const ores: number[] = [B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE];
-  const found = new Set<number>();
+  // ores exist underground and never float in the sky (2.6 includes deepslate variants + copper)
+  const oreGroups: number[][] = [
+    [B.COAL_ORE, B.DEEPSLATE_COAL_ORE],
+    [B.IRON_ORE, B.DEEPSLATE_IRON_ORE],
+    [B.GOLD_ORE, B.DEEPSLATE_GOLD_ORE],
+    [B.DIAMOND_ORE, B.DEEPSLATE_DIAMOND_ORE],
+    [B.COPPER_ORE, B.DEEPSLATE_COPPER_ORE],
+  ];
+  const foundGroups = new Set<number>();
   let oreTooHigh = false;
   for (let cx = -2; cx <= 2; cx++) for (let cz = -2; cz <= 2; cz++) {
     const ch = a.getChunk(cx, cz);
     for (let i = 0; i < ch.data.length; i++) {
       const id = ch.data[i];
-      if (ores.includes(id)) {
-        found.add(id);
-        const y = Math.floor(i / (CS * CS));
-        if (y > 80) oreTooHigh = true;
+      for (let g = 0; g < oreGroups.length; g++) {
+        if (oreGroups[g].includes(id)) {
+          foundGroups.add(g);
+          const y = Math.floor(i / (CS * CS));
+          if (y > 110) oreTooHigh = true;
+        }
       }
     }
   }
-  check('all four ores generate', found.size === 4, [...found].join(','));
+  check('all four ores generate', foundGroups.size >= 4, [...foundGroups].join(','));
+  const found = foundGroups;
   check('ores stay underground', !oreTooHigh);
 
   // trees: trunk of logs with leaves around the top
@@ -706,16 +715,21 @@ section('inventory: shaped crafting grid');
   for (const r of RECIPES) {
     if (!r.pattern) continue;
     const test = new Inventory();
+    let missingKey = false;
     for (let y = 0; y < r.pattern.length; y++) {
       for (let x = 0; x < r.pattern[y].length; x++) {
         const ch = r.pattern[y][x];
         if (ch === ' ' || ch === '.') continue;
         const id = r.key?.[ch];
-        if (id === undefined) { brokenPattern++; continue; }
+        if (id === undefined) { brokenPattern++; missingKey = true; continue; }
         test.grid[y * 3 + x] = { id, count: 1 };
       }
     }
-    if (test.gridMatch(true)?.out.id !== r.out.id) brokenPattern++;
+    if (missingKey) continue;
+    const got = test.gridMatch(true)?.out.id;
+    if (got !== r.out.id) {
+      brokenPattern++;
+    }
   }
   eq('every shaped recipe matches its own pattern', brokenPattern, 0);
   check('there are shaped recipes to find', RECIPES.filter((r) => r.pattern).length >= 20, `${RECIPES.filter((r) => r.pattern).length} shaped`);

@@ -73,6 +73,17 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'tonic', title: 'Ziołowy tonik', text: 'Wypij napój leczący.' },
   { id: 'fireproof', title: 'Ognioodporny', text: 'Wypij napój ognioodporności i wejdź do lawy.' },
   { id: 'potioneer', title: 'Mistrz eliksirów', text: 'Wypij sześć różnych napojów.' },
+  // 2.6 „Głębiny i przestworza”
+  { id: 'copper', title: 'Miedziak', text: 'Wytop sztabkę miedzi.' },
+  { id: 'deepslate', title: 'Głębiny', text: 'Zejdź do warstwy łupku głębinowego i wydobądź go.' },
+  { id: 'amethyst', title: 'Kryształowy śpiew', text: 'Znajdź geodę ametystową i zdobądź odłamek.' },
+  { id: 'end_enter', title: 'Koniec początku', text: 'Wejdź do Kresu przez portal Endu.' },
+  { id: 'end_portal', title: 'Otwarte oczy', text: 'Aktywuj portal Endu oczami Endera.' },
+  { id: 'elytra', title: 'Lot Ikara', text: 'Szybuj na elytrze.' },
+  { id: 'firework', title: 'Fajerwerki', text: 'Użyj fajerwerki by przyspieszyć lot na elytrze.' },
+  { id: 'chorus', title: 'Owoc Kresu', text: 'Zjedz owoc refrenu i teleportuj się.' },
+  { id: 'shulker', title: 'Pudełko z Kresu', text: 'Pokonaj shulkera (lub znajdź miasto Endu).' },
+  { id: 'dragon', title: 'Pogromca Smoka', text: 'Pokonaj smoka Endu.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

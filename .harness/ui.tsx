@@ -330,23 +330,31 @@ section('2.4: brewing screen');
   check('a closed stand renders nothing', nothing === '', nothing);
 }
 
-section('2.3/2.4: journal chapter and menus');
+section('2.3/2.4/2.6: journal chapter and menus');
 {
-  check('the journal has nine chapters', JOURNAL_CHAPTERS.length === 9, String(JOURNAL_CHAPTERS.length));
+  check('the journal has ten chapters', JOURNAL_CHAPTERS.length === 10, String(JOURNAL_CHAPTERS.length));
   const last = JOURNAL_CHAPTERS[JOURNAL_CHAPTERS.length - 1];
-  check('the latest chapter is about the alchemist hour', last.title === 'Godzina alchemika', last.title);
-  check('it covers brewing, healing, fire and mastery', ['alchemist', 'tonic', 'fireproof', 'potioneer'].every((id) => last.goals.includes(id as never)), last.goals.join(','));
-  check('every 2.4 goal is a real achievement', ['alchemist', 'tonic', 'fireproof', 'potioneer'].every((id) => ACHIEVEMENTS.some((a) => a.id === id)));
-  const expedition = JOURNAL_CHAPTERS[JOURNAL_CHAPTERS.length - 2];
-  check('the 2.3 chapter stays intact', expedition.title === 'Wyprawa i ratunek' && ['fisher', 'surveyor', 'smith', 'undying'].every((id) => expedition.goals.includes(id as never)), expedition.goals.join(','));
+  check('the latest chapter is about deep and sky', last.title === 'Głębiny i przestworza', last.title);
+  check('it covers copper, deepslate, amethyst, end, elytra, dragon', ['copper', 'deepslate', 'amethyst', 'end_enter', 'elytra', 'dragon'].every((id) => last.goals.includes(id as never)), last.goals.join(','));
+  check('every 2.6 goal is a real achievement', ['copper', 'deepslate', 'amethyst', 'end_enter', 'elytra', 'dragon'].every((id) => ACHIEVEMENTS.some((a) => a.id === id)));
+  const expedition = JOURNAL_CHAPTERS.find((c) => c.title === 'Wyprawa i ratunek');
+  check('the 2.3 chapter stays intact', !!expedition && ['fisher', 'surveyor', 'smith', 'undying'].every((id) => expedition.goals.includes(id as never)), expedition?.goals.join(',') ?? 'missing');
+  const alchemist = JOURNAL_CHAPTERS.find((c) => c.title === 'Godzina alchemika');
+  check('the 2.4 chapter stays intact', !!alchemist && ['alchemist', 'tonic', 'fireproof', 'potioneer'].every((id) => alchemist.goals.includes(id as never)), alchemist?.goals.join(',') ?? 'missing');
   check('earlier chapters are untouched', JOURNAL_CHAPTERS[0].title === 'Pierwsze kroki' && JOURNAL_CHAPTERS[0].goals.join() === 'wood,craft,pick');
-  // a chapter of new goals is not complete from the first brew
-  const progress = journalProgress(['alchemist']);
+  // a chapter of new goals is not complete from the first brew – check 2.6 last chapter progress
+  const progress = journalProgress(['copper']);
   const chapter = progress[progress.length - 1];
-  check('the first 2.4 goal is done', chapter.done === 1, String(chapter.done));
+  check('the first 2.6 goal is done', chapter.done === 1, String(chapter.done));
   check('but the chapter is not complete', chapter.complete === false);
-  const done = journalProgress(['alchemist', 'tonic', 'fireproof', 'potioneer']);
+  const done = journalProgress(['copper', 'deepslate', 'amethyst', 'end_enter', 'elytra', 'dragon']);
   check('the whole chapter can be completed', done[done.length - 1].complete === true);
+  // also 2.4 still completable
+  const progress24 = journalProgress(['alchemist']);
+  const chap24 = progress24.find((c) => c.title === 'Godzina alchemika')!;
+  check('the first 2.4 goal is done', chap24.done === 1, String(chap24.done));
+  const done24 = journalProgress(['alchemist', 'tonic', 'fireproof', 'potioneer']).find((c) => c.title === 'Godzina alchemika')!;
+  check('the whole 2.4 chapter can be completed', done24.complete === true);
 
   const controls = renderToStaticMarkup(<Controls />);
   check('controls mention the rod', controls.includes('Wędka'));
@@ -360,9 +368,9 @@ section('2.3/2.4: journal chapter and menus');
   check('controls document respawn key', controls.includes('Enter / R (ekran śmierci)'));
   check('controls document touch long-press in windows', controls.includes('przytrzymaj: połowa / jeden'));
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
-  check('the menu announces 2.5', menu.includes('2.5'));
-  // the splash line is picked at random, so check the fixed 2.5 badge instead
-  check('the menu names the 2.5 release', menu.includes('WERSJA 2.5'));
+  check('the menu announces 2.6', menu.includes('2.6'));
+  // the splash line is picked at random, so check the fixed 2.6 badge instead
+  check('the menu names the 2.6 release', menu.includes('WERSJA 2.6'));
 }
 
 section('2.4: brewing rules');

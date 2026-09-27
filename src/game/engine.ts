@@ -14,7 +14,7 @@ import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics
 import { Mob, isHostileMob, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
-const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
+const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast', 'shulker', 'dragon']);
 import { Inventory, RECIPES, type Stack } from './inventory';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
@@ -177,6 +177,10 @@ export interface SaveData {
   isInNether?: boolean;
   /** 1.8: powrót do nadświatu – pozycja portalu, przez który gracz wszedł. */
   portalExit?: [number, number, number];
+  /** 2.6: End – trzeci wymiar */
+  endMods?: Record<string, number[]>;
+  isInEnd?: boolean;
+  endExit?: [number, number, number];
   /** 2.2: własne punkty nawigacyjne i aktualnie śledzony punkt. */
   waypoints?: Waypoint[];
   activeWaypointId?: string | null;
@@ -218,6 +222,9 @@ export const MOB_NAMES: Record<MobType, string> = {
   enderman: 'Enderman',
   slime: 'Slime',
   ghast: 'Ghast',
+  goat: 'Koza',
+  shulker: 'Shulker',
+  dragon: 'Smok Endu',
 };
 
 /** A sand/gravel block tumbling down until it lands. */
@@ -357,10 +364,14 @@ export class Game {
   homeWorld: World;
   /** Nether – osobny wymiar z własnymi chunkami i modyfikacjami. */
   netherWorld: World;
+  /** End – trzeci wymiar, wyspy z kamienia Endu (2.6) */
+  endWorld: World;
   /** Powrót: pozycja (stopy) portalu w nadświanie, przez który gracz wszedł. */
   portalExit: [number, number, number] | null = null;
+  /** Powrót z Endu */
+  endExit: [number, number, number] | null = null;
   /** Obiekty odłożone na czas pobytu w drugim wymiarze. */
-  private dimStash = { home: emptyStash(), nether: emptyStash() };
+  private dimStash = { home: emptyStash(), nether: emptyStash(), end: emptyStash() };
   mode: GameMode;
   ui: UIState = 'paused';
   inventory = new Inventory();
@@ -554,6 +565,11 @@ export class Game {
   private redstoneDirty = new Set<string>();
   portalCooldown = 0;
   isInNether = false;
+  isInEnd = false;
+  // 2.6: lot na Elytrze
+  private elytraFlying = false;
+  private elytraBoost = 0;
+  private fireworkCd = 0;
   private growAcc = 0;
   private growCursor = 0;
   private eatCooldown = 0;
@@ -603,10 +619,13 @@ export class Game {
     this.world = new World(seed, worldType === 'flat');
     this.homeWorld = this.world;
     // Nether istnieje od razu jako osobny wymiar – nigdy nie nadpisuje nadświatu.
-    this.netherWorld = new World(seed, false, true);
+    this.netherWorld = new World(seed, false, true, false);
+    // End – trzeci wymiar (2.6)
+    this.endWorld = new World(seed, false, false, true);
     if (opts.save) {
       this.world.loadMods(opts.save.mods);
       this.netherWorld.loadMods(opts.save.netherMods ?? {});
+      this.endWorld.loadMods((opts.save as any).endMods ?? {});
     }
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -780,11 +799,15 @@ export class Game {
       if ((opts.save.day || 1) >= 2) this.unlocked.add('night');
       this.findSpawn();
       if (opts.save.spawn) this.spawnPoint.set(...opts.save.spawn);
-      // Zapis w Netherze: aktywuj wymiar PRZED wczytaniem chunków wokół gracza.
+      // Zapis w Netherze / Endzie: aktywuj wymiar PRZED wczytaniem chunków wokół gracza.
       if (opts.save.isInNether) {
         this.world = this.netherWorld;
         this.isInNether = true;
         this.portalExit = opts.save.portalExit ?? null;
+      } else if ((opts.save as any).isInEnd) {
+        this.world = this.endWorld;
+        (this as any).isInEnd = true;
+        this.endExit = (opts.save as any).endExit ?? null;
       }
       this.world.getChunk(Math.floor(this.body.pos.x / CS), Math.floor(this.body.pos.z / CS));
     } else {
@@ -807,8 +830,8 @@ export class Game {
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
-      ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 2.5 „Wielka naprawa”: sterowanie działa wreszcie jak trzeba – na PC i na dotyku. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.');
+      ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa. Elytra w ekwipunku pozwala szybować!'
+      : 'BlockCraft 2.6 „Głębiny i przestworza”: miedź w głębinach, kozy w górach, End i Elytra! K – punkty podróży, J – dziennik. Tapnij portal Endu by wejść.');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -1324,21 +1347,23 @@ export class Game {
     return true;
   }
 
-  /** Klucz pieca z prefiksem wymiaru – piec w Netherze nie koliduje z piecem w nadświecie. */
+  /** Klucz pieca z prefiksem wymiaru – piec w Netherze/Endzie nie koliduje z piecem w nadświecie. */
   private fKey(x: number, y: number, z: number) {
-    return (this.isInNether ? 'n:' : '') + furnaceKey(x, y, z);
+    const pref = this.isInNether ? 'n:' : this.isInEnd ? 'e:' : '';
+    return pref + furnaceKey(x, y, z);
   }
 
   /** Klucz skrzyni z prefiksem wymiaru. */
   private cKey(x: number, y: number, z: number) {
-    return (this.isInNether ? 'n:' : '') + chestKey(x, y, z);
+    const pref = this.isInNether ? 'n:' : this.isInEnd ? 'e:' : '';
+    return pref + chestKey(x, y, z);
   }
 
   openFurnace(x: number, y: number, z: number) {
     const key = this.fKey(x, y, z);
     if (!this.furnaces.has(key)) {
       const f = emptyFurnace(x, y, z);
-      f.dim = this.isInNether ? 1 : 0;
+      f.dim = this.isInNether ? 1 : this.isInEnd ? 2 : 0;
       this.furnaces.set(key, f);
     }
     this.furnacePos = { x, y, z };
@@ -1408,7 +1433,7 @@ export class Game {
     if (!chest) {
       const id = this.world.getBlock(x, y, z);
       chest = id === B.LOOT_CHEST ? lootChest(this.world.seed, x, y, z) : emptyChest(x, y, z);
-      chest.dim = this.isInNether ? 1 : 0;
+      chest.dim = this.isInNether ? 1 : this.isInEnd ? 2 : 0;
       if (id === B.LOOT_CHEST) {
         this.world.setBlock(x, y, z, B.CHEST);
         this.unlock('loot');
@@ -1445,7 +1470,8 @@ export class Game {
 
   // ---------- 2.3: kowadło ----------
   private aKey(x: number, y: number, z: number) {
-    return (this.isInNether ? 'n:' : '') + anvilKey(x, y, z);
+    const pref = this.isInNether ? 'n:' : this.isInEnd ? 'e:' : '';
+    return pref + anvilKey(x, y, z);
   }
 
   openAnvil(x: number, y: number, z: number) {
@@ -1453,7 +1479,7 @@ export class Game {
     let anvil = this.anvils.get(key);
     if (!anvil) {
       anvil = emptyAnvil(x, y, z);
-      anvil.dim = this.isInNether ? 1 : 0;
+      anvil.dim = this.isInNether ? 1 : this.isInEnd ? 2 : 0;
       this.anvils.set(key, anvil);
     }
     this.anvilPos = { x, y, z };
@@ -1540,7 +1566,8 @@ export class Game {
 
   // ---------- 2.4: statyw alchemiczny ----------
   private bKey(x: number, y: number, z: number) {
-    return (this.isInNether ? 'n:' : '') + brewingKey(x, y, z);
+    const pref = this.isInNether ? 'n:' : this.isInEnd ? 'e:' : '';
+    return pref + brewingKey(x, y, z);
   }
 
   openBrewing(x: number, y: number, z: number) {
@@ -1548,7 +1575,7 @@ export class Game {
     let stand = this.brewings.get(key);
     if (!stand) {
       stand = emptyBrewing(x, y, z);
-      stand.dim = this.isInNether ? 1 : 0;
+      stand.dim = this.isInNether ? 1 : this.isInEnd ? 2 : 0;
       this.brewings.set(key, stand);
     }
     while (stand.bottles.length < 3) stand.bottles.push(null);
@@ -1724,6 +1751,7 @@ export class Game {
       }
       if (this.inventory.cursor) this.notePickup(this.inventory.cursor.id);
       if (f.output?.id === I.IRON || this.inventory.cursor?.id === I.IRON) this.unlock('iron');
+      if (f.output?.id === I.COPPER_INGOT || this.inventory.cursor?.id === I.COPPER_INGOT) this.unlock('copper');
       return;
     }
     if (cur && slot === 'input' && smeltResult(cur.id) == null) {
@@ -1808,6 +1836,11 @@ export class Game {
     if (id === I.COAL) this.unlock('coal');
     if (id === I.DIAMOND) this.unlock('diamond');
     if (id === I.IRON) this.unlock('iron');
+    if (id === I.COPPER_INGOT) this.unlock('copper');
+    if (id === I.AMETHYST_SHARD) this.unlock('amethyst');
+    if (id === I.CHORUS_FRUIT) this.unlock('chorus');
+    if (id === I.DRAGON_BREATH) this.unlock('dragon');
+    if (id === B.DEEPSLATE || id === B.DEEPSLATE_BRICKS) this.unlock('deepslate');
     if (id === I.WHEAT) this.unlock('farm');
     if (id === I.LAPIS) this.unlock('lapis');
     if (id === I.EMERALD) this.unlock('emerald');
@@ -2002,7 +2035,7 @@ export class Game {
     const food = ITEMS[s.id];
     if (!food || food.kind !== 'food') return;
     if (this.eatCooldown > 0) return;
-    if (this.hunger >= 20 && (food.heal ?? 0) <= 0) {
+    if (this.hunger >= 20 && (food.heal ?? 0) <= 0 && s.id !== I.CHORUS_FRUIT) {
       this.message('Nie jesteś głodny.');
       return;
     }
@@ -2012,7 +2045,31 @@ export class Game {
     this.swingT = 0;
     Sfx.playEat();
     this.unlock('food');
+    const ateId = s.id;
     this.consumeSelected();
+    if (ateId === I.CHORUS_FRUIT) {
+      this.unlock('chorus');
+      // teleport losowo w promieniu 16 jak w MC
+      for (let attempt = 0; attempt < 16; attempt++) {
+        const dx = (Math.random() - 0.5) * 32;
+        const dz = (Math.random() - 0.5) * 32;
+        const dy = (Math.random() - 0.5) * 16;
+        const nx = Math.floor(this.body.pos.x + dx);
+        const ny = Math.floor(this.body.pos.y + dy);
+        const nz = Math.floor(this.body.pos.z + dz);
+        if (ny < 1 || ny >= CH - 2) continue;
+        if (this.world.getBlock(nx, ny, nz) !== B.AIR) continue;
+        if (this.world.getBlock(nx, ny + 1, nz) !== B.AIR) continue;
+        const below = this.world.getBlock(nx, ny - 1, nz);
+        if (!IS_SOLID[below]) continue;
+        this.body.pos.set(nx + 0.5, ny, nz + 0.5);
+        this.fallStart = ny;
+        this.spawnParticles(nx + 0.5, ny + 1, nz + 0.5, B.END_STONE, 18, 0.6);
+        Sfx.playPortal();
+        this.message('Owoc refrenu przeniósł cię w losowe miejsce!');
+        break;
+      }
+    }
   }
 
   private tryTill(t: NonNullable<ReturnType<World['raycast']>>): boolean {
@@ -2164,6 +2221,7 @@ export class Game {
   private enterPortal() {
     if (this.portalCooldown > 0 || this.ui !== 'playing') return;
     if (this.isInNether) { this.leaveNether(); return; }
+    if (this.isInEnd) { this.leaveEnd(); return; }
     this.message('Wkraczasz do portalu Netheru...');
     this.portalCooldown = 4;
     const px = this.body.pos.x, py = this.body.pos.y, pz = this.body.pos.z;
@@ -2179,6 +2237,41 @@ export class Game {
     Sfx.playPortal();
     this.message('Przeniesiono do Netheru! Uważaj na lawę i Ghasty.');
     this.unlock('nether');
+    this.emitHud();
+  }
+
+  private enterEndPortal() {
+    if (this.portalCooldown > 0 || this.ui !== 'playing') return;
+    if (this.isInEnd) { this.leaveEnd(); return; }
+    if (this.isInNether) this.switchDimension(this.homeWorld);
+    this.message('Portal Endu pochłania cię...');
+    this.portalCooldown = 4;
+    const px = this.body.pos.x, py = this.body.pos.y, pz = this.body.pos.z;
+    this.endExit = [px, py, pz];
+    this.switchDimension(this.endWorld);
+    const spot = this.prepareEndArrival();
+    this.body.pos.set(spot.x, spot.y, spot.z);
+    this.body.vel.set(0, 0, 0);
+    this.fallStart = spot.y;
+    this.spawnParticles(spot.x, spot.y + 1, spot.z, B.END_PORTAL, 24, 0.6);
+    Sfx.playPortal();
+    this.message('Trafiłeś do Kresu! Znajdź Elytrę i pokonaj smoka.');
+    this.unlock('end_enter');
+    this.emitHud();
+  }
+
+  private leaveEnd() {
+    if (!this.isInEnd) return;
+    this.portalCooldown = 4;
+    this.switchDimension(this.homeWorld);
+    const [ex, ey, ez] = this.endExit ?? [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z];
+    this.endExit = null;
+    this.body.pos.set(ex, ey, ez);
+    this.body.vel.set(0, 0, 0);
+    this.fallStart = ey;
+    this.spawnParticles(ex, ey + 1, ez, B.END_PORTAL, 20, 0.5);
+    Sfx.playPortal();
+    this.message('Wróciłeś z Kresu.');
     this.emitHud();
   }
 
@@ -2216,6 +2309,12 @@ export class Game {
    * Wszystkie żyjące obiekty (moby, przedmioty, strzały, TNT, XP) są
    * przełączane razem ze światem, więc nigdy nie „wchodzą" na siebie.
    */
+  private dimKey(): 'home' | 'nether' | 'end' {
+    if (this.isInNether) return 'nether';
+    if (this.isInEnd) return 'end';
+    return 'home';
+  }
+
   private switchDimension(next: World) {
     const prev = this.world;
     if (prev === next) return;
@@ -2227,7 +2326,8 @@ export class Game {
 
     // 3. przeskocz
     this.world = next;
-    this.isInNether = next !== this.homeWorld;
+    this.isInNether = next === this.netherWorld;
+    this.isInEnd = next === this.endWorld;
 
     // 4. przypnij siatki nowego wymiaru
     for (const c of next.chunks.values()) for (const m of c.meshes) this.scene.add(m);
@@ -2251,7 +2351,7 @@ export class Game {
   }
 
   private stashLiveEntities() {
-    const s = this.dimStash[this.isInNether ? 'nether' : 'home'];
+    const s = this.dimStash[this.dimKey()];
     for (const m of this.mobs) this.scene.remove(m.group);
     for (const d of this.drops) this.scene.remove(d.mesh);
     for (const a of this.arrows) this.scene.remove(a.mesh);
@@ -2281,7 +2381,7 @@ export class Game {
   }
 
   private restoreStashedEntities() {
-    const s = this.dimStash[this.isInNether ? 'nether' : 'home'];
+    const s = this.dimStash[this.dimKey()];
     for (const m of s.mobs) this.scene.add(m.group);
     for (const d of s.drops) this.scene.add(d.mesh);
     for (const a of s.arrows) this.scene.add(a.mesh);
@@ -2341,6 +2441,32 @@ export class Game {
     return { x: bx + 1.5, y: h + 1, z: bz + 2 };
   }
 
+  private prepareEndArrival(): { x: number; y: number; z: number } {
+    const w = this.endWorld;
+    w.getChunk(0, 0);
+    const h = w.heightAt(0, 0);
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = h + 1; y <= h + 4; y++) {
+      if (w.getBlock(dx, y, dz) !== B.AIR) w.setBlock(dx, y, dz, B.AIR);
+    }
+    for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+      if (!IS_SOLID[w.getBlock(dx, h, dz)]) w.setBlock(dx, h, dz, B.END_STONE);
+    }
+    w.setBlock(0, h, 0, B.BEDROCK);
+    w.setBlock(1, h, 0, B.BEDROCK);
+    w.setBlock(-1, h, 0, B.BEDROCK);
+    w.setBlock(0, h, 1, B.BEDROCK);
+    w.setBlock(0, h, -1, B.BEDROCK);
+    w.setBlock(0, h + 1, 0, B.END_PORTAL);
+    // spawn dragon if not already present in this dimension
+    const stash = this.dimStash.end;
+    const hasDragon = this.mobs.some((m) => m.type === 'dragon') || stash.mobs.some((m) => m.type === 'dragon');
+    if (!hasDragon) {
+      this.spawnMob('dragon', 0, h + 20, 0);
+      this.message('Smok Endu krąży nad wyspą!');
+    }
+    return { x: 0.5, y: h + 1, z: 2.5 };
+  }
+
   private onBlockChanged(x: number, y: number, z: number) {
     this.redstoneDirty.add(`${x},${y},${z}`);
     // also add neighbors
@@ -2367,8 +2493,8 @@ export class Game {
   }
 
   private trySleep(x: number, y: number, z: number) {
-    if (this.isInNether) {
-      this.message('W Netheru nie da się spać – wróć przez portal.');
+    if (this.isInNether || this.isInEnd) {
+      this.message('W tym wymiarze nie da się spać – wróć przez portal.');
       return;
     }
     this.spawnPoint.set(x + 0.5, y + 1, z + 0.5);
@@ -2696,6 +2822,10 @@ export class Game {
         netherMods: this.netherWorld ? this.netherWorld.serializeMods() : {},
         isInNether: !!this.isInNether,
         portalExit: this.portalExit ?? undefined,
+        // 2.6: End
+        endMods: this.endWorld ? this.endWorld.serializeMods() : {},
+        isInEnd: !!(this as any).isInEnd,
+        endExit: this.endExit ?? undefined,
         pos: [this.body.pos.x, this.body.pos.y, this.body.pos.z],
         yaw: this.yaw,
         pitch: this.pitch,
@@ -3249,6 +3379,15 @@ export class Game {
               this.damage(a.power);
               this.body.vel.x += dir.x * 2.5;
               this.body.vel.z += dir.z * 2.5;
+              // 2.6: shulker daje lewitację
+              if ((a.from as any).type === 'shulker') {
+                this.body.vel.y = Math.max(this.body.vel.y, 6);
+                this.message('Shulker trafił – lewitujesz!');
+              }
+              if ((a.from as any).type === 'dragon') {
+                this.body.vel.y = Math.max(this.body.vel.y, 4);
+                this.damage(2);
+              }
             }
             spent = true;
             break;
@@ -3315,6 +3454,34 @@ export class Game {
       if (t.id === B.BUTTON || t.id === B.BUTTON_ON) { this.pressButton(t.x, t.y, t.z); return; }
       if (t.id === B.NOTE_BLOCK) { this.playNoteBlock(t.x, t.y, t.z); return; }
       if (t.id === B.NETHER_PORTAL) { this.enterPortal(); return; }
+      if (t.id === B.END_PORTAL) { this.enterEndPortal(); return; }
+      // 2.6: ramka portalu Endu – Eye of Ender aktywuje portal (uproszczenie)
+      if (t.id === B.END_PORTAL_FRAME) {
+        // jeśli trzymamy oko Endera, aktywuj portal w okolicy
+        const sel = this.selectedStack();
+        if (sel && sel.id === I.ENDER_EYE) {
+          // szukamy 3x3 ramki wokół
+          // uproszczenie: zamień ramkę na portal jeśli wokół są ramki
+          let frameCount = 0;
+          for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+            const bid = this.world.getBlock(t.x + dx, t.y, t.z + dz);
+            if (bid === B.END_PORTAL_FRAME || bid === B.END_PORTAL) frameCount++;
+          }
+          if (frameCount >= 8) {
+            // wypełnij wnętrze portalem
+            for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+              this.world.setBlock(t.x + dx, t.y, t.z + dz, B.END_PORTAL);
+            }
+            this.message('Portal do Endu został aktywowany!');
+            Sfx.playPlace('glass');
+            if (this.mode === 'survival') this.consumeSelected();
+            this.unlock('end_portal');
+          } else {
+            this.message('Potrzeba więcej ramek Endu by otworzyć portal (3x3).');
+          }
+          return;
+        }
+      }
       // 2.3: kowadło wreszcie działa – naprawa, scalanie i nazwy przedmiotów.
       if (t.id === B.ANVIL) { this.openAnvil(t.x, t.y, t.z); return; }
       // 2.4: statyw alchemiczny – PPM otwiera kocioł, a woda leci do fiolki.
@@ -3379,6 +3546,27 @@ export class Game {
     if (s.id === I.ENDER_PEARL) {
       this.throwPearl();
       return;
+    }
+    // 2.6: fajerwerka – boost w locie na elytrze, inaczej wystrzał w niebo
+    if (s.id === I.FIREWORK_ROCKET) {
+      if (this.elytraFlying) {
+        if (this.fireworkCd > 0) { this.message('Fajerwerka musi ostygnąć.'); return; }
+        this.elytraBoost = 1.6;
+        this.fireworkCd = 1.2;
+        this.spawnParticles(this.body.pos.x, this.body.pos.y + 0.5, this.body.pos.z, B.CAMPFIRE, 22, 0.7);
+        Sfx.playPlace('glass');
+        if (this.mode === 'survival') this.consumeSelected();
+        this.unlock('firework');
+        this.swingT = 0;
+        return;
+      } else {
+        const e = this.eyePos();
+        this.spawnParticles(e.x, e.y, e.z, B.CAMPFIRE, 18, 0.6);
+        Sfx.playPlace('glass');
+        if (this.mode === 'survival') this.consumeSelected();
+        this.swingT = 0;
+        return;
+      }
     }
     if (isFood(s.id)) { this.tryEat(s); return; }
     // 2.4: fiolki pije się dokładnie tak jak jedzenie – PPM w powietrzu.
@@ -4004,49 +4192,122 @@ export class Game {
     if (sneaking) this.sprinting = false;
 
     if (this.mode === 'survival' && this.hunger <= 6) this.sprinting = false;
-    let speed = this.flying ? (this.sprinting ? 22 : 11) : sneaking ? 1.3 : this.sprinting ? 5.6 : 4.3;
-    if (inWater && !this.flying) speed *= 0.55;
-    if (inLava && !this.flying) speed *= 0.35;
-    // 2.4: napój szybkości przyspiesza bieg (nie wpływa na latanie w trybie kreatywnym)
-    if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
+
+    // 2.6: Elytra
+    const hasElytra = this.armor[1]?.id === I.ELYTRA;
+    this.fireworkCd = Math.max(0, this.fireworkCd - dt);
+    if (this.elytraBoost > 0) this.elytraBoost = Math.max(0, this.elytraBoost - dt);
 
     const len = Math.hypot(fx, fz) || 1;
     fx /= len; fz /= len;
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     const wx = fx * cos + fz * sin;
     const wz = -fx * sin + fz * cos;
-    const tx = wx * speed, tz = wz * speed;
     const hasInput = fx !== 0 || fz !== 0;
     const feetBelow = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));
     const onIce = feetBelow === B.ICE;
-    let accel = this.flying ? 8 : b.onGround ? 14 : inWater ? 6 : 2.5;
-    if (onIce && !this.flying) accel = hasInput ? 1.4 : 0.45;
-    const a = Math.min(1, accel * dt * (hasInput || b.onGround || this.flying ? 1 : 0.3));
-    b.vel.x += (tx - b.vel.x) * a;
-    b.vel.z += (tz - b.vel.z) * a;
-
     const jump = playing && k.has('Space');
-    if (this.flying) {
-      const ty = jump ? 9 : playing && sneakHeld ? -9 : 0;
-      b.vel.y += (ty - b.vel.y) * Math.min(1, dt * 10);
-    } else if (onLadder && !this.flying) {
-      const climb = jump || (playing && k.has('KeyW'));
-      const descend = sneaking || (playing && k.has('KeyS'));
-      b.vel.y = climb ? 3.4 : descend ? -3.2 : 0;
-      this.fallStart = b.pos.y;
-      if (climb) this.unlock('climb');
-    } else if (inWater || inLava) {
-      b.vel.y -= 12 * dt;
-      if (b.vel.y < -3.5) b.vel.y = -3.5;
-      if (jump) b.vel.y = Math.min(b.vel.y + 40 * dt, 3.8);
-      // jump out of water at edges
-      if (jump && b.hitWall) b.vel.y = 6;
+
+    // Elytra gliding active?
+    if (this.elytraFlying) {
+      // stop conditions
+      if (b.onGround || inWater || inLava || sneaking) {
+        this.elytraFlying = false;
+        this.elytraBoost = 0;
+        this.fallStart = b.pos.y;
+      } else {
+        const look = this.lookDir();
+        // firework boost
+        if (this.elytraBoost > 0) {
+          b.vel.x += look.x * 42 * dt;
+          b.vel.y += look.y * 42 * dt;
+          b.vel.z += look.z * 42 * dt;
+          if (Math.random() < 0.25) {
+            this.spawnParticles(b.pos.x, b.pos.y + 0.8, b.pos.z, B.CAMPFIRE, 2, 0.2);
+          }
+        }
+        // gentle gravity
+        b.vel.y -= 1.6 * dt;
+        // drag
+        const drag = Math.pow(0.990, dt * 20);
+        b.vel.x *= drag;
+        b.vel.y *= drag;
+        b.vel.z *= drag;
+        const horiz = Math.hypot(b.vel.x, b.vel.z);
+        if (look.y < 0) {
+          const downF = -look.y;
+          b.vel.x += look.x * downF * 10 * dt;
+          b.vel.z += look.z * downF * 10 * dt;
+          b.vel.y += look.y * downF * 2.2 * dt;
+        } else {
+          if (horiz > 5) {
+            b.vel.y += look.y * horiz * 0.09 * dt;
+          }
+          const upDrag = 1 - look.y * 0.04 * dt * 20;
+          b.vel.x *= upDrag;
+          b.vel.z *= upDrag;
+        }
+        // WASD steering (slight)
+        b.vel.x += wx * dt * 1.2;
+        b.vel.z += wz * dt * 1.2;
+        // cap speed
+        const spd = Math.hypot(b.vel.x, b.vel.y, b.vel.z);
+        if (spd > 36) {
+          const sc = 36 / spd;
+          b.vel.x *= sc; b.vel.y *= sc; b.vel.z *= sc;
+        }
+        this.fallStart = b.pos.y;
+      }
+    }
+
+    if (!this.elytraFlying) {
+      let speed = this.flying ? (this.sprinting ? 22 : 11) : sneaking ? 1.3 : this.sprinting ? 5.6 : 4.3;
+      if (inWater && !this.flying) speed *= 0.55;
+      if (inLava && !this.flying) speed *= 0.35;
+      if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
+      const tx = wx * speed, tz = wz * speed;
+      let accel = this.flying ? 8 : b.onGround ? 14 : inWater ? 6 : 2.5;
+      if (onIce && !this.flying) accel = hasInput ? 1.4 : 0.45;
+      const a = Math.min(1, accel * dt * (hasInput || b.onGround || this.flying ? 1 : 0.3));
+      b.vel.x += (tx - b.vel.x) * a;
+      b.vel.z += (tz - b.vel.z) * a;
+
+      // start elytra glide?
+      if (hasElytra && !b.onGround && !inWater && !inLava && !this.flying && b.vel.y < -0.5 && jump && playing) {
+        this.elytraFlying = true;
+        this.unlock('elytra');
+        this.message('Szybujesz na elytrze – patrz w dół by przyspieszyć, użyj fajerwerki by dostać kopa.');
+        // give initial push in look direction
+        const ld = this.lookDir();
+        b.vel.x += ld.x * 6;
+        b.vel.z += ld.z * 6;
+        b.vel.y = Math.min(b.vel.y, -1.5);
+      }
     } else {
-      b.vel.y -= 32 * dt;
-      if (b.vel.y < -78) b.vel.y = -78;
-      if (jump && b.onGround) {
-        b.vel.y = 9.1;
-        if (this.sprinting) { b.vel.x += -sin * 2; b.vel.z += -cos * 2; }
+      // when gliding, jump is not used for vertical flight – keep var for later checks
+    }
+    if (!this.elytraFlying) {
+      if (this.flying) {
+        const ty = jump ? 9 : playing && sneakHeld ? -9 : 0;
+        b.vel.y += (ty - b.vel.y) * Math.min(1, dt * 10);
+      } else if (onLadder && !this.flying) {
+        const climb = jump || (playing && k.has('KeyW'));
+        const descend = sneaking || (playing && k.has('KeyS'));
+        b.vel.y = climb ? 3.4 : descend ? -3.2 : 0;
+        this.fallStart = b.pos.y;
+        if (climb) this.unlock('climb');
+      } else if (inWater || inLava) {
+        b.vel.y -= 12 * dt;
+        if (b.vel.y < -3.5) b.vel.y = -3.5;
+        if (jump) b.vel.y = Math.min(b.vel.y + 40 * dt, 3.8);
+        if (jump && b.hitWall) b.vel.y = 6;
+      } else {
+        b.vel.y -= 32 * dt;
+        if (b.vel.y < -78) b.vel.y = -78;
+        if (jump && b.onGround) {
+          b.vel.y = 9.1;
+          if (this.sprinting) { b.vel.x += -sin * 2; b.vel.z += -cos * 2; }
+        }
       }
     }
 
@@ -4066,8 +4327,8 @@ export class Game {
       }
     }
 
-    // fall damage
-    if (this.flying || inWater || b.vel.y > 0) this.fallStart = b.pos.y;
+    // fall damage – elytra also protects
+    if (this.flying || this.elytraFlying || inWater || b.vel.y > 0) this.fallStart = b.pos.y;
     else if (!b.onGround) this.fallStart = Math.max(this.fallStart, b.pos.y);
     if (b.onGround && !wasGround) {
       const fall = this.fallStart - b.pos.y;
@@ -4403,13 +4664,20 @@ export class Game {
         if (IS_SOLID[this.world.getBlock(x, h + 1, z)] || IS_SOLID[this.world.getBlock(x, h + 2, z)]) return null;
         return { x: x + 0.5, y: h + 1, z: z + 0.5, top };
       };
-      if (!this.isInNether && passive < 12 && dl > 0.5) {
+      if (!this.isInNether && !this.isInEnd && passive < 12 && dl > 0.5) {
         const pos = tryPos(20, 48);
-        if (pos && pos.top === B.GRASS) {
-          const roll = Math.random();
-          const type: MobType = roll < 0.1 ? 'wolf' : roll < 0.4 ? 'cow' : roll < 0.65 ? 'chicken' : roll < 0.88 ? 'pig' : 'sheep';
-          const n = type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-          for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
+        if (pos) {
+          // góry > 100 – kozy
+          const h = this.world.heightAt(Math.floor(pos.x), Math.floor(pos.z));
+          if (h > 105 && Math.random() < 0.35) {
+            const n = 2 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < n; i++) this.spawnMob('goat', pos.x + (Math.random() - 0.5) * 4, pos.y + 0.5, pos.z + (Math.random() - 0.5) * 4);
+          } else if (pos.top === B.GRASS) {
+            const roll = Math.random();
+            const type: MobType = roll < 0.1 ? 'wolf' : roll < 0.4 ? 'cow' : roll < 0.65 ? 'chicken' : roll < 0.88 ? 'pig' : 'sheep';
+            const n = type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
+          }
         }
       }
       if (this.isInNether) {
@@ -4423,6 +4691,22 @@ export class Game {
             } else {
               const type: MobType = roll < 0.5 ? 'zombie' : roll < 0.75 ? 'creeper' : 'skeleton';
               this.spawnMob(type, pos.x, pos.y + 0.1, pos.z);
+            }
+          }
+        }
+      } else if (this.isInEnd) {
+        // End: Endermany i Shulkery, smok tylko raz (przy wejściu)
+        if (hostile < 10) {
+          const pos = tryPos(12, 36);
+          if (pos && IS_SOLID[pos.top]) {
+            const roll = Math.random();
+            const type: MobType = roll < 0.6 ? 'enderman' : roll < 0.9 ? 'shulker' : 'dragon';
+            // smok max 1
+            if (type === 'dragon' && alive.some((m) => m.type === 'dragon')) {
+              // skip
+            } else {
+              this.spawnMob(type, pos.x, pos.y + 0.5, pos.z);
+              if (type === 'dragon') this.message('Smok Endu pojawił się! Pokonaj go by zdobyć jajo.');
             }
           }
         }
@@ -4874,6 +5158,25 @@ export class Game {
       if (Math.random() < 0.8) this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
       if (Math.random() < 0.3) this.spawnDrop(I.BLAZE_ROD, 1, x, y, z);
       if (Math.random() < 0.35) this.spawnDrop(I.MAGMA_CREAM, 1, x, y, z);
+    } else if (m.type === 'goat') {
+      if (Math.random() < 0.5) this.spawnDrop(I.GOAT_HORN, 1, x, y, z);
+      if (Math.random() < 0.3) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    } else if (m.type === 'shulker') {
+      if (Math.random() < 0.6) this.spawnDrop(B.PURPUR_BLOCK, 1, x, y, z);
+      if (Math.random() < 0.3) this.spawnDrop(I.ENDER_PEARL, 1, x, y, z);
+      this.unlock('shulker');
+    } else if (m.type === 'dragon') {
+      this.spawnDrop(B.DRAGON_EGG, 1, x, y, z);
+      this.spawnDrop(I.DRAGON_BREATH, 3, x, y, z);
+      this.spawnDrop(I.ELYTRA, 1, x, y, z);
+      this.unlock('dragon');
+      this.message('Smok pokonany! Jajo i Elytra pojawiły się!');
+      // otwórz portal powrotny w centrum
+      this.world.setBlock(0, this.world.heightAt(0, 0), 0, B.BEDROCK);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        if (dx === 0 && dz === 0) continue;
+        this.world.setBlock(dx, this.world.heightAt(0, 0), dz, B.END_PORTAL);
+      }
     } else if (m.type === 'villager') {
       this.message('Mieszkańcy nie zostawiają po sobie niczego. Golem zapamięta ten cios.');
     }
@@ -5052,6 +5355,7 @@ export class Game {
       const before = f.output?.count ?? 0;
       const lit = tickFurnace(f, dt);
       if ((f.output?.count ?? 0) > before && f.output?.id === I.IRON) this.unlock('iron');
+      if ((f.output?.count ?? 0) > before && f.output?.id === I.COPPER_INGOT) this.unlock('copper');
       if ((f.output?.count ?? 0) > before && (f.output?.id === I.COOKED_FISH || f.output?.id === I.COOKED_SALMON)) this.unlock('chef');
       if (before === 0 && f.output) this.gainXp(1); // a finished smelt pays 1 XP
       const want = lit ? B.FURNACE_ON : B.FURNACE;
@@ -5096,12 +5400,15 @@ export class Game {
       tickRedstone(this.world, this.redstoneDirty);
       this.redstoneDirty.clear();
     }
-    // check player standing on portal
+    // check player standing on portal (Nether + End)
     const px = Math.floor(this.body.pos.x), py = Math.floor(this.body.pos.y), pz = Math.floor(this.body.pos.z);
     const b = this.world.getBlock(px, py, pz);
     const b2 = this.world.getBlock(px, py + 1, pz);
     if ((b === B.NETHER_PORTAL || b2 === B.NETHER_PORTAL) && this.portalCooldown <= 0) {
       this.enterPortal();
+    }
+    if ((b === B.END_PORTAL || b2 === B.END_PORTAL) && this.portalCooldown <= 0) {
+      this.enterEndPortal();
     }
   }
 
