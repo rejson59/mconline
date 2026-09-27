@@ -17,6 +17,8 @@ import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/compone
 import EnchantScreen from '../src/components/EnchantScreen';
 import TradeScreen from '../src/components/TradeScreen';
 import WaypointsScreen from '../src/components/WaypointsScreen';
+import DiscoveryMapView from '../src/components/DiscoveryMapView';
+import { DiscoveryMap } from '../src/game/discoveryMap';
 import AnvilScreen from '../src/components/AnvilScreen';
 import BrewingScreen from '../src/components/BrewingScreen';
 import InventoryScreen from '../src/components/InventoryScreen';
@@ -178,7 +180,7 @@ section('menus: static render');
   check('controls list the enchanting table', /zakl/i.test(controls));
 
   const pause = renderToStaticMarkup(
-    <PauseMenu settings={DEFAULT_SETTINGS} shareUrl="http://x/#seed=1" onSettings={noop} onResume={noop} onJournal={noop} onQuit={noop} onSave={noop} />
+    <PauseMenu settings={DEFAULT_SETTINGS} shareUrl="http://x/#seed=1" onSettings={noop} onResume={noop} onJournal={noop} onQuit={noop} onSave={() => true} />
   );
   check('pause menu offers resume and save', pause.includes('Wróć do gry') && pause.includes('Zapisz świat'));
   check('pause menu opens the adventure journal', pause.includes('Dziennik przygód'));
@@ -218,7 +220,7 @@ section('2.2 travel waypoints: static render');
 {
   const fake = {
     waypoints: [{ id: 'home', name: 'Baza', x: 12, y: 65, z: -4, dimension: 'overworld', kind: 'custom' }],
-    activeWaypointId: 'home', isInNether: false,
+    activeWaypointId: 'home', isInNether: false, discovery: new DiscoveryMap(),
     body: { pos: { x: 10, y: 65, z: -2 } },
     currentDimension: () => 'overworld', addWaypoint: () => null,
     activateWaypoint: noop, removeWaypoint: noop,
@@ -227,6 +229,7 @@ section('2.2 travel waypoints: static render');
   check('waypoint screen describes navigation', html.includes('Punkty podróży') && html.includes('minimapie'));
   check('waypoint screen lists coordinates and tracking state', html.includes('Baza') && html.includes('12, 65, -4') && html.includes('Nie śledź'));
   check('waypoint screen supports creating points at the current position', html.includes('Dodaj tutaj'));
+  check('map reachable in waypoint screen on PC and touch', html.includes('Mapa odkrywania') && html.includes('Przesuń mapę na północ') && html.includes('Do mnie'));
 }
 
 // ======================================================= enchanting screen
@@ -495,6 +498,35 @@ async function mountWithJsdom(): Promise<boolean> {
   g.IS_REACT_ACT_ENVIRONMENT = true;
 
   const { createRoot } = await import('react-dom/client');
+  // Canvas drawing is stubbed; gestures/buttons are mounted for real with React.
+  const canvasProto = (w as unknown as { HTMLCanvasElement: typeof HTMLCanvasElement }).HTMLCanvasElement.prototype;
+  canvasProto.getContext = ((kind: string) => kind === '2d' ? { fillStyle: '', fillRect() {} } : null) as typeof canvasProto.getContext;
+  const mapData = new DiscoveryMap();
+  mapData.survey('overworld', 0, 0, 'Równiny', 65);
+  const markers: { id: string; name: string; x: number; y: number; z: number; dimension: 'overworld' }[] = [];
+  const mapGame = {
+    body: { pos: { x: 4, z: 4 } }, discovery: mapData, waypoints: markers, activeWaypointId: null,
+    currentDimension: () => 'overworld',
+    addWaypoint: (name: string, _kind: string, at: { x: number; y: number; z: number }) => {
+      const point = { id: 'map-1', name, ...at, dimension: 'overworld' as const };
+      markers.push(point);
+      return point;
+    },
+  };
+  const mapContainer = w.document.createElement('div');
+  w.document.body.appendChild(mapContainer);
+  const mapRoot = createRoot(mapContainer);
+  await React.act(async () => { mapRoot.render(<DiscoveryMapView game={mapGame as unknown as Game} focus={null} onChange={noop} />); });
+  check('interactive map starts at current position', mapContainer.textContent?.includes('1 odkrytych pól') === true);
+  const centerButton = [...mapContainer.querySelectorAll('button')].find((b) => b.textContent?.includes('Zaznacz środek mapy')) as HTMLButtonElement;
+  await React.act(async () => { centerButton.click(); });
+  check('keyboard-accessible centre marker creates a real waypoint', markers.length === 1 && markers[0].x === 8 && markers[0].z === 8);
+  await React.act(async () => { (mapContainer.querySelector('[aria-label="Przesuń mapę na północ"]') as HTMLButtonElement).click(); });
+  check('unexplored map centre cannot be marked', centerButton.disabled);
+  await React.act(async () => { (mapContainer.querySelector('button') as HTMLButtonElement).click(); });
+  await React.act(async () => { mapRoot.unmount(); });
+  mapContainer.remove();
+
   const App = (await import('../src/App')).default;
 
   const container = w.document.getElementById('root')!;

@@ -46,6 +46,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H } from '../src/game/world';
+import { DiscoveryMap, MAP_LIMIT } from '../src/game/discoveryMap';
 import { B, BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
@@ -1419,7 +1420,10 @@ section('saves: enchantments ride along');
   g.weather = 'clear';
   g.xp = new Xp(42);
   g.armor = [{ id: I.IRON_BOOTS, count: 1, dur: 100, ench: { featherfalling: 3 } }];
-  g.save();
+  g.discovery = new DiscoveryMap();
+  g.discovery.survey('overworld', -1, -16, 'Bagno', 63);
+  g.discovery.survey('nether', 0, 0, 'Nether', 40);
+  check('save succeeds with discovery data', g.save() === true);
 
   const raw = loadSaves().find((s) => s.id === 'ench-test');
   check('the world was stored', !!raw);
@@ -1428,6 +1432,15 @@ section('saves: enchantments ride along');
   eq('second enchantment persists', stored.inv[0]?.ench?.unbreaking, 2);
   eq('armor enchantments persist', stored.armor?.[0]?.ench?.featherfalling, 3);
   eq('durability still persists', stored.inv[0]?.dur, 300);
+  check('engine save retains surveyed tiles in both dimensions', DiscoveryMap.fromSave(stored.discovery).get('overworld', -1, -1)?.[2] === 8 && DiscoveryMap.fromSave(stored.discovery).get('nether', 0, 0)?.[2] === 11);
+  check('world JSON export includes discovery', exportSave('ench-test')?.includes('discovery') === true);
+  const beforeFailedWrite = localStorage.getItem('blockcraft-saves-v2');
+  const setItem = localStorage.setItem;
+  localStorage.setItem = () => { throw new Error('quota'); };
+  check('failed autosave reports failure instead of success', g.save() === false);
+  localStorage.setItem = setItem;
+  check('failed autosave leaves previous world intact', localStorage.getItem('blockcraft-saves-v2') === beforeFailedWrite);
+
 
   // reload into a fresh Game-shaped object through the real constructor path
   const loaded = stored.inv[0];
@@ -2961,6 +2974,22 @@ section('2.5: wielka naprawa sterowania');
   }
   check('one-shot keys never repeat', !(Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has('KeyE'));
   check('drop key never repeats', !(Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has('KeyQ'));
+}
+
+section('3.0: visited-chunk map and legacy import');
+{
+  const empty = DiscoveryMap.fromSave(undefined);
+  check('2.x saves start with an empty atlas in both dimensions', empty.count('overworld') === 0 && empty.count('nether') === 0);
+  check('negative coordinates round down to the correct chunk', empty.survey('overworld', -0.1, -16, 'Bagno', 63) && empty.get('overworld', -1, -1)?.[2] === 8);
+  check('visiting the same chunk does not duplicate discoveries', !empty.survey('overworld', -16, -0.1, 'Równiny', 70) && empty.count('overworld') === 1);
+  check('dimensions cannot overwrite each other', empty.survey('nether', -16, -16, 'Nether', 44) && empty.get('nether', -1, -1)?.[2] === 11 && empty.get('overworld', -1, -1)?.[2] === 8);
+  const saved = JSON.parse(JSON.stringify(empty.serialize()));
+  check('map survives save, export, import and reload', DiscoveryMap.fromSave(saved).serialize().overworld[0]?.[3] === 63);
+  const corrupt = DiscoveryMap.fromSave({ overworld: [[1, 2, 999, 50], [NaN, 2, 0, 50], [3, 4, 0, 50]], nether: 'bad' });
+  check('broken imported tiles do not poison the map', corrupt.count('overworld') === 1 && corrupt.count('nether') === 0);
+  const capped = new DiscoveryMap();
+  for (let i = 0; i < MAP_LIMIT; i++) capped.survey('overworld', i * CS, 0, 'Równiny', 62);
+  check('fixed survey budget retains older discoveries and rejects extras', !capped.survey('overworld', MAP_LIMIT * CS, 0, 'Równiny', 62) && capped.count('overworld') === MAP_LIMIT && !!capped.get('overworld', 0, 0));
 }
 
 // =================================================================== report

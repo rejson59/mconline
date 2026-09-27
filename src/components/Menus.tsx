@@ -116,7 +116,7 @@ export function Controls() {
     ['Sloty pancerza (w E)', 'Załóż pancerz (4 elementy)'],
     ['M', 'Minimapa'],
     ['J', 'Dziennik przygód i postęp celów'],
-    ['K', 'Punkty podróży: baza, kopalnia i znacznik śmierci'],
+    ['K', 'Mapa odkrywania, znaczniki celu i punkt śmierci'],
     ['F3', 'Informacje debugowania'],
     ['Esc', 'Pauza · Esc w pauzie wraca do gry'],
     ['Enter / R (ekran śmierci)', 'Odrodzenie'],
@@ -589,10 +589,11 @@ export function PauseMenu({
   onJournal: () => void;
   onWaypoints?: () => void;
   onQuit: () => void;
-  onSave: () => void;
+  onSave: () => boolean;
 }) {
   const [view, setView] = useState<'main' | 'options' | 'controls' | 'achievements'>('main');
   const [saved, setSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
     try {
@@ -629,7 +630,7 @@ export function PauseMenu({
             </button>
             {onWaypoints && (
               <button className="mc-btn" onClick={onWaypoints}>
-                Punkty podróży · K
+                Mapa i punkty podróży · K
               </button>
             )}
             <button className="mc-btn" onClick={() => setView('achievements')}>
@@ -644,12 +645,13 @@ export function PauseMenu({
             <button
               className="mc-btn"
               onClick={() => {
-                onSave();
-                setSaved(true);
-                setTimeout(() => setSaved(false), 1500);
+                const ok = onSave();
+                setSaved(ok);
+                setSaveFailed(!ok);
+                setTimeout(() => { setSaved(false); setSaveFailed(false); }, 3000);
               }}
             >
-              {saved ? 'Zapisano ✓' : 'Zapisz świat'}
+              {saveFailed ? 'Błąd zapisu — sprawdź pamięć przeglądarki' : saved ? 'Zapisano ✓' : 'Zapisz świat'}
             </button>
             <button className="mc-btn" onClick={onQuit}>
               Zapisz i wyjdź do menu

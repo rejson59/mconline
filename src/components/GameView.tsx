@@ -314,8 +314,8 @@ export default function GameView({
           onWaypoints={() => game.setUI('waypoints')}
           onSave={() => game.save()}
           onQuit={() => {
-            game.save();
-            onQuit();
+            if (game.save()) onQuit();
+            else window.alert('Nie udało się zapisać świata. Pozostań w grze, zwolnij miejsce w przeglądarce i spróbuj ponownie.');
           }}
         />
       )}

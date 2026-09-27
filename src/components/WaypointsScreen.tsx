@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import type { Game } from '../game/engine';
+import DiscoveryMapView from './DiscoveryMapView';
 
 export default function WaypointsScreen({ game, onClose }: { game: Game; onClose: () => void }) {
   const [name, setName] = useState('');
+  const [showMap, setShowMap] = useState(true);
+  const [mapFocus, setMapFocus] = useState<{ x: number; z: number } | null>(null);
   const [, refresh] = useState(0);
   const dimension = game.currentDimension();
   const label = dimension === 'nether' ? 'Nether' : 'Nadświat';
@@ -17,11 +20,16 @@ export default function WaypointsScreen({ game, onClose }: { game: Game; onClose
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 p-3">
-      <div className="flex max-h-[92dvh] w-full max-w-[520px] flex-col gap-3 overflow-hidden border-2 border-black bg-stone-800 p-4 shadow-xl">
+      <div className="flex max-h-[92dvh] w-full max-w-[560px] flex-col gap-3 overflow-y-auto border-2 border-black bg-stone-800 p-4 shadow-xl">
         <div>
           <h2 className="text-2xl text-yellow-200 mc-text">Punkty podróży</h2>
           <p className="text-sm text-gray-300">{label} · zaznacz bazę, kopalnię lub ciekawe miejsce i śledź je na HUD-zie oraz minimapie.</p>
         </div>
+
+        <button className="mc-btn !py-1 !text-sm" onClick={() => setShowMap((v) => !v)}>
+          {showMap ? 'Ukryj mapę' : 'Pokaż mapę odkrywania'}
+        </button>
+        {showMap && <DiscoveryMapView game={game} focus={mapFocus} onChange={() => refresh((n) => n + 1)} />}
 
         <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); add(); }}>
           <label className="sr-only" htmlFor="waypoint-name">Nazwa nowego punktu</label>
@@ -37,13 +45,13 @@ export default function WaypointsScreen({ game, onClose }: { game: Game; onClose
           <button type="submit" className="mc-btn !w-auto !px-4 !text-base" disabled={game.waypoints.length >= 12}>Dodaj tutaj</button>
         </form>
 
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-40 shrink-0 space-y-2 overflow-y-auto pr-1">
           {game.waypoints.map((point) => {
             const active = point.id === game.activeWaypointId;
             const here = point.dimension === dimension;
             const distance = here ? Math.round(Math.hypot(point.x - game.body.pos.x, point.z - game.body.pos.z)) : null;
             return (
-              <div key={point.id} className={`flex items-center gap-2 border p-2 ${active ? 'border-yellow-300 bg-yellow-900/25' : 'border-white/20 bg-black/25'}`}>
+              <div key={point.id} className={`flex flex-wrap items-center gap-2 border p-2 ${active ? 'border-yellow-300 bg-yellow-900/25' : 'border-white/20 bg-black/25'}`}>
                 <div className="min-w-0 flex-1">
                   <div className={point.kind === 'death' ? 'text-red-300' : 'text-white'}>{point.kind === 'death' ? '☠ ' : '◆ '}{point.name}</div>
                   <div className="text-xs text-gray-300">
@@ -56,6 +64,7 @@ export default function WaypointsScreen({ game, onClose }: { game: Game; onClose
                 >
                   {active ? 'Nie śledź' : 'Śledź'}
                 </button>
+                {here && showMap && <button className="mc-btn !w-auto !px-2 !py-1 !text-sm" onClick={() => setMapFocus({ x: point.x, z: point.z })}>Mapa</button>}
                 <button
                   aria-label={`Usuń punkt ${point.name}`}
                   className="mc-btn !w-10 !px-1 !py-1 !text-sm"

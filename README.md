@@ -9,7 +9,9 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwer
 - przywracanie domyślnych ustawień obrazu, sterowania i dźwięku z ekranu Opcji,
 - nowe ID bloków są dopisane bez naruszania starych zapisów; testy sprawdzają powtarzalność i dostępność nowych biomów.
 
-Pełny plan przyszłego wydania 3.0 znajduje się w [`PLAN-100-BLOCKCRAFT-3.0.md`](PLAN-100-BLOCKCRAFT-3.0.md).
+Pełny plan przyszłego wydania 3.0 znajduje się w [`PLAN-100-BLOCKCRAFT-3.0.md`](PLAN-100-BLOCKCRAFT-3.0.md). **Ta gałąź jest pracą w toku, nie wydaniem 3.0.** Stan wymagań i zakres braków: [`3.0-STATUS.md`](3.0-STATUS.md).
+
+**W gałęzi roboczej (nie wydanie 3.0):** ekran punktów podróży (`K` na PC, 📍 na dotyku) zawiera mapę odkrywania. Każdy odwiedzony chunk odsłania pole mapy o kolorze biomu; oddzielne mapy Nadświata i Netheru są zapisywane z danym światem oraz przenoszone przez eksport/import. Strzałkami przesuwasz mapę, przyciskami `+` / `−` zmieniasz skalę; kliknięcie odkrytego pola lub „Zaznacz środek mapy” dodaje cel do istniejących punktów podróży. Znaczniki wskazują cel, gracza i miejsce śmierci. Pamięć mapy jest ograniczona do 16 384 pól na wymiar; po osiągnięciu limitu zachowuje wcześniej odkryte pola. Nie wykonano jeszcze ręcznego testu na urządzeniu z WebGL.
 
 **Wersja 2.6 „Warsztat bez wpadek”**:
 
@@ -152,6 +154,7 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | tarcza w ręku | przyłap strzały, ciosy tracą połowę mocy |
 | sloty pancerza (w `E`) | załóż / zdejmij pancerz (4 elementy) |
 | `M` | minimapa |
+| `K` | mapa odkrywania i punkty podróży (gałąź robocza) |
 | `Esc` | pauza (ponowne `Esc` w pauzie wraca do gry) |
 | `Enter` / `R` | odrodzenie na ekranie śmierci |
 | `J` | dziennik przygód i postęp celów (2.1) |

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, type Biome } from './world';
+import { DiscoveryMap, type DiscoverySave } from './discoveryMap';
 import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
@@ -190,6 +191,8 @@ export interface SaveData {
   brewings?: BrewingState[];
   /** 2.4: wypiłe typy napojów (osiągnięcie „Mistrz eliksirów”). */
   potionsDrunk?: number[];
+  /** Explored chunk tiles, stored separately for both dimensions. Absent in 2.x saves. */
+  discovery?: DiscoverySave;
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
@@ -540,6 +543,7 @@ export class Game {
   showMinimap = true;
   /** 2.2: maksymalnie 12 znaczników na świat, w tym automatyczny punkt śmierci. */
   waypoints: Waypoint[] = [];
+  discovery = new DiscoveryMap();
   activeWaypointId: string | null = null;
   minimapCanvas!: HTMLCanvasElement;
   private minimapCtx!: CanvasRenderingContext2D;
@@ -767,6 +771,7 @@ export class Game {
       this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
       this.xp = new Xp(opts.save.xp ?? 0);
       this.trades = opts.save.trades ?? 0;
+      this.discovery = DiscoveryMap.fromSave(opts.save.discovery);
       this.waypoints = (opts.save.waypoints ?? []).filter((w) =>
         w && typeof w.id === 'string' && typeof w.name === 'string' &&
         Number.isFinite(w.x) && Number.isFinite(w.y) && Number.isFinite(w.z) &&
@@ -809,8 +814,8 @@ export class Game {
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
-      ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}”: szukaj receptur po nazwie lub składniku; pełny ekwipunek nie gubi łupu. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.`);
+      ? 'Tryb kreatywny. K – mapa i punkty podróży, J – dziennik, T – czat, /help – komendy, M – minimapa.'
+      : `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}”: szukaj receptur po nazwie lub składniku; pełny ekwipunek nie gubi łupu. K – mapa odkrywania i punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.`);
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -2736,13 +2741,19 @@ export class Game {
         trades: this.trades,
         waypoints: (this.waypoints ?? []).map((w) => ({ ...w })),
         activeWaypointId: this.activeWaypointId ?? null,
+        discovery: (this.discovery ?? new DiscoveryMap()).serialize(),
         armor: this.armor.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
         fishCaught: this.fishCaught,
         updated: Date.now(),
       };
       upsertSave({ ...data, id: this.worldId });
+      return true;
     } catch (e) {
       console.warn('Save failed', e);
+      // A failed quota write leaves the previous localStorage value intact.
+      // Never tell the player it was saved; offer export/space recovery instead.
+      if (this.messages && typeof this.onHud === 'function') this.message('Nie zapisano świata: pamięć przeglądarki jest pełna lub niedostępna. Zwolnij miejsce i spróbuj ponownie.');
+      return false;
     }
   }
 
@@ -4623,6 +4634,15 @@ export class Game {
     const p = this.body.pos;
     const f = ((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4;
     const now = performance.now();
+    // Only the chunk the player actually entered is surveyed. This is O(1)
+    // on every HUD tick and doesn't generate distant chunks behind the fog.
+    if (this.discovery && this.world && Number.isFinite(p.x) && Number.isFinite(p.z)) {
+      const cx = Math.floor(p.x / CS), cz = Math.floor(p.z / CS);
+      if (!this.discovery.get(this.currentDimension(), cx, cz)) {
+        const s = this.world.surface(cx * CS + CS / 2, cz * CS + CS / 2);
+        this.discovery.survey(this.currentDimension(), p.x, p.z, s.biome, s.h);
+      }
+    }
     this.refreshMinimap();
     this.onHud({
       hotbar: this.inventory.slots.slice(0, 9).map((s) => (s ? { ...s } : null)),
