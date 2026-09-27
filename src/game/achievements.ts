@@ -68,6 +68,11 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'smith', title: 'Kowal', text: 'Scal dwa uszkodzone narzędzia w kowadle.' },
   { id: 'namer', title: 'Nadany imię', text: 'Zmień nazwę przedmiotu w kowadle.' },
   { id: 'undying', title: 'Nieśmiertelny', text: 'Totem Ratowania uratuje cię od śmierci.' },
+  // 2.4 „Godzina alchemika”
+  { id: 'alchemist', title: 'Pierwsze warzenie', text: 'Zawrzyj pierwszy napój na statywie alchemicznym.' },
+  { id: 'tonic', title: 'Ziołowy tonik', text: 'Wypij napój leczący.' },
+  { id: 'fireproof', title: 'Ognioodporny', text: 'Wypij napój ognioodporności i wejdź do lawy.' },
+  { id: 'potioneer', title: 'Mistrz eliksirów', text: 'Wypij sześć różnych napojów.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

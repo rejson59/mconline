@@ -93,16 +93,31 @@ export const I = {
   COOKED_SALMON: 246,
   SPYGLASS: 247,
   TOTEM: 248,
+  // 2.4 „Godzina alchemika” – idy kontynuują po blokach (Nether kończy się na 340)
+  SUGAR: 341,
+  BOTTLE: 342,
+  WATER_BOTTLE: 343,
+  HONEY_BOTTLE: 344,
+  POTION_AWKWARD: 345,
+  POTION_HEAL: 346,
+  POTION_FIRE: 347,
+  POTION_SPEED: 348,
+  POTION_NIGHT: 349,
+  POTION_STRENGTH: 350,
+  POTION_REGEN: 351,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
+
+/** 2.4: effect a potion applies when drunk ('none' = base awkward brew). */
+export type PotionEffectId = 'none' | 'heal' | 'fire' | 'speed' | 'night' | 'strength' | 'regen';
 
 export interface ItemDef {
   id: number;
   name: string;
   /** Short aliases accepted by /give (Polish, without diacritics, and English). */
   keys: string[];
-  kind: 'material' | 'tool' | 'food' | 'bucket' | 'armor';
+  kind: 'material' | 'tool' | 'food' | 'bucket' | 'armor' | 'potion';
   tool?: ToolKind;
   tier?: 1 | 2 | 3 | 4;
   durability?: number;
@@ -110,6 +125,8 @@ export interface ItemDef {
   heal?: number;
   /** Armor metadata: which slot it occupies and how many armor points it adds. */
   armor?: { slot: 0 | 1 | 2 | 3; points: number };
+  /** 2.4: which buff the bottle carries (brewing.ts holds durations/values). */
+  potion?: PotionEffectId;
   /** Flat color used by drop entities and the icon painter. */
   color: string;
   /** Stack size override (1 = never merges, e.g. totems). */
@@ -209,6 +226,18 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.COOKED_SALMON, name: 'Pieczony łosoś', keys: ['pieczony_losos', 'cooked_salmon'], kind: 'food', hunger: 6, heal: 2, color: '#e0703a' },
   { id: I.SPYGLASS, name: 'Lorneta', keys: ['lorneta', 'spyglass'], kind: 'tool', tool: 'spyglass', color: '#c8a43c' },
   { id: I.TOTEM, name: 'Totem Ratowania', keys: ['totem', 'totem_ratowania', 'totem_ratownictwa'], kind: 'material', stack: 1, color: '#e8c85a' },
+  // 2.4 „Godzina alchemika” – cukier, fiolki i napoje
+  { id: I.SUGAR, name: 'Cukier', keys: ['cukier', 'sugar'], kind: 'material', color: '#f6f4ee' },
+  { id: I.BOTTLE, name: 'Szklana fiolka', keys: ['fiolka', 'szklana_fiolka', 'bottle', 'glass_bottle'], kind: 'material', color: '#bfe4f2' },
+  { id: I.WATER_BOTTLE, name: 'Fiolka z wodą', keys: ['fiolka_z_woda', 'water_bottle', 'woda_fiolka'], kind: 'material', color: '#4a8ae0' },
+  { id: I.HONEY_BOTTLE, name: 'Butelka miodu', keys: ['butelka_miodu', 'honey_bottle', 'miodek'], kind: 'food', hunger: 8, heal: 1, color: '#e8a020' },
+  { id: I.POTION_AWKWARD, name: 'Zaczarowany napój', keys: ['zaczarowany_napoj', 'potion_awkward', 'awkward'], kind: 'potion', potion: 'none', stack: 16, color: '#c8b8a8' },
+  { id: I.POTION_HEAL, name: 'Napój leczący', keys: ['napoj_leczacy', 'potion_heal', 'healing'], kind: 'potion', potion: 'heal', stack: 16, color: '#d44a5a' },
+  { id: I.POTION_FIRE, name: 'Napój ognioodporności', keys: ['napoj_ognioodpornosci', 'potion_fire', 'fire_resistance'], kind: 'potion', potion: 'fire', stack: 16, color: '#e07820' },
+  { id: I.POTION_SPEED, name: 'Napój szybkości', keys: ['napoj_szybkosci', 'potion_speed', 'swiftness'], kind: 'potion', potion: 'speed', stack: 16, color: '#b8e04a' },
+  { id: I.POTION_NIGHT, name: 'Napój nocnego widzenia', keys: ['napoj_nocnego_widzenia', 'potion_night', 'night_vision'], kind: 'potion', potion: 'night', stack: 16, color: '#4ad0a8' },
+  { id: I.POTION_STRENGTH, name: 'Napój siły', keys: ['napoj_sily', 'potion_strength', 'sila'], kind: 'potion', potion: 'strength', stack: 16, color: '#e0a030' },
+  { id: I.POTION_REGEN, name: 'Napój regeneracji', keys: ['napoj_regeneracji', 'potion_regen', 'regeneration'], kind: 'potion', potion: 'regen', stack: 16, color: '#e06090' },
 ];
 
 const ARMOR_TIERS: {
@@ -601,6 +630,11 @@ export function resolveId(arg: string): number | null {
 
 export function isFood(id: number): boolean {
   return ITEMS[id]?.kind === 'food';
+}
+
+/** 2.4: a drinkable bottle (potion or the base awkward brew). */
+export function isPotion(id: number): boolean {
+  return ITEMS[id]?.kind === 'potion';
 }
 
 export function isHoe(id: number): boolean {

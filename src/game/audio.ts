@@ -255,6 +255,25 @@ export function playEat() {
   o.stop(t + 0.16);
 }
 
+/** 2.4: potion glug – two liquid blips rising in pitch. */
+export function playDrink() {
+  const c = ensure();
+  if (!c || !master) return;
+  const t = c.currentTime;
+  [0, 0.11].forEach((off, i) => {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(260 + i * 120, t + off);
+    o.frequency.exponentialRampToValueAtTime(140 + i * 60, t + off + 0.09);
+    g.gain.setValueAtTime(0.09, t + off);
+    g.gain.exponentialRampToValueAtTime(0.001, t + off + 0.1);
+    o.connect(g).connect(master!);
+    o.start(t + off);
+    o.stop(t + off + 0.12);
+  });
+}
+
 /** Bow release and arrow impact. */
 export function playBow() {
   const c = ensure();

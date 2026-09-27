@@ -18,9 +18,13 @@ import EnchantScreen from '../src/components/EnchantScreen';
 import TradeScreen from '../src/components/TradeScreen';
 import WaypointsScreen from '../src/components/WaypointsScreen';
 import AnvilScreen from '../src/components/AnvilScreen';
+import BrewingScreen from '../src/components/BrewingScreen';
 import { anvilResult } from '../src/game/anvil';
-import { Inventory } from '../src/game/inventory';
-import { I } from '../src/game/items';
+import { Inventory, RECIPES } from '../src/game/inventory';
+import { I, isFood, isPotion, stackLimit } from '../src/game/items';
+import { B, BLOCKS } from '../src/game/blocks';
+import { applyBrew, emptyBrewing, tickBrewing, POTIONS, HEAL_AMOUNT } from '../src/game/brewing';
+import type { Stack } from '../src/game/inventory';
 import { rollEnchantOptions } from '../src/game/enchant';
 import { createVillagerState, offersFor } from '../src/game/trading';
 import type { Game, TradeRow } from '../src/game/engine';
@@ -282,30 +286,139 @@ section('2.3: anvil screen: static render');
   check('a closed anvil renders nothing', none === '', none);
 }
 
-section('2.3: journal chapter and menus');
+section('2.4: brewing screen');
 {
-  check('the journal has eight chapters', JOURNAL_CHAPTERS.length === 8, String(JOURNAL_CHAPTERS.length));
+  const makeBrewing = (stand: ReturnType<typeof emptyBrewing>) => {
+    return {
+      inventory: new Inventory(),
+      currentBrewing: () => stand,
+      clickBrewing: () => {},
+      closeInventory: () => {},
+      emitHud: () => {},
+    };
+  };
+
+  const fresh = emptyBrewing(0, 1, 0);
+  const brew = renderToStaticMarkup(<BrewingScreen game={makeBrewing(fresh) as never} icons={{}} onChange={() => {}} />);
+  check('the brewing panel has a title', brew.includes('Statyw alchemiczny'));
+  check('it lists three bottles', (brew.match(/Fiolka \d/g) ?? []).length === 3);
+  check('it shows the ingredient and fuel slots', brew.includes('Składnik') && brew.includes('Paliwo'));
+  check('a fresh stand asks for fuel', brew.includes('Dość płomiennej różdżki'));
+
+  const lit = emptyBrewing(0, 1, 0);
+  lit.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
+  lit.ingredient = { id: I.NETHER_WART, count: 1 };
+  lit.fuel = { id: I.BLAZE_ROD, count: 2 };
+  lit.progress = 4;
+  const brewing = renderToStaticMarkup(<BrewingScreen game={makeBrewing(lit) as never} icons={{}} onChange={() => {}} />);
+  check('a lit stand announces brewing', brewing.includes('Warzenie…'));
+  check('the fuel is counted', brewing.includes('2 × różdżka'));
+
+  const gone = { ...makeBrewing(fresh), currentBrewing: () => null };
+  const nothing = renderToStaticMarkup(<BrewingScreen game={gone as never} icons={{}} onChange={() => {}} />);
+  check('a closed stand renders nothing', nothing === '', nothing);
+}
+
+section('2.3/2.4: journal chapter and menus');
+{
+  check('the journal has nine chapters', JOURNAL_CHAPTERS.length === 9, String(JOURNAL_CHAPTERS.length));
   const last = JOURNAL_CHAPTERS[JOURNAL_CHAPTERS.length - 1];
-  check('the new chapter is about the expedition', last.title === 'Wyprawa i ratunek', last.title);
-  check('it covers fishing, the spyglass, the anvil and the totem', ['fisher', 'surveyor', 'smith', 'undying'].every((id) => last.goals.includes(id as never)), last.goals.join(','));
-  check('every 2.3 goal is a real achievement', ['fisher', 'surveyor', 'smith', 'undying'].every((id) => ACHIEVEMENTS.some((a) => a.id === id)));
+  check('the latest chapter is about the alchemist hour', last.title === 'Godzina alchemika', last.title);
+  check('it covers brewing, healing, fire and mastery', ['alchemist', 'tonic', 'fireproof', 'potioneer'].every((id) => last.goals.includes(id as never)), last.goals.join(','));
+  check('every 2.4 goal is a real achievement', ['alchemist', 'tonic', 'fireproof', 'potioneer'].every((id) => ACHIEVEMENTS.some((a) => a.id === id)));
+  const expedition = JOURNAL_CHAPTERS[JOURNAL_CHAPTERS.length - 2];
+  check('the 2.3 chapter stays intact', expedition.title === 'Wyprawa i ratunek' && ['fisher', 'surveyor', 'smith', 'undying'].every((id) => expedition.goals.includes(id as never)), expedition.goals.join(','));
   check('earlier chapters are untouched', JOURNAL_CHAPTERS[0].title === 'Pierwsze kroki' && JOURNAL_CHAPTERS[0].goals.join() === 'wood,craft,pick');
-  // a chapter of new goals is not complete from the first catch
-  const progress = journalProgress(['fisher']);
+  // a chapter of new goals is not complete from the first brew
+  const progress = journalProgress(['alchemist']);
   const chapter = progress[progress.length - 1];
-  check('the first 2.3 goal is done', chapter.done === 1, String(chapter.done));
+  check('the first 2.4 goal is done', chapter.done === 1, String(chapter.done));
   check('but the chapter is not complete', chapter.complete === false);
-  const done = journalProgress(['fisher', 'surveyor', 'smith', 'undying']);
+  const done = journalProgress(['alchemist', 'tonic', 'fireproof', 'potioneer']);
   check('the whole chapter can be completed', done[done.length - 1].complete === true);
 
   const controls = renderToStaticMarkup(<Controls />);
   check('controls mention the rod', controls.includes('Wędka'));
   check('controls mention the spyglass', controls.includes('Lorneta'));
   check('controls mention the anvil', controls.includes('kowadle'));
+  check('controls mention the brewing stand', controls.includes('statywie alchemicznym'));
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
-  check('the menu announces 2.3', menu.includes('2.3'));
-  // the splash line is picked at random, so check the fixed 2.3 badge instead
-  check('the menu names the 2.3 release', menu.includes('Wyprawa i ratunek'));
+  check('the menu announces 2.4', menu.includes('2.4'));
+  // the splash line is picked at random, so check the fixed 2.4 badge instead
+  check('the menu names the 2.4 release', menu.includes('WERSJA 2.4'));
+}
+
+section('2.4: brewing rules');
+{
+  const b = emptyBrewing(0, 1, 0);
+  check('a fresh stand holds three empty bottles', b.bottles.length === 3 && b.bottles.every((x) => x === null));
+  // water + nether wart = awkward base
+  const base: (Stack | null)[] = [{ id: I.WATER_BOTTLE, count: 1 }, null, null];
+  let res = applyBrew(base, I.NETHER_WART);
+  check('water + wart = awkward', res.brewed === true && res.bottles[0]?.id === I.POTION_AWKWARD);
+  // awkward + glowstone = regeneration
+  const awk: (Stack | null)[] = [{ id: I.POTION_AWKWARD, count: 1 }, null, null];
+  res = applyBrew(awk, I.GLOWSTONE_DUST);
+  check('awkward + dust = regeneration', res.brewed === true && res.bottles[0]?.id === I.POTION_REGEN);
+  // water + dust = night vision (not regeneration)
+  res = applyBrew(base, I.GLOWSTONE_DUST);
+  check('water + dust = night vision', res.brewed === true && res.bottles[0]?.id === I.POTION_NIGHT);
+  // healing, fire, speed, strength
+  check('water + tear = healing', applyBrew(base, I.GHAST_TEAR).bottles[0]?.id === I.POTION_HEAL);
+  check('water + magma = fire', applyBrew(base, I.MAGMA_CREAM).bottles[0]?.id === I.POTION_FIRE);
+  check('water + sugar = speed', applyBrew(base, I.SUGAR).bottles[0]?.id === I.POTION_SPEED);
+  check('water + rod = strength', applyBrew(base, I.BLAZE_ROD).bottles[0]?.id === I.POTION_STRENGTH);
+  // a finished potion cannot be re-brewed
+  const healed: (Stack | null)[] = [{ id: I.POTION_HEAL, count: 1 }, null, null];
+  check('healing + wart does nothing', applyBrew(healed, I.NETHER_WART).brewed === false);
+  // an empty bottle is left alone
+  const emptySlots: (Stack | null)[] = [null, null, null];
+  check('empty slots never brew', applyBrew(emptySlots, I.NETHER_WART).brewed === false);
+
+  // the stand ticks a full 8 s batch and spends fuel
+  const stand = emptyBrewing(0, 1, 0);
+  stand.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
+  stand.ingredient = { id: I.NETHER_WART, count: 1 };
+  stand.fuel = { id: I.BLAZE_ROD, count: 1 };
+  let doneCount = 0;
+  for (let t = 0; t < 8.01; t += 0.5) { if (tickBrewing(stand, 0.5).done) doneCount++; }
+  check('one batch finishes in 8 s', doneCount === 1 && stand.bottles[0]?.id === I.POTION_AWKWARD);
+  check('a single rod is spent and two brews are banked', stand.fuel === null && stand.fuelLeft === 2);
+  // the ingredient survives the brew
+  check('the ingredient is not consumed', stand.ingredient?.id === I.NETHER_WART);
+  // a stand with no fuel never starts
+  const noFuel = emptyBrewing(0, 1, 0);
+  noFuel.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
+  noFuel.ingredient = { id: I.NETHER_WART, count: 1 };
+  for (let t = 0; t < 20; t += 1) tickBrewing(noFuel, 1);
+  check('no fuel, no brew', noFuel.bottles[0]?.id === I.WATER_BOTTLE && noFuel.progress === 0);
+  // an invalid ingredient never starts a batch
+  const badIng = emptyBrewing(0, 1, 0);
+  badIng.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
+  badIng.fuel = { id: I.BLAZE_ROD, count: 1 };
+  badIng.ingredient = { id: B.STONE, count: 1 };
+  for (let t = 0; t < 20; t += 1) tickBrewing(badIng, 1);
+  check('stone is not a brewing ingredient', badIng.bottles[0]?.id === I.WATER_BOTTLE && badIng.progress === 0);
+}
+
+section('2.4: potion item metadata');
+{
+  const potionIds = [I.POTION_AWKWARD, I.POTION_HEAL, I.POTION_FIRE, I.POTION_SPEED, I.POTION_NIGHT, I.POTION_STRENGTH, I.POTION_REGEN];
+  check('all potions are drinkable', potionIds.every((id) => isPotion(id)));
+  check('potion effect metadata is complete', potionIds.every((id) => !!POTIONS[id]?.name));
+  check('healing is the instant effect', POTIONS[I.POTION_HEAL]?.effect === 'heal' && HEAL_AMOUNT === 7);
+  check('fire resistance is 45 s', POTIONS[I.POTION_FIRE]?.effect === 'fire' && POTIONS[I.POTION_FIRE]?.duration === 45);
+  check('night vision is 30 s', POTIONS[I.POTION_NIGHT]?.effect === 'night' && POTIONS[I.POTION_NIGHT]?.duration === 30);
+  check('speed is 20 s', POTIONS[I.POTION_SPEED]?.effect === 'speed' && POTIONS[I.POTION_SPEED]?.duration === 20);
+  check('strength is 15 s', POTIONS[I.POTION_STRENGTH]?.effect === 'strength' && POTIONS[I.POTION_STRENGTH]?.duration === 15);
+  check('regeneration is 10 s', POTIONS[I.POTION_REGEN]?.effect === 'regen' && POTIONS[I.POTION_REGEN]?.duration === 10);
+  check('new items do not collide with blocks', potionIds.every((id) => !BLOCKS[id]) && !BLOCKS[I.SUGAR] && !BLOCKS[I.BOTTLE] && !BLOCKS[I.WATER_BOTTLE] && !BLOCKS[I.HONEY_BOTTLE]);
+  check('bottles stack to 16', potionIds.every((id) => stackLimit(id) === 16));
+  check('honey bottle is food', isFood(I.HONEY_BOTTLE) === true);
+  check('the three new recipes are registered',
+    RECIPES.some((r) => r.out.id === I.SUGAR) &&
+    RECIPES.some((r) => r.out.id === I.BOTTLE) &&
+    RECIPES.some((r) => r.out.id === I.HONEY_BOTTLE));
 }
 
 
