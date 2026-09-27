@@ -1,8 +1,18 @@
-# BlockCraft 2.5 🟩
+# BlockCraft 2.6 🟩
 
-Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci. Wersja komputerowa (mysz + klawiatura) i dotykowa (telefon/tablet) są teraz **wyraźnie rozdzielone**, a każda z nich wreszcie działa jak trzeba.
+Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.6 „Warsztat bez wpadek”** domyka kilka ważnych spraw jakościowych: chroni przed utratą łupu, ułatwia wyszukiwanie receptur i dopracowuje interfejs na małych ekranach.
 
-**Wersja 2.5 „Wielka naprawa”** to update, w którym nie ma nowego wymiaru ani nowych bloków – zamiast tego naprawiono **wszystko, co psuło sterowanie** i przez co gra była trudna do ogrywania:
+**Wersja 2.6 „Warsztat bez wpadek”**:
+
+* **Ekwipunek działa transakcyjnie.** Niepełne miejsce nie przyjmuje po cichu części stosu – łup zostaje na ziemi, a nieudana wymiana nie pobiera zapłaty. Wynik rzemiosła nie znika, gdy plecak jest pełny; receptury uwzględniają miejsce zwalniane przez składniki.
+* **Własne nazwy i zaklęcia są bezpieczne przy przenoszeniu.** Dodawanie i zwracanie stosów zachowuje nazwę, wytrzymałość i zaklęcia. Stosy łączą się tylko wtedy, gdy ich metadane naprawdę pasują; przedmioty odkładane z siatki rzemieślniczej nie tracą imienia.
+* **Wyszukiwarka receptur** znajduje wynik lub składnik i ignoruje polskie znaki diakrytyczne. Filtr „Możliwe” ukrywa przepisy bez składników, stołu albo wolnego miejsca na wynik.
+* **Naprawa ustawień.** Wartości wczytane ze starszego lub uszkodzonego zapisu są walidowane i ograniczane do prawidłowych zakresów, zamiast psuć renderowanie lub sterowanie.
+* **Lepsze dopasowanie do telefonu.** Pasek skrótów i sloty zmniejszają się na wąskich ekranach, ekwipunek mieści się w viewportcie, przyciski uwzględniają safe-area, a elementy HUD-u nie są już podnoszone dwukrotnie przez margines wycięcia.
+* **Pikselowy krój pisma jest lokalny.** Pixelify Sans jest osadzany w buildzie zamiast pobierania z Google Fonts, dzięki czemu menu działa offline i nie czeka na zewnętrzną sieć. Licencja fontu znajduje się w `public/OFL-Pixelify-Sans.txt`.
+* **Kontrola jakości w PR.** Nowy workflow GitHub Actions uruchamia typecheck, testy i build dla pull requestów.
+
+**Wersja 2.5 „Wielka naprawa”** to poprzednie wydanie, które rozdzieliło sterowanie komputerowe i dotykowe oraz naprawiło kluczowe błędy wejścia:
 
 * **Osobna wersja PC i osobna wersja dotykowa.** Wcześniej wystarczył ekran dotykowy (choćby w laptopie z Windows), żeby gra wymusiła sterowanie mobilne – Pointer Lock nie startował, więc **mysz i klawiatura były martwe** i na takich maszynach nie dało się praktycznie grać. Teraz o wersji decyduje **główny wskaźnik urządzenia** (`pointer: coarse`), laptopy z ekranem dotykowym dostają pełną wersję PC, a w Opcjach → Sterowanie jest wybór **Tryb sterowania: Automat / Komputer / Dotyk** – przełączany w locie, bez restartu świata.
 * **Klawiatura nie „zamiera” bez blokady kursora.** Całe sterowanie klawiszowe było zależne od aktywnej blokady myszy – po Alt-Tabie albo odrzuconym Pointer Locku klawisze nic nie robiły, dopóki gracz nie kliknął ponownie w ekran. Teraz tylko rozglądanie myszą wymaga blokady; ruch, ekwipunek, czat, sloty i skróty działają zawsze.
@@ -106,7 +116,7 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | PPM | postawienie bloku / użycie stołu rzemieślniczego |
 | ŚPM | wybór bloku z celownika |
 | `1`–`9` (także numeryczne), kółko myszy | wybór slotu na pasku |
-| `E` | ekwipunek i wytwarzanie |
+| `E` | ekwipunek i wytwarzanie · wyszukiwarka receptur po nazwie i składniku (2.6) |
 | `Q` | wyrzucenie przedmiotu (`Ctrl+Q` – cały stos) |
 | `T` lub `/` | czat i komendy |
 | `PPM` na jedzeniu | jedzenie (głód) |
@@ -138,7 +148,7 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | `J` | dziennik przygód i postęp celów (2.1) |
 | `F3` | informacje debugowania |
 
-### Na telefonie i tablecie (2.5)
+### Na telefonie i tablecie (sterowanie 2.5, dopracowane w 2.6)
 
 Od 2.5 wersja dotykowa i komputerowa są **wyraźnie rozdzielone**: o wyborze decyduje główny wskaźnik urządzenia (laptop z ekranem dotykowym dostaje wersję PC), a w Opcjach → Sterowanie → **Tryb sterowania** można wymusić „Komputer” albo „Dotyk” – zmiana działa natychmiast, bez restartu świata.
 
@@ -189,8 +199,8 @@ npm run preview  # podgląd produkcyjnego builda
 npm run typecheck
 ```
 
-Build jest **pojedynczym plikiem `dist/index.html`** (JS i CSS są wbudowane w HTML), a jedynym dodatkowym plikiem jest `dist/menu-bg.jpg`.
-Dzięki temu grę można otworzyć nawet bezpośrednio z dysku (`file://`) albo wrzucić na dowolny hosting statyczny.
+Build jest **pojedynczym plikiem `dist/index.html`** (JavaScript, CSS i font są wbudowane w HTML). Pozostałe pliki to lokalne tło `dist/menu-bg.jpg`, licencja fontu `dist/OFL-Pixelify-Sans.txt` oraz techniczny znacznik `dist/.nojekyll` dla GitHub Pages.
+Dzięki temu grę można otworzyć nawet bezpośrednio z dysku (`file://`) albo wrzucić na dowolny hosting statyczny – po zbudowaniu nie są potrzebne Google Fonts ani inne zewnętrzne zasoby.
 
 ---
 
@@ -225,7 +235,7 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 * `vite.config.ts` ustawia `base: "./"`,
 * tło menu jest ładowane jako `./menu-bg.jpg` (`import.meta.env.BASE_URL`) – **nie** jako `/menu-bg.jpg`,
 * `public/.nojekyll` wyłącza przetwarzanie przez Jekylla (pliki zaczynające się od `_` nie znikają),
-* cały JavaScript i CSS są wbudowane w `index.html`, więc nie ma żadnych zewnętrznych `assets/*` do zgubienia.
+* JavaScript, CSS i lokalne fonty są wbudowane w `index.html`; publikacja nie zależy od zewnętrznego CDN ani `assets/*`.
 
 ---
 
@@ -245,7 +255,7 @@ Katalogi projektowe GitHub Pages są serwowane z podkatalogu (`https://user.gith
 * **Piec**: PPM otwiera przetapianie (ruda → sztabka, piasek → szkło, pień → węgiel drzewny, mięso). Paliwem jest węgiel, deski, patyki albo pnie.
 * **Uprawa**: motyka robi grządkę, nasiona (z trawy) rosną w pszenicę szybciej przy wodzie. Sadzonki z liści wyrastają w drzewa.
 * **Wiadra** z żelaza zbierają i stawiają wodę oraz lawę.
-* **Prawdziwe craftowanie wzorowe** – siatka 2×2 w ekwipunku i 3×3 u stołu rzemieślniczego. Kilof to trzy bloki nad dwoma patykami, łuk to patyki na ukos ze struną, a skrzynia to osiem desek w ramie. Wzory pasują w dowolnym miejscu siatki, a PPM kładzie po jednym przedmiocie. Lista receptur (z filtrem „tylko możliwe”) działa nadal – szybciej, gdy wiesz czego chcesz. Wśród nich łuk (3 patyki + 3 struny) i strzały (krzemień + patyk + pióro) oraz bloki żelaza, złota i diamentów (9 sztabek → 1 blok i z powrotem).
+* **Prawdziwe craftowanie wzorowe** – siatka 2×2 w ekwipunku i 3×3 u stołu rzemieślniczego. Kilof to trzy bloki nad dwoma patykami, łuk to patyki na ukos ze struną, a skrzynia to osiem desek w ramie. Wzory pasują w dowolnym miejscu siatki, a PPM kładzie po jednym przedmiocie. Lista receptur ma wyszukiwarkę po nazwie wyniku i składników (bez względu na polskie znaki) oraz filtr „Możliwe”, który uwzględnia miejsce na wynik. Wśród przepisów: łuk, strzały oraz bloki żelaza, złota i diamentów (9 sztabek → 1 blok i z powrotem).
 * **Moby**: świnie, owce, krowy (dają też skórę) i kury (zostawiają jedzenie, wełnę albo pióra), **mieszkańcy** (neutralni, handlują, uciekają przed potworami, nie dają łupów – uważaj, żeby nie rozgniewać golemów), **żelazne golemy** (100 HP, 7 obrażeń, bronią osady, sypią żelazem i makami), zombie (atakują w nocy i w jaskiniach, palą się w dzień), creepery (podchodzą i wybuchają), **pająki** (szybkie, wspinają się po ścianach – nawet kilka bloków w górę, dają strunę), **szkieletowe stwory** – trzymają dystans i strzelają z łuku, a same rzucają kości, strzały i czasem łuk – oraz **wilki**: dzikie kręcą się po łąkach, a surowym mięsem (PPM) zatamej je; przybrane wilki (czerwona grzywa) podążają za graczem, regenerują się i atakują potwory w jego obronie.
 * **Pancerz i tarcza**: cztery zestawy (skóra, żelazo, złoto, diament) po cztery elementy – kaptur, napierśnik, nogawice, buty. Wytwarzasz je wzorowo u stołu (5/8/7/4 kawałki materiału), zakładasz w slotach nad ekwipunkiem (E), a każdy punkt pancerza redukuje obrażenia o 4% (do 80%). Zbroja ma wytrzymałość, pęka przy silnych ciosach i wypada z Ciebie przy śmierci. **Tarcza** (6 desek + żelazo) w dłoni przyłapuje strzały szkieletów i osłabia ciosy wręcz o połowę.
 * **Zaklęcia (1.5)**: ruda lazurytu (pas y = 9–44, potrzebny kamienny kilof, 4–8 kryształów), trzcina cukrowa rosnąca w kępach przy brzegach wody i w światach płaskich (ścina się samą, rośnie dalej przy wodzie, maks. 3 segmenty), papier z trzech trzcin i książka z papieru ze skórą. **Stół zaklęć** (2 diamenty + 4 obsydiany + książka, tylko przy stole 3×3) daje trzy oferty; każda kosztuje punkty doświadczenia i lazuryt (1–3), a jakość rośnie z liczbą **biblioteczek w pierścieniu wokół stołu** (maks. 15 → poziom 30). Zaklęcia: Wydajność (szybsze kopanie), Szczęście (więcej rud i plonów), Jedwabny dotyk (blok w oryginalnej formie), Niezniszczalność (rzadsze zużycie), Ostrość (obrażenia), Moc (strzały), Nieskończoność (łuk bez strzał), Odrzut, Grabież (dodatkowe łupy), Ochrona (pancerz) i Lekki krok (mniejszy upadek). Zaklęte przedmioty mają poświatę, fioletowe nazwy w podpowiedziach i przeżywają śmierć razem z ekwipunkiem.

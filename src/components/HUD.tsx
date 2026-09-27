@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { HUDState } from '../game/engine';
 import { displayName, durabilityMax } from '../game/items';
 import { enchList } from '../game/enchant';
+import { GAME_VERSION } from '../utils/version';
 
 const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
 const BUBBLE = ['.XXX.', 'X..XX', 'X.XXX', 'XXXXX', '.XXX.'];
@@ -63,8 +64,8 @@ function Drumstick({ fill }: { fill: 0 | 1 | 2 }) {
 export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<number, string>; onSelect?: (i: number) => void }) {
   return (
     <div
-      className="flex"
-      style={{ background: 'rgba(0,0,0,0.35)', border: '2px solid #1a1a1a', padding: 2, pointerEvents: onSelect ? 'auto' : undefined, marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      className="hotbar flex"
+      style={{ background: 'rgba(0,0,0,0.35)', border: '2px solid #1a1a1a', padding: 2, pointerEvents: onSelect ? 'auto' : undefined }}
     >
       {hud.hotbar.map((s, i) => {
         const max = s ? durabilityMax(s.id) : 0;
@@ -72,11 +73,9 @@ export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<
         return (
           <div
             key={i}
-            className="relative flex items-center justify-center"
+            className="hotbar-slot relative flex items-center justify-center"
             onPointerDown={onSelect ? (e) => { e.stopPropagation(); onSelect(i); } : undefined}
             style={{
-              width: 48,
-              height: 48,
               border: i === hud.selected ? '3px solid #fff' : '3px solid #6b6b6b',
               outline: i === hud.selected ? '2px solid #000' : 'none',
               zIndex: i === hud.selected ? 2 : 1,
@@ -193,7 +192,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 2.5 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
+            `BlockCraft ${GAME_VERSION} (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -284,7 +283,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
           </div>
         )}
         {hud.mode === 'survival' && (
-          <div className="mb-1 flex w-full flex-col gap-0.5 px-1" style={{ width: 9 * 48 }}>
+          <div className="mb-1 flex w-full flex-col gap-0.5 px-1" style={{ width: 'min(432px, calc(100vw - 16px))' }}>
             <div className="flex justify-between">
               <div className="flex gap-[2px]">{hearts}</div>
               <div className="flex flex-row-reverse gap-[2px]">{hud.air < hud.maxAir - 0.01 ? bubbles : null}</div>
@@ -303,7 +302,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         )}
         {hud.sprinting && <div className="mb-1 text-sm opacity-80 mc-text">Sprint</div>}
         {hud.mode === 'creative' && hud.flying && <div className="mb-1 text-sm opacity-80 mc-text">✈ Latanie</div>}
-        <div className="relative mb-1 h-[10px]" style={{ width: 9 * 48, background: 'rgba(0,0,0,0.55)', border: '2px solid #1a1a1a' }}>
+        <div className="relative mb-1 h-[10px]" style={{ width: 'min(432px, calc(100vw - 16px))', background: 'rgba(0,0,0,0.55)', border: '2px solid #1a1a1a' }}>
           <div className="h-full" style={{ width: `${Math.round(hud.xpFrac * 100)}%`, background: '#7ec850' }} />
           <span
             className="absolute inset-0 flex items-center justify-center text-[11px] font-bold"

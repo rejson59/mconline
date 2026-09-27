@@ -97,10 +97,57 @@ export function effectiveSettings(s: Settings, profile: DeviceProfile): Settings
   return applyPreset(s, recommendPreset(profile), true);
 }
 
+function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === 'string' && allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+/**
+ * Merges older saves with defaults and rejects stale/corrupted values from
+ * localStorage. A single bad preference must never poison the renderer or
+ * strand a player with an unusable control mode.
+ */
+export function normalizeSettings(value: unknown): Settings {
+  const stored = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<Record<keyof Settings, unknown>>
+    : {};
+  const quality = oneOf(stored.quality, ['auto', 'low', 'medium', 'high'] as const, DEFAULT_SETTINGS.quality);
+  const controlMode = oneOf(stored.controlMode, ['auto', 'desktop', 'touch'] as const, DEFAULT_SETTINGS.controlMode);
+  const touchMode = oneOf(stored.touchMode, ['tap', 'buttons'] as const, DEFAULT_SETTINGS.touchMode);
+  const fps = stored.fpsCap === 0 || stored.fpsCap === 30 || stored.fpsCap === 60 ? stored.fpsCap : DEFAULT_SETTINGS.fpsCap;
+  const bool = (key: keyof Settings) => typeof stored[key] === 'boolean' ? stored[key] as boolean : DEFAULT_SETTINGS[key] as boolean;
+
+  return {
+    ...DEFAULT_SETTINGS,
+    renderDistance: Math.round(boundedNumber(stored.renderDistance, DEFAULT_SETTINGS.renderDistance, 2, 14)),
+    sensitivity: boundedNumber(stored.sensitivity, DEFAULT_SETTINGS.sensitivity, 0.2, 3),
+    fov: Math.round(boundedNumber(stored.fov, DEFAULT_SETTINGS.fov, 50, 110)),
+    volume: boundedNumber(stored.volume, DEFAULT_SETTINGS.volume, 0, 1),
+    minimap: bool('minimap'),
+    controlMode,
+    quality,
+    pixelRatio: boundedNumber(stored.pixelRatio, DEFAULT_SETTINGS.pixelRatio, 0.75, 2),
+    particles: boundedNumber(stored.particles, DEFAULT_SETTINGS.particles, 0, 1),
+    clouds: bool('clouds'),
+    dynamicResolution: bool('dynamicResolution'),
+    fpsCap: fps,
+    viewBobbing: bool('viewBobbing'),
+    showFps: bool('showFps'),
+    touchMode,
+    joystickFixed: bool('joystickFixed'),
+    haptics: bool('haptics'),
+    autoJump: bool('autoJump'),
+  };
+}
+
 export function loadSettings(): Settings {
   try {
-    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '');
-    return { ...DEFAULT_SETTINGS, ...s };
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '');
+    return normalizeSettings(stored);
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

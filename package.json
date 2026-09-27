@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.5.0",
-  "description": "BlockCraft 2.5 „Wielka naprawa” – przeglądarkowa gra sandboxowa (React + TypeScript + Three.js + Vite) z rozdzielonymi wersjami PC i dotykową, naprawionym sterowaniem, statywem alchemicznym, napojami, wędkarstwem, lornetą, kowadłem i Totemem Ratowania.",
+  "version": "2.6.0",
+  "description": "BlockCraft 2.6 „Warsztat bez wpadek” – gra sandboxowa w przeglądarce (React + TypeScript + Three.js + Vite) z bezpiecznym ekwipunkiem, wyszukiwarką receptur i dopracowanym interfejsem mobilnym.",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -25,6 +25,7 @@
     "deploy:branch": "npm run build && npx --yes gh-pages -d dist"
   },
   "dependencies": {
+    "@fontsource/pixelify-sans": "^5.3.0",
     "clsx": "2.1.1",
     "react": "19.2.6",
     "react-dom": "19.2.6",

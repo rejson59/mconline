@@ -25,6 +25,7 @@ import {
 import * as Sfx from './audio';
 import { patchChunkMaterial } from './lighting';
 import { buildItemIcons } from './itemIcons';
+import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
   ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown,
   blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
@@ -48,6 +49,7 @@ import {
   villagerTitle,
   PROFESSIONS,
   createVillagerState,
+  type TradeBlock,
   type TradeOffer,
   type VillagerState,
 } from './trading';
@@ -143,7 +145,7 @@ export interface TradeRow {
   /** Ile wymian zostało do wyczerpania zapasów. */
   left: number;
   max: number;
-  blocked: 'ok' | 'uses' | 'items';
+  blocked: 'ok' | 'uses' | 'items' | 'space';
 }
 
 export interface SaveData {
@@ -808,7 +810,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 2.5 „Wielka naprawa”: sterowanie działa wreszcie jak trzeba – na PC i na dotyku. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.');
+      : `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}”: szukaj receptur po nazwie lub składniku; pełny ekwipunek nie gubi łupu. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.`);
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -1189,7 +1191,7 @@ export class Game {
     // Leaving the inventory must never eat the items sitting in the grid.
     if (s !== 'inventory' && s !== 'chest' && s !== 'furnace' && s !== 'enchant') {
       for (const left of this.inventory.returnGrid()) {
-        if (left) this.spawnDrop(left.id, left.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, left.dur, undefined, undefined, undefined, left.ench);
+        if (left) this.spawnDrop(left.id, left.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, left.dur, undefined, undefined, undefined, left.ench, left.name);
       }
     }
     // …i dla mieszkańca, z którym właśnie handlowano.
@@ -1199,8 +1201,8 @@ export class Game {
       const it = this.enchantItem;
       this.enchantItem = null;
       this.enchOptions = [];
-      if (!this.inventory.add(it.id, it.count, it.dur, it.ench)) {
-        this.spawnDrop(it.id, it.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, it.dur, undefined, undefined, undefined, it.ench);
+      if (!this.inventory.add(it.id, it.count, it.dur, it.ench, it.name)) {
+        this.spawnDrop(it.id, it.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, it.dur, undefined, undefined, undefined, it.ench, it.name);
       }
     }
     this.keys.clear();
@@ -1210,7 +1212,7 @@ export class Game {
     this.touchAim = null;
     if (s !== 'anvil') this.anvilPos = null;
     if (s !== 'brewing') this.brewingPos = null;
-    if (s === 'anvil' && this.anvilPos) this.inventory.returnCursor();
+    if (s === 'anvil' && this.anvilPos) this.returnHeldStack();
     this.onUI(s);
   }
 
@@ -1218,8 +1220,18 @@ export class Game {
     this.craftingTable = table;
     this.setUI('inventory');
   }
+
+  /** Returns a held UI stack safely, spilling it instead of silently dropping it. */
+  private returnHeldStack() {
+    const held = this.inventory.cursor;
+    if (!held || this.inventory.returnCursor()) return;
+    this.inventory.cursor = null;
+    this.spawnDrop(held.id, held.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, held.dur, undefined, undefined, undefined, held.ench, held.name);
+    this.message('Brak miejsca – przedmiot z kursora upadł na ziemię.');
+  }
+
   closeInventory() {
-    this.inventory.returnCursor();
+    this.returnHeldStack();
     this.furnacePos = null;
     this.chestPos = null;
     this.enchantPos = null;
@@ -1283,10 +1295,11 @@ export class Game {
     }));
   }
 
-  private tradeBlocked(st: VillagerState, offer: TradeOffer): 'ok' | 'uses' | 'items' {
+  private tradeBlocked(st: VillagerState, offer: TradeOffer): TradeBlock {
     if (usesLeft(st, offer) <= 0) return 'uses';
-    // W trybie kreatywnym towar jest darmowy (zapasy nadal obowiązują).
-    if (this.mode === 'creative') return 'ok';
+    // W trybie kreatywnym towar jest darmowy (zapasy nadal obowiązują),
+    // ale pełny ekwipunek nie może po cichu pożreć odebranego przedmiotu.
+    if (this.mode === 'creative') return this.inventory.canAdd(offer.get.id, offer.get.count) ? 'ok' : 'space';
     return canTrade(st, this.inventory, offer);
   }
 
@@ -1304,9 +1317,13 @@ export class Game {
       this.message('Nie masz dość towaru na tę wymianę.');
       return false;
     }
+    if (row.blocked === 'space') {
+      this.message('Brak miejsca w ekwipunku na towar z wymiany.');
+      return false;
+    }
     const before = villagerLevel(st);
     if (this.mode === 'creative') {
-      this.inventory.add(row.offer.get.id, row.offer.get.count);
+      if (!this.inventory.add(row.offer.get.id, row.offer.get.count)) return false;
       st.used[row.offer.key] = (st.used[row.offer.key] ?? 0) + 1;
       st.xp += row.offer.xp;
     } else if (!applyTrade(st, this.inventory, row.offer)) {
@@ -1481,8 +1498,8 @@ export class Game {
   }
 
   /**
-   * Takes the result: charges levels, clears the inputs it consumed and hands
-   * the stack to the cursor (or drops it when the inventory is full).
+   * Takes the result: charges levels, clears the inputs it consumed and adds
+   * the intact output to inventory (or drops it if the inventory is full).
    */
   takeAnvilResult(): boolean {
     const a = this.currentAnvil();
@@ -1492,10 +1509,9 @@ export class Game {
       this.message('Za mało poziomów doświadczenia.');
       return false;
     }
-    if (this.inventory.cursor) {
-      if (this.inventory.cursor.id === offer.out.id) this.inventory.cursor.count += offer.out.count;
-      else if (!this.giveOrDrop(offer.out)) return false;
-    } else if (!this.giveOrDrop(offer.out)) return false;
+    // Never merge into the cursor by id alone: anvil outputs may have a new
+    // name, durability or enchantments, and tools themselves are unstackable.
+    if (!this.giveOrDrop(offer.out)) return false;
     if (offer.action === 'merge') { a.a = null; a.b = null; this.unlock('smith'); }
     if (offer.action === 'rename') { a.a = null; a.name = ''; this.unlock('namer'); }
     a.burn = offer.cost;
@@ -2527,8 +2543,12 @@ export class Game {
         const fallback = ITEMS[id]?.kind === 'tool' || ITEMS[id]?.kind === 'bucket' || ITEMS[id]?.stack === 1 ? 1 : 64;
         const n = args[1] ? parseInt(args[1], 10) : fallback;
         const count = Number.isNaN(n) ? fallback : Math.max(1, Math.min(fallback === 1 ? 1 : 256, n));
-        this.inventory.add(id, count);
-        this.message(`Otrzymano ${count}x ${displayName(id)}`);
+        if (this.inventory.add(id, count)) {
+          this.message(`Otrzymano ${count}x ${displayName(id)}`);
+        } else {
+          this.spawnDrop(id, count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z);
+          this.message(`Brak miejsca – ${count}x ${displayName(id)} upadło obok.`);
+        }
         this.notePickup(id);
         break;
       }
