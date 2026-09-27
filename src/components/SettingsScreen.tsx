@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { applyPreset, type ControlMode, type Settings, type TouchMode } from '../utils/settings';
+import { applyPreset, DEFAULT_SETTINGS, type ControlMode, type Settings, type TouchMode } from '../utils/settings';
 import { detectInputKind } from '../utils/input';
 import {
   PRESETS,
@@ -79,9 +79,18 @@ export default function SettingsScreen({
     <div className="flex w-full flex-col gap-3 bg-black/55 p-4">
       <div className="flex items-center justify-between">
         <div className="text-lg mc-text">Opcje</div>
-        <button className="mc-btn !w-auto !px-4 !py-1 !text-sm" onClick={onClose}>
-          Gotowe
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="mc-btn !w-auto !px-3 !py-1 !text-xs"
+            onClick={() => onChange({ ...DEFAULT_SETTINGS })}
+            title="Przywróć domyślne ustawienia obrazu, sterowania i dźwięku"
+          >
+            Przywróć domyślne
+          </button>
+          <button className="mc-btn !w-auto !px-4 !py-1 !text-sm" onClick={onClose}>
+            Gotowe
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2" role="tablist" aria-label="Zakładki opcji">

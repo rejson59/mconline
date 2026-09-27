@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.6.0",
-  "description": "BlockCraft 2.6 „Warsztat bez wpadek” – gra sandboxowa w przeglądarce (React + TypeScript + Three.js + Vite) z bezpiecznym ekwipunkiem, wyszukiwarką receptur i dopracowanym interfejsem mobilnym.",
+  "version": "2.7.0",
+  "description": "BlockCraft 2.7 „Nowe horyzonty” – polska gra sandboxowa w przeglądarce z nowymi biomami, blokami, zapisem lokalnym i sterowaniem dotykowym.",
   "type": "module",
   "license": "MIT",
   "keywords": [

@@ -93,7 +93,7 @@ export const I = {
   COOKED_SALMON: 246,
   SPYGLASS: 247,
   TOTEM: 248,
-  // 2.4 „Godzina alchemika” – idy kontynuują po blokach (Nether kończy się na 340)
+  // 2.4 „Godzina alchemika” – item ids 341–351; block ids 400+ are reserved for 3.0 biomes.
   SUGAR: 341,
   BOTTLE: 342,
   WATER_BOTTLE: 343,
@@ -370,10 +370,10 @@ const PICK_BLOCKS = new Set<number>([
 ]);
 const AXE_BLOCKS = new Set<number>([
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED, B.CHEST, B.LOOT_CHEST,
-  B.HAY, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N,
+  B.HAY, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG,
 ]);
 const SHOVEL_BLOCKS = new Set<number>([
-  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH, B.SOUL_SAND, B.SOUL_SOIL,
+  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH, B.SOUL_SAND, B.SOUL_SOIL, B.MUD,
 ]);
 const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE]);
 
@@ -510,14 +510,14 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
     }
     if (blockId === B.COAL_ORE || blockId === B.DIAMOND_ORE || blockId === B.IRON_ORE || blockId === B.GOLD_ORE ||
         blockId === B.LAPIS_ORE || blockId === B.EMERALD_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.ICE ||
-        blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
+        blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
         blockId === B.FARMLAND || (blockId >= B.CROP0 && blockId <= B.CROP3)) {
       return [{ id: blockId, count: 1 }];
     }
     if (BLOCKS[blockId]?.drop >= 0) return [{ id: blockId, count: 1 }];
     return [];
   }
-  if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
+  if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
   if (blockId === B.GRAVEL) return Math.random() < 0.12 ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
   if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
   if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];

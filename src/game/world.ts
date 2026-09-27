@@ -16,7 +16,7 @@ import {
 // ale stare importy z world.ts nadal działają.
 export { CH, CS, FLAT_H, SEA };
 
-export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Nether';
+export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Nether';
 
 const idx = (x: number, y: number, z: number) => (y * CS + z) * CS + x;
 
@@ -202,8 +202,17 @@ export class World {
     else if (h > 92) biome = 'Góry';
     else if (temp > 0.3) biome = 'Pustynia';
     else if (temp < -0.32) biome = 'Tundra';
+    // Climate bands add three distinct warm/wet regions without changing
+    // existing seed terrain or the save format. The low-frequency fields make
+    // biome borders broad enough to read during exploration.
+    else if (temp > 0.12 && forest < -0.12) biome = 'Sawanna';
+    else if (temp > 0.12 && forest > 0.42) biome = 'Dżungla';
+    else if (temp > -0.08 && temp < 0.12 && forest > 0.18 && forest < 0.42) biome = 'Bagno';
     else if (forest > 0.15) biome = forest > 0.35 ? 'Brzozowy las' : 'Las';
     else biome = 'Równiny';
+    // Marshes sit close to sea level, so shallow pools naturally appear in
+    // their low spots and the existing water table creates a wetland feel.
+    if (biome === 'Bagno') h = Math.min(h, SEA + 2);
     return { h, biome, temp, forest };
   }
 
@@ -247,12 +256,13 @@ export class World {
             id = B.STONE;
             if (biome === 'Pustynia' && y > h - 8) id = B.SANDSTONE;
           } else if (y < h) {
-            id = sandy ? (biome === 'Ocean' && y < SEA - 6 ? B.GRAVEL : B.SAND) : B.DIRT;
+            id = sandy ? (biome === 'Ocean' && y < SEA - 6 ? B.GRAVEL : B.SAND) : biome === 'Bagno' && y >= h - 3 ? B.MUD : B.DIRT;
             if (biome === 'Góry' && h > 100) id = B.STONE;
           } else if (y === h) {
             if (biome === 'Ocean') id = hash(wx, 7, wz, s) < 0.2 ? B.CLAY : h < SEA - 8 ? B.GRAVEL : B.SAND;
             else if (sandy) id = B.SAND;
             else if (biome === 'Tundra') id = B.SNOW;
+            else if (biome === 'Bagno') id = B.MUD;
             else if (biome === 'Góry') id = h > 108 ? B.SNOW : h > 98 ? B.STONE : B.GRASS;
             else id = h < SEA ? B.DIRT : B.GRASS;
           } else if (y <= SEA) {
@@ -307,11 +317,14 @@ export class World {
         const h = info.h;
         const biome = info.biome;
         const top = d[idx(x, h, z)];
+        if (biome === 'Bagno' && h < SEA && SEA + 1 < CH && d[idx(x, SEA, z)] === B.WATER && hash(wx, 2, wz, s + 154) < 0.12) {
+          d[idx(x, SEA + 1, z)] = B.LILY_PAD;
+        }
         if (top === B.GRASS && h + 1 < CH) {
           const r = hash(wx, 3, wz, s + 9);
-          const grassChance = biome === 'Równiny' ? 0.22 : 0.1;
+          const grassChance = biome === 'Równiny' ? 0.22 : biome === 'Dżungla' ? 0.32 : biome === 'Bagno' ? 0.28 : biome === 'Sawanna' ? 0.04 : 0.1;
           if (r < grassChance) d[idx(x, h + 1, z)] = B.TALLGRASS;
-          else if (r < grassChance + 0.012) d[idx(x, h + 1, z)] = B.FLOWER_RED;
+          else if (r < grassChance + (biome === 'Dżungla' ? 0.035 : 0.012)) d[idx(x, h + 1, z)] = B.FLOWER_RED;
           else if (r < grassChance + 0.024) d[idx(x, h + 1, z)] = B.FLOWER_YELLOW;
           else if (r > 0.9995) d[idx(x, h + 1, z)] = B.PUMPKIN;
         }
@@ -349,13 +362,17 @@ export class World {
         let chance = 0;
         if (info.biome === 'Las') chance = 0.035;
         else if (info.biome === 'Brzozowy las') chance = 0.03;
+        else if (info.biome === 'Dżungla') chance = 0.045;
+        else if (info.biome === 'Bagno') chance = 0.025;
+        else if (info.biome === 'Sawanna') chance = 0.008;
         else if (info.biome === 'Równiny') chance = 0.003;
         else if (info.biome === 'Tundra') chance = 0.006;
         else if (info.biome === 'Góry' && info.h < 98) chance = 0.008;
         if (r > chance) continue;
         if (info.h <= SEA) continue;
         const birch = info.biome === 'Brzozowy las' ? hash(tx, 2, tz, s) < 0.8 : hash(tx, 2, tz, s) < 0.15;
-        const top = this.growTree(c, tx, tz, info.h + 1, birch, vmask);
+        const kind = info.biome === 'Dżungla' ? 'jungle' : info.biome === 'Sawanna' ? 'acacia' : undefined;
+        const top = this.growTree(c, tx, tz, info.h + 1, birch, vmask, kind);
         if (top > maxY) maxY = top;
       }
 
@@ -395,13 +412,13 @@ export class World {
    * Places an oak or birch trunk with its canopy, clipping to this chunk only.
    * Returns the highest y the tree reaches (for maxY bookkeeping).
    */
-  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean, skip?: Uint8Array): number {
+  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean, skip?: Uint8Array, kind?: 'jungle' | 'acacia'): number {
     const d = c.data;
     const ox = c.cx * CS, oz = c.cz * CS;
     const s = this.seed;
-    const logId = birch ? B.BIRCH_LOG : B.LOG;
-    const leafId = birch ? B.BIRCH_LEAVES : B.LEAVES;
-    const th = 4 + Math.floor(hash(tx, 6, tz, s) * 3);
+    const logId = kind === 'acacia' ? B.ACACIA_LOG : birch ? B.BIRCH_LOG : B.LOG;
+    const leafId = kind === 'jungle' ? B.JUNGLE_LEAVES : kind === 'acacia' ? B.ACACIA_LEAVES : birch ? B.BIRCH_LEAVES : B.LEAVES;
+    const th = kind === 'acacia' ? 5 + Math.floor(hash(tx, 6, tz, s) * 2) : kind === 'jungle' ? 7 + Math.floor(hash(tx, 6, tz, s) * 4) : 4 + Math.floor(hash(tx, 6, tz, s) * 3);
     const topY = base + th;
     if (topY + 1 >= CH) return base;
     const put = (x: number, y: number, z: number, id: number, force: boolean) => {
@@ -412,8 +429,8 @@ export class World {
       const cur = d[i];
       if (force || cur === B.AIR || cur === B.TALLGRASS || cur === B.FLOWER_RED || cur === B.FLOWER_YELLOW) d[i] = id;
     };
-    for (let ly = topY - 3; ly <= topY; ly++) {
-      const rad = ly >= topY - 1 ? 1 : 2;
+    for (let ly = topY - (kind === 'jungle' ? 4 : 3); ly <= topY; ly++) {
+      const rad = kind === 'acacia' ? (ly >= topY - 1 ? 3 : ly >= topY - 3 ? 2 : 1) : kind === 'jungle' ? (ly >= topY - 2 ? 2 : 3) : ly >= topY - 1 ? 1 : 2;
       for (let dx = -rad; dx <= rad; dx++)
         for (let dz = -rad; dz <= rad; dz++) {
           if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || hash(tx + dx, ly, tz + dz, s) < 0.5)) continue;
@@ -426,6 +443,11 @@ export class World {
     put(tx, topY + 1, tz + 1, leafId, false);
     put(tx, topY + 1, tz - 1, leafId, false);
     for (let y = base; y < topY; y++) put(tx, y, tz, logId, true);
+    if (kind === 'acacia') {
+      const side = hash(tx, 8, tz, s) < 0.5 ? 1 : -1;
+      for (let n = 1; n <= 2; n++) put(tx + side * n, topY - 2 + n, tz, logId, true);
+      for (let n = 1; n <= 2; n++) put(tx - side * n, topY - 1, tz, logId, true);
+    }
     put(tx, base - 1, tz, B.DIRT, true);
     return topY + 3;
   }
@@ -902,7 +924,7 @@ export class World {
             const nx = x + F.dir[0], ny = y + F.dir[1], nz = z + F.dir[2];
             const nb = get(nx, ny, nz);
             if (IS_OPAQUE[nb]) continue;
-            if (nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES) continue;
+            if (nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
             if (isLiquid && (RENDER[nb] === 2)) continue;
             const t = tileFor(id, f);
             const sky = skyLight(nx, ny, nz);

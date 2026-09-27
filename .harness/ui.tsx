@@ -143,7 +143,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows release 2.6', menu.includes('WERSJA 2.6') && menu.includes('Warsztat bez wpadek'));
+  check('main menu shows release 2.7', menu.includes('WERSJA 2.7') && menu.includes('Nowe horyzonty'));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -381,9 +381,9 @@ section('2.3/2.4: journal chapter and menus');
   check('controls document respawn key', controls.includes('Enter / R (ekran śmierci)'));
   check('controls document touch long-press in windows', controls.includes('przytrzymaj: połowa / jeden'));
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
-  check('the menu announces release 2.6', menu.includes('2.6'));
+  check('the menu announces release 2.7', menu.includes('2.7'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the 2.6 release', menu.includes('WERSJA 2.6'));
+  check('the menu names the 2.7 release', menu.includes('WERSJA 2.7'));
 }
 
 section('2.4: brewing rules');

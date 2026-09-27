@@ -125,6 +125,16 @@ section('world: determinism and terrain');
   eq('world height is 128', CH, 128);
   check('sea level inside the world', SEA > 20 && SEA < CH - 20);
 
+  // New 3.0 climate regions are seed-stable and actually reachable.
+  const biomes = new Set<string>();
+  let biomeStable = true;
+  for (let x = -1600; x <= 1600; x += 64) for (let z = -1600; z <= 1600; z += 64) {
+    const aa = a.surface(x, z), bb = b.surface(x, z);
+    biomes.add(aa.biome);
+    if (aa.biome !== bb.biome) biomeStable = false;
+  }
+  check('3.0 wetland, savanna and jungle climates generate deterministically', biomeStable && ['Bagno', 'Sawanna', 'Dżungla'].every((name) => biomes.has(name)));
+
   // bedrock floor and no blocks below it
   let bedrock = true, outsideWorld = true;
   for (let x = -8; x < 8; x++) for (let z = -8; z < 8; z++) {
@@ -236,6 +246,8 @@ section('blocks: definitions and helpers');
   }
   check('every block has a name, hardness and sound', defsOk);
   check('storage blocks exist', [B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK].every((id) => !!BLOCKS[id]));
+  check('3.0 wetland and biome blocks have valid definitions', [B.MUD, B.ACACIA_LOG, B.ACACIA_LEAVES, B.JUNGLE_LEAVES, B.LILY_PAD].every((id) => !!BLOCKS[id] && !!BLOCKS[id]?.name));
+  check('3.0 lilies are non-solid plants', !IS_SOLID[B.LILY_PAD] && RENDER[B.LILY_PAD] === 1);
   check('air is not solid', !IS_SOLID[B.AIR]);
   check('water renders as liquid', RENDER[B.WATER] === 2);
   check('torch is a cross', RENDER[B.TORCH] === 1);
