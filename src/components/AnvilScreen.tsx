@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
 import { stackTooltip, TooltipBody } from '../utils/tooltip';
 import type { Stack } from '../game/inventory';
-import { displayName, durabilityMax } from '../game/items';
+import { displayName } from '../game/items';
+import Slot from './Slot';
 
 /**
  * 2.3 „Wyprawa i ratunek” – kowadło.
@@ -10,7 +11,7 @@ import { displayName, durabilityMax } from '../game/items';
  * Dwa sloty wejściowe i jeden wynik. Reguły (scalanie, przemianowywanie,
  * koszt poziomów) żyją w game/anvil.ts, ekran tylko je pokazuje.
  */
-function Slot({
+function LabeledSlot({
   stack,
   icons,
   onClick,
@@ -27,23 +28,7 @@ function Slot({
 }) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <div
-        className="mc-slot cursor-pointer"
-        onMouseDown={(e) => {
-          e.preventDefault();
-          onClick?.(e.button === 2);
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-        onMouseEnter={() => onHover?.(stackTooltip(stack, empty ?? ''))}
-        onMouseLeave={() => onHover?.(null)}
-      >
-        {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
-        {stack && stack.count > 1 && <span className="mc-count">{stack.count}</span>}
-        {stack?.ench && <span className="ench-glint" />}
-        {stack?.dur !== undefined && durabilityMax(stack.id) > 0 && (
-          <span className="dur-bar"><i style={{ width: `${Math.max(0, stack.dur / durabilityMax(stack.id)) * 100}%` }} /></span>
-        )}
-      </div>
+      <Slot stack={stack} icons={icons} onClick={onClick} onHover={() => onHover?.(stackTooltip(stack, empty ?? ''))} imgSize={34} showCount />
       {label && <div className="text-center text-[11px] text-[#333]">{label}</div>}
     </div>
   );
@@ -86,7 +71,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
         </div>
 
         <div className="flex items-end justify-center gap-3">
-          <Slot
+          <LabeledSlot
             stack={anvil.a}
             icons={icons}
             label="Przedmiot"
@@ -94,7 +79,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
             onHover={setHover}
             onClick={(r) => { game.clickAnvilSlot('a', r); refresh(); }}
           />
-          <Slot
+          <LabeledSlot
             stack={anvil.b}
             icons={icons}
             label="Do połączenia"
@@ -103,7 +88,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
             onClick={(r) => { game.clickAnvilSlot('b', r); refresh(); }}
           />
           <div className="mb-6 text-2xl text-[#333]">→</div>
-          <Slot
+          <LabeledSlot
             stack={offer.out}
             icons={icons}
             label={offer.cost ? `Wynik · ${offer.cost} pkt` : 'Wynik'}
@@ -137,22 +122,16 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
 
         <div className="grid grid-cols-9">
           {inv.slots.map((s, i) => (
-            <div
+            <Slot
               key={i}
-              className="mc-slot cursor-pointer"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                inv.clickSlot(i, e.button === 2);
+              stack={s}
+              icons={icons}
+              onHover={setHover}
+              onClick={(r) => {
+                inv.clickSlot(i, r);
                 refresh();
               }}
-              onContextMenu={(e) => e.preventDefault()}
-              onMouseEnter={() => setHover(stackTooltip(s))}
-              onMouseLeave={() => setHover(null)}
-            >
-              {s && <img src={icons[s.id]} width={32} height={32} className="pixelated" draggable={false} />}
-              {s && s.count > 1 && <span className="mc-count">{s.count}</span>}
-              {s?.ench && <span className="ench-glint" />}
-            </div>
+            />
           ))}
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { applyPreset, type Settings, type TouchMode } from '../utils/settings';
+import { applyPreset, type ControlMode, type Settings, type TouchMode } from '../utils/settings';
+import { detectInputKind } from '../utils/input';
 import {
   PRESETS,
   autoPreset,
@@ -50,6 +51,19 @@ export default function SettingsScreen({
   const fpsLabel = settings.fpsCap === 0 ? 'bez limitu' : `${settings.fpsCap} FPS`;
 
   const cycleTouch = () => set({ touchMode: (settings.touchMode === 'tap' ? 'buttons' : 'tap') as TouchMode });
+
+  /** 2.5: wersja PC / dotykowa z podglądem, co wykrył automat. */
+  const cycleControlMode = () => {
+    const order: ControlMode[] = ['auto', 'desktop', 'touch'];
+    const i = order.indexOf(settings.controlMode);
+    set({ controlMode: order[(i + 1) % order.length] });
+  };
+  const detected = detectInputKind();
+  const modeLabel: Record<ControlMode, string> = {
+    auto: `Automat (wykryto: ${detected === 'touch' ? 'dotyk' : 'komputer'})`,
+    desktop: 'Komputer (mysz + klawiatura)',
+    touch: 'Dotyk (telefon / tablet)',
+  };
 
   const Btn = ({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active?: boolean }) => (
     <button className={`mc-btn !py-2 !text-[15px] ${active ? 'ring-2 ring-inset ring-yellow-300' : ''}`} onClick={onClick}>
@@ -123,6 +137,14 @@ export default function SettingsScreen({
           </Btn>
       </div>
       <div hidden={tab !== 'controls'} className="flex flex-col gap-3">
+          <div className="text-xs text-green-300 mc-text">Wersja sterowania</div>
+          <Btn onClick={cycleControlMode}>
+            Tryb sterowania: {modeLabel[settings.controlMode]}
+          </Btn>
+          <div className="text-[11px] leading-tight opacity-70">
+            Automat wybiera wersję wg głównego wskaźnika urządzenia – ekran dotykowy w laptopie NIE wymusza już sterowania mobilnego.
+            Jeśli coś wykrył źle, wymuś wersję „Komputer” albo „Dotyk”. Zmiana działa od razu, bez restartu świata.
+          </div>
           <OptionSlider label="Czułość patrzenia" value={settings.sensitivity} min={0.2} max={3} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ sensitivity: v })} />
           <OptionSlider label="Pole widzenia" value={settings.fov} min={50} max={110} step={1} fmt={(v) => `${v}°`} onChange={(v) => set({ fov: v })} />
           <div className="mt-1 text-xs text-green-300 mc-text">Ekran dotykowy</div>

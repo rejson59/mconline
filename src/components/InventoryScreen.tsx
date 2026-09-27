@@ -1,44 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
 import { CREATIVE_BLOCKS } from '../game/blocks';
-import { RECIPES, type Stack } from '../game/inventory';
+import { RECIPES } from '../game/inventory';
 import { CREATIVE_ITEMS, displayName, stackLimit } from '../game/items';
-import { stackTooltip, TooltipBody } from '../utils/tooltip';
+import { TooltipBody } from '../utils/tooltip';
 import { ARMOR, armorPoints, ARMOR_SLOT_NAMES } from '../game/armor';
-
-function Slot({
-  stack,
-  icons,
-  onClick,
-  onHover,
-  showCount = true,
-  highlight = false,
-}: {
-  stack: Stack | null;
-  icons: Record<number, string>;
-  onClick?: (right: boolean) => void;
-  onHover?: (name: string | null) => void;
-  showCount?: boolean;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className="mc-slot cursor-pointer"
-      style={highlight ? { outline: '2px solid #fff', zIndex: 1 } : undefined}
-      onMouseDown={(e) => {
-        e.preventDefault();
-        onClick?.(e.button === 2);
-      }}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseEnter={() => onHover?.(stackTooltip(stack))}
-      onMouseLeave={() => onHover?.(null)}
-    >
-      {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
-      {stack && showCount && stack.count > 1 && <span className="mc-count">{stack.count}</span>}
-      {stack?.ench && <span className="ench-glint" />}
-    </div>
-  );
-}
+import Slot from './Slot';
 
 export default function InventoryScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
   const [, setTick] = useState(0);
@@ -124,6 +91,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                 ))}
               </div>
               <div className="mb-1 text-sm">Kliknij blok, a potem slot paska. Klik poza oknem usuwa trzymany blok.</div>
+            <div className="mb-1 text-xs opacity-70">Na dotyku: tapnij, aby wybrać · przytrzymaj, aby wziąć jeden.</div>
               {hotbar}
             </>
           ) : (
@@ -157,7 +125,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                 ))}
               </div>
               {hotbar}
-              <div className="mt-2 text-xs opacity-80">LPM: weź/połóż stos · PPM: połowa / jeden</div>
+              <div className="mt-2 text-xs opacity-80">LPM: weź/połóż stos · PPM: połowa / jeden · dotyk: przytrzymaj = PPM</div>
             </>
           )}
         </div>

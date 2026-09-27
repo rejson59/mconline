@@ -3,7 +3,7 @@ import type { Game } from '../game/engine';
 import { I } from '../game/items';
 import type { Settings } from '../utils/settings';
 
-/** True on phones/tablets (or any device with a touchscreen). */
+/** True on phones/tablets – 2.5: tylko pomocniczo, tryb wybiera utils/input. */
 export function isTouchDevice(): boolean {
   if (typeof window === 'undefined') return false;
   const nav = navigator as Navigator & { msMaxTouchPoints?: number };
@@ -12,7 +12,6 @@ export function isTouchDevice(): boolean {
 
 const STICK_RADIUS = 62;
 const JOINT_BASE = { x: 96, y: -118 }; // środek stałego drążka (od lewej / od dołu)
-const TAP_MS = 260;
 const HOLD_MS = 250;
 const TAP_MOVE_PX = 14;
 
@@ -166,6 +165,7 @@ export default function TouchControls({
       game.mouseLeft = false;
       game.mouseRight = false;
       game.touchAim = null;
+      game.sprinting = false;
     };
     window.addEventListener('blur', stop);
     document.addEventListener('visibilitychange', stop);
@@ -228,10 +228,15 @@ export default function TouchControls({
       setBreaking(false);
       setHoldRing(null);
     } else if (info.gesture === 'draw') {
-      game.mouseRight = false; // wypuszcza naciągniętą strzałę
-      game.touchAim = null;
-    } else if (info.gesture === '' && settings.touchMode === 'tap' && !info.moved && performance.now() - info.downAt < TAP_MS) {
+      // 2.5: najpierw puszczamy cięciwę – silnik wystrzeli strzałę w KIERUNKU
+      // PALCA w tej samej klatce i dopiero wtedy czyści cel dotyku. Wcześniej
+      // oba działy się naraz i strzała leciała zawsze w środek ekranu.
+      game.mouseRight = false;
+    } else if (info.gesture === '' && settings.touchMode === 'tap' && !info.moved && performance.now() - info.downAt < HOLD_MS) {
       // Krótkie tapnięcie: postaw blok / użyj / zjedz / zaatakuj moba.
+      // 2.5: okno tapu = okno przytrzymania – wcześniej tap trwał do 260 ms,
+      // a przytrzymanie startowało po 250 ms, więc ostatnie 10 ms tapu
+      // „gubilo się” jako niechciany cios.
       const n = ndc(info.lastX, info.lastY);
       game.touchTap(n.x, n.y);
       buzz(6, settings.haptics);
@@ -255,10 +260,16 @@ export default function TouchControls({
     const moveZone = settings.joystickFixed
       ? (x < Math.min(rect.width * 0.46, base.x + STICK_RADIUS * 2.25) && y > rect.height * 0.42)
       : x < rect.width * 0.46 && y > rect.height * 0.32;
+    // 2.5: drugi palec w strefie drążka (np. otarta dłoń) NIE zrywa ruchu –
+    // drążek jest tylko jeden, dodatkowy dotyk w strefie to rozglądanie.
+    // Wcześniej drugi dotyk podmieniał drążek, a jego puszczenie zatrzymywało
+    // też pierwszy, więc postać stawała w miejscu.
+    const moveTaken = [...pointers.current.values()].some((p) => p.kind === 'move');
+    const kind: PointerInfo['kind'] = moveZone && !moveTaken ? 'move' : 'look';
     const info: PointerInfo = {
-      kind: moveZone ? 'move' : 'look',
-      originX: moveZone && !settings.joystickFixed ? x : base.x,
-      originY: moveZone && !settings.joystickFixed ? y : base.y,
+      kind,
+      originX: kind === 'move' && !settings.joystickFixed ? x : base.x,
+      originY: kind === 'move' && !settings.joystickFixed ? y : base.y,
       lastX: x,
       lastY: y,
       startX: x,
@@ -308,7 +319,8 @@ export default function TouchControls({
       setMoveKeys(dx / STICK_RADIUS, dy / STICK_RADIUS);
       setStick({ x: info.originX, y: info.originY, dx, dy });
     } else if (info.kind === 'look') {
-      const s = 0.006 * settings.sensitivity;
+      // 2.5: lorneta spowalnia też rozglądanie palcem (jak mysz na PC).
+      const s = 0.006 * settings.sensitivity * (game.isZooming() ? 0.4 : 1);
       game.yaw -= (x - info.lastX) * s;
       game.pitch -= (y - info.lastY) * s;
       game.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, game.pitch));
@@ -318,10 +330,15 @@ export default function TouchControls({
         info.lastX = x;
         info.lastY = y;
         game.touchAim = ndc(x, y); // celownik podąża za palcem
-        if (holdRing) setHoldRing({ x, y, p: game.breakProgress });
+        // 2.5: pierścień zawsze podąża za palcem (wcześniej polegał na
+        // możliwie nieaktualnym stanie z zamknięcia renderowania).
+        setHoldRing({ x, y, p: game.breakProgress });
       } else if (info.gesture === 'draw') {
         info.lastX = x;
         info.lastY = y;
+        // 2.5: naciągnięty łuk celuje tam, gdzie jest palec (wcześniej
+        // trafiał w punkt przytrzymania i nie dało się wycelować).
+        game.touchAim = ndc(x, y);
       }
     }
     info.lastX = x;
@@ -339,6 +356,17 @@ export default function TouchControls({
       game.sprinting = false;
     } else {
       endGesture(info);
+    }
+  };
+
+  // 2.5: pełny ekran – odrzucenie obietnicy (iOS Safari) nie może zostać
+  // jako „unhandled rejection” w konsoli.
+  const toggleFullscreenSafe = () => {
+    try {
+      if (document.fullscreenElement) void document.exitFullscreen?.()?.catch?.(() => {});
+      else void document.documentElement.requestFullscreen?.()?.catch?.(() => {});
+    } catch {
+      /* niektóre przeglądarki mobilne nie pozwalają */
     }
   };
 
@@ -568,12 +596,7 @@ export default function TouchControls({
           style={{ ...btnStyle, width: 50, height: 50, fontSize: 17, opacity: 0.75 }}
           onPointerDown={(e) => {
             e.stopPropagation();
-            try {
-              if (document.fullscreenElement) void document.exitFullscreen?.();
-              else void document.documentElement.requestFullscreen?.();
-            } catch {
-              /* niektóre przeglądarki mobilne nie pozwalają */
-            }
+            toggleFullscreenSafe();
           }}
         >
           ⛶

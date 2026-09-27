@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
-import { stackTooltip, TooltipBody } from '../utils/tooltip';
+import { TooltipBody } from '../utils/tooltip';
+import { stackTooltip } from '../utils/tooltip';
 import type { Stack } from '../game/inventory';
+import Slot from './Slot';
 
-function Slot({
+/** Slot pieca z podpisem (Surowiec / Paliwo / Wynik). */
+function LabeledSlot({
   stack,
   icons,
   onClick,
@@ -18,19 +21,7 @@ function Slot({
 }) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <div
-        className="mc-slot cursor-pointer"
-        onMouseDown={(e) => {
-          e.preventDefault();
-          onClick?.(e.button === 2);
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-        onMouseEnter={() => onHover?.(stackTooltip(stack, label ?? ''))}
-        onMouseLeave={() => onHover?.(null)}
-      >
-        {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
-        {stack && stack.count > 1 && <span className="mc-count">{stack.count}</span>}
-      </div>
+      <Slot stack={stack} icons={icons} onClick={onClick} onHover={() => onHover?.(stackTooltip(stack, label ?? ''))} imgSize={34} showCount />
       {label && <div className="text-[11px] text-[#333]">{label}</div>}
     </div>
   );
@@ -72,7 +63,7 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
       <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
         <div className="text-lg font-semibold">Piec</div>
         <div className="flex items-end justify-center gap-4">
-          <Slot stack={f.input} icons={icons} label="Surowiec" onHover={setHover} onClick={(r) => { game.clickFurnace('input', r); refresh(); }} />
+          <LabeledSlot stack={f.input} icons={icons} label="Surowiec" onHover={setHover} onClick={(r) => { game.clickFurnace('input', r); refresh(); }} />
           <div className="mb-5 flex flex-col items-center gap-1">
             <div className="h-10 w-3 border-2 border-[#373737] bg-[#2a2a2a]">
               <div className="w-full bg-orange-500" style={{ height: `${burn * 100}%`, marginTop: `${(1 - burn) * 100}%` }} />
@@ -81,30 +72,25 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
               <div className="h-full bg-[#e8c15a]" style={{ width: `${Math.min(1, f.cook) * 100}%` }} />
             </div>
           </div>
-          <Slot stack={f.fuel} icons={icons} label="Paliwo" onHover={setHover} onClick={(r) => { game.clickFurnace('fuel', r); refresh(); }} />
+          <LabeledSlot stack={f.fuel} icons={icons} label="Paliwo" onHover={setHover} onClick={(r) => { game.clickFurnace('fuel', r); refresh(); }} />
           <div className="mb-4 text-2xl text-[#333]">→</div>
-          <Slot stack={f.output} icons={icons} label="Wynik" onHover={setHover} onClick={(r) => { game.clickFurnace('output', r); refresh(); }} />
+          <LabeledSlot stack={f.output} icons={icons} label="Wynik" onHover={setHover} onClick={(r) => { game.clickFurnace('output', r); refresh(); }} />
         </div>
         <div className="max-w-[360px] text-xs text-[#333]">
           Przetapia rudę żelaza i złota, piasek na szkło, bruk na kamień, mięso oraz pnie na węgiel drzewny. Paliwo: węgiel, deski, patyki, pnie.
         </div>
         <div className="grid grid-cols-9">
           {inv.slots.map((s, i) => (
-            <div
+            <Slot
               key={i}
-              className="mc-slot cursor-pointer"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                inv.clickSlot(i, e.button === 2);
+              stack={s}
+              icons={icons}
+              onHover={setHover}
+              onClick={(r) => {
+                inv.clickSlot(i, r);
                 refresh();
               }}
-              onContextMenu={(e) => e.preventDefault()}
-              onMouseEnter={() => setHover(stackTooltip(s))}
-              onMouseLeave={() => setHover(null)}
-            >
-              {s && <img src={icons[s.id]} width={32} height={32} className="pixelated" draggable={false} />}
-              {s && s.count > 1 && <span className="mc-count">{s.count}</span>}
-            </div>
+            />
           ))}
         </div>
       </div>
