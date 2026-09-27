@@ -767,6 +767,37 @@ export function buildAtlas(): AtlasResult {
 
   ctx.putImageData(img, 0, 0);
 
+  // 3.0 biome atlas additions: textured wet mud, striped acacia bark,
+  // layered tropical foliage and a readable water-lily silhouette.
+  {
+    const r = R(149);
+    noiseFill(T.mud, [104, 75, 48], 0.24, r);
+    for (let i = 0; i < 18; i++) {
+      const x = Math.floor(r() * 16), y = Math.floor(r() * 16);
+      setPx(T.mud, x, y, 75 + r() * 24, 57 + r() * 18, 38 + r() * 12);
+    }
+  }
+  {
+    const r = R(150);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const stripe = x % 5 === 0 || x % 5 === 1;
+      const c = shade(stripe ? [94, 72, 48] : [164, 116, 69], 0.88 + r() * 0.22);
+      setPx(T.acacia_side, x, y, c[0], c[1], c[2]);
+    }
+    logTop(T.acacia_top, [194, 151, 99], [160, 116, 67], [94, 72, 48], R(151));
+  }
+  leaves(T.jungle_leaves, [42, 112, 44], R(152));
+  {
+    const r = R(153);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const dx = x - 7.5, dy = y - 7.5;
+      const edge = dx * dx + dy * dy > 55;
+      const vein = Math.abs(dx) < 1.2 || Math.abs(dy) < 1.2;
+      const c = edge ? [35, 91, 42] : vein ? [178, 196, 75] : [69 + r() * 20, 148 + r() * 28, 59];
+      setPx(T.lily_pad, x, y, c[0], c[1], c[2], edge ? 0 : 255);
+    }
+  }
+
   // average colors
   for (const d of BLOCKS) {
     if (!d) continue;

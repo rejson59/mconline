@@ -33,6 +33,7 @@ export const T = {
   detector_rail: 135, anvil: 136, brewing_top: 137, brewing_side: 138, shroomlight: 139,
   basalt_top: 140, basalt_side: 141, blackstone: 142, soul_soil: 143, crying_obsidian: 144,
   target_top: 145, target_side: 146, honey_block: 147, honeycomb_block: 148,
+  mud: 149, acacia_side: 150, acacia_top: 151, jungle_leaves: 152, lily_pad: 153,
 } as const;
 
 export const B = {
@@ -89,6 +90,8 @@ export const B = {
   RAIL: 328, POWERED_RAIL: 329, DETECTOR_RAIL: 330,
   ANVIL: 331, BREWING: 332, SHROOMLIGHT: 333, BASALT: 334, BLACKSTONE: 335,
   SOUL_SOIL: 336, CRYING_OBSIDIAN: 337, TARGET: 338, HONEY_BLOCK: 339, HONEYCOMB_BLOCK: 340,
+  // 3.0 biomes: append-only ids preserve existing worlds.
+  MUD: 400, ACACIA_LOG: 401, ACACIA_LEAVES: 402, JUNGLE_LEAVES: 403, LILY_PAD: 404,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail';
@@ -295,6 +298,12 @@ def(B.CRYING_OBSIDIAN, 'Płaczący obsydian', T.crying_obsidian, { hardness: 10 
 def(B.TARGET, 'Tarcza strzelnicza', [T.target_top, T.target_top, T.target_side], { hardness: 0.5, sound: 'grass' });
 def(B.HONEY_BLOCK, 'Blok miodu', T.honey_block, { hardness: 0, sound: 'slime', opaque: false, layer: 2 });
 def(B.HONEYCOMB_BLOCK, 'Blok plastra miodu', T.honeycomb_block, { hardness: 0.6, sound: 'grass' });
+// 3.0: materials and plants found in the new warm and wet biomes.
+def(B.MUD, 'Błoto', T.mud, { hardness: 0.45, sound: 'sand' });
+def(B.ACACIA_LOG, 'Pień akacji', [T.acacia_top, T.acacia_top, T.acacia_side], { hardness: 2, sound: 'wood' });
+def(B.ACACIA_LEAVES, 'Liście akacji', T.jungle_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
+def(B.JUNGLE_LEAVES, 'Gęste liście tropikalne', T.jungle_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
+def(B.LILY_PAD, 'Lilia wodna', T.lily_pad, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0.1, sound: 'grass' });
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;

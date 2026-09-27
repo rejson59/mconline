@@ -3,9 +3,11 @@
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **3.0 „Nowy rozdział”** łączy rozbudowany świat znany z poprzednich wydań z dopracowanym sterowaniem, zapisem lokalnym i dostępniejszymi opcjami. Gra działa na komputerach i urządzeniach dotykowych.
 
 **Wersja 3.0 „Nowy rozdział”**:
-- szybkie przywracanie domyślnych ustawień obrazu, sterowania i dźwięku z ekranu Opcji,
-- spójny numer wydania 3.0 w grze, pakiecie i dokumentacji,
-- pełna weryfikacja silnika, interfejsu, typów TypeScript i kompilacji produkcyjnej.
+- trzy nowe, generowane proceduralnie biomy: **Bagno**, **Sawanna** i **Dżungla**; ich rozmieszczenie jest stabilne dla ziarna świata,
+- biomowe ukształtowanie terenu i roślinności: mokradła z błotem i liliami wodnymi, gęstsze zarośla dżungli oraz rzadsze, charakterystyczne akacje sawanny,
+- pięć nowych bloków z własnymi teksturami: błoto, pień akacji, liście akacji, gęste liście tropikalne i lilia wodna; nowe drzewa reagują na ścinanie i opadanie liści,
+- przywracanie domyślnych ustawień obrazu, sterowania i dźwięku z ekranu Opcji,
+- nowe ID bloków są dopisane bez naruszania starych zapisów; testy sprawdzają powtarzalność i dostępność nowych biomów.
 
 **Wersja 2.6 „Warsztat bez wpadek”**:
 

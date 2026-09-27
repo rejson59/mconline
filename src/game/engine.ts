@@ -3647,8 +3647,8 @@ export class Game {
           if (seen.has(k)) continue;
           seen.add(k);
           const id = this.world.peekBlock(nx, ny, nz);
-          if (id === B.LOG || id === B.BIRCH_LOG) next.push([nx, ny, nz]);
-          else if (id === B.LEAVES || id === B.BIRCH_LEAVES) {
+          if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) next.push([nx, ny, nz]);
+          else if (id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.ACACIA_LEAVES || id === B.JUNGLE_LEAVES) {
             next.push([nx, ny, nz]);
             this.leafDecay.push({ x: nx, y: ny, z: nz, t: 0.25 + Math.random() * 0.9 });
           }
@@ -3665,7 +3665,7 @@ export class Game {
       l.t -= dt;
       if (l.t > 0) { keep.push(l); continue; }
       const id = this.world.peekBlock(l.x, l.y, l.z);
-      if (id !== B.LEAVES && id !== B.BIRCH_LEAVES) continue;
+      if (id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
       this.world.setBlock(l.x, l.y, l.z, B.AIR);
       this.spawnParticles(l.x + 0.5, l.y + 0.5, l.z + 0.5, id, 6, 0.2);
       if (this.mode === 'survival') {
@@ -3705,7 +3705,7 @@ export class Game {
       if (ladderFacing(nid) === f || (isTrapOpen(nid) && nid - B.TRAP_N === f)) this.breakBlock(lx, y, lz, silent);
     }
     this.growables.delete(`${x},${y},${z}`);
-    if (id === B.LOG || id === B.BIRCH_LOG) this.decayLeaves(x, y, z);
+    if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) this.decayLeaves(x, y, z);
     if (!silent) {
       this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 14, 0.35);
       Sfx.playBreak(def.sound);
