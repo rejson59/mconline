@@ -105,6 +105,20 @@ export const I = {
   POTION_NIGHT: 349,
   POTION_STRENGTH: 350,
   POTION_REGEN: 351,
+  // 2.6 „Głębiny i przestworza”
+  RAW_COPPER: 352,
+  COPPER_INGOT: 353,
+  AMETHYST_SHARD: 354,
+  ELYTRA: 355,
+  FIREWORK_ROCKET: 356,
+  CHORUS_FRUIT: 357,
+  POPPED_CHORUS: 358,
+  DRAGON_BREATH: 359,
+  ECHO_SHARD: 360,
+  RECOVERY_COMPASS: 361,
+  GOAT_HORN: 362,
+  ENDER_EYE: 363,
+  END_CRYSTAL: 364,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
@@ -238,6 +252,20 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.POTION_NIGHT, name: 'Napój nocnego widzenia', keys: ['napoj_nocnego_widzenia', 'potion_night', 'night_vision'], kind: 'potion', potion: 'night', stack: 16, color: '#4ad0a8' },
   { id: I.POTION_STRENGTH, name: 'Napój siły', keys: ['napoj_sily', 'potion_strength', 'sila'], kind: 'potion', potion: 'strength', stack: 16, color: '#e0a030' },
   { id: I.POTION_REGEN, name: 'Napój regeneracji', keys: ['napoj_regeneracji', 'potion_regen', 'regeneration'], kind: 'potion', potion: 'regen', stack: 16, color: '#e06090' },
+  // 2.6 „Głębiny i przestworza”
+  { id: I.RAW_COPPER, name: 'Surowa miedź', keys: ['surowa_miedz', 'raw_copper', 'miedz_surowa'], kind: 'material', color: '#c17a4a' },
+  { id: I.COPPER_INGOT, name: 'Sztabka miedzi', keys: ['miedz', 'sztabka_miedzi', 'copper', 'copper_ingot'], kind: 'material', color: '#d88a5a' },
+  { id: I.AMETHYST_SHARD, name: 'Odłamek ametystu', keys: ['ametyst', 'odlamek_ametystu', 'amethyst', 'amethyst_shard'], kind: 'material', color: '#a86ae0' },
+  { id: I.ELYTRA, name: 'Elytra', keys: ['elytra', 'skrzydla', 'skrzydła'], kind: 'armor', durability: 432, armor: { slot: 1, points: 0 }, color: '#6a6a7a' },
+  { id: I.FIREWORK_ROCKET, name: 'Fajerwerka', keys: ['fajerwerka', 'fajerwerki', 'firework', 'firework_rocket'], kind: 'material', color: '#f0d040' },
+  { id: I.CHORUS_FRUIT, name: 'Owoc refrenusu', keys: ['owoc_refrenusu', 'chorus_fruit', 'refrenus'], kind: 'food', hunger: 4, heal: 1, color: '#9a5a9a' },
+  { id: I.POPPED_CHORUS, name: 'Prażony refrenus', keys: ['prazony_refrenus', 'popped_chorus', 'prazony_owoc'], kind: 'material', color: '#c090c0' },
+  { id: I.DRAGON_BREATH, name: 'Oddech smoka', keys: ['oddech_smoka', 'dragon_breath'], kind: 'material', color: '#d060d0' },
+  { id: I.ECHO_SHARD, name: 'Odłamek echa', keys: ['odlamek_echa', 'echo_shard', 'echo'], kind: 'material', color: '#2a4a5a' },
+  { id: I.RECOVERY_COMPASS, name: 'Kompas powrotu', keys: ['kompas_powrotu', 'recovery_compass'], kind: 'material', color: '#5a8a6a' },
+  { id: I.GOAT_HORN, name: 'Kozi róg', keys: ['kozi_rog', 'goat_horn', 'rog'], kind: 'material', stack: 1, color: '#d0c0a0' },
+  { id: I.ENDER_EYE, name: 'Oko Endera', keys: ['oko_endera', 'ender_eye', 'oko'], kind: 'material', color: '#2a6a4a' },
+  { id: I.END_CRYSTAL, name: 'Kryształ Endu', keys: ['krysztal_endu', 'end_crystal', 'krysztal'], kind: 'material', color: '#d040a0' },
 ];
 
 const ARMOR_TIERS: {
@@ -367,6 +395,12 @@ const PICK_BLOCKS = new Set<number>([
   B.TERRACOTTA, B.OBSERVER, B.DISPENSER, B.PISTON, B.STICKY_PISTON, B.NOTE_BLOCK,
   B.OAK_STAIRS_N, B.COBBLE_STAIRS_N, B.BRICK_STAIRS_N, B.STONE_BRICK_STAIRS_N, B.SANDSTONE_STAIRS_N, B.NETHER_BRICK_STAIRS_N, B.QUARTZ_STAIRS_N,
   B.OAK_SLAB, B.STONE_SLAB, B.COBBLE_SLAB, B.BRICK_SLAB, B.SANDSTONE_SLAB, B.NETHER_BRICK_SLAB, B.QUARTZ_SLAB,
+  B.DEEPSLATE, B.DEEPSLATE_BRICKS, B.POLISHED_DEEPSLATE, B.DEEPSLATE_TILES, B.COPPER_ORE, B.DEEPSLATE_COPPER_ORE,
+  B.DEEPSLATE_COAL_ORE, B.DEEPSLATE_IRON_ORE, B.DEEPSLATE_GOLD_ORE, B.DEEPSLATE_DIAMOND_ORE, B.DEEPSLATE_EMERALD_ORE,
+  B.DEEPSLATE_LAPIS_ORE, B.DEEPSLATE_REDSTONE_ORE, B.COPPER_BLOCK, B.CUT_COPPER, B.EXPOSED_COPPER, B.WEATHERED_COPPER,
+  B.OXIDIZED_COPPER, B.AMETHYST_BLOCK, B.BUDDING_AMETHYST, B.CALCITE, B.TINTED_GLASS, B.LIGHTNING_ROD,
+  B.END_PORTAL_FRAME, B.DRAGON_EGG, B.SCULK, B.REINFORCED_DEEPSLATE, B.RAW_COPPER_BLOCK,
+  B.DEEPSLATE_BRICK_STAIRS_N, B.COPPER_STAIRS_N, B.CUT_COPPER_STAIRS_N, B.DEEPSLATE_SLAB, B.COPPER_SLAB, B.CUT_COPPER_SLAB,
 ]);
 const AXE_BLOCKS = new Set<number>([
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED, B.CHEST, B.LOOT_CHEST,
@@ -375,7 +409,9 @@ const AXE_BLOCKS = new Set<number>([
 const SHOVEL_BLOCKS = new Set<number>([
   B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH, B.SOUL_SAND, B.SOUL_SOIL,
 ]);
-const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE]);
+const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE,
+  B.COPPER_ORE, B.DEEPSLATE_COPPER_ORE, B.DEEPSLATE_COAL_ORE, B.DEEPSLATE_IRON_ORE, B.DEEPSLATE_GOLD_ORE, B.DEEPSLATE_DIAMOND_ORE,
+  B.DEEPSLATE_EMERALD_ORE, B.DEEPSLATE_LAPIS_ORE, B.DEEPSLATE_REDSTONE_ORE]);
 
 /** Experience orbs dropped when an ore block is mined. 0 = no experience. */
 const ORE_XP: Record<number, number> = {
@@ -387,6 +423,15 @@ const ORE_XP: Record<number, number> = {
   [B.REDSTONE_ORE]: 5,
   [B.QUARTZ_ORE]: 2,
   [B.EMERALD_ORE]: 6,
+  [B.COPPER_ORE]: 2,
+  [B.DEEPSLATE_COPPER_ORE]: 2,
+  [B.DEEPSLATE_COAL_ORE]: 2,
+  [B.DEEPSLATE_IRON_ORE]: 5,
+  [B.DEEPSLATE_GOLD_ORE]: 6,
+  [B.DEEPSLATE_DIAMOND_ORE]: 7,
+  [B.DEEPSLATE_LAPIS_ORE]: 4,
+  [B.DEEPSLATE_REDSTONE_ORE]: 5,
+  [B.DEEPSLATE_EMERALD_ORE]: 6,
 };
 
 export function isOre(id: number): boolean {
@@ -408,17 +453,19 @@ export function pickTier(toolId: number): number {
 
 /** 0 = any tool. 1 wood, 2 stone, 3 iron, 4 diamond. */
 export function requiredPickTier(blockId: number): number {
-  if (blockId === B.OBSIDIAN || blockId === B.CRYING_OBSIDIAN) return 4;
-  if (blockId === B.DIAMOND_ORE) return 3;
-  if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return 2;
-  if (blockId === B.LAPIS_ORE) return 2;
-  if (blockId === B.REDSTONE_ORE || blockId === B.QUARTZ_ORE) return 2;
-  if (blockId === B.EMERALD_ORE) return 3;
+  if (blockId === B.OBSIDIAN || blockId === B.CRYING_OBSIDIAN || blockId === B.REINFORCED_DEEPSLATE || blockId === B.END_PORTAL_FRAME || blockId === B.DRAGON_EGG) return 4;
+  if (blockId === B.DIAMOND_ORE || blockId === B.DEEPSLATE_DIAMOND_ORE) return 3;
+  if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE || blockId === B.DEEPSLATE_IRON_ORE || blockId === B.DEEPSLATE_GOLD_ORE) return 2;
+  if (blockId === B.LAPIS_ORE || blockId === B.DEEPSLATE_LAPIS_ORE) return 2;
+  if (blockId === B.REDSTONE_ORE || blockId === B.DEEPSLATE_REDSTONE_ORE || blockId === B.QUARTZ_ORE) return 2;
+  if (blockId === B.EMERALD_ORE || blockId === B.DEEPSLATE_EMERALD_ORE) return 3;
   if (blockId === B.EMERALD_BLOCK) return 2;
   if (blockId === B.GOLD_BLOCK || blockId === B.DIAMOND_BLOCK) return 3;
-  if (blockId === B.IRON_BLOCK) return 2;
+  if (blockId === B.IRON_BLOCK || blockId === B.COPPER_BLOCK || blockId === B.CUT_COPPER || blockId === B.RAW_COPPER_BLOCK) return 2;
+  if (blockId === B.COPPER_ORE || blockId === B.DEEPSLATE_COPPER_ORE) return 2;
   if (blockId === B.ANVIL) return 2;
   if (blockId === B.NETHER_BRICKS || blockId === B.BLACKSTONE || blockId === B.BASALT) return 1;
+  if (blockId === B.DEEPSLATE || blockId === B.DEEPSLATE_BRICKS || blockId === B.POLISHED_DEEPSLATE) return 1;
   if (PICK_BLOCKS.has(blockId)) return 1;
   return 0;
 }
@@ -519,17 +566,24 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   }
   if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
   if (blockId === B.GRAVEL) return Math.random() < 0.12 ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
-  if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
-  if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
-  if (blockId === B.EMERALD_ORE) return tier >= 3 ? [{ id: I.EMERALD, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
-  if (blockId === B.LAPIS_ORE) return tier >= 2 ? [{ id: I.LAPIS, count: 4 + Math.floor(Math.random() * 4) + (fortune ? Math.floor(Math.random() * (fortune + 1)) * 2 : 0) }] : [];
-  if (blockId === B.REDSTONE_ORE) return tier >= 2 ? [{ id: I.REDSTONE, count: 4 + Math.floor(Math.random() * 2) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
+  if (blockId === B.COAL_ORE || blockId === B.DEEPSLATE_COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
+  if (blockId === B.DIAMOND_ORE || blockId === B.DEEPSLATE_DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
+  if (blockId === B.EMERALD_ORE || blockId === B.DEEPSLATE_EMERALD_ORE) return tier >= 3 ? [{ id: I.EMERALD, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
+  if (blockId === B.LAPIS_ORE || blockId === B.DEEPSLATE_LAPIS_ORE) return tier >= 2 ? [{ id: I.LAPIS, count: 4 + Math.floor(Math.random() * 4) + (fortune ? Math.floor(Math.random() * (fortune + 1)) * 2 : 0) }] : [];
+  if (blockId === B.REDSTONE_ORE || blockId === B.DEEPSLATE_REDSTONE_ORE) return tier >= 2 ? [{ id: I.REDSTONE, count: 4 + Math.floor(Math.random() * 2) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
   if (blockId === B.QUARTZ_ORE) return tier >= 2 ? [{ id: I.QUARTZ, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
+  if (blockId === B.COPPER_ORE) return tier >= 2 ? [{ id: I.RAW_COPPER, count: 2 + Math.floor(Math.random() * 2) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
+  if (blockId === B.DEEPSLATE_COPPER_ORE) return tier >= 2 ? [{ id: I.RAW_COPPER, count: 2 + Math.floor(Math.random() * 3) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
   if (blockId === B.GLOWSTONE) return [{ id: I.GLOWSTONE_DUST, count: 2 + Math.floor(Math.random() * 3) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }];
   if (blockId === B.SLIME_BLOCK) return [{ id: I.SLIME_BALL, count: 1 }];
   if (blockId === B.HONEY_BLOCK) return [{ id: B.HONEY_BLOCK, count: 1 }];
   if (blockId === B.HONEYCOMB_BLOCK) return [{ id: I.HONEYCOMB, count: 4 }];
-  if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return tier >= 2 ? [{ id: blockId, count: 1 }] : [];
+  if (blockId === B.AMETHYST_CLUSTER) return [{ id: I.AMETHYST_SHARD, count: 4 + (fortune ? Math.floor(Math.random() * fortune) : 0) }];
+  if (blockId === B.AMETHYST_BLOCK) return [{ id: B.AMETHYST_BLOCK, count: 1 }];
+  if (blockId === B.BUDDING_AMETHYST) return [];
+  if (blockId === B.CHORUS_FLOWER) return [{ id: B.CHORUS_FLOWER, count: 1 }];
+  if (blockId === B.CHORUS_PLANT) return [{ id: I.POPPED_CHORUS, count: 1 }];
+  if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE || blockId === B.DEEPSLATE_IRON_ORE || blockId === B.DEEPSLATE_GOLD_ORE) return tier >= 2 ? [{ id: blockId, count: 1 }] : [];
   // płyty: górna dropuje dolną
   if (blockId === B.OAK_SLAB_TOP || blockId === B.STONE_SLAB_TOP || blockId === B.COBBLE_SLAB_TOP || blockId === B.BRICK_SLAB_TOP || blockId === B.SANDSTONE_SLAB_TOP || blockId === B.NETHER_BRICK_SLAB_TOP || blockId === B.QUARTZ_SLAB_TOP) {
     const base = BLOCKS[blockId]?.drop;
@@ -567,16 +621,26 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
 export function smeltResult(id: number): number | null {
   switch (id) {
     case B.IRON_ORE:
+    case B.DEEPSLATE_IRON_ORE:
       return I.IRON;
     case B.GOLD_ORE:
+    case B.DEEPSLATE_GOLD_ORE:
       return I.GOLD;
+    case B.COPPER_ORE:
+    case B.DEEPSLATE_COPPER_ORE:
+      return I.COPPER_INGOT;
+    case I.RAW_COPPER:
+      return I.COPPER_INGOT;
     case B.SAND:
       return B.GLASS;
     case B.COBBLE:
       return B.STONE;
+    case B.DEEPSLATE:
+      return B.DEEPSLATE;
     case B.CLAY:
       return B.BRICK;
     case B.COAL_ORE:
+    case B.DEEPSLATE_COAL_ORE:
       return I.COAL;
     case B.NETHERRACK:
       return I.NETHER_BRICK_ITEM;
@@ -601,6 +665,10 @@ export function smeltResult(id: number): number | null {
       return I.COOKED_SALMON;
     case B.SOUL_SAND:
       return B.SOUL_SOIL;
+    case B.CHORUS_FLOWER:
+      return I.POPPED_CHORUS;
+    case B.AMETHYST_BLOCK:
+      return B.AMETHYST_BLOCK;
     default:
       return null;
   }

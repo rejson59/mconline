@@ -4,10 +4,10 @@ import { stepBody, type Body } from './physics';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast' | 'goat' | 'shulker' | 'dragon';
 
 export function isHostileMob(type: MobType): boolean {
-  return type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton' || type === 'enderman' || type === 'slime' || type === 'ghast';
+  return type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton' || type === 'enderman' || type === 'slime' || type === 'ghast' || type === 'shulker' || type === 'dragon';
 }
 
 /** Mieszkańcy i golemy nie znikają tak szybko, gdy gracz odejdzie od osady. */
@@ -79,7 +79,10 @@ export class Mob {
               : type === 'wolf' ? 0.6
                 : type === 'enderman' ? 0.6
                   : type === 'slime' ? 0.9
-                    : type === 'ghast' ? 2.0 : 0.9;
+                    : type === 'ghast' ? 2.0
+                      : type === 'goat' ? 0.9
+                        : type === 'shulker' ? 0.9
+                          : type === 'dragon' ? 3.5 : 0.9;
     const h =
       type === 'zombie' || type === 'villager' ? 1.9
         : type === 'creeper' ? 1.7
@@ -87,7 +90,10 @@ export class Mob {
             : type === 'enderman' ? 2.9
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
-                  : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
+                  : type === 'goat' ? 1.3
+                    : type === 'shulker' ? 0.9
+                      : type === 'dragon' ? 2.5
+                        : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
     this.maxHealth = this.health =
       type === 'zombie' ? 20
@@ -102,7 +108,10 @@ export class Mob {
                         : type === 'wolf' ? 8
                           : type === 'enderman' ? 40
                             : type === 'slime' ? 12
-                              : type === 'ghast' ? 10 : 10;
+                              : type === 'ghast' ? 10
+                                : type === 'goat' ? 10
+                                  : type === 'shulker' ? 30
+                                    : type === 'dragon' ? 200 : 10;
     this.profession = type === 'villager' ? professionFor(profession) : 0;
     if (type === 'villager') this.trade = createVillagerState(this.profession, 0);
     this.build();
@@ -559,6 +568,85 @@ export class Mob {
       eyeR.position.x = 0.4;
       g.add(eyeL, eyeR);
       this.meshes.push(eyeL, eyeR);
+    } else if (this.type === 'goat') {
+      // koza – biała z rogami
+      const white = 0xf0f0f0;
+      const legH = 0.6;
+      const body = box(0.7, 0.55, 1.0, white, sharedMats);
+      body.position.set(0, legH + 0.28, 0);
+      g.add(body);
+      this.meshes.push(body);
+      const head = new THREE.Group();
+      head.position.set(0, legH + 0.7, 0.55);
+      const hm = box(0.4, 0.4, 0.4, white, sharedMats);
+      head.add(hm);
+      this.meshes.push(hm);
+      const hornL = box(0.08, 0.35, 0.08, 0x5a4a3a, sharedMats);
+      hornL.position.set(-0.12, 0.3, -0.05);
+      hornL.rotation.x = -0.4;
+      const hornR = hornL.clone();
+      hornR.position.x = 0.12;
+      head.add(hornL, hornR);
+      this.meshes.push(hornL, hornR);
+      const eyeL = box(0.06, 0.06, 0.02, 0x111111, sharedMats);
+      eyeL.position.set(-0.12, 0.05, 0.21);
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.12;
+      head.add(eyeL, eyeR);
+      this.meshes.push(eyeL, eyeR);
+      g.add(head);
+      this.head = head;
+      this.addLeg(-0.18, legH, 0.32, 0.14, legH, 0.14, white, this.legs);
+      this.addLeg(0.18, legH, 0.32, 0.14, legH, 0.14, white, this.legs);
+      this.addLeg(-0.18, legH, -0.32, 0.14, legH, 0.14, white, this.legs);
+      this.addLeg(0.18, legH, -0.32, 0.14, legH, 0.14, white, this.legs);
+    } else if (this.type === 'shulker') {
+      const pur = 0xa070b0;
+      const body = box(0.9, 0.9, 0.9, pur, sharedMats);
+      body.position.y = 0.55;
+      g.add(body);
+      this.meshes.push(body);
+      this.head = body as any;
+      const eye = box(0.12, 0.12, 0.02, 0x111111, sharedMats);
+      eye.position.set(0, 0.6, 0.46);
+      g.add(eye);
+      this.meshes.push(eye);
+    } else if (this.type === 'dragon') {
+      const black = 0x222222;
+      const dark = 0x4a3a6a;
+      const body = box(3.5, 1.2, 2.0, black, sharedMats);
+      body.position.y = 1.5;
+      g.add(body);
+      this.meshes.push(body);
+      const head = new THREE.Group();
+      head.position.set(0, 1.8, 1.4);
+      const hm = box(0.9, 0.8, 0.9, black, sharedMats);
+      head.add(hm);
+      this.meshes.push(hm);
+      const eyeL = box(0.16, 0.12, 0.04, 0xff00ff, sharedMats);
+      eyeL.position.set(-0.2, 0.1, 0.46);
+      const eyeR = eyeL.clone();
+      eyeR.position.x = 0.2;
+      head.add(eyeL, eyeR);
+      this.meshes.push(eyeL, eyeR);
+      g.add(head);
+      this.head = head;
+      // wings
+      const wingL = box(1.6, 0.08, 1.0, dark, sharedMats);
+      wingL.position.set(-1.8, 1.6, 0);
+      const wingR = wingL.clone();
+      wingR.position.x = 1.8;
+      g.add(wingL, wingR);
+      this.meshes.push(wingL, wingR);
+      this.arms.push(wingL as any, wingR as any);
+      // tail
+      for (let i = 0; i < 4; i++) {
+        const seg = box(0.5 - i * 0.08, 0.4 - i * 0.05, 0.5, black, sharedMats);
+        seg.position.set(0, 1.4 - i * 0.1, -1.2 - i * 0.6);
+        g.add(seg);
+        this.meshes.push(seg);
+        this.legs.push(seg as any);
+      }
     }
     g.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
@@ -809,10 +897,10 @@ export class Mob {
       return;
     }
 
-    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : this.type === 'wolf' ? 1.6 : this.type === 'enderman' ? 3.2 : this.type === 'slime' ? 2.0 : this.type === 'ghast' ? 1.5 : 1.2;
+    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : this.type === 'wolf' ? 1.6 : this.type === 'enderman' ? 3.2 : this.type === 'slime' ? 2.0 : this.type === 'ghast' ? 1.5 : this.type === 'goat' ? 2.6 : this.type === 'shulker' ? 0 : this.type === 'dragon' ? 8 : 1.2;
     const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
     const dist = Math.hypot(dx, dz);
-    const hostile = this.type === 'zombie' || this.type === 'creeper' || this.type === 'spider' || this.type === 'skeleton' || this.type === 'enderman' || this.type === 'slime' || this.type === 'ghast';
+    const hostile = this.type === 'zombie' || this.type === 'creeper' || this.type === 'spider' || this.type === 'skeleton' || this.type === 'enderman' || this.type === 'slime' || this.type === 'ghast' || this.type === 'shulker' || this.type === 'dragon' || this.type === 'goat';
 
     if (this.fuse > 0) {
       this.fuse -= dt;
@@ -825,16 +913,61 @@ export class Mob {
         this.deathTime = 0;
         this.group.scale.setScalar(1);
       }
-    } else if (hostile && dist < (this.type === 'creeper' ? 14 : this.type === 'skeleton' ? 18 : this.type === 'ghast' ? 32 : 24) && Math.abs(player.y - b.pos.y) < (this.type === 'ghast' ? 24 : 8) && !peaceful) {
+    } else if (hostile && dist < (this.type === 'creeper' ? 14 : this.type === 'skeleton' ? 18 : this.type === 'ghast' ? 32 : this.type === 'shulker' ? 16 : this.type === 'dragon' ? 64 : 24) && Math.abs(player.y - b.pos.y) < (this.type === 'ghast' ? 24 : this.type === 'dragon' ? 40 : 8) && !peaceful) {
       this.yaw = Math.atan2(dx, dz);
-      if (this.type === 'skeleton' || this.type === 'ghast') {
-        // ranged: keep its distance and shoot when it has a clear line
-        const tooClose = dist < (this.type === 'ghast' ? 10 : 5.5);
-        this.walking = dist > (this.type === 'ghast' ? 18 : 12) || tooClose;
-        if (tooClose) this.yaw = Math.atan2(-dx, -dz);
-        if (dist < (this.type === 'ghast' ? 28 : 16) && this.attackCooldown <= 0 && this.hasLineOfSight(world, player.x, player.y + 0.9, player.z)) {
-          this.attackCooldown = this.type === 'ghast' ? 3 + Math.random() * 1.5 : 2 + Math.random() * 1.2;
+      if (this.type === 'skeleton' || this.type === 'ghast' || this.type === 'shulker') {
+        const tooClose = dist < (this.type === 'ghast' ? 10 : this.type === 'shulker' ? 2 : 5.5);
+        this.walking = this.type === 'shulker' ? false : dist > (this.type === 'ghast' ? 18 : 12) || tooClose;
+        if (tooClose && this.type !== 'shulker') this.yaw = Math.atan2(-dx, -dz);
+        if (dist < (this.type === 'ghast' ? 28 : this.type === 'shulker' ? 14 : 16) && this.attackCooldown <= 0 && this.hasLineOfSight(world, player.x, player.y + 0.9, player.z)) {
+          this.attackCooldown = this.type === 'ghast' ? 3 + Math.random() * 1.5 : this.type === 'shulker' ? 2.5 + Math.random() : 2 + Math.random() * 1.2;
           onShoot(this);
+        }
+        if (this.type === 'shulker') {
+          // lekka lewitacja
+          this.body.vel.y += (Math.sin(performance.now() * 0.002 + this.home.x) * 0.3 - this.body.vel.y) * dt * 2;
+        }
+      } else if (this.type === 'goat') {
+        // koza – szarżuje i tryka
+        this.walking = dist > 1.2;
+        if (dist < 1.6 && this.attackCooldown <= 0) {
+          this.attackCooldown = 1.8;
+          onAttack(3, this);
+          this.body.vel.y = 4;
+          this.body.vel.x += Math.sin(this.yaw) * 6;
+          this.body.vel.z += Math.cos(this.yaw) * 6;
+        }
+      } else if (this.type === 'dragon') {
+        // smok – krąży i nurkuje na gracza
+        const cx = 0, cz = 0;
+        const ang = Math.atan2(b.pos.z - cz, b.pos.x - cx) + dt * 0.4;
+        const rad = 38 + Math.sin(performance.now() * 0.0005) * 6;
+        const targetX = cx + Math.cos(ang) * rad;
+        const targetZ = cz + Math.sin(ang) * rad;
+        const targetY = 68 + Math.sin(performance.now() * 0.001) * 8;
+        const ddx = targetX - b.pos.x, ddz = targetZ - b.pos.z, ddy = targetY - b.pos.y;
+        // jeśli blisko gracza, nurkuj
+        if (dist < 18 && Math.abs(player.y - b.pos.y) < 16) {
+          this.yaw = Math.atan2(dx, dz);
+          this.walking = true;
+          speed = 12;
+          if (dist < 3.5 && this.attackCooldown <= 0) {
+            this.attackCooldown = 1.2;
+            onAttack(10, this);
+          }
+        } else {
+          this.yaw = Math.atan2(ddx, ddz);
+          b.vel.x += (ddx * 0.6 - b.vel.x) * dt * 1.5;
+          b.vel.z += (ddz * 0.6 - b.vel.z) * dt * 1.5;
+          b.vel.y += (ddy * 0.6 - b.vel.y) * dt * 1.5;
+          this.walking = true;
+          speed = 0; // velocity set directly
+        }
+        // skrzydła machają szybciej
+        this.walkPhase += dt * 5;
+        if (this.arms.length) {
+          this.arms[0].rotation.z = Math.sin(this.walkPhase) * 0.6;
+          this.arms[1].rotation.z = -Math.sin(this.walkPhase) * 0.6;
         }
       } else {
         this.walking = this.type === 'creeper' ? dist > 2.1 : dist > 0.9;
@@ -846,7 +979,6 @@ export class Mob {
           this.attackCooldown = this.type === 'enderman' ? 0.8 : 1;
           onAttack(this.type === 'enderman' ? 6 : this.type === 'slime' ? 2 : 3, this);
           if (this.type === 'enderman' && Math.random() < 0.3) {
-            // teleport
             this.body.pos.x += (Math.random() - 0.5) * 8;
             this.body.pos.z += (Math.random() - 0.5) * 8;
           }
@@ -868,13 +1000,16 @@ export class Mob {
         this.yaw = Math.random() * Math.PI * 2;
       }
       if (this.hurtTime > 0 || (this.aiTimer > 0 && this.health < this.maxHealth && !hostile)) speed *= 1.8;
-      // slime hopping
       if (this.type === 'slime' && this.body.onGround && this.walking) {
         this.body.vel.y = 5 + Math.random() * 2;
       }
-      // ghast floating
-      if (this.type === 'ghast') {
-        this.body.vel.y += (Math.sin(performance.now() * 0.001 + this.home.x) * 0.5 - this.body.vel.y) * dt * 2;
+      if (this.type === 'ghast' || this.type === 'shulker' || this.type === 'dragon') {
+        const floatAmp = this.type === 'dragon' ? 0.2 : 0.5;
+        this.body.vel.y += (Math.sin(performance.now() * 0.001 + this.home.x) * floatAmp - this.body.vel.y) * dt * 2;
+        if (this.type === 'dragon' && this.body.onGround) this.body.vel.y = 5;
+      }
+      if (this.type === 'goat' && this.body.onGround && Math.random() < 0.01) {
+        this.body.vel.y = 5 + Math.random() * 2; // skoki po górach
       }
     }
 
@@ -897,11 +1032,17 @@ export class Mob {
       b.vel.z *= Math.max(0, 1 - dt * 10);
     }
     const inWater = RENDER[world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y + 0.4), Math.floor(b.pos.z))] === 2;
-    if (inWater) {
-      b.vel.y = Math.min(b.vel.y + 20 * dt, 2.5);
+    const flying = this.type === 'ghast' || this.type === 'dragon' || this.type === 'shulker';
+    if (flying) {
+      // lewitacja – bez grawitacji
+      if (inWater) b.vel.y = Math.min(b.vel.y + 20 * dt, 2.5);
     } else {
-      b.vel.y -= 28 * dt;
-      if (b.vel.y < -40) b.vel.y = -40;
+      if (inWater) {
+        b.vel.y = Math.min(b.vel.y + 20 * dt, 2.5);
+      } else {
+        b.vel.y -= 28 * dt;
+        if (b.vel.y < -40) b.vel.y = -40;
+      }
     }
     const wasWall = b.hitWall;
     stepBody(world, b, dt);

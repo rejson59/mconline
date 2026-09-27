@@ -765,6 +765,239 @@ export function buildAtlas(): AtlasResult {
     for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x++) setPx(T.honeycomb_block, x, y, 200, 160, 50);
   }
 
+  // ------------------------------------------------------------------- 2.6 „Głębiny i przestworza”
+  {
+    const r = R(149);
+    ore(T.copper_ore, [200, 120, 70], r);
+  }
+  {
+    const r = R(150);
+    noiseFill(T.deepslate, [60, 60, 66], 0.18, r);
+    for (let i = 0; i < 12; i++) {
+      const x = Math.floor(r() * 16), y = Math.floor(r() * 16);
+      setPx(T.deepslate, x, y, 80 + r() * 20, 80 + r() * 20, 86 + r() * 20);
+    }
+  }
+  {
+    const r = R(151);
+    copyTile(T.deepslate, T.deepslate_coal_ore);
+    for (let c = 0; c < 4; c++) {
+      const cx = 2 + Math.floor(r() * 12), cy = 2 + Math.floor(r() * 12);
+      for (let i = 0; i < 4; i++) {
+        const x = cx + Math.floor(r() * 3) - 1, y = cy + Math.floor(r() * 3) - 1;
+        setPx(T.deepslate_coal_ore, x, y, 20 + r() * 10, 20 + r() * 10, 20 + r() * 10);
+      }
+    }
+  }
+  {
+    const r = R(152);
+    copyTile(T.deepslate, T.deepslate_iron_ore);
+    for (let c = 0; c < 4; c++) {
+      const cx = 2 + Math.floor(r() * 12), cy = 2 + Math.floor(r() * 12);
+      for (let i = 0; i < 4; i++) {
+        const x = cx + Math.floor(r() * 3) - 1, y = cy + Math.floor(r() * 3) - 1;
+        setPx(T.deepslate_iron_ore, x, y, 216 * (0.8 + r() * 0.4), 175 * (0.8 + r() * 0.4), 147 * (0.8 + r() * 0.4));
+      }
+    }
+  }
+  {
+    const r = R(153);
+    copyTile(T.deepslate, T.deepslate_copper_ore);
+    for (let c = 0; c < 4; c++) {
+      const cx = 2 + Math.floor(r() * 12), cy = 2 + Math.floor(r() * 12);
+      for (let i = 0; i < 4; i++) {
+        const x = cx + Math.floor(r() * 3) - 1, y = cy + Math.floor(r() * 3) - 1;
+        setPx(T.deepslate_copper_ore, x, y, 200 + r() * 40, 120 + r() * 20, 70 + r() * 20);
+      }
+    }
+  }
+  {
+    const r = R(154);
+    copyTile(T.deepslate, T.deepslate_gold_ore);
+    for (let c = 0; c < 4; c++) {
+      const cx = 2 + Math.floor(r() * 12), cy = 2 + Math.floor(r() * 12);
+      for (let i = 0; i < 4; i++) {
+        const x = cx + Math.floor(r() * 3) - 1, y = cy + Math.floor(r() * 3) - 1;
+        setPx(T.deepslate_gold_ore, x, y, 252, 238, 75 + r() * 20);
+      }
+    }
+  }
+  {
+    const r = R(155);
+    copyTile(T.deepslate, T.deepslate_diamond_ore);
+    for (let c = 0; c < 4; c++) {
+      const cx = 2 + Math.floor(r() * 12), cy = 2 + Math.floor(r() * 12);
+      for (let i = 0; i < 4; i++) {
+        const x = cx + Math.floor(r() * 3) - 1, y = cy + Math.floor(r() * 3) - 1;
+        setPx(T.deepslate_diamond_ore, x, y, 93, 236, 245);
+      }
+    }
+  }
+  {
+    const r = R(156);
+    copyTile(T.deepslate, T.deepslate_emerald_ore);
+    for (let c = 0; c < 4; c++) {
+      const cx = 2 + Math.floor(r() * 12), cy = 2 + Math.floor(r() * 12);
+      for (let i = 0; i < 4; i++) {
+        const x = cx + Math.floor(r() * 3) - 1, y = cy + Math.floor(r() * 3) - 1;
+        setPx(T.deepslate_emerald_ore, x, y, 42, 214, 106);
+      }
+    }
+  }
+  {
+    const r = R(157);
+    copyTile(T.deepslate, T.deepslate_lapis_ore);
+    for (let c = 0; c < 4; c++) {
+      const cx = 2 + Math.floor(r() * 12), cy = 2 + Math.floor(r() * 12);
+      for (let i = 0; i < 4; i++) {
+        const x = cx + Math.floor(r() * 3) - 1, y = cy + Math.floor(r() * 3) - 1;
+        setPx(T.deepslate_lapis_ore, x, y, 36, 66, 190);
+      }
+    }
+  }
+  {
+    const r = R(158);
+    copyTile(T.deepslate, T.deepslate_redstone_ore);
+    for (let c = 0; c < 4; c++) {
+      const cx = 2 + Math.floor(r() * 12), cy = 2 + Math.floor(r() * 12);
+      for (let i = 0; i < 4; i++) {
+        const x = cx + Math.floor(r() * 3) - 1, y = cy + Math.floor(r() * 3) - 1;
+        setPx(T.deepslate_redstone_ore, x, y, 200, 30, 30);
+      }
+    }
+  }
+  {
+    const r = R(159);
+    storageBlock(T.copper_block, [200, 120, 70], r);
+  }
+  {
+    const r = R(160);
+    bricksPattern(T.cut_copper, [200, 120, 70], [180, 100, 60], 8, 8, r);
+  }
+  {
+    const r = R(161);
+    storageBlock(T.exposed_copper, [160, 140, 120], r);
+  }
+  {
+    const r = R(162);
+    storageBlock(T.weathered_copper, [110, 160, 110], r);
+  }
+  {
+    const r = R(163);
+    storageBlock(T.oxidized_copper, [70, 160, 130], r);
+  }
+  {
+    const r = R(164);
+    noiseFill(T.amethyst_block, [150, 100, 200], 0.2, r);
+    for (let i = 0; i < 20; i++) setPx(T.amethyst_block, Math.floor(r() * 16), Math.floor(r() * 16), 180, 130, 230);
+  }
+  {
+    const r = R(165);
+    noiseFill(T.budding_amethyst, [120, 70, 180], 0.25, r);
+    for (let i = 0; i < 15; i++) setPx(T.budding_amethyst, Math.floor(r() * 16), Math.floor(r() * 16), 160, 100, 220);
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.amethyst_cluster, x, y, 0, 0, 0, 0);
+    const r = R(166);
+    for (let y = 4; y < 12; y++) for (let x = 6; x < 10; x++) {
+      const c = shade([160, 100, 210], 0.8 + r() * 0.4);
+      setPx(T.amethyst_cluster, x, y, c[0], c[1], c[2]);
+    }
+    for (let y = 2; y < 5; y++) { setPx(T.amethyst_cluster, 7, y, 180, 120, 230); setPx(T.amethyst_cluster, 8, y, 180, 120, 230); }
+  }
+  {
+    const r = R(167);
+    noiseFill(T.calcite, [230, 225, 220], 0.1, r);
+  }
+  {
+    const r = R(168);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const border = x === 0 || y === 0 || x === 15 || y === 15;
+      if (border) setPx(T.tinted_glass, x, y, 40, 30, 50, 255);
+      else setPx(T.tinted_glass, x, y, 60, 50, 70, 120);
+      if ((x - y === 2) && x < 10 && !border && r() < 0.3) setPx(T.tinted_glass, x, y, 90, 80, 100, 80);
+    }
+  }
+  {
+    const r = R(169);
+    bricksPattern(T.deepslate_bricks, [70, 70, 76], [50, 50, 56], 8, 4, r);
+  }
+  {
+    const r = R(170);
+    noiseFill(T.polished_deepslate, [70, 70, 76], 0.12, r);
+  }
+  {
+    const r = R(171);
+    bricksPattern(T.deepslate_tiles, [60, 60, 66], [40, 40, 46], 4, 4, r);
+  }
+  {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.lightning_rod, x, y, 0, 0, 0, 0);
+    for (let y = 2; y < 14; y++) { setPx(T.lightning_rod, 7, y, 200, 120, 70); setPx(T.lightning_rod, 8, y, 180, 100, 60); }
+    for (let x = 6; x < 10; x++) { setPx(T.lightning_rod, x, 2, 220, 140, 90); setPx(T.lightning_rod, x, 13, 180, 100, 60); }
+    setPx(T.lightning_rod, 7, 1, 220, 140, 90); setPx(T.lightning_rod, 8, 1, 220, 140, 90);
+  }
+  {
+    const r = R(173);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.chorus_plant, x, y, 0, 0, 0, 0);
+    for (let y = 2; y < 14; y++) { setPx(T.chorus_plant, 7, y, 110, 80, 110); setPx(T.chorus_plant, 8, y, 90, 60, 90); }
+    for (let x = 5; x < 11; x++) { setPx(T.chorus_plant, x, 7, 130, 100, 130); setPx(T.chorus_plant, x, 8, 110, 80, 110); }
+    if (r() < 1) setPx(T.chorus_plant, 7, 7, 150, 120, 150);
+  }
+  {
+    const r = R(174);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.chorus_flower, x, y, 0, 0, 0, 0);
+    for (let y = 4; y < 12; y++) for (let x = 5; x < 11; x++) {
+      const c = shade([200, 180, 200], 0.85 + r() * 0.3);
+      setPx(T.chorus_flower, x, y, c[0], c[1], c[2]);
+    }
+    setPx(T.chorus_flower, 7, 6, 230, 210, 230); setPx(T.chorus_flower, 8, 6, 230, 210, 230);
+  }
+  {
+    const r = R(175);
+    bricksPattern(T.end_portal_frame, [30, 80, 60], [20, 60, 40], 8, 8, r);
+    for (let x = 4; x < 12; x++) for (let y = 4; y < 12; y++) {
+      if (x === 4 || x === 11 || y === 4 || y === 11) setPx(T.end_portal_frame, x, y, 60, 120, 90);
+    }
+    setPx(T.end_portal_frame, 7, 7, 80, 200, 180); setPx(T.end_portal_frame, 8, 7, 80, 200, 180);
+    setPx(T.end_portal_frame, 7, 8, 80, 200, 180); setPx(T.end_portal_frame, 8, 8, 80, 200, 180);
+  }
+  {
+    const r = R(176);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const c = shade([20, 10, 40], 0.8 + r() * 0.4 + Math.sin(x * 0.5 + y * 0.3) * 0.2);
+      setPx(T.end_portal, x, y, c[0], c[1], c[2], 200);
+      if (r() < 0.05) setPx(T.end_portal, x, y, 120, 220, 200, 180);
+    }
+  }
+  {
+    const r = R(177);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const d = Math.hypot(x - 7.5, y - 7.5);
+      if (d > 7) setPx(T.dragon_egg, x, y, 30, 20, 40);
+      else if (d > 5) setPx(T.dragon_egg, x, y, 60, 40, 80);
+      else setPx(T.dragon_egg, x, y, 40 + r() * 20, 20 + r() * 10, 60 + r() * 20);
+    }
+    for (let i = 0; i < 8; i++) setPx(T.dragon_egg, 6 + Math.floor(r() * 4), 6 + Math.floor(r() * 4), 180, 60, 200);
+  }
+  {
+    const r = R(178);
+    noiseFill(T.sculk, [15, 30, 45], 0.3, r);
+    for (let i = 0; i < 30; i++) {
+      const x = Math.floor(r() * 16), y = Math.floor(r() * 16);
+      setPx(T.sculk, x, y, 20 + r() * 20, 60 + r() * 40, 80 + r() * 40);
+    }
+  }
+  {
+    const r = R(179);
+    noiseFill(T.reinforced_deepslate, [50, 50, 56], 0.1, r);
+    for (let x = 0; x < 16; x++) { setPx(T.reinforced_deepslate, x, 0, 30, 30, 36); setPx(T.reinforced_deepslate, x, 15, 30, 30, 36); }
+    for (let y = 0; y < 16; y++) { setPx(T.reinforced_deepslate, 0, y, 30, 30, 36); setPx(T.reinforced_deepslate, 15, y, 30, 30, 36); }
+  }
+  {
+    const r = R(180);
+    storageBlock(T.raw_copper_block, [180, 110, 70], r);
+  }
+
   ctx.putImageData(img, 0, 0);
 
   // average colors

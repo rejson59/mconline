@@ -14,8 +14,12 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  'Aktualizacja 2.5: Wielka naprawa sterowania!',
-  '2.5: PC i dotyk wreszcie osobno!',
+  'Aktualizacja 2.6: Głębiny i przestworza!',
+  '2.6: Miedź, ametysty, Elytra i End!',
+  'Szybuj na elytrze i używaj fajerwerków!',
+  'Zejdź do łupku głębinowego!',
+  'Kozy skaczą po górach!',
+  'Smok Endu czeka w Kresie!',
   'Trzymany LPM bije dalej – koniec klikania!',
   'Tapnij mieszkańca, aby handlować (nie bić!)',
   'Ctrl+Q wyrzuca cały stos!',
@@ -62,7 +66,7 @@ export function Title() {
           className="px-2 py-0.5 text-sm font-bold"
           style={{ background: '#3c8527', color: '#fff', border: '2px solid #1c1c1c', boxShadow: '2px 2px 0 rgba(0,0,0,0.6)' }}
         >
-          WERSJA 2.5
+          WERSJA 2.6
         </span>
         <span className="splash text-lg font-semibold sm:text-xl" style={{ color: '#ffff00', textShadow: '2px 2px 0 #3f3f00' }}>
           {splash}
@@ -536,7 +540,7 @@ export function MainMenu({
           />
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.5 „Wielka naprawa”</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.6 „Głębiny i przestworza”</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>

@@ -164,6 +164,26 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.SUGAR, count: 1 }, inputs: [{ id: B.SUGARCANE, count: 1 }], table: false },
   { out: { id: I.BOTTLE, count: 3 }, inputs: [{ id: B.GLASS, count: 3 }], table: false, pattern: ['G G', ' G '], key: { G: B.GLASS } },
   { out: { id: I.HONEY_BOTTLE, count: 1 }, inputs: [{ id: I.BOTTLE, count: 1 }, { id: I.HONEYCOMB, count: 1 }], table: false },
+  // 2.6 „Głębiny i przestworza”: miedź, ametyts, deepslate, fajerwerki
+  { out: { id: B.COPPER_BLOCK, count: 1 }, inputs: [{ id: I.COPPER_INGOT, count: 9 }], table: true, pattern: ['CCC', 'CCC', 'CCC'], key: { C: I.COPPER_INGOT } },
+  { out: { id: I.COPPER_INGOT, count: 9 }, inputs: [{ id: B.COPPER_BLOCK, count: 1 }], table: false },
+  { out: { id: B.CUT_COPPER, count: 4 }, inputs: [{ id: B.COPPER_BLOCK, count: 4 }], table: true, pattern: ['CC', 'CC'], key: { C: B.COPPER_BLOCK } },
+  { out: { id: B.RAW_COPPER_BLOCK, count: 1 }, inputs: [{ id: I.RAW_COPPER, count: 9 }], table: true, pattern: ['RRR', 'RRR', 'RRR'], key: { R: I.RAW_COPPER } },
+  { out: { id: I.RAW_COPPER, count: 9 }, inputs: [{ id: B.RAW_COPPER_BLOCK, count: 1 }], table: false },
+  { out: { id: B.COPPER_STAIRS_N, count: 4 }, inputs: [{ id: B.COPPER_BLOCK, count: 6 }], table: true, pattern: ['C  ', 'CC ', 'CCC'], key: { C: B.COPPER_BLOCK } },
+  { out: { id: B.CUT_COPPER_STAIRS_N, count: 4 }, inputs: [{ id: B.CUT_COPPER, count: 6 }], table: true, pattern: ['C  ', 'CC ', 'CCC'], key: { C: B.CUT_COPPER } },
+  { out: { id: B.COPPER_SLAB, count: 6 }, inputs: [{ id: B.COPPER_BLOCK, count: 3 }], table: true, pattern: ['CCC'], key: { C: B.COPPER_BLOCK } },
+  { out: { id: B.CUT_COPPER_SLAB, count: 6 }, inputs: [{ id: B.CUT_COPPER, count: 3 }], table: true, pattern: ['CCC'], key: { C: B.CUT_COPPER } },
+  { out: { id: B.AMETHYST_BLOCK, count: 1 }, inputs: [{ id: I.AMETHYST_SHARD, count: 4 }], table: true, pattern: ['AA', 'AA'], key: { A: I.AMETHYST_SHARD } },
+  { out: { id: B.TINTED_GLASS, count: 2 }, inputs: [{ id: B.GLASS, count: 1 }, { id: I.AMETHYST_SHARD, count: 4 }], table: true, pattern: [' A ', 'AGA', ' A '], key: { A: I.AMETHYST_SHARD, G: B.GLASS } },
+  { out: { id: B.LIGHTNING_ROD, count: 1 }, inputs: [{ id: I.COPPER_INGOT, count: 3 }], table: true, pattern: ['C', 'C', 'C'], key: { C: I.COPPER_INGOT } },
+  { out: { id: B.POLISHED_DEEPSLATE, count: 4 }, inputs: [{ id: B.DEEPSLATE, count: 4 }], table: true, pattern: ['DD', 'DD'], key: { D: B.DEEPSLATE } },
+  { out: { id: B.DEEPSLATE_BRICKS, count: 4 }, inputs: [{ id: B.POLISHED_DEEPSLATE, count: 4 }], table: true, pattern: ['DD', 'DD'], key: { D: B.POLISHED_DEEPSLATE } },
+  { out: { id: B.DEEPSLATE_TILES, count: 4 }, inputs: [{ id: B.DEEPSLATE_BRICKS, count: 4 }], table: true, pattern: ['DD', 'DD'], key: { D: B.DEEPSLATE_BRICKS } },
+  { out: { id: B.DEEPSLATE_BRICK_STAIRS_N, count: 4 }, inputs: [{ id: B.DEEPSLATE_BRICKS, count: 6 }], table: true, pattern: ['D  ', 'DD ', 'DDD'], key: { D: B.DEEPSLATE_BRICKS } },
+  { out: { id: B.DEEPSLATE_SLAB, count: 6 }, inputs: [{ id: B.DEEPSLATE_BRICKS, count: 3 }], table: true, pattern: ['DDD'], key: { D: B.DEEPSLATE_BRICKS } },
+  { out: { id: I.FIREWORK_ROCKET, count: 3 }, inputs: [{ id: I.PAPER, count: 1 }, { id: I.GUNPOWDER, count: 1 }], table: false },
+  { out: { id: I.SPYGLASS, count: 1 }, inputs: [{ id: I.COPPER_INGOT, count: 2 }, { id: I.AMETHYST_SHARD, count: 1 }], table: true, pattern: ['A', 'C', 'C'], key: { A: I.AMETHYST_SHARD, C: I.COPPER_INGOT } },
 ];
 
 /**

@@ -33,6 +33,15 @@ export const T = {
   detector_rail: 135, anvil: 136, brewing_top: 137, brewing_side: 138, shroomlight: 139,
   basalt_top: 140, basalt_side: 141, blackstone: 142, soul_soil: 143, crying_obsidian: 144,
   target_top: 145, target_side: 146, honey_block: 147, honeycomb_block: 148,
+  // 2.6 „Głębiny i przestworza”
+  deepslate: 149, deepslate_bricks: 150, polished_deepslate: 151, deepslate_tiles: 152,
+  copper_ore: 153, deepslate_copper_ore: 154, deepslate_coal_ore: 155, deepslate_iron_ore: 156,
+  deepslate_gold_ore: 157, deepslate_diamond_ore: 158, deepslate_emerald_ore: 159,
+  deepslate_lapis_ore: 160, deepslate_redstone_ore: 161, copper_block: 162, cut_copper: 163,
+  exposed_copper: 164, weathered_copper: 165, oxidized_copper: 166, amethyst_block: 167,
+  budding_amethyst: 168, amethyst_cluster: 169, calcite: 170, tinted_glass: 171,
+  lightning_rod: 172, chorus_plant: 173, chorus_flower: 174, end_portal_frame: 175,
+  end_portal: 176, dragon_egg: 177, sculk: 178, reinforced_deepslate: 179, raw_copper_block: 180,
 } as const;
 
 export const B = {
@@ -89,6 +98,19 @@ export const B = {
   RAIL: 328, POWERED_RAIL: 329, DETECTOR_RAIL: 330,
   ANVIL: 331, BREWING: 332, SHROOMLIGHT: 333, BASALT: 334, BLACKSTONE: 335,
   SOUL_SOIL: 336, CRYING_OBSIDIAN: 337, TARGET: 338, HONEY_BLOCK: 339, HONEYCOMB_BLOCK: 340,
+  // 2.6 „Głębiny i przestworza” – przeniesione do 500+ by nie kolidować z itemami 341-364
+  DEEPSLATE: 500, DEEPSLATE_BRICKS: 501, POLISHED_DEEPSLATE: 502, DEEPSLATE_TILES: 503,
+  COPPER_ORE: 504, DEEPSLATE_COPPER_ORE: 505, DEEPSLATE_COAL_ORE: 506, DEEPSLATE_IRON_ORE: 507,
+  DEEPSLATE_GOLD_ORE: 508, DEEPSLATE_DIAMOND_ORE: 509, DEEPSLATE_EMERALD_ORE: 510,
+  DEEPSLATE_LAPIS_ORE: 511, DEEPSLATE_REDSTONE_ORE: 512, COPPER_BLOCK: 513, CUT_COPPER: 514,
+  EXPOSED_COPPER: 515, WEATHERED_COPPER: 516, OXIDIZED_COPPER: 517, AMETHYST_BLOCK: 518,
+  BUDDING_AMETHYST: 519, AMETHYST_CLUSTER: 520, CALCITE: 521, TINTED_GLASS: 522,
+  LIGHTNING_ROD: 523, CHORUS_PLANT: 524, CHORUS_FLOWER: 525, END_PORTAL_FRAME: 526,
+  END_PORTAL: 527, DRAGON_EGG: 528, SCULK: 529, REINFORCED_DEEPSLATE: 530, RAW_COPPER_BLOCK: 531,
+  DEEPSLATE_BRICK_STAIRS_N: 532, DEEPSLATE_BRICK_STAIRS_E: 533, DEEPSLATE_BRICK_STAIRS_S: 534, DEEPSLATE_BRICK_STAIRS_W: 535,
+  COPPER_STAIRS_N: 536, COPPER_STAIRS_E: 537, COPPER_STAIRS_S: 538, COPPER_STAIRS_W: 539,
+  CUT_COPPER_STAIRS_N: 540, CUT_COPPER_STAIRS_E: 541, CUT_COPPER_STAIRS_S: 542, CUT_COPPER_STAIRS_W: 543,
+  DEEPSLATE_SLAB: 544, DEEPSLATE_SLAB_TOP: 545, COPPER_SLAB: 546, COPPER_SLAB_TOP: 547, CUT_COPPER_SLAB: 548, CUT_COPPER_SLAB_TOP: 549,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail';
@@ -295,15 +317,59 @@ def(B.CRYING_OBSIDIAN, 'Płaczący obsydian', T.crying_obsidian, { hardness: 10 
 def(B.TARGET, 'Tarcza strzelnicza', [T.target_top, T.target_top, T.target_side], { hardness: 0.5, sound: 'grass' });
 def(B.HONEY_BLOCK, 'Blok miodu', T.honey_block, { hardness: 0, sound: 'slime', opaque: false, layer: 2 });
 def(B.HONEYCOMB_BLOCK, 'Blok plastra miodu', T.honeycomb_block, { hardness: 0.6, sound: 'grass' });
+// 2.6 „Głębiny i przestworza”
+def(B.DEEPSLATE, 'Łupek', T.deepslate, { hardness: 3 });
+def(B.DEEPSLATE_BRICKS, 'Łupkowe cegły', T.deepslate_bricks, { hardness: 3.5 });
+def(B.POLISHED_DEEPSLATE, 'Wypolerowany łupek', T.polished_deepslate, { hardness: 3.5 });
+def(B.DEEPSLATE_TILES, 'Łupkowe kafelki', T.deepslate_tiles, { hardness: 3.5 });
+def(B.COPPER_ORE, 'Ruda miedzi', T.copper_ore, { hardness: 3 });
+def(B.DEEPSLATE_COPPER_ORE, 'Łupkowa ruda miedzi', T.deepslate_copper_ore, { hardness: 4.5 });
+def(B.DEEPSLATE_COAL_ORE, 'Łupkowa ruda węgla', T.deepslate_coal_ore, { hardness: 4.5 });
+def(B.DEEPSLATE_IRON_ORE, 'Łupkowa ruda żelaza', T.deepslate_iron_ore, { hardness: 4.5 });
+def(B.DEEPSLATE_GOLD_ORE, 'Łupkowa ruda złota', T.deepslate_gold_ore, { hardness: 4.5 });
+def(B.DEEPSLATE_DIAMOND_ORE, 'Łupkowa ruda diamentu', T.deepslate_diamond_ore, { hardness: 4.5 });
+def(B.DEEPSLATE_EMERALD_ORE, 'Łupkowa ruda szmaragdu', T.deepslate_emerald_ore, { hardness: 4.5 });
+def(B.DEEPSLATE_LAPIS_ORE, 'Łupkowa ruda lazurytu', T.deepslate_lapis_ore, { hardness: 4.5 });
+def(B.DEEPSLATE_REDSTONE_ORE, 'Łupkowa ruda redstone', T.deepslate_redstone_ore, { hardness: 4.5 });
+def(B.COPPER_BLOCK, 'Blok miedzi', T.copper_block, { hardness: 3 });
+def(B.CUT_COPPER, 'Cięta miedź', T.cut_copper, { hardness: 3 });
+def(B.EXPOSED_COPPER, 'Odsłonięta miedź', T.exposed_copper, { hardness: 3 });
+def(B.WEATHERED_COPPER, 'Zwietrzała miedź', T.weathered_copper, { hardness: 3 });
+def(B.OXIDIZED_COPPER, 'Utleniona miedź', T.oxidized_copper, { hardness: 3 });
+def(B.AMETHYST_BLOCK, 'Blok ametystu', T.amethyst_block, { hardness: 1.5, sound: 'glass' });
+def(B.BUDDING_AMETHYST, 'Kiełkujący ametyst', T.budding_amethyst, { hardness: 1.5, sound: 'glass' });
+def(B.AMETHYST_CLUSTER, 'Skupisko ametystu', T.amethyst_cluster, { hardness: 1.5, sound: 'glass', solid: false, opaque: false, layer: 1, render: 'cross' });
+def(B.CALCITE, 'Kalcyt', T.calcite, { hardness: 0.75 });
+def(B.TINTED_GLASS, 'Przyciemnione szkło', T.tinted_glass, { hardness: 0.3, sound: 'glass', opaque: false, layer: 1 });
+def(B.LIGHTNING_ROD, 'Piorunochron', T.lightning_rod, { hardness: 3, solid: false, opaque: false, layer: 1, render: 'cross' as any });
+def(B.CHORUS_PLANT, 'Roślina refrenusu', T.chorus_plant, { hardness: 0.4, sound: 'wood', solid: false, opaque: false, layer: 1, render: 'cross' });
+def(B.CHORUS_FLOWER, 'Kwiat refrenusu', T.chorus_flower, { hardness: 0.4, sound: 'wood', solid: false, opaque: false, layer: 1, render: 'cross' });
+def(B.END_PORTAL_FRAME, 'Ramka portalu Endu', T.end_portal_frame, { hardness: -1, drop: -1 });
+def(B.END_PORTAL, 'Portal Endu', T.end_portal, { solid: false, opaque: false, layer: 2, render: 'portal', hardness: -1, drop: -1 });
+def(B.DRAGON_EGG, 'Jajo smoka', T.dragon_egg, { hardness: 3, sound: 'stone' });
+def(B.SCULK, 'Sculk', T.sculk, { hardness: 0.6, sound: 'cloth' });
+def(B.REINFORCED_DEEPSLATE, 'Wzmocniony łupek', T.reinforced_deepslate, { hardness: -1, drop: -1 });
+def(B.RAW_COPPER_BLOCK, 'Blok surowej miedzi', T.raw_copper_block, { hardness: 5 });
+for (let i = 0; i < 4; i++) {
+  def(B.DEEPSLATE_BRICK_STAIRS_N + i, i === 0 ? 'Łupkowe ceglane schody' : `Łupkowe ceglane schody (${FACE_PL[i]})`, T.deepslate_bricks, { hardness: 3.5, drop: B.DEEPSLATE_BRICK_STAIRS_N, render: 'stairs' as any });
+  def(B.COPPER_STAIRS_N + i, i === 0 ? 'Miedziane schody' : `Miedziane schody (${FACE_PL[i]})`, T.copper_block, { hardness: 3, drop: B.COPPER_STAIRS_N, render: 'stairs' as any });
+  def(B.CUT_COPPER_STAIRS_N + i, i === 0 ? 'Schody z ciętej miedzi' : `Schody z ciętej miedzi (${FACE_PL[i]})`, T.cut_copper, { hardness: 3, drop: B.CUT_COPPER_STAIRS_N, render: 'stairs' as any });
+}
+def(B.DEEPSLATE_SLAB, 'Łupkowa płyta', T.deepslate, { hardness: 3, render: 'slab' as any });
+def(B.DEEPSLATE_SLAB_TOP, 'Łupkowa płyta (górna)', T.deepslate, { hardness: 3, drop: B.DEEPSLATE_SLAB, render: 'slab' as any, solid: true, opaque: false, layer: 1 });
+def(B.COPPER_SLAB, 'Miedziana płyta', T.copper_block, { hardness: 3, render: 'slab' as any });
+def(B.COPPER_SLAB_TOP, 'Miedziana płyta (górna)', T.copper_block, { hardness: 3, drop: B.COPPER_SLAB, render: 'slab' as any, solid: true, opaque: false, layer: 1 });
+def(B.CUT_COPPER_SLAB, 'Płyta z ciętej miedzi', T.cut_copper, { hardness: 3, render: 'slab' as any });
+def(B.CUT_COPPER_SLAB_TOP, 'Płyta z ciętej miedzi (górna)', T.cut_copper, { hardness: 3, drop: B.CUT_COPPER_SLAB, render: 'slab' as any, solid: true, opaque: false, layer: 1 });
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;
 
-// Fast lookup tables – expanded to 512 for 1.7 blocks
-export const IS_SOLID = new Uint8Array(512);
-export const IS_OPAQUE = new Uint8Array(512);
-export const LAYER = new Uint8Array(512);
-export const RENDER = new Uint8Array(512); // 0 cube, 1 cross, 2 liquid, 3 slab, 4 stairs, 5 portal, 6 rail
+// Fast lookup tables – expanded to 1024 for 2.6 blocks (500+)
+export const IS_SOLID = new Uint8Array(1024);
+export const IS_OPAQUE = new Uint8Array(1024);
+export const LAYER = new Uint8Array(1024);
+export const RENDER = new Uint8Array(1024); // 0 cube, 1 cross, 2 liquid, 3 slab, 4 stairs, 5 portal, 6 rail
 for (const d of defs) {
   if (!d) continue;
   IS_SOLID[d.id] = d.solid ? 1 : 0;
@@ -320,7 +386,7 @@ for (const d of defs) {
 }
 
 /** Light level emitted by a block (0–15). Sampled while meshing, not stored in the save. */
-export const EMIT = new Uint8Array(512);
+export const EMIT = new Uint8Array(1024);
 EMIT[B.LAVA] = 15;
 EMIT[B.GLOWSTONE] = 15;
 EMIT[B.TORCH] = 14;
@@ -351,6 +417,7 @@ function creativeVisible(id: number): boolean {
   if (id === B.REDSTONE_LAMP_ON || id === B.REDSTONE_TORCH_OFF || id === B.LEVER_ON || id === B.BUTTON_ON) return false;
   if (id === B.PISTON_HEAD) return false;
   if (id === B.OAK_SLAB_TOP || id === B.STONE_SLAB_TOP || id === B.COBBLE_SLAB_TOP || id === B.BRICK_SLAB_TOP || id === B.SANDSTONE_SLAB_TOP || id === B.NETHER_BRICK_SLAB_TOP || id === B.QUARTZ_SLAB_TOP) return false;
+  if (id === B.DEEPSLATE_SLAB_TOP || id === B.COPPER_SLAB_TOP || id === B.CUT_COPPER_SLAB_TOP) return false;
   if (id >= B.DOOR_E && id <= B.DOOR_OW) return false;
   if (id >= B.DOOR_UN && id <= B.DOOR_UOW) return false;
   if (id >= B.LADDER_E && id <= B.LADDER_W) return false;
@@ -362,6 +429,9 @@ function creativeVisible(id: number): boolean {
   if (id >= B.SANDSTONE_STAIRS_E && id <= B.SANDSTONE_STAIRS_W) return false;
   if (id >= B.NETHER_BRICK_STAIRS_E && id <= B.NETHER_BRICK_STAIRS_W) return false;
   if (id >= B.QUARTZ_STAIRS_E && id <= B.QUARTZ_STAIRS_W) return false;
+  if (id >= B.DEEPSLATE_BRICK_STAIRS_E && id <= B.DEEPSLATE_BRICK_STAIRS_W) return false;
+  if (id >= B.COPPER_STAIRS_E && id <= B.COPPER_STAIRS_W) return false;
+  if (id >= B.CUT_COPPER_STAIRS_E && id <= B.CUT_COPPER_STAIRS_W) return false;
   return true;
 }
 
@@ -415,7 +485,7 @@ export function facingFromNormal(nx: number, nz: number): number {
 // ---------- 1.7 helpers ----------
 
 export function isStairs(id: number): boolean {
-  return (id >= B.OAK_STAIRS_N && id <= B.QUARTZ_STAIRS_W);
+  return (id >= B.OAK_STAIRS_N && id <= B.QUARTZ_STAIRS_W) || (id >= B.DEEPSLATE_BRICK_STAIRS_N && id <= B.CUT_COPPER_STAIRS_W);
 }
 export function stairsFacing(id: number): number {
   if (id >= B.OAK_STAIRS_N && id <= B.OAK_STAIRS_W) return id - B.OAK_STAIRS_N;
@@ -425,6 +495,9 @@ export function stairsFacing(id: number): number {
   if (id >= B.SANDSTONE_STAIRS_N && id <= B.SANDSTONE_STAIRS_W) return id - B.SANDSTONE_STAIRS_N;
   if (id >= B.NETHER_BRICK_STAIRS_N && id <= B.NETHER_BRICK_STAIRS_W) return id - B.NETHER_BRICK_STAIRS_N;
   if (id >= B.QUARTZ_STAIRS_N && id <= B.QUARTZ_STAIRS_W) return id - B.QUARTZ_STAIRS_N;
+  if (id >= B.DEEPSLATE_BRICK_STAIRS_N && id <= B.DEEPSLATE_BRICK_STAIRS_W) return id - B.DEEPSLATE_BRICK_STAIRS_N;
+  if (id >= B.COPPER_STAIRS_N && id <= B.COPPER_STAIRS_W) return id - B.COPPER_STAIRS_N;
+  if (id >= B.CUT_COPPER_STAIRS_N && id <= B.CUT_COPPER_STAIRS_W) return id - B.CUT_COPPER_STAIRS_N;
   return -1;
 }
 export function stairsBase(id: number): number {
@@ -435,16 +508,19 @@ export function stairsBase(id: number): number {
   if (id >= B.SANDSTONE_STAIRS_N && id <= B.SANDSTONE_STAIRS_W) return B.SANDSTONE_STAIRS_N;
   if (id >= B.NETHER_BRICK_STAIRS_N && id <= B.NETHER_BRICK_STAIRS_W) return B.NETHER_BRICK_STAIRS_N;
   if (id >= B.QUARTZ_STAIRS_N && id <= B.QUARTZ_STAIRS_W) return B.QUARTZ_STAIRS_N;
+  if (id >= B.DEEPSLATE_BRICK_STAIRS_N && id <= B.DEEPSLATE_BRICK_STAIRS_W) return B.DEEPSLATE_BRICK_STAIRS_N;
+  if (id >= B.COPPER_STAIRS_N && id <= B.COPPER_STAIRS_W) return B.COPPER_STAIRS_N;
+  if (id >= B.CUT_COPPER_STAIRS_N && id <= B.CUT_COPPER_STAIRS_W) return B.CUT_COPPER_STAIRS_N;
   return id;
 }
 export function isSlab(id: number): boolean {
-  return (id >= B.OAK_SLAB && id <= B.QUARTZ_SLAB_TOP);
+  return (id >= B.OAK_SLAB && id <= B.QUARTZ_SLAB_TOP) || (id >= B.DEEPSLATE_SLAB && id <= B.CUT_COPPER_SLAB_TOP);
 }
 export function isSlabTop(id: number): boolean {
-  return id === B.OAK_SLAB_TOP || id === B.STONE_SLAB_TOP || id === B.COBBLE_SLAB_TOP || id === B.BRICK_SLAB_TOP || id === B.SANDSTONE_SLAB_TOP || id === B.NETHER_BRICK_SLAB_TOP || id === B.QUARTZ_SLAB_TOP;
+  return id === B.OAK_SLAB_TOP || id === B.STONE_SLAB_TOP || id === B.COBBLE_SLAB_TOP || id === B.BRICK_SLAB_TOP || id === B.SANDSTONE_SLAB_TOP || id === B.NETHER_BRICK_SLAB_TOP || id === B.QUARTZ_SLAB_TOP || id === B.DEEPSLATE_SLAB_TOP || id === B.COPPER_SLAB_TOP || id === B.CUT_COPPER_SLAB_TOP;
 }
 export function isSlabBottom(id: number): boolean {
-  return id === B.OAK_SLAB || id === B.STONE_SLAB || id === B.COBBLE_SLAB || id === B.BRICK_SLAB || id === B.SANDSTONE_SLAB || id === B.NETHER_BRICK_SLAB || id === B.QUARTZ_SLAB;
+  return id === B.OAK_SLAB || id === B.STONE_SLAB || id === B.COBBLE_SLAB || id === B.BRICK_SLAB || id === B.SANDSTONE_SLAB || id === B.NETHER_BRICK_SLAB || id === B.QUARTZ_SLAB || id === B.DEEPSLATE_SLAB || id === B.COPPER_SLAB || id === B.CUT_COPPER_SLAB;
 }
 export function slabBase(id: number): number {
   if (id === B.OAK_SLAB || id === B.OAK_SLAB_TOP) return B.OAK_SLAB;
@@ -454,6 +530,9 @@ export function slabBase(id: number): number {
   if (id === B.SANDSTONE_SLAB || id === B.SANDSTONE_SLAB_TOP) return B.SANDSTONE_SLAB;
   if (id === B.NETHER_BRICK_SLAB || id === B.NETHER_BRICK_SLAB_TOP) return B.NETHER_BRICK_SLAB;
   if (id === B.QUARTZ_SLAB || id === B.QUARTZ_SLAB_TOP) return B.QUARTZ_SLAB;
+  if (id === B.DEEPSLATE_SLAB || id === B.DEEPSLATE_SLAB_TOP) return B.DEEPSLATE_SLAB;
+  if (id === B.COPPER_SLAB || id === B.COPPER_SLAB_TOP) return B.COPPER_SLAB;
+  if (id === B.CUT_COPPER_SLAB || id === B.CUT_COPPER_SLAB_TOP) return B.CUT_COPPER_SLAB;
   return id;
 }
 
@@ -466,6 +545,9 @@ const SLAB_FULL: Record<number, number> = {
   [B.SANDSTONE_SLAB]: B.SANDSTONE,
   [B.NETHER_BRICK_SLAB]: B.NETHER_BRICKS,
   [B.QUARTZ_SLAB]: B.QUARTZ_BLOCK,
+  [B.DEEPSLATE_SLAB]: B.DEEPSLATE_BRICKS,
+  [B.COPPER_SLAB]: B.COPPER_BLOCK,
+  [B.CUT_COPPER_SLAB]: B.CUT_COPPER,
 };
 export function slabFullBlock(base: number): number {
   return SLAB_FULL[base] ?? base;
@@ -511,4 +593,10 @@ export function isRedstoneSource(id: number): boolean {
 }
 export function isNetherBlock(id: number): boolean {
   return id === B.NETHERRACK || id === B.SOUL_SAND || id === B.SOUL_SOIL || id === B.NETHER_BRICKS || id === B.BASALT || id === B.BLACKSTONE || id === B.MAGMA || id === B.SHROOMLIGHT || id === B.CRYING_OBSIDIAN || id === B.QUARTZ_BLOCK || id === B.QUARTZ_PILLAR || id === B.QUARTZ_ORE;
+}
+export function isDeepslate(id: number): boolean {
+  return id === B.DEEPSLATE || id === B.DEEPSLATE_BRICKS || id === B.POLISHED_DEEPSLATE || id === B.DEEPSLATE_TILES || id === B.REINFORCED_DEEPSLATE || (id >= B.DEEPSLATE_BRICK_STAIRS_N && id <= B.DEEPSLATE_BRICK_STAIRS_W) || id === B.DEEPSLATE_SLAB || id === B.DEEPSLATE_SLAB_TOP;
+}
+export function isCopper(id: number): boolean {
+  return id === B.COPPER_ORE || id === B.DEEPSLATE_COPPER_ORE || id === B.COPPER_BLOCK || id === B.CUT_COPPER || id === B.EXPOSED_COPPER || id === B.WEATHERED_COPPER || id === B.OXIDIZED_COPPER || id === B.RAW_COPPER_BLOCK || (id >= B.COPPER_STAIRS_N && id <= B.COPPER_STAIRS_W) || (id >= B.CUT_COPPER_STAIRS_N && id <= B.CUT_COPPER_STAIRS_W) || id === B.COPPER_SLAB || id === B.COPPER_SLAB_TOP || id === B.CUT_COPPER_SLAB || id === B.CUT_COPPER_SLAB_TOP;
 }

@@ -16,7 +16,7 @@ import {
 // ale stare importy z world.ts nadal działają.
 export { CH, CS, FLAT_H, SEA };
 
-export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Nether';
+export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Nether' | 'End';
 
 const idx = (x: number, y: number, z: number) => (y * CS + z) * CS + x;
 
@@ -156,6 +156,7 @@ export class World {
    * so the two maps can never bleed into each other.
    */
   readonly isNether: boolean;
+  readonly isEnd: boolean;
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
@@ -167,10 +168,11 @@ export class World {
   private nTemp: SimplexNoise;
   private vctx: VillageContext | null = null;
 
-  constructor(seed: number, flat = false, nether = false) {
+  constructor(seed: number, flat = false, nether = false, end = false) {
     this.seed = seed;
-    this.flat = flat && !nether;
+    this.flat = flat && !nether && !end;
     this.isNether = nether;
+    this.isEnd = end;
     this.n1 = new SimplexNoise(seed);
     this.n2 = new SimplexNoise(seed + 1);
     this.n3 = new SimplexNoise(seed + 2);
@@ -186,6 +188,7 @@ export class World {
   // ---------- Terrain ----------
   surface(x: number, z: number): { h: number; biome: Biome; temp: number; forest: number } {
     if (this.isNether) return { h: this.netherFloorH(x, z), biome: 'Nether', temp: 0, forest: 0 };
+    if (this.isEnd) return { h: this.endFloorH(x, z), biome: 'End', temp: 0, forest: 0 };
     if (this.flat) return { h: FLAT_H, biome: 'Równiny', temp: 0, forest: 0 };
     const cont = this.n1.fbm2D(x / 700, z / 700, 4);
     const hills = this.n2.fbm2D(x / 160, z / 160, 4);
@@ -225,6 +228,7 @@ export class World {
 
   private generate(c: Chunk) {
     if (this.isNether) { this.generateNether(c); return; }
+    if (this.isEnd) { this.generateEnd(c); return; }
     if (this.flat) { this.generateFlat(c); return; }
     const d = c.data;
     const ox = c.cx * CS, oz = c.cz * CS;
@@ -272,25 +276,49 @@ export class World {
             }
           }
 
-          // Ores
-          if (id === B.STONE) {
+          // Deepslate transition 2.6
+          if (id === B.STONE && y < 16) {
+            const t = y / 16;
+            if (hash(wx, y * 2, wz, s + 500) < (1 - t) * 0.85) id = B.DEEPSLATE;
+          }
+          // Ores (including 2.6 copper & deepslate variants)
+          if (id === B.STONE || id === B.DEEPSLATE) {
+            const isDeep = id === B.DEEPSLATE;
             const r = hash(wx, y, wz, s + 77);
             const cl = hash(wx >> 1, y >> 1, wz >> 1, s + 11);
             const cl2 = hash(wx >> 1, y >> 1, wz >> 1, s + 23);
             const cl3 = hash(wx >> 1, y >> 1, wz >> 1, s + 41);
             const cl4 = hash(wx >> 1, y >> 1, wz >> 1, s + 59);
-            if (y < 16 && cl < 0.012 && r < 0.6) id = B.DIAMOND_ORE;
-            else if (y > 6 && y < 40 && cl3 > (biome === 'Góry' ? 0.986 : 0.9965) && r < 0.6) id = B.EMERALD_ORE;
-            else if (y < 16 && cl4 > 0.04 && cl4 < 0.07 && r < 0.55) id = B.REDSTONE_ORE;
-            else if (y < 32 && cl > 0.985 && r < 0.6) id = B.GOLD_ORE;
-            else if (y < 64 && cl > 0.02 && cl < 0.045 && r < 0.6) id = B.IRON_ORE;
-            else if (y < 44 && y > 8 && cl2 < 0.016 && r < 0.55) id = B.LAPIS_ORE;
-            else if (y < 110 && cl > 0.5 && cl < 0.56 && r < 0.65) id = B.COAL_ORE;
-            else if (hash(wx >> 2, y >> 2, wz >> 2, s + 5) < 0.02) id = B.GRAVEL;
+            const clCu = hash(wx >> 1, y >> 1, wz >> 1, s + 71);
+            if (y < 16 && cl < 0.012 && r < 0.6) id = isDeep ? B.DEEPSLATE_DIAMOND_ORE : B.DIAMOND_ORE;
+            else if (y > 6 && y < 40 && cl3 > (biome === 'Góry' ? 0.986 : 0.9965) && r < 0.6) id = isDeep ? B.DEEPSLATE_EMERALD_ORE : B.EMERALD_ORE;
+            else if (y < 16 && cl4 > 0.04 && cl4 < 0.07 && r < 0.55) id = isDeep ? B.DEEPSLATE_REDSTONE_ORE : B.REDSTONE_ORE;
+            else if (y < 32 && cl > 0.985 && r < 0.6) id = isDeep ? B.DEEPSLATE_GOLD_ORE : B.GOLD_ORE;
+            else if (y < 64 && cl > 0.02 && cl < 0.045 && r < 0.6) id = isDeep ? B.DEEPSLATE_IRON_ORE : B.IRON_ORE;
+            else if (y < 44 && y > 8 && cl2 < 0.016 && r < 0.55) id = isDeep ? B.DEEPSLATE_LAPIS_ORE : B.LAPIS_ORE;
+            else if (y < 110 && cl > 0.5 && cl < 0.56 && r < 0.65) id = isDeep ? B.DEEPSLATE_COAL_ORE : B.COAL_ORE;
+            else if (y < 96 && clCu > 0.15 && clCu < 0.22 && r < 0.6) id = isDeep ? B.DEEPSLATE_COPPER_ORE : B.COPPER_ORE;
+            else if (!isDeep && hash(wx >> 2, y >> 2, wz >> 2, s + 5) < 0.02) id = B.GRAVEL;
           }
           d[idx(x, y, z)] = id;
         }
 
+      }
+
+    // Góry 2.6 – calcite / miedź na szczytach (tylko zamiana, bez podnoszenia terenu)
+    for (let z = 0; z < CS; z++)
+      for (let x = 0; x < CS; x++) {
+        const info = surf[z * CS + x];
+        if (info.biome !== 'Góry' || info.h < 98) continue;
+        const wx = ox + x, wz = oz + z;
+        const surfH = info.h;
+        const topId = d[idx(x, surfH, z)];
+        if (topId !== B.STONE && topId !== B.SNOW && topId !== B.GRASS) continue;
+        if (hash(wx, surfH, wz, s + 600) < 0.18) {
+          d[idx(x, surfH, z)] = B.CALCITE;
+        } else if (hash(wx, surfH, wz, s + 601) < 0.06) {
+          d[idx(x, surfH, z)] = B.COPPER_ORE;
+        }
       }
 
     // Wioski: wyrównują teren i stawiają budynki, zanim pojawią się dekoracje.
@@ -358,6 +386,35 @@ export class World {
         const top = this.growTree(c, tx, tz, info.h + 1, birch, vmask);
         if (top > maxY) maxY = top;
       }
+
+    // 2.6 Geody ametystowe – małe kuliste struktury 20-50 y
+    if (hash(ox, oz, 9, s + 700) < 0.06) {
+      const cx0 = 3 + Math.floor(hash(ox, 1, oz, s + 701) * (CS - 6));
+      const cz0 = 3 + Math.floor(hash(ox, 2, oz, s + 702) * (CS - 6));
+      const cy0 = 20 + Math.floor(hash(ox, 3, oz, s + 703) * 30);
+      const rad = 3 + Math.floor(hash(ox, 4, oz, s + 704) * 3);
+      for (let dy = -rad - 1; dy <= rad + 1; dy++) for (let dx = -rad - 1; dx <= rad + 1; dx++) for (let dz = -rad - 1; dz <= rad + 1; dz++) {
+        const lx = cx0 + dx, ly = cy0 + dy, lz = cz0 + dz;
+        if (lx < 0 || lx >= CS || lz < 0 || lz >= CS || ly < 1 || ly >= CH) continue;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist > rad + 1) continue;
+        const ii = idx(lx, ly, lz);
+        if (dist > rad) d[ii] = B.CALCITE;
+        else if (dist > rad - 1) d[ii] = B.AMETHYST_BLOCK;
+        else if (dist > rad - 2) d[ii] = B.BUDDING_AMETHYST;
+        else d[ii] = B.AIR;
+      }
+      // clusters inside
+      for (let k = 0; k < 4; k++) {
+        const ang = hash(ox + k, oz, k, s + 710 + k) * Math.PI * 2;
+        const rr = rad - 1.5;
+        const lx = Math.floor(cx0 + Math.cos(ang) * rr);
+        const lz = Math.floor(cz0 + Math.sin(ang) * rr);
+        const ly = cy0;
+        if (lx < 0 || lx >= CS || lz < 0 || lz >= CS) continue;
+        if (d[idx(lx, ly, lz)] === B.AIR) d[idx(lx, ly, lz)] = B.AMETHYST_CLUSTER;
+      }
+    }
 
     // Buried chests in caves. Does not change terrain height, only fills an existing air pocket.
     for (let n = 0; n < 3; n++) {
@@ -549,6 +606,16 @@ export class World {
     return Math.max(18, Math.min(74, Math.floor(46 + n * 13 + m * 15)));
   }
 
+  /** End – wyspy unoszące się w pustce. */
+  private endFloorH(gx: number, gz: number): number {
+    const d = Math.sqrt(gx * gx + gz * gz);
+    const n = this.n1.fbm2D(gx / 120, gz / 120, 3);
+    const central = d < 80 ? 1 : Math.max(0, 1 - (d - 80) / 400);
+    if (central < 0.2 && this.n2.fbm2D(gx / 60, gz / 60, 2) < -0.2) return 0;
+    const h = 48 + n * 8 + central * 12;
+    return Math.max(0, Math.min(90, Math.floor(h)));
+  }
+
   /** Dolna krawędź skalnego stropu – zostawia ~30 bloków otwartej przestrzeni. */
   private netherCeilH(gx: number, gz: number): number {
     const n = this.n3.fbm2D(gx / 70, gz / 70, 3);
@@ -639,6 +706,52 @@ export class World {
     }
 
     c.maxY = Math.min(CH - 1, maxY);
+    this.applyMods(c);
+    for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x, z);
+  }
+
+  private generateEnd(c: Chunk) {
+    const d = c.data;
+    const ox = c.cx * CS, oz = c.cz * CS;
+    const s = this.seed;
+    let maxY = 0;
+    for (let z = 0; z < CS; z++) {
+      for (let x = 0; x < CS; x++) {
+        const gx = ox + x, gz = oz + z;
+        const fh = this.endFloorH(gx, gz);
+        if (fh === 0) continue;
+        if (fh > maxY) maxY = fh;
+        for (let y = 0; y <= fh; y++) {
+          const id = y === 0 ? B.BEDROCK : y < fh - 2 ? B.END_STONE : B.END_STONE;
+          d[idx(x, y, z)] = id;
+        }
+        // chorus plants on outer islands
+        const dist = Math.sqrt(gx * gx + gz * gz);
+        if (dist > 100 && hash(gx, gz, 7, s + 200) < 0.02) {
+          const h = 2 + Math.floor(hash(gx, 7, gz, s + 201) * 3);
+          for (let k = 1; k <= h && fh + k < CH; k++) d[idx(x, fh + k, z)] = B.CHORUS_PLANT;
+          if (fh + h + 1 < CH) d[idx(x, fh + h + 1, z)] = B.CHORUS_FLOWER;
+        }
+      }
+    }
+    // central island obsidian pillars + end portal frame
+    if (c.cx === 0 && c.cz === 0) {
+      for (let i = 0; i < 10; i++) {
+        const ang = (i / 10) * Math.PI * 2 + hash(i, 0, 0, s) * 0.3;
+        const rad = 18 + Math.floor(hash(i, 1, 0, s) * 10);
+        const px = Math.floor(8 + Math.cos(ang) * rad);
+        const pz = Math.floor(8 + Math.sin(ang) * rad);
+        if (px < 0 || px >= CS || pz < 0 || pz >= CS) continue;
+        const hh = 8 + Math.floor(hash(i, 2, 0, s) * 10);
+        const fh = this.endFloorH(ox + px, oz + pz);
+        for (let y = fh; y < fh + hh && y < CH; y++) d[idx(px, y, pz)] = B.OBSIDIAN;
+        if (fh + hh < CH) d[idx(px, fh + hh, pz)] = B.END_PORTAL_FRAME;
+      }
+      // dragon egg
+      const fh0 = this.endFloorH(0, 0);
+      if (fh0 + 1 < CH) d[idx(8, fh0 + 1, 8)] = B.DRAGON_EGG;
+    }
+    c.maxY = Math.min(CH - 1, maxY + 10);
     this.applyMods(c);
     for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x, z);
   }

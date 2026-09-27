@@ -117,7 +117,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
+export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast' | 'goat' | 'shulker' | 'dragon') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -165,10 +165,22 @@ export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | '
     o.frequency.linearRampToValueAtTime(268, t + 0.3);
     o.frequency.setValueAtTime(300, t + 0.38);
   } else if (type === 'golem') {
-    // żelazny golem: ciężki, metaliczny pomruk
     o.type = 'square';
     o.frequency.setValueAtTime(96, t);
     o.frequency.linearRampToValueAtTime(62, t + 0.5);
+  } else if (type === 'goat') {
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(300, t);
+    o.frequency.linearRampToValueAtTime(500, t + 0.15);
+    o.frequency.linearRampToValueAtTime(320, t + 0.35);
+  } else if (type === 'shulker') {
+    o.type = 'square';
+    o.frequency.setValueAtTime(200, t);
+    o.frequency.linearRampToValueAtTime(120, t + 0.4);
+  } else if (type === 'dragon') {
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(60, t);
+    o.frequency.linearRampToValueAtTime(30, t + 0.8);
   } else {
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(110, t);
