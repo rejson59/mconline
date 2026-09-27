@@ -510,7 +510,7 @@ export default function TouchControls({
       {/* przyciski akcji – diament pod prawym kciukiem */}
       <div
         className="pointer-events-none absolute"
-        style={{ right: 12, bottom: 96 + 30, width: 160, height: settings.touchMode === 'buttons' ? 216 : 148 }}
+        style={{ right: 12, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 126px)', width: 160, height: settings.touchMode === 'buttons' ? 216 : 148 }}
       >
         <div className="absolute" style={{ right: 0, bottom: 0 }}>
           <ActionButton label={flying ? '⤒' : '⬆'} size={72} fontSize={26} opacity={jumping ? 1 : 0.7} onDown={() => pressJump(true)} onUp={() => pressJump(false)} haptics={settings.haptics} />
@@ -545,7 +545,7 @@ export default function TouchControls({
       </div>
 
       {/* pasek górny: pauza, ekwipunek, czat, pełny ekran */}
-      <div className="pointer-events-none absolute left-3 flex gap-2" style={{ top: 34 }}>
+      <div className="pointer-events-none absolute left-3 flex gap-2" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
         <button
           className={btn}
           style={{ ...btnStyle, width: 50, height: 50, fontSize: 20, opacity: 0.75 }}

@@ -19,6 +19,7 @@ import TradeScreen from '../src/components/TradeScreen';
 import WaypointsScreen from '../src/components/WaypointsScreen';
 import AnvilScreen from '../src/components/AnvilScreen';
 import BrewingScreen from '../src/components/BrewingScreen';
+import InventoryScreen from '../src/components/InventoryScreen';
 import { anvilResult } from '../src/game/anvil';
 import { Inventory, RECIPES } from '../src/game/inventory';
 import { I, isFood, isPotion, stackLimit } from '../src/game/items';
@@ -83,6 +84,25 @@ section('trade screen: static render');
   check('player inventory is rendered', html.includes('Ekwipunek'));
 }
 
+section('inventory screen: recipe finder');
+{
+  const fake = {
+    inventory: new Inventory(),
+    mode: 'survival',
+    craftingTable: false,
+    armor: [null, null, null, null],
+    selected: 0,
+    clickArmorSlot: noop,
+    onCraft: noop,
+    body: { pos: { x: 0, y: 65, z: 0 } },
+    spawnDrop: noop,
+    message: noop,
+  };
+  const html = renderToStaticMarkup(<InventoryScreen game={fake as unknown as Game} icons={{}} onChange={noop} />);
+  check('crafting screen includes recipe search', html.includes('Szukaj receptur po nazwie lub składniku'));
+  check('crafting screen can filter craftable recipes', html.includes('aria-pressed="false"') && html.includes('Możliwe'));
+}
+
 section('adventure journal: quests and progress');
 {
   const unlocked = ['wood', 'craft', 'pick', 'torch', 'home'];
@@ -123,6 +143,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
+  check('main menu shows release 2.6', menu.includes('WERSJA 2.6') && menu.includes('Warsztat bez wpadek'));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -360,9 +381,9 @@ section('2.3/2.4: journal chapter and menus');
   check('controls document respawn key', controls.includes('Enter / R (ekran śmierci)'));
   check('controls document touch long-press in windows', controls.includes('przytrzymaj: połowa / jeden'));
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
-  check('the menu announces 2.5', menu.includes('2.5'));
-  // the splash line is picked at random, so check the fixed 2.5 badge instead
-  check('the menu names the 2.5 release', menu.includes('WERSJA 2.5'));
+  check('the menu announces release 2.6', menu.includes('2.6'));
+  // the splash line is picked at random, so check the fixed version badge instead
+  check('the menu names the 2.6 release', menu.includes('WERSJA 2.6'));
 }
 
 section('2.4: brewing rules');

@@ -12,7 +12,7 @@ export interface Stack {
   name?: string;
 }
 
-/** True when two stacks can merge (same id, no durability, no enchantments). */
+/** True when two stacks can merge (same id, metadata-compatible, identical custom names). */
 export function mergeable(a: Stack, b: Stack): boolean {
   return (
     a.id === b.id &&
@@ -23,6 +23,48 @@ export function mergeable(a: Stack, b: Stack): boolean {
 }
 
 export const MAX_STACK = 64;
+
+function copyStack(stack: Stack): Stack {
+  return { ...stack, ...(stack.ench ? { ench: { ...stack.ench } } : {}) };
+}
+
+function makeStack(id: number, count: number, dur?: number, ench?: Record<string, number>, name?: string): Stack {
+  return {
+    id,
+    count,
+    ...(dur !== undefined ? { dur } : {}),
+    ...(ench ? { ench: { ...ench } } : {}),
+    ...(name !== undefined ? { name } : {}),
+  };
+}
+
+/** Capacity check shared by normal pickup and transactional inventory actions. */
+function canFitInSlots(slots: (Stack | null)[], incoming: Stack): boolean {
+  if (!Number.isSafeInteger(incoming.count) || incoming.count < 0) return false;
+  if (incoming.count === 0) return true;
+  const limit = stackLimit(incoming.id);
+  let capacity = 0;
+  for (const slot of slots) {
+    if (!slot) capacity += limit;
+    else if (mergeable(slot, incoming)) capacity += Math.max(0, limit - slot.count);
+    if (capacity >= incoming.count) return true;
+  }
+  return false;
+}
+
+/** Removes by item id from a scratch/live slot array, from the end like Inventory.remove. */
+function removeFromSlots(slots: (Stack | null)[], id: number, count: number): number {
+  let remaining = count;
+  for (let i = slots.length - 1; i >= 0 && remaining > 0; i--) {
+    const slot = slots[i];
+    if (!slot || slot.id !== id) continue;
+    const taken = Math.min(slot.count, remaining);
+    slot.count -= taken;
+    remaining -= taken;
+    if (slot.count <= 0) slots[i] = null;
+  }
+  return remaining;
+}
 
 export interface Recipe {
   out: Stack;
@@ -213,34 +255,57 @@ export class Inventory {
   /** 3x3 crafting grid; only the top-left 2x2 is used without a table. */
   grid: (Stack | null)[] = new Array(9).fill(null);
 
+  /** True only if the complete stack can be added; it never reserves or mutates slots. */
+  canAdd(id: number, count = 1, dur?: number, ench?: Record<string, number>, name?: string): boolean {
+    return canFitInSlots(this.slots, makeStack(id, count, dur, ench, name));
+  }
+
+  /**
+   * Trade preflight: checks capacity after the payment is removed, without
+   * changing the real inventory. This keeps an exchange all-or-nothing while
+   * still allowing the payment itself to free a slot.
+   */
+  canAddAfterRemoving(
+    id: number,
+    count: number,
+    removals: { id: number; count: number }[]
+  ): boolean {
+    const projected = this.slots.map((slot) => slot ? copyStack(slot) : null);
+    for (const removal of removals) {
+      if (!Number.isSafeInteger(removal.count) || removal.count < 0) return false;
+      if (removeFromSlots(projected, removal.id, removal.count) > 0) return false;
+    }
+    return canFitInSlots(projected, makeStack(id, count));
+  }
+
   add(id: number, count = 1, dur?: number, ench?: Record<string, number>, name?: string): boolean {
+    const incoming = makeStack(id, count, dur, ench, name);
+    // Preflight before changing anything. Callers may drop the stack or keep it
+    // in the world when false is returned, so partial insertion would duplicate
+    // items on pickup and on trade.
+    if (!canFitInSlots(this.slots, incoming)) return false;
     const limit = stackLimit(id);
-    // Damaged, enchanted or unstackable items each take their own slot.
-    if (dur !== undefined || ench || name || limit === 1) {
-      for (let i = 0; i < 36 && count > 0; i++) {
-        if (!this.slots[i]) {
-          this.slots[i] = { id, count: 1, ...(dur !== undefined ? { dur } : {}), ...(ench ? { ench } : {}), ...(name ? { name } : {}) };
-          count--;
-        }
-      }
-      return count === 0;
-    }
-    for (let i = 0; i < 36 && count > 0; i++) {
-      const s = this.slots[i];
-      if (s && s.id === id && s.dur === undefined && !s.ench && s.count < limit) {
-        const n = Math.min(limit - s.count, count);
-        s.count += n;
-        count -= n;
+    let remaining = count;
+
+    // Named stacks may merge with the same name, but never with a different
+    // name. Durability/enchantment-bearing items remain individually slotted.
+    if (dur === undefined && !ench) {
+      for (const slot of this.slots) {
+        if (!slot || !mergeable(slot, incoming)) continue;
+        const moved = Math.min(Math.max(0, limit - slot.count), remaining);
+        slot.count += moved;
+        remaining -= moved;
+        if (remaining <= 0) return true;
       }
     }
-    for (let i = 0; i < 36 && count > 0; i++) {
-      if (!this.slots[i]) {
-        const n = Math.min(limit, count);
-        this.slots[i] = { id, count: n };
-        count -= n;
-      }
+
+    for (let i = 0; i < this.slots.length && remaining > 0; i++) {
+      if (this.slots[i]) continue;
+      const moved = Math.min(limit, remaining);
+      this.slots[i] = makeStack(id, moved, dur, ench, name);
+      remaining -= moved;
     }
-    return count === 0;
+    return remaining === 0;
   }
 
   countOf(id: number): number {
@@ -250,15 +315,7 @@ export class Inventory {
   }
 
   remove(id: number, count: number) {
-    for (let i = 35; i >= 0 && count > 0; i--) {
-      const s = this.slots[i];
-      if (s && s.id === id) {
-        const n = Math.min(s.count, count);
-        s.count -= n;
-        count -= n;
-        if (s.count <= 0) this.slots[i] = null;
-      }
-    }
+    removeFromSlots(this.slots, id, count);
   }
 
   /** Number of usable grid cells (2x2 without a table, 3x3 with one). */
@@ -321,7 +378,7 @@ export class Inventory {
       if (!cell) {
         // right click drops a single item – the natural way to fill a pattern
         if (right && this.cursor.count > 1) {
-          this.grid[i] = { id: this.cursor.id, count: 1, dur: this.cursor.dur, ench: this.cursor.ench ? { ...this.cursor.ench } : undefined };
+          this.grid[i] = makeStack(this.cursor.id, 1, this.cursor.dur, this.cursor.ench, this.cursor.name);
           this.cursor.count -= 1;
         } else {
           this.grid[i] = this.cursor;
@@ -374,7 +431,7 @@ export class Inventory {
     for (let i = 0; i < 9; i++) {
       const cell = this.grid[i];
       if (!cell) continue;
-      if (!this.add(cell.id, cell.count, cell.dur, cell.ench)) leftovers.push(cell);
+      if (!this.add(cell.id, cell.count, cell.dur, cell.ench, cell.name)) leftovers.push(cell);
       this.grid[i] = null;
     }
     return leftovers;
@@ -384,10 +441,26 @@ export class Inventory {
     return r.inputs.every((inp) => this.countOf(inp.id) >= inp.count);
   }
 
-  craft(r: Recipe): boolean {
+  /** Checks both ingredients and output capacity, including slots freed by ingredients. */
+  canCraftToInventory(r: Recipe): boolean {
     if (!this.canCraft(r)) return false;
+    const projected = this.slots.map((slot) => slot ? copyStack(slot) : null);
+    for (const input of r.inputs) {
+      if (removeFromSlots(projected, input.id, input.count) > 0) return false;
+    }
+    return canFitInSlots(projected, r.out);
+  }
+
+  craft(r: Recipe): boolean {
+    if (!this.canCraftToInventory(r)) return false;
+    const previous = this.slots.map((slot) => slot ? copyStack(slot) : null);
     for (const inp of r.inputs) this.remove(inp.id, inp.count);
-    this.add(r.out.id, r.out.count);
+    if (!this.add(r.out.id, r.out.count, r.out.dur, r.out.ench, r.out.name)) {
+      // Defensive rollback: output insertion is normally guaranteed by the
+      // preflight above, but never consume a recipe if that assumption changes.
+      this.slots = previous;
+      return false;
+    }
     return true;
   }
 
@@ -431,10 +504,11 @@ export class Inventory {
     this.cursor = s;
   }
 
-  returnCursor() {
-    if (this.cursor) {
-      this.add(this.cursor.id, this.cursor.count);
-      this.cursor = null;
-    }
+  /** Returns false without changing the cursor if the stack does not fit. */
+  returnCursor(): boolean {
+    if (!this.cursor) return true;
+    if (!this.add(this.cursor.id, this.cursor.count, this.cursor.dur, this.cursor.ench, this.cursor.name)) return false;
+    this.cursor = null;
+    return true;
   }
 }

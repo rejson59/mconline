@@ -127,7 +127,8 @@ export interface VillagerState {
 export interface TradeCarrier {
   countOf(id: number, count?: number): number;
   remove(id: number, count: number): void;
-  add(id: number, count: number, dur?: number, ench?: Record<string, number>): boolean;
+  canAddAfterRemoving(id: number, count: number, removals: TradeStack[]): boolean;
+  add(id: number, count: number, dur?: number, ench?: Record<string, number>, name?: string): boolean;
 }
 
 export function professionFor(roll: number): number {
@@ -159,12 +160,13 @@ export function usesLeft(state: VillagerState, o: TradeOffer): number {
   return Math.max(0, o.uses - (state.used[o.key] ?? 0));
 }
 
-export type TradeBlock = 'ok' | 'uses' | 'items';
+export type TradeBlock = 'ok' | 'uses' | 'items' | 'space';
 
-/** Czy wymiana jest możliwa? `items` = brak towaru, `uses` = puste zapasy. */
+/** Czy wymiana jest możliwa? `items` = brak towaru, `space` = brak miejsca na zapłatę. */
 export function canTrade(state: VillagerState, inv: TradeCarrier, o: TradeOffer): TradeBlock {
   if (usesLeft(state, o) <= 0) return 'uses';
   for (const g of o.give) if (inv.countOf(g.id) < g.count) return 'items';
+  if (!inv.canAddAfterRemoving(o.get.id, o.get.count, o.give)) return 'space';
   return 'ok';
 }
 

@@ -39,7 +39,7 @@ function OfferRow({
   const { offer, left, max, blocked } = row;
   const disabled = blocked !== 'ok';
   const inv = game.inventory;
-  const reason = blocked === 'uses' ? 'Zapasy wyczerpane' : blocked === 'items' ? 'Brak towaru' : '';
+  const reason = blocked === 'uses' ? 'Zapasy wyczerpane' : blocked === 'items' ? 'Brak towaru' : blocked === 'space' ? 'Brak miejsca' : '';
   return (
     <button
       type="button"

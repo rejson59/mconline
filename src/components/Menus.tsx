@@ -3,6 +3,7 @@ import type { GameMode } from '../game/engine';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { exportSave, exportSaves, importSaves, MAX_SAVES } from '../game/saves';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
+import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import SettingsScreen from './SettingsScreen';
 
 export type WorldType = 'normal' | 'flat';
@@ -14,8 +15,11 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  'Aktualizacja 2.5: Wielka naprawa sterowania!',
-  '2.5: PC i dotyk wreszcie osobno!',
+  'Aktualizacja 2.6: Warsztat bez wpadek!',
+  'Ekwipunek nie gubi ani nie duplikuje przedmiotów!',
+  'Szukaj receptur po nazwie albo składniku!',
+  'Nazwane przedmioty zachowują swoje imię!',
+  '2.6: pełny plecak nie zabierze już łupu!',
   'Trzymany LPM bije dalej – koniec klikania!',
   'Tapnij mieszkańca, aby handlować (nie bić!)',
   'Ctrl+Q wyrzuca cały stos!',
@@ -46,9 +50,9 @@ const SPLASHES = [
 export function Title() {
   const [splash] = useState(() => SPLASHES[Math.floor(Math.random() * SPLASHES.length)]);
   return (
-    <div className="relative mb-10 select-none text-center">
+    <div className="mb-7 flex w-full flex-col items-center text-center">
       <h1
-        className="text-6xl font-bold tracking-wider sm:text-8xl"
+        className="max-w-full whitespace-nowrap text-[clamp(2.3rem,12vw,4rem)] font-bold leading-none tracking-[0.05em]"
         style={{
           color: '#bdbdbd',
           textShadow: '0 2px 0 #8a8a8a, 0 4px 0 #6b6b6b, 0 6px 0 #4a4a4a, 0 8px 0 #2b2b2b, 0 10px 12px rgba(0,0,0,0.8)',
@@ -57,14 +61,14 @@ export function Title() {
       >
         BLOCKCRAFT
       </h1>
-      <div className="absolute -bottom-5 right-0 flex items-center gap-2">
+      <div className="mt-3 flex w-full flex-wrap items-center justify-center gap-2 px-1">
         <span
-          className="px-2 py-0.5 text-sm font-bold"
+          className="shrink-0 px-2 py-0.5 text-sm font-bold"
           style={{ background: '#3c8527', color: '#fff', border: '2px solid #1c1c1c', boxShadow: '2px 2px 0 rgba(0,0,0,0.6)' }}
         >
-          WERSJA 2.5
+          WERSJA {GAME_VERSION}
         </span>
-        <span className="splash text-lg font-semibold sm:text-xl" style={{ color: '#ffff00', textShadow: '2px 2px 0 #3f3f00' }}>
+        <span className="splash max-w-full text-center text-sm font-semibold leading-tight sm:text-xl" style={{ color: '#ffff70', textShadow: '2px 2px 0 #3f3f00' }}>
           {splash}
         </span>
       </div>
@@ -330,7 +334,7 @@ export function MainMenu({
         }}
       />
       <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
-      <div className="relative z-10 flex max-h-[calc(100dvh-2rem)] w-full max-w-[440px] flex-col items-center overflow-y-auto px-4 py-3">
+      <div className="relative z-10 flex max-h-[calc(100dvh-5rem)] w-full max-w-[440px] flex-col items-center overflow-y-auto px-4 py-3">
         <Title />
         {view === 'main' && (
           <div className="flex w-full flex-col gap-3">
@@ -536,9 +540,13 @@ export function MainMenu({
           />
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.5 „Wielka naprawa”</div>
-      <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
-      <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
+      <div
+        className="absolute inset-x-3 flex flex-col items-center gap-0.5 text-center text-[11px] leading-tight mc-text sm:flex-row sm:justify-between sm:text-sm sm:text-left"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}
+      >
+        <span>BlockCraft {GAME_VERSION} „{GAME_RELEASE_NAME}”</span>
+        <span className="opacity-80">Gra w przeglądarce · Three.js · GitHub Pages</span>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
 import { CREATIVE_BLOCKS } from '../game/blocks';
-import { RECIPES } from '../game/inventory';
+import { RECIPES, mergeable } from '../game/inventory';
+import { filterRecipes } from '../utils/recipeSearch';
 import { CREATIVE_ITEMS, displayName, stackLimit } from '../game/items';
 import { TooltipBody } from '../utils/tooltip';
 import { ARMOR, armorPoints, ARMOR_SLOT_NAMES } from '../game/armor';
@@ -12,6 +13,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [recipeQuery, setRecipeQuery] = useState('');
   const [tab, setTab] = useState<'blocks' | 'items'>('blocks');
   const [onlyReady, setOnlyReady] = useState(false);
   const inv = game.inventory;
@@ -43,6 +45,10 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
 
   const pool = tab === 'blocks' ? CREATIVE_BLOCKS : CREATIVE_ITEMS;
   const filtered = pool.filter((id) => displayName(id).toLowerCase().includes(search.toLowerCase()));
+  const recipeRows = filterRecipes(RECIPES, recipeQuery).filter((recipe) => {
+    if (!onlyReady) return true;
+    return inv.canCraftToInventory(recipe) && !(recipe.table && !game.craftingTable);
+  });
 
   return (
     <div
@@ -57,8 +63,8 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
         }
       }}
     >
-      <div className="flex max-h-[94vh] flex-wrap items-start justify-center gap-4 overflow-y-auto p-3">
-        <div className="mc-panel p-4">
+      <div className="flex max-h-[94dvh] max-w-[100vw] flex-wrap items-start justify-center gap-4 overflow-x-hidden overflow-y-auto p-3">
+        <div className="mc-panel inventory-main-panel w-fit max-w-[calc(100vw-24px)] p-4">
           {creative ? (
             <>
               <div className="mb-2 flex items-center justify-between gap-3">
@@ -74,7 +80,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                   onKeyDown={(e) => e.stopPropagation()}
                 />
               </div>
-              <div className="mb-3 grid max-h-[300px] grid-cols-9 overflow-y-auto" style={{ width: 9 * 44 + 18 }}>
+              <div className="mb-3 grid max-h-[300px] w-fit grid-cols-9 overflow-y-auto">
                 {filtered.map((id) => (
                   <Slot
                     key={id}
@@ -131,10 +137,10 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
         </div>
 
         {!creative && (
-          <div className="mc-panel w-[330px] p-4">
-            <div className="mb-1 flex items-center justify-between text-lg font-semibold">
+          <div className="mc-panel w-[min(330px,calc(100vw-24px))] p-4">
+            <div className="mb-1 flex items-center justify-between gap-2 text-lg font-semibold">
               <span>{game.craftingTable ? 'Stół rzemieślniczy' : 'Wytwarzanie'}</span>
-              <button type="button" className="text-xs underline" onClick={() => setOnlyReady((v) => !v)}>{onlyReady ? 'Wszystkie' : 'Tylko możliwe'}</button>
+              <span className="text-xs font-normal opacity-70">{recipeRows.length}/{RECIPES.length}</span>
             </div>
 
             {/* crafting grid: 2x2 by hand, 3x3 at the table */}
@@ -164,15 +170,18 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                 onClick={() => {
                   if (!gridMatch) return;
                   const cur = inv.cursor;
-                  if (cur && (cur.id !== gridMatch.out.id || cur.dur !== undefined)) return;
+                  if (cur && !mergeable(cur, gridMatch.out)) return;
                   const room = cur ? stackLimit(cur.id) - cur.count : stackLimit(gridMatch.out.id);
                   if (room <= 0) return;
                   const made = inv.craftGrid(!!game.craftingTable);
                   if (!made) return;
                   const take = Math.min(made.count, room);
                   if (cur) { cur.count += take; }
-                  else inv.cursor = { id: made.id, count: take, dur: made.dur };
-                  if (made.count > take) inv.add(made.id, made.count - take, made.dur);
+                  else inv.cursor = { ...made, count: take, ...(made.ench ? { ench: { ...made.ench } } : {}) };
+                  if (made.count > take && !inv.add(made.id, made.count - take, made.dur, made.ench, made.name)) {
+                    game.spawnDrop(made.id, made.count - take, game.body.pos.x, game.body.pos.y + 1, game.body.pos.z, made.dur, undefined, undefined, undefined, made.ench, made.name);
+                    game.message('Brak miejsca – nadmiar wytworzonego przedmiotu upadł na ziemię.');
+                  }
                   game.onCraft(made.id);
                   refresh();
                 }}
@@ -184,13 +193,41 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                 : 'Siatka 2×2 – ułóż składniki i weź wynik. Stoł rzemieślniczy (4 deski) odblokowuje siatkę 3×3.'}
             </div>
             {!game.craftingTable && <div className="mb-2 text-xs">Narzędzia, łóżko i piec wymagają stołu (PPM na stół). Piec przetapia rudy – PPM na piec.</div>}
+            <div className="mb-2 flex gap-2">
+              <label className="sr-only" htmlFor="recipe-search">Szukaj receptur po nazwie lub składniku</label>
+              <input
+                id="recipe-search"
+                className="mc-input min-w-0 flex-1 !py-1 !text-sm"
+                type="search"
+                placeholder="Szukaj receptury lub składnika…"
+                value={recipeQuery}
+                onChange={(e) => setRecipeQuery(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+              <button
+                type="button"
+                className={`mc-btn !w-auto !px-2 !py-1 !text-xs ${onlyReady ? 'ring-2 ring-inset ring-yellow-300' : ''}`}
+                aria-pressed={onlyReady}
+                onClick={() => setOnlyReady((v) => !v)}
+              >
+                {onlyReady ? 'Wszystkie' : 'Możliwe'}
+              </button>
+            </div>
             <div className="max-h-[380px] space-y-1 overflow-y-auto pr-1">
-              {RECIPES.filter((r) => !onlyReady || (inv.canCraft(r) && !(r.table && !game.craftingTable))).map((r, i) => {
+              {recipeRows.length === 0 && (
+                <div className="px-2 py-5 text-center text-sm text-[#444]" role="status">
+                  {recipeQuery.trim() ? 'Nie znaleziono takiej receptury.' : 'Brak receptur możliwych do wykonania. Zdobądź potrzebne składniki.'}
+                </div>
+              )}
+              {recipeRows.map((r) => {
                 const needTable = r.table && !game.craftingTable;
-                const can = inv.canCraft(r) && !needTable;
+                const hasInputs = inv.canCraft(r);
+                const can = hasInputs && !needTable && inv.canCraftToInventory(r);
+                const noRoom = hasInputs && !needTable && !inv.canCraftToInventory(r);
                 return (
                   <button
-                    key={i}
+                    key={RECIPES.indexOf(r)}
+                    title={noRoom ? 'Zrób miejsce w ekwipunku na wynik.' : needTable ? 'Wymaga stołu rzemieślniczego.' : undefined}
                     disabled={!can}
                     onClick={() => {
                       if (inv.craft(r)) { game.onCraft(r.out.id); refresh(); }

@@ -66,7 +66,11 @@ export default function SettingsScreen({
   };
 
   const Btn = ({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active?: boolean }) => (
-    <button className={`mc-btn !py-2 !text-[15px] ${active ? 'ring-2 ring-inset ring-yellow-300' : ''}`} onClick={onClick}>
+    <button
+      className={`mc-btn !py-2 !text-[15px] ${active ? 'ring-2 ring-inset ring-yellow-300' : ''}`}
+      onClick={onClick}
+      aria-pressed={active}
+    >
       {children}
     </button>
   );
@@ -80,7 +84,7 @@ export default function SettingsScreen({
         </button>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2" role="tablist" aria-label="Zakładki opcji">
         {(
           [
             ['gfx', 'Grafika'],
@@ -90,6 +94,10 @@ export default function SettingsScreen({
         ).map(([id, label]) => (
           <button
             key={id}
+            id={`settings-tab-${id}`}
+            role="tab"
+            aria-selected={tab === id}
+            aria-controls={`settings-panel-${id}`}
             className="mc-btn !py-1.5 !text-sm"
             style={tab === id ? { background: 'linear-gradient(#8e98d6,#6c75b8)', color: '#ffffa0' } : undefined}
             onClick={() => setTab(id)}
@@ -99,7 +107,7 @@ export default function SettingsScreen({
         ))}
       </div>
 
-      <div hidden={tab !== 'gfx'} className="flex flex-col gap-3">
+      <div id="settings-panel-gfx" role="tabpanel" aria-labelledby="settings-tab-gfx" hidden={tab !== 'gfx'} className="flex flex-col gap-3">
           <div className="text-xs leading-snug text-green-300 mc-text">Twoje urządzenie: {describeProfile(profile)}</div>
           <div className="grid grid-cols-2 gap-2">
             <Btn active={settings.quality === 'auto'} onClick={() => pickQuality('auto')}>
@@ -110,6 +118,7 @@ export default function SettingsScreen({
                 <button
                   key={p}
                   className="mc-btn !px-1 !py-2 !text-[13px]"
+                  aria-pressed={settings.quality === p}
                   style={settings.quality === p ? { background: 'linear-gradient(#8e98d6,#6c75b8)', color: '#ffffa0' } : undefined}
                   onClick={() => pickQuality(p)}
                 >
@@ -136,7 +145,7 @@ export default function SettingsScreen({
             Limit klatek: {fpsLabel}
           </Btn>
       </div>
-      <div hidden={tab !== 'controls'} className="flex flex-col gap-3">
+      <div id="settings-panel-controls" role="tabpanel" aria-labelledby="settings-tab-controls" hidden={tab !== 'controls'} className="flex flex-col gap-3">
           <div className="text-xs text-green-300 mc-text">Wersja sterowania</div>
           <Btn onClick={cycleControlMode}>
             Tryb sterowania: {modeLabel[settings.controlMode]}
@@ -165,7 +174,7 @@ export default function SettingsScreen({
           </Btn>
       </div>
 
-      <div hidden={tab !== 'sound'} className="flex flex-col gap-3">
+      <div id="settings-panel-sound" role="tabpanel" aria-labelledby="settings-tab-sound" hidden={tab !== 'sound'} className="flex flex-col gap-3">
           <OptionSlider label="Głośność" value={settings.volume} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ volume: v })} />
           <Btn active={settings.minimap} onClick={() => set({ minimap: !settings.minimap })}>
             Minimapa: {settings.minimap ? 'włączona' : 'wyłączona'}
@@ -197,8 +206,18 @@ export function OptionSlider({
 }) {
   return (
     <div className="relative w-full">
-      <input type="range" className="mc-range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} />
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[15px] mc-text">
+      <input
+        type="range"
+        className="mc-range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        aria-label={label}
+        aria-valuetext={fmt(value)}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+      />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center text-[15px] mc-text">
         {label}: {fmt(value)}
       </div>
     </div>

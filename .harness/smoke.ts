@@ -9,7 +9,7 @@
  */
 import * as THREE from 'three';
 import { PRESETS, detectDeviceProfile, recommendPreset, describeProfile, type DeviceProfile } from '../src/utils/performance';
-import { DEFAULT_SETTINGS, applyPreset, effectiveSettings } from '../src/utils/settings';
+import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, loadSettings, normalizeSettings, SETTINGS_KEY } from '../src/utils/settings';
 
 // ---------------------------------------------------------------- DOM stubs
 const ctx2d = {
@@ -90,6 +90,7 @@ import { slabFullBlock } from '../src/game/blocks';
 import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
+import { filterRecipes } from '../src/utils/recipeSearch';
 
 // ------------------------------------------------------------------- runner
 let pass = 0;
@@ -308,6 +309,84 @@ section('inventory: slots, cursor, recipes');
   check('overflow goes to a new slot', inv.add(B.DIRT, 200) && inv.countOf(B.DIRT) === 270);
   check('full inventory refuses', (() => { const i2 = new Inventory(); for (let i = 0; i < 36; i++) i2.slots[i] = { id: B.STONE, count: 64 }; return !i2.add(B.DIRT, 1); })());
   check('tools keep durability on add', inv.add(I.WOOD_PICK, 1, 42) && inv.slots.find((s) => s?.id === I.WOOD_PICK)?.dur === 42);
+
+  // Add is atomic: a failed pickup must not partially duplicate a ground stack.
+  const almostFull = new Inventory();
+  almostFull.slots[0] = { id: B.DIRT, count: 63 };
+  for (let i = 1; i < almostFull.slots.length; i++) almostFull.slots[i] = { id: B.STONE, count: 64 };
+  check('add rejects a stack that only partly fits', !almostFull.add(B.DIRT, 2));
+  eq('failed add leaves the existing stack untouched', almostFull.slots[0]?.count, 63);
+  eq('failed add inserts no partial amount', almostFull.countOf(B.DIRT), 63);
+
+  const namedStacks = new Inventory();
+  check('named stack can be added', namedStacks.add(B.STONE, 2, undefined, undefined, 'Kamyk'));
+  check('identically named stacks merge', namedStacks.add(B.STONE, 3, undefined, undefined, 'Kamyk'));
+  eq('merged custom stack keeps its name and count', namedStacks.slots[0]?.name === 'Kamyk' && namedStacks.slots[0]?.count === 5, true);
+  check('different custom names stay separate', namedStacks.add(B.STONE, 1, undefined, undefined, 'Pamiątka') && namedStacks.slots[1]?.name === 'Pamiątka');
+
+  const cursorItem = new Inventory();
+  cursorItem.cursor = { id: I.IRON_SWORD, count: 1, dur: 47, ench: { sharpness: 2 }, name: 'Wędrowiec' };
+  check('returnCursor preserves custom stack metadata', cursorItem.returnCursor());
+  const returnedSword = cursorItem.slots.find((s) => s?.id === I.IRON_SWORD);
+  check('returned cursor keeps durability, enchantments and name', returnedSword?.dur === 47 && returnedSword.ench?.sharpness === 2 && returnedSword.name === 'Wędrowiec');
+
+  const blockedCursor = new Inventory();
+  for (let i = 0; i < blockedCursor.slots.length; i++) blockedCursor.slots[i] = { id: B.STONE, count: 64 };
+  blockedCursor.cursor = { id: I.DIAMOND, count: 1, name: 'Moje' };
+  check('returnCursor reports a full inventory', !blockedCursor.returnCursor());
+  check('failed return keeps the held stack available', blockedCursor.cursor?.id === I.DIAMOND && blockedCursor.cursor.name === 'Moje');
+  blockedCursor.cursor = { id: I.IRON_SWORD, count: 1, dur: 55, ench: { sharpness: 2 }, name: 'Moje' };
+
+  const namedGrid = new Inventory();
+  namedGrid.grid[0] = { id: B.STONE, count: 2, name: 'Kamyk' };
+  namedGrid.grid[1] = { id: B.STONE, count: 3, name: 'Kamyk' };
+  namedGrid.returnGrid();
+  check('returnGrid preserves and merges identically named stacks', namedGrid.slots[0]?.count === 5 && namedGrid.slots[0]?.name === 'Kamyk');
+  const namedSplit = new Inventory();
+  namedSplit.cursor = { id: B.STONE, count: 3, name: 'Kamyk' };
+  namedSplit.clickGrid(0, true);
+  check('placing one item in the crafting grid keeps its name', namedSplit.grid[0]?.name === 'Kamyk' && namedSplit.cursor?.count === 2);
+
+  const chestRecipe = RECIPES.find((r) => r.out.id === B.CHEST)!;
+  const fullCraftingBag = new Inventory();
+  fullCraftingBag.slots[0] = { id: B.PLANKS, count: 64 };
+  for (let i = 1; i < fullCraftingBag.slots.length; i++) fullCraftingBag.slots[i] = { id: B.STONE, count: 64 };
+  check('craft preflight includes output capacity', !fullCraftingBag.canCraftToInventory(chestRecipe));
+  check('full inventory refuses a craft without consuming inputs', !fullCraftingBag.craft(chestRecipe) && fullCraftingBag.slots[0]?.count === 64);
+
+  const paymentFreesSlot = new Inventory();
+  paymentFreesSlot.slots[0] = { id: I.WHEAT, count: 20 };
+  for (let i = 1; i < paymentFreesSlot.slots.length; i++) paymentFreesSlot.slots[i] = { id: B.STONE, count: 64 };
+  check('trade capacity accounts for slots freed by its payment', paymentFreesSlot.canAddAfterRemoving(I.EMERALD, 1, [{ id: I.WHEAT, count: 20 }]));
+
+  const overflowDrops: unknown[][] = [];
+  const returnGame = Object.create(Game.prototype) as unknown as {
+    inventory: Inventory;
+    body: { pos: THREE.Vector3 };
+    spawnDrop: (...args: unknown[]) => void;
+    message: (text: string) => void;
+    returnHeldStack: () => void;
+  };
+  returnGame.inventory = blockedCursor;
+  returnGame.body = { pos: new THREE.Vector3(1, 64, 2) };
+  returnGame.spawnDrop = (...args) => { overflowDrops.push(args); };
+  returnGame.message = () => {};
+  returnGame.returnHeldStack();
+  check('full inventory spills a held cursor item instead of deleting it', overflowDrops.length === 1 && blockedCursor.cursor === null);
+  check('spilled cursor item keeps its enchantment and custom name', (overflowDrops[0]?.[9] as Record<string, number>)?.sharpness === 2 && overflowDrops[0]?.[10] === 'Moje');
+
+  const giveGame = Object.create(Game.prototype) as Record<string, any>;
+  giveGame.inventory = new Inventory();
+  giveGame.inventory.slots.fill({ id: B.STONE, count: 64 });
+  giveGame.body = { pos: new THREE.Vector3(1, 64, 2) };
+  giveGame.messages = [];
+  giveGame.emitHud = () => {};
+  giveGame.notePickup = () => {};
+  const commandDrops: unknown[][] = [];
+  giveGame.spawnDrop = (...args: unknown[]) => { commandDrops.push(args); };
+  giveGame.command(`/give ${B.DIRT} 2`);
+  check('/give does not silently lose items when inventory is full', commandDrops.length === 1 && commandDrops[0]?.[0] === B.DIRT && commandDrops[0]?.[1] === 2);
+
   inv.remove(B.DIRT, 30);
   eq('remove takes from the stack', inv.countOf(B.DIRT), 240);
   inv.remove(B.DIRT, 99999);
@@ -719,6 +798,13 @@ section('inventory: shaped crafting grid');
   }
   eq('every shaped recipe matches its own pattern', brokenPattern, 0);
   check('there are shaped recipes to find', RECIPES.filter((r) => r.pattern).length >= 20, `${RECIPES.filter((r) => r.pattern).length} shaped`);
+
+  const searchedBooks = filterRecipes(RECIPES, 'książka');
+  check('recipe finder searches result names', searchedBooks.some((r) => r.out.id === I.BOOK));
+  const searchedIron = filterRecipes(RECIPES, 'zelazo');
+  check('recipe finder searches ingredients without Polish accents', searchedIron.some((r) => r.inputs.some((input) => input.id === I.IRON)));
+  check('recipe finder searches by tool result', filterRecipes(RECIPES, 'kilof').some((r) => r.out.id === I.WOOD_PICK));
+  eq('empty recipe query keeps every recipe', filterRecipes(RECIPES, '').length, RECIPES.length);
 }
 
 // ====================================================== leaf decay (engine)
@@ -1714,8 +1800,24 @@ section('engine: trading through the Game API');
   check('the trade achievement unlocked', g.unlocked.has('trade'));
   check('the villager gained xp', villager.trade!.xp > 0);
 
+  // A failed exchange must not consume payment when its output has nowhere to go.
+  g.inventory.slots.fill(null);
+  g.inventory.slots[0] = { id: I.WHEAT, count: 64 };
+  for (let i = 1; i < g.inventory.slots.length; i++) g.inventory.slots[i] = { id: B.STONE, count: 64 };
+  villager.trade = createVillagerState(0, 0);
+  rows = g.tradeRows() as TradeRow[];
+  eq('full inventory marks the offer as blocked', rows[wheatIdx].blocked, 'space');
+  eq('blocked trade does not execute', g.tradeWith(wheatIdx), false);
+  eq('blocked trade does not consume wheat', g.inventory.countOf(I.WHEAT), 64);
+  eq('blocked trade does not use stock', villager.trade!.used.wheat ?? 0, 0);
+  g.inventory.slots.fill(null);
+  villager.trade = createVillagerState(0, 0);
+  rows = g.tradeRows() as TradeRow[];
+  g.inventory.add(I.WHEAT, 20);
+
   // limit zapasów działa
   const uses = rows[wheatIdx].offer.uses;
+  eq('first trade after reset succeeds', g.tradeWith(wheatIdx), true);
   for (let i = 0; i < uses - 1; i++) {
     g.inventory.add(I.WHEAT, 20);
     g.tradeWith(wheatIdx);
@@ -2241,6 +2343,25 @@ section('2.0: automatic graphics and settings');
   check('defaults contain touch mode tap', DEFAULT_SETTINGS.touchMode === 'tap');
   check('defaults enable auto-jump and haptics', DEFAULT_SETTINGS.autoJump === true && DEFAULT_SETTINGS.haptics === true);
   check('defaults enable dynamic resolution', DEFAULT_SETTINGS.dynamicResolution === true);
+
+  store.set(SETTINGS_KEY, JSON.stringify({
+    renderDistance: 99, sensitivity: -3, fov: null, volume: 4, quality: 'ultra',
+    controlMode: 'flight', touchMode: 'trackball', fpsCap: 120, minimap: 'false',
+  }));
+  const recovered = loadSettings();
+  eq('stored render distance is clamped', recovered.renderDistance, 14);
+  eq('invalid sensitivity is clamped safely', recovered.sensitivity, 0.2);
+  eq('invalid FOV falls back to default', recovered.fov, DEFAULT_SETTINGS.fov);
+  eq('volume is clamped', recovered.volume, 1);
+  eq('unknown quality mode falls back safely', recovered.quality, 'auto');
+  eq('unknown control mode falls back safely', recovered.controlMode, 'auto');
+  eq('unknown touch mode falls back safely', recovered.touchMode, 'tap');
+  eq('unsupported FPS cap falls back safely', recovered.fpsCap, 0);
+  eq('non-boolean toggle uses the default', recovered.minimap, true);
+  eq('normalizer preserves supported settings', normalizeSettings({ fov: 90, volume: 0.25, fpsCap: 60 }).fov, 90);
+  store.set(SETTINGS_KEY, '{broken');
+  eq('malformed settings JSON recovers to defaults', loadSettings().renderDistance, DEFAULT_SETTINGS.renderDistance);
+  store.delete(SETTINGS_KEY);
 }
 
 
@@ -2411,6 +2532,15 @@ section('2.3: anvil inside the engine');
   eq('and it costs a level', g.anvilOffer().cost, 1);
   g.takeAnvilResult();
   check('the renamed item keeps id and durability', g.inventory.slots.some((s: Stack | null) => s?.name === 'Szabla wędrowca' && s.id === I.DIAMOND_SWORD && s.dur === 1200));
+
+  const namedPlanks = emptyAnvil(4, 5, 6);
+  namedPlanks.a = { id: B.PLANKS, count: 8 };
+  namedPlanks.name = 'Deski wędrowca';
+  g.anvils.set(anvilKey(4, 5, 6), namedPlanks);
+  g.inventory.cursor = { id: B.PLANKS, count: 5 };
+  g.takeAnvilResult();
+  check('anvil does not merge a renamed stack into an incompatible cursor stack', g.inventory.cursor?.id === B.PLANKS && g.inventory.cursor.count === 5 && g.inventory.cursor.name === undefined);
+  check('renamed anvil output is kept as its own named stack', g.inventory.slots.some((s: Stack | null) => s?.id === B.PLANKS && s.count === 8 && s.name === 'Deski wędrowca'));
 }
 
 section('2.3: totem of undying');
