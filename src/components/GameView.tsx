@@ -12,13 +12,14 @@ import BrewingScreen from './BrewingScreen';
 import JournalScreen from './JournalScreen';
 import WaypointsScreen from './WaypointsScreen';
 import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
-import TouchControls, { isTouchDevice } from './TouchControls';
+import TouchControls from './TouchControls';
 import {
   effectiveSettings,
   loadSettings,
   saveSettings,
   type Settings,
 } from '../utils/settings';
+import { resolveControlMode } from '../utils/input';
 import { detectDeviceProfile, type DeviceProfile } from '../utils/performance';
 
 export type { Settings };
@@ -52,7 +53,9 @@ export default function GameView({
   const [started, setStarted] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [portraitHint, setPortraitHint] = useState(false);
-  const touch = useRef(isTouchDevice()).current;
+  // 2.5: wersja PC i dotykowa są wyraźnie rozdzielone – decyduje tryb
+  // sterowania (auto wg głównego wskaźnika urządzenia albo wymuszony).
+  const [touch, setTouch] = useState(() => resolveControlMode(loadSettings()) === 'touch');
 
   // Profil urządzenia liczony raz – steruje trybem „Auto”.
   const profile: DeviceProfile = useMemo(() => detectDeviceProfile(), []);
@@ -100,7 +103,21 @@ export default function GameView({
   // 2.0: każda zmiana ustawień trafia do silnika na żywo (bez restartu świata).
   useEffect(() => {
     const g = gameRef.current;
+    // 2.5: tryb sterowania może się zmienić w trakcie gry (opcje w pauzie) –
+    // przełączamy wersję PC/dotyk bez restartu świata.
+    const touchNow = resolveControlMode(effective) === 'touch';
+    setTouch(touchNow);
     if (!g) return;
+    g.touchInput = touchNow;
+    // Przejście na wersję dotykową w trakcie gry nie może zostawić
+    // zablokowanego kursora (blokada uniemożliwiałaby gesty).
+    if (touchNow && document.pointerLockElement) {
+      try {
+        document.exitPointerLock();
+      } catch {
+        /* ignore */
+      }
+    }
     g.setRenderDistance(effective.renderDistance);
     g.applyGfx({
       renderDistance: effective.renderDistance,
@@ -213,12 +230,13 @@ export default function GameView({
           hud={hud}
           icons={icons}
           minimap={game.minimapCanvas}
+          touchControls={touch}
           onSelectSlot={touch ? (i) => { game.selected = i; game.emitHud(); } : undefined}
         />
       )}
       {hud && ui === 'playing' && !hud.locked && !touch && (
         <div className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 bg-black/50 px-4 py-2 text-xl mc-text">
-          Kliknij, aby kontynuować
+          {hud.lockCooldown ? 'Chwila… kliknij ponownie, aby przechwycić mysz' : 'Kliknij, aby kontynuować'}
         </div>
       )}
       {game && ui === 'playing' && touch && (

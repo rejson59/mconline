@@ -4,8 +4,9 @@ import { displayName, I } from '../game/items';
 import type { Stack } from '../game/inventory';
 import { enchDef, enchName, type EnchOption } from '../game/enchant';
 import { TooltipBody } from '../utils/tooltip';
+import Slot from './Slot';
 
-function Slot({
+function LabeledSlot({
   stack,
   icons,
   onClick,
@@ -20,20 +21,7 @@ function Slot({
 }) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <div
-        className="mc-slot cursor-pointer"
-        onMouseDown={(e) => {
-          e.preventDefault();
-          onClick?.(e.button === 2);
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-        onMouseEnter={() => onHover?.(stack ? displayName(stack.id) : label ?? null)}
-        onMouseLeave={() => onHover?.(null)}
-      >
-        {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
-        {stack && stack.count > 1 && <span className="mc-count">{stack.count}</span>}
-        {stack?.ench && <span className="ench-glint" />}
-      </div>
+      <Slot stack={stack} icons={icons} onClick={onClick} onHover={() => onHover?.(stack ? displayName(stack.id) : label ?? null)} imgSize={34} showCount />
       {label && <div className="text-[11px] text-[#333]">{label}</div>}
     </div>
   );
@@ -130,7 +118,7 @@ export default function EnchantScreen({ game, icons, onChange }: { game: Game; i
         </div>
 
         <div className="flex items-center gap-6">
-          <Slot stack={item} icons={icons} label="Przedmiot" onHover={setHover} onClick={(r) => { game.clickEnchantSlot(r); refresh(); }} />
+          <LabeledSlot stack={item} icons={icons} label="Przedmiot" onHover={setHover} onClick={(r) => { game.clickEnchantSlot(r); refresh(); }} />
           <span className="mb-4 text-2xl text-[#333]">→</span>
           <div className="flex w-[300px] flex-col gap-2">
             {options.length === 0 && (

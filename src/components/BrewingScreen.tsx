@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
-import { stackTooltip, TooltipBody } from '../utils/tooltip';
 import type { Stack } from '../game/inventory';
+import { TooltipBody } from '../utils/tooltip';
 import { I } from '../game/items';
 import { BREW_TIME, POTIONS, brewResult, type BrewingState } from '../game/brewing';
+import Slot from './Slot';
 
 /**
  * 2.4 „Godzina alchemika” – statyw alchemiczny.
@@ -11,7 +12,7 @@ import { BREW_TIME, POTIONS, brewResult, type BrewingState } from '../game/brewi
  * Trzy fiolki, cup na składnik i podstawa na paliwo. Reguły warzenia żyją
  * w game/brewing.ts, ekran tylko je pokazuje i puszcza kursor między slotami.
  */
-function Slot({
+function LabeledSlot({
   stack,
   icons,
   onClick,
@@ -28,20 +29,8 @@ function Slot({
 }) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <div
-        className="mc-slot cursor-pointer"
-        style={active ? { boxShadow: '0 0 10px 2px rgba(150,220,120,0.8)' } : undefined}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          onClick?.(e.button === 2);
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-        onMouseEnter={() => onHover?.(stackTooltip(stack, label ?? ''))}
-        onMouseLeave={() => onHover?.(null)}
-      >
-        {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
-        {stack && stack.count > 1 && <span className="mc-count">{stack.count}</span>}
-        {stack?.ench && <span className="ench-glint" />}
+      <div style={active ? { boxShadow: '0 0 10px 2px rgba(150,220,120,0.8)' } : undefined}>
+        <Slot stack={stack} icons={icons} onClick={onClick} onHover={onHover} imgSize={34} showCount />
       </div>
       {label && <div className="text-center text-[11px] text-[#333]">{label}</div>}
     </div>
@@ -107,9 +96,9 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
 
         <div className="flex items-center justify-center gap-2">
           <div className="flex flex-col items-center gap-2">
-            <Slot stack={stand.bottles[0]} icons={icons} label="Fiolka 1" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('b0', r); refresh(); }} />
-            <Slot stack={stand.bottles[1]} icons={icons} label="Fiolka 2" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('b1', r); refresh(); }} />
-            <Slot stack={stand.bottles[2]} icons={icons} label="Fiolka 3" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('b2', r); refresh(); }} />
+            <LabeledSlot stack={stand.bottles[0]} icons={icons} label="Fiolka 1" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('b0', r); refresh(); }} />
+            <LabeledSlot stack={stand.bottles[1]} icons={icons} label="Fiolka 2" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('b1', r); refresh(); }} />
+            <LabeledSlot stack={stand.bottles[2]} icons={icons} label="Fiolka 3" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('b2', r); refresh(); }} />
           </div>
           <div className="flex flex-col items-center gap-2 px-1">
             <div className="text-2xl text-[#333]">→</div>
@@ -127,9 +116,9 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
             <div className="text-[11px] text-[#444]">{lit ? 'Warzenie…' : 'Gotowy'}</div>
           </div>
           <div className="flex flex-col items-center gap-2">
-            <Slot stack={stand.ingredient} icons={icons} label="Składnik" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('ingredient', r); refresh(); }} />
+            <LabeledSlot stack={stand.ingredient} icons={icons} label="Składnik" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('ingredient', r); refresh(); }} />
             <div className="h-5" />
-            <Slot stack={stand.fuel} icons={icons} label="Paliwo (różdżka)" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('fuel', r); refresh(); }} />
+            <LabeledSlot stack={stand.fuel} icons={icons} label="Paliwo (różdżka)" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('fuel', r); refresh(); }} />
           </div>
         </div>
 
@@ -151,22 +140,16 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
 
         <div className="grid grid-cols-9">
           {inv.slots.map((s, i) => (
-            <div
+            <Slot
               key={i}
-              className="mc-slot cursor-pointer"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                inv.clickSlot(i, e.button === 2);
+              stack={s}
+              icons={icons}
+              onHover={setHover}
+              onClick={(r) => {
+                inv.clickSlot(i, r);
                 refresh();
               }}
-              onContextMenu={(e) => e.preventDefault()}
-              onMouseEnter={() => setHover(stackTooltip(s))}
-              onMouseLeave={() => setHover(null)}
-            >
-              {s && <img src={icons[s.id]} width={32} height={32} className="pixelated" draggable={false} />}
-              {s && s.count > 1 && <span className="mc-count">{s.count}</span>}
-              {s?.ench && <span className="ench-glint" />}
-            </div>
+            />
           ))}
         </div>
       </div>

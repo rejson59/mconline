@@ -1,6 +1,22 @@
-# BlockCraft 2.4 🟩
+# BlockCraft 2.5 🟩
 
-Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci. Teraz także **w pełni przemyślana dla telefonów i tabletów**.
+Gra sandboxowa w stylu **Minecraft** działająca w całości w przeglądarce – bez instalacji, bez serwera i bez pobierania assetów z sieci. Wersja komputerowa (mysz + klawiatura) i dotykowa (telefon/tablet) są teraz **wyraźnie rozdzielone**, a każda z nich wreszcie działa jak trzeba.
+
+**Wersja 2.5 „Wielka naprawa”** to update, w którym nie ma nowego wymiaru ani nowych bloków – zamiast tego naprawiono **wszystko, co psuło sterowanie** i przez co gra była trudna do ogrywania:
+
+* **Osobna wersja PC i osobna wersja dotykowa.** Wcześniej wystarczył ekran dotykowy (choćby w laptopie z Windows), żeby gra wymusiła sterowanie mobilne – Pointer Lock nie startował, więc **mysz i klawiatura były martwe** i na takich maszynach nie dało się praktycznie grać. Teraz o wersji decyduje **główny wskaźnik urządzenia** (`pointer: coarse`), laptopy z ekranem dotykowym dostają pełną wersję PC, a w Opcjach → Sterowanie jest wybór **Tryb sterowania: Automat / Komputer / Dotyk** – przełączany w locie, bez restartu świata.
+* **Klawiatura nie „zamiera” bez blokady kursora.** Całe sterowanie klawiszowe było zależne od aktywnej blokady myszy – po Alt-Tabie albo odrzuconym Pointer Locku klawisze nic nie robiły, dopóki gracz nie kliknął ponownie w ekran. Teraz tylko rozglądanie myszą wymaga blokady; ruch, ekwipunek, czat, sloty i skróty działają zawsze.
+* **Esc w pauzie wraca do gry**, Enter/R odradza na ekranie śmierci, a Esc zamyka okna nawet wtedy, gdy fokus został w polu nazwy albo wyszukiwania (wcześniej Esc „nic nie robił” po kliknięciu w input).
+* **Trzymany LPM bije dalej.** `tryAttack()` zerował wciśnięcie myszy po każdym trafieniu: walka wymagała szalonego klikania, a mob wejściem w celownik **przerywał kopanie** do ponownego kliknięcia. Teraz trzymany przycisk atakuje z cooldownem broni, a kopanie płynnie wraca po zabiciu moba.
+* **Koniec wkurzającego spamu z owcy.** Nożyce na już ostrzyżonej owcy spamowały komunikatem „Ta owca jest już ostrzyżona” przy każdym powtórzeniu – teraz dostaje zwykły cios.
+* **Miecz nie otwierał ekwipunku w kółko.** Przytrzymanie klawisza `E` otwierało i zamykało ekwipunek w kółko (powtórzenia klawisza były traktowane jak nowe wciśnięcia). Akcje jednorazowe (`E`, `Q`, `J`, `K`, `T`, `F`) reagują teraz tylko na świeże wciśnięcie, a przytrzymanie utrzymuje wyłącznie ruch.
+* **Tapnięcie po mieszkańcu otwiera handel, a nie bije go.** Na dotyku tap w mieszkańca atakował go i budził golemy. Teraz tap = PPM: mieszkaniec → handel, wilk + surowe mięso → oswajanie, potwór → atak.
+* **Na dotyku celownik to palec – naprawdę.** `findMobTarget()` celował zawsze w środek ekranu, więc tapnięcie w moba obok celownika trafiało w próżnię albo w coś zupełnie innego; **strzała z łuku, perła Endu i spławik wędki leciały w środek ekranu**, nie tam, gdzie celował palec. Wszystkie rzuty korzystają teraz z kierunku palca.
+* **Drążek odporny na drugi palec.** Drugi dotyk w strefie drążka (np. otarta dłoń) podmieniał drążek, a jego puszczenie zatrzymywało postać. Teraz drążek jest tylko jeden, a dodatkowy palec w strefie rozgląda się.
+* **Okno tapu przestało „gubić” ostatnie milisekundy.** Tap trwał do 260 ms, a przytrzymanie startowało po 250 ms – ostatnie 10 ms tapu wykonywało niechciany cios. Okna są teraz spójne (250 ms).
+* **Skróty i wygoda na PC:** `Ctrl+Q` wyrzuca **cały stos** (Q – pojedynczy przedmiot), skradanie działa też na **prawym Shifcie**, sprint na **prawym Ctrl**, sloty wybiera też **klawiatura numeryczna**, a mysz celuje z **surowego wejścia** (`unadjustedMovement`) – bez przyspieszeń systemu.
+* **Okna przedmiotów działają na dotyku.** Wszystkie sloty (ekwipunek, skrzynia, piec, kowadło, statyw, stół zaklęć, handel) dostały wspólny slot obsługujący dotyk: **tapnij** – weź/połóż, **przytrzymaj** – akcja „połowa / jeden” (wcześniej prawy przycisk był na telefonie **niedostępny**). Sloty pokazują też pasek wytrzymałości.
+* **Poprawki drobne:** lorneta spowalnia też rozglądanie palcem; podwójne W liczone od nowa po puszczeniu klawisza (W→S→W nie włącza już sprintu); pełny ekran na telefonie nie zostawia błędów w konsoli; podwójne tapnięcie na iOS nie zoomuje widoku; wyrzucanie przedmiotu niesie nazwę z kowadła także przy Ctrl+Q; historia czatu obsługuje strzałkę w dół; przy zniknięciu karty resetują się wszystkie stany dotyku (w tym sprint).
 
 **Wersja 2.4 „Godzina alchemika”** dociera wreszcie do statywu alchemicznego, który od 1.9 stał w świecie jako ozdobny krzyż – teraz warzy prawdziwe eliksiry:
 
@@ -81,17 +97,17 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | Klawisz / przycisk | Akcja |
 | --- | --- |
 | `W A S D` | ruch |
-| mysz | rozglądanie się (po kliknięciu – blokada kursora) |
+| mysz | rozglądanie się (po kliknięciu – blokada kursora, surowe wejście bez przyspieszeń systemu) |
 | `Spacja` | skok / pływanie w górę |
 | `Spacja` ×2 lub `F` | latanie (tryb kreatywny) |
-| `Shift` | skradanie / lot w dół |
-| `W` ×2 lub `Ctrl` | sprint |
-| LPM (przytrzymaj) | kopanie / atak / podpalenie TNT |
+| `Shift` (lewy lub prawy) | skradanie / lot w dół |
+| `W` ×2 lub `Ctrl` (lewy lub prawy) | sprint |
+| LPM (przytrzymaj) | kopanie · atak bije dalej z cooldownem broni |
 | PPM | postawienie bloku / użycie stołu rzemieślniczego |
 | ŚPM | wybór bloku z celownika |
-| `1`–`9`, kółko myszy | wybór slotu na pasku |
+| `1`–`9` (także numeryczne), kółko myszy | wybór slotu na pasku |
 | `E` | ekwipunek i wytwarzanie |
-| `Q` | wyrzucenie przedmiotu |
+| `Q` | wyrzucenie przedmiotu (`Ctrl+Q` – cały stos) |
 | `T` lub `/` | czat i komendy |
 | `PPM` na jedzeniu | jedzenie (głód) |
 | `PPM` na piecu | przetapianie |
@@ -117,18 +133,23 @@ Zbudowana w **React 19 + TypeScript + Three.js + Vite + Tailwind CSS 4**, gotowa
 | tarcza w ręku | przyłap strzały, ciosy tracą połowę mocy |
 | sloty pancerza (w `E`) | załóż / zdejmij pancerz (4 elementy) |
 | `M` | minimapa |
+| `Esc` | pauza (ponowne `Esc` w pauzie wraca do gry) |
+| `Enter` / `R` | odrodzenie na ekranie śmierci |
 | `J` | dziennik przygód i postęp celów (2.1) |
 | `F3` | informacje debugowania |
-| `Esc` | pauza |
 
-### Na telefonie i tablecie (2.0)
+### Na telefonie i tablecie (2.5)
 
-Gra wykrywa ekran dotykowy i włącza pełne sterowanie kieszonkowe:
+Od 2.5 wersja dotykowa i komputerowa są **wyraźnie rozdzielone**: o wyborze decyduje główny wskaźnik urządzenia (laptop z ekranem dotykowym dostaje wersję PC), a w Opcjach → Sterowanie → **Tryb sterowania** można wymusić „Komputer” albo „Dotyk” – zmiana działa natychmiast, bez restartu świata.
+
+Gra włącza pełne sterowanie kieszonkowe:
 
 * **drążek ruchu** w lewym dolnym rogu – ruch; **pchnij do oporu = sprint**, dwa szybkie pchnięcia = zablokowany sprint; w opcjach wybierasz drążek stały albo pojawiający się pod palcem,
 * **przeciągnięcie palcem** po reszcie ekranu – rozglądanie się,
 * **tapnięcie w blok** – postawienie / użycie / jedzenie / atakowanie moba (tryb *Tapnij*),
 * **przytrzymanie bloku** – kopanie; celownik podąża za palcem, a pierścień pokazuje postęp,
+* **tapnięcie moba** – atak, ale mieszkaniec otwiera handel, a wilk z mięsem pozwala się oswoić (2.5),
+* **sloty w oknach (E)** – tapnij: weź/połóż stos, **przytrzymaj**: połowa / jeden sztuka (2.5),
 * **przytrzymanie i puszczenie z łukiem** – naciągnięcie i strzał,
 * duże przyciski po prawej – **skok** (2× tap w trybie kreatywnym = latanie), **skradanie / lot w dół**, **✈ latanie**; w trybie *Przyciski* także **⛏** i **▣** celujące w środek ekranu,
 * **pasek górny** – pauza, ekwipunek, czat i pełny ekran,
@@ -270,8 +291,10 @@ src/
     TradeScreen.tsx        # handel z mieszkańcami (1.6)
     AnvilScreen.tsx        # 2.3: ekran kowadła (scalanie i nazwy przedmiotów)
     TouchControls.tsx      # 2.0: pełne sterowanie dotykowe (drążek, tapnij/przytrzymaj)
+    Slot.tsx               # 2.5: wspólny slot okien – mysz i dotyk (przytrzymaj = PPM)
   utils/
     settings.ts            # ustawienia gracza + presety jakości
+    input.ts               # 2.5: wybór wersji sterowania (PC / dotyk) i wykrywanie urządzenia
     performance.ts         # 2.0: profil urządzenia i automat graficzny
   game/
     engine.ts              # pętla gry, gracz, interakcje, zapis

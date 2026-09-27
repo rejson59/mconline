@@ -118,6 +118,10 @@ export interface HUDState {
   trades: number;
   /** 2.0: bieżąca skala rozdzielczości (dynamiczna rozdzielczość). */
   resScale: number;
+  /** 2.5: czy gra używa wersji dotykowej (podpowiedzi HUD adaptują treść). */
+  touch: boolean;
+  /** 2.5: chwilowe „cooldown” po wyjściu z blokady kursora (Esc w Chrome). */
+  lockCooldown: boolean;
   /** 2.0: czy pokazywać wzmocniony licznik FPS w HUD. */
   showFps: boolean;
   /** 2.0: wywołania rysowania w ostatniej klatce (debug). */
@@ -422,6 +426,8 @@ export class Game {
   mouseLeft = false;
   mouseRight = false;
   locked = false;
+  /** 2.5: kiedy ostatnio utracono blokadę kursora (Esc cooldown w Chrome). */
+  lastLockExit = 0;
   lastSpace = 0;
   lastW = 0;
   debug = false;
@@ -488,6 +494,10 @@ export class Game {
   fishCaught = 0;
   /** 2.3: lorneta – prawy przycisk myszy w dłoni. */
   private zooming = false;
+  /** 2.5: podgląd lornety dla sterowania dotykowego (spowolnienie gestu). */
+  isZooming() {
+    return this.zooming;
+  }
   /** 2.3: sekundy regeneracji po uratowaniu przez totem. */
   private totemHeal = 0;
   private campfireHurt = 0;
@@ -798,7 +808,7 @@ export class Game {
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : 'BlockCraft 2.4: statyw alchemiczny warzy napoje (PPM przy bloku), a fiolka napełnia się nad wodą. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.');
+      : 'BlockCraft 2.5 „Wielka naprawa”: sterowanie działa wreszcie jak trzeba – na PC i na dotyku. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.');
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -945,6 +955,8 @@ export class Game {
   /**
    * 2.0: tapnięcie palcem (tryb „Tapnij”). Najpierw sprawdzamy, czy pod
    * palcem jest mob (atak), a gdy nie – używamy/postawiamy jak PPM.
+   * 2.5: tapnięcie po mieszkańcu otwiera handel (wcześniej uderzało go, co
+   * budziło golemy!), a tapnięcie wilka z surowym mięsem go oswoiło.
    */
   touchTap(nx: number, ny: number) {
     if (this.ui !== 'playing') return;
@@ -953,7 +965,13 @@ export class Game {
     this.refreshTarget();
     const { mob, dist } = this.findMobTarget(3.5);
     const blockDist = this.target ? this.target.dist : Infinity;
-    if (mob && dist < blockDist && this.attackCooldown <= 0) {
+    const held = this.selectedStack();
+    if (mob && dist < blockDist && mob.type === 'villager' && !mob.dead) {
+      this.openTrade(mob);
+    } else if (mob && dist < blockDist && mob.type === 'wolf' && !mob.tamed && !mob.dead && (held?.id === I.RAW_PORK || held?.id === I.RAW_BEEF || held?.id === I.RAW_CHICKEN)) {
+      this.placeCooldown = 0;
+      this.tryUse();
+    } else if (mob && dist < blockDist && this.attackCooldown <= 0) {
       this.tryAttack();
     } else {
       this.placeCooldown = 0;
@@ -977,11 +995,18 @@ export class Game {
       this.camera.updateProjectionMatrix();
     });
     this.on(document, 'pointerlockchange', () => {
+      const was = this.locked;
       this.locked = document.pointerLockElement === canvas;
       // Sterowanie dotykowe nie korzysta z Pointer Lock. Na części telefonów
       // jego nieudana aktywacja natychmiast pauzowała grę i zerowała gesty.
       if (!this.touchInput && !this.locked && this.ui === 'playing') this.setUI('paused');
       if (!this.locked && !this.touchInput) { this.mouseLeft = false; this.mouseRight = false; this.keys.clear(); }
+      if (was && !this.locked) this.lastLockExit = performance.now();
+    });
+    // 2.5: odrzucona blokada kursora (np. cooldown Chrome po Esc) nie może
+    // zostawić gracza bez żadnej reakcji – gra czeka na kolejne kliknięcie.
+    this.on(document, 'pointerlockerror', () => {
+      this.locked = false;
     });
     this.on(canvas, 'mousedown', ((e: MouseEvent) => {
       if (this.ui !== 'playing') return;
@@ -1010,7 +1035,12 @@ export class Game {
       this.emitHud();
     }) as EventListener, { passive: true });
     this.on(window, 'keydown', ((e: KeyboardEvent) => this.onKeyDown(e)) as EventListener);
-    this.on(window, 'keyup', ((e: KeyboardEvent) => { this.keys.delete(e.code); }) as EventListener);
+    this.on(window, 'keyup', ((e: KeyboardEvent) => {
+      this.keys.delete(e.code);
+      // 2.5: dwuklik W na sprint liczony od nowa po puszczeniu klawisza –
+      // wcześniej W→S→W w krótkim odstępie uruchamiało sprint.
+      if (e.code === 'KeyW') this.lastW = 0;
+    }) as EventListener);
     this.on(document, 'visibilitychange', () => {
       if (document.hidden) {
         this.keys.clear();
@@ -1020,12 +1050,37 @@ export class Game {
     });
   }
 
+  /** Klawisze ruchu – powtórzenia (e.repeat) mają je po prostu utrzymywać. */
+  static readonly HOLD_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight']);
+
   private onKeyDown(e: KeyboardEvent) {
     if (this.ui === 'chat') return;
-    // 2.3: pole nazwy w kowadle (i każdy inny input) ma pierwszeństwo –
-    // inaczej litera „e” zamykałaby ekran w trakcie pisania.
+    // 2.5: Escape działa nawet, gdy fokus ma pole tekstowe (szukanie w
+    // dzienniku, suwak w opcjach) – bez tego Esc „nic nie robił”, dopóki
+    // gracz nie kliknął poza polem.
+    if (e.code === 'Escape') {
+      if (this.ui === 'paused' || this.ui === 'journal' || this.ui === 'waypoints') {
+        e.preventDefault();
+        this.setUI('playing');
+        return;
+      }
+      if (['inventory', 'furnace', 'chest', 'enchant', 'trade', 'anvil', 'brewing'].includes(this.ui)) {
+        e.preventDefault();
+        this.closeInventory();
+        return;
+      }
+      // 2.5: Esc pauzuje także, gdy blokada kursora nie jest aktywna (gdy jest,
+      // wyjście z blokady samo wywołuje pauzę przez pointerlockchange).
+      if (this.ui === 'playing' && !this.locked && !this.touchInput) {
+        e.preventDefault();
+        this.setUI('paused');
+        return;
+      }
+    }
+    // 2.3: pole nazwy w kowadle (i każdy inny input) ma pierwszeństwo dla
+    // pozostałych klawiszy – inaczej litera „e” zamykałaby ekran w trakcie pisania.
     const target = e.target as HTMLElement | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
     if (this.ui === 'journal' || this.ui === 'waypoints') {
       if (e.code === 'Escape' || (this.ui === 'waypoints' && e.code === 'KeyK')) {
         e.preventDefault();
@@ -1034,45 +1089,85 @@ export class Game {
       return;
     }
     if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'anvil' || this.ui === 'brewing') {
-      if (e.code === 'KeyE' || e.code === 'Escape') {
+      if (e.code === 'KeyE') {
         e.preventDefault();
         this.closeInventory();
       }
       return;
     }
-    if (this.ui !== 'playing' || !this.locked) return;
+    // 2.5: ekran śmierci obsługuje klawiaturę – Enter albo R odradza.
+    if (this.ui === 'dead') {
+      if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'KeyR') {
+        e.preventDefault();
+        this.respawn();
+      }
+      return;
+    }
+    // 2.5: Esc w pauzie wraca do gry (jak w klasyku); wcześniej pauzę można
+    // było opuścić wyłącznie myszą.
+    if (this.ui === 'paused') {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        this.setUI('playing');
+      }
+      return;
+    }
+    // 2.5: klawisze działają też bez aktywnej blokady kursora (np. po
+    // Alt-Tabs albo odrzuconym Pointer Lock) – blokada jest potrzebna tylko
+    // do rozglądania się myszą. Wcześniej całe sterowanie „zamierało”,
+    // dopóki gracz nie kliknął ponownie w ekran.
+    if (this.ui !== 'playing') return;
+    if (e.repeat) {
+      // Przytrzymane klawisze pozostają wciśnięte, ale akcje jednorazowe
+      // (E, Q, J…) nie mogą odpalać się wielokrotnie – wcześniej trzymanie
+      // „E” otwierało i zamykało ekwipunek w kółko.
+      if (Game.HOLD_KEYS.has(e.code)) this.keys.add(e.code);
+      return;
+    }
     if (e.code === 'F3') { e.preventDefault(); this.debug = !this.debug; this.emitHud(); return; }
     if (e.code === 'KeyM') { this.showMinimap = !this.showMinimap; this.emitHud(); return; }
     if (e.code === 'KeyJ') { e.preventDefault(); this.setUI('journal'); return; }
     if (e.code === 'KeyK') { e.preventDefault(); this.setUI('waypoints'); return; }
-    if (e.code.startsWith('Digit')) {
-      const n = parseInt(e.code.slice(5));
+    if (e.code.startsWith('Digit') || e.code.startsWith('Numpad')) {
+      const n = parseInt(e.code.slice(e.code.startsWith('Digit') ? 5 : 6), 10);
       if (n >= 1 && n <= 9) { this.selected = n - 1; this.emitHud(); }
     }
     if (e.code === 'KeyE') { this.openInventory(false); return; }
     if (e.code === 'KeyT' || e.code === 'Slash') { e.preventDefault(); this.setUI('chat'); return; }
-    if (e.code === 'KeyQ') { this.dropItem(); }
+    // 2.5: Ctrl+Q wyrzuca cały stos (Q – pojedynczy przedmiot, jak w klasyku).
+    if (e.code === 'KeyQ') { this.dropItem(e.ctrlKey); }
     if (e.code === 'KeyF' && this.mode === 'creative') { this.toggleFly(); }
-    if (e.code === 'Space' && !e.repeat) {
+    if (e.code === 'Space') {
       const now = performance.now();
       if (this.mode === 'creative' && now - this.lastSpace < 300) { this.toggleFly(); }
       this.lastSpace = now;
     }
-    if (e.code === 'KeyW' && !e.repeat) {
+    if (e.code === 'KeyW') {
       const now = performance.now();
-      if (now - this.lastW < 280) this.sprinting = true;
+      if (this.lastW > 0 && now - this.lastW < 280) this.sprinting = true;
       this.lastW = now;
     }
-    if (['Space', 'ControlLeft', 'Tab'].includes(e.code)) e.preventDefault();
+    if (['Space', 'ControlLeft', 'ControlRight', 'Tab'].includes(e.code)) e.preventDefault();
     this.keys.add(e.code);
   }
 
   lockPointer() {
     if (this.touchInput) return;
-    const c = this.renderer.domElement as HTMLCanvasElement & { requestPointerLock: () => unknown };
+    const c = this.renderer.domElement as HTMLCanvasElement & {
+      requestPointerLock: (opts?: { unadjustedMovement?: boolean }) => unknown;
+    };
+    // 2.5: surowy ruch myszy (bez przyspieszania z ustawień systemowych) daje
+    // celowanie jak w prawdziwym FPS; starsze przeglądarki dostają zwykłą wersję.
     try {
-      const p = c.requestPointerLock();
-      if (p && typeof (p as Promise<void>).catch === 'function') (p as Promise<void>).catch(() => {});
+      const p = c.requestPointerLock({ unadjustedMovement: true });
+      if (p && typeof (p as Promise<void>).catch === 'function') {
+        (p as Promise<void>).catch(() => {
+          try {
+            const fallback = c.requestPointerLock();
+            if (fallback && typeof (fallback as Promise<void>).catch === 'function') (fallback as Promise<void>).catch(() => {});
+          } catch { /* ignore */ }
+        });
+      }
     } catch { /* ignore */ }
   }
 
@@ -2800,7 +2895,10 @@ export class Game {
   // ---------- Interaction ----------
   private findMobTarget(maxDist: number) {
     const o = this.eyePos();
-    const d = this.lookDir();
+    // 2.5: na dotyku mobów szukamy wzdłuż kierunku PALCA (touchAim), nie
+    // środka ekranu – wcześniej tapnięcie w moba obok celownika atakowało
+    // w próżnię albo trafiało w coś zupełnie innego.
+    const d = this.aimDir ?? this.lookDir();
     let best: Mob | null = null;
     let bd = maxDist;
     for (const m of this.mobs) {
@@ -2819,16 +2917,18 @@ export class Game {
       const toolId = this.selectedStack()?.id ?? 0;
       if (ITEMS[toolId]?.tool === 'shears' && mob.type === 'sheep') {
         this.attackCooldown = 0.35;
-        this.mouseLeft = false;
-        if (!mob.shear()) { this.message('Ta owca jest już ostrzyżona.'); return; }
-        const n = 1 + (Math.random() < 0.4 ? 1 : 0);
-        this.spawnDrop(B.WOOL_WHITE, n, mob.body.pos.x, mob.body.pos.y + 0.6, mob.body.pos.z, undefined, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2);
-        this.wearTool();
-        this.unlock('shear');
-        this.gainXp(1);
-        Sfx.playPlace('cloth');
-        this.message(n > 1 ? 'Ostrzyżono owcę. Dwie wełny.' : 'Ostrzyżono owcę.');
-        return;
+        if (mob.shear()) {
+          const n = 1 + (Math.random() < 0.4 ? 1 : 0);
+          this.spawnDrop(B.WOOL_WHITE, n, mob.body.pos.x, mob.body.pos.y + 0.6, mob.body.pos.z, undefined, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2);
+          this.wearTool();
+          this.unlock('shear');
+          this.gainXp(1);
+          Sfx.playPlace('cloth');
+          this.message(n > 1 ? 'Ostrzyżono owcę. Dwie wełny.' : 'Ostrzyżono owcę.');
+          return;
+        }
+        // 2.5: już ostrzyżona owca dostaje zwykły cios – wcześniej
+        // przytrzymany LPM spamował komunikatem „już ostrzyżona”.
       }
       this.attackCooldown = attackCooldown(toolId);
       const held = this.selectedStack();
@@ -2854,13 +2954,16 @@ export class Game {
           if (n > 0) this.message(n === 1 ? 'Golem w okolicy to zauważył!' : 'Golemy w okolicy to zauważyły!');
         }
       }
-      this.mouseLeft = false;
+      // 2.5: NIE zwalniamy LPM – trzymany przycisk bije dalej z cooldownem
+      // (updateInteraction). Wcześniej każde trafienie „zjadało” wciśnięcie,
+      // więc walka wymagała ręcznego klikania, a kopanie zamierało, gdy mob
+      // wejdzie w celownik.
       return;
     }
     if (this.target && this.target.id === B.TNT) {
       this.igniteTNT(this.target.x, this.target.y, this.target.z, 4);
       this.unlock('boom');
-      this.mouseLeft = false;
+      this.mouseLeft = false; // podpalenie tylko na kliknięcie – bez trzymania
       return;
     }
     if (this.mode === 'creative' && this.target) {
@@ -2883,7 +2986,9 @@ export class Game {
     // Nieskończoność: jedna strzała w ekwipunku wystarczy na wiele wystrzałów
     if (this.mode === 'survival' && !infinite) this.inventory.remove(I.ARROW, 1);
     const eye = this.eyePos();
-    const d = this.lookDir();
+    // 2.5: na dotyku strzała leci tam, gdzie celuje palec (touchAim),
+    // a nie w środek ekranu – wcześniej naciąganie łuku celowało „obok”.
+    const d = this.aimDir ?? this.lookDir();
     this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, (4 + charge * 5) * power);
     Sfx.playBow();
     this.swingT = 0;
@@ -2900,7 +3005,7 @@ export class Game {
     if (!this.pearlMat) this.pearlMat = new THREE.MeshBasicMaterial({ color: 0x49d8c0 });
     const mesh = new THREE.Mesh(this.pearlGeo, this.pearlMat);
     const eye = this.eyePos();
-    const d = this.lookDir();
+    const d = this.aimDir ?? this.lookDir(); // 2.5: cel dotyku, nie środek ekranu
     mesh.position.copy(eye);
     this.scene.add(mesh);
     this.arrows.push({ mesh, pos: eye.clone(), vel: d.clone().multiplyScalar(24), life: 0, power: 0, from: null, pearl: true });
@@ -2921,7 +3026,7 @@ export class Game {
     if (!this.bobberMat) this.bobberMat = new THREE.MeshBasicMaterial({ color: 0xd83a3a });
     const mesh = new THREE.Mesh(this.bobberGeo, this.bobberMat);
     const eye = this.eyePos();
-    const d = this.lookDir();
+    const d = this.aimDir ?? this.lookDir(); // 2.5: spławik leci pod palcem
     mesh.position.copy(eye);
     this.scene.add(mesh);
     this.bobber = {
@@ -3411,18 +3516,20 @@ export class Game {
     }
   }
 
-  dropItem() {
+  /** 2.5: `whole` = wyrzuca cały stos (Ctrl+Q), domyślnie jeden przedmiot. */
+  dropItem(whole = false) {
     const s = this.selectedStack();
     if (!s) return;
     const e = this.eyePos();
     const d = this.lookDir();
     const dur = s.dur;
+    const n = whole ? s.count : 1;
     if (this.mode === 'survival') {
-      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
-      s.count--;
+      this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
+      s.count -= n;
       if (s.count <= 0) this.inventory.slots[this.selected] = null;
     } else {
-      this.spawnDrop(s.id, 1, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
+      this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
       this.inventory.slots[this.selected] = null;
     }
     this.emitHud();
@@ -3888,9 +3995,12 @@ export class Game {
       if (k.has('KeyD')) fx += 1;
     }
     const forward = fz < 0;
-    if (playing && k.has('ControlLeft') && forward) this.sprinting = true;
+    // 2.5: sprint działa też na prawym Ctrl, skradanie na prawym Shifcie
+    // (wcześniej tylko lewe modyfikatory – niewygodne na niektórych klawiaturach).
+    if (playing && (k.has('ControlLeft') || k.has('ControlRight')) && forward) this.sprinting = true;
     if (!forward || (b.hitWall && !this.flying)) this.sprinting = false;
-    const sneaking = playing && k.has('ShiftLeft') && !this.flying;
+    const sneakHeld = k.has('ShiftLeft') || k.has('ShiftRight');
+    const sneaking = playing && sneakHeld && !this.flying;
     if (sneaking) this.sprinting = false;
 
     if (this.mode === 'survival' && this.hunger <= 6) this.sprinting = false;
@@ -3917,7 +4027,7 @@ export class Game {
 
     const jump = playing && k.has('Space');
     if (this.flying) {
-      const ty = jump ? 9 : playing && k.has('ShiftLeft') ? -9 : 0;
+      const ty = jump ? 9 : playing && sneakHeld ? -9 : 0;
       b.vel.y += (ty - b.vel.y) * Math.min(1, dt * 10);
     } else if (onLadder && !this.flying) {
       const climb = jump || (playing && k.has('KeyW'));
@@ -4118,44 +4228,56 @@ export class Game {
 
     if (this.ui !== 'playing') { this.crackMesh.visible = false; return; }
 
-    if (this.mouseLeft && t) {
-      const key = `${t.x},${t.y},${t.z}`;
-      if (this.mode === 'creative') {
-        if (this.breakCooldown <= 0) { this.breakBlock(t.x, t.y, t.z); this.breakCooldown = 0.25; this.swingT = 0; }
-      } else {
-        if (key !== this.breakKey) {
-          this.breakKey = key;
-          this.breakProgress = 0;
-          const hint = pickHint(t.id, this.selectedStack()?.id ?? 0);
-          if (hint && !Number.isFinite(mineSeconds(t.id, this.selectedStack()?.id ?? 0))) this.message(hint);
-        }
-        const def = BLOCKS[t.id];
-        const held = this.selectedStack();
-        const time = mineSeconds(t.id, held?.id ?? 0, enchLevel(held, 'efficiency'));
-        if (def.hardness >= 0 && Number.isFinite(time)) {
-          let mult = 1;
-          if (this.blockAt(this.body.pos, this.eyeHeight) === B.WATER) mult *= 0.25;
-          if (!this.body.onGround && !this.flying) mult *= 0.4;
-          this.breakProgress += (dt / time) * mult;
-          this.digSoundTimer -= dt;
-          if (this.swingT >= 1) this.swingT = 0;
-          if (this.digSoundTimer <= 0) {
-            this.digSoundTimer = 0.22;
-            Sfx.playDig(def.sound);
-            this.spawnParticles(t.x + 0.5 + t.nx * 0.52, t.y + 0.5 + t.ny * 0.52, t.z + 0.5 + t.nz * 0.52, t.id, 2, 0.3);
-          }
-          if (this.breakProgress >= 1) {
-            const broken = t.id;
-            this.breakBlock(t.x, t.y, t.z);
-            if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && toolHelps(broken, this.selectedStack()?.id ?? 0)) this.wearTool();
-            else if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && ITEMS[this.selectedStack()?.id ?? 0]?.tool) this.wearTool();
-            if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.015);
+    if (this.mouseLeft) {
+      // 2.5: trzymany LPM (albo palec w trybie kopania) najpierw sprawdza moba
+      // na celowniku i bije go z cooldownem. Wcześniej tryAttack zerował
+      // mouseLeft po każdym trafieniu, więc walka wymagała furkoczącego
+      // klikania, a mob wchodzący w celownik przerywał kopanie bloku.
+      const { mob, dist } = this.findMobTarget(3.5);
+      const blockDist = t ? t.dist : Infinity;
+      if (mob && dist < blockDist) {
+        this.breakProgress = 0;
+        this.breakKey = '';
+        if (this.attackCooldown <= 0) this.tryAttack();
+      } else if (t) {
+        const key = `${t.x},${t.y},${t.z}`;
+        if (this.mode === 'creative') {
+          if (this.breakCooldown <= 0) { this.breakBlock(t.x, t.y, t.z); this.breakCooldown = 0.25; this.swingT = 0; }
+        } else {
+          if (key !== this.breakKey) {
+            this.breakKey = key;
             this.breakProgress = 0;
-            this.breakKey = '';
+            const hint = pickHint(t.id, this.selectedStack()?.id ?? 0);
+            if (hint && !Number.isFinite(mineSeconds(t.id, this.selectedStack()?.id ?? 0))) this.message(hint);
+          }
+          const def = BLOCKS[t.id];
+          const held = this.selectedStack();
+          const time = mineSeconds(t.id, held?.id ?? 0, enchLevel(held, 'efficiency'));
+          if (def.hardness >= 0 && Number.isFinite(time)) {
+            let mult = 1;
+            if (this.blockAt(this.body.pos, this.eyeHeight) === B.WATER) mult *= 0.25;
+            if (!this.body.onGround && !this.flying) mult *= 0.4;
+            this.breakProgress += (dt / time) * mult;
+            this.digSoundTimer -= dt;
+            if (this.swingT >= 1) this.swingT = 0;
+            if (this.digSoundTimer <= 0) {
+              this.digSoundTimer = 0.22;
+              Sfx.playDig(def.sound);
+              this.spawnParticles(t.x + 0.5 + t.nx * 0.52, t.y + 0.5 + t.ny * 0.52, t.z + 0.5 + t.nz * 0.52, t.id, 2, 0.3);
+            }
+            if (this.breakProgress >= 1) {
+              const broken = t.id;
+              this.breakBlock(t.x, t.y, t.z);
+              if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && toolHelps(broken, this.selectedStack()?.id ?? 0)) this.wearTool();
+              else if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && ITEMS[this.selectedStack()?.id ?? 0]?.tool) this.wearTool();
+              if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.015);
+              this.breakProgress = 0;
+              this.breakKey = '';
+            }
           }
         }
       }
-    } else if (!this.mouseLeft) {
+    } else {
       this.breakProgress = 0;
     }
     if (this.breakProgress > 0 && t) {
@@ -4180,8 +4302,16 @@ export class Game {
         if (this.mouseRight) {
           this.bowDraw = Math.min(1, this.bowDraw + dt);
           if (this.swingT >= 1) this.swingT = 0.55;
-        } else this.releaseBow();
-      } else this.bowDraw = -1;
+        } else {
+          this.releaseBow();
+          // 2.5: cel dotyku czyścimy PO wystrzale – strzała leci pod palcem,
+          // a nie w środek ekranu.
+          this.touchAim = null;
+        }
+      } else {
+        this.bowDraw = -1;
+        this.touchAim = null;
+      }
     }
     this.updateHand();
   }
@@ -4518,7 +4648,12 @@ export class Game {
       resScale: this.resScale,
       showFps: this.showFps,
       drawCalls: this.renderer.info.render.calls,
-      zoom: this.zooming && this.ui === 'playing',
+      zoom: this.isZooming() && this.ui === 'playing',
+      // 2.5: HUD zna tryb sterowania (inna treść podpowiedzi na dotyku).
+      touch: this.touchInput,
+      // 2.5: świeże wyjście z blokady kursora – Chrome chwilę blokuje ponowny
+      // Pointer Lock, więc podpowiedź tłumaczy, czemu klik „nic nie robi”.
+      lockCooldown: !this.locked && !this.touchInput && this.lastLockExit > 0 && performance.now() - this.lastLockExit < 1600,
       fishing: this.fishingState(),
       // 2.4: aktywne wzmocnienia napojów (ikona + nazwa + sekundy)
       effects: [...this.effects.entries()]

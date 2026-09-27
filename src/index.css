@@ -215,6 +215,15 @@ body {
   overscroll-behavior: none;
 }
 
+/* 2.5: iOS ignoruje user-scalable=no – podwójne tapnięcie w przycisk albo
+   input nie może już zoomować widoku (psuło sterowanie dotykowe). */
+button,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

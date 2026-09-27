@@ -99,7 +99,7 @@ export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<
   );
 }
 
-export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDState; icons: Record<number, string>; minimap?: HTMLCanvasElement | null; onSelectSlot?: (i: number) => void }) {
+export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }: { hud: HUDState; icons: Record<number, string>; minimap?: HTMLCanvasElement | null; touchControls?: boolean; onSelectSlot?: (i: number) => void }) {
   const [label, setLabel] = useState<{ text: string; key: number } | null>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
   const sel = hud.hotbar[hud.selected];
@@ -166,10 +166,10 @@ export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDSta
         </div>
       )}
 
-      {/* 2.3: stan wędkarstwa nad celownikiem */}
+      {/* 2.3: stan wędkarstwa nad celownikiem (2.5: treść wg wersji sterowania) */}
       {hud.fishing !== 'idle' && (
         <div className="absolute left-1/2 top-[58%] -translate-x-1/2 px-2 py-0.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
-          {hud.fishing === 'bite' ? '🎣 Brań! Kliknij, aby zaciągnąć' : hud.fishing === 'waiting' ? '🎣 Przynęta czeka…' : '🎣 Przynęta leci…'}
+          {hud.fishing === 'bite' ? (touchControls ? '🎣 Brań! Dotknij, aby zaciągnąć' : '🎣 Brań! Kliknij, aby zaciągnąć') : hud.fishing === 'waiting' ? '🎣 Przynęta czeka…' : '🎣 Przynęta leci…'}
         </div>
       )}
 
@@ -193,7 +193,7 @@ export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDSta
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft 2.4 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
+            `BlockCraft 2.5 (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -205,7 +205,7 @@ export default function HUD({ hud, icons, minimap, onSelectSlot }: { hud: HUDSta
             `Wioska: ${hud.village ?? 'brak'}  ·  wymiany: ${hud.trades}`,
             `Cel: ${hud.target}`,
             `Ziarno: ${hud.seed}`,
-            `Tryb: ${hud.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'}${hud.flying ? ' (lot)' : ''}${hud.sprinting ? ' sprint' : ''}`,
+            `Tryb: ${hud.mode === 'creative' ? 'Kreatywny' : 'Przetrwanie'}${hud.flying ? ' (lot)' : ''}${hud.sprinting ? ' sprint' : ''} · sterowanie: ${hud.touch ? 'dotyk' : 'PC'}`,
             `Głód: ${hud.hunger.toFixed(1)}  Pogoda: ${hud.weather === 'rain' ? 'deszcz' : 'jasno'}`,
             `Poziom: ${hud.level} (${Math.round(hud.xpFrac * 100)}% do następnego)  Pancerz: ${hud.armorPoints} pkt`,
           ].map((l, i) => (

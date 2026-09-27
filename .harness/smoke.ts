@@ -89,6 +89,7 @@ import { mergeable } from '../src/game/inventory';
 import { slabFullBlock } from '../src/game/blocks';
 import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
+import { resolveControlMode } from '../src/utils/input';
 
 // ------------------------------------------------------------------- runner
 let pass = 0;
@@ -2702,6 +2703,122 @@ section('2.4: bug fixes');
   eq('napoj_leczacy resolves to the healing potion', resolveId('napoj_leczacy'), I.POTION_HEAL);
   eq('fiolka resolves to the glass bottle', resolveId('fiolka'), I.BOTTLE);
   eq('cukier resolves to sugar', resolveId('cukier'), I.SUGAR);
+}
+
+
+// ==================================== 2.5 „Wielka naprawa” – sterowanie
+section('2.5: wielka naprawa sterowania');
+{
+  // (1) Ctrl+Q wyrzuca CAŁY stos, samo Q – jeden przedmiot
+  type G = Record<string, any>;
+  const g = Object.create(Game.prototype) as G;
+  g.mode = 'survival';
+  g.ui = 'playing';
+  g.inventory = new Inventory();
+  g.selected = 0;
+  g.yaw = 0;
+  g.pitch = 0;
+  g.eyeHeight = 1.62;
+  g.body = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3() };
+  const drops: Array<[number, number]> = [];
+  g.spawnDrop = (id: number, count: number) => void drops.push([id, count]);
+  g.emitHud = () => {};
+
+  g.inventory.slots[0] = { id: B.DIRT, count: 17 };
+  g.dropItem();
+  eq('Q drops a single item', drops[0]?.[1], 1);
+  eq('16 items stay in the stack', g.inventory.slots[0].count, 16);
+  g.dropItem(true);
+  eq('Ctrl+Q drops the whole stack', drops[1]?.[1], 16);
+  eq('the slot is empty afterwards', g.inventory.slots[0], null);
+
+  // (2) findMobTarget celuje w touchAim (palec), nie w środek ekranu
+  const aims: THREE.Vector3[] = [];
+  const fakeMob = { dead: false, rayHit: (_o: THREE.Vector3, d: THREE.Vector3) => { aims.push(d.clone()); return 2.0; } };
+  const g2 = Object.create(Game.prototype) as G;
+  g2.eyePos = () => new THREE.Vector3();
+  g2.yaw = 0; g2.pitch = 0;
+  g2.aimDir = new THREE.Vector3(1, 0, 0); // palec po prawej stronie ekranu
+  g2.mobs = [fakeMob];
+  const found = g2.findMobTarget(5);
+  eq('touch aim finds the mob under the finger', found.mob === fakeMob, true);
+  check('the search direction follows the finger, not the screen centre', Math.abs(aims[0].x - 1) < 1e-6);
+
+  // (3) tapnięcie po mieszkańcu otwiera handel zamiast go bić
+  const g3 = Object.create(Game.prototype) as G;
+  g3.mode = 'survival';
+  g3.ui = 'playing';
+  g3.touchAim = null;
+  g3.target = null;
+  g3.selectedStack = () => null;
+  g3.refreshTarget = function () { this.target = null; };
+  g3.findMobTarget = () => ({ mob: villagerTap, dist: 2 });
+  g3.attackCooldown = 0;
+  g3.setUI = (s: string) => void (g3.ui = s);
+  g3.tradeMob = null;
+  g3.emitHud = () => {};
+  let hitCount = 0;
+  const villagerTap = new Mob('villager', 0, 0, 0, 0.05);
+  villagerTap.damage = () => { hitCount++; return true; };
+  g3.touchTap(0.3, 0.3);
+  eq('tapping a villager opens trade', g3.ui, 'trade');
+  eq('the villager is not punched', hitCount, 0);
+  check('the trader is the tapped mob', (g3.tradeMob as Mob) === villagerTap);
+
+  // (3b) tapnięcie wilka z surowym mięsem próbuje oswoić, a nie bić
+  const g3b = Object.create(Game.prototype) as G;
+  g3b.mode = 'survival';
+  g3b.ui = 'playing';
+  g3b.touchAim = null;
+  g3b.target = null;
+  g3b.refreshTarget = function () { this.target = null; };
+  let wolfHits = 0;
+  const wolfie = new Mob('wolf', 0, 0, 0);
+  wolfie.damage = () => { wolfHits++; return true; };
+  g3b.effects = new Map();
+  g3b.swingT = 1;
+  g3b.body = { pos: new THREE.Vector3(), vel: new THREE.Vector3() };
+  g3b.findMobTarget = () => ({ mob: wolfie, dist: 1.5 });
+  g3b.selectedStack = () => ({ id: I.RAW_PORK, count: 3 });
+  g3b.attackCooldown = 0;
+  let tryUseCalled = false;
+  g3b.tryUse = () => { tryUseCalled = true; };
+  g3b.touchTap(0.2, 0.2);
+  check('tapping a wild wolf with raw meat tames instead of hitting', tryUseCalled && wolfHits === 0);
+  g3b.selectedStack = () => null;
+  g3b.tryUse = () => {};
+  g3b.touchTap(0.2, 0.2);
+  eq('without meat in hand the tap attacks the wolf', wolfHits, 1);
+
+  // (3c) strzała z łuku na dotyku leci w kierunku palca (touchAim)
+  const g3c = Object.create(Game.prototype) as G;
+  g3c.mode = 'creative';
+  g3c.ui = 'playing';
+  g3c.inventory = new Inventory();
+  g3c.yaw = 0;
+  g3c.pitch = 0;
+  g3c.eyePos = () => new THREE.Vector3();
+  g3c.aimDir = new THREE.Vector3(0, 0, -1); // palec celuje „w przód” ekranu
+  (g3c as G).bowDraw = 0.5;
+  g3c.selectedStack = () => ({ id: I.BOW, count: 1 });
+  g3c.wearTool = () => {};
+  g3c.unlock = () => {};
+  const arrow = { dir: null as THREE.Vector3 | null };
+  g3c.spawnArrow = (_p: unknown, d: THREE.Vector3) => { arrow.dir = d.clone(); };
+  (Game.prototype as unknown as { releaseBow: () => void }).releaseBow.call(g3c);
+  check('the bow fires along the touch aim, not the screen centre', arrow.dir !== null && Math.abs(arrow.dir.z + 1) < 1e-6);
+
+  // (4) tryb sterowania: wymuszony i automatyczny
+  eq('forced desktop stays desktop', resolveControlMode({ controlMode: 'desktop' }), 'desktop');
+  eq('forced touch stays touch', resolveControlMode({ controlMode: 'touch' }), 'touch');
+  eq('auto without a pointer API falls back to desktop', resolveControlMode({ controlMode: 'auto' }), 'desktop');
+
+  // (5) powtórzenia klawiszy (e.repeat) mają prawo utrzymywać tylko ruch
+  for (const k of ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight']) {
+    check(`hold key ${k} may repeat`, (Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has(k));
+  }
+  check('one-shot keys never repeat', !(Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has('KeyE'));
+  check('drop key never repeats', !(Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has('KeyQ'));
 }
 
 // =================================================================== report

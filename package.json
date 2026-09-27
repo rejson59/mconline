@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.4.0",
-  "description": "BlockCraft 2.4 „Godzina alchemika” – przeglądarkowa gra sandboxowa (React + TypeScript + Three.js + Vite) z działającym statywem alchemicznym, napojami, wędkarstwem, lornetą, kowadłem i Totemem Ratowania.",
+  "version": "2.5.0",
+  "description": "BlockCraft 2.5 „Wielka naprawa” – przeglądarkowa gra sandboxowa (React + TypeScript + Three.js + Vite) z rozdzielonymi wersjami PC i dotykową, naprawionym sterowaniem, statywem alchemicznym, napojami, wędkarstwem, lornetą, kowadłem i Totemem Ratowania.",
   "type": "module",
   "license": "MIT",
   "keywords": [

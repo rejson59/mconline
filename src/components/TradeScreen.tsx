@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { Game, TradeRow } from '../game/engine';
-import { displayName, stackLimit } from '../game/items';
+import { displayName } from '../game/items';
 import { PROFESSIONS, VILLAGER_LEVEL_NAMES } from '../game/trading';
 import type { Stack } from '../game/inventory';
 import { TooltipBody } from '../utils/tooltip';
+import Slot from './Slot';
 
 function ItemChip({ stack, icons, have, ok }: { stack: Stack; icons: Record<number, string>; have?: number; ok?: boolean }) {
   return (
@@ -154,19 +155,14 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
         <div className="text-sm font-semibold">Ekwipunek</div>
         <div className="grid grid-cols-9">
           {inv.slots.map((s, i) => (
-            <div
+            <Slot
               key={i}
-              className="mc-slot cursor-pointer"
-              onMouseDown={(e) => { e.preventDefault(); inv.clickSlot(i, e.button === 2); refresh(); }}
-              onContextMenu={(e) => e.preventDefault()}
-              onMouseEnter={() => setHover(s ? `${displayName(s.id)}${s.count > 1 ? ` ×${s.count}` : ''}` : null)}
-              onMouseLeave={() => setHover(null)}
-            >
-              {s && <img src={icons[s.id]} className="pixelated pointer-events-none" width={34} height={34} draggable={false} />}
-              {s && s.count > 1 && <span className="mc-count">{s.count}</span>}
-              {s?.ench && <span className="ench-glint" />}
-              {s && stackLimit(s.id) === 1 && s.dur !== undefined && <span className="dur-bar"><i style={{ width: '100%', background: '#3dba3d' }} /></span>}
-            </div>
+              stack={s}
+              icons={icons}
+              imgSize={34}
+              onHover={(name) => setHover(name)}
+              onClick={(r) => { inv.clickSlot(i, r); refresh(); }}
+            />
           ))}
         </div>
       </div>

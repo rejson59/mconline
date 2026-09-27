@@ -1,36 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
-import { stackTooltip, TooltipBody } from '../utils/tooltip';
-import type { Stack } from '../game/inventory';
-
-function Slot({
-  stack,
-  icons,
-  onClick,
-  onHover,
-}: {
-  stack: Stack | null;
-  icons: Record<number, string>;
-  onClick?: (right: boolean) => void;
-  onHover?: (name: string | null) => void;
-}) {
-  return (
-    <div
-      className="mc-slot cursor-pointer"
-      onMouseDown={(e) => {
-        e.preventDefault();
-        onClick?.(e.button === 2);
-      }}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseEnter={() => onHover?.(stackTooltip(stack))}
-      onMouseLeave={() => onHover?.(null)}
-    >
-      {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={32} height={32} draggable={false} />}
-      {stack && stack.count > 1 && <span className="mc-count">{stack.count}</span>}
-      {stack?.ench && <span className="ench-glint" />}
-    </div>
-  );
-}
+import { TooltipBody } from '../utils/tooltip';
+import Slot from './Slot';
 
 export default function ChestScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
   const [, setTick] = useState(0);

@@ -171,6 +171,17 @@ section('menus: static render');
   check('settings screen shows auto mode', settingsHtml.includes('Auto'));
   check('settings screen shows touch options', settingsHtml.includes('Ekran dotykowy') && settingsHtml.includes('Wibracje'));
   check('settings screen shows fps cap option', settingsHtml.includes('Limit klatek'));
+  // 2.5: wyraźny podział wersji PC i dotykowej w opcjach
+  check('settings show the control mode selector', settingsHtml.includes('Tryb sterowania'));
+  check('control mode selector explains the hybrid case', settingsHtml.includes('laptop'));
+  const forcedPc = renderToStaticMarkup(
+    <SettingsScreen settings={{ ...DEFAULT_SETTINGS, controlMode: 'desktop' }} onChange={noop} onClose={noop} />
+  );
+  check('forced PC mode is labelled', forcedPc.includes('Komputer (mysz + klawiatura)'));
+  const forcedTouch = renderToStaticMarkup(
+    <SettingsScreen settings={{ ...DEFAULT_SETTINGS, controlMode: 'touch' }} onChange={noop} onClose={noop} />
+  );
+  check('forced touch mode is labelled', forcedTouch.includes('Dotyk (telefon / tablet)'));
   const medium = renderToStaticMarkup(
     <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
   );
@@ -342,10 +353,16 @@ section('2.3/2.4: journal chapter and menus');
   check('controls mention the spyglass', controls.includes('Lorneta'));
   check('controls mention the anvil', controls.includes('kowadle'));
   check('controls mention the brewing stand', controls.includes('statywie alchemicznym'));
+  // 2.5: nowe skróty i podział sekcji sterowania
+  check('controls split PC and touch sections', controls.includes('Komputer (mysz + klawiatura)') && controls.includes('Telefon i tablet'));
+  check('controls document Ctrl+Q', controls.includes('Ctrl+Q'));
+  check('controls document Esc-to-resume', controls.includes('Esc w pauzie wraca do gry'));
+  check('controls document respawn key', controls.includes('Enter / R (ekran śmierci)'));
+  check('controls document touch long-press in windows', controls.includes('przytrzymaj: połowa / jeden'));
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
-  check('the menu announces 2.4', menu.includes('2.4'));
-  // the splash line is picked at random, so check the fixed 2.4 badge instead
-  check('the menu names the 2.4 release', menu.includes('WERSJA 2.4'));
+  check('the menu announces 2.5', menu.includes('2.5'));
+  // the splash line is picked at random, so check the fixed 2.5 badge instead
+  check('the menu names the 2.5 release', menu.includes('WERSJA 2.5'));
 }
 
 section('2.4: brewing rules');

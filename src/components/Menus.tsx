@@ -14,14 +14,17 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  'Aktualizacja 2.5: Wielka naprawa sterowania!',
+  '2.5: PC i dotyk wreszcie osobno!',
+  'Trzymany LPM bije dalej – koniec klikania!',
+  'Tapnij mieszkańca, aby handlować (nie bić!)',
+  'Ctrl+Q wyrzuca cały stos!',
+  'Esc w pauzie wraca do gry!',
   'Teraz też na telefonach!',
-  'Aktualizacja 2.4: warzy własne eliksiry!',
-  'Nowe w 2.4: statyw alchemiczny i napoje!',
+  'Statyw alchemiczny warzy napoje!',
   'Ognioodporność: wejdź do lawy bez obrażeń!',
-  'Aktualizacja 2.3: złów rybę i napraw narzędzia!',
-  'Nowe w 2.3: wędkarstwo, lorneta i kowadło!',
+  'Złów rybę i napraw narzędzia!',
   'Totem Ratowania uratuje cię od śmierci!',
-  'Aktualizacja 2.2: twoje światy pod kontrolą!',
   'Przypinaj, kopiuj i nazywaj swoje światy!',
   'Dziennik przygód pokaże ci kolejny cel!',
   'Automatyczna grafika dopasuje się do twojego sprzętu!',
@@ -59,7 +62,7 @@ export function Title() {
           className="px-2 py-0.5 text-sm font-bold"
           style={{ background: '#3c8527', color: '#fff', border: '2px solid #1c1c1c', boxShadow: '2px 2px 0 rgba(0,0,0,0.6)' }}
         >
-          WERSJA 2.4
+          WERSJA 2.5
         </span>
         <span className="splash text-lg font-semibold sm:text-xl" style={{ color: '#ffff00', textShadow: '2px 2px 0 #3f3f00' }}>
           {splash}
@@ -72,32 +75,32 @@ export function Title() {
 export function Controls() {
   const rows: [string, string][] = [
     ['W A S D', 'Ruch'],
-    ['Mysz', 'Rozglądanie się'],
+    ['Mysz', 'Rozglądanie się (surowe wejście – bez przyspieszeń systemu)'],
     ['Spacja', 'Skok / pływanie w górę'],
     ['Spacja x2 / F', 'Latanie (tryb kreatywny)'],
-    ['Shift', 'Skradanie / lot w dół'],
+    ['Shift', 'Skradanie / lot w dół (lewy lub prawy)'],
     ['W x2 lub Ctrl', 'Sprint'],
-    ['LPM (przytrzymaj)', 'Kopanie / atak / podpalenie TNT'],
+    ['LPM (przytrzymaj)', 'Kopanie · atak bije dalej z cooldownem'],
     ['PPM', 'Stawianie bloku / użycie stołu'],
     ['ŚPM', 'Wybierz blok'],
-    ['1-9 / kółko', 'Wybór slotu'],
+    ['1-9 (także numeryczne) / kółko', 'Wybór slotu'],
     ['E', 'Ekwipunek / wytwarzanie'],
-    ['Q', 'Wyrzuć przedmiot'],
+    ['Q', 'Wyrzuć przedmiot · Ctrl+Q: cały stos'],
     ['T lub /', 'Czat i komendy'],
     ['PPM na jedzeniu', 'Jedzenie'],
     ['PPM na piecu', 'Przetapianie'],
     ['PPM na łóżku', 'Sen i punkt odrodzenia'],
-    ['PPM na drzwiach / włazie', 'Otwórz lub zamknij'],
+    ['PPM na drzwiach / włazie', 'Otwórz lub zamknij (Shift+PPM stawia blok)'],
     ['PPM na skrzyni', 'Schowek'],
     ['Drabina + W / spacja', 'Wspinaczka'],
     ['Nożyce + LPM na owcy', 'Wełna bez zabijania'],
     ['Krzesiwo + PPM', 'Podpal TNT'],
     ['Łuk: przytrzymaj PPM, puść', 'Wystrzał ze strzałą'],
     ['Wędka: PPM', 'Zarzuć przynętę i zaciągnij brań'],
-    ['Lorneta: przytrzymaj PPM', 'Przybliżenie (2.3)'],
-    ['PPM na kowadle', 'Scal dwa narzędzia i nadaj nazwę (2.3)'],
-    ['PPM na statywie alchemicznym', 'Warzy napoje (2.4)'],
-    ['PPM na fiolce przy wodzie', 'Napełnij fiolkę (2.4)'],
+    ['Lorneta: przytrzymaj PPM', 'Przybliżenie'],
+    ['PPM na kowadle', 'Scal dwa narzędzia i nadaj nazwę'],
+    ['PPM na statywie alchemicznym', 'Warzy napoje'],
+    ['PPM na fiolce przy wodzie', 'Napełnij fiolkę'],
     ['Kompas / zegar', 'Kierunek odrodzenia i pora dnia'],
     ['Motyka + PPM', 'Grządka'],
     ['PPM na wilku z surowym mięsem', 'Zatamej wilka (strzeże gracza)'],
@@ -109,30 +112,35 @@ export function Controls() {
     ['J', 'Dziennik przygód i postęp celów'],
     ['K', 'Punkty podróży: baza, kopalnia i znacznik śmierci'],
     ['F3', 'Informacje debugowania'],
-    ['Esc', 'Pauza'],
+    ['Esc', 'Pauza · Esc w pauzie wraca do gry'],
+    ['Enter / R (ekran śmierci)', 'Odrodzenie'],
   ];
   const touchRows: [string, string][] = [
     ['Drążek (lewy dół)', 'Ruch · pchnij do oporu = sprint'],
     ['Przeciągnij ekran', 'Rozglądanie się'],
     ['Tapnij w blok', 'Postaw / użyj / zjedz (tryb Tapnij)'],
     ['Przytrzymaj blok', 'Kopanie – celownik podąża za palcem'],
-    ['Tapnij w moba', 'Atak'],
+    ['Tapnij w moba', 'Atak (mieszkaniec: handel!)'],
     ['⬆', 'Skok · 2× w kreatywnym = latanie'],
     ['⇣', 'Skradanie / lot w dół'],
     ['✈ (kreatywny)', 'Włącz / wyłącz latanie'],
     ['Pasek na dole', 'Tapnij slot, aby go wybrać'],
+    ['Sloty w oknach (E)', 'Tapnij: weź / połóż · przytrzymaj: połowa / jeden'],
     ['💬', 'Czat i komendy'],
     ['📍', 'Punkty podróży i znacznik bazy'],
   ];
   return (
     <div className="flex flex-col gap-4 text-[15px]">
-      <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
-        {rows.map(([k, v]) => (
-          <div key={k} className="contents">
-            <div className="text-yellow-300 mc-text">{k}</div>
-            <div className="text-gray-200 mc-text">{v}</div>
-          </div>
-        ))}
+      <div>
+        <div className="mb-1 text-base text-green-300 mc-text">Komputer (mysz + klawiatura)</div>
+        <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+          {rows.map(([k, v]) => (
+            <div key={k} className="contents">
+              <div className="text-yellow-300 mc-text">{k}</div>
+              <div className="text-gray-200 mc-text">{v}</div>
+            </div>
+          ))}
+        </div>
       </div>
       <div>
         <div className="mb-1 text-base text-green-300 mc-text">Telefon i tablet</div>
@@ -144,6 +152,9 @@ export function Controls() {
             </div>
           ))}
         </div>
+      </div>
+      <div className="text-xs opacity-70">
+        Wersję sterowania (Automat / Komputer / Dotyk) zmienisz w Opcjach → Sterowanie – przydatne na laptopach z ekranem dotykowym.
       </div>
     </div>
   );
@@ -525,7 +536,7 @@ export function MainMenu({
           />
         )}
       </div>
-      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.4 „Godzina alchemika”</div>
+      <div className="absolute bottom-2 left-3 text-sm mc-text">BlockCraft 2.5 „Wielka naprawa”</div>
       <div className="absolute bottom-2 right-3 text-sm mc-text">Gra działa w przeglądarce · Three.js</div>
       <div className="absolute bottom-8 left-3 text-xs opacity-70 mc-text">Wersja przeglądarkowa · GitHub Pages</div>
     </div>
@@ -673,6 +684,7 @@ export function DeathScreen({ onRespawn, onQuit }: { onRespawn: () => void; onQu
           Menu główne
         </button>
       </div>
+      <div className="text-sm opacity-80 mc-text">Enter – odrodzenie</div>
     </div>
   );
 }
@@ -707,6 +719,10 @@ export function ChatInput({ onSubmit, onClose }: { onSubmit: (t: string) => void
           else if (e.key === 'ArrowUp') {
             hIdx.current = Math.min(history.current.length - 1, hIdx.current + 1);
             if (history.current[hIdx.current]) setText(history.current[hIdx.current]);
+          } else if (e.key === 'ArrowDown') {
+            // 2.5: strzałka w dół wraca po historii komend.
+            hIdx.current = Math.max(-1, hIdx.current - 1);
+            setText(hIdx.current >= 0 ? history.current[hIdx.current] ?? '' : '');
           }
         }}
       />

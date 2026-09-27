@@ -2,6 +2,8 @@ import { PRESETS, recommendPreset, type DeviceProfile, type PresetName } from '.
 
 export type QualityMode = 'auto' | PresetName;
 export type TouchMode = 'tap' | 'buttons';
+/** 2.5: wyraźny podział wersji PC i dotykowej (patrz utils/input.ts). */
+export type ControlMode = 'auto' | 'desktop' | 'touch';
 
 export interface Settings {
   renderDistance: number;
@@ -9,6 +11,10 @@ export interface Settings {
   fov: number;
   volume: number;
   minimap: boolean;
+
+  // ——— 2.5: wersja komputerowa albo dotykowa ———
+  /** auto = wg głównego wskaźnika urządzenia; można też wymusić PC lub dotyk. */
+  controlMode: ControlMode;
 
   // ——— 2.0: grafika ———
   /** Auto = dobrane do urządzenia przy każdym starcie. */
@@ -44,6 +50,8 @@ export const DEFAULT_SETTINGS: Settings = {
   fov: 72,
   volume: 0.5,
   minimap: true,
+
+  controlMode: 'auto',
 
   quality: 'auto',
   pixelRatio: 1.35,
