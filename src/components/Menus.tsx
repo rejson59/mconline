@@ -15,7 +15,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  'Aktualizacja 2.6: Warsztat bez wpadek!',
+  'BlockCraft 3.0: zaczyna się nowy rozdział!',
+  '3.0: przywróć ustawienia domyślne jednym kliknięciem!',
+  'Świat, który tworzysz, zostaje z tobą!',
   'Ekwipunek nie gubi ani nie duplikuje przedmiotów!',
   'Szukaj receptur po nazwie albo składniku!',
   'Nazwane przedmioty zachowują swoje imię!',

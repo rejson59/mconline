@@ -1,6 +1,11 @@
-# BlockCraft 2.6 🟩
+# BlockCraft 3.0 🟩
 
-Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.6 „Warsztat bez wpadek”** domyka kilka ważnych spraw jakościowych: chroni przed utratą łupu, ułatwia wyszukiwanie receptur i dopracowuje interfejs na małych ekranach.
+Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **3.0 „Nowy rozdział”** łączy rozbudowany świat znany z poprzednich wydań z dopracowanym sterowaniem, zapisem lokalnym i dostępniejszymi opcjami. Gra działa na komputerach i urządzeniach dotykowych.
+
+**Wersja 3.0 „Nowy rozdział”**:
+- szybkie przywracanie domyślnych ustawień obrazu, sterowania i dźwięku z ekranu Opcji,
+- spójny numer wydania 3.0 w grze, pakiecie i dokumentacji,
+- pełna weryfikacja silnika, interfejsu, typów TypeScript i kompilacji produkcyjnej.
 
 **Wersja 2.6 „Warsztat bez wpadek”**:
 
