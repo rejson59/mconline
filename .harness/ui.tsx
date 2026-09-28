@@ -150,6 +150,11 @@ section('inventory screen: recipe finder');
   check('hammer is discoverable with masonry and safe area-attack instructions',
     html.includes('Żelazny młot') && stackTooltip({ id: I.IRON_HAMMER, count: 1 }).includes('8 obrażeń') &&
     renderToStaticMarkup(<Controls />).includes('bez niszczenia sąsiednich bloków'));
+  check('new shield recipes and balanced protection are visible in crafting and help',
+    html.includes('Skórzana tarcza') && html.includes('Żelazna tarcza') &&
+    stackTooltip({ id: I.LEATHER_SHIELD, count: 1 }).includes('35% ochrony') &&
+    stackTooltip({ id: I.IRON_SHIELD, count: 1 }).includes('15% wolniejszy') &&
+    renderToStaticMarkup(<Controls />).includes('Stara tarcza bez zmian'));
 }
 
 section('adventure journal: quests and progress');

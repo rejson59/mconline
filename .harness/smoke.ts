@@ -56,7 +56,7 @@ import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeComp
 import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, CREATIVE_ITEMS, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
-  pickHint, mineSeconds, toolHelps, attackDamage, attackCooldown, attackReach, blockDrops, smeltResult, fuelSeconds, resolveId,
+  pickHint, mineSeconds, toolHelps, attackDamage, attackCooldown, attackReach, shieldDamageFactor, shieldWeightFactor, shieldWear, blockDrops, smeltResult, fuelSeconds, resolveId,
   displayName,
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
@@ -1504,6 +1504,83 @@ section('3.0 #77: mutually exclusive defense and swimming enchants');
     table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
 }
 
+section('3.0 #38: leather and iron shields preserve the original shield');
+{
+  check('append-only shield IDs, durability, palette and Creative access',
+    I.LEATHER_SHIELD === 366 && I.IRON_SHIELD === 367 && I.SHIELD === 217 &&
+    [I.SHIELD, I.LEATHER_SHIELD, I.IRON_SHIELD].every((id) =>
+      ITEMS[id]?.tool === 'shield' && stackLimit(id) === 1 && CREATIVE_ITEMS.includes(id) && !!buildItemIcons()[id]) &&
+    durabilityMax(I.SHIELD) === 300 && durabilityMax(I.LEATHER_SHIELD) === 180 &&
+    durabilityMax(I.IRON_SHIELD) === 600);
+  for (const [id, inputs] of [
+    [I.LEATHER_SHIELD, [[I.LEATHER, 4], [B.PLANKS, 2], [I.STICK, 1]]],
+    [I.IRON_SHIELD, [[I.IRON, 5], [B.PLANKS, 2]]],
+  ] as const) {
+    const r = RECIPES.find((candidate) => candidate.out.id === id)!;
+    const inv = new Inventory();
+    for (const [item, n] of inputs) inv.add(item, n);
+    const crafted = inv.craft(r);
+    check(`${ITEMS[id]?.name} Survival recipe consumes every ingredient exactly once`, r.table && crafted &&
+      inv.countOf(id) === 1 && inputs.every(([item]) => inv.countOf(item) === 0) && !inv.craft(r));
+    const grid = new Inventory();
+    for (let y = 0; y < r.pattern!.length; y++) for (let x = 0; x < r.pattern![y].length; x++) {
+      const ch = r.pattern![y][x];
+      if (ch !== ' ') grid.grid[y * 3 + x] = { id: r.key![ch], count: 1 };
+    }
+    check(`${ITEMS[id]?.name} matches only its table grid`,
+      grid.gridMatch(true)?.out.id === id && grid.gridMatch(false) === null && grid.craftGrid(true)?.id === id);
+  }
+  check('legacy shield keeps exact 2.7 melee/arrow defense and wear',
+    shieldDamageFactor(I.SHIELD, false) === 0.5 && shieldDamageFactor(I.SHIELD, true) === 0 &&
+    shieldWeightFactor(I.SHIELD) === 1 && shieldWear(I.SHIELD, 8) === 8);
+  check('light leather trades protection and life for mobility',
+    shieldDamageFactor(I.LEATHER_SHIELD, false) === 0.65 &&
+    shieldDamageFactor(I.LEATHER_SHIELD, true) === 0.4 &&
+    shieldWeightFactor(I.LEATHER_SHIELD) === 1 && shieldWear(I.LEATHER_SHIELD, 8) === 12);
+  check('iron shield protects more but weighs more and lasts longer',
+    shieldDamageFactor(I.IRON_SHIELD, false) === 0.3 &&
+    shieldDamageFactor(I.IRON_SHIELD, true) === 0.15 &&
+    shieldWeightFactor(I.IRON_SHIELD) === 0.85 && shieldWear(I.IRON_SHIELD, 8) === 6);
+  check('all shield variants accept durability enchants, not Sharpness',
+    canEnchant(I.LEATHER_SHIELD, 'unbreaking') && canEnchant(I.IRON_SHIELD, 'unbreaking') &&
+    !canEnchant(I.IRON_SHIELD, 'sharpness'));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.ui = 'playing'; g.mode = 'survival'; g.yaw = 0; g.hunger = 20; g.flying = false;
+  g.body = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(), onGround: true, h: 1.8 };
+  g.inventory = new Inventory(); g.selected = 0; g.selectedStack = () => g.inventory.slots[0];
+  g.message = () => {}; g.emitHud = () => {}; g.unlock = () => {}; g.keys = new Set();
+  g.world = { peekBlock: () => B.AIR }; g.scene = { remove: () => {} };
+  g.difficulty = DEFAULT_DIFFICULTY; g.arrows = [];
+  let hit = 0, damage = 0;
+  g.damage = (d: number) => { hit++; damage = d; };
+  const shoot = (z: number, velZ: number) => {
+    g.arrows.push({ life: 0, pos: new THREE.Vector3(0, 1, z), vel: new THREE.Vector3(0, 0, velZ),
+      mesh: { position: new THREE.Vector3(), lookAt() {} }, from: { body: { pos: new THREE.Vector3(0, 0, z) } }, power: 10 });
+    g.updateArrows(0.1);
+  };
+  const foe = { type: 'skeleton', dead: false, soundTimer: 10, body: { pos: new THREE.Vector3(0, 0, -2) },
+    group: {}, update(_dt: number, _world: unknown, _p: unknown, onAttack: (d: number, m: unknown) => void) { onAttack(10, this); } };
+  g.mobs = [foe]; g.spawnTimer = 100; g.daylight = () => 0; g.weather = 'clear'; g.isInNether = false;
+  g.drops = []; g.time = 0;
+  for (const [id, melee, arrow, wear] of [
+    [I.SHIELD, 5, 0, 8], [I.LEATHER_SHIELD, 7, 4, 12], [I.IRON_SHIELD, 3, 2, 6],
+  ]) {
+    g.inventory.slots[0] = { id, count: 1 };
+    g.guardTime = 0; g.dodgeTime = 0;
+    const before = hit; g.updateMobs(0.01);
+    check(`${ITEMS[id]?.name} actually reduces frontal mob damage and wears`,
+      hit === before + 1 && damage === melee && g.inventory.slots[0].dur === durabilityMax(id) - wear);
+    const afterMelee = hit; shoot(-0.5, 4);
+    check(`${ITEMS[id]?.name} blocks frontal arrow by its own rate`,
+      hit === afterMelee + (arrow > 0 ? 1 : 0) && (arrow === 0 || damage === arrow));
+    const afterArrow = hit; shoot(0.5, -4);
+    check(`${ITEMS[id]?.name} does not block a rear arrow`, hit === afterArrow + 1 && damage === 10);
+    g.guardCooldown = 0;
+    check(`${ITEMS[id]?.name} still parries fully with correct timing`,
+      g.tryTimedGuard() && g.parryFrom(new THREE.Vector3(0, 0, -2)) && g.guardTime === 0);
+  }
+}
+
 section('3.0 #75: directional shield parry and dodge');
 {
   check('frontal sector faces the camera, not a world axis', threatInFront(0, 0, 0, 0, -3) &&
@@ -2250,6 +2327,7 @@ section('3.0 #64: blind cave listener tracks real sounds, not silent players');
   // normal walking and sprinting emit cues from the player's *old position*.
   const walker = Object.create(Game.prototype) as unknown as Record<string, any>;
   walker.world = world; walker.mode = 'creative'; walker.ui = 'playing';
+  walker.inventory = new Inventory(); walker.selected = 0;
   walker.body = { pos: new THREE.Vector3(4.5, y, 4.5), vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: true, hitWall: false };
   walker.keys = new Set(['KeyD', 'ShiftLeft']);
   walker.yaw = 0; walker.eyeHeight = 1.62; walker.autoJump = false;
@@ -2269,6 +2347,18 @@ section('3.0 #64: blind cave listener tracks real sounds, not silent players');
   for (let i = 0; i < 28; i++) walker.updatePlayer(1 / 30);
   check('right-Control sprint emits farther-reaching steps in the same movement loop',
     walker.noiseEvents?.some((n: {radius: number}) => n.radius === 12));
+  // The iron shield's weight must affect actual ordinary walking, not only a stat tooltip.
+  const walkWith = (id: number) => {
+    walker.body.pos.set(4.5, y, 4.5); walker.body.vel.set(0, 0, 0);
+    walker.body.onGround = true; walker.sprinting = false;
+    walker.keys = new Set(['KeyD']); walker.inventory.slots[0] = { id, count: 1 };
+    for (let i = 0; i < 12; i++) walker.updatePlayer(1 / 30);
+    return walker.body.pos.x - 4.5;
+  };
+  const oldShieldDistance = walkWith(I.SHIELD);
+  const ironShieldDistance = walkWith(I.IRON_SHIELD);
+  check('actual movement is slower only while carrying the heavy iron shield',
+    oldShieldDistance > 0.5 && ironShieldDistance > 0 && ironShieldDistance < oldShieldDistance * 0.94);
 
   // Exercise Q + real dropped entity physics; ordinary block loot must not
   // lure the listener, whereas a player-thrown item makes one impact cue.

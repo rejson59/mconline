@@ -1,4 +1,4 @@
-import { ITEM_LIST, type ItemDef } from './items';
+import { I, ITEM_LIST, type ItemDef } from './items';
 
 /**
  * Pixel-art painter for item icons.
@@ -1646,7 +1646,20 @@ function toolArt(it: ItemDef): string[] {
       '.....DDD........',
     ];
   }
-  // shield
+  // Shields share a recognisable silhouette but have distinct face patterns.
+  if (it.id === I.LEATHER_SHIELD) return [
+    '................', '...DDDDDDDDDD...', '..DHHHHHHHHHHD..', '..DHLHLLHLLHHD..',
+    '..DHHHHHHHHHHD..', '..DHHWWHHWWHD...', '..DHHWWHHWWHD...', '..DHHHHHHHHHHD..',
+    '..DHLHLLHLLHHD..', '..DHHHHHHHHHHD..', '..DHHHWWWWWHHD..', '...DHHWWWHHD....',
+    '....DHHWHHD.....', '.....DHHHD......', '......DD........', '................',
+  ];
+  if (it.id === I.IRON_SHIELD) return [
+    '................', '..DDDDDDDDDDDD..', '.DLLLLLLLLLLLLD.', '.DLHHHHHHHHHHLD.',
+    '.DLHHDDDDDDHHLD.', '.DLHHDBBBBDHHLD.', '.DLHHDBHBBDHHLD.', '.DLHHDBBBBDHHLD.',
+    '.DLHHDDDDDDHHLD.', '..DHHHHHHHHHHD..', '...DHHHHHHHHD...', '....DHHHHHHD....',
+    '.....DHHHHD.....', '......DHHD......', '.......DD.......', '................',
+  ];
+  // original 2.7 shield retains its exact texture
   return [
     '................',
     '...dddddddddd...',

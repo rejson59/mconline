@@ -34,6 +34,7 @@ import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
   ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown, attackReach,
   blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
+  shieldDamageFactor, shieldWeightFactor, shieldWear,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
@@ -2168,7 +2169,7 @@ export class Game {
     if (lvl > 0 && Math.random() > wearChance(lvl)) return;
     const max = ITEMS[s.id]?.durability ?? 1;
     if (s.dur === undefined) s.dur = max;
-    s.dur -= n;
+    s.dur -= shieldWear(s.id, n);
     if (s.dur <= 0) {
       this.inventory.slots[this.selected] = null;
       Sfx.playBreak('wood');
@@ -3607,8 +3608,10 @@ export class Game {
               // A well-timed frontal parry absorbs a single arrow completely.
             } else if (this.holdingShield() && front) {
               Sfx.playShield();
+              const factor = shieldDamageFactor(this.selectedStack()?.id ?? 0, true);
               this.wearShield(12);
               this.unlock('guardian');
+              if (factor > 0) this.damage(Math.ceil(mobDamage(a.power, this.difficulty.damage) * factor), false, 'projectile');
             } else {
               this.damage(mobDamage(a.power, this.difficulty.damage), false, 'projectile');
               this.body.vel.x += dir.x * 2.5;
@@ -4427,6 +4430,7 @@ export class Game {
     // 2.4: napój szybkości przyspiesza bieg (nie wpływa na latanie w trybie kreatywnym)
     if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
     if (!this.flying) speed *= sprintFactor(this.hasEffect('sprint'), this.sprinting);
+    if (!this.flying && this.holdingShield()) speed *= shieldWeightFactor(this.selectedStack()?.id ?? 0);
 
     const len = Math.hypot(fx, fz) || 1;
     fx /= len; fz /= len;
@@ -4753,12 +4757,14 @@ export class Game {
         if (this.parryFrom(mob.body.pos)) return;
         // A raised shield halves the hit and absorbs most of the knockback.
         const shielded = this.holdingShield() && threatInFront(this.yaw, p.x, p.z, mob.body.pos.x, mob.body.pos.z);
+        const shieldFactor = shielded ? shieldDamageFactor(this.selectedStack()?.id ?? 0, false) : 1;
         if (shielded) {
           Sfx.playShield();
           this.wearShield(8);
           this.unlock('guardian');
         }
-        this.damage(shielded ? Math.ceil(mobDamage(dmg, this.difficulty.damage) / 2) : mobDamage(dmg, this.difficulty.damage));
+        this.damage(shielded ? Math.ceil(mobDamage(dmg, this.difficulty.damage) * shieldFactor) :
+          mobDamage(dmg, this.difficulty.damage));
         if (this.mode === 'survival') {
           const dx = p.x - mob.body.pos.x, dz = p.z - mob.body.pos.z;
           const l = Math.hypot(dx, dz) || 1;
@@ -5264,6 +5270,8 @@ export class Game {
     if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
     if (id === I.IRON_SPEAR) return 'Włócznia: 5 bloków zasięgu · cios co 0,92 s · LPM / tap / ⛏';
     if (id === I.IRON_HAMMER) return 'Młot: 8 obrażeń · rozmach do 2 celów · cios co 1,1 s · LPM / tap / ⛏';
+    if (id === I.LEATHER_SHIELD) return 'Skórzana tarcza: lekka · 35% cios / 60% strzała · R / 🛡 paruj';
+    if (id === I.IRON_SHIELD) return 'Żelazna tarcza: ciężka · 70% cios / 85% strzała · R / 🛡 paruj';
     if (id === I.IRON_DAGGER || id === I.DIAMOND_DAGGER) return 'Sztylet: 2,2 bloku · cios co 0,28 s · V / ↝ i LPM / tap / ⛏ = kontra +3';
     if (id === I.COMPASS) {
       const dx = this.spawnPoint.x - this.body.pos.x;

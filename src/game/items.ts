@@ -112,6 +112,7 @@ export const I = {
   RAW_RABBIT: 357, COOKED_RABBIT: 358,
   EMBER_BOOTS: 359, TIDE_BOOTS: 360, SOFT_BOOTS: 361,
   IRON_SPEAR: 362, IRON_DAGGER: 363, DIAMOND_DAGGER: 364, IRON_HAMMER: 365,
+  LEATHER_SHIELD: 366, IRON_SHIELD: 367,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger' | 'hammer';
@@ -219,6 +220,8 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.EMERALD, name: 'Szmaragd', keys: ['szmaragd', 'emerald'], kind: 'material', color: '#2ed06a' },
   { id: I.LEATHER, name: 'Skóra', keys: ['skora', 'skóra', 'leather'], kind: 'material', color: '#8a5a3b' },
   { id: I.SHIELD, name: 'Tarcza', keys: ['tarcza', 'shield'], kind: 'tool', tool: 'shield', durability: 300, color: '#8a6a3a' },
+  { id: I.LEATHER_SHIELD, name: 'Skórzana tarcza', keys: ['skorzana_tarcza', 'leather_shield'], kind: 'tool', tool: 'shield', durability: 180, color: '#a86749' },
+  { id: I.IRON_SHIELD, name: 'Żelazna tarcza', keys: ['zelazna_tarcza', 'iron_shield'], kind: 'tool', tool: 'shield', durability: 600, color: '#c8d2d9' },
   { id: I.REDSTONE, name: 'Czerwony proszek', keys: ['redstone', 'czerwony_proszek', 'redstone_dust'], kind: 'material', color: '#c42a2a' },
   { id: I.QUARTZ, name: 'Kwarc', keys: ['kwarc', 'quartz'], kind: 'material', color: '#e8e0d0' },
   { id: I.SLIME_BALL, name: 'Kula szlamu', keys: ['slime', 'kula_szlamu', 'slime_ball'], kind: 'material', color: '#7ac47a' },
@@ -527,6 +530,20 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
   else if (tool?.tool && tool.tool !== 'sword' && tool.tool !== 'spear' && tool.tool !== 'dagger' && tool.tool !== 'hammer') d = 4;
   if (sprinting) d += 2;
   return d;
+}
+
+/** Fraction of frontal damage after an ordinary shield block (timed parries are total).
+ *  The 2.7 shield retains exactly its old melee and projectile protection. */
+export function shieldDamageFactor(id: number, projectile: boolean): number {
+  if (id === I.LEATHER_SHIELD) return projectile ? 0.4 : 0.65;
+  if (id === I.IRON_SHIELD) return projectile ? 0.15 : 0.3;
+  return projectile ? 0 : 0.5;
+}
+
+export function shieldWeightFactor(id: number): number { return id === I.IRON_SHIELD ? 0.85 : 1; }
+export function shieldWear(id: number, base: number): number {
+  return id === I.LEATHER_SHIELD ? Math.ceil(base * 1.5) :
+    id === I.IRON_SHIELD ? Math.max(1, Math.floor(base * 0.75)) : base;
 }
 
 export function attackCooldown(toolId: number): number {

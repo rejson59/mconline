@@ -165,6 +165,8 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.IRON_HAMMER, count: 1 }, inputs: [{ id: I.IRON, count: 5 }, { id: I.STICK, count: 2 }], table: true, pattern: ['III', 'ISI', ' S '], key: { I: I.IRON, S: I.STICK } },
   { out: { id: I.ARROW, count: 4 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.STICK, count: 1 }, { id: I.FEATHER, count: 1 }], table: false },
   { out: { id: I.SHIELD, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.IRON, count: 1 }], table: true, pattern: ['PIP', 'PPP', 'PPP'], key: { P: B.PLANKS, I: I.IRON } },
+  { out: { id: I.LEATHER_SHIELD, count: 1 }, inputs: [{ id: I.LEATHER, count: 4 }, { id: B.PLANKS, count: 2 }, { id: I.STICK, count: 1 }], table: true, pattern: ['LPL', 'LPL', ' S '], key: { L: I.LEATHER, P: B.PLANKS, S: I.STICK } },
+  { out: { id: I.IRON_SHIELD, count: 1 }, inputs: [{ id: I.IRON, count: 5 }, { id: B.PLANKS, count: 2 }], table: true, pattern: ['III', 'IPI', ' P '], key: { I: I.IRON, P: B.PLANKS } },
   // 1.7 „Nether & Redstone”
   { out: { id: B.REDSTONE_BLOCK, count: 1 }, inputs: [{ id: I.REDSTONE, count: 9 }], table: true, pattern: ['RRR', 'RRR', 'RRR'], key: { R: I.REDSTONE } },
   { out: { id: I.REDSTONE, count: 9 }, inputs: [{ id: B.REDSTONE_BLOCK, count: 1 }], table: false },

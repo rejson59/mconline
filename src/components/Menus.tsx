@@ -95,6 +95,7 @@ export function Controls() {
     ['Żelazna włócznia', 'Stół rzemieślniczy: 2 sztabki żelaza + 2 patyki po przekątnej. Celuj LPM lub tap/⛏ na dotyku: zasięg 5 bloków, 7 obrażeń, atak co 0,92 s. Ściany zatrzymują cios; nie wydłuża zasięgu kopania.'],
     ['Sztylety', 'Żelazny: żelazo + patyk w plecaku; diamentowy: 2 diamenty + patyk na stole. Krótki zasięg 2,2 bloku i szybki cios co 0,28 s. Po uniku (V/↝) masz 0,65 s na jedną kontrę: +3 obrażenia, komunikat trafienia. LPM lub tap/⛏.'],
     ['Żelazny młot', 'Stół rzemieślniczy: 5 sztabek żelaza + 2 patyki. 8 obrażeń, 1,1 s przerwy; trafienie rozmachowe rani do 2 pobliskich mobów przed tobą, nie przez ścianę. Szybciej kruszy wybrane kamienne bloki po przytrzymaniu LPM/⛏, bez niszczenia sąsiednich bloków. Nie wydobywa rud bez kilofa.'],
+    ['Warianty tarczy', 'Skórzana: 4 skóry, 2 deski, patyk; 35% ochrony przed ciosami i 60% przed strzałami, bez spowolnienia. Żelazna: 5 żelaza i 2 deski; 70% przed ciosami, 85% przed strzałami, 15% wolniejszy ruch z tarczą w ręku. Stara tarcza bez zmian, parowanie R/🛡 chroni w pełni przy dobrym timingu.'],
     ['PPM', 'Stawianie bloku / użycie stołu'],
     ['ŚPM', 'Wybierz blok'],
     ['1-9 (także numeryczne) / kółko', 'Wybór slotu'],
