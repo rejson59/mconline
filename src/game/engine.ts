@@ -229,6 +229,7 @@ export const MOB_NAMES: Record<MobType, string> = {
   fox: 'Lis',
   frog: 'Żaba',
   turtle: 'Żółw',
+  bear: 'Niedźwiedź',
   midge: 'Meszka',
   bat: 'Nietoperz',
   lizard: 'Jaszczurka',
@@ -2673,7 +2674,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2685,7 +2686,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -4662,6 +4663,30 @@ export class Game {
           this.spawnMob('bat', batPos.x, batPos.y + 2.2, batPos.z);
         }
       }
+      // Neutral adults keep cubs by their side on taiga and tundra trails.
+      if (!this.isInNether && passive < 11 && alive.filter((m) => m.type === 'bear' && !m.isCub).length < 2 && dl > 0.5) {
+        const pos = tryPos(22, 42);
+        if (pos && (pos.top === B.GRASS || pos.top === B.PODZOL || pos.top === B.SNOW) &&
+          (this.world.peekBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z)) === B.AIR ||
+            RENDER[this.world.peekBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z))] === 1) &&
+          (this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome === 'Tajga' ||
+            this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome === 'Tundra') && Math.random() < 0.28) {
+          this.spawnMob('bear', pos.x, pos.y + 0.1, pos.z);
+          if (passive < 10 && Math.random() < 0.55) {
+            for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nx = Math.floor(pos.x) + ox, nz = Math.floor(pos.z) + oz, ny = Math.floor(pos.y);
+              const floor = this.world.peekBlock(nx, ny - 1, nz);
+              if (!this.world.hasChunk(Math.floor(nx / CS), Math.floor(nz / CS)) ||
+                !IS_SOLID[floor] || floor === B.MAGMA || floor === B.CAMPFIRE ||
+                this.world.peekBlock(nx, ny, nz) !== B.AIR ||
+                this.world.peekBlock(nx, ny + 1, nz) !== B.AIR) continue;
+              const cub = this.spawnMob('bear', nx + 0.5, pos.y + 0.1, nz + 0.5);
+              cub.makeCub();
+              break;
+            }
+          }
+        }
+      }
       if (this.isInNether) {
         // Nether: piwniczne bestie zawsze, a Ghasty tylko w otwartej przestrzeni.
         if (hostile < hostileCap(this.difficulty.aggression)) {
@@ -5112,6 +5137,9 @@ export class Game {
       if (meat) this.spawnDrop(I.RAW_BEEF, meat, x, y, z);
       const hide = Math.floor(Math.random() * 3);
       for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
+    else if (m.type === 'bear') {
+      if (!m.isCub && Math.random() < 0.7) this.spawnDrop(I.LEATHER, 1, x, y, z);
     }
     else if (m.type === 'frog') {
       if (Math.random() < 0.2) this.spawnDrop(I.SLIME_BALL, 1, x, y, z);

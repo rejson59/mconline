@@ -233,6 +233,7 @@ section('menus: static render');
   check('campfire avoidance appears in help', renderToStaticMarkup(<Controls />).includes('Ognisko i pochodnie'));
   check('turtle eggs and saved hatching stages appear in help', renderToStaticMarkup(<Controls />).includes('Żółwie i jaja'));
   check('villager daily routine appears in help', renderToStaticMarkup(<Controls />).includes('Dzień mieszkańców'));
+  check('bear warning and escape hint appears in help', renderToStaticMarkup(<Controls />).includes('Niedźwiedzie z młodymi'));
   const medium = renderToStaticMarkup(
     <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
   );

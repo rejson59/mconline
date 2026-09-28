@@ -102,6 +102,7 @@ export function Controls() {
     ['PPM / tap na mieszkańcu', 'Handel: kartograf, rybak, ogrodnik, kowal i inni. Oferty rosną wraz z doświadczeniem'],
     ['PPM na skrzyni', 'Schowek'],
     ['Drabina + W / spacja', 'Wspinaczka'],
+    ['Niedźwiedzie z młodymi', 'Dorosłe niedźwiedzie są spokojne, dopóki nie zagrozisz młodemu, jedzeniu lub nie zaatakujesz. Przed ciosem ryczą i pokazują pomarańczowy sygnał — odsuń się!'],
     ['Dzień mieszkańców', 'Rano i wieczorem mieszkańcy spotykają się, w dzień pracują przy stanowiskach zawodu, nocą odpoczywają. Zagrożenie zawsze przerywa rutynę.'],
     ['Żółwie i jaja', 'Żółwie przy wodzie znoszą jaja na piasku. Jaja rosną w trzech etapach i wylęgają się; etapy zapisują się w świecie.'],
     ['Ognisko i pochodnie', 'Wybrane zwierzęta obchodzą źródła ognia, nie biegną przez lawę ani zamknięte ściany'],

@@ -5,7 +5,7 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 /** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
 export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
@@ -223,6 +223,11 @@ export class Mob {
   private lizardSkin: THREE.MeshLambertMaterial | null = null;
   private lizardFace: THREE.MeshLambertMaterial | null = null;
   private camouflageGround = -1;
+  isCub = false;
+  private bearWarning: THREE.Mesh | null = null;
+  private bearWindup = 0;
+  private bearCooldown = 0;
+  private bearAlert = 0;
   private activityTimer = 0;
   private activityGoal: { x: number; z: number } | null = null;
   private activityKind: VillagerActivity | null = null;
@@ -253,6 +258,7 @@ export class Mob {
     this.home.set(x, y, z);
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
+        : type === 'bear' ? 1.15
         : type === 'turtle' ? 0.78
         : type === 'lizard' ? 0.36
         : type === 'bat' ? 0.36
@@ -274,6 +280,7 @@ export class Mob {
             : type === 'enderman' ? 2.9
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
+                  : type === 'bear' ? 1.4
                   : type === 'turtle' ? 0.6
                   : type === 'lizard' ? 0.35
                   : type === 'bat' ? 0.4
@@ -284,6 +291,7 @@ export class Mob {
       type === 'zombie' ? 20
         : type === 'creeper' ? 16
           : type === 'cow' ? 10
+            : type === 'bear' ? 26
             : type === 'turtle' ? 10
             : type === 'lizard' ? 4
             : type === 'bat' ? 4
@@ -304,6 +312,16 @@ export class Mob {
     this.profession = type === 'villager' ? professionFor(profession) : 0;
     if (type === 'villager') this.trade = createVillagerState(this.profession, 0);
     this.build();
+  }
+
+  /** Spawned family member shares bear AI but flees and never attacks. */
+  makeCub(): void {
+    if (this.type !== 'bear' || this.isCub) return;
+    this.isCub = true;
+    this.group.scale.setScalar(0.6);
+    this.body.w *= 0.6;
+    this.body.h *= 0.6;
+    this.maxHealth = this.health = 8;
   }
 
   /** Marks a wild wolf as tamed (friendly coat, full health). */
@@ -388,6 +406,32 @@ export class Mob {
       this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
       this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
       this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'bear') {
+      const fur = 0x684735, muzzle = 0xb99877, dark = 0x34271f;
+      const torso = box(1.02, 0.92, 1.28, fur, sharedMats);
+      torso.position.set(0, 0.78, -0.1);
+      const snout = box(0.62, 0.45, 0.53, muzzle, sharedMats);
+      snout.position.set(0, 1.04, 0.75);
+      const nose = box(0.23, 0.15, 0.12, dark, sharedMats);
+      nose.position.set(0, 1.02, 1.04);
+      g.add(torso, snout, nose);
+      this.meshes.push(torso, snout, nose);
+      for (const side of [-1, 1]) {
+        const ear = box(0.23, 0.24, 0.17, fur, sharedMats);
+        ear.position.set(side * 0.37, 1.39, 0.44);
+        const eye = box(0.09, 0.1, 0.035, dark, sharedMats);
+        eye.position.set(side * 0.24, 1.24, 1.02);
+        g.add(ear, eye); this.meshes.push(ear, eye);
+      }
+      for (const side of [-1, 1]) for (const z of [-0.56, 0.48]) {
+        this.addLeg(side * 0.37, 0.34, z, 0.29, 0.64, 0.33, fur, this.legs);
+      }
+      // Visible red warning strip rises over the head throughout the windup.
+      const warning = box(0.65, 0.09, 0.13, 0xf07d36, sharedMats);
+      warning.position.set(0, 1.66, 0.5);
+      warning.visible = false;
+      g.add(warning); this.meshes.push(warning);
+      this.bearWarning = warning;
     } else if (this.type === 'turtle') {
       const green = 0x638a66, shell = 0x416850, light = 0x86a771;
       const body = box(0.62, 0.22, 0.78, green, sharedMats);
@@ -1427,6 +1471,67 @@ export class Mob {
     this.moveAndAnimate(dt, world, player, this.walking ? 1.2 : 0);
   }
 
+  private updateBear(dt: number, world: World, player: THREE.Vector3, allies: Mob[], food: readonly FoxFood[],
+    onAttack: (dmg: number, mob: Mob) => void, peaceful: boolean): void {
+    const b = this.body;
+    const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
+    const dist = Math.hypot(dx, dz);
+    if (this.isCub) {
+      const parent = allies.find((o) => o !== this && o.type === 'bear' && !o.isCub && !o.dead && o.body.pos.distanceTo(b.pos) < 13);
+      if (dist < 5 && Math.abs(player.y - b.pos.y) < 3) {
+        this.yaw = Math.atan2(-dx, -dz);
+        this.walking = true;
+      } else if (parent && parent.body.pos.distanceTo(b.pos) > 2.5) {
+        this.yaw = Math.atan2(parent.body.pos.x - b.pos.x, parent.body.pos.z - b.pos.z);
+        this.walking = true;
+      } else this.walking = false;
+      this.moveAndAnimate(dt, world, player, this.walking ? 1.55 : 0);
+      return;
+    }
+    const cubThreat = allies.some((o) => o.type === 'bear' && o.isCub && !o.dead &&
+      o.body.pos.distanceTo(b.pos) < 9 && o.body.pos.distanceTo(player) < 6);
+    const storesThreat = food.some((drop) => drop.age > 0.75 && isFood(drop.id) &&
+      drop.pos.distanceTo(b.pos) < 4 && drop.pos.distanceTo(player) < 4);
+    if (!peaceful && Math.abs(player.y - b.pos.y) < 3 && dist < 10 && (cubThreat || storesThreat || this.hurtTime > 0)) {
+      this.bearAlert = 6;
+    } else this.bearAlert = Math.max(0, this.bearAlert - dt);
+    this.bearCooldown -= dt;
+    if (peaceful || dist > 12) { this.bearAlert = 0; this.bearWindup = 0; }
+    if (this.bearWindup > 0) {
+      this.bearWindup -= dt;
+      this.bearWarning!.visible = this.bearWindup > 0;
+      this.walking = false;
+      this.yaw = Math.atan2(dx, dz);
+      this.moveAndAnimate(dt, world, player, 0);
+      if (this.bearWindup <= 0) {
+        this.bearWarning!.visible = false;
+        this.bearCooldown = 2.3;
+        if (!peaceful && dist < 2.5 && Math.abs(player.y - b.pos.y) < 2) onAttack(5, this);
+      }
+      return;
+    }
+    this.bearWarning!.visible = false;
+    if (this.bearAlert > 0 && !peaceful && dist < 10) {
+      this.yaw = Math.atan2(dx, dz);
+      this.walking = dist > 2.1;
+      if (!this.walking && this.bearCooldown <= 0) {
+        this.bearWindup = 0.9;
+        this.bearWarning!.visible = true;
+        this.soundTimer = Math.min(this.soundTimer, 0.1);
+      }
+      this.moveAndAnimate(dt, world, player, this.walking ? 2.2 : 0);
+      return;
+    }
+    this.aiTimer -= dt;
+    if (this.aiTimer <= 0) {
+      this.aiTimer = 2.5 + Math.random() * 4;
+      const hx = this.home.x - b.pos.x, hz = this.home.z - b.pos.z;
+      this.yaw = Math.hypot(hx, hz) > 9 ? Math.atan2(hx, hz) : Math.random() * Math.PI * 2;
+      this.walking = Math.hypot(hx, hz) > 9 || Math.random() < 0.4;
+    }
+    this.moveAndAnimate(dt, world, player, this.walking ? 0.88 : 0);
+  }
+
   private updateTurtle(dt: number, world: World, player: THREE.Vector3): void {
     const b = this.body;
     this.eggTimer -= dt;
@@ -1512,6 +1617,10 @@ export class Mob {
     }
     if (this.type === 'golem') {
       this.updateGolem(dt, world, player, allies, onAttack);
+      return;
+    }
+    if (this.type === 'bear') {
+      this.updateBear(dt, world, player, allies, food, onAttack, peaceful);
       return;
     }
     if (this.type === 'turtle') {

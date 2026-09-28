@@ -1665,6 +1665,67 @@ section('3.0 #58: visible camouflage for small swamp lizards');
   } finally { Math.random = random; }
 }
 
+section('3.0 #56: neutral bear defends cub and food with escapable windup');
+{
+  const world = new World(166, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 3; x <= 13; x++) for (let z = 3; z <= 13; z++) for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  const player = new THREE.Vector3(8, y, 7.5);
+  const bear = new Mob('bear', 5.5, y, 7.5);
+  bear.aiTimer = 100; bear.walking = false;
+  const empty = () => {};
+  let attacks = 0;
+  const tick = (mob: Mob, allies: Mob[], food: {id: number; count: number; age: number; pos: THREE.Vector3}[] = [], calm = false) =>
+    mob.update(1 / 30, world, player, () => { attacks++; }, empty, calm, allies, empty, 1, food);
+  for (let i = 0; i < 12; i++) tick(bear, [bear]);
+  check('adult bear is neutral near player without cub or food', attacks === 0 && bear.walking === false && (bear as unknown as {bearWindup: number}).bearWindup === 0);
+  const cub = new Mob('bear', 5, y, 8.5);
+  cub.makeCub();
+  check('cub has smaller visible model and hitbox', cub.isCub && cub.body.w < bear.body.w && cub.group.scale.x === 0.6);
+  const start = bear.body.pos.x;
+  for (let i = 0; i < 20; i++) tick(bear, [bear, cub]);
+  check('bear protects its cub by approaching trespasser', bear.body.pos.x > start + 0.2);
+  // Drive the bear into attack range to inspect the warning BEFORE damage.
+  player.x = bear.body.pos.x + 1.5;
+  tick(bear, [bear, cub]);
+  check('windup emits a visible warning before contact damage', (bear as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible && attacks === 0);
+  for (let i = 0; i < 32; i++) tick(bear, [bear, cub]);
+  check('warning concludes in one cooldown-limited defensive strike', attacks === 1 && !(bear as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  const threatenedCub = new Mob('bear', 7.5, y, 7.5);
+  threatenedCub.makeCub();
+  const mother = new Mob('bear', 5.5, y, 7.5);
+  player.x = 7.5;
+  tick(mother, [mother, threatenedCub]);
+  check('second family raises the telegraph immediately when the cub is close', (mother as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  const previous = attacks;
+  player.x = 18.5;
+  for (let i = 0; i < 32; i++) tick(mother, [mother, threatenedCub]);
+  check('retreating beyond 12 blocks cancels the bite and warning', attacks === previous && !(mother as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  const foodBear = new Mob('bear', 5.5, y, 7.5);
+  player.x = 7.5;
+  const fish = { id: I.RAW_FISH, count: 1, age: 2, pos: new THREE.Vector3(5.5, y, 7.5) };
+  tick(foodBear, [foodBear], [fish]);
+  check('bear guards nearby abandoned food (no cub required)', (foodBear as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  const peacefulBear = new Mob('bear', 5.5, y, 7.5);
+  tick(peacefulBear, [peacefulBear, threatenedCub], [fish], true);
+  check('peaceful difficulty leaves bears non-attacking', !(peacefulBear as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  // Actual game spawn cycle in taiga, with a family in loaded safe terrain.
+  const coast = new World(96, true);
+  coast.getChunk(1, 2);
+  coast.surface = (_x: number, _z: number) => ({ h: FLAT_H, biome: 'Tajga', temp: 0, forest: 0 });
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = coast; g.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  g.mobs = []; g.drops = []; g.isInNether = false;
+  g.mode = 'survival'; g.weather = 'clear'; g.time = 0.25;
+  g.spawnTimer = 0; g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.scene = { remove: () => {} };
+  g.spawnMob = (kind: MobType, x: number, yy: number, z: number) => { const m = new Mob(kind, x, yy, z); g.mobs.push(m); return m; };
+  const random = Math.random;
+  try { Math.random = () => 0.2; g.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('real taiga spawning can create an adult and a protected cub', g.mobs.some((m: Mob) => m.type === 'bear' && !m.isCub) && g.mobs.some((m: Mob) => m.type === 'bear' && m.isCub));
+}
+
 section('3.0 #61: village work, meetings, rest and threat priority');
 {
   eq('work is scheduled during daytime', villagerActivity(0.25), 'work');
