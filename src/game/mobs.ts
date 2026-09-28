@@ -5,7 +5,7 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 /** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
 export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
@@ -84,6 +84,9 @@ export class Mob {
   foxSnack = 0;
   private tongueTime = 0;
   private tongueMesh: THREE.Mesh | null = null;
+  private lizardSkin: THREE.MeshLambertMaterial | null = null;
+  private lizardFace: THREE.MeshLambertMaterial | null = null;
+  private camouflageGround = -1;
   /** True while a spider crawls up a wall (drives the leg animation). */
   climbing = false;
   /** 1.6: zawód mieszkańca (indeks w PROFESSIONS) i jego stan handlu. */
@@ -106,6 +109,7 @@ export class Mob {
     this.home.set(x, y, z);
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
+        : type === 'lizard' ? 0.36
         : type === 'bat' ? 0.36
         : type === 'frog' ? 0.48
         : type === 'midge' ? 0.2
@@ -125,6 +129,7 @@ export class Mob {
             : type === 'enderman' ? 2.9
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
+                  : type === 'lizard' ? 0.35
                   : type === 'bat' ? 0.4
                   : type === 'frog' ? 0.47 : type === 'midge' ? 0.26
                   : type === 'fox' ? 0.72 : type === 'rabbit' ? 0.65 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
@@ -133,6 +138,7 @@ export class Mob {
       type === 'zombie' ? 20
         : type === 'creeper' ? 16
           : type === 'cow' ? 10
+            : type === 'lizard' ? 4
             : type === 'bat' ? 4
             : type === 'frog' ? 5
             : type === 'midge' ? 1
@@ -235,6 +241,33 @@ export class Mob {
       this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
       this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
       this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'lizard') {
+      // Bright eyes and a pale stripe stay legible through color changes.
+      // build() clones each material per mob after assembling the model.
+      const body = box(0.32, 0.2, 0.48, 0x4a8255, sharedMats);
+      body.position.set(0, 0.21, -0.07);
+      const tail = box(0.11, 0.11, 0.4, 0x324c3b, sharedMats);
+      tail.position.set(0, 0.19, -0.48);
+      const stripe = box(0.09, 0.023, 0.43, 0xd9d69b, sharedMats);
+      stripe.position.set(0, 0.325, -0.07);
+      g.add(body, tail, stripe);
+      this.meshes.push(body, tail, stripe);
+      const head = new THREE.Group();
+      head.position.set(0, 0.24, 0.25);
+      const face = box(0.27, 0.18, 0.23, 0x4a8255, sharedMats);
+      head.add(face);
+      this.meshes.push(face);
+      for (const side of [-1, 1]) {
+        const eye = box(0.045, 0.04, 0.025, 0xf5db8a, sharedMats);
+        eye.position.set(side * 0.087, 0.06, 0.13);
+        head.add(eye);
+        this.meshes.push(eye);
+      }
+      g.add(head);
+      this.head = head;
+      for (const side of [-1, 1]) for (const z of [-0.17, 0.2]) {
+        this.addLeg(side * 0.15, 0.13, z, 0.08, 0.13, 0.09, 0x335543, this.legs);
+      }
     } else if (this.type === 'bat') {
       const brown = 0x534741, wingColor = 0x867272;
       const body = box(0.24, 0.29, 0.24, brown, sharedMats);
@@ -769,6 +802,10 @@ export class Mob {
         mesh.material = (mesh.material as THREE.MeshLambertMaterial).clone();
       }
     });
+    if (this.type === 'lizard') {
+      this.lizardSkin = this.meshes[0].material as THREE.MeshLambertMaterial;
+      this.lizardFace = this.meshes[3].material as THREE.MeshLambertMaterial;
+    }
   }
 
   setTint(red: boolean) {
@@ -973,6 +1010,32 @@ export class Mob {
     this.sheared = true;
     if (this.woolMesh) this.woolMesh.material = new THREE.MeshLambertMaterial({ color: 0xd8c8b0 });
     return true;
+  }
+
+  /** Swap an opaque, per-animal skin tone when the ground changes. The dorsal
+   * stripe and pale eyes remain high contrast on both colors. */
+  private updateLizard(dt: number, world: World, player: THREE.Vector3): void {
+    const b = this.body;
+    const ground = b.onGround ? world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.25), Math.floor(b.pos.z)) : this.camouflageGround;
+    if (ground !== this.camouflageGround) {
+      this.camouflageGround = ground;
+      const color = ground === B.MUD || ground === B.DIRT ? 0x907a5b : 0x4a8255;
+      this.lizardSkin?.color.setHex(color);
+      this.lizardFace?.color.setHex(color);
+    }
+    const dx = b.pos.x - player.x, dz = b.pos.z - player.z;
+    const threatened = Math.hypot(dx, dz) < 5 && Math.abs(b.pos.y - player.y) < 3;
+    this.aiTimer -= dt;
+    if (threatened) {
+      this.yaw = Math.atan2(dx, dz);
+      this.walking = true;
+    } else if (this.aiTimer <= 0) {
+      this.aiTimer = 2 + Math.random() * 3;
+      const hx = this.home.x - b.pos.x, hz = this.home.z - b.pos.z;
+      this.yaw = Math.hypot(hx, hz) > 7 ? Math.atan2(hx, hz) : Math.random() * Math.PI * 2;
+      this.walking = Math.random() < 0.45;
+    }
+    this.moveAndAnimate(dt, world, player, this.walking ? threatened ? 2.7 : 0.9 : 0);
   }
 
   /** Nocturnal flight stays within a short loaded neighborhood. During the
@@ -1191,6 +1254,10 @@ export class Mob {
     }
     if (this.type === 'golem') {
       this.updateGolem(dt, world, player, allies, onAttack);
+      return;
+    }
+    if (this.type === 'lizard') {
+      this.updateLizard(dt, world, player);
       return;
     }
     if (this.type === 'bat') {

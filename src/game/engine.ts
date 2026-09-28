@@ -230,6 +230,7 @@ export const MOB_NAMES: Record<MobType, string> = {
   frog: 'Żaba',
   midge: 'Meszka',
   bat: 'Nietoperz',
+  lizard: 'Jaszczurka',
   sheep: 'Owca',
   cow: 'Krowa',
   chicken: 'Kurczak',
@@ -2671,7 +2672,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2683,7 +2684,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, rabbit, fox, frog, midge, bat, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -4614,6 +4615,8 @@ export class Game {
           const biome = this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome;
           const shore = ['Bagno', 'Plaża', 'Równiny', 'Las', 'Kwiecista łąka'].includes(biome) &&
             (pos.top === B.MUD || pos.top === B.SAND || pos.top === B.GRASS || pos.top === B.MEADOW_GRASS) &&
+            (this.world.peekBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z)) === B.AIR ||
+              RENDER[this.world.peekBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z))] === 1) &&
             shoreWaterNearby(this.world, Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
           const frogs = alive.filter((m) => m.type === 'frog').length;
           const midges = alive.filter((m) => m.type === 'midge').length;
@@ -4628,6 +4631,17 @@ export class Game {
             const n = type === 'fox' ? 1 : type === 'rabbit' || type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
             for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
           }
+        }
+      }
+      // Swamp lizards need actual ground to camouflage against, not just a
+      // swamp biome name. The existing passive cap also bounds their AI.
+      if (!this.isInNether && passive < 12 && alive.filter((m) => m.type === 'lizard').length < 3 && dl > 0.5) {
+        const lizPos = tryPos(20, 36);
+        if (lizPos && (lizPos.top === B.MUD || lizPos.top === B.GRASS) &&
+          (this.world.peekBlock(Math.floor(lizPos.x), Math.floor(lizPos.y), Math.floor(lizPos.z)) === B.AIR ||
+            RENDER[this.world.peekBlock(Math.floor(lizPos.x), Math.floor(lizPos.y), Math.floor(lizPos.z))] === 1) &&
+          this.world.surface(Math.floor(lizPos.x), Math.floor(lizPos.z)).biome === 'Bagno' && Math.random() < 0.35) {
+          this.spawnMob('lizard', lizPos.x, lizPos.y + 0.1, lizPos.z);
         }
       }
       // Nighttime forest bats use the same loaded surface candidate and

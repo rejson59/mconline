@@ -1602,6 +1602,67 @@ section('3.0 #57: nocturnal bats take flight and rest by day');
   } finally { Math.random = random; }
 }
 
+section('3.0 #58: visible camouflage for small swamp lizards');
+{
+  const world = new World(839, true);
+  world.getChunk(0, 0);
+  world.getChunk(1, 0);
+  world.setBlock(8, FLAT_H, 8, B.MUD);
+  const lizard = new Mob('lizard', 8.5, FLAT_H + 1, 8.5);
+  const player = new THREE.Vector3(40, FLAT_H + 1, 40);
+  for (let i = 0; i < 5; i++) lizard.update(1 / 30, world, player, () => {}, () => {}, false);
+  const skin = (lizard.meshes[0] as THREE.Mesh).material as THREE.MeshLambertMaterial;
+  const muddy = skin.color.getHex();
+  check('on mud lizard has opaque brown skin, pale stripe and bright eyes', muddy === 0x907a5b && skin.transparent === false && lizard.meshes.some((m) => (m.material as THREE.MeshLambertMaterial).color?.getHex() === 0xd9d69b), `skin=${muddy.toString(16)} onGround=${lizard.body.onGround} pos=${lizard.body.pos.toArray()} ground=${world.peekBlock(8,64,8)} cache=${(lizard as unknown as {camouflageGround: number}).camouflageGround} targetSkin=${(lizard as unknown as {lizardSkin: THREE.MeshLambertMaterial}).lizardSkin.color.getHex().toString(16)} at=${world.peekBlock(Math.floor(lizard.body.pos.x), Math.floor(lizard.body.pos.y-0.25),Math.floor(lizard.body.pos.z))}`);
+  world.setBlock(8, FLAT_H, 8, B.GRASS);
+  for (let i = 0; i < 5; i++) lizard.update(1 / 30, world, player, () => {}, () => {}, false);
+  check('grass changes skin without making it invisible', skin.color.getHex() === 0x4a8255 && skin.opacity === 1);
+  const another = new Mob('lizard', 9.5, FLAT_H + 1, 8.5);
+  for (let i = 0; i < 5; i++) another.update(1 / 30, world, player, () => {}, () => {}, false);
+  world.setBlock(8, FLAT_H, 8, B.MUD);
+  lizard.update(1 / 30, world, player, () => {}, () => {}, false);
+  check('camouflage is per-animal, not a global tint of every lizard', skin.color.getHex() === 0x907a5b && ((another.meshes[0] as THREE.Mesh).material as THREE.MeshLambertMaterial).color.getHex() === 0x4a8255, `skin=${skin.color.getHex().toString(16)} other=${((another.meshes[0] as THREE.Mesh).material as THREE.MeshLambertMaterial).color.getHex().toString(16)}`);
+  const shy = new Mob('lizard', 7.5, FLAT_H + 1, 7.5);
+  const near = new THREE.Vector3(9.5, FLAT_H + 1, 9.5);
+  const startDist = shy.body.pos.distanceTo(near);
+  let attacks = 0;
+  for (let i = 0; i < 70; i++) shy.update(1 / 30, world, near, () => { attacks++; }, () => {}, false);
+  check('lizard flees a nearby player without attacking', !isHostileMob('lizard') && shy.body.pos.distanceTo(near) > startDist + 1 && attacks === 0);
+  check('swamp lizard is identifiable in the target HUD', MOB_NAMES.lizard === 'Jaszczurka' && lizard.body.w < 0.5);
+
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const originalSurface = world.surface.bind(world);
+  g.world = world;
+  g.world.surface = (x: number, z: number) => ({ ...originalSurface(x, z), biome: 'Bagno' });
+  g.body = { pos: new THREE.Vector3(8.5, FLAT_H + 1, 8.5) };
+  g.mode = 'survival';
+  g.time = 0.25;
+  g.isInNether = false;
+  g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  g.mobs = [];
+  g.spawnTimer = 0;
+  g.spawnVillageFolk = () => {};
+  g.scene = { remove: () => {} };
+  g.spawnMob = (type: MobType, x: number, y: number, z: number) => { const m = new Mob(type, x, y, z); g.mobs.push(m); return m; };
+  world.setBlock(28, FLAT_H, 8, B.MUD);
+  const random = Math.random;
+  try {
+    Math.random = () => 0;
+    g.updateMobs(1 / 30);
+    check('swamp mud naturally spawns a lizard in Survival', g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
+    g.mobs = [];
+    g.spawnTimer = 0;
+    world.setBlock(28, FLAT_H + 1, 8, B.WATER);
+    g.updateMobs(1 / 30);
+    check('submerged mud cannot spawn a lizard or shore frog', !g.mobs.some((m: Mob) => m.type === 'lizard' || m.type === 'frog'));
+    g.mobs = [];
+    g.spawnTimer = 0;
+    g.isInNether = true;
+    g.updateMobs(1 / 30);
+    check('Nether has no swamp lizards', !g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
+  } finally { Math.random = random; }
+}
+
 // ======================================================================== wolf
 section('mobs: wolf taming and defence');
 {
