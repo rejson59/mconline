@@ -53,7 +53,7 @@ import { DiscoveryMap, MAP_LIMIT } from '../src/game/discoveryMap';
 import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeCompass';
 import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
-  ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
+  ITEMS, I, CREATIVE_ITEMS, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
   displayName,
 } from '../src/game/items';
@@ -78,7 +78,7 @@ import {
 import { Xp as XpClass } from '../src/game/xp';
 import { Game, MOB_NAMES, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
 import { tryCreatePortal } from '../src/game/redstone';
-import { brewingKey, emptyBrewing } from '../src/game/brewing';
+import { brewingKey, emptyBrewing, brewResult, tickBrewing, POTIONS, sprintFactor, fallDamageAfterPotion, restoreEffects } from '../src/game/brewing';
 import { VILLAGE_CELL, villageInCell, villageSpawnSpots, type Village } from '../src/game/village';
 import {
   PROFESSIONS, VILLAGER_LEVEL_XP, applyTrade, canTrade, createVillagerState, offersFor,
@@ -1114,7 +1114,8 @@ section('engine: armor damage, equipping, xp');
   g.gainXp(9);
   eq('24 xp is level 3', g.xp.info().level, 3);
 
-  // death: armor drops with the inventory
+  // death: armor drops with the inventory, and all active buffs end
+  g.effects = new Map([['fall', 2000]]);
   g.health = 1;
   g.ui = 'playing';
   g.damage(1000, true);
@@ -1122,6 +1123,7 @@ section('engine: armor damage, equipping, xp');
   const droppedIds = drops.map((d) => d[0]);
   check('armor dropped on death', [I.LEATHER_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS].every((id) => droppedIds.includes(id)), JSON.stringify(droppedIds));
   eq('armor cleared on death', g.armor.every((s: any) => s === null), true);
+  eq('active potion buffs cleared on death', g.effects.size, 0);
 }
 
 // ======================================================================== wolf
@@ -1371,7 +1373,12 @@ section('update 1.5: lapis, sugar cane, table, drops');
   eq('silk touch keeps leaves', silkLeaf[0]?.id, B.LEAVES);
   eq('silk touch keeps tall grass', blockDrops(B.TALLGRASS, 0, { silk: true })[0]?.id, B.TALLGRASS);
   eq('silk touch keeps flowers', blockDrops(B.FLOWER_RED, 0, { silk: true })[0]?.id, B.FLOWER_RED);
-  check('plain leaves still roll nothing or sapling', blockDrops(B.LEAVES, 0).length <= 1);
+  {
+    const random = Math.random;
+    try { Math.random = () => 0.99;
+      check('plain leaves still roll nothing or sapling', blockDrops(B.LEAVES, 0).length <= 1);
+    } finally { Math.random = random; }
+  }
 
   // --- mining speed with Efficiency
   const bare = mineSeconds(B.STONE, I.IRON_PICK);
@@ -1504,6 +1511,7 @@ section('saves: enchantments ride along');
   g.spawnPoint = new THREE.Vector3(1, 70, 2);
   g.furnaces = new Map(); g.chests = new Map();
   g.brewings = new Map();
+  g.effects = new Map([['night', 17000], ['fall', 34500], ['sprint', 8000]]);
   g.potionsDrunk = new Set<number>();
   g.unlocked = new Set(['wood']);
   g.weather = 'clear';
@@ -1524,6 +1532,10 @@ section('saves: enchantments ride along');
   eq('durability still persists', stored.inv[0]?.dur, 300);
   eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
+  eq('night vision timer persists on save', stored.effects?.night, 17000);
+  eq('fall resistance timer persists on save', stored.effects?.fall, 34500);
+  eq('sprint timer persists on save', stored.effects?.sprint, 8000);
+  check('imported save restores active buffs', restoreEffects(JSON.parse(exportSave('ench-test') ?? '{}').saves?.[0]?.effects).get('fall') === 34500);
   check('engine save retains surveyed tiles in both dimensions', DiscoveryMap.fromSave(stored.discovery).get('overworld', -1, -1)?.[2] === 8 && DiscoveryMap.fromSave(stored.discovery).get('nether', 0, 0)?.[2] === 11);
   check('world JSON export includes discovery', exportSave('ench-test')?.includes('discovery') === true);
   const beforeFailedWrite = localStorage.getItem('blockcraft-saves-v2');
@@ -2728,6 +2740,7 @@ section('2.3: totem of undying');
   plain.inventory = new Inventory();
   plain.unlocked = new Set();
   plain.totemHeal = 0;
+  plain.effects = new Map();
   plain.armor = [null, null, null, null];
   plain.emitHud = () => {};
   plain.body = { pos: new THREE.Vector3(1, 70, 1) };
@@ -2887,6 +2900,41 @@ section('2.4: brewing inside the engine');
   check('the contents spilled to the ground', (g.dropped ?? 0) === 2, String(g.dropped));
   check('the brewed potion survived the spill', droppedIds.includes(I.POTION_AWKWARD));
   check('the ingredient spilled too', droppedIds.includes(I.NETHER_WART));
+}
+
+section('3.0 #78: brewable fall and sprint potions, effect isolation and save migration');
+{
+  // IDs are appended: existing speed and night vision keep their old recipes.
+  check('both new potions can be selected in Creative', [I.POTION_FALL, I.POTION_SPRINT].every((id) => CREATIVE_ITEMS.includes(id)));
+  eq('fall potion resolves by name', resolveId('napoj_ladowania'), I.POTION_FALL);
+  eq('sprint potion resolves by name', resolveId('napoj_zrywu'), I.POTION_SPRINT);
+  eq('water + sugar remains the older speed brew', brewResult(I.WATER_BOTTLE, I.SUGAR), I.POTION_SPEED);
+  eq('water + glowstone remains night vision', brewResult(I.WATER_BOTTLE, I.GLOWSTONE_DUST), I.POTION_NIGHT);
+  eq('awkward + feather produces fall protection', brewResult(I.POTION_AWKWARD, I.FEATHER), I.POTION_FALL);
+  eq('awkward + sugar produces short sprint', brewResult(I.POTION_AWKWARD, I.SUGAR), I.POTION_SPRINT);
+  eq('water + feather is not a shortcut', brewResult(I.WATER_BOTTLE, I.FEATHER), null);
+  for (const [ingredient, expected] of [[I.FEATHER, I.POTION_FALL], [I.SUGAR, I.POTION_SPRINT]]) {
+    const stand = emptyBrewing(0, 1, 0);
+    stand.bottles[0] = { id: I.POTION_AWKWARD, count: 1 };
+    stand.ingredient = { id: ingredient, count: 1 };
+    stand.fuel = { id: I.BLAZE_ROD, count: 1 };
+    eq('the new brew completes in a fueled stand', tickBrewing(stand, 8).done, true);
+    eq('the stand outputs the matching potion', stand.bottles[0]?.id, expected);
+    check('new potions have timed descriptions', POTIONS[expected].duration > 0 && !!POTIONS[expected].desc);
+  }
+  eq('fall potion absorbs fall damage', fallDamageAfterPotion(12, true), 0);
+  eq('without the effect fall damage remains', fallDamageAfterPotion(12, false), 12);
+  eq('sprint buff speeds sprinting', sprintFactor(true, true), 1.45);
+  eq('sprint buff does not change walking', sprintFactor(true, false), 1);
+  eq('no potion means normal sprint speed', sprintFactor(false, true), 1);
+  eq('2.7 saves without effects load without buffs', restoreEffects(undefined).size, 0);
+  const restored = restoreEffects({ fall: 2000, sprint: 1400, night: 6000, speed: -1, bogus: 9999, regen: Infinity, fire: '3000', strength: 1e10, heal: 5000 });
+  eq('fall timer restored', restored.get('fall'), 2000);
+  eq('sprint timer restored', restored.get('sprint'), 1400);
+  eq('old night timer restored', restored.get('night'), 6000);
+  eq('malformed timers ignored', restored.has('speed') || restored.has('regen') || restored.has('fire') || [...restored.keys()].some((key) => String(key) === 'bogus') || restored.has('heal'), false);
+  eq('oversized imported timer limited', restored.get('strength'), 120000);
+  eq('non-record effects rejected', restoreEffects([1, 2]).size, 0);
 }
 
 section('2.4: potion effects inside the engine');

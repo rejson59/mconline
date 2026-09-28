@@ -1331,6 +1331,9 @@ const POTION_ART: Record<number, [Record<string, string>, string[]]> = {
   350: potionArt('#e0a030', '#f8c858', '#9a6414'),
   // regeneracja: różowy korzeń
   351: potionArt('#e06090', '#f898bc', '#9a3058'),
+  // lekki upadek: chłodny błękit, zryw: bursztyn
+  355: potionArt('#81b9ef', '#c9e5ff', '#376b9b'),
+  356: potionArt('#e89d55', '#ffd29a', '#a15a24'),
 };
 Object.assign(ART, POTION_ART);
 

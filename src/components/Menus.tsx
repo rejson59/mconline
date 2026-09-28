@@ -108,6 +108,7 @@ export function Controls() {
     ['PPM na kowadle', 'Scal dwa narzędzia i nadaj nazwę'],
     ['PPM na statywie alchemicznym', 'Warzy napoje'],
     ['PPM na fiolce przy wodzie', 'Napełnij fiolkę'],
+    ['Statyw: zaczarowany napój + pióro / cukier', 'Lekkie lądowanie / zryw (czas na HUD-zie)'],
     ['Kompas / zegar', 'Kierunek odrodzenia i pora dnia'],
     ['Motyka + PPM', 'Grządka'],
     ['PPM na wilku z surowym mięsem', 'Zatamej wilka (strzeże gracza)'],

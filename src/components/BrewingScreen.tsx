@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
 import type { Stack } from '../game/inventory';
 import { TooltipBody } from '../utils/tooltip';
-import { I } from '../game/items';
-import { BREW_TIME, POTIONS, brewResult, type BrewingState } from '../game/brewing';
+import { I, displayName } from '../game/items';
+import { BREW_TIME, BREWING_INGREDIENTS, POTIONS, brewResult, type BrewingState } from '../game/brewing';
 import Slot from './Slot';
 
 /**
@@ -137,6 +137,20 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
         <div className="max-w-[400px] text-xs text-[#333]">
           Fiolka napełnia się nad wodą (PPM na fiolce przy źródełku). Brodawka Netheru daje zaczarowany napój, z którego powstaną mocne eliksiry. Jedna różdżka = 3 warzenia.
         </div>
+
+        <details className="border border-stone-500 p-2 text-xs text-[#292929]">
+          <summary className="cursor-pointer">Przepisy i działanie napojów</summary>
+          <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto">
+            {[I.WATER_BOTTLE, I.POTION_AWKWARD].flatMap((base) => [...BREWING_INGREDIENTS].map((ingredient) => {
+              const output = brewResult(base, ingredient);
+              return output === null ? null : (
+                <li key={`${base}-${ingredient}`}>
+                  {displayName(base)} + {displayName(ingredient)} → {POTIONS[output].name}: {POTIONS[output].desc}
+                </li>
+              );
+            }))}
+          </ul>
+        </details>
 
         <div className="grid grid-cols-9">
           {inv.slots.map((s, i) => (

@@ -350,6 +350,7 @@ section('2.4: brewing screen');
   check('it lists three bottles', (brew.match(/Fiolka \d/g) ?? []).length === 3);
   check('it shows the ingredient and fuel slots', brew.includes('Składnik') && brew.includes('Paliwo'));
   check('a fresh stand asks for fuel', brew.includes('Dość płomiennej różdżki'));
+  check('the brewing recipe list shows both new paths and their effects', brew.includes('Napój lekkiego lądowania') && brew.includes('Napój zrywu') && brew.includes('Nie otrzymujesz obrażeń od upadku') && brew.includes('Biegniesz o 45%'));
 
   const lit = emptyBrewing(0, 1, 0);
   lit.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
@@ -455,7 +456,7 @@ section('2.4: brewing rules');
 
 section('2.4: potion item metadata');
 {
-  const potionIds = [I.POTION_AWKWARD, I.POTION_HEAL, I.POTION_FIRE, I.POTION_SPEED, I.POTION_NIGHT, I.POTION_STRENGTH, I.POTION_REGEN];
+  const potionIds = [I.POTION_AWKWARD, I.POTION_HEAL, I.POTION_FIRE, I.POTION_SPEED, I.POTION_NIGHT, I.POTION_STRENGTH, I.POTION_REGEN, I.POTION_FALL, I.POTION_SPRINT];
   check('all potions are drinkable', potionIds.every((id) => isPotion(id)));
   check('potion effect metadata is complete', potionIds.every((id) => !!POTIONS[id]?.name));
   check('healing is the instant effect', POTIONS[I.POTION_HEAL]?.effect === 'heal' && HEAL_AMOUNT === 7);

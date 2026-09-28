@@ -7,7 +7,7 @@ import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE, typ
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
 import {
   BREW_FUELS, BREWING_INGREDIENTS, HEAL_AMOUNT, SPEED_FACTOR, STRENGTH_DAMAGE, POTIONS,
-  brewingKey, emptyBrewing, tickBrewing,
+  brewingKey, emptyBrewing, tickBrewing, sprintFactor, fallDamageAfterPotion, restoreEffects,
   type BrewingState, type PotionEffectId,
 } from './brewing';
 import { getAtlas, tileUV, AVG_COLOR } from './textures';
@@ -196,6 +196,8 @@ export interface SaveData {
   brewings?: BrewingState[];
   /** 2.4: wypiłe typy napojów (osiągnięcie „Mistrz eliksirów”). */
   potionsDrunk?: number[];
+  /** Milliseconds remaining per effect; optional in saves predating 3.0. */
+  effects?: Record<string, number>;
   /** Explored chunk tiles, stored separately for both dimensions. Absent in 2.x saves. */
   discovery?: DiscoverySave;
 }
@@ -210,6 +212,8 @@ const EFFECT_META: Record<Exclude<PotionEffectId, 'none'>, { icon: string; name:
   night: { icon: '👁', name: 'Nocne widzenie' },
   strength: { icon: '💪', name: 'Siła' },
   regen: { icon: '✚', name: 'Regeneracja' },
+  fall: { icon: '🪶', name: 'Lekkie lądowanie' },
+  sprint: { icon: '⚡', name: 'Zryw' },
 };
 
 /** Polskie nazwy mobów – używane w podpowiedzi pod celownikiem. */
@@ -769,6 +773,7 @@ export class Game {
         clean.progress = Math.max(0, Math.min(8, b.progress ?? 0));
         this.brewings.set((b.dim ? 'n:' : '') + brewingKey(b.x, b.y, b.z), clean);
       }
+      this.effects = restoreEffects(opts.save.effects);
       this.fishCaught = Math.max(0, Math.floor(opts.save.fishCaught ?? 0));
       this.fishingBait = opts.save.fishingBait === I.WORM_BAIT || opts.save.fishingBait === I.GLOW_BAIT ? opts.save.fishingBait : null;
       for (const id of Array.isArray(opts.save.potionsDrunk) ? opts.save.potionsDrunk : []) {
@@ -2762,6 +2767,7 @@ export class Game {
         anvils: this.anvils ? [...this.anvils.values()] : [],
         brewings: this.brewings ? [...this.brewings.values()] : [],
         potionsDrunk: this.potionsDrunk ? [...this.potionsDrunk] : [],
+        effects: Object.fromEntries(this.effects ?? []),
         unlocked: [...this.unlocked],
         weather: this.weather,
         xp: this.xp.total,
@@ -3889,6 +3895,7 @@ export class Game {
         }
         this.armor.fill(null);
       }
+      this.effects.clear();
       this.inventory.slots.fill(null);
       this.inventory.cursor = null;
       this.fishingBait = null;
@@ -4092,6 +4099,7 @@ export class Game {
     if (inLava && !this.flying) speed *= 0.35;
     // 2.4: napój szybkości przyspiesza bieg (nie wpływa na latanie w trybie kreatywnym)
     if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
+    if (!this.flying) speed *= sprintFactor(this.hasEffect('sprint'), this.sprinting);
 
     const len = Math.hypot(fx, fz) || 1;
     fx /= len; fz /= len;
@@ -4157,7 +4165,7 @@ export class Game {
       if (fall > 3.4 && this.mode === 'survival' && !inWater) {
         // Lekki krok na butach tłumi upadek
         const raw = Math.floor(fall - 3);
-        this.damage(Math.max(raw > 0 ? 1 : 0, Math.round(raw * fallDamageFactor(this.armor[3]))));
+        this.damage(fallDamageAfterPotion(Math.max(raw > 0 ? 1 : 0, Math.round(raw * fallDamageFactor(this.armor[3]))), this.hasEffect('fall')));
       }
       if (fall > 1) {
         const below = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));

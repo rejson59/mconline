@@ -108,12 +108,13 @@ export const I = {
   BIOME_COMPASS: 352,
   WORM_BAIT: 353,
   GLOW_BAIT: 354,
+  POTION_FALL: 355, POTION_SPRINT: 356,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
 
 /** 2.4: effect a potion applies when drunk ('none' = base awkward brew). */
-export type PotionEffectId = 'none' | 'heal' | 'fire' | 'speed' | 'night' | 'strength' | 'regen';
+export type PotionEffectId = 'none' | 'heal' | 'fire' | 'speed' | 'night' | 'strength' | 'regen' | 'fall' | 'sprint';
 
 export interface ItemDef {
   id: number;
@@ -244,6 +245,8 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.POTION_NIGHT, name: 'Napój nocnego widzenia', keys: ['napoj_nocnego_widzenia', 'potion_night', 'night_vision'], kind: 'potion', potion: 'night', stack: 16, color: '#4ad0a8' },
   { id: I.POTION_STRENGTH, name: 'Napój siły', keys: ['napoj_sily', 'potion_strength', 'sila'], kind: 'potion', potion: 'strength', stack: 16, color: '#e0a030' },
   { id: I.POTION_REGEN, name: 'Napój regeneracji', keys: ['napoj_regeneracji', 'potion_regen', 'regeneration'], kind: 'potion', potion: 'regen', stack: 16, color: '#e06090' },
+  { id: I.POTION_FALL, name: 'Napój lekkiego lądowania', keys: ['napoj_ladowania', 'potion_fall'], kind: 'potion', potion: 'fall', stack: 16, color: '#81b9ef' },
+  { id: I.POTION_SPRINT, name: 'Napój zrywu', keys: ['napoj_zrywu', 'potion_sprint'], kind: 'potion', potion: 'sprint', stack: 16, color: '#e89d55' },
 ];
 
 const ARMOR_TIERS: {
