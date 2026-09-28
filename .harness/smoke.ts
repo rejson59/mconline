@@ -1666,6 +1666,68 @@ section('3.0 #58: visible camouflage for small swamp lizards');
   } finally { Math.random = random; }
 }
 
+section('3.0 #65: sand ambusher warns before an escapable leap');
+{
+  check('sandstalker counts as a real hostile instead of passive mob', isHostileMob('sandstalker'));
+  const world = new World(265, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 4; x <= 13; x++) for (let z = 6; z <= 10; z++) {
+    world.setBlock(x, y - 1, z, B.SAND);
+    for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  }
+  const enemy = new Mob('sandstalker', 6.5, y, 8.5);
+  const player = new THREE.Vector3(11, y, 8.5);
+  let wounds = 0;
+  const tick = (mob: Mob, calm = false) => mob.update(1 / 30, world, player, () => { wounds++; }, () => {}, calm);
+  const model = enemy as unknown as { sandBody: THREE.Group; sandMound: THREE.Mesh; sandWarning: THREE.Mesh; sandBuried: boolean };
+  check('buried enemy has visible mound but not visible hidden body', model.sandMound.visible && !model.sandBody.visible);
+  check('buried mound has small target area, not invisible full-height hitbox',
+    enemy.rayHit(new THREE.Vector3(6.5, y + 1.1, 4), new THREE.Vector3(0, 0, 1), 10) === null &&
+    enemy.rayHit(new THREE.Vector3(6.5, y + 0.1, 4), new THREE.Vector3(0, 0, 1), 10) !== null);
+
+  tick(enemy);
+  for (let i = 0; i < 20; i++) tick(enemy);
+  check('crest warns for over half a second with no instant damage', model.sandWarning.visible && model.sandBuried && wounds === 0);
+  player.x = 18;
+  tick(enemy);
+  check('retreat beyond ten blocks cancels windup and prevents hit', !model.sandWarning.visible && model.sandBuried && wounds === 0);
+  player.x = 8.2;
+  for (let i = 0; i < 40; i++) tick(enemy);
+  check('only after full warning does monster leap visibly out of sand', !model.sandBuried && model.sandBody.visible && !model.sandMound.visible && wounds === 0);
+  for (let i = 0; i < 55; i++) tick(enemy);
+  check('emerged pursuer can attack after a dodgeable delay', wounds >= 1);
+  player.x = 30;
+  for (let i = 0; i < 120; i++) tick(enemy);
+  check('enemy reburies when target flees and sand is still underfoot', model.sandBuried && model.sandMound.visible);
+  const calmMob = new Mob('sandstalker', 6.5, y, 8.5);
+  const woundCount = wounds;
+  player.x = 8.2;
+  for (let i = 0; i < 50; i++) tick(calmMob, true);
+  check('peaceful aggression never starts warning or ambush', (calmMob as unknown as {sandBuried: boolean}).sandBuried && wounds === woundCount);
+  // Actual engine spawn: desert biome alone is insufficient; there must be
+  // a loaded, dry sand cell with room for the creature to emerge.
+  const desert = new World(265, true);
+  desert.getChunk(0, 1);
+  desert.surface = () => ({ h: FLAT_H, biome: 'Pustynia', temp: 1, forest: 0 });
+  desert.setBlock(14, y - 1, 27, B.SAND);
+  desert.setBlock(14, y, 27, B.AIR);
+  desert.setBlock(14, y + 1, 27, B.AIR);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = desert; g.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  g.scene = { add: () => {}, remove: () => {} };
+  g.mobs = []; g.drops = []; g.isInNether = false;
+  g.mode = 'survival'; g.weather = 'clear'; g.time = 0.25;
+  g.spawnTimer = 0; g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.nowSeconds = () => 0;
+  const random = Math.random;
+  try { Math.random = () => 0.2; g.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('loaded desert sand produces actual ambusher in day-time game tick', g.mobs.some((m: Mob) => m.type === 'sandstalker'));
+  g.mobs = []; g.spawnTimer = 0; g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  try { Math.random = () => 0.2; g.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('calm difficulty suppresses desert enemy spawns', !g.mobs.some((m: Mob) => m.type === 'sandstalker'));
+}
+
 section('3.0 #68: bounded loaded-chunk pathfinding instead of wall pushing');
 {
   const world = new World(264, true);

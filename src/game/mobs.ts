@@ -6,7 +6,7 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'merchant' | 'pack_animal' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'sandstalker' | 'merchant' | 'pack_animal' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 /** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
 export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
@@ -182,7 +182,7 @@ export function fireEscapeHeading(world: Pick<World, 'peekBlock'>, x: number, y:
 }
 
 export function isHostileMob(type: MobType): boolean {
-  return type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton' || type === 'enderman' || type === 'slime' || type === 'ghast';
+  return type === 'sandstalker' || type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton' || type === 'enderman' || type === 'slime' || type === 'ghast';
 }
 
 /** Mieszkańcy i golemy nie znikają tak szybko, gdy gracz odejdzie od osady. */
@@ -235,6 +235,12 @@ export class Mob {
   private camouflageGround = -1;
   isCub = false;
   merchantRegion = '';
+  private sandBody: THREE.Group | null = null;
+  private sandMound: THREE.Mesh | null = null;
+  private sandWarning: THREE.Mesh | null = null;
+  private sandBuried = true;
+  private sandTelegraph = 0;
+  private sandActive = 0;
   private bearWarning: THREE.Mesh | null = null;
   private bearWindup = 0;
   private bearCooldown = 0;
@@ -275,6 +281,7 @@ export class Mob {
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' || type === 'merchant' || type === 'guard' ? 0.6
         : type === 'pack_animal' ? 0.9
+        : type === 'sandstalker' ? 0.7
         : type === 'bear' ? 1.15
         : type === 'turtle' ? 0.78
         : type === 'lizard' ? 0.36
@@ -298,6 +305,7 @@ export class Mob {
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
                   : type === 'pack_animal' ? 1.35
+                  : type === 'sandstalker' ? 1.15
                   : type === 'bear' ? 1.4
                   : type === 'turtle' ? 0.6
                   : type === 'lizard' ? 0.35
@@ -309,6 +317,7 @@ export class Mob {
       type === 'zombie' ? 20
         : type === 'creeper' ? 16
           : type === 'cow' ? 10
+            : type === 'sandstalker' ? 14
             : type === 'bear' ? 26
             : type === 'turtle' ? 10
             : type === 'lizard' ? 4
@@ -425,6 +434,33 @@ export class Mob {
       this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
       this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
       this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'sandstalker') {
+      const ochre = 0x8f6440, dark = 0x433624;
+      const mound = box(0.83, 0.1, 0.83, 0xc39d69, sharedMats);
+      mound.position.y = 0.06;
+      g.add(mound); this.meshes.push(mound); this.sandMound = mound;
+      const warning = box(0.62, 0.2, 0.14, 0xff8f32, sharedMats);
+      warning.position.set(0, 0.28, 0);
+      warning.visible = false;
+      g.add(warning); this.meshes.push(warning); this.sandWarning = warning;
+      const risen = new THREE.Group();
+      const torso = box(0.63, 0.76, 0.5, ochre, sharedMats);
+      torso.position.set(0, 0.75, 0);
+      const face = box(0.54, 0.28, 0.4, dark, sharedMats);
+      face.position.set(0, 1.2, 0.09);
+      risen.add(torso, face); this.meshes.push(torso, face);
+      for (const side of [-1, 1]) {
+        const eye = box(0.09, 0.07, 0.03, 0xf0de9d, sharedMats);
+        eye.position.set(side * 0.16, 1.24, 0.31);
+        const claw = box(0.18, 0.45, 0.2, dark, sharedMats);
+        claw.position.set(side * 0.43, 0.78, 0.12);
+        risen.add(eye, claw); this.meshes.push(eye, claw);
+        this.addLeg(side * 0.2, 0.25, 0, 0.19, 0.48, 0.18, ochre, this.legs);
+      }
+      // Legs are children of the main group, hidden separately while buried.
+      for (const leg of this.legs) { g.remove(leg); risen.add(leg); }
+      risen.visible = false;
+      g.add(risen); this.sandBody = risen;
     } else if (this.type === 'bear') {
       const fur = 0x684735, muzzle = 0xb99877, dark = 0x34271f;
       const torso = box(1.02, 0.92, 1.28, fur, sharedMats);
@@ -1654,6 +1690,60 @@ export class Mob {
     this.moveAndAnimate(dt, world, player, this.walking ? 1.2 : 0);
   }
 
+  /** The orange crest is visible and audible BEFORE the ambusher can deal
+   * damage. Running away during the warning cancels the emergence entirely. */
+  private updateSandstalker(dt: number, world: World, player: THREE.Vector3,
+    onAttack: (dmg: number, mob: Mob) => void, peaceful: boolean): void {
+    const b = this.body;
+    const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
+    const distance = Math.hypot(dx, dz);
+    const close = Math.abs(player.y - b.pos.y) < 3;
+    if (this.sandBuried) {
+      if (peaceful || !close || distance > 10) {
+        this.sandTelegraph = 0;
+        this.sandWarning!.visible = false;
+      } else if (distance < 8 || this.hurtTime > 0 || this.sandTelegraph > 0) {
+        if (this.sandTelegraph <= 0) {
+          this.sandTelegraph = 1.25;
+          this.sandWarning!.visible = true;
+          this.soundTimer = 0.1;
+        } else {
+          this.sandTelegraph -= dt;
+          if (this.sandTelegraph <= 0) {
+            this.sandBuried = false;
+            this.sandBody!.visible = true;
+            this.sandMound!.visible = false;
+            this.sandWarning!.visible = false;
+            this.sandActive = 8;
+            b.vel.y = 5.5;
+            this.attackCooldown = Math.max(this.attackCooldown, 0.6);
+          }
+        }
+      }
+      this.walking = false;
+      this.moveAndAnimate(dt, world, player, 0);
+      return;
+    }
+    this.sandActive -= dt;
+    const onSand = world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y) - 1, Math.floor(b.pos.z)) === B.SAND;
+    if ((peaceful || distance > 14 || this.sandActive <= 0) && b.onGround && onSand) {
+      this.sandBuried = true;
+      this.sandBody!.visible = false;
+      this.sandMound!.visible = true;
+      this.sandWarning!.visible = false;
+      this.walking = false;
+      this.moveAndAnimate(dt, world, player, 0);
+      return;
+    }
+    this.yaw = Math.atan2(dx, dz);
+    this.walking = !peaceful && close && distance > 1.3 && distance < 14;
+    if (!peaceful && distance < 1.7 && Math.abs(player.y - b.pos.y) < 2 && this.attackCooldown <= 0) {
+      onAttack(3, this);
+      this.attackCooldown = 1.4;
+    }
+    this.moveToward(dt, world, player, this.walking ? 2 : 0, player.x, player.z);
+  }
+
   private updateBear(dt: number, world: World, player: THREE.Vector3, allies: Mob[], food: readonly FoxFood[],
     onAttack: (dmg: number, mob: Mob) => void, peaceful: boolean): void {
     const b = this.body;
@@ -1812,6 +1902,10 @@ export class Mob {
     }
     if (this.type === 'golem') {
       this.updateGolem(dt, world, player, allies, onAttack);
+      return;
+    }
+    if (this.type === 'sandstalker') {
+      this.updateSandstalker(dt, world, player, onAttack, peaceful);
       return;
     }
     if (this.type === 'bear') {
@@ -2145,7 +2239,7 @@ export class Mob {
     const b = this.body;
     const hw = b.w / 2 + 0.1;
     const min = [b.pos.x - hw, b.pos.y, b.pos.z - hw];
-    const max = [b.pos.x + hw, b.pos.y + b.h, b.pos.z + hw];
+    const max = [b.pos.x + hw, b.pos.y + (this.type === 'sandstalker' && this.sandBuried ? 0.22 : b.h), b.pos.z + hw];
     const oo = [o.x, o.y, o.z], dd = [d.x, d.y, d.z];
     let tmin = 0, tmax = maxDist;
     for (let i = 0; i < 3; i++) {

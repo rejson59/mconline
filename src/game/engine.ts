@@ -17,7 +17,7 @@ import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics
 import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, batSpawnAllowed, merchantProfession, type FoxFood, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
-const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
+const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast', 'sandstalker']);
 import { Inventory, RECIPES, type Stack } from './inventory';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
@@ -233,6 +233,7 @@ export const MOB_NAMES: Record<MobType, string> = {
   guard: 'Strażnik wioski',
   merchant: 'Wędrowny kupiec',
   pack_animal: 'Zwierzę juczne',
+  sandstalker: 'Piaskowy zasadzkarz',
   midge: 'Meszka',
   bat: 'Nietoperz',
   lizard: 'Jaszczurka',
@@ -2677,7 +2678,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', guard: 'guard', strażnik: 'guard', straznik: 'guard', merchant: 'merchant', kupiec: 'merchant', pack_animal: 'pack_animal', juczne: 'pack_animal', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', guard: 'guard', strażnik: 'guard', straznik: 'guard', merchant: 'merchant', kupiec: 'merchant', pack_animal: 'pack_animal', juczne: 'pack_animal', sandstalker: 'sandstalker', zasadzkarz: 'sandstalker', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2689,7 +2690,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, guard, merchant, pack_animal, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, guard, merchant, pack_animal, sandstalker, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -4610,11 +4611,11 @@ export class Game {
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 1.5;
       const alive = this.mobs.filter((m) => !m.dead);
-      const hostile = alive.filter((m) => HOSTILE_MOBS.has(m.type)).length;
-      const passive = alive.length - hostile;
+      const passive = alive.filter((m) => !HOSTILE_MOBS.has(m.type)).length;
       // Recount after each spawn branch: a single 1.5 s tick can otherwise
       // add several families and exceed the mobile-friendly passive cap.
       const passiveCount = () => this.mobs.filter((m) => !m.dead && !HOSTILE_MOBS.has(m.type)).length;
+      const hostileCount = () => this.mobs.filter((m) => !m.dead && HOSTILE_MOBS.has(m.type)).length;
       const tryPos = (minD: number, maxD: number) => {
         const ang = Math.random() * Math.PI * 2;
         const dist = minD + Math.random() * (maxD - minD);
@@ -4721,9 +4722,20 @@ export class Game {
           }
         }
       }
+      // Sand ambushers give a long mound/crest warning before leaping, even
+      // during the day. They only arise from loaded desert sand, never in calm.
+      if (!this.isInNether && this.difficulty.aggression !== 'spokojna' &&
+        hostileCount() < hostileCap(this.difficulty.aggression)) {
+        const desert = tryPos(16, 34);
+        if (desert?.top === B.SAND &&
+          this.world.peekBlock(Math.floor(desert.x), Math.floor(desert.y), Math.floor(desert.z)) === B.AIR &&
+          (this.world.surface(Math.floor(desert.x), Math.floor(desert.z)).biome === 'Pustynia' ||
+            this.world.surface(Math.floor(desert.x), Math.floor(desert.z)).biome === 'Pustkowie') &&
+          Math.random() < 0.25) this.spawnMob('sandstalker', desert.x, desert.y + 0.1, desert.z);
+      }
       if (this.isInNether) {
         // Nether: piwniczne bestie zawsze, a Ghasty tylko w otwartej przestrzeni.
-        if (hostile < hostileCap(this.difficulty.aggression)) {
+        if (hostileCount() < hostileCap(this.difficulty.aggression)) {
           const pos = tryPos(16, 40);
           if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES && pos.top !== B.LAVA) {
             const roll = Math.random();
@@ -4735,7 +4747,7 @@ export class Game {
             }
           }
         }
-      } else if (hostile < hostileCap(this.difficulty.aggression) && dl < 0.4) {
+      } else if (hostileCount() < hostileCap(this.difficulty.aggression) && dl < 0.4) {
         const pos = tryPos(18, 40);
         if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES) {
           const roll = Math.random();
@@ -4744,7 +4756,7 @@ export class Game {
         }
       }
       this.spawnVillageFolk();
-      if (hostile < Math.max(0, hostileCap(this.difficulty.aggression) - 2)) {
+      if (hostileCount() < Math.max(0, hostileCap(this.difficulty.aggression) - 2)) {
         const ang = Math.random() * Math.PI * 2;
         const dist = 14 + Math.random() * 22;
         const x = Math.floor(p.x + Math.cos(ang) * dist);
@@ -5183,6 +5195,10 @@ export class Game {
       if (meat) this.spawnDrop(I.RAW_BEEF, meat, x, y, z);
       const hide = Math.floor(Math.random() * 3);
       for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
+    else if (m.type === 'sandstalker') {
+      this.spawnDrop(B.SAND, 1, x, y, z);
+      if (Math.random() < 0.3) this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
     }
     else if (m.type === 'pack_animal') {
       this.spawnDrop(I.LEATHER, 1, x, y, z);
