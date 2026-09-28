@@ -125,6 +125,7 @@ section('adventure journal: quests and progress');
   const hud = {
     worldName: 'Nowy świat', day: 3, biome: 'plains', level: 4,
     pos: [12.8, 65.2, -3.4], seed: 1234, mode: 'survival',
+    challenges: { challenge_builder: 7, challenge_hunter: 2, challenge_explorer: 1 },
   };
   const html = renderToStaticMarkup(
     <JournalScreen hud={hud as never} unlocked={unlocked} onClose={noop} />
@@ -133,6 +134,7 @@ section('adventure journal: quests and progress');
   check('journal lists unfinished objectives', html.includes('Wyprawa pod ziemię') && html.includes('Diamenty!'));
   check('journal includes accessible progress indicators', html.includes('role="progressbar"') && html.includes('aria-valuenow="3"'));
   check('journal shows world seed and return hint', html.includes('1234') && html.includes('powrót do gry'));
+  check('journal lists measurable building, combat and exploration challenges', html.includes('Budowniczy osady') && html.includes('Obrońca szlaku') && html.includes('Wędrowiec biomów') && html.includes('7/20') && html.includes('2/5') && html.includes('1/3'));
 }
 
 section('world list: search and sorting');
@@ -381,10 +383,11 @@ section('2.4: brewing screen');
 
 section('2.3/2.4: journal chapter and menus');
 {
-  check('the journal has ten chapters', JOURNAL_CHAPTERS.length === 10, String(JOURNAL_CHAPTERS.length));
+  check('the journal has eleven chapters', JOURNAL_CHAPTERS.length === 11, String(JOURNAL_CHAPTERS.length));
   const last = JOURNAL_CHAPTERS.find((chapter) => chapter.title === 'Godzina alchemika')!;
   check('the latest chapter is about the alchemist hour', last.title === 'Godzina alchemika', last.title);
   check('it covers brewing, healing, fire and mastery', ['alchemist', 'tonic', 'fireproof', 'potioneer'].every((id) => last.goals.includes(id as never)), last.goals.join(','));
+  check('new challenge chapter has three real achievements', JOURNAL_CHAPTERS.some((chapter) => chapter.title === 'Wyzwania świata' && chapter.goals.every((id) => ACHIEVEMENTS.some((a) => a.id === id))));
   const biomeChapter = JOURNAL_CHAPTERS.find((chapter) => chapter.title === 'Szlak sześciu biomów');
   check('biome expedition is playable in the journal', !!biomeChapter && biomeChapter.goals.length === 6 && biomeChapter.goals.every((id) => ACHIEVEMENTS.some((a) => a.id === id)));
   check('journal remembers partial biome visits', journalProgress(['biome_swamp']).find((c) => c.title === 'Szlak sześciu biomów')?.done === 1);

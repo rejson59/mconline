@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, type Biome } from './world';
 import { DiscoveryMap, type DiscoverySave } from './discoveryMap';
+import { CHALLENGES, normalizeChallenges, type ChallengeId, type ChallengeProgress } from './challenges';
 import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, resourceDropCount, type WorldDifficulty } from './difficulty';
 import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
@@ -139,6 +140,7 @@ export interface HUDState {
   bait?: string | null;
   /** 2.4: aktywne efekty napojów (ikona, nazwa, sekundy pozostałe). */
   effects: { id: string; icon: string; name: string; left: number }[];
+  challenges: ChallengeProgress;
 }
 
 export interface TradeRow {
@@ -201,6 +203,7 @@ export interface SaveData {
   effects?: Record<string, number>;
   /** Optional 3.0 per-world rules. Older worlds use the 2.7 normal defaults. */
   difficulty?: WorldDifficulty;
+  challengeProgress?: ChallengeProgress;
   /** Explored chunk tiles, stored separately for both dimensions. Absent in 2.x saves. */
   discovery?: DiscoverySave;
 }
@@ -501,6 +504,7 @@ export class Game {
   /** Aktywne efekty napojów (id → pozostałe ms), zachowywane w zapisie. */
   private effects = new Map<PotionEffectId, number>();
   difficulty: WorldDifficulty = { ...DEFAULT_DIFFICULTY };
+  challengeProgress: ChallengeProgress = normalizeChallenges(undefined);
   /** 2.4: odliczanie leczenia z napoju regeneracji. */
   private potionRegenAcc = 0;
   /** 2.4: jakie butelki gracz kiedykolwiek wypił (osiągnięcie „Mistrz eliksirów”). */
@@ -786,8 +790,15 @@ export class Game {
         if (typeof id === 'number' && POTIONS[id]) this.potionsDrunk.add(id);
       }
       for (const id of opts.save.unlocked ?? []) this.unlocked.add(id);
+      this.challengeProgress = normalizeChallenges(opts.save.challengeProgress, this.unlocked);
       this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
       this.xp = new Xp(opts.save.xp ?? 0);
+      // Pre-3.0 explorers with three recorded biome visits deserve the new
+      // chapter reward once, even if all six biomes were already visited.
+      if (this.challengeProgress.challenge_explorer >= CHALLENGES.challenge_explorer.target && !this.unlocked.has('challenge_explorer')) {
+        this.unlocked.add('challenge_explorer');
+        this.xp.add(CHALLENGES.challenge_explorer.rewardXp);
+      }
       this.trades = opts.save.trades ?? 0;
       this.discovery = DiscoveryMap.fromSave(opts.save.discovery);
       this.waypoints = (opts.save.waypoints ?? []).filter((w) =>
@@ -1843,6 +1854,23 @@ export class Game {
     this.emitHud();
   }
 
+  /** Bounded counters and once-per-world rewards, shared by building, combat and exploration. */
+  private advanceChallenge(id: ChallengeId) {
+    // Older prototype-only tests and imported saves can omit this optional field.
+    this.challengeProgress ??= normalizeChallenges(undefined, this.unlocked);
+    const rule = CHALLENGES[id];
+    const next = Math.min(rule.target, this.challengeProgress[id] + 1);
+    if (next === this.challengeProgress[id]) return;
+    this.challengeProgress[id] = next;
+    if (next === rule.target && !this.unlocked.has(id)) {
+      this.unlock(id);
+      if (this.mode === 'survival') {
+        this.gainXp(rule.rewardXp);
+        this.message(`Ukończono wyzwanie: ${rule.label}. +${rule.rewardXp} PD.`);
+      }
+    }
+  }
+
   /** Only entering a biome earns its journal goal; the unlocked set is saved. */
   private lastBiomeVisitKey = '';
 
@@ -1850,6 +1878,7 @@ export class Game {
     const id = BIOME_DISCOVERY_GOALS[biome];
     if (!id || this.unlocked.has(id)) return;
     this.unlock(id);
+    this.advanceChallenge('challenge_explorer');
     if (this.mode === 'survival') {
       this.gainXp(3);
       this.message('Odkrycie biomu: +3 PD.');
@@ -2805,6 +2834,7 @@ export class Game {
         potionsDrunk: this.potionsDrunk ? [...this.potionsDrunk] : [],
         effects: Object.fromEntries(this.effects ?? []),
         difficulty: normalizeDifficulty(this.difficulty),
+        challengeProgress: { ...this.challengeProgress },
         unlocked: [...this.unlocked],
         weather: this.weather,
         xp: this.xp.total,
@@ -3044,6 +3074,7 @@ export class Game {
           mob.body.vel.z *= kb;
           mob.body.vel.y = Math.max(mob.body.vel.y, 6 * kb);
         }
+        if (mob.dead && isHostileMob(mob.type)) this.advanceChallenge('challenge_hunter');
         Sfx.playHurt();
         Sfx.playMob(mob.type);
         this.wearTool();
@@ -3385,6 +3416,7 @@ export class Game {
             ) {
               if (a.pearl) { spent = true; break; }
               if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2)) {
+                if (m.dead && isHostileMob(m.type)) this.advanceChallenge('challenge_hunter');
                 mb.vel.x += dir.x * 4;
                 mb.vel.z += dir.z * 4;
                 mb.vel.y = Math.max(mb.vel.y, 2.5);
@@ -3583,6 +3615,7 @@ export class Game {
       this.swingT = 0;
       this.consumeSelected();
       this.unlock('home');
+      this.advanceChallenge('challenge_builder');
       return;
     } else if (isLadder(id)) {
       if (t.ny !== 0) { this.message('Drabina musi wisieć na ścianie.'); return; }
@@ -3591,6 +3624,7 @@ export class Game {
       Sfx.playPlace('wood');
       this.swingT = 0;
       this.consumeSelected();
+      this.advanceChallenge('challenge_builder');
       return;
     } else if (isTrap(id)) {
       if (t.ny === 1) this.world.setBlock(px, py, pz, B.TRAP);
@@ -3599,6 +3633,7 @@ export class Game {
       Sfx.playPlace('wood');
       this.swingT = 0;
       this.consumeSelected();
+      this.advanceChallenge('challenge_builder');
       return;
     } else if (id === B.CHEST) {
       this.unlock('stash');
@@ -3607,6 +3642,7 @@ export class Game {
     }
     const finalId = placeId ?? id;
     this.world.setBlock(px, py, pz, finalId);
+    this.advanceChallenge('challenge_builder');
     this.settle(px, py, pz);
     // redstone update
     this.onBlockChanged(px, py, pz);
@@ -4799,6 +4835,7 @@ export class Game {
       lockCooldown: !this.locked && !this.touchInput && this.lastLockExit > 0 && performance.now() - this.lastLockExit < 1600,
       fishing: this.fishingState(),
       bait: this.fishingBait ? displayName(this.fishingBait) : null,
+      challenges: { ...this.challengeProgress },
       // 2.4: aktywne wzmocnienia napojów (ikona + nazwa + sekundy)
       effects: [...this.effects.entries()]
         .filter(([id]) => id !== 'none')

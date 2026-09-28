@@ -82,6 +82,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'biome_taiga', title: 'Pośród świerków', text: 'Wejdź do Tajgi. Nagroda: 3 PD.' },
   { id: 'biome_wasteland', title: 'Sucha ziemia', text: 'Wejdź na Pustkowie. Nagroda: 3 PD.' },
   { id: 'biome_meadow', title: 'Kwiecista wyprawa', text: 'Wejdź na Kwiecistą łąkę. Nagroda: 3 PD.' },
+  { id: 'challenge_builder', title: 'Budowniczy osady', text: 'Postaw 20 bloków. Nagroda: 10 PD.' },
+  { id: 'challenge_hunter', title: 'Obrońca szlaku', text: 'Pokonaj 5 wrogich mobów. Nagroda: 10 PD.' },
+  { id: 'challenge_explorer', title: 'Wędrowiec biomów', text: 'Odwiedź 3 różne biomy. Nagroda: 10 PD.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

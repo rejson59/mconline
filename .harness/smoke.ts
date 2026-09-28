@@ -50,6 +50,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
 import { DiscoveryMap, MAP_LIMIT } from '../src/game/discoveryMap';
+import { CHALLENGES, normalizeChallenges } from '../src/game/challenges';
 import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, oreYield, resourceDropCount } from '../src/game/difficulty';
 import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeCompass';
 import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
@@ -1127,6 +1128,83 @@ section('engine: armor damage, equipping, xp');
   eq('active potion buffs cleared on death', g.effects.size, 0);
 }
 
+section('3.0 #79: build, combat and exploration challenges');
+{
+  check('all three challenge goals exist as journal achievements', Object.keys(CHALLENGES).every((id) => !!achievementById(id)));
+  const base = normalizeChallenges(null);
+  eq('2.7 saves start with no challenge counters', Object.values(base).join(','), '0,0,0');
+  const migrated = normalizeChallenges({ challenge_builder: 7.9, challenge_hunter: -10, challenge_explorer: 999, bogus: 99 }, ['biome_swamp', 'biome_savanna']);
+  eq('building progress is sanitized on import', migrated.challenge_builder, 7);
+  eq('negative combat progress is rejected', migrated.challenge_hunter, 0);
+  eq('old first-visit achievements contribute to exploration', migrated.challenge_explorer, 2);
+  eq('three pre-existing biome visits can complete the challenge on load', normalizeChallenges({}, ['biome_swamp', 'biome_savanna', 'biome_jungle']).challenge_explorer, 3);
+  eq('completed challenge cannot be demoted by a bad save', normalizeChallenges({}, ['challenge_hunter']).challenge_hunter, CHALLENGES.challenge_hunter.target);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.challengeProgress = normalizeChallenges(undefined);
+  g.unlocked = new Set();
+  g.mode = 'survival';
+  g.emitHud = () => {};
+  g.message = () => {};
+  let xp = 0;
+  g.gainXp = (n: number) => { xp += n; };
+  for (let i = 0; i < 19; i++) g.advanceChallenge('challenge_builder');
+  check('nineteen placed blocks show partial progress with no reward', g.challengeProgress.challenge_builder === 19 && xp === 0 && !g.unlocked.has('challenge_builder'));
+  g.advanceChallenge('challenge_builder');
+  check('twentieth placed block awards once', g.challengeProgress.challenge_builder === 20 && xp === 10 && g.unlocked.has('challenge_builder'));
+  g.advanceChallenge('challenge_builder');
+  eq('repeated actions after completion cannot farm rewards', xp, 10);
+  for (let i = 0; i < 5; i++) g.advanceChallenge('challenge_hunter');
+  check('combat challenge uses its own counter and reward', g.challengeProgress.challenge_hunter === 5 && xp === 20);
+  g.advanceChallenge('challenge_explorer');
+  check('exploration does not increment combat or building', g.challengeProgress.challenge_explorer === 1 && xp === 20);
+  eq('saved counters and achievements cannot repay completed reward', normalizeChallenges(JSON.parse(JSON.stringify(g.challengeProgress)), g.unlocked).challenge_builder, 20);
+  // The live placement and melee paths (shared by PC clicks and touch taps)
+  // advance counters only after successful actions, never on invalid targets.
+  const live = Object.create(Game.prototype) as unknown as Record<string, any>;
+  live.mode = 'survival';
+  live.challengeProgress = normalizeChallenges(undefined);
+  live.unlocked = new Set();
+  live.message = () => {};
+  live.emitHud = () => {};
+  live.keys = new Set();
+  live.mobs = [];
+  live.body = { pos: new THREE.Vector3(5.5, 65, 5.5), w: 0.6, h: 1.8 };
+  live.findMobTarget = () => ({ mob: null, dist: Infinity });
+  live.selectedStack = () => ({ id: B.COBBLE, count: 1 });
+  live.tryMakePath = () => false;
+  live.settle = () => {};
+  live.onBlockChanged = () => {};
+  live.growables = new Map();
+  live.consumeSelected = () => {};
+  live.target = null;
+  live.tryUse();
+  eq('using an item without a target does not build', live.challengeProgress.challenge_builder, 0);
+  let placed = 0;
+  live.world = {
+    getBlock: (_x: number, y: number) => y <= 64 ? B.STONE : B.AIR,
+    setBlock: () => { placed++; },
+  };
+  live.target = { id: B.STONE, x: 2, y: 64, z: 2, nx: 0, ny: 1, nz: 0 };
+  live.tryUse();
+  check('placing a real block advances construction', placed === 1 && live.challengeProgress.challenge_builder === 1);
+  const zombie = new Mob('zombie', 6, 65, 6);
+  zombie.health = 1;
+  live.findMobTarget = () => ({ mob: zombie, dist: 1 });
+  live.target = null;
+  live.selectedStack = () => null;
+  live.attackCooldown = 0;
+  live.sprinting = false;
+  live.hunger = 20;
+  live.wearTool = () => {};
+  live.hasEffect = () => false;
+  live.tryAttack();
+  check('a direct lethal melee hit counts as combat', zombie.dead && live.challengeProgress.challenge_hunter === 1);
+  live.attackCooldown = 0;
+  live.tryAttack();
+  eq('dead enemies cannot grant a second kill', live.challengeProgress.challenge_hunter, 1);
+
+}
+
 section('3.0 #81: independent, live per-world difficulty');
 {
   eq('legacy saves use 2.7 normal settings', JSON.stringify(normalizeDifficulty(undefined)), JSON.stringify(DEFAULT_DIFFICULTY));
@@ -1170,6 +1248,7 @@ section('3.0 #80: first-visit biome rewards');
   check('six exploration goals are real achievements', expected.every((b) => achievementById(BIOME_DISCOVERY_GOALS[b]!) !== undefined));
   const g = Object.create(Game.prototype) as unknown as Record<string, any>;
   g.unlocked = new Set();
+  g.challengeProgress = normalizeChallenges(undefined);
   g.mode = 'survival';
   g.toast = null;
   g.message = () => {};
@@ -1189,7 +1268,7 @@ section('3.0 #80: first-visit biome rewards');
   g.discoverBiome('Tajga');
   check('Creative earns journal entry without experience', xp === 6 && g.unlocked.has('biome_taiga'));
   g.discoverBiome('Nether');
-  eq('the Nether does not award overworld goals', g.unlocked.size, 3);
+  check('the Nether does not award overworld goals', g.unlocked.size === 4 && !g.unlocked.has('biome_nether'));
   let samples = 0;
   g.mode = 'survival';
   g.lastBiomeVisitKey = '';
@@ -1642,6 +1721,7 @@ section('saves: enchantments ride along');
   g.emitHud = () => {};
   g.potionsDrunk = new Set<number>();
   g.unlocked = new Set(['wood', 'biome_swamp']);
+  g.challengeProgress = normalizeChallenges({ challenge_builder: 7 }, g.unlocked);
   g.weather = 'clear';
   g.xp = new Xp(42);
   g.armor = [{ id: I.IRON_BOOTS, count: 1, dur: 100, ench: { featherfalling: 3 } }];
@@ -1661,6 +1741,8 @@ section('saves: enchantments ride along');
   eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
   check('first-visit biome progress persists in a world export', stored.unlocked?.includes('biome_swamp') && exportSave('ench-test')?.includes('biome_swamp'));
+  eq('building challenge counter persists in world save', stored.challengeProgress?.challenge_builder, 7);
+  check('challenge progress survives export without changing inventory', exportSave('ench-test')?.includes('challenge_builder') === true);
   eq('legacy difficulty defaults are preserved when saved', stored.difficulty?.aggression, 'normalna');
   check('difficulty on an existing world can be changed and saved instantly', g.setDifficulty({ aggression: 'zaciekla', resources: 'obfite' }) === true);
   const updated = loadSaves().find((s) => s.id === 'ench-test') as unknown as SaveData;
