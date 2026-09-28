@@ -61,7 +61,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, pickPassiveMob, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -1460,6 +1460,84 @@ section('3.0 #53: biome foxes hunt, flee and steal only dropped food');
   game.mobs[0].attackCooldown = 0;
   game.updateMobs(1 / 30);
   check('fox consuming last unit removes the entity rather than duplicating it', game.drops.length === 0 && removed === 1 && feedback === 2, `${JSON.stringify(game.drops.map((d: {count:number}) => d.count))} removed=${removed} feedback=${feedback}`);
+}
+
+section('3.0 #54: frogs at real water and their insect prey');
+{
+  const world = new World(78, true);
+  world.getChunk(0, 0);
+  world.getChunk(1, 0);
+  eq('flat dry land does not spawn pond life', shoreWaterNearby(world, 8, FLAT_H + 1, 8), false);
+  world.setBlock(11, FLAT_H, 8, B.WATER);
+  eq('water three blocks from a shore is detected', shoreWaterNearby(world, 8, FLAT_H + 1, 8), true);
+  eq('distant water is not mistaken for a pond', shoreWaterNearby(world, 4, FLAT_H + 1, 8), false);
+  const knownChunks = world.chunks.size;
+  shoreWaterNearby(world, -1, FLAT_H + 1, 8);
+  eq('pond check never creates neighboring chunks', world.chunks.size, knownChunks);
+  check('frog and insect have distinct Polish target names', MOB_NAMES.frog === 'Żaba' && MOB_NAMES.midge === 'Meszka');
+  check('frog is passive and compact with visible throat and eyes', (() => {
+    const frog = new Mob('frog', 8.5, FLAT_H + 1, 8.5);
+    return !isHostileMob('frog') && frog.body.h < 0.6 && frog.legs.length === 4 && frog.meshes.length >= 10;
+  })());
+  const flyer = new Mob('midge', 6.5, FLAT_H + 2, 6.5);
+  const flyY = flyer.body.pos.y;
+  for (let i = 0; i < 60; i++) flyer.update(1 / 30, world, new THREE.Vector3(40, 65, 40), () => {}, () => {}, false);
+  check('insects hover over the shore without falling', Math.abs(flyer.body.pos.y - flyY) < 0.3 && flyer.body.pos.y > FLAT_H + 1.5);
+  const frog = new Mob('frog', 8.5, FLAT_H + 1, 8.5);
+  const prey = new Mob('midge', 9.4, FLAT_H + 1.35, 8.5);
+  frog.update(1 / 30, world, new THREE.Vector3(40, 65, 40), () => {}, () => {}, false, [frog, prey]);
+  check('frog catches an actual insect and shows a tongue lunge', prey.dead && frog.head.children.some((part) => part instanceof THREE.Mesh && part.visible && (part as THREE.Mesh).position.z === 0.4));
+  const jumper = new Mob('frog', 5.5, FLAT_H + 1, 5.5);
+  jumper.walking = true;
+  jumper.aiTimer = 6;
+  let jumped = false;
+  for (let i = 0; i < 65; i++) {
+    jumper.update(1 / 30, world, new THREE.Vector3(40, 65, 40), () => {}, () => {}, false);
+    if (jumper.body.pos.y > FLAT_H + 1.35) jumped = true;
+  }
+  check('frogs jump instead of merely sliding', jumped);
+
+  // Real spawn pathway picks a loaded shoreline on the existing flat biome.
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world;
+  g.body = { pos: new THREE.Vector3(8.5, FLAT_H + 1, 8.5) };
+  g.mode = 'survival';
+  g.time = 0.25;
+  g.isInNether = false;
+  g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  g.mobs = [];
+  g.spawnTimer = 0;
+  g.spawnVillageFolk = () => {};
+  g.scene = { remove: () => {} };
+  g.spawnMob = (type: MobType, x: number, y: number, z: number) => { const m = new Mob(type, x, y, z); g.mobs.push(m); return m; };
+  world.setBlock(31, FLAT_H, 8, B.WATER);
+  const random = Math.random;
+  try {
+    Math.random = () => 0;
+    g.updateMobs(1 / 30);
+    check('engine spawns frogs with insects beside loaded water in Survival', g.mobs.some((m: Mob) => m.type === 'frog') && g.mobs.some((m: Mob) => m.type === 'midge'));
+    g.mobs = [];
+    world.setBlock(31, FLAT_H, 8, B.GRASS);
+    g.spawnTimer = 0;
+    g.updateMobs(1 / 30);
+    check('same seed/ground without water does not spawn a frog', !g.mobs.some((m: Mob) => m.type === 'frog' || m.type === 'midge'));
+    g.mobs = [];
+    g.isInNether = true;
+    g.spawnTimer = 0;
+    g.updateMobs(1 / 30);
+    check('Nether never spawns pond life', !g.mobs.some((m: Mob) => m.type === 'frog' || m.type === 'midge'));
+    g.mobXp = Game.prototype['mobXp'];
+    let orbs = 0;
+    g.dropXpOrbs = () => { orbs++; };
+    g.mobXp(prey, 0, 0, 0);
+    eq('insects cannot become an unlimited XP farm', orbs, 0);
+    const drops: number[] = [];
+    g.spawnDrop = (id: number) => { drops.push(id); };
+    g.mobXp = () => {};
+    g.unlock = () => {};
+    g.mobLoot(frog);
+    check('frog has a rare usable slimeball drop', drops.includes(I.SLIME_BALL));
+  } finally { Math.random = random; }
 }
 
 // ======================================================================== wolf

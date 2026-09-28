@@ -5,7 +5,7 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 /** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
 export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
@@ -17,6 +17,16 @@ export function pickPassiveMob(roll: number, biome: Biome): MobType {
       (biome === 'Kwiecista łąka' && roll >= 0.42 && roll < 0.54) ||
       (biome === 'Las' && roll >= 0.1 && roll < 0.18)) return 'fox';
   return roll < 0.1 ? 'wolf' : roll < 0.4 ? 'cow' : roll < 0.65 ? 'chicken' : roll < 0.88 ? 'pig' : 'sheep';
+}
+
+/** Checks only already-loaded cells around solid shore ground. No chunk
+ * generation, so a pond crossing a chunk border remains safe to query. */
+export function shoreWaterNearby(world: Pick<World, 'peekBlock'>, x: number, y: number, z: number): boolean {
+  for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+    if (world.peekBlock(x + dx, y - 1, z + dz) === B.WATER ||
+        world.peekBlock(x + dx, y, z + dz) === B.WATER) return true;
+  }
+  return false;
 }
 
 export function isHostileMob(type: MobType): boolean {
@@ -66,6 +76,8 @@ export class Mob {
   bonusLoot = 0;
   /** A purely visual munching cue, not a held inventory item. */
   foxSnack = 0;
+  private tongueTime = 0;
+  private tongueMesh: THREE.Mesh | null = null;
   /** True while a spider crawls up a wall (drives the leg animation). */
   climbing = false;
   /** 1.6: zawód mieszkańca (indeks w PROFESSIONS) i jego stan handlu. */
@@ -88,6 +100,8 @@ export class Mob {
     this.home.set(x, y, z);
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
+        : type === 'frog' ? 0.48
+        : type === 'midge' ? 0.2
         : type === 'fox' ? 0.55
         : type === 'rabbit' ? 0.38
         : type === 'chicken' ? 0.45
@@ -104,12 +118,15 @@ export class Mob {
             : type === 'enderman' ? 2.9
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
+                  : type === 'frog' ? 0.47 : type === 'midge' ? 0.26
                   : type === 'fox' ? 0.72 : type === 'rabbit' ? 0.65 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
     this.maxHealth = this.health =
       type === 'zombie' ? 20
         : type === 'creeper' ? 16
           : type === 'cow' ? 10
+            : type === 'frog' ? 5
+            : type === 'midge' ? 1
             : type === 'fox' ? 9
             : type === 'rabbit' ? 4
             : type === 'chicken' ? 4
@@ -209,6 +226,53 @@ export class Mob {
       this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
       this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
       this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'frog') {
+      const green = 0x4d9b40, dark = 0x28643d, cream = 0xd6de8e;
+      const body = box(0.45, 0.29, 0.48, green, sharedMats);
+      body.position.set(0, 0.22, -0.05);
+      const throat = box(0.32, 0.17, 0.25, cream, sharedMats);
+      throat.position.set(0, 0.17, 0.26);
+      g.add(body, throat);
+      this.meshes.push(body, throat);
+      const head = new THREE.Group();
+      head.position.set(0, 0.29, 0.24);
+      const face = box(0.4, 0.24, 0.29, green, sharedMats);
+      head.add(face);
+      this.meshes.push(face);
+      for (const side of [-1, 1]) {
+        const eye = box(0.14, 0.18, 0.15, green, sharedMats);
+        eye.position.set(side * 0.14, 0.16, 0.03);
+        const pupil = box(0.064, 0.065, 0.025, 0x101b12, sharedMats);
+        pupil.position.set(side * 0.14, 0.19, 0.118);
+        head.add(eye, pupil);
+        this.meshes.push(eye, pupil);
+      }
+      const tongue = box(0.065, 0.04, 0.6, 0xed797c, sharedMats);
+      tongue.position.set(0, -0.085, 0.4);
+      tongue.visible = false;
+      head.add(tongue);
+      this.meshes.push(tongue);
+      this.tongueMesh = tongue;
+      g.add(head);
+      this.head = head;
+      for (const side of [-1, 1]) {
+        this.addLeg(side * 0.19, 0.14, -0.16, 0.16, 0.18, 0.21, dark, this.legs);
+        this.addLeg(side * 0.18, 0.1, 0.21, 0.1, 0.13, 0.17, green, this.legs);
+      }
+    } else if (this.type === 'midge') {
+      // Simple two-wing insect: a lightweight prey object, no item or XP farm.
+      const thorax = box(0.1, 0.11, 0.14, 0x525038, sharedMats);
+      const head = new THREE.Group();
+      head.position.set(0, 0.05, 0.13);
+      const face = box(0.08, 0.08, 0.08, 0xe6c869, sharedMats);
+      head.add(face);
+      g.add(thorax, head);
+      this.meshes.push(thorax, face);
+      this.head = head;
+      for (const side of [-1, 1]) {
+        const wing = this.addLeg(side * 0.04, 0.08, 0, 0.22, 0.02, 0.14, 0xddeaf1, this.arms);
+        wing.rotation.z = side * -0.3;
+      }
     } else if (this.type === 'fox') {
       // Narrow red-orange body, dark paws, white chest and broad light-tipped
       // tail stay legible in the low-detail render preset.
@@ -874,6 +938,62 @@ export class Mob {
     return true;
   }
 
+  /** Lightweight pond insect: short wandering flights around its spawn point;
+   * movement checks only the current block, never generates a distant chunk. */
+  private updateMidge(dt: number, world: World): void {
+    this.aiTimer -= dt;
+    const b = this.body;
+    if (this.aiTimer <= 0) {
+      this.aiTimer = 0.8 + Math.random() * 1.4;
+      const dx = this.home.x - b.pos.x, dz = this.home.z - b.pos.z;
+      this.yaw = Math.hypot(dx, dz) > 3 ? Math.atan2(dx, dz) : Math.random() * Math.PI * 2;
+    }
+    const nx = b.pos.x + Math.sin(this.yaw) * dt * 0.9;
+    const nz = b.pos.z + Math.cos(this.yaw) * dt * 0.9;
+    const ny = this.home.y + Math.sin(this.walkPhase * 1.6) * 0.23;
+    if (world.peekBlock(Math.floor(nx), Math.floor(ny), Math.floor(nz)) === B.AIR) b.pos.set(nx, ny, nz);
+    else this.yaw += Math.PI / 2;
+    this.walkPhase += dt * 7;
+    for (let i = 0; i < this.arms.length; i++) this.arms[i].rotation.z = (i ? 1 : -1) * (0.3 + Math.sin(this.walkPhase * 5) * 0.45);
+    this.group.position.copy(b.pos);
+    this.group.rotation.y = this.yaw;
+  }
+
+  /** Jump toward small pond insects and show a brief tongue lunge. */
+  private updateFrog(dt: number, world: World, player: THREE.Vector3, allies: Mob[]): void {
+    const b = this.body;
+    this.tongueTime = Math.max(0, this.tongueTime - dt);
+    if (this.tongueMesh) this.tongueMesh.visible = this.tongueTime > 0;
+    let prey: Mob | null = null;
+    let distance = 7;
+    for (const other of allies) {
+      if (other.type !== 'midge' || other.dead) continue;
+      const d = b.pos.distanceTo(other.body.pos);
+      if (d < distance) { prey = other; distance = d; }
+    }
+    this.aiTimer -= dt;
+    if (prey) {
+      this.yaw = Math.atan2(prey.body.pos.x - b.pos.x, prey.body.pos.z - b.pos.z);
+      this.walking = distance > 0.6;
+      if (distance < 1.25 && this.attackCooldown <= 0) {
+        this.attackCooldown = 1.5;
+        this.tongueTime = 0.28;
+        if (this.tongueMesh) this.tongueMesh.visible = true;
+        this.soundTimer = 0.1;
+        prey.damage(2, b.pos.x, b.pos.z);
+      }
+    } else if (this.aiTimer <= 0) {
+      this.aiTimer = 2 + Math.random() * 3;
+      this.yaw = Math.random() * Math.PI * 2;
+      this.walking = Math.random() < 0.6;
+    }
+    if (b.onGround && this.walking && this.attackCooldown <= 0) {
+      b.vel.y = 5.6;
+      this.attackCooldown = 0.9;
+    }
+    this.moveAndAnimate(dt, world, player, this.walking ? prey ? 1.7 : 0.9 : 0);
+  }
+
   /** Hunt only small wild animals, or steal one unit from a dropped food
    * stack. Threats always take precedence; foxes do not attack the player. */
   private updateFox(dt: number, world: World, player: THREE.Vector3, allies: Mob[],
@@ -998,6 +1118,14 @@ export class Mob {
     }
     if (this.type === 'golem') {
       this.updateGolem(dt, world, player, allies, onAttack);
+      return;
+    }
+    if (this.type === 'midge') {
+      this.updateMidge(dt, world);
+      return;
+    }
+    if (this.type === 'frog') {
+      this.updateFrog(dt, world, player, allies);
       return;
     }
     if (this.type === 'fox') {
@@ -1163,7 +1291,7 @@ export class Mob {
       const fy = Math.floor(b.pos.y);
       const below = world.peekBlock(fx, fy - 1, fz);
       const below2 = world.peekBlock(fx, fy - 2, fz);
-      if (below === B.WATER || below === B.LAVA || (!IS_SOLID[below] && !IS_SOLID[below2])) this.yaw += Math.PI * (0.5 + Math.random());
+      if ((below === B.WATER && this.type !== 'frog') || below === B.LAVA || (below !== B.WATER && !IS_SOLID[below] && !IS_SOLID[below2])) this.yaw += Math.PI * (0.5 + Math.random());
     }
 
     // animation (spiders scuttle faster, and fastest while climbing)
