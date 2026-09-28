@@ -160,6 +160,8 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.DIAMOND, count: 9 }, inputs: [{ id: B.DIAMOND_BLOCK, count: 1 }], table: false },
   { out: { id: I.BOW, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 3 }], table: true, pattern: [' #S', '# S', ' #S'], key: { '#': I.STICK, S: I.STRING } },
   { out: { id: I.IRON_SPEAR, count: 1 }, inputs: [{ id: I.IRON, count: 2 }, { id: I.STICK, count: 2 }], table: true, pattern: ['  I', ' IS', 'S  '], key: { I: I.IRON, S: I.STICK } },
+  { out: { id: I.IRON_DAGGER, count: 1 }, inputs: [{ id: I.IRON, count: 1 }, { id: I.STICK, count: 1 }], table: false, pattern: ['I', 'S'], key: { I: I.IRON, S: I.STICK } },
+  { out: { id: I.DIAMOND_DAGGER, count: 1 }, inputs: [{ id: I.DIAMOND, count: 2 }, { id: I.STICK, count: 1 }], table: true, pattern: ['DD', 'S '], key: { D: I.DIAMOND, S: I.STICK } },
   { out: { id: I.ARROW, count: 4 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.STICK, count: 1 }, { id: I.FEATHER, count: 1 }], table: false },
   { out: { id: I.SHIELD, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.IRON, count: 1 }], table: true, pattern: ['PIP', 'PPP', 'PPP'], key: { P: B.PLANKS, I: I.IRON } },
   // 1.7 „Nether & Redstone”

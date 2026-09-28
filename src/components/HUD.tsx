@@ -166,6 +166,14 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         </div>
       )}
 
+      {/* Dagger hit confirmation lasts less than half a second; it does not flood chat. */}
+      {hud.daggerHit && (
+        <div className={`absolute left-1/2 top-[46%] -translate-x-1/2 whitespace-nowrap px-2 py-0.5 text-sm mc-text ${hud.daggerHit.counter ? 'text-yellow-300' : 'text-white'}`}
+          style={{ background: 'rgba(0,0,0,0.55)' }} role="status">
+          {hud.daggerHit.counter ? '⚔ Kontra!' : '✦ Trafienie'} {hud.daggerHit.damage} obrażeń
+        </div>
+      )}
+
       {/* 2.3: stan wędkarstwa nad celownikiem (2.5: treść wg wersji sterowania) */}
       {hud.fishing !== 'idle' && (
         <div className="absolute left-1/2 top-[58%] -translate-x-1/2 px-2 py-0.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
@@ -262,6 +270,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         {hud.combat && (hud.combat.dodgeCooldown > 0 || hud.combat.guardCooldown > 0 || hud.combat.shield) && (
           <div className="mb-1 flex gap-2 bg-black/60 px-2 py-0.5 text-[11px] mc-text" role="status">
             <span className={hud.combat.dodgeActive ? 'text-green-300' : ''}>↝ {hud.combat.dodgeActive ? 'unik!' : hud.combat.dodgeCooldown > 0 ? `${hud.combat.dodgeCooldown.toFixed(1)}s` : 'gotów'}</span>
+            {hud.combat.counterReady && <span className="text-yellow-300">⚔ kontra gotowa!</span>}
             {hud.combat.shield && <span className={hud.combat.guardActive ? 'text-green-300' : ''}>🛡 {hud.combat.guardActive ? 'paruj!' : hud.combat.guardCooldown > 0 ? `${hud.combat.guardCooldown.toFixed(1)}s` : 'gotowa'}</span>}
           </div>
         )}

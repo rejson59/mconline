@@ -1137,6 +1137,94 @@ section('engine: armor damage, equipping, xp');
   eq('active potion buffs cleared on death', g.effects.size, 0);
 }
 
+section('3.0 #41: fast daggers, short range and one dodge counter');
+{
+  check('dagger IDs append without moving old spear, and both are durable Creative items',
+    I.IRON_SPEAR === 362 && I.IRON_DAGGER === 363 && I.DIAMOND_DAGGER === 364 &&
+    [I.IRON_DAGGER, I.DIAMOND_DAGGER].every((id) => CREATIVE_ITEMS.includes(id) &&
+      stackLimit(id) === 1 && !!buildItemIcons()[id]));
+  check('iron and diamond daggers trade reach and damage for rate against legacy swords',
+    attackReach(I.IRON_DAGGER) === 2.2 && attackReach(I.DIAMOND_DAGGER) === 2.2 &&
+    attackReach(I.IRON_SWORD) === 3.5 && attackCooldown(I.IRON_DAGGER) === 0.28 &&
+    attackCooldown(I.DIAMOND_DAGGER) === 0.28 && attackCooldown(I.IRON_SWORD) === 0.42 &&
+    attackDamage(I.IRON_DAGGER, false) === 4 && attackDamage(I.DIAMOND_DAGGER, false) === 5 &&
+    attackDamage(I.IRON_SWORD, false) === 7 && durabilityMax(I.DIAMOND_DAGGER) === 600);
+  for (const [id, material, amount, table] of [
+    [I.IRON_DAGGER, I.IRON, 1, false], [I.DIAMOND_DAGGER, I.DIAMOND, 2, true],
+  ] as const) {
+    const r = RECIPES.find((candidate) => candidate.out.id === id)!;
+    const inv = new Inventory(); inv.add(material, amount); inv.add(I.STICK, 1);
+    check(`${ITEMS[id]?.name} Survival recipe consumes material and stick`, r.table === table &&
+      inv.craft(r) && inv.countOf(id) === 1 && inv.countOf(material) === 0 && inv.countOf(I.STICK) === 0 && !inv.craft(r));
+    const grid = new Inventory();
+    for (let y = 0; y < r.pattern!.length; y++) for (let x = 0; x < r.pattern![y].length; x++) {
+      const symbol = r.pattern![y][x];
+      if (symbol !== ' ') grid.grid[y * 3 + x] = { id: r.key![symbol], count: 1 };
+    }
+    check(`${ITEMS[id]?.name} grid validates the actual shape and table constraint`,
+      grid.gridMatch(true)?.out.id === id && grid.gridMatch(false)?.out.id === (table ? undefined : id) &&
+      grid.craftGrid(true)?.id === id);
+  }
+  check('daggers accept combat enchants but not mining enchants',
+    canEnchant(I.IRON_DAGGER, 'sharpness') && canEnchant(I.DIAMOND_DAGGER, 'looting') &&
+    canEnchant(I.IRON_DAGGER, 'unbreaking') && !canEnchant(I.IRON_DAGGER, 'efficiency') &&
+    attackDamage(I.IRON_DAGGER, false, 2) > attackDamage(I.IRON_DAGGER, false));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.IRON_DAGGER, count: 1 };
+  g.selected = 0; g.selectedStack = () => g.inventory.slots[0];
+  g.mode = 'survival'; g.ui = 'playing'; g.keys = new Set(); g.target = null; g.yaw = 0;
+  g.body = { pos: new THREE.Vector3(0, 64, 0), vel: new THREE.Vector3(), onGround: true };
+  g.dodgeTime = 0; g.dodgeCooldown = 0; g.daggerCounter = 0;
+  g.attackCooldown = 0; g.sprinting = false; g.hunger = 20; g.swingT = 1;
+  g.flying = false; g.emitHud = () => {}; g.hasEffect = () => false;
+  g.wearTool = () => {}; g.advanceChallenge = () => {}; g.message = (s: string) => messages.push(s);
+  const messages: string[] = [], damages: number[] = [], ranges: number[] = [];
+  const mob = { type: 'zombie', dead: false, hurtTime: 0,
+    body: { pos: new THREE.Vector3(0, 64, -2), vel: new THREE.Vector3() }, bonusLoot: 0,
+    damage: (d: number) => { if (mob.hurtTime > 0) return false; damages.push(d); mob.hurtTime = 0.5; return true; } };
+  g.findMobTarget = (range: number) => { ranges.push(range); const dist = Math.abs(mob.body.pos.z);
+    return range >= dist ? { mob, dist } : { mob: null, dist: range }; };
+  check('dodge starts a single counter window with hunger cost and cannot be spammed',
+    g.tryDodge() && !g.tryDodge() && g.daggerCounter === 0.65 && g.hunger === 19 && g.dodgeCooldown === 2.7);
+  g.tryAttack();
+  check('successful counter hits once at short range with hit feedback and shorter hit immunity',
+    damages[0] === 7 && ranges.at(-1) === 2.2 && g.daggerCounter === 0 &&
+    mob.hurtTime === 0.28 && g.attackCooldown === 0.28 &&
+    messages.some((m) => m.includes('Kontra sztyletem')));
+  g.tryAttack();
+  check('dagger cooldown prevents attacks before recovery', damages.length === 1);
+  g.attackCooldown = 0; mob.hurtTime = 0;
+  g.tryAttack();
+  check('next quick hit uses only base damage, no repeated counter', damages[1] === 4);
+  g.attackCooldown = 0; mob.hurtTime = 0;
+  g.dodgeCooldown = 0; g.tryDodge();
+  g.target = { id: B.STONE, dist: 1.4 }; g.tryAttack();
+  check('wall prevents the counter and does not consume its opportunity', damages.length === 2 && g.daggerCounter === 0.65);
+  g.target = null; g.attackCooldown = 0; g.daggerCounter = 0;
+  g.tryAttack();
+  check('expired counter does not grant bonus damage', damages[2] === 4);
+  g.attackCooldown = 0; mob.hurtTime = 0;
+  mob.body.pos.z = -2.8; g.tryAttack();
+  check('dagger cannot hit at sword range', damages.length === 3 && ranges.at(-1) === 2.2);
+  mob.body.pos.z = -2; mob.hurtTime = 0; g.attackCooldown = 0; g.daggerCounter = 0.65;
+  g.refreshTarget = () => { g.target = null; };
+  g.touchAim = null;
+  g.touchTap(0.3, 0.4);
+  check('touch tap uses short reach and triggers the same dodge counter', damages[3] === 7 &&
+    ranges.at(-1) === 2.2 && g.daggerCounter === 0 && g.touchAim === null);
+  mob.hurtTime = 0; g.attackCooldown = 0; g.mouseLeft = true; g.placeCooldown = 1;
+  g.pearlCd = 0; g.eatCooldown = 0; g.breakCooldown = 0; g.breakProgress = 0;
+  g.mouseRight = false; g.bowDraw = -1;
+  g.selection = { visible: false }; g.crackMesh = { visible: false };
+  g.world = { raycast: () => null };
+  g.eyePos = () => new THREE.Vector3(0, 65.6, 0); g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  g.updateHand = () => {};
+  g.updateInteraction(1 / 30);
+  check('held attack on PC or touch respects dagger speed and reach without mining',
+    damages[4] === 4 && ranges.slice(-2).every((r) => r === 2.2) &&
+    g.breakProgress === 0 && g.mouseLeft);
+}
+
 section('3.0 #39: crafted long-reach spear with slower PC and touch attacks');
 {
   eq('new spear ID is appended without changing existing armor/item IDs', I.IRON_SPEAR, 362);

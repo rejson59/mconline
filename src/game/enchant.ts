@@ -96,7 +96,7 @@ export function enchName(id: string, lvl: number): string {
 }
 
 // ---------------------------------------------------------------- applicability
-type Target = 'pick' | 'axe' | 'shovel' | 'sword' | 'spear' | 'hoe' | 'shears' | 'bow' | 'shield' | 'armor';
+type Target = 'pick' | 'axe' | 'shovel' | 'sword' | 'spear' | 'dagger' | 'hoe' | 'shears' | 'bow' | 'shield' | 'armor';
 
 function targetsOf(itemId: number): Target[] {
   const it = ITEMS[itemId];
@@ -104,7 +104,7 @@ function targetsOf(itemId: number): Target[] {
     if (it.tool === 'shears') return ['shears'];
     if (it.tool === 'bow') return ['bow'];
     if (it.tool === 'shield') return ['shield'];
-    if (it.tool === 'sword' || it.tool === 'spear') return [it.tool];
+    if (it.tool === 'sword' || it.tool === 'spear' || it.tool === 'dagger') return [it.tool];
     if (it.tool === 'pick' || it.tool === 'axe' || it.tool === 'shovel' || it.tool === 'hoe') return [it.tool];
     // 2.3: wędka i lorneta to narzędzia obserwacyjne – nie poddają się
     // zaklęciom, a wcześniejsze `as Target` przemycało je jako cel.
@@ -124,9 +124,9 @@ export function canEnchant(itemId: number, ench: EnchId | string): boolean {
     case 'fortune': return t.some((x) => x === 'pick' || x === 'shovel' || x === 'hoe');
     case 'silktouch': return t.some((x) => x === 'pick' || x === 'axe' || x === 'shovel' || x === 'hoe');
     case 'unbreaking': return t.length > 0;
-    case 'sharpness': return t.includes('sword') || t.includes('spear');
+    case 'sharpness': return t.includes('sword') || t.includes('spear') || t.includes('dagger');
     case 'power': case 'infinity': return t.includes('bow');
-    case 'knockback': case 'looting': return t.includes('sword');
+    case 'knockback': case 'looting': return t.includes('sword') || t.includes('dagger');
     case 'protection': return t.includes('armor');
     case 'featherfalling': case 'tidewalker': return t.includes('armor') && ITEMS[itemId]?.armor?.slot === 3;
     case 'fireward': case 'arrowguard': return t.includes('armor');

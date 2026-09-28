@@ -143,7 +143,8 @@ export interface HUDState {
   /** 2.4: aktywne efekty napojów (ikona, nazwa, sekundy pozostałe). */
   effects: { id: string; icon: string; name: string; left: number }[];
   challenges: ChallengeProgress;
-  combat?: { dodgeCooldown: number; guardCooldown: number; dodgeActive: boolean; guardActive: boolean; shield: boolean };
+  combat?: { dodgeCooldown: number; guardCooldown: number; dodgeActive: boolean; guardActive: boolean; shield: boolean; counterReady?: boolean };
+  daggerHit?: { damage: number; counter: boolean } | null;
 }
 
 export interface TradeRow {
@@ -598,6 +599,11 @@ export class Game {
   /** Short, timed defensive actions. Timers are transient and reset on reload. */
   private dodgeTime = 0;
   private dodgeCooldown = 0;
+  /** One successful dagger counter may follow a dodge, even after invulnerability expires. */
+  private daggerCounter = 0;
+  private daggerHitAt = 0;
+  private daggerHitDamage = 0;
+  private daggerHitCounter = false;
   private guardTime = 0;
   private guardCooldown = 0;
   /** Rzuty perłą Endu mają krótki odstęp (1.9). */
@@ -2180,6 +2186,7 @@ export class Game {
     this.body.vel.z = dir.z * 8;
     this.dodgeTime = 0.29;
     this.dodgeCooldown = 2.7;
+    this.daggerCounter = 0.65;
     if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 1);
     this.message('Unik! Krótkie okno bezpieczeństwa.');
     this.emitHud();
@@ -3220,10 +3227,22 @@ export class Game {
       this.attackCooldown = attackCooldown(toolId);
       const held = this.selectedStack();
       let dmg = attackDamage(toolId, this.sprinting, sharpnessDamage(enchLevel(held, 'sharpness')));
+      const counter = ITEMS[toolId]?.tool === 'dagger' && this.daggerCounter > 0;
+      if (counter) dmg += 3;
       // 2.4: napój siły dorzuca obrażenia do każdego trafienia
       if (this.hasEffect('strength')) dmg += STRENGTH_DAMAGE;
       const kb = knockbackFactor(enchLevel(held, 'knockback'));
       if (mob.damage(dmg, this.body.pos.x, this.body.pos.z)) {
+        if (counter) { this.daggerCounter = 0; this.message('Kontra sztyletem! +3 obrażenia'); }
+        if (ITEMS[toolId]?.tool === 'dagger') {
+          // Quick, legible hit confirmation beside the crosshair, also for non-counter hits.
+          this.daggerHitAt = performance.now();
+          this.daggerHitDamage = dmg;
+          this.daggerHitCounter = counter;
+          this.emitHud();
+          // A dagger's recovery must actually permit the next hit on this same mob.
+          mob.hurtTime = Math.min(mob.hurtTime, 0.28);
+        }
         if (kb > 1) {
           mob.body.vel.x *= kb;
           mob.body.vel.z *= kb;
@@ -4208,7 +4227,8 @@ export class Game {
     this.air = this.maxAir;
     this.body.pos.copy(this.spawnPoint);
     this.body.vel.set(0, 0, 0);
-    this.dodgeTime = this.dodgeCooldown = this.guardTime = this.guardCooldown = 0;
+    this.dodgeTime = this.dodgeCooldown = this.daggerCounter = this.guardTime = this.guardCooldown = 0;
+    this.daggerHitAt = 0;
     this.fallStart = this.body.pos.y;
     if (this.mode === 'creative') this.giveStarterItems();
     this.setUI('playing');
@@ -4337,6 +4357,7 @@ export class Game {
 
   private updatePlayer(dt: number) {
     this.dodgeTime = Math.max(0, (this.dodgeTime || 0) - dt);
+    this.daggerCounter = Math.max(0, (this.daggerCounter || 0) - dt);
     this.dodgeCooldown = Math.max(0, (this.dodgeCooldown || 0) - dt);
     this.guardTime = Math.max(0, (this.guardTime || 0) - dt);
     this.guardCooldown = Math.max(0, (this.guardCooldown || 0) - dt);
@@ -4567,7 +4588,8 @@ export class Game {
     this.attackCooldown -= dt;
     this.pearlCd = Math.max(0, this.pearlCd - dt);
     this.eatCooldown = Math.max(0, this.eatCooldown - dt);
-    if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * (this.selectedStack()?.id === I.IRON_SPEAR ? 1.65 : 4));
+    if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * (this.selectedStack()?.id === I.IRON_SPEAR ? 1.65 :
+      ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'dagger' ? 7.2 : 4));
 
     const e = this.eyePos();
     // 2.0: na dotyku celownik podąża za palcem (touchAim w NDC).
@@ -5013,7 +5035,11 @@ export class Game {
 
     // hand
     const sw = Math.sin(this.swingT * Math.PI);
-    if (this.handId === I.IRON_SPEAR) {
+    if (ITEMS[this.handId]?.tool === 'dagger') {
+      // Short horizontal flick, visibly faster and shallower than the long spear thrust.
+      this.hand.position.set(bobX + sw * 0.12, -Math.abs(bob) * 0.6 + sw * 0.08, -sw * 0.25);
+      this.hand.rotation.set(-sw * 0.25, sw * 1.15, sw * 0.48);
+    } else if (this.handId === I.IRON_SPEAR) {
       // Long forward thrust and slower recovery instead of the sword's slash.
       this.hand.position.set(bobX, -Math.abs(bob) * 0.6 + sw * 0.04, -sw * 0.55);
       this.hand.rotation.set(-sw * 0.4, 0, -sw * 0.08);
@@ -5140,8 +5166,11 @@ export class Game {
       weather: this.weather,
       toast: this.toast && now - this.toast.at < 4600 ? { title: this.toast.title, text: this.toast.text } : null,
       sprinting: this.sprinting,
+      daggerHit: this.daggerHitAt > 0 && now - this.daggerHitAt < 450
+        ? { damage: this.daggerHitDamage, counter: this.daggerHitCounter } : null,
       combat: { dodgeCooldown: this.dodgeCooldown, guardCooldown: this.guardCooldown,
-        dodgeActive: this.dodgeTime > 0, guardActive: this.guardTime > 0, shield: this.holdingShield() },
+        dodgeActive: this.dodgeTime > 0, guardActive: this.guardTime > 0, shield: this.holdingShield(),
+        counterReady: this.daggerCounter > 0 && ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'dagger' },
       worldName: this.worldName,
       worldType: this.worldType,
       minimap: this.showMinimap,
@@ -5197,6 +5226,7 @@ export class Game {
     if (id === I.WORM_BAIT || id === I.GLOW_BAIT) return 'Przynęta: PPM / tap, aby założyć na wędkę w ekwipunku';
     if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
     if (id === I.IRON_SPEAR) return 'Włócznia: 5 bloków zasięgu · cios co 0,92 s · LPM / tap / ⛏';
+    if (id === I.IRON_DAGGER || id === I.DIAMOND_DAGGER) return 'Sztylet: 2,2 bloku · cios co 0,28 s · V / ↝ i LPM / tap / ⛏ = kontra +3';
     if (id === I.COMPASS) {
       const dx = this.spawnPoint.x - this.body.pos.x;
       const dz = this.spawnPoint.z - this.body.pos.z;

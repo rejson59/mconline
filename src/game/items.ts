@@ -111,10 +111,10 @@ export const I = {
   POTION_FALL: 355, POTION_SPRINT: 356,
   RAW_RABBIT: 357, COOKED_RABBIT: 358,
   EMBER_BOOTS: 359, TIDE_BOOTS: 360, SOFT_BOOTS: 361,
-  IRON_SPEAR: 362,
+  IRON_SPEAR: 362, IRON_DAGGER: 363, DIAMOND_DAGGER: 364,
 } as const;
 
-export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear';
+export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger';
 
 /** 2.4: effect a potion applies when drunk ('none' = base awkward brew). */
 export type PotionEffectId = 'none' | 'heal' | 'fire' | 'speed' | 'night' | 'strength' | 'regen' | 'fall' | 'sprint';
@@ -210,6 +210,8 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.ARROW, name: 'Strzała', keys: ['strzala', 'strzała', 'arrow'], kind: 'material', color: '#c8b08a' },
   { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
   { id: I.IRON_SPEAR, name: 'Żelazna włócznia', keys: ['wlocznia', 'zelazna_wlocznia', 'iron_spear'], kind: 'tool', tool: 'spear', durability: 240, color: '#c9d3df' },
+  { id: I.IRON_DAGGER, name: 'Żelazny sztylet', keys: ['sztylet', 'zelazny_sztylet', 'iron_dagger'], kind: 'tool', tool: 'dagger', tier: 2, durability: 200, color: '#c9d3df' },
+  { id: I.DIAMOND_DAGGER, name: 'Diamentowy sztylet', keys: ['diamentowy_sztylet', 'diamond_dagger'], kind: 'tool', tool: 'dagger', tier: 4, durability: 600, color: '#5ce9dc' },
   { id: I.LAPIS, name: 'Lazuryt', keys: ['lazuryt', 'lapis', 'lapis_lazuli'], kind: 'material', color: '#3a5fd0' },
   { id: I.PAPER, name: 'Papier', keys: ['papier', 'paper'], kind: 'material', color: '#f2f2ee' },
   { id: I.BOOK, name: 'Książka', keys: ['ksiazka', 'książka', 'book'], kind: 'material', color: '#9a4a3a' },
@@ -504,6 +506,7 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
   let d = 3;
   if (tool?.tool === 'sword') d = [0, 5, 6, 7, 9][tool.tier ?? 1];
   if (tool?.tool === 'spear') d = 7;
+  if (tool?.tool === 'dagger') d = tool.tier === 4 ? 5 : 4;
   if (sharp > 0) d += sharp * 0.5 + 0.5;
   else if (tool?.tool === 'shield') d = 2;
   else if (tool?.tool === 'shears' || tool?.tool === 'igniter' || tool?.tool === 'bow') d = 1;
@@ -511,19 +514,20 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
   else if (tool?.tool === 'rod' || tool?.tool === 'spyglass') d = 1;
   // 2.3: ten `else if` kasował wcześniej obrażenia miecza (trafiał tu każdy
   // miecz), więc diamentowy miecz bił jak drewniany topór – 4 zamiast 9.
-  else if (tool?.tool && tool.tool !== 'sword' && tool.tool !== 'spear') d = 4;
+  else if (tool?.tool && tool.tool !== 'sword' && tool.tool !== 'spear' && tool.tool !== 'dagger') d = 4;
   if (sprinting) d += 2;
   return d;
 }
 
 export function attackCooldown(toolId: number): number {
   if (ITEMS[toolId]?.tool === 'spear') return 0.92;
+  if (ITEMS[toolId]?.tool === 'dagger') return 0.28;
   return ITEMS[toolId]?.tool === 'sword' ? 0.42 : 0.5;
 }
 
 /** Only the long polearm extends melee targeting, not mining or placement. */
 export function attackReach(toolId: number): number {
-  return ITEMS[toolId]?.tool === 'spear' ? 5 : 3.5;
+  return ITEMS[toolId]?.tool === 'spear' ? 5 : ITEMS[toolId]?.tool === 'dagger' ? 2.2 : 3.5;
 }
 
 /** What a broken block yields. Empty array = nothing (wrong tool on ore, leaves that rolled nothing).

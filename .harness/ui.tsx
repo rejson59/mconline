@@ -14,6 +14,7 @@ import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS, applyPreset } from '../src/utils/settings';
 import { DEFAULT_DIFFICULTY, normalizeDifficulty, type WorldDifficulty } from '../src/game/difficulty';
 import SettingsScreen from '../src/components/SettingsScreen';
+import HUD from '../src/components/HUD';
 import TouchControls from '../src/components/TouchControls';
 import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/components/JournalScreen';
 import EnchantScreen from '../src/components/EnchantScreen';
@@ -99,6 +100,24 @@ section('trade screen: static render');
   }
 }
 
+section('3.0 dagger: compact combat feedback in HUD');
+{
+  const base = {
+    mode: 'survival', health: 20, hunger: 20, air: 10, maxAir: 10,
+    hotbar: Array(9).fill(null), selected: 0, armor: [null, null, null, null],
+    time: 0, fishing: 'idle', messages: [], effects: [], bow: -1,
+    level: 0, xpFrac: 0, loading: 1,
+    combat: { dodgeCooldown: 2, guardCooldown: 0, dodgeActive: false,
+      guardActive: false, shield: false, counterReady: true },
+  };
+  const ready = renderToStaticMarkup(<HUD hud={{ ...base, daggerHit: null } as never} icons={{}} />);
+  const hit = renderToStaticMarkup(<HUD hud={{ ...base, daggerHit: { damage: 4, counter: false } } as never} icons={{}} />);
+  const counter = renderToStaticMarkup(<HUD hud={{ ...base, daggerHit: { damage: 7, counter: true } } as never} icons={{}} />);
+  check('dodge counter readiness is visibly announced on small HUD', ready.includes('kontra gotowa!'));
+  check('successful dagger hit shows a short-lived damage confirmation', hit.includes('Trafienie') && hit.includes('4 obrażeń'));
+  check('counter hit is distinguished visually and reports actual damage', counter.includes('Kontra!') && counter.includes('7 obrażeń'));
+}
+
 section('inventory screen: recipe finder');
 {
   const fake = {
@@ -123,6 +142,11 @@ section('inventory screen: recipe finder');
   check('spear recipe and long-range stats are discoverable in crafting/help', html.includes('Żelazna włócznia') &&
     stackTooltip({ id: I.IRON_SPEAR, count: 1 }).includes('Zasięg 5 bloków') &&
     renderToStaticMarkup(<Controls />).includes('tap/⛏'));
+  check('both dagger recipes, close range and dodge counter are discoverable',
+    html.includes('Żelazny sztylet') && html.includes('Diamentowy sztylet') &&
+    stackTooltip({ id: I.IRON_DAGGER, count: 1 }).includes('Zasięg 2,2 bloku') &&
+    stackTooltip({ id: I.DIAMOND_DAGGER, count: 1 }).includes('0,28 s') &&
+    renderToStaticMarkup(<Controls />).includes('kontrę: +3 obrażenia'));
 }
 
 section('adventure journal: quests and progress');

@@ -18,7 +18,9 @@ export function stackTooltip(s: Stack | null | undefined, fallback = ''): string
   // 2.4: napoje opowiadają o swoim wzmocnieniu
   const potion = POTIONS[s.id];
   const desc = potion ? `\n§7${potion.desc}` : SPECIAL_BOOTS[s.id] ? `\n${SPECIAL_BOOTS[s.id]}` :
-    s.id === I.IRON_SPEAR ? '\nZasięg 5 bloków, 7 obrażeń, 0,92 s między ciosami.' : '';
+    s.id === I.IRON_SPEAR ? '\nZasięg 5 bloków, 7 obrażeń, 0,92 s między ciosami.' :
+    s.id === I.IRON_DAGGER || s.id === I.DIAMOND_DAGGER ?
+      `\nZasięg 2,2 bloku, ${s.id === I.IRON_DAGGER ? 4 : 5} obrażeń, 0,28 s między ciosami. Po uniku: +3 obrażenia z kontry.` : '';
   return list.length ? `${name}\n§5${list.join('\n')}${desc}` : `${name}${desc}`;
 }
 
