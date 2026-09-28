@@ -235,6 +235,7 @@ section('menus: static render');
   check('villager daily routine appears in help', renderToStaticMarkup(<Controls />).includes('Dzień mieszkańców'));
   check('bear warning and escape hint appears in help', renderToStaticMarkup(<Controls />).includes('Niedźwiedzie z młodymi'));
   check('human village guards appear in help', renderToStaticMarkup(<Controls />).includes('Strażnik wioski'));
+  check('regional caravan trading appears in help', renderToStaticMarkup(<Controls />).includes('Karawana kupca'));
   const medium = renderToStaticMarkup(
     <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
   );

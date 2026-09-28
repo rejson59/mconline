@@ -117,7 +117,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
+export function playMob(type: 'pig' | 'merchant' | 'pack_animal' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -127,6 +127,10 @@ export function playMob(type: 'pig' | 'guard' | 'bear' | 'turtle' | 'lizard' | '
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(260, t);
     o.frequency.linearRampToValueAtTime(180, t + 0.25);
+  } else if (type === 'merchant' || type === 'pack_animal') {
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(type === 'merchant' ? 210 : 140, t);
+    o.frequency.linearRampToValueAtTime(type === 'merchant' ? 270 : 105, t + 0.24);
   } else if (type === 'guard') {
     o.type = 'triangle';
     o.frequency.setValueAtTime(250, t);

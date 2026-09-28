@@ -5,7 +5,7 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'merchant' | 'pack_animal' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 /** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
 export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
@@ -43,6 +43,15 @@ export function findTurtleNest(world: Pick<World, 'peekBlock' | 'hasChunk'>, x: 
     if (turtleSpawnAllowed(world, xx, y, zz)) return { x: xx, y, z: zz };
   }
   return null;
+}
+
+/** Caravan cargo is chosen from existing, usable trade inventories. Append no
+ * new profession indices: old villager saves retain their job and prices. */
+export function merchantProfession(biome: Biome): number {
+  if (biome === 'Pustynia' || biome === 'Sawanna' || biome === 'Pustkowie') return 5; // maps and compass
+  if (biome === 'Bagno' || biome === 'Ocean' || biome === 'Plaża') return 6; // fish and bait
+  if (biome === 'Tajga' || biome === 'Tundra' || biome === 'Las' || biome === 'Brzozowy las') return 7; // plants
+  return 4; // general building supplies
 }
 
 export type VillagerActivity = 'rest' | 'work' | 'meet';
@@ -224,6 +233,7 @@ export class Mob {
   private lizardFace: THREE.MeshLambertMaterial | null = null;
   private camouflageGround = -1;
   isCub = false;
+  merchantRegion = '';
   private bearWarning: THREE.Mesh | null = null;
   private bearWindup = 0;
   private bearCooldown = 0;
@@ -257,7 +267,8 @@ export class Mob {
     this.type = type;
     this.home.set(x, y, z);
     const w =
-      type === 'zombie' || type === 'creeper' || type === 'villager' || type === 'guard' ? 0.6
+      type === 'zombie' || type === 'creeper' || type === 'villager' || type === 'merchant' || type === 'guard' ? 0.6
+        : type === 'pack_animal' ? 0.9
         : type === 'bear' ? 1.15
         : type === 'turtle' ? 0.78
         : type === 'lizard' ? 0.36
@@ -274,12 +285,13 @@ export class Mob {
                   : type === 'slime' ? 0.9
                     : type === 'ghast' ? 2.0 : 0.9;
     const h =
-      type === 'zombie' || type === 'villager' || type === 'guard' ? 1.9
+      type === 'zombie' || type === 'villager' || type === 'merchant' || type === 'guard' ? 1.9
         : type === 'creeper' ? 1.7
           : type === 'golem' ? 2.2
             : type === 'enderman' ? 2.9
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
+                  : type === 'pack_animal' ? 1.35
                   : type === 'bear' ? 1.4
                   : type === 'turtle' ? 0.6
                   : type === 'lizard' ? 0.35
@@ -304,13 +316,14 @@ export class Mob {
                 : type === 'skeleton' ? 20
                   : type === 'spider' ? 16
                     : type === 'golem' ? 100
-                      : type === 'villager' || type === 'guard' ? 20
+                      : type === 'villager' || type === 'guard' || type === 'merchant' ? 20
+                      : type === 'pack_animal' ? 16
                         : type === 'wolf' ? 8
                           : type === 'enderman' ? 40
                             : type === 'slime' ? 12
                               : type === 'ghast' ? 10 : 10;
-    this.profession = type === 'villager' ? professionFor(profession) : 0;
-    if (type === 'villager') this.trade = createVillagerState(this.profession, 0);
+    this.profession = type === 'villager' ? professionFor(profession) : type === 'merchant' ? Math.max(0, Math.min(PROFESSIONS.length - 1, Math.floor(profession))) : 0;
+    if (type === 'villager' || type === 'merchant') this.trade = createVillagerState(this.profession, 0);
     this.build();
   }
 
@@ -907,6 +920,49 @@ export class Mob {
       this.arms.push(armL, armR);
       this.addLeg(-0.16, legH + 0.05, 0, 0.2, legH + 0.1, 0.22, 0x3d3d46, this.legs);
       this.addLeg(0.16, legH + 0.05, 0, 0.2, legH + 0.1, 0.22, 0x3d3d46, this.legs);
+    } else if (this.type === 'merchant') {
+      const coat = 0x85624c, skin = 0xb98c68;
+      this.addLeg(-0.16, 0.5, 0, 0.2, 0.94, 0.22, 0x3d3d42, this.legs);
+      this.addLeg(0.16, 0.5, 0, 0.2, 0.94, 0.22, 0x3d3d42, this.legs);
+      const body = box(0.66, 0.92, 0.4, coat, sharedMats);
+      body.position.set(0, 0.96, 0);
+      const satchel = box(0.4, 0.34, 0.18, 0x5e3f2f, sharedMats);
+      satchel.position.set(0.33, 0.85, 0.22);
+      g.add(body, satchel); this.meshes.push(body, satchel);
+      const head = new THREE.Group(); head.position.set(0, 1.65, 0);
+      const face = box(0.46, 0.45, 0.45, skin, sharedMats);
+      const brim = box(0.66, 0.07, 0.66, 0x3b5548, sharedMats);
+      brim.position.y = 0.28;
+      const hat = box(0.4, 0.22, 0.4, 0x3b5548, sharedMats);
+      hat.position.y = 0.4;
+      head.add(face, brim, hat); this.meshes.push(face, brim, hat);
+      for (const side of [-1, 1]) {
+        const eye = box(0.07, 0.06, 0.025, 0x283a34, sharedMats);
+        eye.position.set(side * 0.12, 0.07, 0.24);
+        head.add(eye); this.meshes.push(eye);
+      }
+      g.add(head); this.head = head;
+      this.addLeg(-0.45, 1.15, 0, 0.16, 0.68, 0.18, coat, this.arms);
+      this.addLeg(0.45, 1.15, 0, 0.16, 0.68, 0.18, coat, this.arms);
+    } else if (this.type === 'pack_animal') {
+      const brown = 0x795b40, pack = 0xa67d4f;
+      const body = box(0.73, 0.74, 1.1, brown, sharedMats);
+      body.position.set(0, 0.88, 0);
+      const neck = box(0.3, 0.66, 0.34, brown, sharedMats);
+      neck.position.set(0, 1.18, 0.53);
+      const head = box(0.35, 0.33, 0.48, brown, sharedMats);
+      head.position.set(0, 1.4, 0.72);
+      g.add(body, neck, head); this.meshes.push(body, neck, head);
+      for (const side of [-1, 1]) {
+        const crate = box(0.3, 0.52, 0.73, pack, sharedMats);
+        crate.position.set(side * 0.51, 0.91, -0.04);
+        const strap = box(0.33, 0.06, 0.76, 0x493b31, sharedMats);
+        strap.position.set(side * 0.51, 1.16, -0.04);
+        const eye = box(0.06, 0.065, 0.03, 0x18191a, sharedMats);
+        eye.position.set(side * 0.15, 1.46, 0.96);
+        g.add(crate, strap, eye); this.meshes.push(crate, strap, eye);
+        for (const z of [-0.38, 0.43]) this.addLeg(side * 0.27, 0.33, z, 0.2, 0.65, 0.2, brown, this.legs);
+      }
     } else if (this.type === 'guard') {
       const armor = 0x486679, steel = 0x9aaab2, skin = 0xa77b61;
       for (const sx of [-0.16, 0.16]) this.addLeg(sx, 0.5, 0, 0.23, 0.9, 0.25, 0x374758, this.legs);
@@ -1184,13 +1240,54 @@ export class Mob {
     this.moveAndAnimate(dt, world, player, this.walking ? 1.35 : 0);
   }
 
-  /**
-   * Żelazny golem: patroluje okolicę i atakuje potwory. Gdy gracz skrzywdzi
-   * mieszkańca, golem bierze go na cel (provoked > 0).
-   */
   /** Armed human guard: prioritises monsters near villagers, not neutral
    * animals or ordinary visitors. Player aggression uses the existing
    * provoked timer when a villager is actually struck. */
+  private updateMerchant(dt: number, world: World, player: THREE.Vector3): void {
+    const b = this.body;
+    this.aiTimer -= dt;
+    if (this.aiTimer <= 0) {
+      this.aiTimer = 2 + Math.random() * 2;
+      const y = Math.floor(b.pos.y) - 1;
+      // Merchants follow existing trails, not arbitrary desert or ungenerated
+      // chunks. The bounded 5x5 search stays cheap on mobile devices.
+      let best: { x: number; z: number } | null = null;
+      let distance = -1;
+      for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+        const x = Math.floor(b.pos.x) + dx, z = Math.floor(b.pos.z) + dz;
+        if (!world.hasChunk(Math.floor(x / CS), Math.floor(z / CS)) ||
+          world.peekBlock(x, y, z) !== B.PATH || IS_SOLID[world.peekBlock(x, y + 1, z)] ||
+          IS_SOLID[world.peekBlock(x, y + 2, z)] ||
+          !villagerWalkable(world, b.pos.x, y + 1, b.pos.z, x + 0.5, z + 0.5)) continue;
+        const d = Math.hypot(dx, dz);
+        if (d > distance && d <= 2.7 && d > 0.8 && Math.random() > 0.25) { distance = d; best = { x: x + 0.5, z: z + 0.5 }; }
+      }
+      this.activityGoal = best && b.pos.distanceTo(this.home) < 18 ? best
+        : b.pos.distanceTo(this.home) > 4 ? { x: this.home.x, z: this.home.z } : null;
+    }
+    if (this.activityGoal) {
+      const dx = this.activityGoal.x - b.pos.x, dz = this.activityGoal.z - b.pos.z;
+      this.yaw = Math.atan2(dx, dz);
+      this.walking = Math.hypot(dx, dz) > 0.55;
+      if (!this.walking) this.aiTimer = 0;
+    } else this.walking = false;
+    if (b.pos.distanceTo(player) < 2.2) this.walking = false;
+    this.moveAndAnimate(dt, world, player, this.walking ? 1.15 : 0);
+  }
+
+  private updatePackAnimal(dt: number, world: World, player: THREE.Vector3, allies: Mob[]): void {
+    const b = this.body;
+    const merchant = allies.find((m) => m.type === 'merchant' && !m.dead && m.body.pos.distanceTo(b.pos) < 22);
+    if (merchant) {
+      const dx = merchant.body.pos.x - b.pos.x, dz = merchant.body.pos.z - b.pos.z;
+      this.yaw = Math.atan2(dx, dz);
+      this.walking = Math.hypot(dx, dz) > 2.1;
+    } else {
+      this.walking = false;
+    }
+    this.moveAndAnimate(dt, world, player, this.walking ? 1.55 : 0);
+  }
+
   private updateGuard(dt: number, world: World, player: THREE.Vector3, allies: Mob[],
     onAttack: (dmg: number, mob: Mob) => void, peaceful: boolean): void {
     const b = this.body;
@@ -1241,6 +1338,7 @@ export class Mob {
     this.moveAndAnimate(dt, world, player, this.walking ? 1.35 : 0);
   }
 
+  /** Iron golem keeps its older independent patrol and heavy defence. */
   private updateGolem(dt: number, world: World, player: THREE.Vector3, allies: Mob[], onAttack: (dmg: number, mob: Mob) => void): void {
     const b = this.body;
     if (this.provoked > 0) this.provoked = Math.max(0, this.provoked - dt);
@@ -1693,6 +1791,14 @@ export class Mob {
     }
     if (this.type === 'villager') {
       this.updateVillager(dt, world, player, allies, dayPhase);
+      return;
+    }
+    if (this.type === 'merchant') {
+      this.updateMerchant(dt, world, player);
+      return;
+    }
+    if (this.type === 'pack_animal') {
+      this.updatePackAnimal(dt, world, player, allies);
       return;
     }
     if (this.type === 'guard') {

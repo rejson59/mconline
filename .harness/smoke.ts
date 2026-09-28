@@ -61,7 +61,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, villagerActivity, villagerWorkSpot, villagerWalkable, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, villagerActivity, villagerWorkSpot, villagerWalkable, merchantProfession, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -1663,6 +1663,71 @@ section('3.0 #58: visible camouflage for small swamp lizards');
     g.updateMobs(1 / 30);
     check('Nether has no swamp lizards', !g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
   } finally { Math.random = random; }
+}
+
+section('3.0 #59: regional travelling merchant and pack animal caravan');
+{
+  check('cargo offers really change with the region without changing saved profession ids',
+    merchantProfession('Pustynia') === 5 && merchantProfession('Bagno') === 6 &&
+    merchantProfession('Tajga') === 7 && merchantProfession('Równiny') === 4 &&
+    offersFor(createVillagerState(merchantProfession('Pustynia'), 0))[0].key !==
+    offersFor(createVillagerState(merchantProfession('Bagno'), 0))[0].key);
+  const world = new World(160, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 5; x <= 12; x++) for (let z = 6; z <= 10; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(x, yy, z, B.AIR);
+  for (let x = 5; x <= 12; x++) world.setBlock(x, y - 1, 8, B.PATH);
+  const merchant = new Mob('merchant', 8.5, y, 8.5, merchantProfession('Tajga'));
+  const mule = new Mob('pack_animal', 5.5, y, 8.5);
+  const far = new THREE.Vector3(40, y, 40);
+  check('merchant has trades and the mule has visible carried packs', merchant.trade !== null && mule.meshes.length > 8 && mule.trade === null);
+  const random = Math.random;
+  try {
+    Math.random = () => 0.5;
+    for (let i = 0; i < 70; i++) {
+      merchant.update(1 / 30, world, far, () => {}, () => {}, false, [merchant, mule]);
+      mule.update(1 / 30, world, far, () => {}, () => {}, false, [merchant, mule]);
+    }
+  } finally { Math.random = random; }
+  check('merchant follows loaded road and mule follows merchant', merchant.body.pos.x < 7.5 && mule.body.pos.x > 5.8);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.mobs = []; g.scene = { add: () => {}, remove: () => {} };
+  g.mode = 'survival'; g.ui = 'playing'; g.inventory = new Inventory();
+  g.trades = 0; g.nowSeconds = () => 0;
+  g.setUI = (screen: string) => { g.ui = screen; };
+  g.message = () => {}; g.emitHud = () => {}; g.gainXp = () => {}; g.unlock = () => {};
+  const trader = g.spawnMob('merchant', 8.5, y, 8.5) as Mob;
+  g.openTrade(trader);
+  check('real trade UI opens for caravan NPC with readable region', g.ui === 'trade' && g.tradeTitle().includes('Wędrowny kupiec') && g.tradeTitle().includes('Równiny'));
+  eq('plain caravan offers building cargo', g.tradeRows()[0].offer.key, 'cobble');
+  g.inventory.add(B.COBBLE, 24);
+  check('actual Survival exchange consumes goods and gives regional item', g.tradeWith(0) && g.inventory.countOf(I.EMERALD) === 1 && g.inventory.countOf(B.COBBLE) === 0);
+  g.ui = 'playing';
+  g.refreshTarget = () => {};
+  g.findMobTarget = () => ({ mob: trader, dist: 2 });
+  g.selectedStack = () => null; g.target = null; g.touchAim = null;
+  g.touchTap(0.5, 0.5);
+  check('touching trader opens trade instead of striking him', g.ui === 'trade' && !trader.dead);
+  // A new encounter is produced by Game only if an existing loaded PATH tile
+  // and adjacent dry pack location are available.
+  const road = new World(161, true);
+  road.getChunk(0, 1);
+  for (let yy = y; yy <= y + 2; yy++) for (const xx of [11, 12]) road.setBlock(xx, yy, 19, B.AIR);
+  road.setBlock(11, y - 1, 19, B.PATH);
+  const live = Object.create(Game.prototype) as unknown as Record<string, any>;
+  live.world = road; live.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  live.scene = { add: () => {}, remove: () => {} };
+  live.mobs = []; live.drops = []; live.isInNether = false;
+  live.mode = 'survival'; live.weather = 'clear'; live.time = 0.25;
+  live.spawnTimer = 0; live.difficulty = { ...DEFAULT_DIFFICULTY };
+  live.nowSeconds = () => 0;
+  try { Math.random = () => 0.2; live.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('real encounter creates both caravan members on loaded village-style trail',
+    live.mobs.some((m: Mob) => m.type === 'merchant') && live.mobs.some((m: Mob) => m.type === 'pack_animal'));
+  const prior = live.mobs.length;
+  live.spawnTimer = 0;
+  try { Math.random = () => 0.2; live.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('existing merchant prevents another immediate caravan', live.mobs.length === prior);
 }
 
 section('3.0 #60: village guard patrols and defends residents');

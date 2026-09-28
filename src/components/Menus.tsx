@@ -102,6 +102,7 @@ export function Controls() {
     ['PPM / tap na mieszkańcu', 'Handel: kartograf, rybak, ogrodnik, kowal i inni. Oferty rosną wraz z doświadczeniem'],
     ['PPM na skrzyni', 'Schowek'],
     ['Drabina + W / spacja', 'Wspinaczka'],
+    ['Karawana kupca', 'Za dnia na wiejskich drogach można spotkać wędrownego kupca ze zwierzęciem jucznym. PPM lub dotknij kupca, by handlować — oferty zależą od biomu.'],
     ['Strażnik wioski', 'Uzbrojony strażnik patroluje osadę, atakuje potwory przy mieszkańcach i reaguje na skrzywdzenie mieszkańca przez gracza.'],
     ['Niedźwiedzie z młodymi', 'Dorosłe niedźwiedzie są spokojne, dopóki nie zagrozisz młodemu, jedzeniu lub nie zaatakujesz. Przed ciosem ryczą i pokazują pomarańczowy sygnał — odsuń się!'],
     ['Dzień mieszkańców', 'Rano i wieczorem mieszkańcy spotykają się, w dzień pracują przy stanowiskach zawodu, nocą odpoczywają. Zagrożenie zawsze przerywa rutynę.'],

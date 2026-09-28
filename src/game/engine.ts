@@ -14,7 +14,7 @@ import {
 } from './brewing';
 import { getAtlas, compactAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, batSpawnAllowed, type FoxFood, type MobType } from './mobs';
+import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, batSpawnAllowed, merchantProfession, type FoxFood, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
@@ -231,6 +231,8 @@ export const MOB_NAMES: Record<MobType, string> = {
   turtle: 'Żółw',
   bear: 'Niedźwiedź',
   guard: 'Strażnik wioski',
+  merchant: 'Wędrowny kupiec',
+  pack_animal: 'Zwierzę juczne',
   midge: 'Meszka',
   bat: 'Nietoperz',
   lizard: 'Jaszczurka',
@@ -1024,7 +1026,7 @@ export class Game {
     const { mob, dist } = this.findMobTarget(3.5);
     const blockDist = this.target ? this.target.dist : Infinity;
     const held = this.selectedStack();
-    if (mob && dist < blockDist && mob.type === 'villager' && !mob.dead) {
+    if (mob && dist < blockDist && (mob.type === 'villager' || mob.type === 'merchant') && !mob.dead) {
       this.openTrade(mob);
     } else if (mob && dist < blockDist && mob.type === 'wolf' && !mob.tamed && !mob.dead && (held?.id === I.RAW_PORK || held?.id === I.RAW_BEEF || held?.id === I.RAW_CHICKEN)) {
       this.placeCooldown = 0;
@@ -1299,7 +1301,7 @@ export class Game {
   // ---------- Handel z mieszkańcami (1.6) ----------
 
   openTrade(mob: Mob) {
-    if (mob.type !== 'villager' || mob.dead) return;
+    if ((mob.type !== 'villager' && mob.type !== 'merchant') || mob.dead) return;
     if (!mob.trade) mob.trade = createVillagerState(mob.profession, this.nowSeconds());
     this.tradeMob = mob;
     this.setUI('trade');
@@ -1319,7 +1321,7 @@ export class Game {
   /** Nazwa rozmówcy razem z jego poziomem („Rolnik (Czeladnik)”). */
   tradeTitle(): string {
     const st = this.tradeMob?.trade;
-    return st ? villagerTitle(st) : 'Mieszkaniec';
+    return st ? (this.tradeMob?.type === 'merchant' ? `Wędrowny kupiec · ${this.tradeMob.merchantRegion} · ${villagerTitle(st)}` : villagerTitle(st)) : 'Mieszkaniec';
   }
 
   tradeLevel(): number {
@@ -2004,7 +2006,7 @@ export class Game {
 
   /** Mobs drop XP worth their type: hostiles 3–7, passives 1–3, wolves 2–5. */
   private mobXp(m: Mob, x: number, y: number, z: number) {
-    if (m.type === 'villager' || m.type === 'midge' || m.type === 'bat') return; // meszki i nietoperze nie dają PD
+    if (m.type === 'villager' || m.type === 'merchant' || m.type === 'midge' || m.type === 'bat') return; // meszki i nietoperze nie dają PD
     const total = m.type === 'golem'
       ? 5 + Math.floor(Math.random() * 4)
       : m.type === 'wolf'
@@ -2675,7 +2677,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', guard: 'guard', strażnik: 'guard', straznik: 'guard', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', guard: 'guard', strażnik: 'guard', straznik: 'guard', merchant: 'merchant', kupiec: 'merchant', pack_animal: 'pack_animal', juczne: 'pack_animal', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2687,7 +2689,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, guard, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, guard, merchant, pack_animal, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -3472,7 +3474,7 @@ export class Game {
     const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     // Mieszkaniec ma pierwszeństwo – PPM otwiera okno handlu.
     const vt = this.findMobTarget(4.5);
-    if (vt.mob && vt.mob.type === 'villager' && !vt.mob.dead) {
+    if (vt.mob && (vt.mob.type === 'villager' || vt.mob.type === 'merchant') && !vt.mob.dead) {
       this.openTrade(vt.mob);
       return;
     }
@@ -4056,7 +4058,12 @@ export class Game {
   }
 
   spawnMob(type: MobType, x: number, y: number, z: number, profession = 0) {
-    const m = new Mob(type, x, y, z, profession);
+    const region = type === 'merchant' ? this.world.surface(Math.floor(x), Math.floor(z)).biome : null;
+    const m = new Mob(type, x, y, z, region ? merchantProfession(region) : profession);
+    if (region) {
+      m.merchantRegion = region;
+      m.trade = createVillagerState(m.profession, this.nowSeconds());
+    }
     this.mobs.push(m);
     this.scene.add(m.group);
     return m;
@@ -4689,6 +4696,27 @@ export class Game {
           }
         }
       }
+      // Rare daytime caravan on an EXISTING village trail; do not invent a
+      // path at a random coordinate or force distant chunks to generate.
+      if (!this.isInNether && dl > 0.5 && passive < 10 &&
+        alive.filter((m) => m.type === 'merchant').length === 0) {
+        const road = tryPos(8, 24);
+        if (road?.top === B.PATH && Math.random() < 0.35 &&
+          this.world.peekBlock(Math.floor(road.x), Math.floor(road.y), Math.floor(road.z)) === B.AIR) {
+          let packSpot: { x: number; z: number } | null = null;
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const x = Math.floor(road.x) + dx, z = Math.floor(road.z) + dz, y = Math.floor(road.y);
+            if (!this.world.hasChunk(Math.floor(x / CS), Math.floor(z / CS)) ||
+              !IS_SOLID[this.world.peekBlock(x, y - 1, z)] || this.world.peekBlock(x, y, z) !== B.AIR ||
+              this.world.peekBlock(x, y + 1, z) !== B.AIR) continue;
+            packSpot = { x: x + 0.5, z: z + 0.5 }; break;
+          }
+          if (packSpot) {
+            this.spawnMob('merchant', road.x, road.y + 0.1, road.z);
+            this.spawnMob('pack_animal', packSpot.x, road.y + 0.1, packSpot.z);
+          }
+        }
+      }
       if (this.isInNether) {
         // Nether: piwniczne bestie zawsze, a Ghasty tylko w otwartej przestrzeni.
         if (hostile < hostileCap(this.difficulty.aggression)) {
@@ -5019,6 +5047,7 @@ export class Game {
     }
     if (mob.type === 'golem') return mob.provoked > 0 ? 'Żelazny golem (rozgniewany!)' : 'Żelazny golem – stróż osady';
     if (mob.type === 'guard') return mob.provoked > 0 ? 'Strażnik wioski (rozgniewany!)' : 'Strażnik wioski – patrol';
+    if (mob.type === 'merchant') return `Wędrowny kupiec · ${mob.merchantRegion}`;
     return `${MOB_NAMES[mob.type] ?? mob.type} · ${Math.max(0, Math.round(mob.health))}/${mob.maxHealth} HP`;
   }
 
@@ -5150,6 +5179,9 @@ export class Game {
       if (meat) this.spawnDrop(I.RAW_BEEF, meat, x, y, z);
       const hide = Math.floor(Math.random() * 3);
       for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
+    else if (m.type === 'pack_animal') {
+      this.spawnDrop(I.LEATHER, 1, x, y, z);
     }
     else if (m.type === 'bear') {
       if (!m.isCub && Math.random() < 0.7) this.spawnDrop(I.LEATHER, 1, x, y, z);
