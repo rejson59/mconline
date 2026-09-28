@@ -14,7 +14,7 @@ import {
 } from './brewing';
 import { getAtlas, compactAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, batSpawnAllowed, merchantProfession, type FoxFood, type CaveNoise, type MobType } from './mobs';
+import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, batSpawnAllowed, merchantProfession, isTrustAnimal, isTrustFood, type TrustAnimal, type FoxFood, type CaveNoise, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast', 'sandstalker', 'echolurker']);
@@ -157,7 +157,7 @@ export interface TradeRow {
 }
 
 export interface CompanionSave {
-  type: 'wolf';
+  type: TrustAnimal;
   dim: 'home' | 'nether';
   x: number; y: number; z: number;
   health: number; trust: number; tamed: boolean;
@@ -173,18 +173,18 @@ export function normalizeCompanions(raw: unknown): CompanionSave[] {
   for (const value of raw.slice(0, 128)) {
     if (!value || typeof value !== 'object') continue;
     const v = value as Record<string, unknown>;
-    if (v.type !== 'wolf' || (v.dim !== 'home' && v.dim !== 'nether') ||
+    if ((v.type !== 'wolf' && v.type !== 'fox' && v.type !== 'rabbit') || (v.dim !== 'home' && v.dim !== 'nether') ||
         ![v.x, v.y, v.z, v.health].every((n) => typeof n === 'number' && Number.isFinite(n)) ||
         Math.abs(v.x as number) > 1e6 || Math.abs(v.z as number) > 1e6 ||
         (v.y as number) < 1 || (v.y as number) > CH - 3 || (v.health as number) <= 0) continue;
     const tamed = v.tamed === true;
     const trust = tamed ? 3 : Math.max(0, Math.min(2, Math.floor(Number(v.trust) || 0)));
     if (!trust) continue;
-    const key = `${v.dim}:${Math.round((v.x as number) * 10)},${Math.round((v.y as number) * 10)},${Math.round((v.z as number) * 10)}`;
+    const key = `${v.dim}:${v.type}:${Math.round((v.x as number) * 10)},${Math.round((v.y as number) * 10)},${Math.round((v.z as number) * 10)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    result.push({ type: 'wolf', dim: v.dim, x: v.x as number, y: v.y as number, z: v.z as number,
-      health: Math.min(8, v.health as number), trust, tamed,
+    result.push({ type: v.type, dim: v.dim, x: v.x as number, y: v.y as number, z: v.z as number,
+      health: Math.min(v.type === 'fox' ? 9 : v.type === 'rabbit' ? 4 : 8, v.health as number), trust, tamed,
       cooldown: Math.max(0, Math.min(3, Number(v.cooldown) || 0)) });
     if (result.length >= 24) break;
   }
@@ -1087,7 +1087,7 @@ export class Game {
     const held = this.selectedStack();
     if (mob && dist < blockDist && (mob.type === 'villager' || mob.type === 'merchant') && !mob.dead) {
       this.openTrade(mob);
-    } else if (mob && dist < blockDist && mob.type === 'wolf' && !mob.tamed && !mob.dead && (held?.id === I.RAW_PORK || held?.id === I.RAW_BEEF || held?.id === I.RAW_CHICKEN)) {
+    } else if (mob && dist < blockDist && !mob.tamed && !mob.dead && held && isTrustFood(mob.type, held.id)) {
       this.placeCooldown = 0;
       this.tryUse();
     } else if (mob && dist < blockDist && this.attackCooldown <= 0) {
@@ -2427,7 +2427,7 @@ export class Game {
   private restoreCompanions(raw: unknown) {
     for (const saved of normalizeCompanions(raw)) {
       const active = saved.dim === (this.isInNether ? 'nether' : 'home');
-      const mob = active ? this.spawnMob('wolf', saved.x, saved.y, saved.z) : new Mob('wolf', saved.x, saved.y, saved.z);
+      const mob = active ? this.spawnMob(saved.type, saved.x, saved.y, saved.z) : new Mob(saved.type, saved.x, saved.y, saved.z);
       mob.trust = saved.trust;
       mob.trustCooldown = saved.cooldown;
       if (saved.tamed) mob.tame();
@@ -2440,8 +2440,8 @@ export class Game {
   private companionSaves(): CompanionSave[] {
     const active: CompanionSave['dim'] = this.isInNether ? 'nether' : 'home';
     const collect = (mobs: Mob[], dim: CompanionSave['dim']): CompanionSave[] =>
-      mobs.filter((m) => m.type === 'wolf' && !m.dead && m.trust > 0).map((m) => ({
-        type: 'wolf', dim, x: m.body.pos.x, y: m.body.pos.y, z: m.body.pos.z,
+      mobs.filter((m) => isTrustAnimal(m.type) && !m.dead && m.trust > 0).map((m) => ({
+        type: m.type as TrustAnimal, dim, x: m.body.pos.x, y: m.body.pos.y, z: m.body.pos.z,
         trust: m.trust, tamed: m.tamed, health: m.health, cooldown: m.trustCooldown,
       }));
     return normalizeCompanions([
@@ -3664,29 +3664,29 @@ export class Game {
       }
     }
     if (t && t.id === B.CAMPFIRE && this.cookOnCampfire(s)) return;
-    // Taming: right-click a wild wolf while holding raw meat.
-    if (s.id === I.RAW_PORK || s.id === I.RAW_BEEF || s.id === I.RAW_CHICKEN) {
-      const wt = this.findMobTarget(4.5);
-      if (wt.mob && wt.mob.type === 'wolf' && !wt.mob.tamed && !wt.mob.dead) {
-        const tracked = [...(this.mobs ?? []), ...(this.dimStash?.home.mobs ?? []), ...(this.dimStash?.nether.mobs ?? [])]
-          .filter((m) => m.type === 'wolf' && !m.dead && m.trust > 0).length;
-        if (!wt.mob.trust && tracked >= 24) {
-          this.message('Masz już 24 zaprzyjaźnione wilki w tym świecie.');
-          return;
-        }
-        const result = wt.mob.feedTrust();
-        if (result === 'wait') { this.message('Wilk potrzebuje chwili przed kolejnym karmieniem.'); return; }
-        if (result === 'invalid') return;
-        if (this.mode === 'survival') this.consumeSelected();
-        Sfx.playEat();
-        Sfx.playPop();
-        if (result === 'tamed') {
-          this.message('Zaufanie 3/3: wilk jest posłuszny i będzie cię bronić!');
-          this.unlock('wolf');
-        } else this.message(`Zaufanie wilka: ${wt.mob.trust}/3. Poczekaj 3 sekundy i nakarm go ponownie.`);
-        this.swingT = 0;
+    // Earned trust is species-specific; only a successful, cooldown-free
+    // feeding consumes food. The world-wide 24-animal cap covers both dimensions.
+    const companionTarget = vt.mob;
+    if (companionTarget && !companionTarget.tamed && !companionTarget.dead && isTrustFood(companionTarget.type, s.id)) {
+      const tracked = [...(this.mobs ?? []), ...(this.dimStash?.home.mobs ?? []), ...(this.dimStash?.nether.mobs ?? [])]
+        .filter((m) => isTrustAnimal(m.type) && !m.dead && m.trust > 0).length;
+      if (!companionTarget.trust && tracked >= 24) {
+        this.message('Masz już 24 zaprzyjaźnione zwierzęta w tym świecie.');
         return;
       }
+      const name = MOB_NAMES[companionTarget.type].toLowerCase();
+      const result = companionTarget.feedTrust();
+      if (result === 'wait') { this.message(`${name} potrzebuje chwili przed kolejnym karmieniem.`); return; }
+      if (result === 'invalid') return;
+      if (this.mode === 'survival') this.consumeSelected();
+      Sfx.playEat();
+      Sfx.playPop();
+      if (result === 'tamed') {
+        this.message(`Zaufanie 3/3: ${name} będzie za tobą podążać${companionTarget.type === 'wolf' ? ' i cię bronić' : ''}!`);
+        if (companionTarget.type === 'wolf') this.unlock('wolf');
+      } else this.message(`Zaufanie — ${name}: ${companionTarget.trust}/3. Poczekaj 3 sekundy i nakarm ponownie.`);
+      this.swingT = 0;
+      return;
     }
     if (s.id === I.BOW) {
       // holding RMB keeps drawing; only a fresh press starts a new draw
@@ -4689,7 +4689,7 @@ export class Game {
     const dl = this.daylight();
     const peaceful = this.mode === 'creative';
     for (const m of this.mobs) {
-      if (m.type === 'wolf' && m.trust > 0 && !m.dead && m.body.pos.distanceTo(p) > 90) continue;
+      if (isTrustAnimal(m.type) && m.trust > 0 && !m.dead && m.body.pos.distanceTo(p) > 90) continue;
       m.update(dt, this.world, p, (dmg, mob) => {
         if (this.ui === 'dead') return;
         if (this.dodgeTime > 0) { this.message('Cios chybiony — unik!'); return; }
@@ -4763,7 +4763,7 @@ export class Game {
     }
     this.mobs = this.mobs.filter((m) => {
       // Mieszkańcy i golemy trzymają się osady – nie znikają tuż za jej granicą.
-      const far = m.body.pos.distanceTo(p) > (isVillageMob(m.type) ? 240 : 90) && !(m.type === 'wolf' && m.trust > 0 && !m.dead);
+      const far = m.body.pos.distanceTo(p) > (isVillageMob(m.type) ? 240 : 90) && !(isTrustAnimal(m.type) && m.trust > 0 && !m.dead);
       const gone = (m.dead && m.deathTime > 0.9) || far || m.body.pos.y < -10;
       if (gone) {
         if (m.dead && !far) this.spawnSmoke(m.body.pos.x, m.body.pos.y + 0.5, m.body.pos.z, 10, 1);
@@ -4778,10 +4778,10 @@ export class Game {
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 1.5;
       const alive = this.mobs.filter((m) => !m.dead);
-      const passive = alive.filter((m) => !HOSTILE_MOBS.has(m.type) && !(m.type === 'wolf' && m.trust > 0)).length;
+      const passive = alive.filter((m) => !HOSTILE_MOBS.has(m.type) && !(isTrustAnimal(m.type) && m.trust > 0)).length;
       // Recount after each spawn branch: a single 1.5 s tick can otherwise
       // add several families and exceed the mobile-friendly passive cap.
-      const passiveCount = () => this.mobs.filter((m) => !m.dead && !HOSTILE_MOBS.has(m.type) && !(m.type === 'wolf' && m.trust > 0)).length;
+      const passiveCount = () => this.mobs.filter((m) => !m.dead && !HOSTILE_MOBS.has(m.type) && !(isTrustAnimal(m.type) && m.trust > 0)).length;
       const hostileCount = () => this.mobs.filter((m) => !m.dead && HOSTILE_MOBS.has(m.type)).length;
       const tryPos = (minD: number, maxD: number) => {
         const ang = Math.random() * Math.PI * 2;
@@ -5233,7 +5233,11 @@ export class Game {
     if (mob.type === 'golem') return mob.provoked > 0 ? 'Żelazny golem (rozgniewany!)' : 'Żelazny golem – stróż osady';
     if (mob.type === 'guard') return mob.provoked > 0 ? 'Strażnik wioski (rozgniewany!)' : 'Strażnik wioski – patrol';
     if (mob.type === 'merchant') return `Wędrowny kupiec · ${mob.merchantRegion}`;
-    if (mob.type === 'wolf') return mob.tamed ? 'Wilk oswojony · zaufanie 3/3' : `Wilk · zaufanie ${mob.trust}/3 · karm surowym mięsem`;
+    if (isTrustAnimal(mob.type)) {
+      const food = mob.type === 'rabbit' ? 'pszenicą' : mob.type === 'fox' ? 'surowym kurczakiem' : 'surowym mięsem';
+      const name = MOB_NAMES[mob.type];
+      return mob.tamed ? `${name} oswojony · zaufanie 3/3` : `${name} · zaufanie ${mob.trust}/3 · karm ${food}`;
+    }
     return `${MOB_NAMES[mob.type] ?? mob.type} · ${Math.max(0, Math.round(mob.health))}/${mob.maxHealth} HP`;
   }
 

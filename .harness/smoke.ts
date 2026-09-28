@@ -65,7 +65,7 @@ import { boundedPathStep } from '../src/game/pathfinding';
 import { chooseAmbient } from '../src/game/ambience';
 import { dodgeDirection, threatInFront } from '../src/game/combatMoves';
 import * as Sfx from '../src/game/audio';
-import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, villagerActivity, villagerWorkSpot, villagerWalkable, merchantProfession, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
+import { Mob, isTrustFood, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, villagerActivity, villagerWorkSpot, villagerWalkable, merchantProfession, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -2316,6 +2316,138 @@ section('3.0 #70: earned wolf trust, save migration and dimension-safe companion
     roundtrip.length === 2 && roundtrip[0].dim === 'home' && roundtrip[1].dim === 'nether');
   reload.mobs[0].dead = true;
   check('dead wolves are not duplicated on next save', reload.companionSaves().length === 1);
+}
+
+section('3.0 #70: fox and rabbit trust, behavior and mixed-species persistence');
+{
+  check('species require different existing survival food', isTrustFood('rabbit', I.WHEAT) &&
+    !isTrustFood('rabbit', I.RAW_CHICKEN) && isTrustFood('fox', I.RAW_CHICKEN) &&
+    !isTrustFood('fox', I.WHEAT) && isTrustFood('wolf', I.RAW_BEEF) &&
+    !isTrustFood('creeper', I.WHEAT));
+  const world = new World(4070, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  const rabbit = new Mob('rabbit', 6.5, y, 6.5);
+  const fox = new Mob('fox', 9.5, y, 8.5);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.ui = 'playing'; g.mode = 'survival'; g.keys = new Set(); g.target = null; g.selected = 0;
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.WHEAT, count: 4 };
+  g.mobs = [rabbit, fox]; g.body = { pos: new THREE.Vector3(6.5, y, 5.5) };
+  g.findMobTarget = () => ({ mob: rabbit, dist: 2 });
+  const messages: string[] = [];
+  g.message = (text: string) => messages.push(text);
+  g.emitHud = () => {};
+  g.unlock = () => {};
+  const rabbitMark = (rabbit as unknown as { trustMark: THREE.Mesh }).trustMark;
+  const foxMark = (fox as unknown as { trustMark: THREE.Mesh }).trustMark;
+  check('foxes and rabbits start wild with hidden trust marks', !rabbitMark.visible && !foxMark.visible);
+  g.tryUse();
+  check('PC feeding rabbit consumes exactly one wheat and reveals progress', rabbit.trust === 1 && rabbitMark.visible &&
+    g.inventory.countOf(I.WHEAT) === 3 && messages.at(-1)?.includes('1/3'));
+  g.tryUse();
+  check('spam feeding rabbit cannot consume food', rabbit.trust === 1 && g.inventory.countOf(I.WHEAT) === 3);
+  const far = new THREE.Vector3(35, y, 35);
+  for (let i = 0; i < 95; i++) rabbit.update(1/30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('rabbit trust increases only after cooldown', rabbit.trust === 2 && g.inventory.countOf(I.WHEAT) === 2);
+  for (let i = 0; i < 95; i++) rabbit.update(1/30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('rabbit eventually follows but does not become a wolf fighter', rabbit.tamed && rabbit.trust === 3 &&
+    g.inventory.countOf(I.WHEAT) === 1 && rabbitMark.visible);
+  rabbit.body.pos.set(6.5, y, 6.5);
+  let rabbitBites = 0;
+  rabbit.update(1 / 30, world, new THREE.Vector3(12.5, y, 6.5), () => {}, () => {}, false,
+    [new Mob('zombie', 7.5, y, 7.5)], () => { rabbitBites++; });
+  check('trained rabbit moves towards player without attacking hostile mobs', rabbit.walking && rabbit.body.vel.x > 0 && rabbitBites === 0);
+  const wildRabbit = new Mob('rabbit', 6.5, y, 6.5);
+  wildRabbit.aiTimer = 100; wildRabbit.walking = false;
+  wildRabbit.update(1 / 30, world, new THREE.Vector3(9.7, y, 6.5), () => {}, () => {}, false);
+  const semiRabbit = new Mob('rabbit', 6.5, y, 6.5);
+  semiRabbit.trust = 2; semiRabbit.aiTimer = 100; semiRabbit.walking = false;
+  semiRabbit.update(1 / 30, world, new THREE.Vector3(9.7, y, 6.5), () => {}, () => {}, false);
+  check('partial trust reduces rabbit fear before taming', wildRabbit.walking && !semiRabbit.walking);
+
+  g.inventory.slots[0] = { id: I.RAW_CHICKEN, count: 3 };
+  g.findMobTarget = () => ({ mob: fox, dist: 2 });
+  g.refreshTarget = () => { g.target = null; };
+  g.attackCooldown = 0; g.touchAim = null;
+  let accidentalHits = 0;
+  g.tryAttack = () => { accidentalHits++; };
+  g.touchTap(0.4, 0.5);
+  check('tap feeds fox without accidental attack', fox.trust === 1 && foxMark.visible &&
+    g.inventory.countOf(I.RAW_CHICKEN) === 2 && accidentalHits === 0 && g.touchAim === null);
+  for (let i = 0; i < 95; i++) fox.update(1/30, world, far, () => {}, () => {}, false);
+  g.mode = 'creative'; g.tryUse();
+  check('Creative feeds fox without using chicken', fox.trust === 2 && g.inventory.countOf(I.RAW_CHICKEN) === 2);
+  for (let i = 0; i < 95; i++) fox.update(1/30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('trained fox retains food, does not steal or hunt and gains visible marker',
+    fox.tamed && fox.trust === 3 && foxMark.visible && g.inventory.countOf(I.RAW_CHICKEN) === 2);
+  fox.body.pos.set(9.5, y, 8.5);
+  fox.update(1 / 30, world, new THREE.Vector3(14.5, y, 8.5), () => {}, () => {}, false,
+    [rabbit], () => { rabbitBites++; });
+  check('trained fox follows instead of hunting other animals', fox.walking && fox.body.vel.x > 0 && rabbitBites === 0);
+  const wildFox = new Mob('fox', 6.5, y, 6.5);
+  wildFox.aiTimer = 100; wildFox.walking = false;
+  wildFox.update(1 / 30, world, new THREE.Vector3(10.2, y, 6.5), () => {}, () => {}, false);
+  const semiFox = new Mob('fox', 6.5, y, 6.5);
+  semiFox.trust = 2; semiFox.aiTimer = 100; semiFox.walking = false;
+  semiFox.update(1 / 30, world, new THREE.Vector3(10.2, y, 6.5), () => {}, () => {}, false);
+  check('partial trust reduces fox fear before taming', wildFox.walking && !semiFox.walking);
+  const hp = rabbit.health;
+  const hungryFox = new Mob('fox', 6.7, y, 6.7);
+  hungryFox.attackCooldown = 0;
+  hungryFox.update(0.1, world, far, () => {}, () => {}, false, [rabbit]);
+  check('wild fox does not hunt a trained rabbit', rabbit.health === hp);
+  const wrong = new Mob('rabbit', 4.5, y, 4.5);
+  g.mode = 'survival'; g.hunger = 20; g.inventory.slots[0] = { id: I.RAW_CHICKEN, count: 2 };
+  g.findMobTarget = () => ({ mob: wrong, dist: 2 });
+  g.tryUse();
+  check('wrong-species food does not consume items or award trust', wrong.trust === 0 && g.inventory.countOf(I.RAW_CHICKEN) === 2);
+  g.mobs = [rabbit, fox, wrong]; g.findMobTarget = () => ({ mob: wrong, dist: 2 });
+  check('crosshair explains rabbit food and recorded progress', g.mobHint().includes('pszenicą') && g.mobHint().includes('0/3'));
+  g.findMobTarget = () => ({ mob: fox, dist: 2 });
+  check('trained fox has distinct progress hint', g.mobHint().includes('3/3'));
+
+  const legacy = { type: 'wolf', dim: 'home', x: 2.5, y, z: 2.5, health: 6, trust: 2, tamed: false, cooldown: 1 };
+  const saved = [legacy, { type: 'rabbit', dim: 'home', x: 6.5, y, z: 6.5, health: 4, trust: 3, tamed: true, cooldown: 0 },
+    { type: 'fox', dim: 'nether', x: 5.5, y: 48, z: 5.5, health: 9, trust: 2, tamed: false, cooldown: 2 }];
+  const valid = normalizeCompanions(saved);
+  check('old wolf saves coexist with two new species', valid.length === 3 && valid.map((s) => s.type).join() === 'wolf,rabbit,fox');
+  const reload = Object.create(Game.prototype) as unknown as Record<string, any>;
+  reload.mobs = []; reload.isInNether = false; reload.world = world;
+  reload.scene = { add: () => {}, remove: () => {} };
+  reload.dimStash = { home: { mobs: [] }, nether: { mobs: [] } };
+  const before = world.chunks.size;
+  reload.restoreCompanions(saved);
+  check('reload restores all species, trust and marker without distant chunk generation',
+    reload.mobs.length === 2 && reload.mobs[0].type === 'wolf' && reload.mobs[0].trust === 2 &&
+    reload.mobs[1].type === 'rabbit' && reload.mobs[1].tamed &&
+    (reload.mobs[1] as { trustMark: THREE.Mesh }).trustMark.visible &&
+    reload.dimStash.nether.mobs[0].type === 'fox' && reload.dimStash.nether.mobs[0].trust === 2 &&
+    world.chunks.size === before);
+  check('save roundtrip keeps separate dimensions and animal types', reload.companionSaves().map((m: any) => `${m.type}:${m.dim}`).join() ===
+    'wolf:home,rabbit:home,fox:nether');
+  const malformed = normalizeCompanions([
+    { type: 'fox', dim: 'home', x: 4, y, z: 3, health: 400, trust: 99, cooldown: 99 },
+    { type: 'rabbit', dim: 'home', x: 6, y, z: 3, health: 999, trust: 1 },
+    { type: 'fox', dim: 'home', x: 4, y, z: 3, health: 400, trust: 99, cooldown: 99 },
+    { type: 'rabbit', dim: 'home', x: Number.NaN, y, z: 3, health: 2, trust: 2 },
+    { type: 'creeper', dim: 'home', x: 8, y, z: 3, health: 2, trust: 2 },
+  ]);
+  check('import clamps and deduplicates mixed animals while refusing hostile/NaN', malformed.length === 2 &&
+    malformed[0].health === 9 && malformed[0].trust === 2 && malformed[0].cooldown === 3 &&
+    malformed[1].health === 4);
+  const crowded = new Mob('rabbit', 9.5, y, 9.5);
+  g.mobs = [crowded, ...Array.from({ length: 24 }, (_, i) => {
+    const friend = new Mob(i % 2 ? 'fox' : 'wolf', i + 1.5, y, 9.5);
+    friend.tame(); return friend;
+  })];
+  g.inventory.slots[0] = { id: I.WHEAT, count: 1 };
+  g.findMobTarget = () => ({ mob: crowded, dist: 2 });
+  g.tryUse();
+  check('global 24 companion cap refuses extra rabbit without charging wheat', crowded.trust === 0 &&
+    g.inventory.countOf(I.WHEAT) === 1 && messages.at(-1)?.includes('24'));
 }
 
 section('3.0 #68: bounded loaded-chunk pathfinding instead of wall pushing');

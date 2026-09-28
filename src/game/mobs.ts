@@ -3,10 +3,22 @@ import { CS, type World, type Biome } from './world';
 import { stepBody, type Body } from './physics';
 import { boundedPathStep } from './pathfinding';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
-import { isFood } from './items';
+import { I, isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
 export type MobType = 'echolurker' | 'sandstalker' | 'merchant' | 'pack_animal' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+
+export type TrustAnimal = 'wolf' | 'fox' | 'rabbit';
+export function isTrustAnimal(type: MobType): type is TrustAnimal {
+  return type === 'wolf' || type === 'fox' || type === 'rabbit';
+}
+/** Deliberately species-specific: incidental clicks or unsuitable food cannot
+ * silently consume an item or train the wrong creature. */
+export function isTrustFood(type: MobType, itemId: number): boolean {
+  if (type === 'wolf') return itemId === I.RAW_PORK || itemId === I.RAW_BEEF || itemId === I.RAW_CHICKEN;
+  if (type === 'fox') return itemId === I.RAW_CHICKEN;
+  return type === 'rabbit' && itemId === I.WHEAT;
+}
 
 /** Transient sound positions. The listener never receives the player's current
  * position as a pursuit goal: only footsteps, mining and item impacts count. */
@@ -229,7 +241,7 @@ export class Mob {
   exploded = false;
   looted = false;
   sheared = false;
-  /** Tamed wolves follow the player and fight hostiles for them. */
+  /** Trained animals follow the player; only wolves fight hostiles. */
   tamed = false;
   /** Three separate feedings earn loyalty. A short pause prevents click-spam. */
   trust = 0;
@@ -376,7 +388,7 @@ export class Mob {
   /** Only an accepted feeding consumes meat. The final feeding changes the
    * actual AI to a loyal companion; previous stages survive save/reload. */
   feedTrust(): 'invalid' | 'wait' | 'progress' | 'tamed' {
-    if (this.type !== 'wolf' || this.tamed || this.dead) return 'invalid';
+    if (!isTrustAnimal(this.type) || this.tamed || this.dead) return 'invalid';
     if (this.trustCooldown > 0) return 'wait';
     this.trust = Math.min(3, this.trust + 1);
     this.trustCooldown = 3;
@@ -386,14 +398,14 @@ export class Mob {
     return 'progress';
   }
 
-  /** Marks a wild wolf as tamed (friendly coat, full health). */
+  /** Marks a wild animal as trained (wolf keeps its old friendly coat). */
   tame(): boolean {
-    if (this.type !== 'wolf' || this.tamed || this.dead) return false;
+    if (!isTrustAnimal(this.type) || this.tamed || this.dead) return false;
     this.tamed = true;
     this.trust = 3;
     if (this.trustMark) this.trustMark.visible = true;
     this.health = this.maxHealth;
-    this.group.traverse((o) => {
+    if (this.type === 'wolf') this.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       const m = mesh.material as THREE.MeshLambertMaterial;
@@ -1205,9 +1217,9 @@ export class Mob {
       g.add(warning); this.meshes.push(warning);
       this.strikeWarning = warning;
     }
-    if (this.type === 'wolf') {
-      const mark = box(0.18, 0.13, 0.12, 0xffd477, sharedMats);
-      mark.position.set(0, 1.02, 0.37);
+    if (isTrustAnimal(this.type)) {
+      const mark = box(this.type === 'wolf' ? 0.18 : 0.16, 0.13, 0.12, 0xffd477, sharedMats);
+      mark.position.set(0, this.type === 'wolf' ? 1.02 : this.body.h + 0.13, this.type === 'wolf' ? 0.37 : 0);
       mark.visible = false;
       g.add(mark); this.meshes.push(mark); this.trustMark = mark;
     }
@@ -1622,6 +1634,25 @@ export class Mob {
     this.moveToward(dt, world, player, this.walking ? 4.6 : 0, target?.body.pos.x ?? player.x, target?.body.pos.z ?? player.z);
   }
 
+  /** Friendly foxes and rabbits trail the owner, without wolf attacks,
+   * stolen food, or extra loot. Normal movement still checks walls and fire. */
+  private updateTrainedAnimal(dt: number, world: World, player: THREE.Vector3): void {
+    const b = this.body;
+    const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
+    const dist = Math.hypot(dx, dz);
+    this.walking = dist > 1.7 && dist < 35;
+    if (this.walking) {
+      this.yaw = Math.atan2(dx, dz);
+      if (this.type === 'rabbit' && b.onGround && this.attackCooldown <= 0) {
+        b.vel.y = 5.6;
+        this.attackCooldown = 0.9;
+      }
+    }
+    if (this.hurtTime <= 0 && this.health < this.maxHealth)
+      this.health = Math.min(this.maxHealth, this.health + dt * 0.25);
+    this.moveToward(dt, world, player, this.walking ? (this.type === 'fox' ? 3.2 : 2.5) : 0, player.x, player.z);
+  }
+
   /** Removes a sheep's wool once. Returns false if it was already sheared or isn't a sheep. */
   shear(): boolean {
     if (this.type !== 'sheep' || this.dead || this.sheared) return false;
@@ -1758,7 +1789,7 @@ export class Mob {
     this.aiTimer -= dt;
     let threatX = 0, threatZ = 0;
     const pd = Math.hypot(b.pos.x - player.x, b.pos.z - player.z);
-    if (pd < 6 && Math.abs(b.pos.y - player.y) < 3) {
+    if (pd < Math.max(1.1, 6 - this.trust * 2) && Math.abs(b.pos.y - player.y) < 3) {
       threatX += (b.pos.x - player.x) / Math.max(pd, 0.1);
       threatZ += (b.pos.z - player.z) / Math.max(pd, 0.1);
     }
@@ -1788,7 +1819,7 @@ export class Mob {
     let prey: Mob | null = null;
     let preyDist = 12;
     for (const other of allies) {
-      if (other.dead || (other.type !== 'rabbit' && other.type !== 'chicken')) continue;
+      if (other.dead || other.tamed || (other.type !== 'rabbit' && other.type !== 'chicken')) continue;
       const d = b.pos.distanceTo(other.body.pos);
       if (d < preyDist) { prey = other; preyDist = d; }
     }
@@ -2029,7 +2060,8 @@ export class Mob {
     }
 
     if (this.tamed) {
-      this.updateTamed(dt, world, player, allies, onBite);
+      if (this.type === 'wolf') this.updateTamed(dt, world, player, allies, onBite);
+      else this.updateTrainedAnimal(dt, world, player);
       return;
     }
     if (this.type === 'villager') {
@@ -2090,7 +2122,7 @@ export class Mob {
     }
     if (this.type === 'rabbit') {
       const dx = b.pos.x - player.x, dz = b.pos.z - player.z;
-      const threatened = Math.hypot(dx, dz) < 7 && Math.abs(b.pos.y - player.y) < 3;
+      const threatened = Math.hypot(dx, dz) < Math.max(1.1, 7 - this.trust * 2) && Math.abs(b.pos.y - player.y) < 3;
       this.aiTimer -= dt;
       if (threatened) {
         this.yaw = Math.atan2(dx, dz);
