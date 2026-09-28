@@ -66,7 +66,7 @@ import {
   cleanWorldName, deleteSave, duplicateSave, exportSave, exportSaves, importSaves,
   loadSaves, renameSave, toggleFavoriteSave, upsertSave, MAX_WORLD_NAME,
 } from '../src/game/saves';
-import { ACHIEVEMENTS, achievementById } from '../src/game/achievements';
+import { ACHIEVEMENTS, achievementById, BIOME_DISCOVERY_GOALS } from '../src/game/achievements';
 import { Xp, xpToNext, totalXpForLevel, levelFromXp } from '../src/game/xp';
 import { ARMOR, isArmor, armorPoints, damageReduction, armorSlotOf } from '../src/game/armor';
 import {
@@ -1126,6 +1126,51 @@ section('engine: armor damage, equipping, xp');
   eq('active potion buffs cleared on death', g.effects.size, 0);
 }
 
+section('3.0 #80: first-visit biome rewards');
+{
+  const expected = ['Bagno', 'Sawanna', 'Dżungla', 'Tajga', 'Pustkowie', 'Kwiecista łąka'] as const;
+  check('six exploration goals are real achievements', expected.every((b) => achievementById(BIOME_DISCOVERY_GOALS[b]!) !== undefined));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.unlocked = new Set();
+  g.mode = 'survival';
+  g.toast = null;
+  g.message = () => {};
+  g.emitHud = () => {};
+  let xp = 0;
+  g.gainXp = (n: number) => { xp += n; };
+  g.discoverBiome('Bagno');
+  check('entering swamp adds the goal to the saved unlocked set', g.unlocked.has('biome_swamp'));
+  eq('one visit pays exactly 3 experience', xp, 3);
+  g.discoverBiome('Bagno');
+  eq('revisiting same biome never farms extra rewards', xp, 3);
+  g.discoverBiome('Równiny');
+  eq('ordinary terrain has no discovery reward', xp, 3);
+  g.discoverBiome('Kwiecista łąka');
+  eq('different biome has its own reward', xp, 6);
+  g.mode = 'creative';
+  g.discoverBiome('Tajga');
+  check('Creative earns journal entry without experience', xp === 6 && g.unlocked.has('biome_taiga'));
+  g.discoverBiome('Nether');
+  eq('the Nether does not award overworld goals', g.unlocked.size, 3);
+  let samples = 0;
+  g.mode = 'survival';
+  g.lastBiomeVisitKey = '';
+  g.body = { pos: new THREE.Vector3(-0.2, 66, -0.2) };
+  g.currentDimension = () => 'overworld';
+  g.world = { surface: (x: number, z: number) => { samples++; return { biome: x === -1 && z === -1 ? 'Pustkowie' : 'Sawanna' }; } };
+  g.observeBiomeAtPlayer();
+  check('negative block coordinates select the actually visited biome', g.unlocked.has('biome_wasteland'));
+  g.observeBiomeAtPlayer();
+  eq('staying inside a block does not resample terrain', samples, 1);
+  g.body.pos.x = 0.1;
+  g.observeBiomeAtPlayer();
+  check('crossing a biome border in one chunk gives a different goal', samples === 2 && g.unlocked.has('biome_savanna'));
+  g.currentDimension = () => 'nether';
+  g.observeBiomeAtPlayer();
+  eq('dimension swap invalidates last-position cache', samples, 3);
+
+}
+
 section('3.0 #52: meadow rabbits, fleeing, jumping, food and drops');
 {
   eq('meadow spawn selects rabbits often', pickPassiveMob(0.3, 'Kwiecista łąka'), 'rabbit');
@@ -1556,7 +1601,7 @@ section('saves: enchantments ride along');
   g.brewings = new Map();
   g.effects = new Map([['night', 17000], ['fall', 34500], ['sprint', 8000]]);
   g.potionsDrunk = new Set<number>();
-  g.unlocked = new Set(['wood']);
+  g.unlocked = new Set(['wood', 'biome_swamp']);
   g.weather = 'clear';
   g.xp = new Xp(42);
   g.armor = [{ id: I.IRON_BOOTS, count: 1, dur: 100, ench: { featherfalling: 3 } }];
@@ -1575,6 +1620,7 @@ section('saves: enchantments ride along');
   eq('durability still persists', stored.inv[0]?.dur, 300);
   eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
+  check('first-visit biome progress persists in a world export', stored.unlocked?.includes('biome_swamp') && exportSave('ench-test')?.includes('biome_swamp'));
   eq('night vision timer persists on save', stored.effects?.night, 17000);
   eq('fall resistance timer persists on save', stored.effects?.fall, 34500);
   eq('sprint timer persists on save', stored.effects?.sprint, 8000);

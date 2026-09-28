@@ -15,6 +15,7 @@ export const JOURNAL_CHAPTERS = [
   { title: 'Dalsze horyzonty', text: 'Staw czoła Endermanowi i wykorzystaj moc jego perły.', goals: ['enderman', 'pearl'] },
   { title: 'Wyprawa i ratunek', text: 'Złów rybę, przyjrzyj się okolicy i zadbaj o narzędzia.', goals: ['fisher', 'surveyor', 'smith', 'undying'] },
   { title: 'Godzina alchemika', text: 'Napełnij fiolki, rozpal statyw i warzy swoje pierwsze eliksiry.', goals: ['alchemist', 'tonic', 'fireproof', 'potioneer'] },
+  { title: 'Szlak sześciu biomów', text: 'Odwiedź osobiście sześć różnych krain. Za pierwsze wejście do każdej otrzymasz 3 PD w Survival.', goals: ['biome_swamp', 'biome_savanna', 'biome_jungle', 'biome_taiga', 'biome_wasteland', 'biome_meadow'] },
 ] as const;
 
 export function journalProgress(unlocked: string[]) {

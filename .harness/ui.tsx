@@ -376,21 +376,24 @@ section('2.4: brewing screen');
 
 section('2.3/2.4: journal chapter and menus');
 {
-  check('the journal has nine chapters', JOURNAL_CHAPTERS.length === 9, String(JOURNAL_CHAPTERS.length));
-  const last = JOURNAL_CHAPTERS[JOURNAL_CHAPTERS.length - 1];
+  check('the journal has ten chapters', JOURNAL_CHAPTERS.length === 10, String(JOURNAL_CHAPTERS.length));
+  const last = JOURNAL_CHAPTERS.find((chapter) => chapter.title === 'Godzina alchemika')!;
   check('the latest chapter is about the alchemist hour', last.title === 'Godzina alchemika', last.title);
   check('it covers brewing, healing, fire and mastery', ['alchemist', 'tonic', 'fireproof', 'potioneer'].every((id) => last.goals.includes(id as never)), last.goals.join(','));
+  const biomeChapter = JOURNAL_CHAPTERS.find((chapter) => chapter.title === 'Szlak sześciu biomów');
+  check('biome expedition is playable in the journal', !!biomeChapter && biomeChapter.goals.length === 6 && biomeChapter.goals.every((id) => ACHIEVEMENTS.some((a) => a.id === id)));
+  check('journal remembers partial biome visits', journalProgress(['biome_swamp']).find((c) => c.title === 'Szlak sześciu biomów')?.done === 1);
   check('every 2.4 goal is a real achievement', ['alchemist', 'tonic', 'fireproof', 'potioneer'].every((id) => ACHIEVEMENTS.some((a) => a.id === id)));
-  const expedition = JOURNAL_CHAPTERS[JOURNAL_CHAPTERS.length - 2];
+  const expedition = JOURNAL_CHAPTERS.find((chapter) => chapter.title === 'Wyprawa i ratunek')!;
   check('the 2.3 chapter stays intact', expedition.title === 'Wyprawa i ratunek' && ['fisher', 'surveyor', 'smith', 'undying'].every((id) => expedition.goals.includes(id as never)), expedition.goals.join(','));
   check('earlier chapters are untouched', JOURNAL_CHAPTERS[0].title === 'Pierwsze kroki' && JOURNAL_CHAPTERS[0].goals.join() === 'wood,craft,pick');
   // a chapter of new goals is not complete from the first brew
   const progress = journalProgress(['alchemist']);
-  const chapter = progress[progress.length - 1];
+  const chapter = progress.find((c) => c.title === 'Godzina alchemika')!;
   check('the first 2.4 goal is done', chapter.done === 1, String(chapter.done));
   check('but the chapter is not complete', chapter.complete === false);
   const done = journalProgress(['alchemist', 'tonic', 'fireproof', 'potioneer']);
-  check('the whole chapter can be completed', done[done.length - 1].complete === true);
+  check('the whole chapter can be completed', done.find((c) => c.title === 'Godzina alchemika')?.complete === true);
 
   const controls = renderToStaticMarkup(<Controls />);
   check('controls mention the rod', controls.includes('Wędka'));

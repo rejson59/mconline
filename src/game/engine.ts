@@ -33,7 +33,7 @@ import {
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
-import { achievementById } from './achievements';
+import { achievementById, BIOME_DISCOVERY_GOALS } from './achievements';
 import { upsertSave } from './saves';
 import { Xp } from './xp';
 import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT } from './armor';
@@ -1836,6 +1836,28 @@ export class Game {
     this.toast = { title: a.title, text: a.text, at: performance.now() };
     this.message(`Osiągnięcie: ${a.title}`);
     this.emitHud();
+  }
+
+  /** Only entering a biome earns its journal goal; the unlocked set is saved. */
+  private lastBiomeVisitKey = '';
+
+  private discoverBiome(biome: Biome) {
+    const id = BIOME_DISCOVERY_GOALS[biome];
+    if (!id || this.unlocked.has(id)) return;
+    this.unlock(id);
+    if (this.mode === 'survival') {
+      this.gainXp(3);
+      this.message('Odkrycie biomu: +3 PD.');
+    }
+  }
+
+  /** Called on HUD ticks, but terrain noise runs only after entering a new block. */
+  private observeBiomeAtPlayer() {
+    const bx = Math.floor(this.body.pos.x), bz = Math.floor(this.body.pos.z);
+    const visitKey = `${this.currentDimension()}:${bx},${bz}`;
+    if (visitKey === this.lastBiomeVisitKey) return;
+    this.lastBiomeVisitKey = visitKey;
+    this.discoverBiome(this.world.surface(bx, bz).biome);
   }
 
   private notePickup(id: number) {
@@ -4705,6 +4727,8 @@ export class Game {
         this.discovery.survey(this.currentDimension(), p.x, p.z, s.biome, s.h);
       }
     }
+    // Use actual player coordinates; a biome border can cross the cached HUD chunk.
+    if (this.ui === 'playing') this.observeBiomeAtPlayer();
     this.refreshMinimap();
     this.onHud({
       hotbar: this.inventory.slots.slice(0, 9).map((s) => (s ? { ...s } : null)),
