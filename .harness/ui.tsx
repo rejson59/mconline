@@ -225,6 +225,7 @@ section('menus: static render');
     <SettingsScreen settings={{ ...DEFAULT_SETTINGS, controlMode: 'touch' }} onChange={noop} onClose={noop} />
   );
   check('forced touch mode is labelled', forcedTouch.includes('Dotyk (telefon / tablet)'));
+  check('fox behavior is explained to both PC and touch players', renderToStaticMarkup(<Controls />).includes('Lisy w tajdze i lasach'));
   const medium = renderToStaticMarkup(
     <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
   );

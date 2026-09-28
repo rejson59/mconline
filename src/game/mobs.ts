@@ -2,13 +2,20 @@ import * as THREE from 'three';
 import type { World, Biome } from './world';
 import { stepBody, type Body } from './physics';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
+import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
-/** Rabbits prefer flower meadows, with a small plains population in older worlds. */
+/** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
+export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
+
+/** Rabbits prefer meadows; foxes range from taiga into older forests. */
 export function pickPassiveMob(roll: number, biome: Biome): MobType {
   if ((biome === 'Kwiecista łąka' && roll < 0.42) || (biome === 'Równiny' && roll < 0.025)) return 'rabbit';
+  if ((biome === 'Tajga' && roll < 0.3) ||
+      (biome === 'Kwiecista łąka' && roll >= 0.42 && roll < 0.54) ||
+      (biome === 'Las' && roll >= 0.1 && roll < 0.18)) return 'fox';
   return roll < 0.1 ? 'wolf' : roll < 0.4 ? 'cow' : roll < 0.65 ? 'chicken' : roll < 0.88 ? 'pig' : 'sheep';
 }
 
@@ -57,6 +64,8 @@ export class Mob {
   tamed = false;
   /** Grabież (Looting): extra drops rolled when this mob's loot is collected. */
   bonusLoot = 0;
+  /** A purely visual munching cue, not a held inventory item. */
+  foxSnack = 0;
   /** True while a spider crawls up a wall (drives the leg animation). */
   climbing = false;
   /** 1.6: zawód mieszkańca (indeks w PROFESSIONS) i jego stan handlu. */
@@ -79,6 +88,7 @@ export class Mob {
     this.home.set(x, y, z);
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
+        : type === 'fox' ? 0.55
         : type === 'rabbit' ? 0.38
         : type === 'chicken' ? 0.45
           : type === 'cow' ? 1.1
@@ -94,12 +104,13 @@ export class Mob {
             : type === 'enderman' ? 2.9
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
-                  : type === 'rabbit' ? 0.65 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
+                  : type === 'fox' ? 0.72 : type === 'rabbit' ? 0.65 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
     this.maxHealth = this.health =
       type === 'zombie' ? 20
         : type === 'creeper' ? 16
           : type === 'cow' ? 10
+            : type === 'fox' ? 9
             : type === 'rabbit' ? 4
             : type === 'chicken' ? 4
               : type === 'sheep' ? 8
@@ -198,6 +209,45 @@ export class Mob {
       this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
       this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
       this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'fox') {
+      // Narrow red-orange body, dark paws, white chest and broad light-tipped
+      // tail stay legible in the low-detail render preset.
+      const fur = 0xbd572c, dark = 0x342621, pale = 0xf4e7d0;
+      const torso = box(0.49, 0.37, 0.77, fur, sharedMats);
+      torso.position.set(0, 0.38, -0.07);
+      const chest = box(0.36, 0.28, 0.23, pale, sharedMats);
+      chest.position.set(0, 0.29, 0.31);
+      const tail = box(0.32, 0.29, 0.56, fur, sharedMats);
+      tail.position.set(0, 0.41, -0.64);
+      tail.rotation.x = -0.22;
+      const tip = box(0.33, 0.26, 0.17, pale, sharedMats);
+      tip.position.set(0, 0.46, -0.92);
+      g.add(torso, chest, tail, tip);
+      this.meshes.push(torso, chest, tail, tip);
+      const head = new THREE.Group();
+      head.position.set(0, 0.53, 0.37);
+      const face = box(0.4, 0.31, 0.32, fur, sharedMats);
+      head.add(face);
+      this.meshes.push(face);
+      const muzzle = box(0.26, 0.13, 0.22, pale, sharedMats);
+      muzzle.position.set(0, -0.1, 0.25);
+      const nose = box(0.09, 0.08, 0.06, dark, sharedMats);
+      nose.position.set(0, -0.1, 0.38);
+      head.add(muzzle, nose);
+      this.meshes.push(muzzle, nose);
+      for (const side of [-1, 1]) {
+        const ear = box(0.12, 0.2, 0.1, dark, sharedMats);
+        ear.position.set(side * 0.14, 0.24, -0.05);
+        const eye = box(0.07, 0.055, 0.025, 0x161412, sharedMats);
+        eye.position.set(side * 0.12, 0.035, 0.175);
+        head.add(ear, eye);
+        this.meshes.push(ear, eye);
+      }
+      g.add(head);
+      this.head = head;
+      for (const z of [-0.32, 0.27]) for (const side of [-1, 1]) {
+        this.addLeg(side * 0.18, 0.23, z, 0.12, 0.23, 0.14, dark, this.legs);
+      }
     } else if (this.type === 'rabbit') {
       // Small silhouette, large upright ears, bright tail; two hind-leg pivots
       // double as a readable hopping animation on low graphics presets.
@@ -824,6 +874,94 @@ export class Mob {
     return true;
   }
 
+  /** Hunt only small wild animals, or steal one unit from a dropped food
+   * stack. Threats always take precedence; foxes do not attack the player. */
+  private updateFox(dt: number, world: World, player: THREE.Vector3, allies: Mob[],
+    food: readonly FoxFood[], onSnatch: (target: FoxFood) => boolean): void {
+    const b = this.body;
+    this.foxSnack = Math.max(0, this.foxSnack - dt);
+    this.head.rotation.x = this.foxSnack > 0 ? 0.14 + Math.sin(this.foxSnack * 18) * 0.1 : 0;
+    this.aiTimer -= dt;
+    let threatX = 0, threatZ = 0;
+    const pd = Math.hypot(b.pos.x - player.x, b.pos.z - player.z);
+    if (pd < 6 && Math.abs(b.pos.y - player.y) < 3) {
+      threatX += (b.pos.x - player.x) / Math.max(pd, 0.1);
+      threatZ += (b.pos.z - player.z) / Math.max(pd, 0.1);
+    }
+    for (const other of allies) {
+      if (other.dead || other === this || (other.type !== 'wolf' && other.type !== 'golem')) continue;
+      const d = b.pos.distanceTo(other.body.pos);
+      if (d < 8) {
+        threatX += (b.pos.x - other.body.pos.x) / Math.max(d, 0.1);
+        threatZ += (b.pos.z - other.body.pos.z) / Math.max(d, 0.1);
+      }
+    }
+    if (threatX !== 0 || threatZ !== 0 || this.hurtTime > 0) {
+      if (threatX === 0 && threatZ === 0) {
+        threatX = b.pos.x - player.x;
+        threatZ = b.pos.z - player.z;
+      }
+      this.yaw = Math.atan2(threatX, threatZ);
+      this.walking = true;
+      if (b.onGround && this.attackCooldown <= 0) {
+        b.vel.y = 5.5;
+        this.attackCooldown = 0.55;
+      }
+      this.moveAndAnimate(dt, world, player, 4.1);
+      return;
+    }
+
+    let prey: Mob | null = null;
+    let preyDist = 12;
+    for (const other of allies) {
+      if (other.dead || (other.type !== 'rabbit' && other.type !== 'chicken')) continue;
+      const d = b.pos.distanceTo(other.body.pos);
+      if (d < preyDist) { prey = other; preyDist = d; }
+    }
+    if (prey) {
+      this.yaw = Math.atan2(prey.body.pos.x - b.pos.x, prey.body.pos.z - b.pos.z);
+      this.walking = preyDist > 0.75;
+      if (preyDist < 1.1 && this.attackCooldown <= 0) {
+        this.attackCooldown = 1.2;
+        prey.damage(2, b.pos.x, b.pos.z);
+        this.foxSnack = 0.35;
+      }
+      if (b.onGround && this.walking && this.attackCooldown <= 0) {
+        b.vel.y = 4.5;
+        this.attackCooldown = 0.6;
+      }
+      this.moveAndAnimate(dt, world, player, this.walking ? 3.2 : 0);
+      return;
+    }
+
+    let snack: FoxFood | null = null;
+    let foodDist = 9;
+    for (const d of food) {
+      if (d.age < 0.75 || d.count <= 0 || !isFood(d.id)) continue;
+      const dist = b.pos.distanceTo(d.pos);
+      if (dist < foodDist) { snack = d; foodDist = dist; }
+    }
+    if (snack) {
+      this.yaw = Math.atan2(snack.pos.x - b.pos.x, snack.pos.z - b.pos.z);
+      this.walking = foodDist > 0.8;
+      if (foodDist < 1.15 && this.attackCooldown <= 0 && onSnatch(snack)) {
+        this.attackCooldown = 5; // even large stacks cannot be eaten instantly
+        this.foxSnack = 1.5;
+        this.soundTimer = 0.1;
+      }
+      this.moveAndAnimate(dt, world, player, this.walking ? 2.7 : 0);
+      return;
+    }
+
+    if (this.aiTimer <= 0) {
+      this.aiTimer = 2 + Math.random() * 4;
+      const homeDist = Math.hypot(this.home.x - b.pos.x, this.home.z - b.pos.z);
+      this.yaw = homeDist > 18 ? Math.atan2(this.home.x - b.pos.x, this.home.z - b.pos.z) : Math.random() * Math.PI * 2;
+      this.walking = homeDist > 18 || Math.random() < 0.55;
+    }
+    this.moveAndAnimate(dt, world, player, this.walking ? 1.2 : 0);
+  }
+
   update(
     dt: number,
     world: World,
@@ -833,7 +971,9 @@ export class Mob {
     peaceful: boolean,
     allies: Mob[] = [],
     onBite: (mob: Mob) => void = () => {},
-    aggressionSpeed = 1
+    aggressionSpeed = 1,
+    food: readonly FoxFood[] = [],
+    onSnatch: (target: FoxFood) => boolean = () => false
   ) {
     const b = this.body;
     if (this.hurtTime > 0) {
@@ -858,6 +998,10 @@ export class Mob {
     }
     if (this.type === 'golem') {
       this.updateGolem(dt, world, player, allies, onAttack);
+      return;
+    }
+    if (this.type === 'fox') {
+      this.updateFox(dt, world, player, allies, food, onSnatch);
       return;
     }
     if (this.type === 'rabbit') {

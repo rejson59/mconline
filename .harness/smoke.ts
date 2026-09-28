@@ -1391,6 +1391,77 @@ section('3.0 #52: meadow rabbits, fleeing, jumping, food and drops');
 
 }
 
+section('3.0 #53: biome foxes hunt, flee and steal only dropped food');
+{
+  eq('taiga can naturally spawn foxes', pickPassiveMob(0.2, 'Tajga'), 'fox');
+  eq('flower meadow can also spawn foxes', pickPassiveMob(0.49, 'Kwiecista łąka'), 'fox');
+  eq('older forest worlds can spawn foxes', pickPassiveMob(0.15, 'Las'), 'fox');
+  eq('old meadow rabbits keep their original chance', pickPassiveMob(0.3, 'Kwiecista łąka'), 'rabbit');
+  eq('old forest other animals keep their spawn range', pickPassiveMob(0.8, 'Las'), 'pig');
+  check('foxes are passive to players', !isHostileMob('fox'));
+  check('fox has Polish target name and distinctive model', MOB_NAMES.fox === 'Lis' && (() => {
+    const fox = new Mob('fox', 0, 0, 0);
+    return fox.meshes.length >= 14 && fox.legs.length === 4 && fox.body.h < 0.9;
+  })());
+  const w = new World(786, true);
+  w.getChunk(0, 0);
+  const distantPlayer = new THREE.Vector3(35.5, FLAT_H + 1, 35.5);
+  const hunter = new Mob('fox', 8.5, FLAT_H + 1, 8.5);
+  const prey = new Mob('rabbit', 10.5, FLAT_H + 1, 8.5);
+  const hp = prey.health;
+  for (let i = 0; i < 180 && !prey.dead; i++) hunter.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [hunter, prey]);
+  check('fox catches and damages a small animal in the real AI path', prey.health < hp, `${prey.health}/${hp} (fox ${hunter.body.pos.toArray()})`);
+  const timid = new Mob('fox', 7.5, FLAT_H + 1, 7.5);
+  const nearPlayer = new THREE.Vector3(9.5, FLAT_H + 1, 9.5);
+  const firstDist = timid.body.pos.distanceTo(nearPlayer);
+  let attacks = 0;
+  for (let i = 0; i < 90; i++) timid.update(1 / 30, w, nearPlayer, () => { attacks++; }, () => {}, false, [timid]);
+  check('fox flees instead of attacking the player', timid.body.pos.distanceTo(nearPlayer) > firstDist + 2 && attacks === 0);
+  const wolf = new Mob('wolf', 7.5, FLAT_H + 1, 10.5);
+  const scared = new Mob('fox', 7.5, FLAT_H + 1, 7.5);
+  const wolfDistance = scared.body.pos.distanceTo(wolf.body.pos);
+  for (let i = 0; i < 70; i++) scared.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [scared, wolf]);
+  check('fox keeps away from wolves', scared.body.pos.distanceTo(wolf.body.pos) > wolfDistance + 2);
+
+  const snackFox = new Mob('fox', 8.5, FLAT_H + 1, 8.5);
+  const food = { id: I.APPLE, count: 2, age: 2, pos: new THREE.Vector3(8.6, FLAT_H + 1, 8.5) };
+  let eaten = 0;
+  const snatch = () => { eaten++; food.count--; return true; };
+  for (let i = 0; i < 30; i++) snackFox.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [snackFox], () => {}, 1, [food], snatch);
+  check('fox steals exactly one from a food stack with a cooldown', eaten === 1 && food.count === 1 && snackFox.foxSnack > 0);
+  const metal = { ...food, id: I.IRON, count: 1 };
+  let stolenMetal = 0;
+  snackFox.attackCooldown = 0;
+  snackFox.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [snackFox], () => {}, 1, [metal], () => { stolenMetal++; return true; });
+  eq('fox will not steal tools, materials or non-food items', stolenMetal, 0);
+  const newFood = { id: I.BREAD, count: 1, age: 0.3, pos: snackFox.body.pos.clone() };
+  snackFox.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [snackFox], () => {}, 1, [newFood], () => { stolenMetal++; return true; });
+  eq('newly dropped food is not stolen during pickup grace period', stolenMetal, 0);
+
+  // Exercise the actual game callback: stealing a stack decrements exactly one
+  // item and deleting the final one removes its world mesh, with no inventory.
+  const game = Object.create(Game.prototype) as unknown as Record<string, any>;
+  game.world = w;
+  game.time = 0.25;
+  game.mode = 'survival';
+  game.ui = 'playing';
+  game.isInNether = false;
+  game.difficulty = { ...DEFAULT_DIFFICULTY };
+  game.mobs = [new Mob('fox', 8.5, FLAT_H + 1, 8.5)];
+  game.body = { pos: new THREE.Vector3(20.5, FLAT_H + 1, 8.5) };
+  game.spawnTimer = 100;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.32), new THREE.MeshBasicMaterial());
+  game.drops = [{ id: I.APPLE, count: 2, age: 2, pos: new THREE.Vector3(8.55, FLAT_H + 1, 8.5), mesh, vel: new THREE.Vector3() }];
+  let removed = 0, feedback = 0;
+  game.scene = { remove: () => { removed++; } };
+  game.message = () => { feedback++; };
+  game.updateMobs(1 / 30);
+  check('real world drop loses one when fox eats; remainder can still be picked up', game.drops.length === 1 && game.drops[0].count === 1 && removed === 0 && feedback === 1, `${JSON.stringify(game.drops.map((d: {count:number}) => d.count))} removed=${removed} feedback=${feedback} fox=${game.mobs[0]?.body.pos.toArray()}`);
+  game.mobs[0].attackCooldown = 0;
+  game.updateMobs(1 / 30);
+  check('fox consuming last unit removes the entity rather than duplicating it', game.drops.length === 0 && removed === 1 && feedback === 2, `${JSON.stringify(game.drops.map((d: {count:number}) => d.count))} removed=${removed} feedback=${feedback}`);
+}
+
 // ======================================================================== wolf
 section('mobs: wolf taming and defence');
 {

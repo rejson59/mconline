@@ -14,7 +14,7 @@ import {
 } from './brewing';
 import { getAtlas, compactAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, pickPassiveMob, type MobType } from './mobs';
+import { Mob, isHostileMob, pickPassiveMob, type FoxFood, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
@@ -226,6 +226,7 @@ const EFFECT_META: Record<Exclude<PotionEffectId, 'none'>, { icon: string; name:
 export const MOB_NAMES: Record<MobType, string> = {
   pig: 'Świnia',
   rabbit: 'Królik',
+  fox: 'Lis',
   sheep: 'Owca',
   cow: 'Krowa',
   chicken: 'Kurczak',
@@ -2667,7 +2668,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2679,7 +2680,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -4533,7 +4534,23 @@ export class Game {
         // tamed wolf's bite
         target.damage(4, m.body.pos.x, m.body.pos.z);
         Sfx.playHurt();
-      }, hostileSpeed(this.difficulty.aggression));
+      }, hostileSpeed(this.difficulty.aggression), this.drops, (food: FoxFood) => {
+        // Consume ONE from the actual world entity: no shadow inventory, no
+        // saved held item, no duplication when the player picks up the rest.
+        const i = this.drops.indexOf(food as DropEntity);
+        if (i < 0 || food.count <= 0 || food.age < 0.75 || !isFood(food.id)) return false;
+        const drop = this.drops[i];
+        drop.count--;
+        if (drop.count === 0) {
+          this.drops.splice(i, 1);
+          this.scene.remove(drop.mesh);
+          const mesh = drop.mesh as THREE.Mesh;
+          mesh.geometry?.dispose();
+          if (mesh.material && !Array.isArray(mesh.material)) mesh.material.dispose();
+        }
+        if (m.body.pos.distanceTo(p) < 16) this.message('Lis porwał leżące jedzenie!');
+        return true;
+      });
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
         if (m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
@@ -4590,11 +4607,11 @@ export class Game {
       };
       if (!this.isInNether && passive < 12 && dl > 0.5) {
         const pos = tryPos(20, 48);
-        if (pos && (pos.top === B.GRASS || pos.top === B.MEADOW_GRASS)) {
+        if (pos && (pos.top === B.GRASS || pos.top === B.MEADOW_GRASS || pos.top === B.PODZOL)) {
           const biome = this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome;
           const roll = Math.random();
           const type = pickPassiveMob(roll, biome);
-          const n = type === 'rabbit' || type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+          const n = type === 'fox' ? 1 : type === 'rabbit' || type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
           for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
         }
       }
@@ -5048,6 +5065,9 @@ export class Game {
       if (meat) this.spawnDrop(I.RAW_BEEF, meat, x, y, z);
       const hide = Math.floor(Math.random() * 3);
       for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
+    else if (m.type === 'fox') {
+      if (Math.random() < 0.3) this.spawnDrop(I.LEATHER, 1, x, y, z);
     }
     else if (m.type === 'rabbit') {
       if (meat) this.spawnDrop(I.RAW_RABBIT, meat, x, y, z);

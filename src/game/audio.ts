@@ -117,7 +117,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'rabbit' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
+export function playMob(type: 'pig' | 'fox' | 'rabbit' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -127,6 +127,13 @@ export function playMob(type: 'pig' | 'rabbit' | 'zombie' | 'sheep' | 'cow' | 'c
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(260, t);
     o.frequency.linearRampToValueAtTime(180, t + 0.25);
+  } else if (type === 'fox') {
+    // Two short, rising yips instead of a constant hostile drone.
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(360, t);
+    o.frequency.linearRampToValueAtTime(590, t + 0.11);
+    o.frequency.setValueAtTime(390, t + 0.18);
+    o.frequency.linearRampToValueAtTime(620, t + 0.32);
   } else if (type === 'rabbit') {
     o.type = 'triangle';
     o.frequency.setValueAtTime(580, t);
