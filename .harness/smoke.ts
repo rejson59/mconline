@@ -2981,12 +2981,26 @@ section('2.4: potion effects inside the engine');
   g.updateEffects(100);
   check('the effect ends and the timer resets', g.hasEffect('regen') === false && g.potionRegenAcc < 2);
 
+  // Both 3.0 brews pass through the real drink path and decay independently.
+  g.inventory.slots[0] = { id: I.POTION_FALL, count: 1 };
+  g.drinkPotion({ id: I.POTION_FALL, count: 1 });
+  eq('drinking fall protection applies 35 s', g.effectLeft('fall'), 35);
+  eq('fall bottle consumed in Survival', g.inventory.slots[0], null);
+  g.inventory.slots[0] = { id: I.POTION_SPRINT, count: 1 };
+  g.drinkPotion({ id: I.POTION_SPRINT, count: 1 });
+  eq('drinking sprint potion applies 12 s', g.effectLeft('sprint'), 12);
+  eq('sprint bottle consumed in Survival', g.inventory.slots[0], null);
+  g.updateEffects(13);
+  check('short sprint expires before fall protection', !g.hasEffect('sprint') && g.hasEffect('fall'));
+  g.updateEffects(23);
+  check('fall protection expires normally', !g.hasEffect('fall'));
+
   // the awkward brew is harmless but still drunk
   g.inventory.slots[0] = { id: I.POTION_AWKWARD, count: 1 };
   g.drinkPotion({ id: I.POTION_AWKWARD, count: 1 });
   eq('awkward tastes like dirt', g.inventory.slots[0], null);
   check('and no effect sticks', g.effects.size === 0);
-  check('it does not count toward mastery', (g.potionsDrunk as Set<number>).size === 1);
+  check('awkward does not count toward mastery', (g.potionsDrunk as Set<number>).size === 3);
 }
 
 section('2.4: bug fixes');
