@@ -67,6 +67,45 @@ export function findNearbyShelter(world: Pick<World, 'peekBlock' | 'hasChunk'>, 
   return result;
 }
 
+/** Nearby open flames are avoided, but never queried outside loaded chunks. */
+export function nearestFire(world: Pick<World, 'peekBlock' | 'hasChunk'>, x: number, y: number, z: number): { x: number; z: number; safe: number } | null {
+  let best = 16;
+  let result: { x: number; z: number; safe: number } | null = null;
+  for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
+    const xx = x + dx, zz = z + dz;
+    if (!world.hasChunk(Math.floor(xx / CS), Math.floor(zz / CS))) continue;
+    for (const yy of [y - 1, y, y + 1]) {
+      const id = world.peekBlock(xx, yy, zz);
+      const safe = id === B.CAMPFIRE ? 3.2 : id === B.TORCH ? 2 : 0;
+      if (!safe) continue;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < best) { best = d2; result = { x: xx + 0.5, z: zz + 0.5, safe }; }
+    }
+  }
+  return result;
+}
+
+/** A cheap local step away from fire. Do not walk into walls, lava, or cliffs
+ * just because the direct outward vector points there. */
+export function fireEscapeHeading(world: Pick<World, 'peekBlock'>, x: number, y: number, z: number, fireX: number, fireZ: number): number | null {
+  const oldDist = Math.hypot(x - fireX, z - fireZ);
+  let best = oldDist + 0.08;
+  let heading: number | null = null;
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    const nx = x + Math.sin(a) * 1.1, nz = z + Math.cos(a) * 1.1;
+    const xx = Math.floor(nx), zz = Math.floor(nz);
+    const ground = world.peekBlock(xx, y - 1, zz);
+    const feet = world.peekBlock(xx, y, zz);
+    const head = world.peekBlock(xx, y + 1, zz);
+    if (!IS_SOLID[ground] || ground === B.CAMPFIRE || ground === B.MAGMA ||
+      ground === B.LAVA || feet === B.WATER || feet === B.LAVA || IS_SOLID[feet] || IS_SOLID[head]) continue;
+    const d = Math.hypot(nx - fireX, nz - fireZ);
+    if (d > best) { best = d; heading = a; }
+  }
+  return heading;
+}
+
 export function isHostileMob(type: MobType): boolean {
   return type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton' || type === 'enderman' || type === 'slime' || type === 'ghast';
 }
@@ -119,6 +158,8 @@ export class Mob {
   private lizardSkin: THREE.MeshLambertMaterial | null = null;
   private lizardFace: THREE.MeshLambertMaterial | null = null;
   private camouflageGround = -1;
+  private fireTimer = 0;
+  private nearbyFlame: { x: number; z: number; safe: number } | null = null;
   private shelterTimer = 0;
   private shelterGoal: { x: number; z: number } | null = null;
   /** True while a spider crawls up a wall (drives the leg animation). */
@@ -1279,6 +1320,29 @@ export class Mob {
     }
     this.attackCooldown -= dt;
     this.soundTimer -= dt;
+
+    if ((this.type === 'pig' || this.type === 'cow' || this.type === 'sheep' || this.type === 'chicken' ||
+      this.type === 'rabbit' || this.type === 'fox' || this.type === 'frog' || this.type === 'lizard') && this.hurtTime <= 0) {
+      this.fireTimer -= dt;
+      if (this.fireTimer <= 0) {
+        this.nearbyFlame = nearestFire(world, Math.floor(b.pos.x), Math.floor(b.pos.y), Math.floor(b.pos.z));
+        this.fireTimer = this.nearbyFlame ? 0.22 : 0.8;
+      }
+      const flame = this.nearbyFlame;
+      if (flame && Math.hypot(b.pos.x - flame.x, b.pos.z - flame.z) < flame.safe &&
+        b.pos.distanceTo(player) > 4) {
+        const heading = fireEscapeHeading(world, b.pos.x, Math.floor(b.pos.y), b.pos.z, flame.x, flame.z);
+        if (heading != null) {
+          this.yaw = heading;
+          this.walking = true;
+          this.moveAndAnimate(dt, world, player, 2.1);
+        } else {
+          this.walking = false;
+          this.moveAndAnimate(dt, world, player, 0);
+        }
+        return;
+      }
+    }
 
     if (this.tamed) {
       this.updateTamed(dt, world, player, allies, onBite);

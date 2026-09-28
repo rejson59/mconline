@@ -61,7 +61,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, batSpawnAllowed, findNearbyShelter, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -1661,6 +1661,44 @@ section('3.0 #58: visible camouflage for small swamp lizards');
     g.updateMobs(1 / 30);
     check('Nether has no swamp lizards', !g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
   } finally { Math.random = random; }
+}
+
+section('3.0 #63: real campfire and torch avoidance');
+{
+  const world = new World(184, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  const far = new THREE.Vector3(40, y, 40);
+  // The flat preset can still place trees and tallgrass: make a controlled clearing.
+  for (let x = 7; x <= 13; x++) for (let z = 6; z <= 10; z++) for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  eq('ordinary terrain has no flame to evade', nearestFire(world, 9, y, 8), null);
+  world.setBlock(8, y, 8, B.CAMPFIRE);
+  eq('campfire is found from adjacent tile', nearestFire(world, 9, y, 8)?.safe, 3.2);
+  const cow = new Mob('cow', 10, y, 8.5);
+  cow.walking = false;
+  cow.aiTimer = 100;
+  for (let i = 0; i < 35; i++) cow.update(1 / 30, world, far, () => {}, () => {}, false);
+  check('livestock moves away from campfire instead of standing in it', cow.body.pos.x > 11 && !cow.dead);
+  world.setBlock(8, y, 8, B.AIR);
+  world.setBlock(8, y, 8, B.TORCH);
+  const rabbit = new Mob('rabbit', 9.5, y, 8.5);
+  rabbit.aiTimer = 100;
+  for (let i = 0; i < 20; i++) rabbit.update(1 / 30, world, far, () => {}, () => {}, false);
+  check('rabbit avoids a torch too', rabbit.body.pos.x > 10.1);
+  world.setBlock(8, y, 8, B.CAMPFIRE);
+  for (const z of [7, 8, 9]) { world.setBlock(11, y, z, B.STONE); world.setBlock(11, y + 1, z, B.STONE); }
+  const sideStep = fireEscapeHeading(world, 10, y, 8.5, 8.5, 8.5);
+  check('light-source route steers around a solid wall', sideStep !== null && Math.abs(Math.sin(sideStep!)) < 0.8);
+  const sheep = new Mob('sheep', 10, y, 8.5);
+  sheep.walking = false;
+  sheep.aiTimer = 100;
+  for (let i = 0; i < 20; i++) sheep.update(1 / 30, world, far, () => {}, () => {}, false);
+  check('sheep takes an available sidestep, not a blocked direct route', Math.abs(sheep.body.pos.z - 8.5) > 0.3 && sheep.body.pos.x < 11);
+  // Fully enclosed: there is no artificial escape through walls or lava.
+  for (const z of [7, 9]) for (const x of [9, 10]) {
+    world.setBlock(x, y, z, B.STONE); world.setBlock(x, y + 1, z, B.STONE);
+  }
+  eq('no false escape when fire is fully surrounded', fireEscapeHeading(world, 10, y, 8.5, 8.5, 8.5), null);
 }
 
 section('3.0 #62: bounded and predictable animal reactions to rain');

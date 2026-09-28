@@ -230,6 +230,7 @@ section('menus: static render');
   check('nighttime bats are explained in in-game help', renderToStaticMarkup(<Controls />).includes('Nietoperze w lesie nocą'));
   check('visible lizard camouflage is explained in help', renderToStaticMarkup(<Controls />).includes('Jaszczurki na Bagnach'));
   check('rain shelter behavior appears in help', renderToStaticMarkup(<Controls />).includes('Deszcz i zwierzęta'));
+  check('campfire avoidance appears in help', renderToStaticMarkup(<Controls />).includes('Ognisko i pochodnie'));
   const medium = renderToStaticMarkup(
     <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
   );
