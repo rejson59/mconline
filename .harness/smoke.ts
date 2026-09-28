@@ -3066,6 +3066,41 @@ section('2.5: wielka naprawa sterowania');
   check('drop key never repeats', !(Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has('KeyQ'));
 }
 
+section('3.0: spyglass long-range markers');
+{
+  const g = Object.create(Game.prototype) as any;
+  g.ui = 'playing';
+  g.zooming = true;
+  g.selectedStack = () => ({ id: I.SPYGLASS, count: 1 });
+  g.eyePos = () => new THREE.Vector3(0, 70, 0);
+  g.lookDir = () => new THREE.Vector3(1, 0, 0);
+  g.aimDir = null;
+  g.renderDistance = 4;
+  g.waypoints = [];
+  g.activeWaypointId = null;
+  g.body = { pos: new THREE.Vector3(0, 65, 0) };
+  g.currentDimension = () => 'overworld';
+  g.unlocked = new Set();
+  g.unlock = () => {};
+  g.emitHud = () => {};
+  const messages: string[] = [];
+  g.message = (text: string) => { messages.push(text); };
+  let reach = 0;
+  let loaded = false;
+  const hit = { x: 30, y: 66, z: -4, id: B.STONE };
+  g.world = {
+    raycast: (_x: number, _y: number, _z: number, _dx: number, _dy: number, _dz: number, maxDist: number) => { reach = maxDist; return hit; },
+    hasChunk: () => loaded,
+  };
+  check('spyglass cannot tag fake blocks in unloaded chunks', !g.markSpyglass() && g.waypoints.length === 0 && reach === 62);
+  loaded = true;
+  check('spyglass marks visible block and selects the actual waypoint', g.markSpyglass() &&
+    g.waypoints.length === 1 && g.activeWaypointId === g.waypoints[0].id && g.waypoints[0].x === 30);
+  g.zooming = false;
+  check('spyglass marking cannot fire without zoom', !g.markSpyglass() && g.waypoints.length === 1);
+  check('spyglass messages explain unreachable targets', messages.some((m) => m.includes('nie widać celu')));
+}
+
 section('3.0: visited-chunk map and legacy import');
 {
   const empty = DiscoveryMap.fromSave(undefined);

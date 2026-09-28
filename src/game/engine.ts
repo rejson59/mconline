@@ -1137,6 +1137,7 @@ export class Game {
     if (e.code === 'KeyM') { this.showMinimap = !this.showMinimap; this.emitHud(); return; }
     if (e.code === 'KeyJ') { e.preventDefault(); this.setUI('journal'); return; }
     if (e.code === 'KeyK') { e.preventDefault(); this.setUI('waypoints'); return; }
+    if (e.code === 'KeyG' && this.zooming) { e.preventDefault(); this.markSpyglass(); return; }
     if (e.code.startsWith('Digit') || e.code.startsWith('Numpad')) {
       const n = parseInt(e.code.slice(e.code.startsWith('Digit') ? 5 : 6), 10);
       if (n >= 1 && n <= 9) { this.selected = n - 1; this.emitHud(); }
@@ -2676,6 +2677,24 @@ export class Game {
     if (kind === 'custom' && this.unlocked instanceof Set) this.unlock('cartographer');
     this.emitHud();
     return waypoint;
+  }
+
+  /** Marks the actual block under the spyglass reticle, never a generated-on-
+   * demand point or the fake STONE sentinel at an unloaded chunk boundary. */
+  markSpyglass(): boolean {
+    if (this.ui !== 'playing' || !this.zooming || this.selectedStack()?.id !== I.SPYGLASS) return false;
+    const eye = this.eyePos();
+    const dir = this.aimDir ?? this.lookDir();
+    const reach = Math.min(96, this.renderDistance * CS - 2);
+    const hit = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, reach);
+    if (!hit || !this.world.hasChunk(Math.floor(hit.x / CS), Math.floor(hit.z / CS))) {
+      this.message('Lorneta: nie widać celu w zasięgu załadowanego świata.');
+      return false;
+    }
+    const point = this.addWaypoint(`Namierzono: ${BLOCKS[hit.id]?.name ?? 'miejsce'}`, 'custom', hit);
+    if (!point) { this.message('Lorneta: usuń stary znacznik (K), aby dodać nowy.'); return false; }
+    this.message(`Lorneta: śledzisz cel ${point.x}, ${point.y}, ${point.z}.`);
+    return true;
   }
 
   activateWaypoint(id: string | null) {
@@ -4731,6 +4750,7 @@ export class Game {
     // 2.4: fiolki i napoje mają krótką podpowiedź pod celownikiem
     if (id === I.BOTTLE) return 'Fiolka: PPM nad wodą, aby napełnić';
     if (id !== undefined && isPotion(id)) return 'Napój: PPM, aby wypić';
+    if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
     if (id === I.COMPASS) {
       const dx = this.spawnPoint.x - this.body.pos.x;
       const dz = this.spawnPoint.z - this.body.pos.z;
@@ -4745,7 +4765,7 @@ export class Game {
       return `Kompas: odrodzenie ${names[idx]} · ${Math.round(dist)} m`;
     }
     if (id === I.SPYGLASS) {
-      return this.zooming ? 'Lorneta: przybliżenie – puść PPM, aby wrócić' : 'Lorneta: przytrzymaj PPM, aby przyjrzeć się okolicy';
+      return this.zooming ? 'Lorneta: G / Zaznacz cel, aby śledzić widoczny blok' : 'Lorneta: przytrzymaj PPM, aby przyjrzeć się okolicy';
     }
     if (id === I.FISHING_ROD) {
       const f = this.fishingState();

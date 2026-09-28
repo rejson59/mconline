@@ -603,6 +603,13 @@ export default function TouchControls({
         </button>
       </div>
 
+      {game.isZooming() && (
+        <button className="pointer-events-auto absolute left-1/2 top-16 z-40 -translate-x-1/2 border-2 border-yellow-300 bg-stone-900/90 px-3 py-2 text-sm mc-text"
+          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); game.markSpyglass(); }}>
+          ⌖ Zaznacz cel
+        </button>
+      )}
+
       {/* krótka ściągka trybu tap – pod paskiem górnym, żeby nie zasłaniać HUD-u */}
       {settings.touchMode === 'tap' && (
         <div className="pointer-events-none absolute left-3 max-w-[240px] text-[12px] leading-tight opacity-55 mc-text" style={{ top: 92 }}>
