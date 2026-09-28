@@ -107,6 +107,7 @@ export function Controls() {
     ['Niedźwiedzie z młodymi', 'Dorosłe niedźwiedzie są spokojne, dopóki nie zagrozisz młodemu, jedzeniu lub nie zaatakujesz. Przed ciosem ryczą i pokazują pomarańczowy sygnał — odsuń się!'],
     ['Dzień mieszkańców', 'Rano i wieczorem mieszkańcy spotykają się, w dzień pracują przy stanowiskach zawodu, nocą odpoczywają. Zagrożenie zawsze przerywa rutynę.'],
     ['Żółwie i jaja', 'Żółwie przy wodzie znoszą jaja na piasku. Jaja rosną w trzech etapach i wylęgają się; etapy zapisują się w świecie.'],
+    ['Omijanie przeszkód', 'Moby ścigające cel szukają krótkiej, bezpiecznej drogi wokół murów. Nie wchodzą w lawę ani ognisko i nie próbują przechodzić przez zamkniętą ścianę.'],
     ['Ognisko i pochodnie', 'Wybrane zwierzęta obchodzą źródła ognia, nie biegną przez lawę ani zamknięte ściany'],
     ['Deszcz i zwierzęta', 'Krowy, świnie, owce i kurczaki szukają pobliskiego zadaszenia; żaby ożywiają się w deszczu'],
     ['Jaszczurki na Bagnach', 'Na błocie mają brązowe ciało, na trawie zielone; jasny grzbiet i oczy zawsze widać'],

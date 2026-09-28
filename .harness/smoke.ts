@@ -61,6 +61,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
+import { boundedPathStep } from '../src/game/pathfinding';
 import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, villagerActivity, villagerWorkSpot, villagerWalkable, merchantProfession, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
@@ -1663,6 +1664,80 @@ section('3.0 #58: visible camouflage for small swamp lizards');
     g.updateMobs(1 / 30);
     check('Nether has no swamp lizards', !g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
   } finally { Math.random = random; }
+}
+
+section('3.0 #68: bounded loaded-chunk pathfinding instead of wall pushing');
+{
+  const world = new World(264, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 3; x <= 13; x++) for (let z = 1; z <= 13; z++) for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  for (let z = 4; z <= 9; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(7, yy, z, B.STONE);
+  const chunkCount = world.chunks.size;
+  let cells = 0;
+  const seen = { peekBlock(x: number, yy: number, z: number) { cells++; return world.peekBlock(x, yy, z); },
+    hasChunk(cx: number, cz: number) { return world.hasChunk(cx, cz); } };
+  let pos = { x: 5.5, z: 7.5 };
+  let aroundWall = false;
+  for (let i = 0; i < 24 && Math.hypot(pos.x - 10.5, pos.z - 7.5) > 0.7; i++) {
+    const next = boundedPathStep(seen, pos.x, y, pos.z, 10.5, 7.5);
+    if (!next) break;
+    pos = next;
+    if (pos.z < 4 || pos.z > 10) aroundWall = true;
+  }
+  check('search routes around a two-block-high obstruction rather than through it',
+    aroundWall && Math.hypot(pos.x - 10.5, pos.z - 7.5) < 0.7);
+  check('bounded path never loads new terrain', world.chunks.size === chunkCount);
+  cells = 0;
+  boundedPathStep(seen, 5.5, y, 7.5, 10.5, 7.5);
+  check('one route search has a hard probe budget on low graphics', cells <= 96 * 4 * 3);
+  eq('even an invalid custom budget cannot create an unbounded search', boundedPathStep(world, 5.5, y, 7.5, 10.5, 7.5, Number.NaN)?.x, 6.5);
+  eq('zero-hop route is not invented when already on target', boundedPathStep(world, 5.5, y, 5.5, 5.5, 5.5), null);
+  // Real Mob.update pursuer pathing: AI, physics and route cache are all live.
+  const guard = new Mob('guard', 5.5, y, 7.5);
+  const villager = new Mob('villager', 10.5, y, 6.5);
+  const zombie = new Mob('zombie', 10.5, y, 7.5);
+  const far = new THREE.Vector3(40, y, 40);
+  let minZ = 7.5, maxZ = 7.5;
+  for (let i = 0; i < 240; i++) {
+    guard.update(1 / 30, world, far, () => {}, () => {}, false, [guard, villager, zombie]);
+    minZ = Math.min(minZ, guard.body.pos.z); maxZ = Math.max(maxZ, guard.body.pos.z);
+  }
+  check('actual guard walks around wall and reaches threatened resident',
+    zombie.health < zombie.maxHealth && (minZ < 4 || maxZ > 10));
+  const hunter = new Mob('zombie', 5.5, y, 7.5);
+  let hit = 0;
+  let huntedMin = 7.5, huntedMax = 7.5;
+  const behindPlayer = new THREE.Vector3(10.5, y, 7.5);
+  for (let i = 0; i < 220; i++) {
+    hunter.update(1 / 30, world, behindPlayer, () => { hit++; }, () => {}, false, [hunter]);
+    huntedMin = Math.min(huntedMin, hunter.body.pos.z); huntedMax = Math.max(huntedMax, hunter.body.pos.z);
+  }
+  check('ordinary hostile also uses the detour and cannot attack through masonry',
+    hit > 0 && (huntedMin < 4 || huntedMax > 10));
+  // Navigation must choose safe ground even if the shortest route is a fire.
+  const hazardWorld = new World(264, true);
+  hazardWorld.getChunk(0, 0);
+  for (let x = 4; x <= 11; x++) for (let z = 5; z <= 9; z++) for (let yy = y; yy <= y + 2; yy++) hazardWorld.setBlock(x, yy, z, B.AIR);
+  hazardWorld.setBlock(7, y - 1, 7, B.CAMPFIRE);
+  let h = { x: 5.5, z: 7.5 };
+  let fireTouched = false;
+  for (let i = 0; i < 14 && Math.hypot(h.x - 9.5, h.z - 7.5) > 0.6; i++) {
+    const next = boundedPathStep(hazardWorld, h.x, y, h.z, 9.5, 7.5);
+    if (!next) break;
+    h = next;
+    if (Math.floor(h.x) === 7 && Math.floor(h.z) === 7) fireTouched = true;
+  }
+  check('path avoids a campfire instead of using the shortest hazardous tile',
+    !fireTouched && Math.hypot(h.x - 9.5, h.z - 7.5) < 0.6);
+
+  // Completely sealed wall: guard gives up instead of repeatedly trying
+  // to jump through masonry and consuming a whole mobile tick forever.
+  for (let z = 0; z < 16; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(7, yy, z, B.STONE);
+  const stuck = new Mob('guard', 5.5, y, 7.5);
+  const behind = new Mob('zombie', 10.5, y, 7.5);
+  for (let i = 0; i < 150; i++) stuck.update(1 / 30, world, far, () => {}, () => {}, false, [stuck, behind]);
+  check('sealed wall does not cause endless wall-press or fake hits', stuck.body.pos.x < 7 && behind.health === behind.maxHealth);
 }
 
 section('3.0 #59: regional travelling merchant and pack animal caravan');

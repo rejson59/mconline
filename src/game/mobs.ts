@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CS, type World, type Biome } from './world';
 import { stepBody, type Body } from './physics';
+import { boundedPathStep } from './pathfinding';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
@@ -238,6 +239,11 @@ export class Mob {
   private bearWindup = 0;
   private bearCooldown = 0;
   private bearAlert = 0;
+  private blockedTime = 0;
+  private routeTimer = 0;
+  private routeGoal: { x: number; z: number } | null = null;
+  private routeStep: { x: number; z: number } | null = null;
+  private routeBlocked = false;
   private activityTimer = 0;
   private activityGoal: { x: number; z: number } | null = null;
   private activityKind: VillagerActivity | null = null;
@@ -1240,9 +1246,7 @@ export class Mob {
     this.moveAndAnimate(dt, world, player, this.walking ? 1.35 : 0);
   }
 
-  /** Armed human guard: prioritises monsters near villagers, not neutral
-   * animals or ordinary visitors. Player aggression uses the existing
-   * provoked timer when a villager is actually struck. */
+  /** Follows existing village roads without forcing chunk generation. */
   private updateMerchant(dt: number, world: World, player: THREE.Vector3): void {
     const b = this.body;
     this.aiTimer -= dt;
@@ -1285,9 +1289,10 @@ export class Mob {
     } else {
       this.walking = false;
     }
-    this.moveAndAnimate(dt, world, player, this.walking ? 1.55 : 0);
+    this.moveToward(dt, world, player, this.walking ? 1.55 : 0, merchant?.body.pos.x ?? b.pos.x, merchant?.body.pos.z ?? b.pos.z);
   }
 
+  /** Armed human guard prioritises monsters near residents. */
   private updateGuard(dt: number, world: World, player: THREE.Vector3, allies: Mob[],
     onAttack: (dmg: number, mob: Mob) => void, peaceful: boolean): void {
     const b = this.body;
@@ -1300,7 +1305,7 @@ export class Mob {
         this.attackCooldown = 1.5;
         onAttack(4, this);
       }
-      this.moveAndAnimate(dt, world, player, this.walking ? 2.65 : 0);
+      this.moveToward(dt, world, player, this.walking ? 2.65 : 0, player.x, player.z);
       return;
     }
     let threat: Mob | null = null;
@@ -1325,7 +1330,7 @@ export class Mob {
           threat.body.vel.z *= 1.25;
         }
       }
-      this.moveAndAnimate(dt, world, player, this.walking ? 2.55 : 0);
+      this.moveToward(dt, world, player, this.walking ? 2.55 : 0, threat.body.pos.x, threat.body.pos.z);
       return;
     }
     this.aiTimer -= dt;
@@ -1351,7 +1356,7 @@ export class Mob {
         this.attackCooldown = 1.5;
         onAttack(6, this);
       }
-      this.moveAndAnimate(dt, world, player, this.walking ? 3.3 : 0);
+      this.moveToward(dt, world, player, this.walking ? 3.3 : 0, player.x, player.z);
       return;
     }
 
@@ -1372,7 +1377,7 @@ export class Mob {
           target.body.vel.y = Math.max(target.body.vel.y, 6);
         }
       }
-      this.moveAndAnimate(dt, world, player, this.walking ? 3.3 : 0);
+      this.moveToward(dt, world, player, this.walking ? 3.3 : 0, target.body.pos.x, target.body.pos.z);
       return;
     }
 
@@ -1432,7 +1437,7 @@ export class Mob {
       }
       if (this.hurtTime <= 0) this.health = Math.min(this.maxHealth, this.health + dt * 0.5);
     }
-    this.moveAndAnimate(dt, world, player, this.walking ? 4.6 : 0);
+    this.moveToward(dt, world, player, this.walking ? 4.6 : 0, target?.body.pos.x ?? player.x, target?.body.pos.z ?? player.z);
   }
 
   /** Removes a sheep's wool once. Returns false if it was already sheared or isn't a sheep. */
@@ -1617,7 +1622,7 @@ export class Mob {
         b.vel.y = 4.5;
         this.attackCooldown = 0.6;
       }
-      this.moveAndAnimate(dt, world, player, this.walking ? 3.2 : 0);
+      this.moveToward(dt, world, player, this.walking ? 3.2 : 0, prey.body.pos.x, prey.body.pos.z);
       return;
     }
 
@@ -1636,7 +1641,7 @@ export class Mob {
         this.foxSnack = 1.5;
         this.soundTimer = 0.1;
       }
-      this.moveAndAnimate(dt, world, player, this.walking ? 2.7 : 0);
+      this.moveToward(dt, world, player, this.walking ? 2.7 : 0, snack.pos.x, snack.pos.z);
       return;
     }
 
@@ -1697,7 +1702,7 @@ export class Mob {
         this.bearWarning!.visible = true;
         this.soundTimer = Math.min(this.soundTimer, 0.1);
       }
-      this.moveAndAnimate(dt, world, player, this.walking ? 2.2 : 0);
+      this.moveToward(dt, world, player, this.walking ? 2.2 : 0, player.x, player.z);
       return;
     }
     this.aiTimer -= dt;
@@ -1958,7 +1963,52 @@ export class Mob {
       }
     }
 
-    this.moveAndAnimate(dt, world, player, this.walking && this.hurtTime < 0.3 ? speed : 0);
+    const pace = this.walking && this.hurtTime < 0.3 ? speed : 0;
+    // Only ground chasers need a route; spider climbing and floating ghasts
+    // keep their own three-dimensional locomotion.
+    const followsPlayer = !peaceful && this.fuse <= 0 && Math.abs(player.y - b.pos.y) < 8 &&
+      dist < (this.type === 'skeleton' ? 18 : 24) &&
+      (this.type === 'zombie' || this.type === 'creeper' || this.type === 'enderman' ||
+        (this.type === 'skeleton' && dist > 5.5));
+    if (followsPlayer) this.moveToward(dt, world, player, pace, player.x, player.z);
+    else this.moveAndAnimate(dt, world, player, pace);
+  }
+
+  /** Limited route search only for actors pursuing a concrete target. Reuse
+   * the first waypoint until reached; never run A* on every render frame. */
+  private moveToward(dt: number, world: World, player: THREE.Vector3, speed: number, tx: number, tz: number): void {
+    const b = this.body;
+    if (speed > 0 && b.onGround && Math.hypot(tx - b.pos.x, tz - b.pos.z) > 1.1) {
+      this.routeTimer -= dt;
+      const arrived = this.routeStep && Math.hypot(this.routeStep.x - b.pos.x, this.routeStep.z - b.pos.z) < 0.38;
+      const changed = !this.routeGoal || Math.hypot(tx - this.routeGoal.x, tz - this.routeGoal.z) > 1.7;
+      if (this.routeTimer <= 0 || arrived || changed) {
+        this.routeGoal = { x: tx, z: tz };
+        this.routeTimer = 0.6;
+        this.routeBlocked = false;
+        this.routeStep = null;
+        const y = Math.floor(b.pos.y);
+        if (!villagerWalkable(world, b.pos.x, y, b.pos.z, tx, tz)) {
+          // Keep the original step-up physics on uneven terrain; bounded
+          // level-ground search is for walls, not a replacement for jumping.
+          const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.85);
+          const fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.85);
+          const ledge = IS_SOLID[world.peekBlock(fx, y, fz)] &&
+            !IS_SOLID[world.peekBlock(fx, y + 1, fz)] && !IS_SOLID[world.peekBlock(fx, y + 2, fz)];
+          if (!ledge) {
+            this.routeStep = boundedPathStep(world, b.pos.x, y, b.pos.z, tx, tz);
+            this.routeBlocked = this.routeStep === null;
+          }
+        }
+      }
+      if (this.routeStep) this.yaw = Math.atan2(this.routeStep.x - b.pos.x, this.routeStep.z - b.pos.z);
+      if (this.routeBlocked) { this.walking = false; speed = 0; }
+    } else {
+      this.routeTimer = 0;
+      this.routeStep = null;
+      this.routeBlocked = false;
+    }
+    this.moveAndAnimate(dt, world, player, speed);
   }
 
   /**
@@ -2005,6 +2055,23 @@ export class Mob {
     }
     // A climbing spider keeps its heading: it must not turn away mid-wall.
     if ((b.hitWall || wasWall) && b.onGround && this.walking && !(this.type === 'spider' && this.climbing)) {
+      // Replan around a newly placed block instead of pushing against it.
+      // Random wanderers abandon a stubborn two-block wall; one-block steps
+      // still use the pre-existing hop below.
+      const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.8), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.8);
+      const hy = Math.floor(b.pos.y);
+      const tallWall = IS_SOLID[world.peekBlock(fx, hy, fz)] && IS_SOLID[world.peekBlock(fx, hy + 1, fz)];
+      if (this.routeStep && tallWall) {
+        this.routeTimer = 0;
+        this.routeStep = null;
+        this.walking = false;
+        b.vel.x = b.vel.z = 0;
+      } else if (tallWall && (this.blockedTime += dt) > 0.5) {
+        this.walking = false;
+        this.aiTimer = 0;
+        this.blockedTime = 0;
+        b.vel.x = b.vel.z = 0;
+      } else {
       // jump over obstacle if space above — but not onto a fence or a closed door
       const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.8), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.8);
       const hy = Math.floor(b.pos.y);
@@ -2012,7 +2079,8 @@ export class Mob {
       if (front === B.FENCE || isDoor(front)) this.yaw += Math.PI * (0.45 + Math.random() * 0.3);
       else if (!IS_SOLID[world.peekBlock(fx, hy + 1, fz)] && !IS_SOLID[world.peekBlock(fx, hy + 2, fz)]) b.vel.y = 8.2;
       else if (this.type !== 'zombie') this.yaw += Math.PI / 2;
-    }
+      }
+    } else this.blockedTime = 0;
     // avoid walking into water / cliffs (passive mobs)
     if (this.type !== 'zombie' && this.type !== 'creeper' && this.type !== 'skeleton' && this.walking && b.onGround) {
       const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.9), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.9);
