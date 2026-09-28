@@ -5,7 +5,7 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 /** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
 export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
@@ -177,7 +177,7 @@ export function isHostileMob(type: MobType): boolean {
 
 /** Mieszkańcy i golemy nie znikają tak szybko, gdy gracz odejdzie od osady. */
 export function isVillageMob(type: MobType): boolean {
-  return type === 'villager' || type === 'golem';
+  return type === 'villager' || type === 'golem' || type === 'guard';
 }
 
 function box(w: number, h: number, d: number, color: number, mats: Map<number, THREE.Material>) {
@@ -257,7 +257,7 @@ export class Mob {
     this.type = type;
     this.home.set(x, y, z);
     const w =
-      type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
+      type === 'zombie' || type === 'creeper' || type === 'villager' || type === 'guard' ? 0.6
         : type === 'bear' ? 1.15
         : type === 'turtle' ? 0.78
         : type === 'lizard' ? 0.36
@@ -274,7 +274,7 @@ export class Mob {
                   : type === 'slime' ? 0.9
                     : type === 'ghast' ? 2.0 : 0.9;
     const h =
-      type === 'zombie' || type === 'villager' ? 1.9
+      type === 'zombie' || type === 'villager' || type === 'guard' ? 1.9
         : type === 'creeper' ? 1.7
           : type === 'golem' ? 2.2
             : type === 'enderman' ? 2.9
@@ -304,7 +304,7 @@ export class Mob {
                 : type === 'skeleton' ? 20
                   : type === 'spider' ? 16
                     : type === 'golem' ? 100
-                      : type === 'villager' ? 20
+                      : type === 'villager' || type === 'guard' ? 20
                         : type === 'wolf' ? 8
                           : type === 'enderman' ? 40
                             : type === 'slime' ? 12
@@ -907,6 +907,33 @@ export class Mob {
       this.arms.push(armL, armR);
       this.addLeg(-0.16, legH + 0.05, 0, 0.2, legH + 0.1, 0.22, 0x3d3d46, this.legs);
       this.addLeg(0.16, legH + 0.05, 0, 0.2, legH + 0.1, 0.22, 0x3d3d46, this.legs);
+    } else if (this.type === 'guard') {
+      const armor = 0x486679, steel = 0x9aaab2, skin = 0xa77b61;
+      for (const sx of [-0.16, 0.16]) this.addLeg(sx, 0.5, 0, 0.23, 0.9, 0.25, 0x374758, this.legs);
+      const torso = box(0.72, 0.78, 0.42, armor, sharedMats);
+      torso.position.set(0, 1.12, 0);
+      const breastplate = box(0.46, 0.57, 0.06, steel, sharedMats);
+      breastplate.position.set(0, 1.12, 0.24);
+      g.add(torso, breastplate); this.meshes.push(torso, breastplate);
+      const head = new THREE.Group();
+      head.position.set(0, 1.65, 0);
+      const face = box(0.42, 0.37, 0.42, skin, sharedMats);
+      const helmet = box(0.53, 0.17, 0.53, steel, sharedMats);
+      helmet.position.y = 0.23;
+      head.add(face, helmet); this.meshes.push(face, helmet);
+      for (const side of [-1, 1]) {
+        const eye = box(0.07, 0.06, 0.025, 0x1b282f, sharedMats);
+        eye.position.set(side * 0.105, 0.06, 0.23);
+        head.add(eye); this.meshes.push(eye);
+      }
+      g.add(head); this.head = head;
+      this.addLeg(-0.47, 1.17, 0, 0.18, 0.68, 0.2, armor, this.arms);
+      this.addLeg(0.47, 1.17, 0, 0.18, 0.68, 0.2, armor, this.arms);
+      const shield = box(0.12, 0.7, 0.45, steel, sharedMats);
+      shield.position.set(-0.58, 0.95, 0.29);
+      const sword = box(0.07, 0.74, 0.08, steel, sharedMats);
+      sword.position.set(0.58, 0.96, 0.4);
+      g.add(shield, sword); this.meshes.push(shield, sword);
     } else if (this.type === 'golem') {
       // Żelazny golem: masywny tors, długie ręce, mosiężne oczy i pnącza.
       const iron = 0xc9c9cd;
@@ -1161,6 +1188,59 @@ export class Mob {
    * Żelazny golem: patroluje okolicę i atakuje potwory. Gdy gracz skrzywdzi
    * mieszkańca, golem bierze go na cel (provoked > 0).
    */
+  /** Armed human guard: prioritises monsters near villagers, not neutral
+   * animals or ordinary visitors. Player aggression uses the existing
+   * provoked timer when a villager is actually struck. */
+  private updateGuard(dt: number, world: World, player: THREE.Vector3, allies: Mob[],
+    onAttack: (dmg: number, mob: Mob) => void, peaceful: boolean): void {
+    const b = this.body;
+    this.provoked = Math.max(0, this.provoked - dt);
+    const playerDist = b.pos.distanceTo(player);
+    if (!peaceful && this.provoked > 0 && playerDist < 16) {
+      this.yaw = Math.atan2(player.x - b.pos.x, player.z - b.pos.z);
+      this.walking = playerDist > 1.8;
+      if (!this.walking && this.attackCooldown <= 0) {
+        this.attackCooldown = 1.5;
+        onAttack(4, this);
+      }
+      this.moveAndAnimate(dt, world, player, this.walking ? 2.65 : 0);
+      return;
+    }
+    let threat: Mob | null = null;
+    let best = 18;
+    for (const o of allies) {
+      if (o.dead || !isHostileMob(o.type)) continue;
+      const distance = o.body.pos.distanceTo(b.pos);
+      if (distance >= best) continue;
+      if (distance >= 12 && !allies.some((v) => v.type === 'villager' && !v.dead &&
+        v.body.pos.distanceTo(b.pos) < 18 && v.body.pos.distanceTo(o.body.pos) < 7)) continue;
+      best = distance; threat = o;
+    }
+    if (threat && !peaceful) {
+      const dx = threat.body.pos.x - b.pos.x, dz = threat.body.pos.z - b.pos.z;
+      const dist = Math.hypot(dx, dz);
+      this.yaw = Math.atan2(dx, dz);
+      this.walking = dist > 1.35;
+      if (!this.walking && this.attackCooldown <= 0) {
+        this.attackCooldown = 1.25;
+        if (threat.damage(5, b.pos.x, b.pos.z)) {
+          threat.body.vel.x *= 1.25;
+          threat.body.vel.z *= 1.25;
+        }
+      }
+      this.moveAndAnimate(dt, world, player, this.walking ? 2.55 : 0);
+      return;
+    }
+    this.aiTimer -= dt;
+    const hx = this.home.x - b.pos.x, hz = this.home.z - b.pos.z;
+    if (this.aiTimer <= 0) {
+      this.aiTimer = 2 + Math.random() * 3;
+      this.yaw = Math.hypot(hx, hz) > 13 ? Math.atan2(hx, hz) : Math.random() * Math.PI * 2;
+      this.walking = Math.hypot(hx, hz) > 13 || Math.random() < 0.65;
+    }
+    this.moveAndAnimate(dt, world, player, this.walking ? 1.35 : 0);
+  }
+
   private updateGolem(dt: number, world: World, player: THREE.Vector3, allies: Mob[], onAttack: (dmg: number, mob: Mob) => void): void {
     const b = this.body;
     if (this.provoked > 0) this.provoked = Math.max(0, this.provoked - dt);
@@ -1613,6 +1693,10 @@ export class Mob {
     }
     if (this.type === 'villager') {
       this.updateVillager(dt, world, player, allies, dayPhase);
+      return;
+    }
+    if (this.type === 'guard') {
+      this.updateGuard(dt, world, player, allies, onAttack, peaceful);
       return;
     }
     if (this.type === 'golem') {

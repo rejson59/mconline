@@ -230,6 +230,7 @@ export const MOB_NAMES: Record<MobType, string> = {
   frog: 'Żaba',
   turtle: 'Żółw',
   bear: 'Niedźwiedź',
+  guard: 'Strażnik wioski',
   midge: 'Meszka',
   bat: 'Nietoperz',
   lizard: 'Jaszczurka',
@@ -2674,7 +2675,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', guard: 'guard', strażnik: 'guard', straznik: 'guard', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2686,7 +2687,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, guard, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -3095,6 +3096,7 @@ export class Game {
           mob.body.vel.z *= kb;
           mob.body.vel.y = Math.max(mob.body.vel.y, 6 * kb);
         }
+        if (mob.type === 'guard') mob.provoked = Math.max(mob.provoked, 8);
         if (mob.dead && isHostileMob(mob.type)) this.advanceChallenge('challenge_hunter');
         Sfx.playHurt();
         Sfx.playMob(mob.type);
@@ -3105,7 +3107,7 @@ export class Game {
         // 1.6: krzywda mieszkańca budzi okoliczne golemy
         if (mob.type === 'villager') {
           const n = this.provokeGolems(mob.body.pos.x, mob.body.pos.z, 26, 20);
-          if (n > 0) this.message(n === 1 ? 'Golem w okolicy to zauważył!' : 'Golemy w okolicy to zauważyły!');
+          if (n > 0) this.message('Straż wioski zauważyła atak!');
         }
       }
       // 2.5: NIE zwalniamy LPM – trzymany przycisk bije dalej z cooldownem
@@ -5016,6 +5018,7 @@ export class Game {
       return st ? `${villagerTitle(st)} – PPM, aby handlować` : 'Mieszkaniec – PPM, aby handlować';
     }
     if (mob.type === 'golem') return mob.provoked > 0 ? 'Żelazny golem (rozgniewany!)' : 'Żelazny golem – stróż osady';
+    if (mob.type === 'guard') return mob.provoked > 0 ? 'Strażnik wioski (rozgniewany!)' : 'Strażnik wioski – patrol';
     return `${MOB_NAMES[mob.type] ?? mob.type} · ${Math.max(0, Math.round(mob.health))}/${mob.maxHealth} HP`;
   }
 
@@ -5068,11 +5071,11 @@ export class Game {
     return true;
   }
 
-  /** Golemy w promieniu wpadają w gniew na podany czas. Zwraca ich liczbę. */
+  /** Golemy i strażnicy w promieniu bronią uderzonego mieszkańca. */
   private provokeGolems(x: number, z: number, radius: number, seconds: number): number {
     let n = 0;
     for (const m of this.mobs) {
-      if (m.type !== 'golem' || m.dead) continue;
+      if ((m.type !== 'golem' && m.type !== 'guard') || m.dead) continue;
       if (Math.hypot(m.body.pos.x - x, m.body.pos.z - z) > radius) continue;
       m.provoked = Math.max(m.provoked, seconds);
       n++;
@@ -5091,6 +5094,7 @@ export class Game {
     const near = this.mobs.filter((m) => !m.dead && isVillageMob(m.type) && Math.hypot(m.body.pos.x - v.x, m.body.pos.z - v.z) < 64);
     const villagers = near.filter((m) => m.type === 'villager').length;
     const golems = near.filter((m) => m.type === 'golem').length;
+    const guards = near.filter((m) => m.type === 'guard').length;
     const spots = villageSpawnSpots(v);
     const free = (x: number, y: number, z: number) => {
       if (this.world.peekBlock(Math.floor(x), Math.floor(y), Math.floor(z)) !== B.AIR) return false;
@@ -5108,6 +5112,15 @@ export class Game {
         if (!free(x, y, z)) continue;
         const mob = this.spawnMob('villager', x, y, z, Math.random());
         mob.trade = createVillagerState(mob.profession, this.nowSeconds());
+        break;
+      }
+    }
+    if (guards < 1) {
+      for (const spot of spots) {
+        const x = spot.x + 0.5, z = spot.z + 0.5;
+        const y = this.world.heightAt(Math.floor(x), Math.floor(z)) + 1;
+        if (!free(x, y, z)) continue;
+        this.spawnMob('guard', x, y, z);
         break;
       }
     }

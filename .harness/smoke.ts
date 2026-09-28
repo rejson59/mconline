@@ -1665,6 +1665,55 @@ section('3.0 #58: visible camouflage for small swamp lizards');
   } finally { Math.random = random; }
 }
 
+section('3.0 #60: village guard patrols and defends residents');
+{
+  check('guard is a distinct persistent village mob, not a renamed golem',
+    isVillageMob('guard') && !isHostileMob('guard') && MOB_NAMES.guard !== MOB_NAMES.golem);
+  const world = new World(269, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 2; x <= 13; x++) for (let z = 2; z <= 12; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(x, yy, z, B.AIR);
+  const guard = new Mob('guard', 5.5, y, 7.5);
+  const player = new THREE.Vector3(6, y, 7.5);
+  const villager = new Mob('villager', 8.5, y, 7.5);
+  const zombie = new Mob('zombie', 8.5, y, 9.5);
+  let playerHits = 0;
+  const tick = (mob: Mob, allies: Mob[], peaceful = false) =>
+    mob.update(1 / 30, world, player, () => { playerHits++; }, () => {}, peaceful, allies);
+  check('guard has readable armor, shield and sword without trade state', guard.meshes.length > 8 && guard.trade === null && guard.health === 20);
+  guard.walking = false; guard.aiTimer = 100;
+  for (let i = 0; i < 20; i++) tick(guard, [guard, villager]);
+  eq('guard leaves peaceful player and resident alone', playerHits, 0);
+  check('guard stands down before a monster appears', guard.body.pos.x === 5.5);
+  for (let i = 0; i < 105; i++) tick(guard, [guard, villager, zombie]);
+  check('guard identifies monster threatening resident and deals damage', zombie.health < zombie.maxHealth && playerHits === 0);
+  guard.body.pos.set(5.5, y, 7.5); guard.body.vel.set(0, 0, 0);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.mobs = [guard, villager];
+  eq('player harming villager alerts the nearby guard', g.provokeGolems(8, 7, 24, 10), 1);
+  check('guard has provocation timer', guard.provoked > 0);
+  for (let i = 0; i < 50; i++) tick(guard, [guard, villager]);
+  check('guard defends resident from a provoking player', playerHits > 0);
+  // Guard spawning uses real village roads with loaded chunks.
+  const w = new World(20260926);
+  let village: Village | null = null;
+  for (let gx = -2; gx <= 2 && !village; gx++)
+    for (let gz = -2; gz <= 2 && !village; gz++) village = villageInCell(gx, gz, w.villageContext());
+  if (village) {
+    const game = Object.create(Game.prototype) as unknown as Record<string, any>;
+    game.world = w;
+    game.body = { pos: new THREE.Vector3(village.x, village.y + 1, village.z) };
+    game.mobs = []; game.scene = { add: () => {}, remove: () => {} };
+    game.nowSeconds = () => 0;
+    game.unlock = () => {};
+    game.message = () => {};
+    game.spawnVillageFolk();
+    check('real generated village receives one guard independently of golem', game.mobs.filter((m: Mob) => m.type === 'guard').length === 1);
+    game.spawnVillageFolk();
+    eq('guard does not multiply every village check', game.mobs.filter((m: Mob) => m.type === 'guard').length, 1);
+  }
+}
+
 section('3.0 #56: neutral bear defends cub and food with escapable windup');
 {
   const world = new World(166, true);
