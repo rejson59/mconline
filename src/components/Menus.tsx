@@ -92,6 +92,7 @@ export function Controls() {
     ['R / 🛡 na dotyku', 'Parowanie z tarczą w ręku: 0,42 s na cios lub strzałę z przodu, odnowienie 1,7 s'],
     ['Specjalne buty', 'Na stole rzemieślniczym: 4 żelaza + 2 magmowe kremy (żar), ryba + lazuryt (pływanie) lub pióro + pył jasnogłazu (upadek). Każda para ma 1 punkt pancerza zamiast 2 jak żelazne buty.'],
     ['LPM (przytrzymaj)', 'Kopanie · atak bije dalej z cooldownem'],
+    ['Żelazna włócznia', 'Stół rzemieślniczy: 2 sztabki żelaza + 2 patyki po przekątnej. Celuj LPM lub tap/⛏ na dotyku: zasięg 5 bloków, 7 obrażeń, atak co 0,92 s. Ściany zatrzymują cios; nie wydłuża zasięgu kopania.'],
     ['PPM', 'Stawianie bloku / użycie stołu'],
     ['ŚPM', 'Wybierz blok'],
     ['1-9 (także numeryczne) / kółko', 'Wybór slotu'],

@@ -56,7 +56,7 @@ import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeComp
 import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, CREATIVE_ITEMS, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
-  pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
+  pickHint, mineSeconds, toolHelps, attackDamage, attackCooldown, attackReach, blockDrops, smeltResult, fuelSeconds, resolveId,
   displayName,
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
@@ -1135,6 +1135,77 @@ section('engine: armor damage, equipping, xp');
   check('armor dropped on death', [I.LEATHER_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS].every((id) => droppedIds.includes(id)), JSON.stringify(droppedIds));
   eq('armor cleared on death', g.armor.every((s: any) => s === null), true);
   eq('active potion buffs cleared on death', g.effects.size, 0);
+}
+
+section('3.0 #39: crafted long-reach spear with slower PC and touch attacks');
+{
+  eq('new spear ID is appended without changing existing armor/item IDs', I.IRON_SPEAR, 362);
+  check('iron spear is a unique durable Creative item with icon', ITEMS[I.IRON_SPEAR]?.tool === 'spear' &&
+    CREATIVE_ITEMS.includes(I.IRON_SPEAR) && stackLimit(I.IRON_SPEAR) === 1 &&
+    durabilityMax(I.IRON_SPEAR) === 240 && !!buildItemIcons()[I.IRON_SPEAR]);
+  const recipe = RECIPES.find((r) => r.out.id === I.IRON_SPEAR);
+  check('crafting recipe requires 2 iron and 2 sticks at a table', !!recipe && recipe.table &&
+    recipe.inputs.some((a) => a.id === I.IRON && a.count === 2) &&
+    recipe.inputs.some((a) => a.id === I.STICK && a.count === 2));
+  const inv = new Inventory();
+  inv.add(I.IRON, 2); inv.add(I.STICK, 2);
+  check('Survival crafts spear using real inventory, without duplication', inv.craft(recipe!) &&
+    inv.countOf(I.IRON_SPEAR) === 1 && inv.countOf(I.IRON) === 0 && inv.countOf(I.STICK) === 0 && !inv.craft(recipe!));
+  const grid = new Inventory();
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+    const symbol = recipe!.pattern![y][x];
+    if (symbol !== ' ') grid.grid[y * 3 + x] = { id: recipe!.key![symbol], count: 1 };
+  }
+  check('3×3 grid yields a spear, 2×2 personal crafting does not', grid.craftGrid(true)?.id === I.IRON_SPEAR && grid.craftGrid(false) === null);
+  check('spear reaches farther but recovers slower than every old sword', attackReach(I.IRON_SPEAR) === 5 &&
+    attackReach(I.IRON_SWORD) === 3.5 && attackCooldown(I.IRON_SPEAR) === 0.92 &&
+    attackCooldown(I.IRON_SWORD) === 0.42);
+  check('damage is balanced between iron and diamond sword', attackDamage(I.IRON_SPEAR, false) === 7 &&
+    attackDamage(I.IRON_SPEAR, false) < attackDamage(I.DIAMOND_SWORD, false) &&
+    attackDamage(I.IRON_SPEAR, true) === 9);
+  check('spear can take sharpness without changing legacy enchant applicability', canEnchant(I.IRON_SPEAR, 'sharpness') &&
+    canEnchant(I.IRON_SPEAR, 'unbreaking') && !canEnchant(I.IRON_SPEAR, 'efficiency') &&
+    attackDamage(I.IRON_SPEAR, false, 2) > attackDamage(I.IRON_SPEAR, false));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.selected = 0; g.inventory.slots[0] = { id: I.IRON_SPEAR, count: 1 };
+  g.mode = 'survival'; g.ui = 'playing'; g.keys = new Set(); g.target = null;
+  g.body = { pos: new THREE.Vector3(0, 64, 0), vel: new THREE.Vector3() };
+  g.attackCooldown = 0; g.sprinting = false; g.hunger = 20; g.swingT = 1;
+  g.hasEffect = () => false; g.wearTool = () => {}; g.advanceChallenge = () => {}; g.message = () => {};
+  g.selectedStack = () => g.inventory.slots[g.selected] ?? null;
+  let attacks = 0, lastDamage = 0;
+  const mob = { type: 'zombie', dead: false, body: { pos: new THREE.Vector3(0, 64, -4.5), vel: new THREE.Vector3() },
+    bonusLoot: 0, damage: (d: number) => { attacks++; lastDamage = d; return true; } };
+  const ranges: number[] = [];
+  g.findMobTarget = (range: number) => { ranges.push(range); return range >= 4.5 ? { mob, dist: 4.5 } : { mob: null, dist: range }; };
+  g.tryAttack();
+  check('real PC combat path hits at 4.5 blocks with spear and applies cooldown', attacks === 1 &&
+    lastDamage === 7 && g.attackCooldown === 0.92 && ranges.at(-1) === 5);
+  g.tryAttack();
+  check('repeat clicks during spear recovery cannot spam hits', attacks === 1);
+  g.attackCooldown = 0;
+  g.inventory.slots[0] = { id: I.IRON_SWORD, count: 1 };
+  g.tryAttack();
+  check('existing swords do not inherit extra reach', attacks === 1 && ranges.at(-1) === 3.5);
+  g.inventory.slots[0] = { id: I.IRON_SPEAR, count: 1 };
+  g.target = { id: B.STONE, dist: 2 };
+  g.tryAttack();
+  check('closer wall blocks the extended spear strike', attacks === 1);
+  g.target = null; g.attackCooldown = 0; g.touchAim = null;
+  g.refreshTarget = () => { g.target = null; };
+  g.touchTap(0.3, 0.4);
+  check('touch tap reaches the same distant mob and restores aim', attacks === 2 &&
+    g.touchAim === null && ranges.at(-1) === 5);
+  g.attackCooldown = 0; g.mouseLeft = true; g.placeCooldown = 1; g.pearlCd = 0; g.eatCooldown = 0;
+  g.breakCooldown = 0; g.breakProgress = 0; g.mouseRight = false; g.bowDraw = -1;
+  g.selection = { visible: false }; g.crackMesh = { visible: false };
+  g.world = { raycast: () => null };
+  g.eyePos = () => new THREE.Vector3(0, 65.6, 0); g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  g.updateHand = () => {};
+  g.updateInteraction(1 / 30);
+  check('held PC/touch attack scans long reach on each swing without mining', attacks === 3 && g.mouseLeft &&
+    ranges.slice(-2).every((r) => r === 5) && g.breakProgress === 0);
+  check('equipped spear shows its range and rate in crosshair help', g.heldHint().includes('0,92 s'));
 }
 
 section('3.0 #76: specialized boots with crafting and equipment');

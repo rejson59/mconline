@@ -120,6 +120,9 @@ section('inventory screen: recipe finder');
   check('three specialized boot recipes are visible in Survival crafting UI', boots.every((id) => html.includes(stackTooltip({ id, count: 1 }).split('\n')[0])));
   check('each boot tooltip explains the live effect, not only its name', boots.every((id) => stackTooltip({ id, count: 1 }).includes('%')));
   check('PC and touch help includes the cost and armor tradeoff', renderToStaticMarkup(<Controls />).includes('Specjalne buty') && renderToStaticMarkup(<Controls />).includes('zamiast 2'));
+  check('spear recipe and long-range stats are discoverable in crafting/help', html.includes('Żelazna włócznia') &&
+    stackTooltip({ id: I.IRON_SPEAR, count: 1 }).includes('Zasięg 5 bloków') &&
+    renderToStaticMarkup(<Controls />).includes('tap/⛏'));
 }
 
 section('adventure journal: quests and progress');

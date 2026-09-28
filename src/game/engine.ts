@@ -32,7 +32,7 @@ import { patchChunkMaterial } from './lighting';
 import { buildItemIcons } from './itemIcons';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
-  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown,
+  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown, attackReach,
   blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
@@ -1082,7 +1082,7 @@ export class Game {
     const prev = this.touchAim;
     this.touchAim = { x: nx, y: ny };
     this.refreshTarget();
-    const { mob, dist } = this.findMobTarget(3.5);
+    const { mob, dist } = this.findMobTarget(this.meleeReach());
     const blockDist = this.target ? this.target.dist : Infinity;
     const held = this.selectedStack();
     if (mob && dist < blockDist && (mob.type === 'villager' || mob.type === 'merchant') && !mob.dead) {
@@ -3194,10 +3194,12 @@ export class Game {
     return { mob: best, dist: bd };
   }
 
+  private meleeReach(): number { return attackReach(this.selectedStack()?.id ?? 0); }
+
   tryAttack() {
     this.swingT = 0;
     const blockDist = this.target ? this.target.dist : 99;
-    const { mob, dist } = this.findMobTarget(3.5);
+    const { mob, dist } = this.findMobTarget(this.meleeReach());
     if (mob && dist < blockDist && this.attackCooldown <= 0) {
       const toolId = this.selectedStack()?.id ?? 0;
       if (ITEMS[toolId]?.tool === 'shears' && mob.type === 'sheep') {
@@ -4565,7 +4567,7 @@ export class Game {
     this.attackCooldown -= dt;
     this.pearlCd = Math.max(0, this.pearlCd - dt);
     this.eatCooldown = Math.max(0, this.eatCooldown - dt);
-    if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * 4);
+    if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * (this.selectedStack()?.id === I.IRON_SPEAR ? 1.65 : 4));
 
     const e = this.eyePos();
     // 2.0: na dotyku celownik podąża za palcem (touchAim w NDC).
@@ -4599,7 +4601,7 @@ export class Game {
       // na celowniku i bije go z cooldownem. Wcześniej tryAttack zerował
       // mouseLeft po każdym trafieniu, więc walka wymagała furkoczącego
       // klikania, a mob wchodzący w celownik przerywał kopanie bloku.
-      const { mob, dist } = this.findMobTarget(3.5);
+      const { mob, dist } = this.findMobTarget(this.meleeReach());
       const blockDist = t ? t.dist : Infinity;
       if (mob && dist < blockDist) {
         this.breakProgress = 0;
@@ -5011,8 +5013,14 @@ export class Game {
 
     // hand
     const sw = Math.sin(this.swingT * Math.PI);
-    this.hand.position.set(bobX - sw * 0.25, -Math.abs(bob) * 0.6 + sw * 0.12, -sw * 0.15);
-    this.hand.rotation.set(-sw * 0.9, sw * 0.4, 0);
+    if (this.handId === I.IRON_SPEAR) {
+      // Long forward thrust and slower recovery instead of the sword's slash.
+      this.hand.position.set(bobX, -Math.abs(bob) * 0.6 + sw * 0.04, -sw * 0.55);
+      this.hand.rotation.set(-sw * 0.4, 0, -sw * 0.08);
+    } else {
+      this.hand.position.set(bobX - sw * 0.25, -Math.abs(bob) * 0.6 + sw * 0.12, -sw * 0.15);
+      this.hand.rotation.set(-sw * 0.9, sw * 0.4, 0);
+    }
   }
 
   private updateSky() {
@@ -5188,6 +5196,7 @@ export class Game {
     if (id !== undefined && isPotion(id)) return 'Napój: PPM, aby wypić';
     if (id === I.WORM_BAIT || id === I.GLOW_BAIT) return 'Przynęta: PPM / tap, aby założyć na wędkę w ekwipunku';
     if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
+    if (id === I.IRON_SPEAR) return 'Włócznia: 5 bloków zasięgu · cios co 0,92 s · LPM / tap / ⛏';
     if (id === I.COMPASS) {
       const dx = this.spawnPoint.x - this.body.pos.x;
       const dz = this.spawnPoint.z - this.body.pos.z;
@@ -5224,7 +5233,7 @@ export class Game {
 
   /** Nazwa i wskazówka dla istoty pod celownikiem (1.6). */
   private mobHint(): string | null {
-    const { mob } = this.findMobTarget(4.5);
+    const { mob } = this.findMobTarget(Math.max(4.5, this.meleeReach()));
     if (!mob || mob.dead) return null;
     if (mob.type === 'villager') {
       const st = mob.trade ?? null;

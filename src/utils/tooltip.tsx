@@ -17,7 +17,8 @@ export function stackTooltip(s: Stack | null | undefined, fallback = ''): string
   const name = s.name ? `§e${s.name}§r\n${displayName(s.id)}` : displayName(s.id);
   // 2.4: napoje opowiadają o swoim wzmocnieniu
   const potion = POTIONS[s.id];
-  const desc = potion ? `\n§7${potion.desc}` : SPECIAL_BOOTS[s.id] ? `\n${SPECIAL_BOOTS[s.id]}` : '';
+  const desc = potion ? `\n§7${potion.desc}` : SPECIAL_BOOTS[s.id] ? `\n${SPECIAL_BOOTS[s.id]}` :
+    s.id === I.IRON_SPEAR ? '\nZasięg 5 bloków, 7 obrażeń, 0,92 s między ciosami.' : '';
   return list.length ? `${name}\n§5${list.join('\n')}${desc}` : `${name}${desc}`;
 }
 
