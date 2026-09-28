@@ -16,6 +16,7 @@ import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from
 import TouchControls from './TouchControls';
 import {
   effectiveSettings,
+  effectiveDetail,
   loadSettings,
   saveSettings,
   type Settings,
@@ -121,6 +122,7 @@ export default function GameView({
     }
     g.setRenderDistance(effective.renderDistance);
     g.applyGfx({
+      ...effectiveDetail(effective, profile),
       renderDistance: effective.renderDistance,
       pixelRatio: effective.pixelRatio,
       particles: effective.particles,

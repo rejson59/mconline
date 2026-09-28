@@ -938,3 +938,18 @@ export function tileUV(tile: number, u: number, v: number): [number, number] {
   const V = 1 - (row + 1 - v) / ATLAS_TILES + (v === 0 ? e : -e);
   return [U, V];
 }
+
+/** Half-size GPU atlas, with each 16px tile downsampled separately so adjacent
+ * tiles cannot bleed into one another. Inventory icons keep the full atlas. */
+export function compactAtlas(source: HTMLCanvasElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = ATLAS_SIZE / 2;
+  canvas.height = ATLAS_SIZE / 2;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  for (let tile = 0; tile < ATLAS_TILES * ATLAS_TILES; tile++) {
+    const x = tile % ATLAS_TILES, y = Math.floor(tile / ATLAS_TILES);
+    ctx.drawImage(source, x * TILE, y * TILE, TILE, TILE, x * TILE / 2, y * TILE / 2, TILE / 2, TILE / 2);
+  }
+  return canvas;
+}

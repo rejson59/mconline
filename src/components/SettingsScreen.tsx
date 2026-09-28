@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { applyPreset, DEFAULT_SETTINGS, type ControlMode, type Settings, type TouchMode } from '../utils/settings';
+import { applyPreset, DEFAULT_SETTINGS, effectiveDetail, type ControlMode, type Settings, type TouchMode } from '../utils/settings';
 import { detectInputKind } from '../utils/input';
 import {
   PRESETS,
@@ -28,6 +28,9 @@ export default function SettingsScreen({
   // Profil urządzenia liczony raz – służy tylko do podglądu i trybu „Auto”.
   const profile: DeviceProfile = useMemo(() => autoPreset().profile, []);
   const auto = recommendPreset(profile);
+  const detail = effectiveDetail(settings, profile);
+  const detailText = { auto: 'Auto', low: 'Oszczędne', full: 'Pełne' };
+  const nextDetail = (v: Settings['textureDetail']): Settings['textureDetail'] => v === 'auto' ? 'low' : v === 'low' ? 'full' : 'auto';
 
   const set = (patch: Partial<Settings>) => onChange({ ...settings, ...patch });
 
@@ -143,6 +146,12 @@ export default function SettingsScreen({
           )}
           <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={14} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => set({ renderDistance: v })} />
           <OptionSlider label="Rozdzielczość" value={settings.pixelRatio} min={0.75} max={2} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ pixelRatio: v })} />
+          <Btn onClick={() => set({ textureDetail: nextDetail(settings.textureDetail) })}>
+            Tekstury: {detailText[settings.textureDetail]} ({detail.textureDetail === 'low' ? '8 px/kafelek' : '16 px/kafelek'})
+          </Btn>
+          <Btn onClick={() => set({ effectDetail: nextDetail(settings.effectDetail) })}>
+            Efekty: {detailText[settings.effectDetail]} ({detail.effectDetail === 'low' ? 'mniej cząsteczek i opadów' : 'pełne'})
+          </Btn>
           <OptionSlider label="Cząsteczki i deszcz" value={settings.particles} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ particles: v })} />
           <Btn active={settings.dynamicResolution} onClick={() => set({ dynamicResolution: !settings.dynamicResolution })}>
             Dynamiczna rozdzielczość: {settings.dynamicResolution ? 'włączona' : 'wyłączona'}

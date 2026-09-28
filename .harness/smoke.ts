@@ -9,7 +9,7 @@
  */
 import * as THREE from 'three';
 import { PRESETS, detectDeviceProfile, recommendPreset, describeProfile, type DeviceProfile } from '../src/utils/performance';
-import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, loadSettings, normalizeSettings, SETTINGS_KEY } from '../src/utils/settings';
+import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, effectiveDetail, loadSettings, normalizeSettings, saveSettings, SETTINGS_KEY } from '../src/utils/settings';
 
 // ---------------------------------------------------------------- DOM stubs
 let committedAtlas: Uint8ClampedArray | null = null;
@@ -86,7 +86,7 @@ import {
   PROFESSIONS, VILLAGER_LEVEL_XP, applyTrade, canTrade, createVillagerState, offersFor,
   professionFor, restockIfDue, restockIn, usesLeft, villagerLevel, villagerProgress, villagerTitle,
 } from '../src/game/trading';
-import { getAtlas, AVG_COLOR } from '../src/game/textures';
+import { getAtlas, compactAtlas, AVG_COLOR } from '../src/game/textures';
 import { BITE_MAX, BITE_MIN, BITE_WINDOW, PATIENCE, biteDelay, cookedOf, isFishStack, rollCatch } from '../src/game/fishing';
 import {
   MERGE_COST, RENAME_COST, anvilKey, anvilResult, canMerge, cleanItemName, emptyAnvil,
@@ -967,6 +967,9 @@ section('textures and icons');
     return true;
   })());
   check('atlas has crack frames', atlas.cracks.length > 0);
+  const small = compactAtlas(atlas.canvas);
+  eq('low-detail world atlas is half-size on each GPU axis', small.width, atlas.canvas.width / 2);
+  eq('low-detail world atlas does not overwrite inventory icons', getAtlas().canvas.width, atlas.canvas.width);
   const tileAlpha = (tile: number, x: number, y: number) => committedAtlas?.[((Math.floor(tile / 16) * 16 + y) * 256 + (tile % 16) * 16 + x) * 4 + 3] ?? 0;
   check('new and old 2.7 textures are actually committed to the rendered atlas',
     tileAlpha(T.mud, 8, 8) > 0 && tileAlpha(T.acacia_side, 8, 8) > 0 &&
@@ -2750,8 +2753,37 @@ section('2.0: automatic graphics and settings');
   eq('non-boolean toggle uses the default', recovered.minimap, true);
   eq('normalizer preserves supported settings', normalizeSettings({ fov: 90, volume: 0.25, fpsCap: 60 }).fov, 90);
   store.set(SETTINGS_KEY, '{broken');
+  const lowDetail = effectiveDetail(applyPreset(DEFAULT_SETTINGS, 'low'), weakPhone);
+  check('low preset automatically selects low texture and effect detail', lowDetail.textureDetail === 'low' && lowDetail.effectDetail === 'low');
+  const manualDetail = effectiveDetail({ ...applyPreset(DEFAULT_SETTINGS, 'low'), textureDetail: 'full', effectDetail: 'full' }, weakPhone);
+  check('independent detail overrides survive a low preset', manualDetail.textureDetail === 'full' && manualDetail.effectDetail === 'full');
+  check('auto uses device recommendation for texture detail', effectiveDetail(DEFAULT_SETTINGS, gamingPC).textureDetail === 'full' && effectiveDetail(DEFAULT_SETTINGS, weakPhone).textureDetail === 'low');
+  check('corrupted detail values fall back to Auto', normalizeSettings({ textureDetail: 'huge', effectDetail: [] }).textureDetail === 'auto' && normalizeSettings({ effectDetail: [] }).effectDetail === 'auto');
+  saveSettings({ ...DEFAULT_SETTINGS, textureDetail: 'low', effectDetail: 'full' });
+  check('independent detail axes survive settings reload', loadSettings().textureDetail === 'low' && loadSettings().effectDetail === 'full');
   eq('malformed settings JSON recovers to defaults', loadSettings().renderDistance, DEFAULT_SETTINGS.renderDistance);
   store.delete(SETTINGS_KEY);
+}
+
+
+section('3.0 #100: live texture and effect quality budgets');
+{
+  const g = Object.create(Game.prototype) as Game;
+  const full = getAtlas().canvas;
+  const fake = g as unknown as { fullAtlasCanvas: HTMLCanvasElement; textureDetail: 'low' | 'full'; rainGeo: THREE.BufferGeometry };
+  fake.fullAtlasCanvas = full;
+  fake.textureDetail = 'full';
+  fake.rainGeo = new THREE.BufferGeometry();
+  g.atlasTex = new THREE.CanvasTexture(full);
+  g.gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, requestedParticles: 1, effectDetail: 'full', clouds: true };
+  g.emitHud = () => {};
+  g.applyGfx({ textureDetail: 'low', effectDetail: 'low', particles: 0.8 });
+  check('low atlas actually reaches the GPU texture without altering icon source', (g.atlasTex.image as HTMLCanvasElement).width === 128 && getAtlas().canvas.width === 256);
+  eq('low effects cap particle work', g.gfx.particleScale, 0.35);
+  eq('low effects cap rain draw calls', fake.rainGeo.drawRange.count, Math.floor(420 * 0.35));
+  g.applyGfx({ textureDetail: 'full', effectDetail: 'full' });
+  check('returning to full detail restores original atlas and particle budget', g.atlasTex.image === full && g.gfx.particleScale === 0.8);
+  g.atlasTex.dispose();
 }
 
 

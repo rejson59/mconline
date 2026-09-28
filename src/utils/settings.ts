@@ -1,6 +1,7 @@
 import { PRESETS, recommendPreset, type DeviceProfile, type PresetName } from './performance';
 
 export type QualityMode = 'auto' | PresetName;
+export type DetailMode = 'auto' | 'low' | 'full';
 export type TouchMode = 'tap' | 'buttons';
 /** 2.5: wyraźny podział wersji PC i dotykowej (patrz utils/input.ts). */
 export type ControlMode = 'auto' | 'desktop' | 'touch';
@@ -19,6 +20,9 @@ export interface Settings {
   // ——— 2.0: grafika ———
   /** Auto = dobrane do urządzenia przy każdym starcie. */
   quality: QualityMode;
+  /** Independent GPU atlas resolution and visual-effects budgets. */
+  textureDetail: DetailMode;
+  effectDetail: DetailMode;
   /** Górny limit rozdzielczości (devicePixelRatio). */
   pixelRatio: number;
   /** Mnożnik cząsteczek/deszczu 0–1. */
@@ -54,6 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   controlMode: 'auto',
 
   quality: 'auto',
+  textureDetail: 'auto',
+  effectDetail: 'auto',
   pixelRatio: 1.35,
   particles: 0.8,
   clouds: true,
@@ -97,6 +103,15 @@ export function effectiveSettings(s: Settings, profile: DeviceProfile): Settings
   return applyPreset(s, recommendPreset(profile), true);
 }
 
+/** Resolve each visual detail axis without overwriting the stored Auto choice. */
+export function effectiveDetail(s: Settings, profile: DeviceProfile): { textureDetail: 'low' | 'full'; effectDetail: 'low' | 'full' } {
+  const low = (s.quality === 'auto' ? recommendPreset(profile) : s.quality) === 'low';
+  return {
+    textureDetail: s.textureDetail === 'auto' ? low ? 'low' : 'full' : s.textureDetail,
+    effectDetail: s.effectDetail === 'auto' ? low ? 'low' : 'full' : s.effectDetail,
+  };
+}
+
 function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, value));
@@ -130,6 +145,8 @@ export function normalizeSettings(value: unknown): Settings {
     minimap: bool('minimap'),
     controlMode,
     quality,
+    textureDetail: oneOf(stored.textureDetail, ['auto', 'low', 'full'] as const, DEFAULT_SETTINGS.textureDetail),
+    effectDetail: oneOf(stored.effectDetail, ['auto', 'low', 'full'] as const, DEFAULT_SETTINGS.effectDetail),
     pixelRatio: boundedNumber(stored.pixelRatio, DEFAULT_SETTINGS.pixelRatio, 0.75, 2),
     particles: boundedNumber(stored.particles, DEFAULT_SETTINGS.particles, 0, 1),
     clouds: bool('clouds'),

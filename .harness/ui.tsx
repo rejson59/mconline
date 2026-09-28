@@ -211,6 +211,9 @@ section('menus: static render');
   check('settings screen shows auto mode', settingsHtml.includes('Auto'));
   check('settings screen shows touch options', settingsHtml.includes('Ekran dotykowy') && settingsHtml.includes('Wibracje'));
   check('settings screen shows fps cap option', settingsHtml.includes('Limit klatek'));
+  check('graphics panel has independent texture and effect quality controls', settingsHtml.includes('Tekstury: Auto') && settingsHtml.includes('Efekty: Auto'));
+  const manualVisuals = renderToStaticMarkup(<SettingsScreen settings={{ ...DEFAULT_SETTINGS, textureDetail: 'low', effectDetail: 'full' }} onChange={noop} onClose={noop} />);
+  check('graphics panel describes actual detail choices', manualVisuals.includes('8 px/kafelek') && manualVisuals.includes('Efekty: Pełne'));
   // 2.5: wyraźny podział wersji PC i dotykowej w opcjach
   check('settings show the control mode selector', settingsHtml.includes('Tryb sterowania'));
   check('control mode selector explains the hybrid case', settingsHtml.includes('laptop'));
@@ -539,6 +542,23 @@ async function mountWithJsdom(): Promise<boolean> {
   // Canvas drawing is stubbed; gestures/buttons are mounted for real with React.
   const canvasProto = (w as unknown as { HTMLCanvasElement: typeof HTMLCanvasElement }).HTMLCanvasElement.prototype;
   canvasProto.getContext = ((kind: string) => kind === '2d' ? { fillStyle: '', fillRect() {} } : null) as typeof canvasProto.getContext;
+  const gfxContainer = w.document.createElement('div');
+  w.document.body.appendChild(gfxContainer);
+  const gfxRoot = createRoot(gfxContainer);
+  function GraphicsHarness() {
+    const [value, setValue] = React.useState({ ...DEFAULT_SETTINGS });
+    return <SettingsScreen settings={value} onChange={setValue} onClose={noop} />;
+  }
+  await React.act(async () => { gfxRoot.render(<GraphicsHarness />); });
+  const gfxButton = (text: string) => [...gfxContainer.querySelectorAll('button')].find((b) => b.textContent?.includes(text)) as HTMLButtonElement;
+  await React.act(async () => { gfxButton('Tekstury:').click(); });
+  await React.act(async () => { gfxButton('Efekty:').click(); });
+  check('live texture and effect controls respond independently to clicks', gfxContainer.textContent?.includes('Tekstury: Oszczędne') && gfxContainer.textContent?.includes('Efekty: Oszczędne'), gfxContainer.textContent ?? '');
+  await React.act(async () => { gfxButton('Tekstury:').click(); });
+  check('texture detail cycles to full without changing effects', gfxContainer.textContent?.includes('Tekstury: Pełne') && gfxContainer.textContent?.includes('Efekty: Oszczędne'), gfxContainer.textContent ?? '');
+  await React.act(async () => { gfxRoot.unmount(); });
+  gfxContainer.remove();
+
   const difficultyContainer = w.document.createElement('div');
   w.document.body.appendChild(difficultyContainer);
   const difficultyRoot = createRoot(difficultyContainer);

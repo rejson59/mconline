@@ -12,7 +12,7 @@ import {
   brewingKey, emptyBrewing, tickBrewing, sprintFactor, fallDamageAfterPotion, restoreEffects,
   type BrewingState, type PotionEffectId,
 } from './brewing';
-import { getAtlas, tileUV, AVG_COLOR } from './textures';
+import { getAtlas, compactAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { Mob, isHostileMob, pickPassiveMob, type MobType } from './mobs';
 
@@ -403,7 +403,7 @@ export class Game {
   /** Twardy limit klatek (0 = bez limitu). Oszczędza baterię na telefonach. */
   fpsCap = 0;
   /** Budżety jakości ustawiane przez applyGfx(). */
-  gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, clouds: true };
+  gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, requestedParticles: 1, effectDetail: 'full' as 'low' | 'full', clouds: true };
   /** Automatyczne wskakiwanie na 1-blokowe schodki (sterowanie mobilne). */
   autoJump = false;
   /** Krótkie wibracje przy kopaniu i obrażeniach. */
@@ -470,6 +470,9 @@ export class Game {
   // rendering
   materials: THREE.Material[];
   atlasTex: THREE.Texture;
+  private fullAtlasCanvas!: HTMLCanvasElement;
+  private lowAtlasCanvas: HTMLCanvasElement | null = null;
+  private textureDetail: 'low' | 'full' = 'full';
   selection: THREE.LineSegments;
   crackMesh: THREE.Mesh;
   crackTex: THREE.Texture[];
@@ -647,6 +650,7 @@ export class Game {
     this.scene.fog = new THREE.Fog(0x88bbff, 20, this.renderDistance * CS);
 
     const atlas = getAtlas();
+    this.fullAtlasCanvas = atlas.canvas;
     this.icons = { ...atlas.icons, ...buildItemIcons() };
     const tex = new THREE.CanvasTexture(atlas.canvas);
     tex.magFilter = THREE.NearestFilter;
@@ -925,6 +929,8 @@ export class Game {
     renderDistance?: number;
     pixelRatio?: number;
     particles?: number;
+    textureDetail?: 'low' | 'full';
+    effectDetail?: 'low' | 'full';
     clouds?: boolean;
     dynamicResolution?: boolean;
     fpsCap?: number;
@@ -941,8 +947,16 @@ export class Game {
       this.basePixelRatio = Math.max(0.6, Math.min(3, o.pixelRatio));
       this.applyResScale();
     }
-    if (o.particles !== undefined) {
-      this.gfx.particleScale = Math.max(0, Math.min(1, o.particles));
+    if (o.textureDetail !== undefined && o.textureDetail !== this.textureDetail) {
+      this.textureDetail = o.textureDetail;
+      if (o.textureDetail === 'low' && !this.lowAtlasCanvas) this.lowAtlasCanvas = compactAtlas(this.fullAtlasCanvas);
+      this.atlasTex.image = o.textureDetail === 'low' ? this.lowAtlasCanvas! : this.fullAtlasCanvas;
+      this.atlasTex.needsUpdate = true;
+    }
+    if (o.effectDetail !== undefined) this.gfx.effectDetail = o.effectDetail;
+    if (o.particles !== undefined) this.gfx.requestedParticles = Math.max(0, Math.min(1, o.particles));
+    if (o.particles !== undefined || o.effectDetail !== undefined) {
+      this.gfx.particleScale = Math.min(this.gfx.requestedParticles, this.gfx.effectDetail === 'low' ? 0.35 : 1);
       if (this.rainGeo) this.rainGeo.setDrawRange(0, Math.floor(420 * this.gfx.particleScale));
     }
     if (o.clouds !== undefined) this.gfx.clouds = o.clouds;
