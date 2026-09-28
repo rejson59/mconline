@@ -12,6 +12,7 @@ import { PRESETS, detectDeviceProfile, recommendPreset, describeProfile, type De
 import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, loadSettings, normalizeSettings, SETTINGS_KEY } from '../src/utils/settings';
 
 // ---------------------------------------------------------------- DOM stubs
+let committedAtlas: Uint8ClampedArray | null = null;
 const ctx2d = {
   canvas: { width: 16, height: 16 },
   fillStyle: '', strokeStyle: '', lineWidth: 1, globalAlpha: 1, imageSmoothingEnabled: true,
@@ -19,7 +20,9 @@ const ctx2d = {
   fillRect() {}, strokeRect() {}, clearRect() {}, beginPath() {}, closePath() {}, moveTo() {}, lineTo() {},
   arc() {}, arcTo() {}, quadraticCurveTo() {}, bezierCurveTo() {}, fill() {}, stroke() {}, clip() {},
   drawImage() {}, save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, setTransform() {},
-  resetTransform() {}, putImageData() {},
+  resetTransform() {}, putImageData(data: { width: number; data: Uint8ClampedArray }) {
+    if (data.width === 256) committedAtlas = new Uint8ClampedArray(data.data);
+  },
   createImageData: (a: number, b: number) => ({ width: a, height: b, data: new Uint8ClampedArray(a * b * 4) }),
   getImageData: (_x: number, _y: number, w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
   measureText: () => ({ width: 10 }),
@@ -45,9 +48,10 @@ if (typeof globalThis.localStorage === 'undefined') {
 }
 
 // ------------------------------------------------------------------ imports
-import { World, CS, CH, SEA, FLAT_H } from '../src/game/world';
+import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
 import { DiscoveryMap, MAP_LIMIT } from '../src/game/discoveryMap';
-import { B, BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
+import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeCompass';
+import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
@@ -196,6 +200,85 @@ section('world: determinism and terrain');
     }
   }
   check('world has trees', trees > 0, `${trees} trunks`);
+}
+
+// =================================================== generator v3: six biomes
+section('3.0: biome expansion and legacy terrain');
+{
+  const world = new World(12345);
+  const copy = new World(12345);
+  const legacy = new World(12345, false, false, 2);
+  const seen = new Set<string>();
+  let repeatable = true;
+  for (let x = -2000; x <= 2000; x += 64) for (let z = -2000; z <= 2000; z += 64) {
+    const a = world.surface(x, z), b = copy.surface(x, z);
+    seen.add(a.biome);
+    if (a.biome !== b.biome || a.h !== b.h) repeatable = false;
+  }
+  check('all six requested biomes generate deterministically', repeatable &&
+    ['Bagno', 'Sawanna', 'Dżungla', 'Tajga', 'Pustkowie', 'Kwiecista łąka'].every((b) => seen.has(b)));
+  const table = [
+    { x: -2000, z: -1136, biome: 'Tajga', top: B.PODZOL, vegetation: B.SPRUCE_LOG },
+    { x: -2000, z: -144, biome: 'Pustkowie', top: B.DRY_SOIL, vegetation: B.DEAD_SHRUB },
+    { x: -2000, z: -1616, biome: 'Kwiecista łąka', top: B.MEADOW_GRASS, vegetation: B.FLOWER_BLUE },
+  ];
+  for (const site of table) {
+    const surface = world.surface(site.x, site.z);
+    const c = world.getChunk(Math.floor(site.x / CS), Math.floor(site.z / CS));
+    check(`${site.biome} has biome-specific ground and vegetation`, surface.biome === site.biome &&
+      c.data.includes(site.top) && c.data.includes(site.vegetation));
+  }
+  const lc = legacy.getChunk(0, 0).data;
+  let checksum = 2166136261;
+  for (const n of lc) checksum = Math.imul(checksum ^ n, 16777619) >>> 0;
+  eq('pre-upgrade world generator chunk is unchanged', checksum, 1020360066);
+  check('old generator never silently introduces new biomes',
+    legacy.surface(-2000, -1136).biome !== 'Tajga' && legacy.terrainVersion === 2);
+  const a = new World(12345), b = new World(12345);
+  const cx = Math.floor(-2000 / CS), cz = Math.floor(-1136 / CS);
+  a.getChunk(cx, cz); a.getChunk(cx + 1, cz);
+  b.getChunk(cx + 1, cz); b.getChunk(cx, cz);
+  check('spruce forest is independent of chunk load order across seams',
+    a.getChunk(cx, cz).data.every((n, i) => n === b.getChunk(cx, cz).data[i]) &&
+    a.getChunk(cx + 1, cz).data.every((n, i) => n === b.getChunk(cx + 1, cz).data[i]));
+  check('new terrain/trees and flowers are accessible in Creative',
+    [B.SPRUCE_LOG, B.SPRUCE_LEAVES, B.SPRUCE_SAPLING, B.PODZOL, B.MEADOW_GRASS,
+      B.FLOWER_BLUE, B.DRY_SOIL, B.DEAD_SHRUB].every((id) => CREATIVE_BLOCKS.includes(id)));
+  const f = new World(9876, true);
+  const y = FLAT_H + 1;
+  f.setBlock(3, y, 3, B.SPRUCE_SAPLING);
+  check('spruce sapling grows on planted ground and yields a cone canopy',
+    plantTree(f, 3, y, 3, false, true) && f.getBlock(3, y, 3) === B.SPRUCE_LOG &&
+      [7, 8, 9].some((dy) => f.getBlock(3, y + dy, 3) === B.SPRUCE_LEAVES));
+  const rand = Math.random;
+  try {
+    Math.random = () => 0;
+    check('spruce leaves drop a renewable sapling in Survival', blockDrops(B.SPRUCE_LEAVES, 0)[0]?.id === B.SPRUCE_SAPLING);
+    check('wasteland shrubs drop useful sticks', blockDrops(B.DEAD_SHRUB, 0)[0]?.id === I.STICK);
+  } finally { Math.random = rand; }
+  check('spruce logs craft into usable planks',
+    RECIPES.some((r) => r.out.id === B.PLANKS && r.inputs.some((v) => v.id === B.SPRUCE_LOG)));
+}
+
+section('3.0: craftable biome compass search');
+{
+  const w = new World(12345);
+  const found = new BiomeSearch(w, -2000, -1136, 'Tajga');
+  check('search can be advanced with a bounded per-frame budget', found.advance(1) && found.checked === 1);
+  check('nearby taiga located without generating chunks', found.result?.distance === 0 && w.chunks.size === 0);
+  const far = new BiomeSearch(w, -2000, -1136, 'Kwiecista łąka');
+  while (!far.advance(96)) { /* bounded frame batches */ }
+  check('a different biome is found inside range', !!far.result && far.result.distance <= COMPASS_RANGE &&
+    w.surface(far.result.x, far.result.z).biome === 'Kwiecista łąka' && w.chunks.size === 0);
+  const flat = new World(42, true);
+  const absent = new BiomeSearch(flat, 0, 0, 'Tajga');
+  while (!absent.advance(96)) { /* finite search */ }
+  check('missing biome is reported after capped search', absent.done && absent.result === null && absent.checked === absent.total);
+  check('compass refuses the Nether', new BiomeSearch(new World(42, false, true), 0, 0, 'Tajga').done);
+  check('all selectable biomes belong to the overworld', !BIOME_TARGETS.includes('Nether'));
+  check('recipe uses existing compass, paper and lapis', RECIPES.some((r) => r.out.id === I.BIOME_COMPASS &&
+    [I.COMPASS, I.PAPER, I.LAPIS].every((id) => r.inputs.some((i) => i.id === id))));
+  check('biome compass exists as a separate Creative item', isItem(I.BIOME_COMPASS) && stackLimit(I.BIOME_COMPASS) === 1);
 }
 
 // ============================================================== flat worlds
@@ -882,6 +965,12 @@ section('textures and icons');
     return true;
   })());
   check('atlas has crack frames', atlas.cracks.length > 0);
+  const tileAlpha = (tile: number, x: number, y: number) => committedAtlas?.[((Math.floor(tile / 16) * 16 + y) * 256 + (tile % 16) * 16 + x) * 4 + 3] ?? 0;
+  check('new and old 2.7 textures are actually committed to the rendered atlas',
+    tileAlpha(T.mud, 8, 8) > 0 && tileAlpha(T.acacia_side, 8, 8) > 0 &&
+    tileAlpha(T.spruce_side, 8, 8) > 0 && tileAlpha(T.dry_soil, 8, 8) > 0 &&
+    tileAlpha(T.flower_blue, 8, 4) > 0);
+
   check('atlas average colours are filled', BLOCKS.slice(1, 40).every((d) => d && (atlas.canvas ? true : true)));
 
   const icons = buildItemIcons();
@@ -1432,6 +1521,7 @@ section('saves: enchantments ride along');
   eq('second enchantment persists', stored.inv[0]?.ench?.unbreaking, 2);
   eq('armor enchantments persist', stored.armor?.[0]?.ench?.featherfalling, 3);
   eq('durability still persists', stored.inv[0]?.dur, 300);
+  eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
   check('engine save retains surveyed tiles in both dimensions', DiscoveryMap.fromSave(stored.discovery).get('overworld', -1, -1)?.[2] === 8 && DiscoveryMap.fromSave(stored.discovery).get('nether', 0, 0)?.[2] === 11);
   check('world JSON export includes discovery', exportSave('ench-test')?.includes('discovery') === true);
   const beforeFailedWrite = localStorage.getItem('blockcraft-saves-v2');

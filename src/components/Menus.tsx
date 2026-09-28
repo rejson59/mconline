@@ -117,6 +117,7 @@ export function Controls() {
     ['M', 'Minimapa'],
     ['J', 'Dziennik przygód i postęp celów'],
     ['K', 'Mapa odkrywania, znaczniki celu i punkt śmierci'],
+    ['PPM / tap z kompasem biomów', 'Wybierz biom, wyszukaj w zasięgu i śledź punkt'],
     ['F3', 'Informacje debugowania'],
     ['Esc', 'Pauza · Esc w pauzie wraca do gry'],
     ['Enter / R (ekran śmierci)', 'Odrodzenie'],

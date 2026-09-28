@@ -536,6 +536,27 @@ const ART: Record<number, [Record<string, string>, string[]]> = {
       '................',
     ]],
 
+  // -- Kompas biomów: zielona igła na mapie, inna sylwetka niż zwykły kompas.
+  352: [
+    { O: '#3d7764', G: '#86c686', D: '#285247', M: '#b6a977', W: '#e9e4b4', B: '#3c8cb6' }, [
+      '................',
+      '..OOOOOOOOOOOO..',
+      '..OGGGGGGGGGDO..',
+      '..OGGWWGGGGBDO..',
+      '..OGWMMWGGGBDO..',
+      '..OGWMMMWWWGDO..',
+      '..OGGWMMMGGGDO..',
+      '..OGGGWMMGGGDO..',
+      '..OGGGGWMGGGDO..',
+      '..OGGGGWWGGGDO..',
+      '..OGBGGGGGGGDO..',
+      '..OGBGGGGGGGDO..',
+      '..ODDDDDDDDDDO..',
+      '..OOOOOOOOOOOO..',
+      '................',
+      '................',
+    ]],
+
   // -- Zegar -----------------------------------------------------------------
   144: [
     {

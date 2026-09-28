@@ -11,6 +11,8 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwer
 
 Pełny plan przyszłego wydania 3.0 znajduje się w [`PLAN-100-BLOCKCRAFT-3.0.md`](PLAN-100-BLOCKCRAFT-3.0.md). **Ta gałąź jest pracą w toku, nie wydaniem 3.0.** Stan wymagań i zakres braków: [`3.0-STATUS.md`](3.0-STATUS.md).
 
+**Dalsze zmiany w gałęzi roboczej (nadal nie wydanie 3.0):** nowe światy mają także **Tajgę**, **Pustkowie** i **Kwiecistą łąkę**. Tajga zawiera świerki i bielicę, pustkowie spękaną ziemię i suche krzewy, łąka błękitne kwiaty i gęstszą roślinność. Świerk daje sadzonki z igieł; sadzonki rosną, a pień można przerobić na deski. Starsze zapisy bez wersji generatora zachowują dokładnie dawny teren 2.7, a nowy generator zapisuje numer rewizji świata. Przedmiot **Kompas biomów** (kompas + 2 papiery + lazuryt przy stole) wybiera biom z menu, szuka przybliżonego najbliższego obszaru w promieniu 1024 bloków bez generowania chunków i pozwala śledzić wynik. Gdy biomu nie ma w zasięgu, wyświetla komunikat. Dostępny również w Creative; nie działa w Netherze.
+
 **W gałęzi roboczej (nie wydanie 3.0):** ekran punktów podróży (`K` na PC, 📍 na dotyku) zawiera mapę odkrywania. Każdy odwiedzony chunk odsłania pole mapy o kolorze biomu; oddzielne mapy Nadświata i Netheru są zapisywane z danym światem oraz przenoszone przez eksport/import. Strzałkami przesuwasz mapę, przyciskami `+` / `−` zmieniasz skalę; kliknięcie odkrytego pola lub „Zaznacz środek mapy” dodaje cel do istniejących punktów podróży. Znaczniki wskazują cel, gracza i miejsce śmierci. Pamięć mapy jest ograniczona do 16 384 pól na wymiar; po osiągnięciu limitu zachowuje wcześniej odkryte pola. Nie wykonano jeszcze ręcznego testu na urządzeniu z WebGL.
 
 **Wersja 2.6 „Warsztat bez wpadek”**:

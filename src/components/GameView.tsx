@@ -11,6 +11,7 @@ import AnvilScreen from './AnvilScreen';
 import BrewingScreen from './BrewingScreen';
 import JournalScreen from './JournalScreen';
 import WaypointsScreen from './WaypointsScreen';
+import BiomeCompassScreen from './BiomeCompassScreen';
 import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
 import TouchControls from './TouchControls';
 import {
@@ -266,6 +267,7 @@ export default function GameView({
       {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && hud && ui === 'journal' && <JournalScreen hud={hud} unlocked={game.achievementIds()} onClose={() => game.setUI('playing')} />}
       {game && ui === 'waypoints' && <WaypointsScreen game={game} onClose={() => game.setUI('playing')} />}
+      {game && ui === 'biomeCompass' && <BiomeCompassScreen game={game} onClose={() => game.setUI('playing')} />}
       {game && ui === 'chat' && (
         <ChatInput
           onSubmit={(t) => game.command(t)}

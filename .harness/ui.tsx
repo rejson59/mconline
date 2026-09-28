@@ -18,7 +18,9 @@ import EnchantScreen from '../src/components/EnchantScreen';
 import TradeScreen from '../src/components/TradeScreen';
 import WaypointsScreen from '../src/components/WaypointsScreen';
 import DiscoveryMapView from '../src/components/DiscoveryMapView';
+import BiomeCompassScreen from '../src/components/BiomeCompassScreen';
 import { DiscoveryMap } from '../src/game/discoveryMap';
+import { World } from '../src/game/world';
 import AnvilScreen from '../src/components/AnvilScreen';
 import BrewingScreen from '../src/components/BrewingScreen';
 import InventoryScreen from '../src/components/InventoryScreen';
@@ -230,6 +232,15 @@ section('2.2 travel waypoints: static render');
   check('waypoint screen lists coordinates and tracking state', html.includes('Baza') && html.includes('12, 65, -4') && html.includes('Nie śledź'));
   check('waypoint screen supports creating points at the current position', html.includes('Dodaj tutaj'));
   check('map reachable in waypoint screen on PC and touch', html.includes('Mapa odkrywania') && html.includes('Przesuń mapę na północ') && html.includes('Do mnie'));
+}
+
+section('3.0: biome compass selection screen');
+{
+  const game = { homeWorld: new World(12345), body: { pos: { x: 0, z: 0 } } };
+  const html = renderToStaticMarkup(<BiomeCompassScreen game={game as unknown as Game} onClose={noop} />);
+  check('compass has selectable biomes and search action', html.includes('Kompas biomów') &&
+    html.includes('Tajga') && html.includes('Pustkowie') && html.includes('Kwiecista łąka') && html.includes('Szukaj biomu'));
+  check('compass describes radius and returns to game', html.includes('1024') && html.includes('Wróć do gry'));
 }
 
 // ======================================================= enchanting screen

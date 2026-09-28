@@ -105,6 +105,7 @@ export const I = {
   POTION_NIGHT: 349,
   POTION_STRENGTH: 350,
   POTION_REGEN: 351,
+  BIOME_COMPASS: 352,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
@@ -195,6 +196,7 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.SHEARS, name: 'Nożyce', keys: ['nozyce', 'nożyce', 'shears'], kind: 'tool', tool: 'shears', durability: 120, color: '#d8d8e0' },
   { id: I.FLINT_STEEL, name: 'Krzesiwo', keys: ['krzesiwo', 'flint_and_steel', 'zapalniczka'], kind: 'tool', tool: 'igniter', durability: 48, color: '#c8c8d0' },
   { id: I.COMPASS, name: 'Kompas', keys: ['kompas', 'compass'], kind: 'material', color: '#c44848' },
+  { id: I.BIOME_COMPASS, name: 'Kompas biomów', keys: ['kompas_biomow', 'biome_compass'], kind: 'material', color: '#64bf85', stack: 1 },
   { id: I.CLOCK, name: 'Zegar', keys: ['zegar', 'clock'], kind: 'material', color: '#e2c14a' },
   { id: I.STRING, name: 'Struna', keys: ['struna', 'string'], kind: 'material', color: '#e8e8ea' },
   { id: I.BONE, name: 'Kość', keys: ['kosc', 'kość', 'bone'], kind: 'material', color: '#efe9d8' },
@@ -370,10 +372,10 @@ const PICK_BLOCKS = new Set<number>([
 ]);
 const AXE_BLOCKS = new Set<number>([
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED, B.CHEST, B.LOOT_CHEST,
-  B.HAY, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG,
+  B.HAY, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG, B.SPRUCE_LOG,
 ]);
 const SHOVEL_BLOCKS = new Set<number>([
-  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH, B.SOUL_SAND, B.SOUL_SOIL, B.MUD,
+  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH, B.SOUL_SAND, B.SOUL_SOIL, B.MUD, B.DRY_SOIL, B.MEADOW_GRASS, B.PODZOL,
 ]);
 const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE]);
 
@@ -510,14 +512,14 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
     }
     if (blockId === B.COAL_ORE || blockId === B.DIAMOND_ORE || blockId === B.IRON_ORE || blockId === B.GOLD_ORE ||
         blockId === B.LAPIS_ORE || blockId === B.EMERALD_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.ICE ||
-        blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
+        blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.SPRUCE_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
         blockId === B.FARMLAND || (blockId >= B.CROP0 && blockId <= B.CROP3)) {
       return [{ id: blockId, count: 1 }];
     }
     if (BLOCKS[blockId]?.drop >= 0) return [{ id: blockId, count: 1 }];
     return [];
   }
-  if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
+  if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.SPRUCE_LEAVES || blockId === B.DEAD_SHRUB || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
   if (blockId === B.GRAVEL) return Math.random() < 0.12 ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
   if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
   if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
@@ -544,8 +546,10 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
     return out;
   }
   if (blockId === B.BIRCH_LEAVES) return Math.random() < 0.1 ? [{ id: B.BIRCH_SAPLING, count: 1 }] : [];
+  if (blockId === B.SPRUCE_LEAVES) return Math.random() < 0.12 ? [{ id: B.SPRUCE_SAPLING, count: 1 }] : [];
+  if (blockId === B.DEAD_SHRUB) return Math.random() < 0.4 ? [{ id: I.STICK, count: 1 }] : [];
   if (blockId === B.TALLGRASS) return Math.random() < 0.18 ? [{ id: I.SEEDS, count: 1 }] : [];
-  if (blockId === B.GRASS) {
+  if (blockId === B.GRASS || blockId === B.MEADOW_GRASS) {
     const out: Stack[] = [{ id: B.DIRT, count: 1 }];
     if (Math.random() < 0.12) out.push({ id: I.SEEDS, count: 1 });
     return out;
@@ -588,6 +592,7 @@ export function smeltResult(id: number): number | null {
       return B.STONE;
     case B.LOG:
     case B.BIRCH_LOG:
+    case B.SPRUCE_LOG:
       return I.COAL;
     case I.RAW_PORK:
       return I.COOKED_PORK;
@@ -610,8 +615,8 @@ export function smeltResult(id: number): number | null {
 export function fuelSeconds(id: number): number {
   if (id === I.COAL || id === B.COAL_ORE) return 32;
   if (id === I.BLAZE_ROD) return 60;
-  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || id === B.CHEST || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
-  if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || isLadder(id)) return 2;
+  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.SPRUCE_LOG || id === B.CRAFTING || id === B.BOOKSHELF || id === B.CHEST || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
+  if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING || isLadder(id)) return 2;
   if (id === B.HAY) return 6;
   if (id === B.WOOL_WHITE || id === B.WOOL_RED || id === B.WOOL_BLUE || id === B.WOOL_GREEN || id === B.WOOL_YELLOW || id === B.WOOL_BLACK) return 3;
   const it = ITEMS[id];

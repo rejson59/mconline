@@ -765,8 +765,6 @@ export function buildAtlas(): AtlasResult {
     for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x++) setPx(T.honeycomb_block, x, y, 200, 160, 50);
   }
 
-  ctx.putImageData(img, 0, 0);
-
   // 3.0 biome atlas additions: textured wet mud, striped acacia bark,
   // layered tropical foliage and a readable water-lily silhouette.
   {
@@ -797,6 +795,54 @@ export function buildAtlas(): AtlasResult {
       setPx(T.lily_pad, x, y, c[0], c[1], c[2], edge ? 0 : 255);
     }
   }
+
+  // Conifer, meadow and arid ground: all tiles use the same 16px atlas budget.
+  {
+    const r = R(154);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const seam = x % 5 === 0 || x % 5 === 1;
+      const c = shade(seam ? [52, 47, 41] : [94, 76, 56], 0.85 + r() * 0.26);
+      setPx(T.spruce_side, x, y, ...c);
+    }
+    logTop(T.spruce_top, [154, 123, 85], [113, 85, 60], [53, 47, 41], R(155));
+  }
+  leaves(T.spruce_leaves, [37, 83, 64], R(156));
+  clear(T.spruce_sapling);
+  for (let y = 8; y < 15; y++) setPx(T.spruce_sapling, 8, y, 94, 75, 52);
+  for (let y = 2; y < 11; y++) {
+    const rad = Math.min(4, Math.floor((y + 1) / 2));
+    for (let x = 8 - rad; x <= 8 + rad; x++) if (Math.abs(x - 8) <= rad - (y % 3 === 0 ? 1 : 0)) {
+      setPx(T.spruce_sapling, x, y, 34 + (x % 3) * 9, 91 + (y % 4) * 6, 67);
+    }
+  }
+  {
+    const r = R(158);
+    noiseFill(T.dry_soil, [153, 132, 100], 0.22, r);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      if ((x * 7 + y * 11) % 29 === 0 || (y % 7 === 0 && (x + y) % 9 < 2)) setPx(T.dry_soil, x, y, 95, 79, 64);
+    }
+  }
+  clear(T.dead_shrub);
+  for (let y = 5; y < 15; y++) setPx(T.dead_shrub, 8, y, 117, 89, 57);
+  for (const [x, y] of [[5, 5], [6, 6], [7, 7], [10, 5], [9, 6], [7, 9], [6, 8], [10, 9], [9, 10]]) setPx(T.dead_shrub, x, y, 142, 109, 65);
+  clear(T.flower_blue);
+  for (let y = 7; y < 15; y++) setPx(T.flower_blue, 8, y, 53, 124, 49);
+  for (const [x, y] of [[7, 2], [8, 2], [6, 3], [7, 3], [8, 3], [9, 3], [7, 4], [8, 4], [6, 5], [9, 5]]) setPx(T.flower_blue, x, y, 94, 138, 221);
+  setPx(T.flower_blue, 8, 4, 235, 209, 87);
+  noiseFill(T.meadow_top, [108, 175, 71], 0.25, R(161));
+  copyTile(T.grass_side, T.meadow_side);
+  const meadowSideRnd = R(162);
+  for (let x = 0; x < 16; x++) for (let y = 0; y < 5; y++) {
+    const r = meadowSideRnd();
+    setPx(T.meadow_side, x, y, 88 + r * 26, 149 + r * 32, 61 + r * 16);
+  }
+  noiseFill(T.podzol, [91, 81, 60], 0.3, R(163));
+  for (let x = 0; x < 16; x += 3) for (let y = (x % 5); y < 16; y += 5) setPx(T.podzol, x, y, 42, 90, 62);
+
+  // Commit every appended tile to the GPU atlas BEFORE generating block icons.
+  // Previously the 2.7 tiles were painted into ImageData only after the sole
+  // putImageData call, so their inventory icons and rendered faces were blank.
+  ctx.putImageData(img, 0, 0);
 
   // average colors
   for (const d of BLOCKS) {

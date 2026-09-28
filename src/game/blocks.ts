@@ -34,6 +34,8 @@ export const T = {
   basalt_top: 140, basalt_side: 141, blackstone: 142, soul_soil: 143, crying_obsidian: 144,
   target_top: 145, target_side: 146, honey_block: 147, honeycomb_block: 148,
   mud: 149, acacia_side: 150, acacia_top: 151, jungle_leaves: 152, lily_pad: 153,
+  spruce_side: 154, spruce_top: 155, spruce_leaves: 156, spruce_sapling: 157,
+  dry_soil: 158, dead_shrub: 159, flower_blue: 160, meadow_top: 161, meadow_side: 162, podzol: 163,
 } as const;
 
 export const B = {
@@ -92,6 +94,8 @@ export const B = {
   SOUL_SOIL: 336, CRYING_OBSIDIAN: 337, TARGET: 338, HONEY_BLOCK: 339, HONEYCOMB_BLOCK: 340,
   // 3.0 biomes: append-only ids preserve existing worlds.
   MUD: 400, ACACIA_LOG: 401, ACACIA_LEAVES: 402, JUNGLE_LEAVES: 403, LILY_PAD: 404,
+  SPRUCE_LOG: 405, SPRUCE_LEAVES: 406, SPRUCE_SAPLING: 407, DRY_SOIL: 408,
+  DEAD_SHRUB: 409, FLOWER_BLUE: 410, MEADOW_GRASS: 411, PODZOL: 412,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail';
@@ -304,6 +308,15 @@ def(B.ACACIA_LOG, 'Pień akacji', [T.acacia_top, T.acacia_top, T.acacia_side], {
 def(B.ACACIA_LEAVES, 'Liście akacji', T.jungle_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.JUNGLE_LEAVES, 'Gęste liście tropikalne', T.jungle_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.LILY_PAD, 'Lilia wodna', T.lily_pad, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0.1, sound: 'grass' });
+// New terrain and vegetation belong to generator v3; ids remain stable in older saves.
+def(B.SPRUCE_LOG, 'Pień świerku', [T.spruce_top, T.spruce_top, T.spruce_side], { hardness: 2, sound: 'wood' });
+def(B.SPRUCE_LEAVES, 'Igły świerku', T.spruce_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
+def(B.SPRUCE_SAPLING, 'Sadzonka świerku', T.spruce_sapling, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
+def(B.DRY_SOIL, 'Spękana ziemia', T.dry_soil, { hardness: 0.6, sound: 'sand' });
+def(B.DEAD_SHRUB, 'Suchy krzew', T.dead_shrub, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass', drop: -1 });
+def(B.FLOWER_BLUE, 'Błękitny kwiat', T.flower_blue, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
+def(B.MEADOW_GRASS, 'Łąkowa trawa', [T.meadow_top, T.dirt, T.meadow_side], { hardness: 0.6, sound: 'grass', drop: B.DIRT });
+def(B.PODZOL, 'Bielica', T.podzol, { hardness: 0.6, sound: 'grass' });
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;

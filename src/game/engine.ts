@@ -58,7 +58,7 @@ import { villageSpawnSpots } from './village';
 import { isVillageMob } from './mobs';
 
 export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'anvil' | 'brewing';
+export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'biomeCompass' | 'anvil' | 'brewing';
 
 export interface Waypoint {
   id: string;
@@ -163,6 +163,8 @@ export interface SaveData {
   id?: string;
   name?: string;
   worldType?: 'normal' | 'flat';
+  /** Missing in older saves: keep the original 2.7 generator for them. */
+  terrainVersion?: 2 | 3;
   updated?: number;
   hunger?: number;
   spawn?: [number, number, number];
@@ -606,7 +608,7 @@ export class Game {
     const seed = opts.save ? opts.save.seed : opts.seed;
     const worldType = opts.save?.worldType ?? opts.worldType ?? 'normal';
     this.worldType = worldType;
-    this.world = new World(seed, worldType === 'flat');
+    this.world = new World(seed, worldType === 'flat', false, opts.save && opts.save.terrainVersion !== 3 ? 2 : 3);
     this.homeWorld = this.world;
     // Nether istnieje od razu jako osobny wymiar – nigdy nie nadpisuje nadświatu.
     this.netherWorld = new World(seed, false, true);
@@ -814,7 +816,7 @@ export class Game {
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
-      ? 'Tryb kreatywny. K – mapa i punkty podróży, J – dziennik, T – czat, /help – komendy, M – minimapa.'
+      ? 'Tryb kreatywny. K – mapa i punkty podróży, J – dziennik; użyj kompasu biomów, aby wyszukać cel.'
       : `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}”: szukaj receptur po nazwie lub składniku; pełny ekwipunek nie gubi łupu. K – mapa odkrywania i punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.`);
   }
 
@@ -1066,7 +1068,7 @@ export class Game {
     // dzienniku, suwak w opcjach) – bez tego Esc „nic nie robił”, dopóki
     // gracz nie kliknął poza polem.
     if (e.code === 'Escape') {
-      if (this.ui === 'paused' || this.ui === 'journal' || this.ui === 'waypoints') {
+      if (this.ui === 'paused' || this.ui === 'journal' || this.ui === 'waypoints' || this.ui === 'biomeCompass') {
         e.preventDefault();
         this.setUI('playing');
         return;
@@ -1088,7 +1090,7 @@ export class Game {
     // pozostałych klawiszy – inaczej litera „e” zamykałaby ekran w trakcie pisania.
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-    if (this.ui === 'journal' || this.ui === 'waypoints') {
+    if (this.ui === 'journal' || this.ui === 'waypoints' || this.ui === 'biomeCompass') {
       if (e.code === 'Escape' || (this.ui === 'waypoints' && e.code === 'KeyK')) {
         e.preventDefault();
         this.setUI('playing');
@@ -1825,7 +1827,7 @@ export class Game {
   }
 
   private notePickup(id: number) {
-    if (id === B.LOG || id === B.BIRCH_LOG) this.unlock('wood');
+    if (id === B.LOG || id === B.BIRCH_LOG || id === B.SPRUCE_LOG) this.unlock('wood');
     if (id === I.COAL) this.unlock('coal');
     if (id === I.DIAMOND) this.unlock('diamond');
     if (id === I.IRON) this.unlock('iron');
@@ -2713,6 +2715,7 @@ export class Game {
         id: this.worldId,
         name: this.worldName,
         worldType: this.worldType,
+        terrainVersion: home.terrainVersion,
         seed: home.seed,
         mode: this.mode,
         mods: home.serializeMods(),
@@ -3407,6 +3410,11 @@ export class Game {
     if (s.id === I.FISHING_ROD) { this.useRod(); return; }
     // 2.3: bez przytrzymania (telefon) lorneta działa jak przełącznik.
     if (s.id === I.SPYGLASS) { this.zooming = this.touchInput ? !this.zooming : true; return; }
+    if (s.id === I.BIOME_COMPASS) {
+      if (this.isInNether) this.message('Kompas biomów działa tylko w Nadświecie.');
+      else this.setUI('biomeCompass');
+      return;
+    }
     if (s.id === I.ENDER_PEARL) {
       this.throwPearl();
       return;
@@ -3442,8 +3450,8 @@ export class Game {
       if (!IS_SOLID[below] && !around.some((n) => IS_SOLID[n])) return;
     }
     const below = this.world.getBlock(px, py - 1, pz);
-    if (id === B.SAPLING || id === B.BIRCH_SAPLING) {
-      if (below !== B.GRASS && below !== B.DIRT && below !== B.FARMLAND) return;
+    if (id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING) {
+      if (below !== B.GRASS && below !== B.DIRT && below !== B.FARMLAND && below !== B.PODZOL && below !== B.MEADOW_GRASS) return;
     } else if (id === B.CROP0 || id === B.CROP1 || id === B.CROP2 || id === B.CROP3) {
       if (below !== B.FARMLAND) return;
     } else if (id === B.TORCH || id === B.REDSTONE_TORCH) {
@@ -3516,7 +3524,7 @@ export class Game {
     this.settle(px, py, pz);
     // redstone update
     this.onBlockChanged(px, py, pz);
-    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
+    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SPRUCE_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
     if (finalId === B.TORCH || finalId === B.REDSTONE_TORCH) this.unlock('torch');
     if (finalId === B.NETHER_BRICKS || finalId === B.QUARTZ_BLOCK) this.unlock('nether');
     Sfx.playPlace(BLOCKS[finalId].sound);
@@ -3658,8 +3666,8 @@ export class Game {
           if (seen.has(k)) continue;
           seen.add(k);
           const id = this.world.peekBlock(nx, ny, nz);
-          if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) next.push([nx, ny, nz]);
-          else if (id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.ACACIA_LEAVES || id === B.JUNGLE_LEAVES) {
+          if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG || id === B.SPRUCE_LOG) next.push([nx, ny, nz]);
+          else if (id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.ACACIA_LEAVES || id === B.JUNGLE_LEAVES || id === B.SPRUCE_LEAVES) {
             next.push([nx, ny, nz]);
             this.leafDecay.push({ x: nx, y: ny, z: nz, t: 0.25 + Math.random() * 0.9 });
           }
@@ -3676,7 +3684,7 @@ export class Game {
       l.t -= dt;
       if (l.t > 0) { keep.push(l); continue; }
       const id = this.world.peekBlock(l.x, l.y, l.z);
-      if (id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
+      if (id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES && id !== B.SPRUCE_LEAVES) continue;
       this.world.setBlock(l.x, l.y, l.z, B.AIR);
       this.spawnParticles(l.x + 0.5, l.y + 0.5, l.z + 0.5, id, 6, 0.2);
       if (this.mode === 'survival') {
@@ -3716,7 +3724,7 @@ export class Game {
       if (ladderFacing(nid) === f || (isTrapOpen(nid) && nid - B.TRAP_N === f)) this.breakBlock(lx, y, lz, silent);
     }
     this.growables.delete(`${x},${y},${z}`);
-    if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) this.decayLeaves(x, y, z);
+    if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG || id === B.SPRUCE_LOG) this.decayLeaves(x, y, z);
     if (!silent) {
       this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 14, 0.35);
       Sfx.playBreak(def.sound);
@@ -5005,7 +5013,7 @@ export class Game {
     const ox = c.cx * CS, oz = c.cz * CS;
     for (let i = 0; i < c.data.length; i++) {
       const id = c.data[i];
-      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2)) continue;
+      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SPRUCE_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2)) continue;
       const y = (i / (CS * CS)) | 0;
       const rem = i % (CS * CS);
       const z = (rem / CS) | 0;
@@ -5013,11 +5021,11 @@ export class Game {
       const key = `${ox + x},${y},${oz + z}`;
       if (!this.growables.has(key)) this.growables.set(key, performance.now());
       const elapsed = (performance.now() - (this.growables.get(key) ?? 0)) / 1000;
-      if (id === B.SAPLING || id === B.BIRCH_SAPLING) {
+      if (id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING) {
         if (elapsed < 28 + ((x * 5 + z) % 12)) continue;
         const px = this.body.pos.x, pz = this.body.pos.z, py = this.body.pos.y;
         if (Math.abs(px - (ox + x)) < 1.4 && Math.abs(pz - (oz + z)) < 1.4 && py > y - 1 && py < y + 6) continue;
-        if (plantTree(this.world, ox + x, y, oz + z, id === B.BIRCH_SAPLING)) {
+        if (plantTree(this.world, ox + x, y, oz + z, id === B.BIRCH_SAPLING, id === B.SPRUCE_SAPLING)) {
           this.growables.delete(key);
           this.unlock('tree');
           Sfx.playPlace('grass');

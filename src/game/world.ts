@@ -16,7 +16,7 @@ import {
 // ale stare importy z world.ts nadal działają.
 export { CH, CS, FLAT_H, SEA };
 
-export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Nether';
+export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Tajga' | 'Pustkowie' | 'Kwiecista łąka' | 'Nether';
 
 const idx = (x: number, y: number, z: number) => (y * CS + z) * CS + x;
 
@@ -156,6 +156,8 @@ export class World {
    * so the two maps can never bleed into each other.
    */
   readonly isNether: boolean;
+  /** Generator v2 reproduces pre-3.0 seeds for worlds created before the upgrade. */
+  readonly terrainVersion: 2 | 3;
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
@@ -167,7 +169,8 @@ export class World {
   private nTemp: SimplexNoise;
   private vctx: VillageContext | null = null;
 
-  constructor(seed: number, flat = false, nether = false) {
+  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 = 3) {
+    this.terrainVersion = terrainVersion;
     this.seed = seed;
     this.flat = flat && !nether;
     this.isNether = nether;
@@ -202,6 +205,9 @@ export class World {
     else if (h > 92) biome = 'Góry';
     else if (temp > 0.3) biome = 'Pustynia';
     else if (temp < -0.32) biome = 'Tundra';
+    else if (this.terrainVersion >= 3 && temp < -0.12 && forest > 0.06) biome = 'Tajga';
+    else if (this.terrainVersion >= 3 && temp > 0.12 && forest < -0.23) biome = 'Pustkowie';
+    else if (this.terrainVersion >= 3 && temp > -0.11 && temp < 0.16 && forest < -0.13) biome = 'Kwiecista łąka';
     // Climate bands add three distinct warm/wet regions without changing
     // existing seed terrain or the save format. The low-frequency fields make
     // biome borders broad enough to read during exploration.
@@ -256,13 +262,16 @@ export class World {
             id = B.STONE;
             if (biome === 'Pustynia' && y > h - 8) id = B.SANDSTONE;
           } else if (y < h) {
-            id = sandy ? (biome === 'Ocean' && y < SEA - 6 ? B.GRAVEL : B.SAND) : biome === 'Bagno' && y >= h - 3 ? B.MUD : B.DIRT;
+            id = sandy ? (biome === 'Ocean' && y < SEA - 6 ? B.GRAVEL : B.SAND) : biome === 'Bagno' && y >= h - 3 ? B.MUD : biome === 'Pustkowie' && y >= h - 3 ? B.DRY_SOIL : B.DIRT;
             if (biome === 'Góry' && h > 100) id = B.STONE;
           } else if (y === h) {
             if (biome === 'Ocean') id = hash(wx, 7, wz, s) < 0.2 ? B.CLAY : h < SEA - 8 ? B.GRAVEL : B.SAND;
             else if (sandy) id = B.SAND;
             else if (biome === 'Tundra') id = B.SNOW;
             else if (biome === 'Bagno') id = B.MUD;
+            else if (biome === 'Pustkowie') id = hash(wx, 23, wz, s) < 0.14 ? B.GRAVEL : B.DRY_SOIL;
+            else if (biome === 'Tajga') id = h > 87 ? B.SNOW : B.PODZOL;
+            else if (biome === 'Kwiecista łąka') id = B.MEADOW_GRASS;
             else if (biome === 'Góry') id = h > 108 ? B.SNOW : h > 98 ? B.STONE : B.GRASS;
             else id = h < SEA ? B.DIRT : B.GRASS;
           } else if (y <= SEA) {
@@ -320,6 +329,19 @@ export class World {
         if (biome === 'Bagno' && h < SEA && SEA + 1 < CH && d[idx(x, SEA, z)] === B.WATER && hash(wx, 2, wz, s + 154) < 0.12) {
           d[idx(x, SEA + 1, z)] = B.LILY_PAD;
         }
+        if (biome === 'Pustkowie' && top === B.DRY_SOIL && h + 1 < CH && hash(wx, 31, wz, s + 72) < 0.035) {
+          d[idx(x, h + 1, z)] = B.DEAD_SHRUB;
+        }
+        if (biome === 'Tajga' && top === B.PODZOL && h + 1 < CH && hash(wx, 30, wz, s + 74) < 0.06) {
+          d[idx(x, h + 1, z)] = B.TALLGRASS;
+        }
+        if (top === B.MEADOW_GRASS && h + 1 < CH) {
+          const r = hash(wx, 31, wz, s + 73);
+          if (r < 0.18) d[idx(x, h + 1, z)] = B.TALLGRASS;
+          else if (r < 0.36) d[idx(x, h + 1, z)] = B.FLOWER_BLUE;
+          else if (r < 0.49) d[idx(x, h + 1, z)] = B.FLOWER_RED;
+          else if (r < 0.62) d[idx(x, h + 1, z)] = B.FLOWER_YELLOW;
+        }
         if (top === B.GRASS && h + 1 < CH) {
           const r = hash(wx, 3, wz, s + 9);
           const grassChance = biome === 'Równiny' ? 0.22 : biome === 'Dżungla' ? 0.32 : biome === 'Bagno' ? 0.28 : biome === 'Sawanna' ? 0.04 : 0.1;
@@ -365,13 +387,15 @@ export class World {
         else if (info.biome === 'Dżungla') chance = 0.045;
         else if (info.biome === 'Bagno') chance = 0.025;
         else if (info.biome === 'Sawanna') chance = 0.008;
+        else if (info.biome === 'Tajga') chance = 0.038;
+        else if (info.biome === 'Kwiecista łąka') chance = 0.001;
         else if (info.biome === 'Równiny') chance = 0.003;
         else if (info.biome === 'Tundra') chance = 0.006;
         else if (info.biome === 'Góry' && info.h < 98) chance = 0.008;
         if (r > chance) continue;
         if (info.h <= SEA) continue;
         const birch = info.biome === 'Brzozowy las' ? hash(tx, 2, tz, s) < 0.8 : hash(tx, 2, tz, s) < 0.15;
-        const kind = info.biome === 'Dżungla' ? 'jungle' : info.biome === 'Sawanna' ? 'acacia' : undefined;
+        const kind = info.biome === 'Dżungla' ? 'jungle' : info.biome === 'Sawanna' ? 'acacia' : info.biome === 'Tajga' ? 'spruce' : undefined;
         const top = this.growTree(c, tx, tz, info.h + 1, birch, vmask, kind);
         if (top > maxY) maxY = top;
       }
@@ -412,13 +436,13 @@ export class World {
    * Places an oak or birch trunk with its canopy, clipping to this chunk only.
    * Returns the highest y the tree reaches (for maxY bookkeeping).
    */
-  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean, skip?: Uint8Array, kind?: 'jungle' | 'acacia'): number {
+  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean, skip?: Uint8Array, kind?: 'jungle' | 'acacia' | 'spruce'): number {
     const d = c.data;
     const ox = c.cx * CS, oz = c.cz * CS;
     const s = this.seed;
-    const logId = kind === 'acacia' ? B.ACACIA_LOG : birch ? B.BIRCH_LOG : B.LOG;
-    const leafId = kind === 'jungle' ? B.JUNGLE_LEAVES : kind === 'acacia' ? B.ACACIA_LEAVES : birch ? B.BIRCH_LEAVES : B.LEAVES;
-    const th = kind === 'acacia' ? 5 + Math.floor(hash(tx, 6, tz, s) * 2) : kind === 'jungle' ? 7 + Math.floor(hash(tx, 6, tz, s) * 4) : 4 + Math.floor(hash(tx, 6, tz, s) * 3);
+    const logId = kind === 'spruce' ? B.SPRUCE_LOG : kind === 'acacia' ? B.ACACIA_LOG : birch ? B.BIRCH_LOG : B.LOG;
+    const leafId = kind === 'spruce' ? B.SPRUCE_LEAVES : kind === 'jungle' ? B.JUNGLE_LEAVES : kind === 'acacia' ? B.ACACIA_LEAVES : birch ? B.BIRCH_LEAVES : B.LEAVES;
+    const th = kind === 'spruce' ? 7 + Math.floor(hash(tx, 6, tz, s) * 3) : kind === 'acacia' ? 5 + Math.floor(hash(tx, 6, tz, s) * 2) : kind === 'jungle' ? 7 + Math.floor(hash(tx, 6, tz, s) * 4) : 4 + Math.floor(hash(tx, 6, tz, s) * 3);
     const topY = base + th;
     if (topY + 1 >= CH) return base;
     const put = (x: number, y: number, z: number, id: number, force: boolean) => {
@@ -429,8 +453,8 @@ export class World {
       const cur = d[i];
       if (force || cur === B.AIR || cur === B.TALLGRASS || cur === B.FLOWER_RED || cur === B.FLOWER_YELLOW) d[i] = id;
     };
-    for (let ly = topY - (kind === 'jungle' ? 4 : 3); ly <= topY; ly++) {
-      const rad = kind === 'acacia' ? (ly >= topY - 1 ? 3 : ly >= topY - 3 ? 2 : 1) : kind === 'jungle' ? (ly >= topY - 2 ? 2 : 3) : ly >= topY - 1 ? 1 : 2;
+    for (let ly = topY - (kind === 'spruce' ? 6 : kind === 'jungle' ? 4 : 3); ly <= topY; ly++) {
+      const rad = kind === 'spruce' ? Math.max(0, Math.min(2, Math.floor((topY - ly + 1) / 2))) : kind === 'acacia' ? (ly >= topY - 1 ? 3 : ly >= topY - 3 ? 2 : 1) : kind === 'jungle' ? (ly >= topY - 2 ? 2 : 3) : ly >= topY - 1 ? 1 : 2;
       for (let dx = -rad; dx <= rad; dx++)
         for (let dz = -rad; dz <= rad; dz++) {
           if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || hash(tx + dx, ly, tz + dz, s) < 0.5)) continue;
@@ -448,7 +472,7 @@ export class World {
       for (let n = 1; n <= 2; n++) put(tx + side * n, topY - 2 + n, tz, logId, true);
       for (let n = 1; n <= 2; n++) put(tx - side * n, topY - 1, tz, logId, true);
     }
-    put(tx, base - 1, tz, B.DIRT, true);
+    if (kind !== 'spruce') put(tx, base - 1, tz, B.DIRT, true);
     return topY + 3;
   }
 
@@ -924,7 +948,7 @@ export class World {
             const nx = x + F.dir[0], ny = y + F.dir[1], nz = z + F.dir[2];
             const nb = get(nx, ny, nz);
             if (IS_OPAQUE[nb]) continue;
-            if (nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
+            if (nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES && id !== B.SPRUCE_LEAVES) continue;
             if (isLiquid && (RENDER[nb] === 2)) continue;
             const t = tileFor(id, f);
             const sky = skyLight(nx, ny, nz);
@@ -1008,19 +1032,19 @@ export class World {
   }
 }
 
-/** Grows an oak or birch where a sapling stands. Returns false if the space is blocked. */
-export function plantTree(world: World, x: number, y: number, z: number, birch: boolean): boolean {
-  const logId = birch ? B.BIRCH_LOG : B.LOG;
-  const leafId = birch ? B.BIRCH_LEAVES : B.LEAVES;
+/** Grows an oak, birch or spruce where a sapling stands. Checks the whole canopy first. */
+export function plantTree(world: World, x: number, y: number, z: number, birch: boolean, spruce = false): boolean {
+  const logId = spruce ? B.SPRUCE_LOG : birch ? B.BIRCH_LOG : B.LOG;
+  const leafId = spruce ? B.SPRUCE_LEAVES : birch ? B.BIRCH_LEAVES : B.LEAVES;
   const ground = world.getBlock(x, y - 1, z);
-  if (ground !== B.DIRT && ground !== B.GRASS && ground !== B.FARMLAND) return false;
-  const th = 4 + Math.floor(Math.random() * 3);
+  if (ground !== B.DIRT && ground !== B.GRASS && ground !== B.FARMLAND && ground !== B.PODZOL && ground !== B.MEADOW_GRASS) return false;
+  const th = (spruce ? 7 : 4) + Math.floor(Math.random() * 3);
   const topY = y + th - 1;
   if (topY + 1 >= CH) return false;
   const clearish = (id: number) =>
-    id === B.AIR || id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.LEAVES || id === B.BIRCH_LEAVES || RENDER[id] === 1;
+    id === B.AIR || id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING || id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.SPRUCE_LEAVES || RENDER[id] === 1;
   for (let ly = y; ly < topY; ly++) if (!clearish(world.getBlock(x, ly, z))) return false;
-  for (let ly = topY - 2; ly <= topY + 1; ly++) {
+  for (let ly = topY - (spruce ? 5 : 2); ly <= topY + 1; ly++) {
     for (let dx = -2; dx <= 2; dx++)
       for (let dz = -2; dz <= 2; dz++) {
         if (dx === 0 && dz === 0) continue;
@@ -1032,8 +1056,8 @@ export function plantTree(world: World, x: number, y: number, z: number, birch: 
     const cur = world.getBlock(px, py, pz);
     if (force || clearish(cur)) world.setBlock(px, py, pz, id);
   };
-  for (let ly = topY - 3; ly <= topY; ly++) {
-    const rad = ly >= topY - 1 ? 1 : 2;
+  for (let ly = topY - (spruce ? 5 : 3); ly <= topY; ly++) {
+    const rad = spruce ? Math.max(0, Math.min(2, Math.floor((topY - ly + 1) / 2))) : ly >= topY - 1 ? 1 : 2;
     for (let dx = -rad; dx <= rad; dx++)
       for (let dz = -rad; dz <= rad; dz++) {
         if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || Math.random() < 0.5)) continue;
@@ -1045,6 +1069,6 @@ export function plantTree(world: World, x: number, y: number, z: number, birch: 
     if (Math.random() < 0.65) put(x + dx, topY + 1, z + dz, leafId, false);
   }
   for (let ly = y; ly < topY; ly++) put(x, ly, z, logId, true);
-  if (ground !== B.DIRT) put(x, y - 1, z, B.DIRT, true);
+  if (ground !== B.DIRT && ground !== B.PODZOL && ground !== B.MEADOW_GRASS) put(x, y - 1, z, B.DIRT, true);
   return true;
 }
