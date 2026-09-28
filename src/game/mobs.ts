@@ -6,7 +6,14 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'sandstalker' | 'merchant' | 'pack_animal' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'echolurker' | 'sandstalker' | 'merchant' | 'pack_animal' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+
+/** Transient sound positions. The listener never receives the player's current
+ * position as a pursuit goal: only footsteps, mining and item impacts count. */
+export interface CaveNoise {
+  id: number; x: number; y: number; z: number; radius: number; ttl: number;
+  source: 'player' | 'decoy';
+}
 
 /** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
 export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
@@ -182,7 +189,7 @@ export function fireEscapeHeading(world: Pick<World, 'peekBlock'>, x: number, y:
 }
 
 export function isHostileMob(type: MobType): boolean {
-  return type === 'sandstalker' || type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton' || type === 'enderman' || type === 'slime' || type === 'ghast';
+  return type === 'echolurker' || type === 'sandstalker' || type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton' || type === 'enderman' || type === 'slime' || type === 'ghast';
 }
 
 /** Mieszkańcy i golemy nie znikają tak szybko, gdy gracz odejdzie od osady. */
@@ -235,6 +242,9 @@ export class Mob {
   private camouflageGround = -1;
   isCub = false;
   merchantRegion = '';
+  private heardId = 0;
+  private heardGoal: { x: number; y: number; z: number; source: CaveNoise['source'] } | null = null;
+  private heardTime = 0;
   private sandBody: THREE.Group | null = null;
   private sandMound: THREE.Mesh | null = null;
   private sandWarning: THREE.Mesh | null = null;
@@ -281,6 +291,7 @@ export class Mob {
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' || type === 'merchant' || type === 'guard' ? 0.6
         : type === 'pack_animal' ? 0.9
+        : type === 'echolurker' ? 0.72
         : type === 'sandstalker' ? 0.7
         : type === 'bear' ? 1.15
         : type === 'turtle' ? 0.78
@@ -305,6 +316,7 @@ export class Mob {
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
                   : type === 'pack_animal' ? 1.35
+                  : type === 'echolurker' ? 1.65
                   : type === 'sandstalker' ? 1.15
                   : type === 'bear' ? 1.4
                   : type === 'turtle' ? 0.6
@@ -317,6 +329,7 @@ export class Mob {
       type === 'zombie' ? 20
         : type === 'creeper' ? 16
           : type === 'cow' ? 10
+            : type === 'echolurker' ? 18
             : type === 'sandstalker' ? 14
             : type === 'bear' ? 26
             : type === 'turtle' ? 10
@@ -434,6 +447,25 @@ export class Mob {
       this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
       this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
       this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'echolurker') {
+      // Pale antennae and a sealed face make the creature legible even at
+      // low texture resolution; there are deliberately no glowing eyes.
+      const hide = 0x293b42, crest = 0x9aceb5, seam = 0x627f79;
+      for (const sx of [-0.21, 0.21]) this.addLeg(sx, 0.38, 0, 0.2, 0.76, 0.24, hide, this.legs);
+      const torso = box(0.69, 0.86, 0.46, hide, sharedMats);
+      torso.position.y = 1.03; g.add(torso); this.meshes.push(torso);
+      const head = new THREE.Group(); head.position.set(0, 1.55, 0);
+      const skull = box(0.58, 0.42, 0.5, hide, sharedMats);
+      const blindfold = box(0.59, 0.13, 0.06, seam, sharedMats);
+      blindfold.position.set(0, 0.06, 0.27);
+      head.add(skull, blindfold); this.meshes.push(skull, blindfold);
+      for (const side of [-1, 1]) {
+        const ear = box(0.13, 0.33, 0.16, crest, sharedMats);
+        ear.position.set(side * 0.36, 0.13, -0.04);
+        head.add(ear); this.meshes.push(ear);
+        this.addLeg(side * 0.43, 1.02, 0.08, 0.17, 0.62, 0.19, hide, this.arms);
+      }
+      g.add(head); this.head = head;
     } else if (this.type === 'sandstalker') {
       const ochre = 0x8f6440, dark = 0x433624;
       const mound = box(0.83, 0.1, 0.83, 0xc39d69, sharedMats);
@@ -1379,6 +1411,47 @@ export class Mob {
     this.moveAndAnimate(dt, world, player, this.walking ? 1.35 : 0);
   }
 
+  /** Pursues the *last heard position*, not the player's live coordinates.
+   * Thrown items override old footsteps, but ordinary loot makes no sound. */
+  private updateEcholurker(dt: number, world: World, player: THREE.Vector3,
+    onAttack: (dmg: number, mob: Mob) => void, peaceful: boolean, noises: readonly CaveNoise[]): void {
+    if (peaceful) { this.heardGoal = null; this.heardTime = 0; }
+    else {
+      // Only loaded cave sounds at roughly the same height can be heard.
+      // Newest reachable cue wins; the list is capped by the engine.
+      for (const noise of noises) {
+        if (noise.id <= this.heardId || noise.ttl <= 0 ||
+          Math.abs(noise.y - this.body.pos.y) > 5 ||
+          Math.hypot(noise.x - this.body.pos.x, noise.z - this.body.pos.z) > noise.radius) continue;
+        this.heardId = noise.id;
+        this.heardGoal = { x: noise.x, y: noise.y, z: noise.z, source: noise.source };
+        this.heardTime = 4;
+        this.soundTimer = Math.min(this.soundTimer, 0.15);
+      }
+      this.heardTime = Math.max(0, this.heardTime - dt);
+    }
+    const goal = this.heardTime > 0 ? this.heardGoal : null;
+    if (!goal) {
+      this.walking = false;
+      this.moveAndAnimate(dt, world, player, 0);
+      return;
+    }
+    const dx = goal.x - this.body.pos.x, dz = goal.z - this.body.pos.z;
+    const distance = Math.hypot(dx, dz);
+    this.yaw = Math.atan2(dx, dz);
+    this.walking = distance > 0.6;
+    // A decoy draws it to the impact, never licenses a player attack.
+    // A quiet player who moves away from the heard spot remains safe.
+    if (goal.source === 'player' && !peaceful && distance < 1.75 &&
+      Math.hypot(player.x - this.body.pos.x, player.z - this.body.pos.z) < 1.65 &&
+      Math.abs(player.y - this.body.pos.y) < 2 && this.attackCooldown <= 0) {
+      this.attackCooldown = 1.6;
+      onAttack(4, this);
+    }
+    this.moveToward(dt, world, player, this.walking ? 2.05 : 0, goal.x, goal.z);
+    if (distance < 0.6 && goal.source === 'decoy') this.heardTime = Math.min(this.heardTime, 0.7);
+  }
+
   /** Iron golem keeps its older independent patrol and heavy defence. */
   private updateGolem(dt: number, world: World, player: THREE.Vector3, allies: Mob[], onAttack: (dmg: number, mob: Mob) => void): void {
     const b = this.body;
@@ -1842,7 +1915,8 @@ export class Mob {
     onSnatch: (target: FoxFood) => boolean = () => false,
     daylight = 1,
     raining = false,
-    dayPhase = 0.25
+    dayPhase = 0.25,
+    noises: readonly CaveNoise[] = []
   ) {
     const b = this.body;
     if (this.hurtTime > 0) {
@@ -1902,6 +1976,10 @@ export class Mob {
     }
     if (this.type === 'golem') {
       this.updateGolem(dt, world, player, allies, onAttack);
+      return;
+    }
+    if (this.type === 'echolurker') {
+      this.updateEcholurker(dt, world, player, onAttack, peaceful, noises);
       return;
     }
     if (this.type === 'sandstalker') {

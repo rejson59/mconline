@@ -52,10 +52,12 @@ interface BtnProps {
 }
 
 /** Okrągły przycisk akcji – duży, półprzezroczysty, „majstrowany” pod palec. */
-function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22, onDown, onUp, haptics }: BtnProps) {
+function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22, hint, onDown, onUp, haptics }: BtnProps) {
   const [held, setHeld] = useState(false);
   return (
     <button
+      title={hint}
+      aria-label={hint || label}
       className="pointer-events-auto flex select-none items-center justify-center border-2 border-black mc-text"
       style={{
         width: size,
@@ -99,7 +101,7 @@ function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22,
  *    przytrzymanie kopie blok pod palcem (celownik leci za palcem, nie na środek),
  *  • tryb „Przyciski”: klasyczne ⛏ i ▣ celujące w środek ekranu,
  *  • łuk: przytrzymaj i puść w obu trybach,
- *  • podwójne tapnięcie skoku w trybie kreatywnym = latanie.
+ *  • podwójne tapnięcie skoku w trybie kreatywnym = latanie; ↗ = rzut przedmiotu.
  */
 export default function TouchControls({
   game,
@@ -517,6 +519,10 @@ export default function TouchControls({
         </div>
         <div className="absolute" style={{ right: 84, bottom: 6 }}>
           <ActionButton label={sneaking ? '⇩' : '⇣'} size={56} active={sneaking} onDown={() => pressSneak(!sneaking)} haptics={settings.haptics} />
+        </div>
+        {/* A decoy must be usable on touch as well as with keyboard Q. */}
+        <div className="absolute" style={{ right: 8, bottom: 80 }}>
+          <ActionButton label="↗" hint="Rzuć przedmiot" size={48} onDown={() => game.dropItem()} haptics={settings.haptics} />
         </div>
         {creative && (
           <div className="absolute" style={{ right: 94, bottom: 76 }}>

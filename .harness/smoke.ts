@@ -1728,6 +1728,127 @@ section('3.0 #65: sand ambusher warns before an escapable leap');
   check('calm difficulty suppresses desert enemy spawns', !g.mobs.some((m: Mob) => m.type === 'sandstalker'));
 }
 
+section('3.0 #64: blind cave listener tracks real sounds, not silent players');
+{
+  check('listener is hostile and gets its own model', isHostileMob('echolurker'));
+  const world = new World(164, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 2; x <= 14; x++) for (let z = 2; z <= 14; z++) {
+    world.setBlock(x, y - 1, z, B.STONE);
+    for (let h = y; h <= y + 3; h++) world.setBlock(x, h, z, B.AIR);
+  }
+  const mob = new Mob('echolurker', 5.5, y, 6.5);
+  const player = new THREE.Vector3(8.5, y, 6.5);
+  let wounds = 0;
+  let noises: Array<{id: number; x: number; y: number; z: number; radius: number; ttl: number; source: 'player' | 'decoy'}> = [];
+  const tick = (subject = mob, calm = false) => subject.update(1 / 30, world, player, () => { wounds++; }, () => {}, calm,
+    [], () => {}, 1, [], () => false, 0, false, 0.25, noises);
+  const px = mob.body.pos.x;
+  for (let i = 0; i < 50; i++) tick();
+  check('without sounds the listener does not magically chase a nearby player', Math.abs(mob.body.pos.x - px) < 0.1 && wounds === 0);
+  noises = [{ id: 1, x: 8.5, y, z: 6.5, radius: 7, ttl: 1.3, source: 'player' }];
+  for (let i = 0; i < 55; i++) tick();
+  check('a footstep is investigated and can lead to a real melee attack', mob.body.pos.x > 7 && wounds > 0);
+  const woundsAfter = wounds;
+  player.set(12.5, y, 12.5);
+  noises = [{ id: 2, x: 4.5, y, z: 8.5, radius: 13, ttl: 1.3, source: 'decoy' }];
+  for (let i = 0; i < 40; i++) tick();
+  check('thrown-object impact redirects pursuit toward the landing point, away from player',
+    mob.body.pos.x < 7.5 && mob.body.pos.z > 6.5 && wounds === woundsAfter);
+  noises = [];
+  for (let i = 0; i < 160; i++) tick();
+  const stopped = mob.body.pos.clone();
+  player.set(mob.body.pos.x + 2, y, mob.body.pos.z);
+  for (let i = 0; i < 40; i++) tick();
+  check('expired sound memory lets a quiet player pass undetected',
+    mob.body.pos.distanceTo(stopped) < 0.2 && wounds === woundsAfter);
+  const calmMob = new Mob('echolurker', 5.5, y, 6.5);
+  noises = [{ id: 3, x: 8.5, y, z: 6.5, radius: 12, ttl: 1.3, source: 'player' }];
+  for (let i = 0; i < 65; i++) tick(calmMob, true);
+  check('peaceful mode prevents listener pursuit and attacks', Math.abs(calmMob.body.pos.x - 5.5) < 0.1 && wounds === woundsAfter);
+
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.body = { pos: new THREE.Vector3(5.5, y, 6.5) };
+  g.mode = 'creative'; g.growables = new Map();
+  g.spawnParticles = () => {}; g.fallGravity = () => {};
+  world.setBlock(8, y, 6, B.STONE);
+  g.breakBlock(8, y, 6);
+  check('actually breaking a block near player emits a louder positional mining cue',
+    g.noiseEvents.length === 1 && g.noiseEvents[0].radius === 13 && g.noiseEvents[0].source === 'player');
+  world.setBlock(8, y, 6, B.STONE);
+  g.breakBlock(8, y, 6, true);
+  eq('silent world edits do not emit player mining sounds', g.noiseEvents.length, 1);
+  for (let i = 0; i < 60; i++) g.emitCaveNoise(5, y, 5, 7);
+  check('sound queue is bounded even during mass block destruction', g.noiseEvents.length <= 32);
+
+  // Run the real player physics/update loop: sneaking suppresses footsteps,
+  // normal walking and sprinting emit cues from the player's *old position*.
+  const walker = Object.create(Game.prototype) as unknown as Record<string, any>;
+  walker.world = world; walker.mode = 'creative'; walker.ui = 'playing';
+  walker.body = { pos: new THREE.Vector3(4.5, y, 4.5), vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+  walker.keys = new Set(['KeyD', 'ShiftLeft']);
+  walker.yaw = 0; walker.eyeHeight = 1.62; walker.autoJump = false;
+  walker.flying = false; walker.sprinting = false; walker.hunger = 20;
+  walker.health = 20; walker.maxAir = 12; walker.air = 12;
+  walker.hasEffect = () => false;
+  walker.fallStart = y; walker.stepDist = 0; walker.bobPhase = 0;
+  for (let i = 0; i < 65; i++) walker.updatePlayer(1 / 30);
+  check('actual Shift movement covers distance without emitting any footstep cues',
+    walker.body.pos.x > 6 && (walker.noiseEvents?.length ?? 0) === 0);
+  walker.keys = new Set(['KeyD']); walker.stepDist = 0;
+  for (let i = 0; i < 20; i++) walker.updatePlayer(1 / 30);
+  check('normal walking emits real short-range step cues',
+    walker.noiseEvents?.some((n: {radius: number; source: string}) => n.radius === 7 && n.source === 'player'));
+  walker.noiseEvents = []; walker.stepDist = 0;
+  walker.keys = new Set(['KeyW', 'ControlRight']);
+  for (let i = 0; i < 28; i++) walker.updatePlayer(1 / 30);
+  check('right-Control sprint emits farther-reaching steps in the same movement loop',
+    walker.noiseEvents?.some((n: {radius: number}) => n.radius === 12));
+
+  // Exercise Q + real dropped entity physics; ordinary block loot must not
+  // lure the listener, whereas a player-thrown item makes one impact cue.
+  g.scene = { add: () => {}, remove: () => {} };
+  g.dropMat = new THREE.MeshBasicMaterial(); g.dropGeos = new Map(); g.drops = [];
+  g.inventory = new Inventory(); g.selected = 0;
+  g.inventory.slots[0] = { id: B.STONE, count: 2 };
+  g.eyePos = () => new THREE.Vector3(4.5, y + 3, 5.5);
+  g.lookDir = () => new THREE.Vector3(1, 0, 0);
+  g.emitHud = () => {}; g.noiseEvents = [];
+  g.dropItem();
+  check('Creative Q creates a tagged physics drop without consuming old item IDs', g.drops.length === 1 && g.drops[0].thrown && g.drops[0].id === B.STONE);
+  g.body.pos.set(40, y, 40); // no automatic pickup during this test
+  for (let i = 0; i < 60; i++) g.updateDrops(1 / 30);
+  check('first collision of thrown item creates exactly one decoy at impact',
+    g.noiseEvents.length === 1 && g.noiseEvents[0].source === 'decoy' && g.noiseEvents[0].radius === 13);
+  for (let i = 0; i < 35; i++) g.updateDrops(1 / 30);
+  eq('bouncing item never produces repeated lure cues', g.noiseEvents.length, 1);
+  g.spawnDrop(B.STONE, 1, 6.5, y + 3, 6.5);
+  for (let i = 0; i < 60; i++) g.updateDrops(1 / 30);
+  eq('ordinary loot landing makes no decoy noise', g.noiseEvents.length, 1);
+
+  // Spawn from loaded underground air above a solid cave floor; no new
+  // chunks and no surface spawns even when it is daytime outside.
+  const cave = new World(164, true);
+  cave.getChunk(1, 0);
+  cave.setBlock(22, 48, 8, B.AIR);
+  cave.setBlock(22, 49, 8, B.AIR);
+  const spawn = Object.create(Game.prototype) as unknown as Record<string, any>;
+  spawn.world = cave; spawn.body = { pos: new THREE.Vector3(8.5, 50, 8.5) };
+  spawn.scene = { add: () => {}, remove: () => {} };
+  spawn.mobs = []; spawn.drops = []; spawn.isInNether = false;
+  spawn.mode = 'survival'; spawn.weather = 'clear'; spawn.time = 0.25;
+  spawn.spawnTimer = 0; spawn.difficulty = { ...DEFAULT_DIFFICULTY };
+  spawn.nowSeconds = () => 0; spawn.spawnVillageFolk = () => {};
+  const oldRandom = Math.random, count = cave.chunks.size;
+  try { Math.random = () => 0; spawn.updateMobs(1 / 30); } finally { Math.random = oldRandom; }
+  check('loaded cave generates a listener in Survival without loading extra chunks',
+    spawn.mobs.some((m: Mob) => m.type === 'echolurker') && cave.chunks.size === count);
+  spawn.mobs = []; spawn.spawnTimer = 0; spawn.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  try { Math.random = () => 0; spawn.updateMobs(1 / 30); } finally { Math.random = oldRandom; }
+  check('peaceful difficulty suppresses new cave listeners', !spawn.mobs.some((m: Mob) => m.type === 'echolurker'));
+}
+
 section('3.0 #68: bounded loaded-chunk pathfinding instead of wall pushing');
 {
   const world = new World(264, true);

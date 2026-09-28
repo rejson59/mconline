@@ -14,10 +14,10 @@ import {
 } from './brewing';
 import { getAtlas, compactAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, batSpawnAllowed, merchantProfession, type FoxFood, type MobType } from './mobs';
+import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, batSpawnAllowed, merchantProfession, type FoxFood, type CaveNoise, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
-const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast', 'sandstalker']);
+const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast', 'sandstalker', 'echolurker']);
 import { Inventory, RECIPES, type Stack } from './inventory';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
@@ -234,6 +234,7 @@ export const MOB_NAMES: Record<MobType, string> = {
   merchant: 'Wędrowny kupiec',
   pack_animal: 'Zwierzę juczne',
   sandstalker: 'Piaskowy zasadzkarz',
+  echolurker: 'Jaskiniowy nasłuchiwacz',
   midge: 'Meszka',
   bat: 'Nietoperz',
   lizard: 'Jaszczurka',
@@ -317,6 +318,8 @@ interface DropEntity {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   age: number;
+  thrown?: boolean;
+  landed?: boolean;
 }
 
 /** 2.3: spławik wędkarstwa – lekki, tonie w wodzie i czeka na brań. */
@@ -585,6 +588,15 @@ export class Game {
   private dropMat!: THREE.MeshBasicMaterial;
   private itemTex = new Map<number, THREE.Texture>();
   private dropGeos = new Map<number, THREE.BufferGeometry>();
+  /** Ephemeral, bounded acoustic cues; never written to world saves. */
+  private noiseEvents: CaveNoise[] = [];
+  private nextNoiseId = 0;
+  private emitCaveNoise(x: number, y: number, z: number, radius: number, source: CaveNoise['source'] = 'player') {
+    this.noiseEvents ??= [];
+    this.nextNoiseId = (this.nextNoiseId || 0) + 1;
+    this.noiseEvents.push({ id: this.nextNoiseId, x, y, z, radius, ttl: 1.3, source });
+    if (this.noiseEvents.length > 32) this.noiseEvents.shift();
+  }
   private falling: FallingBlock[] = [];
   /** Leaves waiting to fall apart after their tree lost its last log. */
   private leafDecay: { x: number; y: number; z: number; t: number }[] = [];
@@ -2335,6 +2347,8 @@ export class Game {
   private switchDimension(next: World) {
     const prev = this.world;
     if (prev === next) return;
+    // Sounds are transient and must never lure creatures in another dimension.
+    this.noiseEvents = [];
 
     // 1. odepnij siatki wymiaru, z którego wychodzimy (geometria zostaje)
     for (const c of prev.chunks.values()) for (const m of c.meshes) this.scene.remove(m);
@@ -2678,7 +2692,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', guard: 'guard', strażnik: 'guard', straznik: 'guard', merchant: 'merchant', kupiec: 'merchant', pack_animal: 'pack_animal', juczne: 'pack_animal', sandstalker: 'sandstalker', zasadzkarz: 'sandstalker', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', guard: 'guard', strażnik: 'guard', straznik: 'guard', merchant: 'merchant', kupiec: 'merchant', pack_animal: 'pack_animal', juczne: 'pack_animal', sandstalker: 'sandstalker', zasadzkarz: 'sandstalker', echolurker: 'echolurker', nasluchiwacz: 'echolurker', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2690,7 +2704,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, guard, merchant, pack_animal, sandstalker, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, guard, merchant, pack_animal, sandstalker, echolurker, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -3721,6 +3735,8 @@ export class Game {
       this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
       this.inventory.slots[this.selected] = null;
     }
+    const thrown = this.drops?.[this.drops.length - 1];
+    if (thrown) thrown.thrown = true;
     this.emitHud();
   }
 
@@ -3861,6 +3877,8 @@ export class Game {
     if (id === B.ANVIL) this.spillAnvil(x, y, z);
     if (id === B.BREWING) this.spillBrewing(x, y, z);
     this.world.setBlock(x, y, z, fill);
+    if (!silent && this.body?.pos && Math.hypot(x + 0.5 - this.body.pos.x, z + 0.5 - this.body.pos.z) < 7)
+      this.emitCaveNoise(x + 0.5, y, z + 0.5, 13);
     if (isDoor(id)) {
       const face = doorFacing(id);
       const oy = isDoorTop(id) ? y - 1 : y + 1;
@@ -4388,7 +4406,10 @@ export class Game {
       if (this.stepDist > (this.sprinting ? 2.4 : 1.9)) {
         this.stepDist = 0;
         const below = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));
-        if (below && !sneaking) Sfx.playStep(BLOCKS[below].sound);
+        if (below && !sneaking) {
+          Sfx.playStep(BLOCKS[below].sound);
+          this.emitCaveNoise(b.pos.x, b.pos.y, b.pos.z, this.sprinting ? 12 : 7);
+        }
       }
     } else {
       this.bobPhase *= 0.9;
@@ -4521,6 +4542,8 @@ export class Game {
   }
 
   private updateMobs(dt: number) {
+    this.noiseEvents ??= [];
+    this.noiseEvents = this.noiseEvents.filter((sound) => (sound.ttl -= dt) > 0);
     const p = this.body.pos;
     const dl = this.daylight();
     const peaceful = this.mode === 'creative';
@@ -4569,7 +4592,7 @@ export class Game {
         if (m.body.pos.distanceTo(p) < 16) this.message('Lis porwał leżące jedzenie!');
         return true;
       }, dl, this.weather === 'rain' && !this.isInNether &&
-        this.world.surface(Math.floor(m.body.pos.x), Math.floor(m.body.pos.z)).biome !== 'Pustynia', this.time);
+        this.world.surface(Math.floor(m.body.pos.x), Math.floor(m.body.pos.z)).biome !== 'Pustynia', this.time, this.noiseEvents);
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
         if (m.type !== 'midge' && (m.type !== 'bat' || dl < 0.5) && m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
@@ -4768,7 +4791,7 @@ export class Game {
             const below = this.world.peekBlock(x, y - 1, z);
             if (here === B.AIR && this.world.peekBlock(x, y + 1, z) === B.AIR && IS_SOLID[below] && below !== B.LEAVES && y < ceiling) {
               const roll = Math.random();
-              const type: MobType = roll < 0.3 ? 'creeper' : roll < 0.65 ? 'zombie' : 'spider';
+              const type: MobType = roll < 0.25 ? 'echolurker' : roll < 0.45 ? 'creeper' : roll < 0.72 ? 'zombie' : 'spider';
               this.spawnMob(type, x + 0.5, y, z + 0.5);
               break;
             }
@@ -5196,7 +5219,9 @@ export class Game {
       const hide = Math.floor(Math.random() * 3);
       for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
     }
-    else if (m.type === 'sandstalker') {
+    else if (m.type === 'echolurker') {
+      this.spawnDrop(I.BONE, 1, x, y, z);
+    } else if (m.type === 'sandstalker') {
       this.spawnDrop(B.SAND, 1, x, y, z);
       if (Math.random() < 0.3) this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
     }
@@ -5288,6 +5313,10 @@ export class Game {
       d.pos.addScaledVector(d.vel, dt);
       const bx = Math.floor(d.pos.x), by = Math.floor(d.pos.y), bz = Math.floor(d.pos.z);
       if (this.world.isSolid(bx, by, bz)) {
+        if (d.thrown && !d.landed) {
+          d.landed = true;
+          this.emitCaveNoise(d.pos.x, by + 1, d.pos.z, 13, 'decoy');
+        }
         d.pos.y = by + 1.02;
         d.vel.y = Math.max(0, -d.vel.y * 0.25);
         d.vel.x *= 0.82;

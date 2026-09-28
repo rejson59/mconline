@@ -14,6 +14,7 @@ import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS, applyPreset } from '../src/utils/settings';
 import { DEFAULT_DIFFICULTY, normalizeDifficulty, type WorldDifficulty } from '../src/game/difficulty';
 import SettingsScreen from '../src/components/SettingsScreen';
+import TouchControls from '../src/components/TouchControls';
 import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/components/JournalScreen';
 import EnchantScreen from '../src/components/EnchantScreen';
 import TradeScreen from '../src/components/TradeScreen';
@@ -232,6 +233,7 @@ section('menus: static render');
   check('rain shelter behavior appears in help', renderToStaticMarkup(<Controls />).includes('Deszcz i zwierzęta'));
   check('campfire avoidance appears in help', renderToStaticMarkup(<Controls />).includes('Ognisko i pochodnie'));
   check('bounded mob route finding appears in help', renderToStaticMarkup(<Controls />).includes('Omijanie przeszkód'));
+  check('cave listener quiet steps and Q decoy appear in help', renderToStaticMarkup(<Controls />).includes('Jaskiniowy nasłuchiwacz') && renderToStaticMarkup(<Controls />).includes('Shift'));
   check('sand ambush warning and escape appears in help', renderToStaticMarkup(<Controls />).includes('Zasadzkarz pustynny'));
   check('turtle eggs and saved hatching stages appear in help', renderToStaticMarkup(<Controls />).includes('Żółwie i jaja'));
   check('villager daily routine appears in help', renderToStaticMarkup(<Controls />).includes('Dzień mieszkańców'));
@@ -555,6 +557,24 @@ async function mountWithJsdom(): Promise<boolean> {
   // Canvas drawing is stubbed; gestures/buttons are mounted for real with React.
   const canvasProto = (w as unknown as { HTMLCanvasElement: typeof HTMLCanvasElement }).HTMLCanvasElement.prototype;
   canvasProto.getContext = ((kind: string) => kind === '2d' ? { fillStyle: '', fillRect() {} } : null) as typeof canvasProto.getContext;
+  const touchContainer = w.document.createElement('div');
+  w.document.body.appendChild(touchContainer);
+  const touchRoot = createRoot(touchContainer);
+  let thrown = 0;
+  const touchGame = { flying: false, mode: 'survival', keys: new Set<string>(), isZooming: () => false, dropItem: () => { thrown++; } };
+  await React.act(async () => {
+    touchRoot.render(<TouchControls game={touchGame as unknown as Game} settings={{ ...DEFAULT_SETTINGS, touchMode: 'tap' }}
+      onInventory={noop} onPause={noop} onChat={noop} onWaypoints={noop} />);
+  });
+  const throwButton = touchContainer.querySelector('[aria-label="Rzuć przedmiot"]') as HTMLButtonElement | null;
+  check('touch decoy button is visible in tap mode with accessible label', !!throwButton);
+  await React.act(async () => {
+    throwButton?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
+  });
+  check('touch throw action calls the same real item-dropping method as Q', thrown === 1);
+  await React.act(async () => { touchRoot.unmount(); });
+  touchContainer.remove();
+
   const gfxContainer = w.document.createElement('div');
   w.document.body.appendChild(gfxContainer);
   const gfxRoot = createRoot(gfxContainer);
