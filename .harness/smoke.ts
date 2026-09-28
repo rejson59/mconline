@@ -79,7 +79,7 @@ import {
   fallDamageFactor, MAX_ENCHS,
 } from '../src/game/enchant';
 import { Xp as XpClass } from '../src/game/xp';
-import { Game, MOB_NAMES, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
+import { Game, MOB_NAMES, normalizeCompanions, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
 import { tryCreatePortal } from '../src/game/redstone';
 import { brewingKey, emptyBrewing, brewResult, tickBrewing, POTIONS, sprintFactor, fallDamageAfterPotion, restoreEffects } from '../src/game/brewing';
 import { VILLAGE_CELL, villageInCell, villageSpawnSpots, type Village } from '../src/game/village';
@@ -1928,6 +1928,120 @@ section('3.0 #69: cancellable melee telegraph and combat hit reaction');
     !(calm as unknown as { strikeWarning: THREE.Mesh }).strikeWarning.visible && hits === 0);
 }
 
+section('3.0 #70: earned wolf trust, save migration and dimension-safe companions');
+{
+  eq('old 2.7 worlds without companion data start with none', normalizeCompanions(undefined).length, 0);
+  const world = new World(270, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  const wolf = new Mob('wolf', 6.5, y, 6.5);
+  const mark = (wolf as unknown as { trustMark: THREE.Mesh }).trustMark;
+  check('wild wolf starts with no collar and no trust', wolf.trust === 0 && !mark.visible && !wolf.tamed);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.keys = new Set(); g.target = null; g.selected = 0; g.mode = 'survival';
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.RAW_BEEF, count: 3 };
+  g.body = { pos: new THREE.Vector3(6.5, y, 5.5), vel: new THREE.Vector3() };
+  g.mobs = [wolf]; g.findMobTarget = () => ({ mob: wolf, dist: 1.5 });
+  const messages: string[] = [], awarded: string[] = [];
+  g.message = (s: string) => messages.push(s);
+  g.unlock = (s: string) => awarded.push(s);
+  g.emitHud = () => {};
+  g.tryUse();
+  check('actual Survival feeding consumes exactly one meat and starts visible trust',
+    wolf.trust === 1 && !wolf.tamed && mark.visible && g.inventory.countOf(I.RAW_BEEF) === 2 && messages.at(-1)?.includes('1/3'));
+  g.tryUse();
+  check('spam feeding neither consumes meat nor advances loyalty before cooldown',
+    wolf.trust === 1 && g.inventory.countOf(I.RAW_BEEF) === 2 && messages.at(-1)?.includes('chwili'));
+  const far = new THREE.Vector3(20, y, 20);
+  for (let i = 0; i < 95; i++) wolf.update(1 / 30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('a later feeding advances progress, still without instant taming', wolf.trust === 2 && !wolf.tamed && g.inventory.countOf(I.RAW_BEEF) === 1);
+  for (let i = 0; i < 95; i++) wolf.update(1 / 30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('third real feeding tames and unlocks achievement exactly once',
+    wolf.tamed && wolf.trust === 3 && g.inventory.countOf(I.RAW_BEEF) === 0 && awarded.filter((a) => a === 'wolf').length === 1);
+  check('tamed wolf remains marked and earns the companion coat', mark.visible && wolf.health === wolf.maxHealth);
+  const curious = new Mob('wolf', 5.5, y, 5.5);
+  curious.trust = 1;
+  curious.aiTimer = 10; curious.walking = false;
+  curious.update(1 / 30, world, new THREE.Vector3(10.5, y, 5.5), () => {}, () => {}, false);
+  check('partially trusting wolf approaches a nearby player without becoming tame',
+    curious.body.vel.x > 0 && curious.walking && !curious.tamed);
+  check('crosshair reports persistent progress instead of a hidden stat',
+    g.mobHint().includes('3/3'));
+  const cub = new Mob('wolf', 8.5, y, 8.5);
+  g.mobs = [cub]; g.findMobTarget = () => ({ mob: cub, dist: 1.5 });
+  g.mode = 'creative'; g.inventory.slots[0] = { id: I.RAW_CHICKEN, count: 4 };
+  g.tryUse();
+  check('Creative feeding advances trust without consuming inventory', cub.trust === 1 && g.inventory.countOf(I.RAW_CHICKEN) === 4);
+  const tapped = new Mob('wolf', 7.5, y, 7.5);
+  g.mode = 'survival'; g.ui = 'playing'; g.mobs = [tapped];
+  g.inventory.slots[0] = { id: I.RAW_PORK, count: 1 };
+  g.findMobTarget = () => ({ mob: tapped, dist: 2 });
+  g.refreshTarget = () => { g.target = null; };
+  g.attackCooldown = 0; g.touchAim = null;
+  let accidentalHits = 0;
+  g.tryAttack = () => { accidentalHits++; };
+  g.touchTap(0.4, 0.6);
+  check('actual touch tap uses feeding instead of hitting and restores touch aim',
+    tapped.trust === 1 && g.inventory.countOf(I.RAW_PORK) === 0 && accidentalHits === 0 && g.touchAim === null);
+  const crowded = new Mob('wolf', 7.5, y, 7.5);
+  g.mobs = [crowded, ...Array.from({ length: 24 }, (_, i) => {
+    const friend = new Mob('wolf', i + 2.5, y, 8.5);
+    friend.tame(); return friend;
+  })];
+  g.findMobTarget = () => ({ mob: crowded, dist: 2 });
+  g.inventory.slots[0] = { id: I.RAW_PORK, count: 1 };
+  g.tryUse();
+  check('companion cap refuses extra bond without wasting the last meat',
+    crowded.trust === 0 && g.inventory.countOf(I.RAW_PORK) === 1 && messages.at(-1)?.includes('24'));
+  const old = new Mob('wolf', 4.5, y, 4.5);
+  check('existing direct tame API still works for legacy callers', old.tame() && old.trust === 3);
+  const malformed = [null, {type: 'creeper', x: 5, y, z: 5, health: 4, trust: 3, dim: 'home'},
+    {type: 'wolf', x: Number.NaN, y, z: 5, health: 8, trust: 3, dim: 'home'},
+    {type: 'wolf', x: 1e10, y, z: 5, health: 8, trust: 3, dim: 'home'},
+    {type: 'wolf', x: 5.5, y, z: 5.5, health: 40, trust: 500, dim: 'nether'},
+    {type: 'wolf', x: 5.5, y, z: 5.5, health: 40, trust: 500, dim: 'nether'}];
+  const valid = normalizeCompanions(malformed);
+  check('import discards invalid mob types/NaN/out-of-bounds and deduplicates copies', valid.length === 1);
+  check('import clamps impossible health/trust to safe bounds', valid[0].health === 8 && valid[0].trust === 2);
+  check('save clamps array to 24 companions, not unbounded imported mobs', normalizeCompanions(Array.from({length: 100}, (_, i) => ({
+    type: 'wolf', x: i, y, z: 5, health: 8, trust: 1, dim: 'home', tamed: false,
+  }))).length === 24);
+  // Exercise the engine's real restore into both dimensions; the remote
+  // companion must not create any chunks until the player enters that world.
+  const saved = [
+    { type: 'wolf', dim: 'home', x: 8.5, y, z: 6.5, health: 6, trust: 2, tamed: false, cooldown: 2 },
+    { type: 'wolf', dim: 'nether', x: 13.5, y: 48, z: 6.5, health: 5, trust: 3, tamed: true, cooldown: 0 },
+  ];
+  const reload = Object.create(Game.prototype) as unknown as Record<string, any>;
+  reload.mobs = []; reload.isInNether = false; reload.world = world;
+  reload.scene = { add: () => {}, remove: () => {} };
+  reload.dimStash = { home: { mobs: [] }, nether: { mobs: [] } };
+  const loadedChunks = world.chunks.size;
+  reload.restoreCompanions(saved);
+  check('reload restores active partial progress, collar, health and cooldown',
+    reload.mobs.length === 1 && reload.mobs[0].trust === 2 && !reload.mobs[0].tamed &&
+    reload.mobs[0].health === 6 && reload.mobs[0].trustCooldown === 2 &&
+    (reload.mobs[0] as unknown as { trustMark: THREE.Mesh }).trustMark.visible);
+  check('Nether wolf remains in its own dimension and retains trained status',
+    reload.dimStash.nether.mobs.length === 1 && reload.dimStash.nether.mobs[0].tamed && reload.dimStash.nether.mobs[0].health === 5);
+  eq('restoring companions does not generate remote terrain', world.chunks.size, loadedChunks);
+  reload.body = { pos: new THREE.Vector3(4.5, y, 4.5) };
+  reload.mobs[0].body.pos.set(880.5, y, 6.5); // far beyond render distance
+  reload.mode = 'survival'; reload.time = 0.25; reload.spawnTimer = 5;
+  reload.difficulty = { ...DEFAULT_DIFFICULTY };
+  reload.nowSeconds = () => 0;
+  reload.updateMobs(1 / 30);
+  check('remote trusted wolf remains saved and does not simulate unloaded chunks',
+    reload.mobs.length === 1 && world.chunks.size === loadedChunks);
+  const roundtrip = reload.companionSaves();
+  check('roundtrip captures both active and stashed companions without mixing dimensions',
+    roundtrip.length === 2 && roundtrip[0].dim === 'home' && roundtrip[1].dim === 'nether');
+  reload.mobs[0].dead = true;
+  check('dead wolves are not duplicated on next save', reload.companionSaves().length === 1);
+}
+
 section('3.0 #68: bounded loaded-chunk pathfinding instead of wall pushing');
 {
   const world = new World(264, true);
@@ -2826,11 +2940,19 @@ section('saves: enchantments ride along');
   g.discovery = new DiscoveryMap();
   g.discovery.survey('overworld', -1, -16, 'Bagno', 63);
   g.discovery.survey('nether', 0, 0, 'Nether', 40);
+  g.mobs = [new Mob('wolf', 4.5, FLAT_H + 1, 4.5)];
+  g.mobs[0].trust = 2;
+  g.dimStash = { home: { mobs: [] }, nether: { mobs: [new Mob('wolf', 7.5, 48, 7.5)] } };
+  g.dimStash.nether.mobs[0].tame();
   check('save succeeds with discovery data', g.save() === true);
 
   const raw = loadSaves().find((s) => s.id === 'ench-test');
   check('the world was stored', !!raw);
   const stored = raw as unknown as SaveData;
+  check('real world save and JSON export preserve wolf trust in both dimensions',
+    stored.companions?.length === 2 && stored.companions[0].trust === 2 &&
+    stored.companions[1].dim === 'nether' && stored.companions[1].tamed === true &&
+    JSON.parse(exportSave('ench-test') ?? '{}').saves?.[0]?.companions?.length === 2);
   eq('inventory enchantments persist', stored.inv[0]?.ench?.efficiency, 4);
   eq('second enchantment persists', stored.inv[0]?.ench?.unbreaking, 2);
   eq('armor enchantments persist', stored.armor?.[0]?.ench?.featherfalling, 3);

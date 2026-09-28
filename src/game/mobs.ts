@@ -231,6 +231,10 @@ export class Mob {
   sheared = false;
   /** Tamed wolves follow the player and fight hostiles for them. */
   tamed = false;
+  /** Three separate feedings earn loyalty. A short pause prevents click-spam. */
+  trust = 0;
+  trustCooldown = 0;
+  private trustMark: THREE.Mesh | null = null;
   /** Grabież (Looting): extra drops rolled when this mob's loot is collected. */
   bonusLoot = 0;
   /** A purely visual munching cue, not a held inventory item. */
@@ -367,10 +371,27 @@ export class Mob {
     this.maxHealth = this.health = 8;
   }
 
+  showTrustMark(): void { if (this.trustMark) this.trustMark.visible = this.trust > 0; }
+
+  /** Only an accepted feeding consumes meat. The final feeding changes the
+   * actual AI to a loyal companion; previous stages survive save/reload. */
+  feedTrust(): 'invalid' | 'wait' | 'progress' | 'tamed' {
+    if (this.type !== 'wolf' || this.tamed || this.dead) return 'invalid';
+    if (this.trustCooldown > 0) return 'wait';
+    this.trust = Math.min(3, this.trust + 1);
+    this.trustCooldown = 3;
+    this.soundTimer = Math.min(this.soundTimer, 0.1);
+    if (this.trustMark) this.trustMark.visible = true;
+    if (this.trust >= 3) { this.tame(); return 'tamed'; }
+    return 'progress';
+  }
+
   /** Marks a wild wolf as tamed (friendly coat, full health). */
   tame(): boolean {
     if (this.type !== 'wolf' || this.tamed || this.dead) return false;
     this.tamed = true;
+    this.trust = 3;
+    if (this.trustMark) this.trustMark.visible = true;
     this.health = this.maxHealth;
     this.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -1184,6 +1205,12 @@ export class Mob {
       g.add(warning); this.meshes.push(warning);
       this.strikeWarning = warning;
     }
+    if (this.type === 'wolf') {
+      const mark = box(0.18, 0.13, 0.12, 0xffd477, sharedMats);
+      mark.position.set(0, 1.02, 0.37);
+      mark.visible = false;
+      g.add(mark); this.meshes.push(mark); this.trustMark = mark;
+    }
     g.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
         // clone material per mob so we can tint on hurt
@@ -1975,6 +2002,7 @@ export class Mob {
       return;
     }
     this.attackCooldown -= dt;
+    this.trustCooldown = Math.max(0, this.trustCooldown - dt);
     this.soundTimer -= dt;
 
     if ((this.type === 'pig' || this.type === 'cow' || this.type === 'sheep' || this.type === 'chicken' ||
@@ -2175,6 +2203,12 @@ export class Mob {
       }
     }
 
+    if (this.type === 'wolf' && this.trust > 0 && !this.tamed && !peaceful &&
+        dist < 7 && dist > 2.4 && Math.abs(player.y - b.pos.y) < 3 && this.hurtTime <= 0) {
+      this.yaw = Math.atan2(dx, dz);
+      this.walking = true;
+      speed = Math.min(speed, 1.35);
+    }
     const pace = this.walking && this.hurtTime < 0.3 ? speed : 0;
     // Only ground chasers need a route; spider climbing and floating ghasts
     // keep their own three-dimensional locomotion.
