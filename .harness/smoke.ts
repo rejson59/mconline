@@ -1728,6 +1728,21 @@ section('3.0 #59: regional travelling merchant and pack animal caravan');
   live.spawnTimer = 0;
   try { Math.random = () => 0.2; live.updateMobs(1 / 30); } finally { Math.random = random; }
   check('existing merchant prevents another immediate caravan', live.mobs.length === prior);
+  const capped = new World(162, true);
+  capped.getChunk(0, 0); capped.getChunk(1, 2);
+  const capGame = Object.create(Game.prototype) as unknown as Record<string, any>;
+  capGame.world = capped; capGame.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  capGame.scene = { add: () => {}, remove: () => {} };
+  capGame.mobs = Array.from({ length: 11 }, () => new Mob('cow', 8.5, y, 8.5));
+  capGame.drops = []; capGame.isInNether = false; capGame.mode = 'survival';
+  capGame.weather = 'clear'; capGame.time = 0.25; capGame.spawnTimer = 0;
+  capGame.difficulty = { ...DEFAULT_DIFFICULTY };
+  capGame.spawnMob = (kind: MobType, x: number, yy: number, z: number) => {
+    const m = new Mob(kind, x, yy, z); capGame.mobs.push(m); return m;
+  };
+  try { Math.random = () => 0.2; capGame.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('adding multiple species in one spawn tick still respects mobile passive cap', capGame.mobs.length <= 12);
+
 }
 
 section('3.0 #60: village guard patrols and defends residents');

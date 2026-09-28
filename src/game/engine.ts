@@ -4612,6 +4612,9 @@ export class Game {
       const alive = this.mobs.filter((m) => !m.dead);
       const hostile = alive.filter((m) => HOSTILE_MOBS.has(m.type)).length;
       const passive = alive.length - hostile;
+      // Recount after each spawn branch: a single 1.5 s tick can otherwise
+      // add several families and exceed the mobile-friendly passive cap.
+      const passiveCount = () => this.mobs.filter((m) => !m.dead && !HOSTILE_MOBS.has(m.type)).length;
       const tryPos = (minD: number, maxD: number) => {
         const ang = Math.random() * Math.PI * 2;
         const dist = minD + Math.random() * (maxD - minD);
@@ -4636,26 +4639,27 @@ export class Game {
           const midges = alive.filter((m) => m.type === 'midge').length;
           if (shore && frogs < 3 && Math.random() < (biome === 'Bagno' ? 0.7 : 0.38)) {
             this.spawnMob('frog', pos.x, pos.y + 0.1, pos.z);
-            if (passive < 11 && midges < 4) this.spawnMob('midge', pos.x + 1, pos.y + 1.1, pos.z);
+            if (passiveCount() < 12 && midges < 4) this.spawnMob('midge', pos.x + 1, pos.y + 1.1, pos.z);
           } else if (shore && frogs > 0 && midges < 4 && Math.random() < 0.45) {
             this.spawnMob('midge', pos.x, pos.y + 1.1, pos.z);
           } else if (pos.top === B.GRASS || pos.top === B.MEADOW_GRASS || pos.top === B.PODZOL) {
             const roll = Math.random();
             const type = pickPassiveMob(roll, biome);
             const n = type === 'fox' ? 1 : type === 'rabbit' || type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-            for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
+            const spawnN = Math.min(n, 12 - passiveCount());
+            for (let i = 0; i < spawnN; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
           }
         }
       }
       // Slow coastal turtles lay persistent eggs on real, loaded sand near water.
-      if (!this.isInNether && passive < 12 && alive.filter((m) => m.type === 'turtle').length < 3 && dl > 0.5) {
+      if (!this.isInNether && passiveCount() < 12 && alive.filter((m) => m.type === 'turtle').length < 3 && dl > 0.5) {
         const coast = tryPos(20, 42);
         if (coast && turtleSpawnAllowed(this.world, Math.floor(coast.x), Math.floor(coast.y), Math.floor(coast.z)) &&
           Math.random() < 0.65) this.spawnMob('turtle', coast.x, coast.y + 0.1, coast.z);
       }
       // Swamp lizards need actual ground to camouflage against, not just a
       // swamp biome name. The existing passive cap also bounds their AI.
-      if (!this.isInNether && passive < 12 && alive.filter((m) => m.type === 'lizard').length < 3 && dl > 0.5) {
+      if (!this.isInNether && passiveCount() < 12 && alive.filter((m) => m.type === 'lizard').length < 3 && dl > 0.5) {
         const lizPos = tryPos(20, 36);
         if (lizPos && (lizPos.top === B.MUD || lizPos.top === B.GRASS) &&
           (this.world.peekBlock(Math.floor(lizPos.x), Math.floor(lizPos.y), Math.floor(lizPos.z)) === B.AIR ||
@@ -4666,14 +4670,14 @@ export class Game {
       }
       // Nighttime forest bats use the same loaded surface candidate and
       // passive cap; they rest by day rather than generating endlessly.
-      if (!this.isInNether && passive < 12 && alive.filter((m) => m.type === 'bat').length < 3 && dl < 0.45) {
+      if (!this.isInNether && passiveCount() < 12 && alive.filter((m) => m.type === 'bat').length < 3 && dl < 0.45) {
         const batPos = tryPos(18, 38);
         if (batPos && batSpawnAllowed(batPos.top, this.world.surface(Math.floor(batPos.x), Math.floor(batPos.z)).biome, dl)) {
           this.spawnMob('bat', batPos.x, batPos.y + 2.2, batPos.z);
         }
       }
       // Neutral adults keep cubs by their side on taiga and tundra trails.
-      if (!this.isInNether && passive < 11 && alive.filter((m) => m.type === 'bear' && !m.isCub).length < 2 && dl > 0.5) {
+      if (!this.isInNether && passiveCount() < 12 && alive.filter((m) => m.type === 'bear' && !m.isCub).length < 2 && dl > 0.5) {
         const pos = tryPos(22, 42);
         if (pos && (pos.top === B.GRASS || pos.top === B.PODZOL || pos.top === B.SNOW) &&
           (this.world.peekBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z)) === B.AIR ||
@@ -4681,7 +4685,7 @@ export class Game {
           (this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome === 'Tajga' ||
             this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome === 'Tundra') && Math.random() < 0.28) {
           this.spawnMob('bear', pos.x, pos.y + 0.1, pos.z);
-          if (passive < 10 && Math.random() < 0.55) {
+          if (passiveCount() < 12 && Math.random() < 0.55) {
             for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
               const nx = Math.floor(pos.x) + ox, nz = Math.floor(pos.z) + oz, ny = Math.floor(pos.y);
               const floor = this.world.peekBlock(nx, ny - 1, nz);
@@ -4698,7 +4702,7 @@ export class Game {
       }
       // Rare daytime caravan on an EXISTING village trail; do not invent a
       // path at a random coordinate or force distant chunks to generate.
-      if (!this.isInNether && dl > 0.5 && passive < 10 &&
+      if (!this.isInNether && dl > 0.5 && passiveCount() <= 10 &&
         alive.filter((m) => m.type === 'merchant').length === 0) {
         const road = tryPos(8, 24);
         if (road?.top === B.PATH && Math.random() < 0.35 &&
