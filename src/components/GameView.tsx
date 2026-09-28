@@ -307,6 +307,8 @@ export default function GameView({
       {game && ui === 'paused' && started && (
         <PauseMenu
           settings={settings}
+          difficulty={game.difficulty}
+          onDifficulty={(patch) => { const ok = game.setDifficulty(patch); force((n) => n + 1); return ok; }}
           shareUrl={worldShareUrl(game.world.seed, game.mode)}
           worldName={game.worldName}
           unlocked={game.achievementIds()}

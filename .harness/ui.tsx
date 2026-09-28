@@ -12,6 +12,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MainMenu, Controls, AchievementsPanel, PauseMenu, filterAndSortWorlds } from '../src/components/Menus';
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS, applyPreset } from '../src/utils/settings';
+import { DEFAULT_DIFFICULTY, normalizeDifficulty, type WorldDifficulty } from '../src/game/difficulty';
 import SettingsScreen from '../src/components/SettingsScreen';
 import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/components/JournalScreen';
 import EnchantScreen from '../src/components/EnchantScreen';
@@ -195,6 +196,10 @@ section('menus: static render');
   check('pause menu offers resume and save', pause.includes('Wróć do gry') && pause.includes('Zapisz świat'));
   check('pause menu opens the adventure journal', pause.includes('Dziennik przygód'));
   check('pause menu counts achievements', pause.includes(`/${ACHIEVEMENTS.length}`));
+  const worldPause = renderToStaticMarkup(<PauseMenu settings={DEFAULT_SETTINGS} shareUrl="http://x/#seed=1"
+    difficulty={DEFAULT_DIFFICULTY} onDifficulty={() => true} onSettings={noop} onResume={noop} onJournal={noop} onQuit={noop} onSave={() => true} />);
+  check('per-world difficulty is visible in the pause menu but not global settings', worldPause.includes('Trudność świata') && !pause.includes('Trudność świata'));
+
 
   // 2.0: ekran opcji (zakładki, presety jakości, sterowanie dotykowe)
   const settingsHtml = renderToStaticMarkup(
@@ -531,6 +536,27 @@ async function mountWithJsdom(): Promise<boolean> {
   // Canvas drawing is stubbed; gestures/buttons are mounted for real with React.
   const canvasProto = (w as unknown as { HTMLCanvasElement: typeof HTMLCanvasElement }).HTMLCanvasElement.prototype;
   canvasProto.getContext = ((kind: string) => kind === '2d' ? { fillStyle: '', fillRect() {} } : null) as typeof canvasProto.getContext;
+  const difficultyContainer = w.document.createElement('div');
+  w.document.body.appendChild(difficultyContainer);
+  const difficultyRoot = createRoot(difficultyContainer);
+  const selected: WorldDifficulty[] = [];
+  function DifficultyHarness() {
+    const [value, setValue] = React.useState<WorldDifficulty>({ ...DEFAULT_DIFFICULTY });
+    return <PauseMenu settings={DEFAULT_SETTINGS} shareUrl="http://x/#seed=1" difficulty={value}
+      onDifficulty={(patch) => { const next = normalizeDifficulty({ ...value, ...patch }); selected.push(next); setValue(next); return true; }}
+      onSettings={noop} onResume={noop} onJournal={noop} onQuit={noop} onSave={() => true} />;
+  }
+  await React.act(async () => { difficultyRoot.render(<DifficultyHarness />); });
+  const button = (text: string) => Array.from(difficultyContainer.querySelectorAll('button')).find((b) => b.textContent?.includes(text)) as HTMLButtonElement;
+  await React.act(async () => { button('Trudność świata').click(); });
+  check('three independent rules are presented in the world panel', difficultyContainer.textContent?.includes('Agresja mobów') && difficultyContainer.textContent.includes('Obrażenia od potworów') && difficultyContainer.textContent.includes('Zasoby (rudy)'));
+  await React.act(async () => { button('Spokojna:').click(); });
+  await React.act(async () => { button('Surowe:').click(); });
+  await React.act(async () => { button('Obfite:').click(); });
+  check('touch-sized controls change all three world axes independently', selected.at(-1)?.aggression === 'spokojna' && selected.at(-1)?.damage === 'surowe' && selected.at(-1)?.resources === 'obfite');
+  await React.act(async () => { difficultyRoot.unmount(); });
+  difficultyContainer.remove();
+
   const mapData = new DiscoveryMap();
   mapData.survey('overworld', 0, 0, 'Równiny', 65);
   const markers: { id: string; name: string; x: number; y: number; z: number; dimension: 'overworld' }[] = [];

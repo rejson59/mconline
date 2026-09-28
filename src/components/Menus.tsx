@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameMode } from '../game/engine';
+import type { WorldDifficulty } from '../game/difficulty';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { exportSave, exportSaves, importSaves, MAX_SAVES } from '../game/saves';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
@@ -579,6 +580,8 @@ export function PauseMenu({
   worldName,
   unlocked,
   onSettings,
+  difficulty,
+  onDifficulty,
   onResume,
   onJournal,
   onWaypoints,
@@ -590,13 +593,15 @@ export function PauseMenu({
   worldName?: string;
   unlocked?: string[];
   onSettings: (s: Settings) => void;
+  difficulty?: WorldDifficulty;
+  onDifficulty?: (patch: Partial<WorldDifficulty>) => boolean;
   onResume: () => void;
   onJournal: () => void;
   onWaypoints?: () => void;
   onQuit: () => void;
   onSave: () => boolean;
 }) {
-  const [view, setView] = useState<'main' | 'options' | 'controls' | 'achievements'>('main');
+  const [view, setView] = useState<'main' | 'options' | 'controls' | 'achievements' | 'difficulty'>('main');
   const [saved, setSaved] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -627,6 +632,9 @@ export function PauseMenu({
             <button className="mc-btn" onClick={() => setView('options')}>
               Opcje...
             </button>
+            {difficulty && onDifficulty && <button className="mc-btn" onClick={() => setView('difficulty')}>
+              Trudność świata...
+            </button>}
             <button className="mc-btn" onClick={() => setView('controls')}>
               Sterowanie
             </button>
@@ -665,6 +673,28 @@ export function PauseMenu({
         )}
         {view === 'options' && (
           <SettingsScreen settings={settings} onChange={onSettings} onClose={() => setView('main')} />
+        )}
+        {view === 'difficulty' && difficulty && onDifficulty && (
+          <div className="flex w-full flex-col gap-3 bg-black/60 p-4 text-sm text-white">
+            <div className="text-xl mc-text">Trudność tego świata</div>
+            <p>Zmiany działają od razu i zapisują się tylko w tym świecie. Tryb kreatywny nie otrzymuje obrażeń.</p>
+            {([
+              ['aggression', 'Agresja mobów', [['spokojna', 'Spokojna: bez ataków i nowych potworów'], ['normalna', 'Normalna'], ['zaciekla', 'Zacięta: szybsze i liczniejsze potwory']]],
+              ['damage', 'Obrażenia od potworów', [['lagodne', 'Łagodne: ×0,7'], ['normalne', 'Normalne'], ['surowe', 'Surowe: ×1,4']]],
+              ['resources', 'Zasoby (rudy)', [['skape', 'Skąpe: 25% szans na utratę jednej sztuki'], ['normalne', 'Normalne'], ['obfite', 'Obfite: dodatkowy surowiec (bez duplikacji bloków rud)']]],
+            ] as const).map(([key, title, options]) => (
+              <div key={key} className="flex flex-col gap-1">
+                <strong>{title}</strong>
+                {options.map(([value, label]) => <button key={value} type="button" className="mc-btn !py-1 !text-sm" aria-pressed={difficulty[key] === value}
+                  onClick={() => {
+                    const ok = onDifficulty({ [key]: value });
+                    setSaveFailed(!ok);
+                  }}>{difficulty[key] === value ? '✓ ' : ''}{label}</button>)}
+              </div>
+            ))}
+            {saveFailed && <p role="alert">Nie udało się zapisać trudności. Zwolnij miejsce i zapisz świat ponownie.</p>}
+            <button className="mc-btn" onClick={() => setView('main')}>Gotowe</button>
+          </div>
         )}
         {view === 'controls' && (
           <div className="flex w-full flex-col gap-4 bg-black/60 p-5">

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, type Biome } from './world';
 import { DiscoveryMap, type DiscoverySave } from './discoveryMap';
+import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, resourceDropCount, type WorldDifficulty } from './difficulty';
 import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE, type BaitId } from './fishing';
@@ -198,6 +199,8 @@ export interface SaveData {
   potionsDrunk?: number[];
   /** Milliseconds remaining per effect; optional in saves predating 3.0. */
   effects?: Record<string, number>;
+  /** Optional 3.0 per-world rules. Older worlds use the 2.7 normal defaults. */
+  difficulty?: WorldDifficulty;
   /** Explored chunk tiles, stored separately for both dimensions. Absent in 2.x saves. */
   discovery?: DiscoverySave;
 }
@@ -495,8 +498,9 @@ export class Game {
   /** 2.4: statywy alchemiczne – PPM otwiera ekran warzenia napojów. */
   brewings = new Map<string, BrewingState>();
   brewingPos: { x: number; y: number; z: number } | null = null;
-  /** 2.4: aktywne efekty napojów (id → pozostałe ms). Krótkie – nie zapisują się. */
+  /** Aktywne efekty napojów (id → pozostałe ms), zachowywane w zapisie. */
   private effects = new Map<PotionEffectId, number>();
+  difficulty: WorldDifficulty = { ...DEFAULT_DIFFICULTY };
   /** 2.4: odliczanie leczenia z napoju regeneracji. */
   private potionRegenAcc = 0;
   /** 2.4: jakie butelki gracz kiedykolwiek wypił (osiągnięcie „Mistrz eliksirów”). */
@@ -775,6 +779,7 @@ export class Game {
         this.brewings.set((b.dim ? 'n:' : '') + brewingKey(b.x, b.y, b.z), clean);
       }
       this.effects = restoreEffects(opts.save.effects);
+      this.difficulty = normalizeDifficulty(opts.save.difficulty);
       this.fishCaught = Math.max(0, Math.floor(opts.save.fishCaught ?? 0));
       this.fishingBait = opts.save.fishingBait === I.WORM_BAIT || opts.save.fishingBait === I.GLOW_BAIT ? opts.save.fishingBait : null;
       for (const id of Array.isArray(opts.save.potionsDrunk) ? opts.save.potionsDrunk : []) {
@@ -2758,6 +2763,14 @@ export class Game {
   }
 
   // ---------- Save ----------
+  /** Change one rule on this world only. Does not mutate global visual settings. */
+  setDifficulty(patch: Partial<WorldDifficulty>): boolean {
+    this.difficulty = normalizeDifficulty({ ...this.difficulty, ...patch });
+    const saved = this.save();
+    this.emitHud();
+    return saved;
+  }
+
   save() {
     try {
       // homeWorld zawsze istnieje w pełnej grze; defensywny fallback
@@ -2791,6 +2804,7 @@ export class Game {
         brewings: this.brewings ? [...this.brewings.values()] : [],
         potionsDrunk: this.potionsDrunk ? [...this.potionsDrunk] : [],
         effects: Object.fromEntries(this.effects ?? []),
+        difficulty: normalizeDifficulty(this.difficulty),
         unlocked: [...this.unlocked],
         weather: this.weather,
         xp: this.xp.total,
@@ -3351,7 +3365,7 @@ export class Game {
               this.wearShield(12);
               this.unlock('guardian');
             } else {
-              this.damage(a.power);
+              this.damage(mobDamage(a.power, this.difficulty.damage));
               this.body.vel.x += dir.x * 2.5;
               this.body.vel.z += dir.z * 2.5;
             }
@@ -3811,7 +3825,10 @@ export class Game {
         fortune: enchLevel(this.selectedStack(), 'fortune'),
         silk: enchLevel(this.selectedStack(), 'silktouch') > 0,
       });
-      for (const drop of drops) this.spawnDrop(drop.id, drop.count, x + 0.5, y + 0.45, z + 0.5);
+      for (const drop of drops) {
+        const count = resourceDropCount(id, drop.id, drop.count, this.difficulty.resources, enchLevel(this.selectedStack(), 'silktouch') > 0);
+        if (count > 0) this.spawnDrop(drop.id, count, x + 0.5, y + 0.45, z + 0.5);
+      }
       if (isDoorTop(id)) this.spawnDrop(B.DOOR_N, 1, x + 0.5, y + 0.2, z + 0.5);
       // ores that actually yielded something also drop XP
       const xp = oreXp(id);
@@ -3836,7 +3853,7 @@ export class Game {
     Sfx.playFuse();
   }
 
-  explode(cx: number, cy: number, cz: number, power: number) {
+  explode(cx: number, cy: number, cz: number, power: number, fromMob = false) {
     Sfx.playExplosion();
     this.shake = 0.6;
     const r = Math.ceil(power);
@@ -3869,7 +3886,7 @@ export class Game {
     affect(this.body.pos, this.body.h, (dmg, kb) => {
       this.body.vel.add(kb);
       this.fallStart = this.body.pos.y;
-      this.damage(dmg);
+      this.damage(fromMob ? mobDamage(dmg, this.difficulty.damage) : dmg);
     });
     for (const m of this.mobs) affect(m.body.pos, m.body.h, (dmg, kb) => {
       m.hurtTime = 0;
@@ -4444,7 +4461,7 @@ export class Game {
           this.wearShield(8);
           this.unlock('guardian');
         }
-        this.damage(shielded ? Math.ceil(dmg / 2) : dmg);
+        this.damage(shielded ? Math.ceil(mobDamage(dmg, this.difficulty.damage) / 2) : mobDamage(dmg, this.difficulty.damage));
         if (this.mode === 'survival') {
           const dx = p.x - mob.body.pos.x, dz = p.z - mob.body.pos.z;
           const l = Math.hypot(dx, dz) || 1;
@@ -4458,11 +4475,11 @@ export class Game {
         const to = new THREE.Vector3(p.x, p.y + 1.0, p.z);
         const dir = to.sub(from).normalize();
         this.spawnArrow(from.addScaledVector(dir, 0.6), dir, 24, mob, 4);
-      }, peaceful, this.mobs, (target) => {
+      }, peaceful || this.difficulty.aggression === 'spokojna', this.mobs, (target) => {
         // tamed wolf's bite
         target.damage(4, m.body.pos.x, m.body.pos.z);
         Sfx.playHurt();
-      });
+      }, hostileSpeed(this.difficulty.aggression));
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
         if (m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
@@ -4481,7 +4498,7 @@ export class Game {
     for (const m of this.mobs) {
       if (m.exploded && !m.looted) {
         m.looted = true;
-        this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2);
+        this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2, true);
       } else if (m.dead && !m.looted) {
         m.looted = true;
         this.mobLoot(m);
@@ -4529,7 +4546,7 @@ export class Game {
       }
       if (this.isInNether) {
         // Nether: piwniczne bestie zawsze, a Ghasty tylko w otwartej przestrzeni.
-        if (hostile < 8) {
+        if (hostile < hostileCap(this.difficulty.aggression)) {
           const pos = tryPos(16, 40);
           if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES && pos.top !== B.LAVA) {
             const roll = Math.random();
@@ -4541,7 +4558,7 @@ export class Game {
             }
           }
         }
-      } else if (hostile < 8 && dl < 0.4) {
+      } else if (hostile < hostileCap(this.difficulty.aggression) && dl < 0.4) {
         const pos = tryPos(18, 40);
         if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES) {
           const roll = Math.random();
@@ -4550,7 +4567,7 @@ export class Game {
         }
       }
       this.spawnVillageFolk();
-      if (hostile < 6) {
+      if (hostile < Math.max(0, hostileCap(this.difficulty.aggression) - 2)) {
         const ang = Math.random() * Math.PI * 2;
         const dist = 14 + Math.random() * 22;
         const x = Math.floor(p.x + Math.cos(ang) * dist);

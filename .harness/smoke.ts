@@ -50,6 +50,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
 import { DiscoveryMap, MAP_LIMIT } from '../src/game/discoveryMap';
+import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, oreYield, resourceDropCount } from '../src/game/difficulty';
 import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeCompass';
 import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
@@ -1126,6 +1127,43 @@ section('engine: armor damage, equipping, xp');
   eq('active potion buffs cleared on death', g.effects.size, 0);
 }
 
+section('3.0 #81: independent, live per-world difficulty');
+{
+  eq('legacy saves use 2.7 normal settings', JSON.stringify(normalizeDifficulty(undefined)), JSON.stringify(DEFAULT_DIFFICULTY));
+  const normalized = normalizeDifficulty({ aggression: 'spokojna', damage: 'surowe', resources: 'invalid', foreign: true });
+  eq('valid axes survive, invalid axes default independently', JSON.stringify(normalized),
+    JSON.stringify({ aggression: 'spokojna', damage: 'surowe', resources: 'normalne' }));
+  eq('arrays cannot smuggle difficulty settings', normalizeDifficulty(['zaciekla']).aggression, 'normalna');
+  eq('calm world stops spawning hostiles', hostileCap('spokojna'), 0);
+  check('fierce world allows more hostile mobs', hostileCap('zaciekla') > hostileCap('normalna'));
+  eq('fierce hostile movement is faster', hostileSpeed('zaciekla'), 1.25);
+  eq('normal mob hits preserve old damage', mobDamage(4, 'normalne'), 4);
+  eq('gentle mob hits still hurt', mobDamage(1, 'lagodne'), 1);
+  eq('gentle mob hits are reduced', mobDamage(10, 'lagodne'), 7);
+  eq('harsh mob hits are increased', mobDamage(10, 'surowe'), 14);
+  eq('scarce ore sometimes yields nothing', oreYield(1, 'skape', 0.1), 0);
+  eq('scarce ore still sometimes yields its normal amount', oreYield(1, 'skape', 0.9), 1);
+  eq('rich ore grants one extra resource', oreYield(4, 'obfite'), 5);
+  eq('normal ore preserves 2.7 yield', oreYield(4, 'normalne'), 4);
+  eq('rich diamonds add material', resourceDropCount(B.DIAMOND_ORE, I.DIAMOND, 1, 'obfite', false), 2);
+  eq('rich mode cannot duplicate an iron ore block', resourceDropCount(B.IRON_ORE, B.IRON_ORE, 1, 'obfite', false), 1);
+  eq('silk touch never applies resource multiplier', resourceDropCount(B.DIAMOND_ORE, B.DIAMOND_ORE, 1, 'obfite', true), 1);
+  eq('ordinary stone ignores resource multiplier', resourceDropCount(B.STONE, B.COBBLE, 1, 'obfite', false), 1);
+
+  const world = new World(17, true);
+  world.getChunk(0, 0);
+  const near = new THREE.Vector3(9.5, FLAT_H + 1, 12.5);
+  const calmCreeper = new Mob('creeper', 9.5, FLAT_H + 1, 9.5);
+  calmCreeper.fuse = 0.2;
+  calmCreeper.update(0.3, world, near, () => {}, () => {}, true);
+  check('calm setting defuses already-lit creepers without explosions', calmCreeper.fuse === -1 && !calmCreeper.exploded);
+  const slow = new Mob('zombie', 9.5, FLAT_H + 1, 9.5);
+  const fast = new Mob('zombie', 9.5, FLAT_H + 1, 9.5);
+  slow.update(1 / 30, world, near, () => {}, () => {}, false, [], () => {}, hostileSpeed('normalna'));
+  fast.update(1 / 30, world, near, () => {}, () => {}, false, [], () => {}, hostileSpeed('zaciekla'));
+  check('fierce aggression moves chasing mobs faster in the actual AI', Math.hypot(fast.body.vel.x, fast.body.vel.z) > Math.hypot(slow.body.vel.x, slow.body.vel.z));
+}
+
 section('3.0 #80: first-visit biome rewards');
 {
   const expected = ['Bagno', 'Sawanna', 'Dżungla', 'Tajga', 'Pustkowie', 'Kwiecista łąka'] as const;
@@ -1600,6 +1638,8 @@ section('saves: enchantments ride along');
   g.furnaces = new Map(); g.chests = new Map();
   g.brewings = new Map();
   g.effects = new Map([['night', 17000], ['fall', 34500], ['sprint', 8000]]);
+  g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.emitHud = () => {};
   g.potionsDrunk = new Set<number>();
   g.unlocked = new Set(['wood', 'biome_swamp']);
   g.weather = 'clear';
@@ -1621,6 +1661,11 @@ section('saves: enchantments ride along');
   eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
   check('first-visit biome progress persists in a world export', stored.unlocked?.includes('biome_swamp') && exportSave('ench-test')?.includes('biome_swamp'));
+  eq('legacy difficulty defaults are preserved when saved', stored.difficulty?.aggression, 'normalna');
+  check('difficulty on an existing world can be changed and saved instantly', g.setDifficulty({ aggression: 'zaciekla', resources: 'obfite' }) === true);
+  const updated = loadSaves().find((s) => s.id === 'ench-test') as unknown as SaveData;
+  check('per-world axes persist in exported saves', updated.difficulty?.aggression === 'zaciekla' && updated.difficulty.resources === 'obfite' && exportSave('ench-test')?.includes('zaciekla'));
+  eq('changing two axes does not change damage', updated.difficulty?.damage, 'normalne');
   eq('night vision timer persists on save', stored.effects?.night, 17000);
   eq('fall resistance timer persists on save', stored.effects?.fall, 34500);
   eq('sprint timer persists on save', stored.effects?.sprint, 8000);

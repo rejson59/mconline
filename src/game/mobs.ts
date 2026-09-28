@@ -832,7 +832,8 @@ export class Mob {
     onShoot: (mob: Mob) => void,
     peaceful: boolean,
     allies: Mob[] = [],
-    onBite: (mob: Mob) => void = () => {}
+    onBite: (mob: Mob) => void = () => {},
+    aggressionSpeed = 1
   ) {
     const b = this.body;
     if (this.hurtTime > 0) {
@@ -885,6 +886,13 @@ export class Mob {
     const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
     const dist = Math.hypot(dx, dz);
     const hostile = this.type === 'zombie' || this.type === 'creeper' || this.type === 'spider' || this.type === 'skeleton' || this.type === 'enderman' || this.type === 'slime' || this.type === 'ghast';
+
+    if (hostile && !peaceful) speed *= aggressionSpeed;
+    if (peaceful && this.fuse > 0) {
+      this.fuse = -1;
+      this.setFlash(false);
+      this.group.scale.setScalar(1);
+    }
 
     if (this.fuse > 0) {
       this.fuse -= dt;
