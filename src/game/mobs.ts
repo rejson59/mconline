@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { World, Biome } from './world';
+import { CS, type World, type Biome } from './world';
 import { stepBody, type Body } from './physics';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
@@ -33,6 +33,38 @@ export function shoreWaterNearby(world: Pick<World, 'peekBlock'>, x: number, y: 
 export function batSpawnAllowed(top: number, biome: Biome, daylight: number): boolean {
   return daylight < 0.45 && (biome === 'Las' || biome === 'Brzozowy las' || biome === 'Tajga' || biome === 'Bagno') &&
     (top === B.GRASS || top === B.PODZOL || top === B.MUD);
+}
+
+/** Bounded local search; only already loaded, dry cells with a two-block-high
+ * covered space and solid floor count as shelter. No distant pathfinding. */
+export function findNearbyShelter(world: Pick<World, 'peekBlock' | 'hasChunk'>, x: number, y: number, z: number): { x: number; z: number } | null {
+  let best = 49;
+  let result: { x: number; z: number } | null = null;
+  for (let dx = -6; dx <= 6; dx++) for (let dz = -6; dz <= 6; dz++) {
+    const d2 = dx * dx + dz * dz;
+    if (d2 > 36 || d2 >= best) continue;
+    const xx = x + dx, zz = z + dz;
+    if (!world.hasChunk(Math.floor(xx / CS), Math.floor(zz / CS))) continue;
+    const floor = world.peekBlock(xx, y - 1, zz);
+    const feet = world.peekBlock(xx, y, zz);
+    const head = world.peekBlock(xx, y + 1, zz);
+    const roof = world.peekBlock(xx, y + 2, zz);
+    if (!IS_SOLID[floor] || floor === B.MAGMA || floor === B.CAMPFIRE ||
+      (feet !== B.AIR && RENDER[feet] !== 1) || head !== B.AIR || !IS_SOLID[roof] || roof === B.CACTUS) continue;
+    // Do not choose the inside of a sealed building: direct movement cannot
+    // walk through walls, and endlessly pressing against them is misleading.
+    const steps = Math.ceil(Math.sqrt(d2) * 2);
+    let reachable = true;
+    for (let step = 1; step <= steps; step++) {
+      const px = Math.floor(x + dx * step / Math.max(1, steps));
+      const pz = Math.floor(z + dz * step / Math.max(1, steps));
+      if (IS_SOLID[world.peekBlock(px, y, pz)] || IS_SOLID[world.peekBlock(px, y + 1, pz)]) { reachable = false; break; }
+    }
+    if (!reachable) continue;
+    best = d2;
+    result = { x: xx + 0.5, z: zz + 0.5 };
+  }
+  return result;
 }
 
 export function isHostileMob(type: MobType): boolean {
@@ -87,6 +119,8 @@ export class Mob {
   private lizardSkin: THREE.MeshLambertMaterial | null = null;
   private lizardFace: THREE.MeshLambertMaterial | null = null;
   private camouflageGround = -1;
+  private shelterTimer = 0;
+  private shelterGoal: { x: number; z: number } | null = null;
   /** True while a spider crawls up a wall (drives the leg animation). */
   climbing = false;
   /** 1.6: zawód mieszkańca (indeks w PROFESSIONS) i jego stan handlu. */
@@ -1095,7 +1129,7 @@ export class Mob {
   }
 
   /** Jump toward small pond insects and show a brief tongue lunge. */
-  private updateFrog(dt: number, world: World, player: THREE.Vector3, allies: Mob[]): void {
+  private updateFrog(dt: number, world: World, player: THREE.Vector3, allies: Mob[], raining: boolean): void {
     const b = this.body;
     this.tongueTime = Math.max(0, this.tongueTime - dt);
     if (this.tongueMesh) this.tongueMesh.visible = this.tongueTime > 0;
@@ -1118,9 +1152,10 @@ export class Mob {
         prey.damage(2, b.pos.x, b.pos.z);
       }
     } else if (this.aiTimer <= 0) {
-      this.aiTimer = 2 + Math.random() * 3;
+      this.aiTimer = raining ? 0.7 : 2 + Math.random() * 3;
       this.yaw = Math.random() * Math.PI * 2;
-      this.walking = Math.random() < 0.6;
+      this.walking = raining || Math.random() < 0.6;
+      if (raining) this.soundTimer = Math.min(this.soundTimer, 3);
     }
     if (b.onGround && this.walking && this.attackCooldown <= 0) {
       b.vel.y = 5.6;
@@ -1229,7 +1264,8 @@ export class Mob {
     aggressionSpeed = 1,
     food: readonly FoxFood[] = [],
     onSnatch: (target: FoxFood) => boolean = () => false,
-    daylight = 1
+    daylight = 1,
+    raining = false
   ) {
     const b = this.body;
     if (this.hurtTime > 0) {
@@ -1269,7 +1305,7 @@ export class Mob {
       return;
     }
     if (this.type === 'frog') {
-      this.updateFrog(dt, world, player, allies);
+      this.updateFrog(dt, world, player, allies, raining);
       return;
     }
     if (this.type === 'fox') {
@@ -1297,6 +1333,29 @@ export class Mob {
       return;
     }
 
+
+    // Livestock look for cover while it rains. They keep their current goal
+    // for a few seconds, so they do not rescan 13x13 cells on every frame.
+    if (this.type === 'pig' || this.type === 'cow' || this.type === 'sheep' || this.type === 'chicken') {
+      if (!raining) {
+        if (this.shelterGoal) this.aiTimer = 0; // normal wandering resumes
+        this.shelterGoal = null;
+        this.shelterTimer = 0;
+      } else if (this.hurtTime <= 0 && this.body.pos.distanceTo(player) > 5) {
+        this.shelterTimer -= dt;
+        if (this.shelterTimer <= 0) {
+          this.shelterTimer = 2.5;
+          this.shelterGoal = findNearbyShelter(world, Math.floor(b.pos.x), Math.floor(b.pos.y), Math.floor(b.pos.z));
+        }
+        if (this.shelterGoal) {
+          const dx = this.shelterGoal.x - b.pos.x, dz = this.shelterGoal.z - b.pos.z;
+          this.yaw = Math.atan2(dx, dz);
+          this.walking = Math.hypot(dx, dz) > 0.5;
+          this.moveAndAnimate(dt, world, player, this.walking ? 1.9 : 0);
+          return;
+        }
+      }
+    }
 
     let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : this.type === 'wolf' ? 1.6 : this.type === 'enderman' ? 3.2 : this.type === 'slime' ? 2.0 : this.type === 'ghast' ? 1.5 : 1.2;
     const dx = player.x - b.pos.x, dz = player.z - b.pos.z;

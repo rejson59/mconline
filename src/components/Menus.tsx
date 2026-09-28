@@ -102,6 +102,7 @@ export function Controls() {
     ['PPM / tap na mieszkańcu', 'Handel: kartograf, rybak, ogrodnik, kowal i inni. Oferty rosną wraz z doświadczeniem'],
     ['PPM na skrzyni', 'Schowek'],
     ['Drabina + W / spacja', 'Wspinaczka'],
+    ['Deszcz i zwierzęta', 'Krowy, świnie, owce i kurczaki szukają pobliskiego zadaszenia; żaby ożywiają się w deszczu'],
     ['Jaszczurki na Bagnach', 'Na błocie mają brązowe ciało, na trawie zielone; jasny grzbiet i oczy zawsze widać'],
     ['Nietoperze w lesie nocą', 'Latają i piszczą po zmierzchu, za dnia odpoczywają przy ziemi; nie atakują'],
     ['Żaby przy wodzie', 'Skaczą, rechoczą i polują na meszki nad brzegiem; meszki nie zostawiają łupu ani PD'],

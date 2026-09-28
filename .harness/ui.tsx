@@ -229,6 +229,7 @@ section('menus: static render');
   check('frog and insect behaviors appear in in-game help', renderToStaticMarkup(<Controls />).includes('Żaby przy wodzie'));
   check('nighttime bats are explained in in-game help', renderToStaticMarkup(<Controls />).includes('Nietoperze w lesie nocą'));
   check('visible lizard camouflage is explained in help', renderToStaticMarkup(<Controls />).includes('Jaszczurki na Bagnach'));
+  check('rain shelter behavior appears in help', renderToStaticMarkup(<Controls />).includes('Deszcz i zwierzęta'));
   const medium = renderToStaticMarkup(
     <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
   );

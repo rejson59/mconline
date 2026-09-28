@@ -61,7 +61,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, batSpawnAllowed, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, batSpawnAllowed, findNearbyShelter, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -1661,6 +1661,61 @@ section('3.0 #58: visible camouflage for small swamp lizards');
     g.updateMobs(1 / 30);
     check('Nether has no swamp lizards', !g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
   } finally { Math.random = random; }
+}
+
+section('3.0 #62: bounded and predictable animal reactions to rain');
+{
+  const world = new World(154, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  eq('open flat land is not falsely considered shelter', findNearbyShelter(world, 5, y, 8), null);
+  const existingChunks = world.chunks.size;
+  findNearbyShelter(world, -1, y, 8);
+  eq('search does not generate new chunks across a border', world.chunks.size, existingChunks);
+  world.setBlock(8, y + 2, 8, B.PLANKS);
+  check('real dry roof provides shelter', findNearbyShelter(world, 5, y, 8)?.x === 8.5);
+  world.setBlock(7, y, 8, B.STONE);
+  world.setBlock(7, y + 1, 8, B.STONE);
+  eq('sealed path to shelter is rejected instead of wall-walking forever', findNearbyShelter(world, 5, y, 8), null);
+  world.setBlock(7, y, 8, B.AIR);
+  world.setBlock(7, y + 1, 8, B.AIR);
+  const cow = new Mob('cow', 5.5, y, 8.5);
+  cow.walking = false;
+  cow.aiTimer = 100;
+  const far = new THREE.Vector3(40, y, 40);
+  for (let i = 0; i < 60; i++) cow.update(1 / 30, world, far, () => {}, () => {}, false, [cow], () => {}, 1, [], () => false, 1, true);
+  check('cow goes under roof when rain begins', cow.body.pos.x > 7.5 && cow.body.pos.x < 9.4);
+  cow.update(1 / 30, world, far, () => {}, () => {}, false, [cow], () => {}, 1, [], () => false, 1, false);
+  eq('cow clears its rain goal as soon as sky clears', (cow as unknown as {shelterGoal: unknown}).shelterGoal, null);
+  const frog = new Mob('frog', 5.5, y, 5.5);
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0.99;
+    frog.update(1 / 30, world, far, () => {}, () => {}, false, [frog], () => {}, 1, [], () => false, 1, false);
+    check('without rain frog can stay resting', frog.walking === false);
+    frog.aiTimer = 0;
+    frog.update(1 / 30, world, far, () => {}, () => {}, false, [frog], () => {}, 1, [], () => false, 1, true);
+    check('rain awakens frog movement and makes croaking more frequent', frog.walking === true && frog.soundTimer <= 3);
+  } finally { Math.random = originalRandom; }
+  // Same live tick shared by PC and touch, not just a pure weather helper.
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const liveCow = new Mob('cow', 5.5, y, 8.5);
+  g.mobs = [liveCow];
+  g.drops = [];
+  g.world = world;
+  g.body = { pos: far };
+  g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  g.isInNether = false;
+  g.mode = 'survival';
+  g.weather = 'rain';
+  g.time = 0.25;
+  g.spawnTimer = 100;
+  g.scene = { remove: () => {} };
+  for (let i = 0; i < 60; i++) g.updateMobs(1 / 30);
+  check('actual rain state in Game drives the livestock AI', liveCow.body.pos.x > 7.5);
+  g.weather = 'clear';
+  g.updateMobs(1 / 30);
+  eq('clearing rain in the game releases its livestock immediately', (liveCow as unknown as {shelterGoal: unknown}).shelterGoal, null);
 }
 
 // ======================================================================== wolf

@@ -4554,7 +4554,8 @@ export class Game {
         }
         if (m.body.pos.distanceTo(p) < 16) this.message('Lis porwał leżące jedzenie!');
         return true;
-      }, dl);
+      }, dl, this.weather === 'rain' && !this.isInNether &&
+        this.world.surface(Math.floor(m.body.pos.x), Math.floor(m.body.pos.z)).biome !== 'Pustynia');
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
         if (m.type !== 'midge' && (m.type !== 'bat' || dl < 0.5) && m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
