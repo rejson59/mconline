@@ -14,7 +14,7 @@ import {
 } from './brewing';
 import { getAtlas, compactAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, batSpawnAllowed, type FoxFood, type MobType } from './mobs';
+import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, batSpawnAllowed, type FoxFood, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
@@ -228,6 +228,7 @@ export const MOB_NAMES: Record<MobType, string> = {
   rabbit: 'Królik',
   fox: 'Lis',
   frog: 'Żaba',
+  turtle: 'Żółw',
   midge: 'Meszka',
   bat: 'Nietoperz',
   lizard: 'Jaszczurka',
@@ -2672,7 +2673,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2684,7 +2685,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -3656,6 +3657,8 @@ export class Game {
       return;
     } else if (id === B.CHEST) {
       this.unlock('stash');
+    } else if (id === B.TURTLE_EGG0) {
+      if (below !== B.SAND || !shoreWaterNearby(this.world, px, py, pz)) { this.message('Jaja żółwia wymagają piasku przy wodzie.'); return; }
     } else if (RENDER[id] === 1) {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && below !== B.FARMLAND) return;
     }
@@ -3665,7 +3668,7 @@ export class Game {
     this.settle(px, py, pz);
     // redstone update
     this.onBlockChanged(px, py, pz);
-    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SPRUCE_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
+    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SPRUCE_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2) || finalId === B.TURTLE_EGG0) this.growables.set(`${px},${py},${pz}`, performance.now());
     if (finalId === B.TORCH || finalId === B.REDSTONE_TORCH) this.unlock('torch');
     if (finalId === B.NETHER_BRICKS || finalId === B.QUARTZ_BLOCK) this.unlock('nether');
     Sfx.playPlace(BLOCKS[finalId].sound);
@@ -4634,6 +4637,12 @@ export class Game {
           }
         }
       }
+      // Slow coastal turtles lay persistent eggs on real, loaded sand near water.
+      if (!this.isInNether && passive < 12 && alive.filter((m) => m.type === 'turtle').length < 3 && dl > 0.5) {
+        const coast = tryPos(20, 42);
+        if (coast && turtleSpawnAllowed(this.world, Math.floor(coast.x), Math.floor(coast.y), Math.floor(coast.z)) &&
+          Math.random() < 0.65) this.spawnMob('turtle', coast.x, coast.y + 0.1, coast.z);
+      }
       // Swamp lizards need actual ground to camouflage against, not just a
       // swamp biome name. The existing passive cap also bounds their AI.
       if (!this.isInNether && passive < 12 && alive.filter((m) => m.type === 'lizard').length < 3 && dl > 0.5) {
@@ -5234,7 +5243,7 @@ export class Game {
     const ox = c.cx * CS, oz = c.cz * CS;
     for (let i = 0; i < c.data.length; i++) {
       const id = c.data[i];
-      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SPRUCE_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2)) continue;
+      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SPRUCE_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2) && (id < B.TURTLE_EGG0 || id > B.TURTLE_EGG2)) continue;
       const y = (i / (CS * CS)) | 0;
       const rem = i % (CS * CS);
       const z = (rem / CS) | 0;
@@ -5242,6 +5251,24 @@ export class Game {
       const key = `${ox + x},${y},${oz + z}`;
       if (!this.growables.has(key)) this.growables.set(key, performance.now());
       const elapsed = (performance.now() - (this.growables.get(key) ?? 0)) / 1000;
+      if (id >= B.TURTLE_EGG0 && id <= B.TURTLE_EGG2) {
+        if (this.world.peekBlock(ox + x, y - 1, oz + z) !== B.SAND) {
+          this.world.setBlock(ox + x, y, oz + z, B.AIR); // unsupported eggs cannot float
+          this.growables.delete(key);
+        } else if (elapsed > 12 && shoreWaterNearby(this.world, ox + x, y, oz + z)) {
+          if (id < B.TURTLE_EGG2) {
+            this.world.setBlock(ox + x, y, oz + z, id + 1);
+            this.growables.set(key, performance.now());
+          } else if (this.mobs.filter((m) => !m.dead && !isHostileMob(m.type)).length < 12 &&
+            this.world.peekBlock(ox + x, y + 1, oz + z) === B.AIR) {
+            this.world.setBlock(ox + x, y, oz + z, B.AIR);
+            this.growables.delete(key);
+            this.spawnMob('turtle', ox + x + 0.5, y + 0.1, oz + z + 0.5);
+            Sfx.playPlace('sand');
+          }
+        }
+        continue;
+      }
       if (id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING) {
         if (elapsed < 28 + ((x * 5 + z) % 12)) continue;
         const px = this.body.pos.x, pz = this.body.pos.z, py = this.body.pos.y;

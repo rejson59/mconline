@@ -231,6 +231,7 @@ section('menus: static render');
   check('visible lizard camouflage is explained in help', renderToStaticMarkup(<Controls />).includes('Jaszczurki na Bagnach'));
   check('rain shelter behavior appears in help', renderToStaticMarkup(<Controls />).includes('Deszcz i zwierzęta'));
   check('campfire avoidance appears in help', renderToStaticMarkup(<Controls />).includes('Ognisko i pochodnie'));
+  check('turtle eggs and saved hatching stages appear in help', renderToStaticMarkup(<Controls />).includes('Żółwie i jaja'));
   const medium = renderToStaticMarkup(
     <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
   );

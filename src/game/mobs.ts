@@ -5,7 +5,7 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 /** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
 export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
@@ -27,6 +27,22 @@ export function shoreWaterNearby(world: Pick<World, 'peekBlock'>, x: number, y: 
         world.peekBlock(x + dx, y, z + dz) === B.WATER) return true;
   }
   return false;
+}
+
+/** Eggs and turtles require actual sand within three cells of water, not
+ * merely a beach biome. The animal may be on adjacent wet sand or water. */
+export function turtleSpawnAllowed(world: Pick<World, 'peekBlock'>, x: number, y: number, z: number): boolean {
+  return world.peekBlock(x, y - 1, z) === B.SAND && world.peekBlock(x, y, z) === B.AIR &&
+    world.peekBlock(x, y + 1, z) === B.AIR && shoreWaterNearby(world, x, y, z);
+}
+
+export function findTurtleNest(world: Pick<World, 'peekBlock' | 'hasChunk'>, x: number, y: number, z: number): { x: number; y: number; z: number } | null {
+  for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+    const xx = x + dx, zz = z + dz;
+    if (!world.hasChunk(Math.floor(xx / CS), Math.floor(zz / CS))) continue;
+    if (turtleSpawnAllowed(world, xx, y, zz)) return { x: xx, y, z: zz };
+  }
+  return null;
 }
 
 /** Surface bats leave their daytime resting place only after dusk. */
@@ -158,6 +174,7 @@ export class Mob {
   private lizardSkin: THREE.MeshLambertMaterial | null = null;
   private lizardFace: THREE.MeshLambertMaterial | null = null;
   private camouflageGround = -1;
+  private eggTimer = 10 + Math.random() * 10;
   private fireTimer = 0;
   private nearbyFlame: { x: number; z: number; safe: number } | null = null;
   private shelterTimer = 0;
@@ -184,6 +201,7 @@ export class Mob {
     this.home.set(x, y, z);
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
+        : type === 'turtle' ? 0.78
         : type === 'lizard' ? 0.36
         : type === 'bat' ? 0.36
         : type === 'frog' ? 0.48
@@ -204,6 +222,7 @@ export class Mob {
             : type === 'enderman' ? 2.9
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
+                  : type === 'turtle' ? 0.6
                   : type === 'lizard' ? 0.35
                   : type === 'bat' ? 0.4
                   : type === 'frog' ? 0.47 : type === 'midge' ? 0.26
@@ -213,6 +232,7 @@ export class Mob {
       type === 'zombie' ? 20
         : type === 'creeper' ? 16
           : type === 'cow' ? 10
+            : type === 'turtle' ? 10
             : type === 'lizard' ? 4
             : type === 'bat' ? 4
             : type === 'frog' ? 5
@@ -316,6 +336,34 @@ export class Mob {
       this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
       this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
       this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'turtle') {
+      const green = 0x638a66, shell = 0x416850, light = 0x86a771;
+      const body = box(0.62, 0.22, 0.78, green, sharedMats);
+      body.position.set(0, 0.22, 0);
+      const rim = box(0.83, 0.12, 0.92, 0x344e39, sharedMats);
+      rim.position.set(0, 0.36, -0.02);
+      const carapace = box(0.7, 0.19, 0.79, shell, sharedMats);
+      carapace.position.set(0, 0.48, -0.02);
+      g.add(body, rim, carapace);
+      this.meshes.push(body, rim, carapace);
+      for (const x of [-0.19, 0.19]) for (const z of [-0.23, 0.22]) {
+        const scute = box(0.22, 0.02, 0.21, light, sharedMats);
+        scute.position.set(x, 0.584, z);
+        g.add(scute); this.meshes.push(scute);
+      }
+      const head = new THREE.Group();
+      head.position.set(0, 0.25, 0.47);
+      const face = box(0.32, 0.26, 0.34, green, sharedMats);
+      head.add(face); this.meshes.push(face);
+      for (const side of [-1, 1]) {
+        const eye = box(0.053, 0.06, 0.035, 0x19291b, sharedMats);
+        eye.position.set(side * 0.116, 0.05, 0.18);
+        head.add(eye); this.meshes.push(eye);
+      }
+      g.add(head); this.head = head;
+      for (const side of [-1, 1]) for (const z of [-0.29, 0.28]) {
+        this.addLeg(side * 0.34, 0.12, z, 0.23, 0.12, 0.19, green, this.legs);
+      }
     } else if (this.type === 'lizard') {
       // Bright eyes and a pale stripe stay legible through color changes.
       // build() clones each material per mob after assembling the model.
@@ -1293,6 +1341,29 @@ export class Mob {
     this.moveAndAnimate(dt, world, player, this.walking ? 1.2 : 0);
   }
 
+  private updateTurtle(dt: number, world: World, player: THREE.Vector3): void {
+    const b = this.body;
+    this.eggTimer -= dt;
+    if (this.eggTimer <= 0) {
+      const nest = b.onGround && b.pos.distanceTo(player) > 1.2
+        ? findTurtleNest(world, Math.floor(b.pos.x), Math.floor(b.pos.y), Math.floor(b.pos.z)) : null;
+      if (nest) {
+        world.setBlock(nest.x, nest.y, nest.z, B.TURTLE_EGG0);
+        this.eggTimer = 42 + Math.random() * 18;
+        this.walking = false;
+        this.aiTimer = 2;
+        this.soundTimer = 0.15;
+      } else this.eggTimer = 3; // retry while near shore; never lay on dirt
+    }
+    this.aiTimer -= dt;
+    if (this.aiTimer <= 0) {
+      this.aiTimer = 2 + Math.random() * 3;
+      this.yaw = Math.random() * Math.PI * 2;
+      this.walking = Math.random() < 0.55;
+    }
+    this.moveAndAnimate(dt, world, player, this.walking ? 0.65 : 0);
+  }
+
   update(
     dt: number,
     world: World,
@@ -1322,7 +1393,7 @@ export class Mob {
     this.soundTimer -= dt;
 
     if ((this.type === 'pig' || this.type === 'cow' || this.type === 'sheep' || this.type === 'chicken' ||
-      this.type === 'rabbit' || this.type === 'fox' || this.type === 'frog' || this.type === 'lizard') && this.hurtTime <= 0) {
+      this.type === 'rabbit' || this.type === 'fox' || this.type === 'frog' || this.type === 'lizard' || this.type === 'turtle') && this.hurtTime <= 0) {
       this.fireTimer -= dt;
       if (this.fireTimer <= 0) {
         this.nearbyFlame = nearestFire(world, Math.floor(b.pos.x), Math.floor(b.pos.y), Math.floor(b.pos.z));
@@ -1354,6 +1425,10 @@ export class Mob {
     }
     if (this.type === 'golem') {
       this.updateGolem(dt, world, player, allies, onAttack);
+      return;
+    }
+    if (this.type === 'turtle') {
+      this.updateTurtle(dt, world, player);
       return;
     }
     if (this.type === 'lizard') {

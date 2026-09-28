@@ -130,6 +130,7 @@ function addBox(
 
 /** Local bounds of a thin panel. null = draw a normal cube. */
 function panelBounds(id: number): [number, number, number, number, number, number] | null {
+  if (id >= B.TURTLE_EGG0 && id <= B.TURTLE_EGG2) return [0.26, 0, 0.27, 0.74, 0.36, 0.73];
   const t = 0.1875;
   const face = ladderFacing(id);
   if (face === 0 || id === B.TRAP_N) return [0, 0, 0, 1, 1, t];

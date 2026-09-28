@@ -838,6 +838,21 @@ export function buildAtlas(): AtlasResult {
   }
   noiseFill(T.podzol, [91, 81, 60], 0.3, R(163));
   for (let x = 0; x < 16; x += 3) for (let y = (x % 5); y < 16; y += 5) setPx(T.podzol, x, y, 42, 90, 62);
+  for (let stage = 0; stage < 3; stage++) {
+    const tile = T.turtle_egg0 + stage;
+    noiseFill(tile, [236 - stage * 9, 232 - stage * 7, 202 - stage * 5], 0.07, R(164 + stage));
+    const r = R(180 + stage);
+    for (let i = 0; i < 23; i++) {
+      const x = Math.floor(r() * 16), y = Math.floor(r() * 16);
+      setPx(tile, x, y, 67, 129, 93);
+      if (i % 4 === 0) setPx(tile, Math.min(15, x + 1), y, 91, 147, 103);
+    }
+    for (let i = 0; i < stage * 4; i++) {
+      const x = 2 + ((i * 7 + 3) % 12), y = 2 + ((i * 5 + 4) % 12);
+      setPx(tile, x, y, 104, 97, 74);
+      setPx(tile, x + 1, y + (i % 2 ? 1 : -1), 104, 97, 74);
+    }
+  }
 
   // Commit every appended tile to the GPU atlas BEFORE generating block icons.
   // Previously the 2.7 tiles were painted into ImageData only after the sole

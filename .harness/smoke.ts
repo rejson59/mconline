@@ -61,7 +61,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -971,6 +971,8 @@ section('textures and icons');
   eq('low-detail world atlas is half-size on each GPU axis', small.width, atlas.canvas.width / 2);
   eq('low-detail world atlas does not overwrite inventory icons', getAtlas().canvas.width, atlas.canvas.width);
   const tileAlpha = (tile: number, x: number, y: number) => committedAtlas?.[((Math.floor(tile / 16) * 16 + y) * 256 + (tile % 16) * 16 + x) * 4 + 3] ?? 0;
+  check('three turtle egg stages have committed atlas pixels even in low graphics',
+    [T.turtle_egg0, T.turtle_egg1, T.turtle_egg2].every((t) => tileAlpha(t, 8, 8) > 0));
   check('new and old 2.7 textures are actually committed to the rendered atlas',
     tileAlpha(T.mud, 8, 8) > 0 && tileAlpha(T.acacia_side, 8, 8) > 0 &&
     tileAlpha(T.spruce_side, 8, 8) > 0 && tileAlpha(T.dry_soil, 8, 8) > 0 &&
@@ -1661,6 +1663,98 @@ section('3.0 #58: visible camouflage for small swamp lizards');
     g.updateMobs(1 / 30);
     check('Nether has no swamp lizards', !g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
   } finally { Math.random = random; }
+}
+
+section('3.0 #55: turtle nesting, staged eggs and save/reload');
+{
+  eq('append-only egg ids preserve the old final block', B.TURTLE_EGG0, B.PODZOL + 1);
+  check('only stage-zero egg is available in Creative', CREATIVE_BLOCKS.includes(B.TURTLE_EGG0) &&
+    !CREATIVE_BLOCKS.includes(B.TURTLE_EGG1) && !CREATIVE_BLOCKS.includes(B.TURTLE_EGG2));
+  check('egg stages are non-solid small objects with visible stage textures',
+    [B.TURTLE_EGG0, B.TURTLE_EGG1, B.TURTLE_EGG2].every((id) => !IS_SOLID[id] && BLOCKS[id].drop === B.TURTLE_EGG0 && BLOCKS[id].top === T.turtle_egg0 + id - B.TURTLE_EGG0));
+  const world = new World(107, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 6; x <= 10; x++) for (let z = 6; z <= 10; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(x, yy, z, B.AIR);
+  eq('sand without water is not a turtle habitat', turtleSpawnAllowed(world, 8, y, 8), false);
+  world.setBlock(8, y - 1, 8, B.SAND);
+  world.setBlock(9, y - 1, 8, B.WATER);
+  check('sand beside water accepts turtle nesting', turtleSpawnAllowed(world, 8, y, 8) && findTurtleNest(world, 8, y, 8)?.x === 8);
+  world.setBlock(8, y, 8, B.TURTLE_EGG0);
+  eq('existing eggs prevent laying another on the same tile', findTurtleNest(world, 8, y, 8), null);
+  world.setBlock(8, y, 8, B.AIR);
+  const turtle = new Mob('turtle', 8.5, y, 8.5);
+  check('turtle has a recognisable shell, head and four flippers', turtle.meshes.length >= 14 && turtle.body.h < 1);
+  const far = new THREE.Vector3(40, y, 40);
+  turtle.update(1 / 30, world, far, () => {}, () => {}, false);
+  (turtle as unknown as {eggTimer: number}).eggTimer = 0;
+  turtle.update(1 / 30, world, far, () => {}, () => {}, false);
+  eq('live turtle actually lays its own egg on valid shore sand', world.getBlock(8, y, 8), B.TURTLE_EGG0);
+  const eggMeshes = world.buildMesh(world.getChunk(0, 0));
+  const eggPos = eggMeshes[1].getAttribute('position');
+  let tinyEgg = false;
+  for (let i = 0; i < eggPos.count; i++) {
+    if (Math.abs(eggPos.getX(i) - 8.26) < 0.01 && Math.abs(eggPos.getY(i) - y) < 0.01 &&
+      Math.abs(eggPos.getZ(i) - 8.27) < 0.01) { tinyEgg = true; break; }
+  }
+  check('laying generates a small visible egg mesh instead of a full invisible cube', tinyEgg);
+  eggMeshes.forEach((geometry) => geometry.dispose());
+
+  const key = `8,${y},8`;
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.body = { pos: new THREE.Vector3(8, y, 8) };
+  g.mobs = []; g.growables = new Map<string, number>(); g.growCursor = 0; g.growAcc = 0;
+  g.isInNether = false;
+  const born: string[] = [];
+  g.spawnMob = (kind: string) => { born.push(kind); };
+  g.growables.set(key, performance.now() - 13_000);
+  g.updateGrowth(0.45);
+  eq('incubation cracks egg to stage one', world.getBlock(8, y, 8), B.TURTLE_EGG1);
+  const restored = new World(107, true);
+  restored.loadMods(world.serializeMods());
+  restored.getChunk(0, 0);
+  eq('first egg stage survives loading world modifications', restored.getBlock(8, y, 8), B.TURTLE_EGG1);
+  g.world = restored;
+  g.growables = new Map();
+  g.growCursor = 0;
+  g.updateGrowth(0.45);
+  eq('reload preserves stage but resets unsaved sub-stage timer', restored.getBlock(8, y, 8), B.TURTLE_EGG1);
+  g.growables.set(key, performance.now() - 13_000);
+  g.growCursor = 0;
+  g.updateGrowth(0.45);
+  eq('incubation proceeds to visible final stage', restored.getBlock(8, y, 8), B.TURTLE_EGG2);
+  const restoredAgain = new World(107, true);
+  restoredAgain.loadMods(restored.serializeMods());
+  restoredAgain.getChunk(0, 0);
+  eq('final cracking stage persists through another reload', restoredAgain.getBlock(8, y, 8), B.TURTLE_EGG2);
+  g.world = restoredAgain;
+  g.growables.set(key, performance.now() - 13_000);
+  g.growCursor = 0;
+  g.updateGrowth(0.45);
+  check('mature egg hatches an actual turtle mob and clears block', born.length === 1 && born[0] === 'turtle' && restoredAgain.getBlock(8, y, 8) === B.AIR);
+  restoredAgain.setBlock(8, y, 8, B.TURTLE_EGG2);
+  restoredAgain.setBlock(8, y - 1, 8, B.DIRT);
+  g.growables.set(key, performance.now() - 13_000);
+  g.growCursor = 0;
+  g.updateGrowth(0.45);
+  eq('unsupported eggs do not hang in midair', restoredAgain.getBlock(8, y, 8), B.AIR);
+  const coast = new World(107, true);
+  coast.getChunk(-2, 0);
+  for (let yy = y; yy <= y + 4; yy++) coast.setBlock(-23, yy, 8, B.AIR);
+  coast.setBlock(-23, y - 1, 8, B.SAND);
+  coast.setBlock(-22, y - 1, 8, B.WATER);
+  const live = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const seen: string[] = [];
+  live.world = coast; live.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  live.mobs = []; live.drops = []; live.isInNether = false;
+  live.mode = 'survival'; live.weather = 'clear'; live.time = 0.25;
+  live.spawnTimer = 0; live.difficulty = { ...DEFAULT_DIFFICULTY };
+  live.scene = { remove: () => {} };
+  live.spawnMob = (kind: string) => { seen.push(kind); };
+  const random = Math.random;
+  try { Math.random = () => 0.5; live.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('actual game spawn tick creates turtle at loaded sand coast', seen.includes('turtle'));
+
 }
 
 section('3.0 #63: real campfire and torch avoidance');
