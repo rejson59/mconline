@@ -74,7 +74,7 @@ import {
 } from '../src/game/saves';
 import { ACHIEVEMENTS, achievementById, BIOME_DISCOVERY_GOALS } from '../src/game/achievements';
 import { Xp, xpToNext, totalXpForLevel, levelFromXp } from '../src/game/xp';
-import { ARMOR, isArmor, armorPoints, damageReduction, armorSlotOf } from '../src/game/armor';
+import { ARMOR, isArmor, armorPoints, damageReduction, armorSlotOf, bootHeatReduction, bootSwimFactor, bootFallFactor, waterSpeedFactor, landingFactor } from '../src/game/armor';
 import {
   ENCHANTS, enchName, resolveEnch, canEnchant, conflicts, canAddEnch, addEnch,
   enchLevel, enchList, stackName, countShelves, rollEnchantOptions, efficiencyFactor,
@@ -1135,6 +1135,65 @@ section('engine: armor damage, equipping, xp');
   check('armor dropped on death', [I.LEATHER_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS].every((id) => droppedIds.includes(id)), JSON.stringify(droppedIds));
   eq('armor cleared on death', g.armor.every((s: any) => s === null), true);
   eq('active potion buffs cleared on death', g.effects.size, 0);
+}
+
+section('3.0 #76: specialized boots with crafting and equipment');
+{
+  const ids = [I.EMBER_BOOTS, I.TIDE_BOOTS, I.SOFT_BOOTS];
+  check('three boot IDs extend existing item space without replacing old items', ids.join(',') === '359,360,361' &&
+    ids.every((id) => !!ITEMS[id] && CREATIVE_ITEMS.includes(id) && stackLimit(id) === 1));
+  check('all variants use the feet slot with less protection than iron boots', ids.every((id) =>
+    armorSlotOf(id) === 3 && armorPoints([null, null, null, { id, count: 1 }]) === 1) &&
+    armorPoints([null, null, null, { id: I.IRON_BOOTS, count: 1 }]) === 2);
+  const icons = buildItemIcons();
+  check('new boots receive equipment icons', ids.every((id) => !!icons[id]));
+  const inputs = [
+    [I.IRON, I.MAGMA_CREAM], [I.IRON, I.RAW_FISH, I.LAPIS], [I.IRON, I.FEATHER, I.GLOWSTONE_DUST],
+  ];
+  for (let j = 0; j < ids.length; j++) {
+    const id = ids[j];
+    const recipe = RECIPES.find((r) => r.out.id === id);
+    check(`boots ${id} have a table recipe with accessible existing resources`, !!recipe && recipe.table &&
+      inputs[j].every((input) => recipe.inputs.some((s) => s.id === input)));
+    const inv = new Inventory();
+    for (const input of recipe!.inputs) inv.add(input.id, input.count);
+    check(`Survival can craft ${id} using actual inventory transaction`, inv.craft(recipe!) &&
+      inv.countOf(id) === 1 && recipe!.inputs.every((input) => inv.countOf(input.id) === 0));
+    check(`no free second craft of ${id}`, !inv.craft(recipe!));
+  }
+  const grid = new Inventory();
+  const pattern = RECIPES.find((r) => r.out.id === I.TIDE_BOOTS)!;
+  for (let y = 0; y < 2; y++) for (let x = 0; x < 3; x++) {
+    const symbol = pattern.pattern![y][x];
+    if (symbol !== ' ') grid.grid[y * 3 + x] = { id: pattern.key![symbol], count: 1 };
+  }
+  check('placing the swim recipe in the real 3×3 grid shows the correct output', grid.craftGrid(true)?.id === I.TIDE_BOOTS);
+  check('2×2 personal grid cannot craft the specialized boots', grid.craftGrid(false) === null);
+
+  const g = Object.create(Game.prototype) as any;
+  g.mode = 'survival'; g.ui = 'playing'; g.inventory = new Inventory();
+  g.armor = [null, null, null, null]; g.emitHud = () => {}; g.unlock = () => {};
+  g.inventory.cursor = { id: I.EMBER_BOOTS, count: 1 };
+  g.clickArmorSlot(3);
+  check('new boots equip through the real armor slot, not only the hotbar', g.armor[3]?.id === I.EMBER_BOOTS && g.inventory.cursor === null);
+  check('fire boots have situational heat resistance only', bootHeatReduction(g.armor[3]) === 0.24 &&
+    bootHeatReduction({ id: I.IRON_BOOTS, count: 1 }) === 0);
+  check('water boots only multiply swimming speed', bootSwimFactor({ id: I.TIDE_BOOTS, count: 1 }) === 1.35 &&
+    bootSwimFactor(g.armor[3]) === 1);
+  check('soft boots only reduce fall damage', bootFallFactor({ id: I.SOFT_BOOTS, count: 1 }) === 0.6 &&
+    bootFallFactor(g.armor[3]) === 1);
+  check('stacked swimming upgrades have a bounded multiplier', waterSpeedFactor({ id: I.TIDE_BOOTS, count: 1, ench: { tidewalker: 3 } }) === 1.75 && waterSpeedFactor(null) === 1);
+  check('soft boots and feather falling cannot reduce drops below 40%', landingFactor({ id: I.SOFT_BOOTS, count: 1, ench: { featherfalling: 4 } }) === 0.4 && landingFactor(null) === 1);
+  g.health = 100; g.hurtCount = 0; g.shake = 0;
+  g.body = { pos: new THREE.Vector3(0, 64, 0) };
+  g.wearArmor = () => {}; g.buzz = () => {};
+  g.damage(4, false, 'fire');
+  const protectedHit = 100 - g.health;
+  g.health = 100;
+  g.damage(4, false, 'projectile');
+  check('equipped fire boots only protect against heat in the real engine', protectedHit < 100 - g.health);
+  g.armor[3] = null;
+  check('removing boots immediately removes the bonus', bootHeatReduction(g.armor[3]) === 0);
 }
 
 section('3.0 #77: mutually exclusive defense and swimming enchants');

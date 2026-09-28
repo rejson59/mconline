@@ -235,6 +235,17 @@ addArmor(I.LEATHER, [I.LEATHER_HELMET, I.LEATHER_CHEST, I.LEATHER_LEGS, I.LEATHE
 addArmor(I.IRON, [I.IRON_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS]);
 addArmor(I.GOLD, [I.GOLD_HELMET, I.GOLD_CHEST, I.GOLD_LEGS, I.GOLD_BOOTS]);
 addArmor(I.DIAMOND, [I.DIAMOND_HELMET, I.DIAMOND_CHEST, I.DIAMOND_LEGS, I.DIAMOND_BOOTS]);
+// Each variant costs the same four iron ingots as ordinary boots plus two
+// thematic resources. Craftable at a table in Survival, listed in Creative.
+RECIPES.push(
+  { out: { id: I.EMBER_BOOTS, count: 1 }, inputs: [{ id: I.IRON, count: 4 }, { id: I.MAGMA_CREAM, count: 2 }],
+    table: true, pattern: ['IMI', 'IMI'], key: { I: I.IRON, M: I.MAGMA_CREAM } },
+  { out: { id: I.TIDE_BOOTS, count: 1 }, inputs: [{ id: I.IRON, count: 4 }, { id: I.RAW_FISH, count: 1 }, { id: I.LAPIS, count: 1 }],
+    table: true, pattern: ['IFI', 'ILI'], key: { I: I.IRON, F: I.RAW_FISH, L: I.LAPIS } },
+  { out: { id: I.SOFT_BOOTS, count: 1 }, inputs: [{ id: I.IRON, count: 4 }, { id: I.FEATHER, count: 1 }, { id: I.GLOWSTONE_DUST, count: 1 }],
+    table: true, pattern: ['IFI', 'IGI'], key: { I: I.IRON, F: I.FEATHER, G: I.GLOWSTONE_DUST } },
+);
+
 
 function addTools(mat: number, pick: number, axe: number, shovel: number, sword: number, hoe: number) {
   // 'M' is the material (planks / cobble / ingot / gem), 'S' a stick

@@ -22,7 +22,7 @@ import { Inventory, RECIPES, type Stack } from './inventory';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
-  sharpnessDamage, knockbackFactor, powerFactor, totalProtection, fallDamageFactor, sourceProtection, swimSpeedFactor, conflicts,
+  sharpnessDamage, knockbackFactor, powerFactor, totalProtection, sourceProtection, conflicts,
   type EnchOption,
 } from './enchant';
 import * as Sfx from './audio';
@@ -40,7 +40,7 @@ import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
 import { achievementById, BIOME_DISCOVERY_GOALS } from './achievements';
 import { upsertSave } from './saves';
 import { Xp } from './xp';
-import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT } from './armor';
+import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT, bootHeatReduction, waterSpeedFactor, landingFactor } from './armor';
 import {
   applyTrade,
   canTrade,
@@ -4118,7 +4118,8 @@ export class Game {
     if (this.ui === 'dead') return;
     // Armor soaks damage; force kills (void, /kill) ignore it and don't break the gear.
     // Zaklęcie Ochrona dodaje 3% redukcji za każdy poziom (do 90% łącznie).
-    const specialized = source === 'generic' ? 0 : sourceProtection(this.armor, source);
+    const specialized = source === 'generic' ? 0 : sourceProtection(this.armor, source) +
+      (source === 'fire' ? bootHeatReduction(this.armor[3]) : 0);
     const reduction = Math.min(0.9, damageReduction(armorPoints(this.armor)) + totalProtection(this.armor) * 0.03 + specialized);
     // Heat protection must also matter for one-point magma/campfire ticks.
     // Keep the old integer damage rule for unenchanted worlds and other sources.
@@ -4366,7 +4367,7 @@ export class Game {
 
     if (this.mode === 'survival' && this.hunger <= 6) this.sprinting = false;
     let speed = this.flying ? (this.sprinting ? 22 : 11) : sneaking ? 1.3 : this.sprinting ? 5.6 : 4.3;
-    if (inWater && !this.flying) speed *= 0.55 * swimSpeedFactor(this.armor[3]);
+    if (inWater && !this.flying) speed *= 0.55 * waterSpeedFactor(this.armor[3]);
     if (inLava && !this.flying) speed *= 0.35;
     // 2.4: napój szybkości przyspiesza bieg (nie wpływa na latanie w trybie kreatywnym)
     if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
@@ -4436,7 +4437,7 @@ export class Game {
       if (fall > 3.4 && this.mode === 'survival' && !inWater) {
         // Lekki krok na butach tłumi upadek
         const raw = Math.floor(fall - 3);
-        this.damage(fallDamageAfterPotion(Math.max(raw > 0 ? 1 : 0, Math.round(raw * fallDamageFactor(this.armor[3]))), this.hasEffect('fall')));
+        this.damage(fallDamageAfterPotion(Math.max(raw > 0 ? 1 : 0, Math.round(raw * landingFactor(this.armor[3]))), this.hasEffect('fall')));
       }
       if (fall > 1) {
         const below = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));

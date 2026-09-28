@@ -35,6 +35,7 @@ import type { Stack } from '../src/game/inventory';
 import { rollEnchantOptions } from '../src/game/enchant';
 import { createVillagerState, offersFor } from '../src/game/trading';
 import type { Game, TradeRow } from '../src/game/engine';
+import { stackTooltip } from '../src/utils/tooltip';
 
 // ------------------------------------------------------------------- runner
 let pass = 0;
@@ -115,6 +116,10 @@ section('inventory screen: recipe finder');
   const html = renderToStaticMarkup(<InventoryScreen game={fake as unknown as Game} icons={{}} onChange={noop} />);
   check('crafting screen includes recipe search', html.includes('Szukaj receptur po nazwie lub składniku'));
   check('crafting screen can filter craftable recipes', html.includes('aria-pressed="false"') && html.includes('Możliwe'));
+  const boots = [I.EMBER_BOOTS, I.TIDE_BOOTS, I.SOFT_BOOTS];
+  check('three specialized boot recipes are visible in Survival crafting UI', boots.every((id) => html.includes(stackTooltip({ id, count: 1 }).split('\n')[0])));
+  check('each boot tooltip explains the live effect, not only its name', boots.every((id) => stackTooltip({ id, count: 1 }).includes('%')));
+  check('PC and touch help includes the cost and armor tradeoff', renderToStaticMarkup(<Controls />).includes('Specjalne buty') && renderToStaticMarkup(<Controls />).includes('zamiast 2'));
 }
 
 section('adventure journal: quests and progress');

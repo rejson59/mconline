@@ -1,5 +1,6 @@
-import { ITEMS } from './items';
+import { ITEMS, I } from './items';
 import type { Stack } from './inventory';
+import { swimSpeedFactor, fallDamageFactor } from './enchant';
 
 /**
  * Player armor. The item definitions live in items.ts (kind "armor"); this
@@ -54,4 +55,25 @@ export function armorPoints(equipped: (Stack | null)[]): number {
 /** 4% per armor point, capped at 80% – matches the feel of the classic game. */
 export function damageReduction(points: number): number {
   return Math.min(0.8, Math.max(0, points) * 0.04);
+}
+
+/** Situational boot bonuses deliberately trade an iron boot's second armor
+ * point for utility. They only apply while equipped in the feet slot. */
+export function bootHeatReduction(boots: Stack | null | undefined): number {
+  return boots?.id === I.EMBER_BOOTS ? 0.24 : 0;
+}
+export function bootSwimFactor(boots: Stack | null | undefined): number {
+  return boots?.id === I.TIDE_BOOTS ? 1.35 : 1;
+}
+export function bootFallFactor(boots: Stack | null | undefined): number {
+  return boots?.id === I.SOFT_BOOTS ? 0.6 : 1;
+}
+
+/** Specialized armor and enchantments stack, but cannot create runaway speed
+ * or make severe falls risk-free without the temporary fall potion. */
+export function waterSpeedFactor(boots: Stack | null | undefined): number {
+  return Math.min(1.75, swimSpeedFactor(boots) * bootSwimFactor(boots));
+}
+export function landingFactor(boots: Stack | null | undefined): number {
+  return Math.max(0.4, fallDamageFactor(boots) * bootFallFactor(boots));
 }

@@ -90,6 +90,7 @@ export function Controls() {
     ['W x2 lub Ctrl', 'Sprint'],
     ['V / ↝ na dotyku', 'Unik w kierunku ruchu (bez kierunku: w tył); krótkie okno ochrony, koszt 1 głodu, odnowienie 2,7 s'],
     ['R / 🛡 na dotyku', 'Parowanie z tarczą w ręku: 0,42 s na cios lub strzałę z przodu, odnowienie 1,7 s'],
+    ['Specjalne buty', 'Na stole rzemieślniczym: 4 żelaza + 2 magmowe kremy (żar), ryba + lazuryt (pływanie) lub pióro + pył jasnogłazu (upadek). Każda para ma 1 punkt pancerza zamiast 2 jak żelazne buty.'],
     ['LPM (przytrzymaj)', 'Kopanie · atak bije dalej z cooldownem'],
     ['PPM', 'Stawianie bloku / użycie stołu'],
     ['ŚPM', 'Wybierz blok'],

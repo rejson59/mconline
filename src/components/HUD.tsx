@@ -37,9 +37,10 @@ function Bubble({ pop }: { pop: boolean }) {
   );
 }
 
-function ArmorPiece({ icon, frac, enchanted }: { icon: string; frac: number; enchanted?: boolean }) {
+function ArmorPiece({ icon, frac, enchanted, label }: { icon: string; frac: number; enchanted?: boolean; label: string }) {
   return (
-    <div className="relative flex items-center justify-center" style={{ width: 22, height: 22, background: 'rgba(40,40,40,0.5)', border: '1px solid #1a1a1a' }}>
+    <div className="relative flex items-center justify-center" role="img" aria-label={label} title={label}
+      style={{ width: 22, height: 22, background: 'rgba(40,40,40,0.5)', border: '1px solid #1a1a1a' }}>
       <img src={icon} className="pixelated" width={18} height={18} draggable={false} />
       {enchanted && <span className="ench-glint" />}
       {frac < 1 && <span className="dur-bar"><i style={{ width: `${frac * 100}%`, background: frac < 0.25 ? '#e04040' : '#3dba3d' }} /></span>}
@@ -286,7 +287,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
               if (!s) return <div key={i} style={{ width: 22, height: 22, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,0,0,0.45)' }} />;
               const max = durabilityMax(s.id);
               const frac = s.dur !== undefined && max > 0 ? Math.max(0, s.dur / max) : 1;
-              return <ArmorPiece key={i} icon={icons[s.id]} frac={frac} enchanted={!!s.ench} />;
+              return <ArmorPiece key={i} icon={icons[s.id]} frac={frac} enchanted={!!s.ench} label={displayName(s.id)} />;
             })}
           </div>
         )}

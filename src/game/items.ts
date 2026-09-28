@@ -110,6 +110,7 @@ export const I = {
   GLOW_BAIT: 354,
   POTION_FALL: 355, POTION_SPRINT: 356,
   RAW_RABBIT: 357, COOKED_RABBIT: 358,
+  EMBER_BOOTS: 359, TIDE_BOOTS: 360, SOFT_BOOTS: 361,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
@@ -306,6 +307,17 @@ ARMOR_TIERS.forEach((tier, ti) => {
   });
 });
 ITEM_LIST.push(...armorItems);
+// 3.0: special boots trade one point of physical armor for a situational
+// benefit. New IDs are appended after all 2.7 / previously added items.
+ITEM_LIST.push(
+  { id: I.EMBER_BOOTS, name: 'Buty żaru', keys: ['buty_zaru', 'ember_boots'], kind: 'armor',
+    armor: { slot: 3, points: 1 }, durability: 180, color: '#c86136' },
+  { id: I.TIDE_BOOTS, name: 'Buty przypływu', keys: ['buty_przyplywu', 'tide_boots'], kind: 'armor',
+    armor: { slot: 3, points: 1 }, durability: 180, color: '#358fb5' },
+  { id: I.SOFT_BOOTS, name: 'Buty miękkiego lądowania', keys: ['buty_miekkiego_ladowania', 'soft_boots'], kind: 'armor',
+    armor: { slot: 3, points: 1 }, durability: 180, color: '#b8a378' },
+);
+
 
 export const ITEMS: (ItemDef | undefined)[] = [];
 for (const it of ITEM_LIST) ITEMS[it.id] = it;
