@@ -242,6 +242,8 @@ export class Mob {
   private camouflageGround = -1;
   isCub = false;
   merchantRegion = '';
+  private strikeWindup = 0;
+  private strikeWarning: THREE.Mesh | null = null;
   private heardId = 0;
   private heardGoal: { x: number; y: number; z: number; source: CaveNoise['source'] } | null = null;
   private heardTime = 0;
@@ -1171,6 +1173,17 @@ export class Mob {
       g.add(eyeL, eyeR);
       this.meshes.push(eyeL, eyeR);
     }
+    if (this.type === 'echolurker' || this.type === 'zombie' || this.type === 'spider' ||
+        this.type === 'enderman' || this.type === 'slime' ||
+        this.type === 'skeleton' || this.type === 'ghast') {
+      // Bright, world-space warning above the silhouette: no particles, shader
+      // or high-resolution texture required on low graphics / small displays.
+      const warning = box(0.68, 0.12, 0.14, 0xffa33b, sharedMats);
+      warning.position.set(0, this.body.h + 0.22, 0);
+      warning.visible = false;
+      g.add(warning); this.meshes.push(warning);
+      this.strikeWarning = warning;
+    }
     g.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
         // clone material per mob so we can tint on hurt
@@ -1198,9 +1211,43 @@ export class Mob {
     });
   }
 
+  private cancelStrike(): void {
+    if (this.strikeWindup > 0) this.attackCooldown = Math.max(this.attackCooldown, 0.35);
+    this.strikeWindup = 0;
+    if (this.strikeWarning) this.strikeWarning.visible = false;
+  }
+
+  /** A melee cue must finish before damage is dealt. Leaving reach, turning
+   * peaceful or striking the creature interrupts it instead of a phantom hit. */
+  private telegraphStrike(dt: number, inReach: boolean, damage: number, cooldown: number | (() => number),
+    onAttack: (dmg: number, mob: Mob) => void): boolean {
+    if (!inReach) { this.cancelStrike(); return false; }
+    if (this.strikeWindup > 0) {
+      this.strikeWindup -= dt;
+      if (this.strikeWindup <= 0) {
+        this.strikeWindup = 0;
+        if (this.strikeWarning) this.strikeWarning.visible = false;
+        this.attackCooldown = typeof cooldown === 'function' ? cooldown() : cooldown;
+        onAttack(damage, this);
+        if (this.type === 'enderman' && Math.random() < 0.3) {
+          this.body.pos.x += (Math.random() - 0.5) * 8;
+          this.body.pos.z += (Math.random() - 0.5) * 8;
+        }
+        if (this.type === 'slime') this.body.vel.y = 6;
+      }
+      return true;
+    }
+    if (this.attackCooldown > 0) return false;
+    this.strikeWindup = 0.55;
+    if (this.strikeWarning) this.strikeWarning.visible = true;
+    this.soundTimer = Math.min(this.soundTimer, 0.1);
+    return true;
+  }
+
   damage(amount: number, fromX: number, fromZ: number) {
     if (this.dead || this.hurtTime > 0) return false;
     this.health -= amount;
+    this.cancelStrike();
     this.hurtTime = 0.5;
     const dx = this.body.pos.x - fromX, dz = this.body.pos.z - fromZ;
     const l = Math.hypot(dx, dz) || 1;
@@ -1432,6 +1479,7 @@ export class Mob {
     }
     const goal = this.heardTime > 0 ? this.heardGoal : null;
     if (!goal) {
+      this.cancelStrike();
       this.walking = false;
       this.moveAndAnimate(dt, world, player, 0);
       return;
@@ -1442,12 +1490,10 @@ export class Mob {
     this.walking = distance > 0.6;
     // A decoy draws it to the impact, never licenses a player attack.
     // A quiet player who moves away from the heard spot remains safe.
-    if (goal.source === 'player' && !peaceful && distance < 1.75 &&
+    const threatening = goal.source === 'player' && !peaceful && distance < 1.75 &&
       Math.hypot(player.x - this.body.pos.x, player.z - this.body.pos.z) < 1.65 &&
-      Math.abs(player.y - this.body.pos.y) < 2 && this.attackCooldown <= 0) {
-      this.attackCooldown = 1.6;
-      onAttack(4, this);
-    }
+      Math.abs(player.y - this.body.pos.y) < 2;
+    if (this.telegraphStrike(dt, threatening, 4, 1.6, onAttack)) this.walking = false;
     this.moveToward(dt, world, player, this.walking ? 2.05 : 0, goal.x, goal.z);
     if (distance < 0.6 && goal.source === 'decoy') this.heardTime = Math.min(this.heardTime, 0.7);
   }
@@ -2089,27 +2135,20 @@ export class Mob {
         const tooClose = dist < (this.type === 'ghast' ? 10 : 5.5);
         this.walking = dist > (this.type === 'ghast' ? 18 : 12) || tooClose;
         if (tooClose) this.yaw = Math.atan2(-dx, -dz);
-        if (dist < (this.type === 'ghast' ? 28 : 16) && this.attackCooldown <= 0 && this.hasLineOfSight(world, player.x, player.y + 0.9, player.z)) {
-          this.attackCooldown = this.type === 'ghast' ? 3 + Math.random() * 1.5 : 2 + Math.random() * 1.2;
-          onShoot(this);
-        }
+        const canShoot = dist < (this.type === 'ghast' ? 28 : 16) &&
+          (this.strikeWindup > 0 || this.attackCooldown <= 0) &&
+          this.hasLineOfSight(world, player.x, player.y + 0.9, player.z);
+        if (this.telegraphStrike(dt, canShoot, 0,
+          () => this.type === 'ghast' ? 3 + Math.random() * 1.5 : 2 + Math.random() * 1.2,
+          (_damage, mob) => onShoot(mob))) this.walking = false;
       } else {
         this.walking = this.type === 'creeper' ? dist > 2.1 : dist > 0.9;
-        if (this.type === 'spider' && dist < 1.5 && Math.abs(player.y - b.pos.y) < 1.4 && this.attackCooldown <= 0) {
-          this.attackCooldown = 1;
-          onAttack(3, this);
-        }
-        if ((this.type === 'zombie' || this.type === 'enderman' || this.type === 'slime') && dist < 1.6 && Math.abs(player.y - b.pos.y) < 2.2 && this.attackCooldown <= 0) {
-          this.attackCooldown = this.type === 'enderman' ? 0.8 : 1;
-          onAttack(this.type === 'enderman' ? 6 : this.type === 'slime' ? 2 : 3, this);
-          if (this.type === 'enderman' && Math.random() < 0.3) {
-            // teleport
-            this.body.pos.x += (Math.random() - 0.5) * 8;
-            this.body.pos.z += (Math.random() - 0.5) * 8;
-          }
-          if (this.type === 'slime') {
-            this.body.vel.y = 6;
-          }
+        if (this.type === 'spider' || this.type === 'zombie' || this.type === 'enderman' || this.type === 'slime') {
+          const inReach = dist < (this.type === 'spider' ? 1.5 : 1.6) &&
+            Math.abs(player.y - b.pos.y) < (this.type === 'spider' ? 1.4 : 2.2);
+          const strikeDamage = this.type === 'enderman' ? 6 : this.type === 'slime' ? 2 : 3;
+          if (this.telegraphStrike(dt, inReach, strikeDamage, this.type === 'enderman' ? 0.8 : 1, onAttack))
+            this.walking = false;
         }
         if (this.type === 'creeper' && dist < 2.15 && Math.abs(player.y - b.pos.y) < 2) {
           this.fuse = 1.35;
@@ -2117,6 +2156,7 @@ export class Mob {
         }
       }
     } else {
+      this.cancelStrike();
       if (this.type === 'creeper') this.group.scale.setScalar(1);
       this.aiTimer -= dt;
       if (this.aiTimer <= 0) {
@@ -2290,6 +2330,20 @@ export class Mob {
         this.arms[0].rotation.x = -Math.PI / 2 + Math.sin(this.walkPhase * 0.5) * 0.08;
         this.arms[1].rotation.x = -Math.PI / 2 - Math.sin(this.walkPhase * 0.5) * 0.08;
       }
+    }
+    if (this.strikeWindup > 0) {
+      // Raised arms/forelegs or a compressed body show the windup as motion,
+      // alongside the static cue. All use the existing low-poly geometry.
+      if (this.type === 'spider' && this.legs.length >= 8) {
+        this.legs[0].rotation.x = this.legs[4].rotation.x = -0.95;
+      } else if (this.arms.length >= 2) {
+        this.arms[0].rotation.x = this.arms[1].rotation.x = -2.35;
+      }
+    }
+    if (this.type === 'slime' || this.type === 'ghast') {
+      const windup = this.strikeWindup > 0 ? Math.min(1, this.strikeWindup / 0.55) : 0;
+      if (this.type === 'slime') this.group.scale.set(1 + 0.1 * windup, 1 - 0.13 * windup, 1 + 0.1 * windup);
+      else this.group.scale.setScalar(1 + 0.08 * windup);
     }
     this.group.position.copy(b.pos);
     // smooth rotation

@@ -1849,6 +1849,85 @@ section('3.0 #64: blind cave listener tracks real sounds, not silent players');
   check('peaceful difficulty suppresses new cave listeners', !spawn.mobs.some((m: Mob) => m.type === 'echolurker'));
 }
 
+section('3.0 #69: cancellable melee telegraph and combat hit reaction');
+{
+  const world = new World(269, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 3; x <= 14; x++) for (let z = 3; z <= 13; z++)
+    for (let yy = y; yy <= y + 4; yy++) world.setBlock(x, yy, z, B.AIR);
+  for (const type of ['zombie', 'spider', 'enderman', 'slime'] as MobType[]) {
+    const m = new Mob(type, 7.5, y, 7.5);
+    const target = new THREE.Vector3(8.6, y, 7.5);
+    let hits = 0;
+    const tell = (m as unknown as { strikeWarning: THREE.Mesh }).strikeWarning;
+    const tick = () => m.update(1 / 30, world, target, () => { hits++; }, () => {}, false);
+    tick();
+    check(`${type}: orange warning appears before first hit`, tell.visible && hits === 0);
+    check(`${type}: silhouette animates its attack preparation`,
+      type === 'spider' ? m.legs[0].rotation.x < -0.9 : type === 'slime' ? m.group.scale.y < 0.95 : m.arms[0].rotation.x < -2);
+    for (let i = 0; i < 10; i++) tick();
+    check(`${type}: windup lasts long enough to dodge`, tell.visible && hits === 0);
+    target.x = 15;
+    tick();
+    check(`${type}: retreat cancels warning, never deals a phantom hit`, !tell.visible && hits === 0);
+    target.set(m.body.pos.x + 1, y, m.body.pos.z);
+    for (let i = 0; i < 40; i++) tick();
+    check(`${type}: returning close permits a new warned hit after cooldown`, hits >= 1);
+  }
+  for (const type of ['skeleton', 'ghast'] as MobType[]) {
+    const archer = new Mob(type, 7.5, y, 7.5);
+    const target = new THREE.Vector3(12.5, y, 7.5);
+    let shots = 0;
+    const tell = (archer as unknown as { strikeWarning: THREE.Mesh }).strikeWarning;
+    const tick = () => archer.update(1 / 30, world, target, () => {}, () => { shots++; }, false);
+    tick();
+    check(`${type}: ranged windup has a visible orange cue and no instant projectile`, tell.visible && shots === 0);
+    for (let i = 0; i < 10; i++) tick();
+    check(`${type}: projectile is delayed long enough to find cover`, tell.visible && shots === 0);
+    for (let yy = y; yy <= y + 3; yy++) world.setBlock(10, yy, 7, B.STONE);
+    tick();
+    check(`${type}: blocking line of sight interrupts the shot`, !tell.visible && shots === 0);
+    for (let yy = y; yy <= y + 3; yy++) world.setBlock(10, yy, 7, B.AIR);
+    for (let i = 0; i < 55; i++) tick();
+    check(`${type}: after cover clears it can shoot again with a new warning`, shots >= 1);
+    const originalLOS = archer.hasLineOfSight.bind(archer);
+    let probes = 0;
+    archer.hasLineOfSight = (w, x, yy, z) => { probes++; return originalLOS(w, x, yy, z); };
+    tick();
+    eq(`${type}: active cooldown skips costly line-of-sight checks`, probes, 0);
+  }
+  const foe = new Mob('zombie', 7.5, y, 7.5);
+  const player = new THREE.Vector3(8.6, y, 7.5);
+  let hits = 0;
+  const tick = () => foe.update(1 / 30, world, player, () => { hits++; }, () => {}, false);
+  tick();
+  const tell = (foe as unknown as { strikeWarning: THREE.Mesh }).strikeWarning;
+  check('windup model is an actual visible part of the hostile', foe.group.children.includes(tell) && tell.visible);
+  foe.damage(2, player.x, player.z);
+  check('hitting an attacker cancels its windup, recoils and flashes red',
+    !tell.visible && foe.hurtTime > 0 && foe.body.vel.x < 0 &&
+    (foe.meshes[0].material as THREE.MeshLambertMaterial).emissive.getHex() === 0x770000);
+  player.x = 15;
+  for (let i = 0; i < 35; i++) tick();
+  eq('counterattack interrupted the original melee swing', hits, 0);
+  const cave = new Mob('echolurker', 7.5, y, 7.5);
+  player.x = 8.6;
+  const footstep = [{ id: 1, x: 8.6, y, z: 7.5, radius: 7, ttl: 1, source: 'player' as const }];
+  cave.update(1 / 30, world, player, () => { hits++; }, () => {}, false,
+    [], () => {}, 1, [], () => false, 0, false, 0.25, footstep);
+  const earTell = (cave as unknown as { strikeWarning: THREE.Mesh }).strikeWarning;
+  check('the blind listener also visibly announces its strike', earTell.visible && hits === 0);
+  player.x = 15;
+  cave.update(1 / 30, world, player, () => { hits++; }, () => {}, false,
+    [], () => {}, 1, [], () => false, 0, false, 0.25, []);
+  check('silently escaping the heard location cancels the blind strike', !earTell.visible && hits === 0);
+  const calm = new Mob('zombie', 7.5, y, 7.5);
+  for (let i = 0; i < 30; i++) calm.update(1 / 30, world, new THREE.Vector3(8.6, y, 7.5), () => { hits++; }, () => {}, true);
+  check('peaceful monsters never show a threatening warning or hit',
+    !(calm as unknown as { strikeWarning: THREE.Mesh }).strikeWarning.visible && hits === 0);
+}
+
 section('3.0 #68: bounded loaded-chunk pathfinding instead of wall pushing');
 {
   const world = new World(264, true);
