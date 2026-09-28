@@ -45,6 +45,55 @@ export function findTurtleNest(world: Pick<World, 'peekBlock' | 'hasChunk'>, x: 
   return null;
 }
 
+export type VillagerActivity = 'rest' | 'work' | 'meet';
+/** World day runs from dawn (0) through noon (.25) to dusk (.5). */
+export function villagerActivity(phase: number): VillagerActivity {
+  const time = ((phase % 1) + 1) % 1;
+  if (time < 0.015 || time >= 0.62) return 'rest';
+  if (time < 0.17 || time >= 0.46) return 'meet';
+  return 'work';
+}
+
+/** Accept only a straight, loaded, level and open walking route. Villagers
+ * never try to cross walls just to reach a workstation or meeting. */
+export function villagerWalkable(world: Pick<World, 'peekBlock' | 'hasChunk'>, x: number, y: number, z: number, tx: number, tz: number): boolean {
+  const steps = Math.ceil(Math.hypot(tx - x, tz - z) * 3);
+  for (let i = 1; i <= steps; i++) {
+    const px = Math.floor(x + (tx - x) * i / steps), pz = Math.floor(z + (tz - z) * i / steps);
+    if (!world.hasChunk(Math.floor(px / CS), Math.floor(pz / CS)) ||
+      IS_SOLID[world.peekBlock(px, y, pz)] || IS_SOLID[world.peekBlock(px, y + 1, pz)] ||
+      !IS_SOLID[world.peekBlock(px, y - 1, pz)] || world.peekBlock(px, y - 1, pz) === B.MAGMA) return false;
+  }
+  return true;
+}
+
+/** Workstation scanning is bounded and only happens when schedule changes or
+ * every few seconds; old village profession indices remain unchanged. */
+export function villagerWorkSpot(world: Pick<World, 'peekBlock' | 'hasChunk'>, x: number, y: number, z: number, profession: number): { x: number; z: number } | null {
+  const job = PROFESSIONS[profession]?.id;
+  const work: number[] = job === 'rolnik' || job === 'ogrodnik' ? [B.FARMLAND, B.CROP0, B.CROP1, B.CROP2, B.CROP3]
+    : job === 'kowal' ? [B.FURNACE, B.ANVIL]
+    : job === 'bibliotekarz' || job === 'kartograf' ? [B.BOOKSHELF]
+    : job === 'rybak' ? [B.WATER]
+    : job === 'pasterz' ? [B.HAY] : [B.CRAFTING];
+  let best = 121;
+  let found: { x: number; z: number } | null = null;
+  for (let dx = -10; dx <= 10; dx++) for (let dz = -10; dz <= 10; dz++) {
+    const d2 = dx * dx + dz * dz;
+    if (d2 >= best || d2 > 100) continue;
+    const wx = x + dx, wz = z + dz;
+    if (!world.hasChunk(Math.floor(wx / CS), Math.floor(wz / CS))) continue;
+    if (![y - 1, y].some((yy) => work.includes(world.peekBlock(wx, yy, wz)))) continue;
+    for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const tx = wx + sx, tz = wz + sz;
+      if (!villagerWalkable(world, x + 0.5, y, z + 0.5, tx + 0.5, tz + 0.5)) continue;
+      const dist = (tx - x) ** 2 + (tz - z) ** 2;
+      if (dist < best) { best = dist; found = { x: tx + 0.5, z: tz + 0.5 }; }
+    }
+  }
+  return found;
+}
+
 /** Surface bats leave their daytime resting place only after dusk. */
 export function batSpawnAllowed(top: number, biome: Biome, daylight: number): boolean {
   return daylight < 0.45 && (biome === 'Las' || biome === 'Brzozowy las' || biome === 'Tajga' || biome === 'Bagno') &&
@@ -174,6 +223,9 @@ export class Mob {
   private lizardSkin: THREE.MeshLambertMaterial | null = null;
   private lizardFace: THREE.MeshLambertMaterial | null = null;
   private camouflageGround = -1;
+  private activityTimer = 0;
+  private activityGoal: { x: number; z: number } | null = null;
+  private activityKind: VillagerActivity | null = null;
   private eggTimer = 10 + Math.random() * 10;
   private fireTimer = 0;
   private nearbyFlame: { x: number; z: number; safe: number } | null = null;
@@ -993,7 +1045,7 @@ export class Mob {
    * Mieszkaniec: krąży wokół domu, a gdy w pobliżu pojawi się potwór – ucieka
    * i woła (dźwięk odtwarza silnik przez soundTimer).
    */
-  private updateVillager(dt: number, world: World, player: THREE.Vector3, allies: Mob[]): void {
+  private updateVillager(dt: number, world: World, player: THREE.Vector3, allies: Mob[], dayPhase: number): void {
     const b = this.body;
     // Świeżo uderzony mieszkaniec po prostu zwiewa (yaw ustawia damage()).
     if (this.panic > 0) {
@@ -1013,6 +1065,41 @@ export class Mob {
       this.moveAndAnimate(dt, world, player, 3.2);
       return;
     }
+    if (this.hurtTime <= 0 && this.health < this.maxHealth) this.health = Math.min(this.maxHealth, this.health + dt * 0.35);
+    const activity = villagerActivity(dayPhase);
+    this.activityTimer -= dt;
+    if (activity !== this.activityKind || this.activityTimer <= 0) {
+      this.activityKind = activity;
+      this.activityTimer = 4 + Math.random() * 2;
+      this.activityGoal = null;
+      if (activity === 'work') this.activityGoal = villagerWorkSpot(world, Math.floor(b.pos.x), Math.floor(b.pos.y), Math.floor(b.pos.z), this.profession);
+      if (activity === 'meet') {
+        const other = allies.find((o) => o !== this && o.type === 'villager' && !o.dead &&
+          Math.abs(o.body.pos.y - b.pos.y) < 1.5 && o.body.pos.distanceTo(b.pos) < 10 &&
+          villagerWalkable(world, b.pos.x, Math.floor(b.pos.y), b.pos.z, o.body.pos.x, o.body.pos.z));
+        if (other) this.activityGoal = { x: other.body.pos.x, z: other.body.pos.z };
+      }
+      if (activity === 'rest' && villagerWalkable(world, b.pos.x, Math.floor(b.pos.y), b.pos.z, this.home.x, this.home.z)) {
+        this.activityGoal = { x: this.home.x, z: this.home.z };
+      }
+    }
+    if (this.activityGoal) {
+      const dx = this.activityGoal.x - b.pos.x, dz = this.activityGoal.z - b.pos.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 12 || !villagerWalkable(world, b.pos.x, Math.floor(b.pos.y), b.pos.z, this.activityGoal.x, this.activityGoal.z)) {
+        this.activityGoal = null;
+      } else {
+        this.yaw = Math.atan2(dx, dz);
+        this.walking = dist > (activity === 'meet' ? 2.1 : 0.9);
+        this.moveAndAnimate(dt, world, player, this.walking ? (activity === 'rest' ? 1.2 : 1.35) : 0);
+        return;
+      }
+    }
+    if (activity === 'rest') {
+      this.walking = false;
+      this.moveAndAnimate(dt, world, player, 0);
+      return;
+    }
     this.aiTimer -= dt;
     const dx = this.home.x - b.pos.x;
     const dz = this.home.z - b.pos.z;
@@ -1024,7 +1111,6 @@ export class Mob {
       this.walking = Math.random() < 0.7;
     }
     this.moveAndAnimate(dt, world, player, this.walking ? 1.35 : 0);
-    if (this.hurtTime <= 0 && this.health < this.maxHealth) this.health = Math.min(this.maxHealth, this.health + dt * 0.35);
   }
 
   /**
@@ -1377,7 +1463,8 @@ export class Mob {
     food: readonly FoxFood[] = [],
     onSnatch: (target: FoxFood) => boolean = () => false,
     daylight = 1,
-    raining = false
+    raining = false,
+    dayPhase = 0.25
   ) {
     const b = this.body;
     if (this.hurtTime > 0) {
@@ -1420,7 +1507,7 @@ export class Mob {
       return;
     }
     if (this.type === 'villager') {
-      this.updateVillager(dt, world, player, allies);
+      this.updateVillager(dt, world, player, allies, dayPhase);
       return;
     }
     if (this.type === 'golem') {

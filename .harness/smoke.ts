@@ -61,7 +61,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, villagerActivity, villagerWorkSpot, villagerWalkable, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -1663,6 +1663,57 @@ section('3.0 #58: visible camouflage for small swamp lizards');
     g.updateMobs(1 / 30);
     check('Nether has no swamp lizards', !g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
   } finally { Math.random = random; }
+}
+
+section('3.0 #61: village work, meetings, rest and threat priority');
+{
+  eq('work is scheduled during daytime', villagerActivity(0.25), 'work');
+  eq('sunrise is the social hour', villagerActivity(0.1), 'meet');
+  eq('evening is the social hour', villagerActivity(0.55), 'meet');
+  eq('night is restful', villagerActivity(0.8), 'rest');
+  const world = new World(266, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 3; x <= 12; x++) for (let z = 3; z <= 12; z++) for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  world.setBlock(8, y - 1, 8, B.FARMLAND);
+  const near = villagerWorkSpot(world, 4, y, 8, 0);
+  check('farmer recognises real accessible farmland', near !== null && near.x >= 7);
+  world.setBlock(9, y, 8, B.FURNACE);
+  check('blacksmith chooses a furnace instead of a field', villagerWorkSpot(world, 4, y, 8, 1) !== null);
+  for (let z = 3; z <= 12; z++) { world.setBlock(6, y, z, B.STONE); world.setBlock(6, y + 1, z, B.STONE); }
+  eq('villager does not walk through sealed wall to reach work', villagerWorkSpot(world, 4, y, 8, 0), null);
+  check('line route detects the wall too', !villagerWalkable(world, 4.5, y, 8.5, 7.5, 8.5));
+  for (let z = 3; z <= 12; z++) { world.setBlock(6, y, z, B.AIR); world.setBlock(6, y + 1, z, B.AIR); }
+  const farmer = new Mob('villager', 4.5, y, 8.5, 0);
+  const trade = farmer.trade;
+  const far = new THREE.Vector3(40, y, 40);
+  const tick = (mob: Mob, allies: Mob[], phase: number) => mob.update(1 / 30, world, far, () => {}, () => {}, false, allies, () => {}, 1, [], () => false, 1, false, phase);
+  for (let i = 0; i < 65; i++) tick(farmer, [farmer], 0.25);
+  check('during work hour farmer actually walks toward farmland', farmer.body.pos.x > 5.4 && (farmer as unknown as {activityKind: string}).activityKind === 'work');
+  check('routine does not reset trade inventory', farmer.trade === trade);
+  for (let i = 0; i < 90; i++) tick(farmer, [farmer], 0.8);
+  check('at night farmer returns to home and rests', farmer.body.pos.x < 5.5 && farmer.walking === false);
+  const a = new Mob('villager', 4.5, y, 5.5, 0);
+  const b = new Mob('villager', 8.5, y, 5.5, 2);
+  for (let i = 0; i < 42; i++) tick(a, [a, b], 0.1);
+  check('during gathering time villagers actually approach each other', a.body.pos.x > 5.25 && (a as unknown as {activityKind: string}).activityKind === 'meet');
+  const zombie = new Mob('zombie', a.body.pos.x + 1.5, y, a.body.pos.z);
+  const before = a.body.pos.x;
+  for (let i = 0; i < 10; i++) tick(a, [a, b, zombie], 0.25);
+  check('threat overrides social/work schedule with immediate flight', a.body.pos.x < before && a.soundTimer <= 0.2);
+  const live = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const liveFarmer = new Mob('villager', 4.5, y, 8.5, 0);
+  live.world = world; live.body = { pos: far };
+  live.mobs = [liveFarmer]; live.drops = [];
+  live.isInNether = false; live.weather = 'clear'; live.mode = 'survival';
+  live.difficulty = { ...DEFAULT_DIFFICULTY }; live.time = 0.25;
+  live.spawnTimer = 100; live.scene = { remove: () => {} };
+  for (let i = 0; i < 40; i++) live.updateMobs(1 / 30);
+  check('actual game clock controls villager work AI', liveFarmer.body.pos.x > 5 && (liveFarmer as unknown as {activityKind: string}).activityKind === 'work');
+  live.time = 0.8;
+  live.updateMobs(1 / 30);
+  eq('game night changes villager activity without removing trading', (liveFarmer as unknown as {activityKind: string}).activityKind, 'rest');
+
 }
 
 section('3.0 #55: turtle nesting, staged eggs and save/reload');
