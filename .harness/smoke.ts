@@ -1820,6 +1820,51 @@ section('update 1.6: villager trading');
   check('progress starts at zero', villagerProgress(createVillagerState(0, 0)) === 0);
 }
 
+section('3.0 #91: new village jobs and trade progression');
+{
+  eq('saved original profession indices keep their meanings', PROFESSIONS.slice(0, 5).map((p) => p.id).join(','),
+    'rolnik,kowal,bibliotekarz,pasterz,budowniczy');
+  const jobs = ['kartograf', 'rybak', 'ogrodnik'];
+  eq('new jobs are appended, not inserted', PROFESSIONS.slice(5).map((p) => p.id).join(','), jobs.join(','));
+  for (const [offset, job] of jobs.entries()) {
+    const idx = offset + 5;
+    const villager = new Mob('villager', 0, 64, 0, (idx + 0.5) / PROFESSIONS.length);
+    eq(`${job} is generated as a working villager`, villager.trade?.profession, idx);
+    check(`${job} wears a recognizable trade hat`, villager.meshes.length > new Mob('villager', 0, 64, 0, 0).meshes.length);
+    eq(`${job} has no advanced offers at first`, offersFor(villager.trade!).every((o) => o.level === 1), true);
+    check(`${job} has available merchant offers`, offersFor(villager.trade!).length >= 2);
+    villager.trade!.xp = 40;
+    check(`${job} unlocks advanced offers by trading`, offersFor(villager.trade!).some((o) => o.level >= 3));
+  }
+  const mapState = createVillagerState(5, 0);
+  mapState.xp = 6;
+  const compassTrade = offersFor(mapState).find((o) => o.key === 'map_biome')!;
+  check('cartographer sells the real biome compass after advancement', compassTrade.get.id === I.BIOME_COMPASS && compassTrade.give.length === 2);
+  const mapInv = new Inventory();
+  mapInv.add(I.EMERALD, 6);
+  eq('both payment types required', canTrade(mapState, mapInv, compassTrade), 'items');
+  mapInv.add(I.COMPASS, 1);
+  check('two-item barter succeeds through shared trade rules', applyTrade(mapState, mapInv, compassTrade));
+  eq('cartographer yields an equippable biome compass', mapInv.countOf(I.BIOME_COMPASS), 1);
+  eq('compass is spent on barter', mapInv.countOf(I.COMPASS), 0);
+  eq('stock is reduced', usesLeft(mapState, compassTrade), compassTrade.uses - 1);
+  const fishState = createVillagerState(6, 0);
+  const fishSale = offersFor(fishState).find((o) => o.key === 'fish_cod')!;
+  const fishInv = new Inventory();
+  fishInv.add(I.RAW_FISH, 12);
+  check('fisher buys caught fish for emeralds', applyTrade(fishState, fishInv, fishSale) && fishInv.countOf(I.EMERALD) === 1);
+  fishState.xp = 40;
+  check('fisher sells glow bait at higher rank', offersFor(fishState).some((o) => o.get.id === I.GLOW_BAIT));
+  const gardenState = createVillagerState(7, 0);
+  const sapling = offersFor(gardenState).find((o) => o.key === 'garden_sapling')!;
+  const gardenInv = new Inventory();
+  gardenInv.add(I.EMERALD, 1);
+  check('gardener sells renewable spruce saplings', applyTrade(gardenState, gardenInv, sapling) && gardenInv.countOf(B.SPRUCE_SAPLING) === 2);
+  gardenState.xp = 18;
+  check('gardener also offers decorative meadow blocks', offersFor(gardenState).some((o) => o.get.id === B.MEADOW_GRASS));
+  eq('old smith stays in slot one', createVillagerState(1, 0).profession, 1);
+}
+
 // ============================================ update 1.6 – mieszkańcy i golemy
 section('update 1.6: villagers and golems');
 {

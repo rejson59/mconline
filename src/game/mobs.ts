@@ -439,6 +439,18 @@ export class Mob {
       this.meshes.push(eyeL, eyeR);
       g.add(head);
       this.head = head;
+      // New trades are identifiable even without opening the panel. Kept to
+      // two simple boxes per villager so low-graphics mode has no extra atlas.
+      const job = PROFESSIONS[this.profession]?.id;
+      if (job === 'kartograf' || job === 'rybak' || job === 'ogrodnik') {
+        const hatColor = job === 'kartograf' ? 0xe6e0c8 : job === 'rybak' ? 0x194662 : 0xd8ba66;
+        const brim = box(0.66, 0.07, 0.66, hatColor, sharedMats);
+        brim.position.set(0, 0.31, 0);
+        const crown = box(0.42, 0.17, 0.42, hatColor, sharedMats);
+        crown.position.set(0, 0.42, 0);
+        head.add(brim, crown);
+        this.meshes.push(brim, crown);
+      }
       // ręce złożone z przodu, jak na bazarze
       const armL = box(0.14, 0.16, 0.44, robe, sharedMats);
       armL.position.set(-0.34, legH + 0.86, 0.18);

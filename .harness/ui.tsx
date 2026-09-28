@@ -86,6 +86,14 @@ section('trade screen: static render');
   check('offer row shows emeralds', html.includes('Szmaragd') || html.includes('szmaragd'));
   check('close hint is shown', html.includes('Esc'));
   check('player inventory is rendered', html.includes('Ekwipunek'));
+  for (const [idx, name, product] of [[5, 'Kartograf', 'Kompas'], [6, 'Rybak', 'Wędka'], [7, 'Ogrodnik', 'Sadzonka']] as const) {
+    const job = createVillagerState(idx, 0);
+    const screen = renderToStaticMarkup(<TradeScreen game={{
+      ...fake, tradeMob: { trade: job }, tradeTitle: () => name,
+      tradeRows: () => offersFor(job).map((offer, index) => ({ index, offer, left: offer.uses, max: offer.uses, blocked: 'items' as const })),
+    } as unknown as Game} icons={{}} onChange={noop} />);
+    check(`${name} is shown with job-specific stock on the trading screen`, screen.includes(name) && screen.includes(product));
+  }
 }
 
 section('inventory screen: recipe finder');

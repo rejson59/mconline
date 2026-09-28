@@ -97,6 +97,7 @@ export function Controls() {
     ['PPM na piecu', 'Przetapianie'],
     ['PPM na łóżku', 'Sen i punkt odrodzenia'],
     ['PPM na drzwiach / włazie', 'Otwórz lub zamknij (Shift+PPM stawia blok)'],
+    ['PPM / tap na mieszkańcu', 'Handel: kartograf, rybak, ogrodnik, kowal i inni. Oferty rosną wraz z doświadczeniem'],
     ['PPM na skrzyni', 'Schowek'],
     ['Drabina + W / spacja', 'Wspinaczka'],
     ['Nożyce + LPM na owcy', 'Wełna bez zabijania'],
