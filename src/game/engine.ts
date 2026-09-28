@@ -22,7 +22,7 @@ import { Inventory, RECIPES, type Stack } from './inventory';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
-  sharpnessDamage, knockbackFactor, powerFactor, totalProtection, fallDamageFactor,
+  sharpnessDamage, knockbackFactor, powerFactor, totalProtection, fallDamageFactor, sourceProtection, swimSpeedFactor, conflicts,
   type EnchOption,
 } from './enchant';
 import * as Sfx from './audio';
@@ -1523,8 +1523,10 @@ export class Game {
     const item = this.enchantItem;
     if (!opt || !item || !canAddEnch(item, opt.ench)) return false;
     if (this.mode !== 'creative') {
-      if (!this.xp.spend(opt.cost)) { this.message('Za mało doświadczenia.'); return false; }
+      // Check both costs before spending either: a direct call must not burn
+      // experience just because the last piece of lapis was moved elsewhere.
       if (this.inventory.countOf(I.LAPIS) < opt.lapis) { this.message('Potrzebny jest lazuryt.'); return false; }
+      if (!this.xp.spend(opt.cost)) { this.message('Za mało doświadczenia.'); return false; }
       this.inventory.remove(I.LAPIS, opt.lapis);
     }
     addEnch(item, opt.ench, opt.level);
@@ -2711,6 +2713,7 @@ export class Game {
         if (!held) { this.message('Trzymaj przedmiot w ręce.'); break; }
         if (!canEnchant(held.id, ench)) { this.message(`${displayName(held.id)} nie przyjmuje tego zaklęcia.`); break; }
         const lvl = Math.max(1, Math.min(10, parseInt(args[1] || '1', 10) || 1));
+        if (Object.keys(held.ench ?? {}).some((id) => conflicts(id, ench))) { this.message('Konflikt zaklęć: wybierz tylko jeden typ ochrony.'); break; }
         addEnch(held, ench, lvl);
         this.message(`${displayName(held.id)}: ${enchName(ench, lvl)}.`);
         this.unlock('enchant');
@@ -3554,7 +3557,7 @@ export class Game {
               this.wearShield(12);
               this.unlock('guardian');
             } else {
-              this.damage(mobDamage(a.power, this.difficulty.damage));
+              this.damage(mobDamage(a.power, this.difficulty.damage), false, 'projectile');
               this.body.vel.x += dir.x * 2.5;
               this.body.vel.z += dir.z * 2.5;
             }
@@ -4109,14 +4112,18 @@ export class Game {
     });
   }
 
-  damage(amount: number, force = false) {
+  damage(amount: number, force = false, source: 'generic' | 'fire' | 'projectile' = 'generic') {
     if (amount <= 0) return;
     if (this.mode === 'creative' && !force) return;
     if (this.ui === 'dead') return;
     // Armor soaks damage; force kills (void, /kill) ignore it and don't break the gear.
     // Zaklęcie Ochrona dodaje 3% redukcji za każdy poziom (do 90% łącznie).
-    const reduction = Math.min(0.9, damageReduction(armorPoints(this.armor)) + totalProtection(this.armor) * 0.03);
-    const dealt = force ? amount : Math.max(0, Math.round(amount * (1 - reduction)));
+    const specialized = source === 'generic' ? 0 : sourceProtection(this.armor, source);
+    const reduction = Math.min(0.9, damageReduction(armorPoints(this.armor)) + totalProtection(this.armor) * 0.03 + specialized);
+    // Heat protection must also matter for one-point magma/campfire ticks.
+    // Keep the old integer damage rule for unenchanted worlds and other sources.
+    const raw = amount * (1 - reduction);
+    const dealt = force ? amount : Math.max(0, source === 'fire' && specialized > 0 ? raw : Math.round(raw));
     if (dealt > 0) {
       if (!force) this.wearArmor(dealt);
       this.health -= dealt;
@@ -4359,7 +4366,7 @@ export class Game {
 
     if (this.mode === 'survival' && this.hunger <= 6) this.sprinting = false;
     let speed = this.flying ? (this.sprinting ? 22 : 11) : sneaking ? 1.3 : this.sprinting ? 5.6 : 4.3;
-    if (inWater && !this.flying) speed *= 0.55;
+    if (inWater && !this.flying) speed *= 0.55 * swimSpeedFactor(this.armor[3]);
     if (inLava && !this.flying) speed *= 0.35;
     // 2.4: napój szybkości przyspiesza bieg (nie wpływa na latanie w trybie kreatywnym)
     if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
@@ -4479,11 +4486,11 @@ export class Game {
     const fireImmune = this.hasEffect('fire');
     if (!fireImmune && under === B.MAGMA && b.onGround && this.mode === 'survival' && !this.flying) {
       this.campfireHurt += dt;
-      if (this.campfireHurt > 0.6) { this.campfireHurt = 0; this.damage(1); this.message('Blok magmy parzy!'); }
+      if (this.campfireHurt > 0.6) { this.campfireHurt = 0; this.damage(1, false, 'fire'); this.message('Blok magmy parzy!'); }
     }
     if (!fireImmune && under === B.CAMPFIRE && b.onGround && this.mode === 'survival' && !this.flying) {
       this.campfireHurt += dt;
-      if (this.campfireHurt > 0.45) { this.campfireHurt = 0; this.damage(1); }
+      if (this.campfireHurt > 0.45) { this.campfireHurt = 0; this.damage(1, false, 'fire'); }
     }
     // lava
     if (fireImmune && inLava && this.mode === 'survival') {
@@ -4491,7 +4498,7 @@ export class Game {
       this.unlock('fireproof');
     } else if (inLava && this.mode === 'survival') {
       this.lavaAcc += dt;
-      if (this.lavaAcc > 0.5) { this.lavaAcc = 0; this.damage(4); }
+      if (this.lavaAcc > 0.5) { this.lavaAcc = 0; this.damage(4, false, 'fire'); }
     }
     // cactus
     if (this.mode === 'survival') {

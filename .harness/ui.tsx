@@ -314,6 +314,17 @@ section('enchant screen: static render');
   for (const opt of options) check(`offer ${opt.ench} rendered`, html.includes(opt.cost + ' pkt'));
   check('lapis cost shown', html.includes('1◆'));
   check('inventory grid rendered', html.includes('mc-slot'));
+  const defensive = renderToStaticMarkup(<EnchantScreen game={{ ...game, mode: 'creative',
+    enchantItem: { id: I.IRON_BOOTS, count: 1 },
+    enchOptions: [
+      { ench: 'fireward', level: 2, cost: 4, lapis: 1 },
+      { ench: 'arrowguard', level: 2, cost: 5, lapis: 2 },
+      { ench: 'tidewalker', level: 1, cost: 6, lapis: 3 },
+    ],
+  } as never} icons={{}} onChange={() => {}} />);
+  check('specialised armor options describe the actual effect on PC and touch', defensive.includes('Osłona żaru') &&
+    defensive.includes('Osłona strzał') && defensive.includes('Krok pływaka') && defensive.includes('Ruch w wodzie'));
+  check('mutually exclusive armor choices are explained on the enchanting screen', defensive.includes('wykluczają się'));
 }
 
 

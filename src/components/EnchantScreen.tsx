@@ -56,7 +56,10 @@ function Offer({
         cursor: disabled ? 'default' : 'pointer',
       }}
     >
-      <span className="font-semibold text-[#1c1c1c]">{enchName(option.ench, option.level)}</span>
+      <span className="min-w-0 flex-1 text-[#1c1c1c]">
+        <span className="block font-semibold">{enchName(option.ench, option.level)}</span>
+        <span className="block text-[11px] leading-tight">{def?.desc(option.level)}</span>
+      </span>
       <span className="flex items-center gap-2 text-sm text-[#333]">
         <span className="text-[#6b3fa0]">{option.cost} pkt</span>
         <span className="text-[#2a4fa0]">{option.lapis}◆</span>
@@ -111,16 +114,16 @@ export default function EnchantScreen({ game, icons, onChange }: { game: Game; i
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
-      <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
+      <div className="mc-panel flex max-h-[94vh] max-w-[98vw] flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-baseline justify-between gap-6">
           <span className="text-lg font-semibold">Stół zaklęć</span>
           <span className="text-xs text-[#444]">Biblioteczki: {power}/15 · Poziom: {level} · Lazuryt: {lapis}</span>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-6">
           <LabeledSlot stack={item} icons={icons} label="Przedmiot" onHover={setHover} onClick={(r) => { game.clickEnchantSlot(r); refresh(); }} />
           <span className="mb-4 text-2xl text-[#333]">→</span>
-          <div className="flex w-[300px] flex-col gap-2">
+          <div className="flex w-[min(300px,85vw)] flex-col gap-2">
             {options.length === 0 && (
               <div className="border-2 border-[#777] bg-[#8b8b8b] px-3 py-4 text-center text-sm text-[#333]">
                 {item ? 'Ten przedmiot nie przyjmuje żadnych zaklęć.' : 'Umieść tu narzędzie, broń lub element pancerza.'}
@@ -141,7 +144,8 @@ export default function EnchantScreen({ game, icons, onChange }: { game: Game; i
 
         <div className="max-w-[460px] text-xs text-[#333]">
           Wybór zaklęć zależy od liczby biblioteczek ustawionych w pierścieniu wokół stołu (maks. 15) oraz twojego poziomu.
-          Każde zaklęcie zużywa punkty doświadczenia i lazuryt (1–3). Item w stole czeka na ciebie – możesz go zabrać w każdej chwili.
+          Każde zaklęcie zużywa punkty doświadczenia i lazuryt (1–3). Przedmiot w stole czeka na ciebie – możesz go zabrać w każdej chwili.
+          Ochrona, Osłona żaru i Osłona strzał wykluczają się na jednym elemencie pancerza; Krok pływaka działa tylko w wodzie i tylko na butach.
         </div>
 
         <div className="text-sm font-semibold">Ekwipunek</div>

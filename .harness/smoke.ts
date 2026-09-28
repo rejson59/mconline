@@ -79,7 +79,7 @@ import {
   ENCHANTS, enchName, resolveEnch, canEnchant, conflicts, canAddEnch, addEnch,
   enchLevel, enchList, stackName, countShelves, rollEnchantOptions, efficiencyFactor,
   wearChance, sharpnessDamage, powerFactor, knockbackFactor, totalProtection,
-  fallDamageFactor, MAX_ENCHS,
+  fallDamageFactor, sourceProtection, swimSpeedFactor, MAX_ENCHS,
 } from '../src/game/enchant';
 import { Xp as XpClass } from '../src/game/xp';
 import { Game, MOB_NAMES, normalizeCompanions, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
@@ -1135,6 +1135,75 @@ section('engine: armor damage, equipping, xp');
   check('armor dropped on death', [I.LEATHER_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS].every((id) => droppedIds.includes(id)), JSON.stringify(droppedIds));
   eq('armor cleared on death', g.armor.every((s: any) => s === null), true);
   eq('active potion buffs cleared on death', g.effects.size, 0);
+}
+
+section('3.0 #77: mutually exclusive defense and swimming enchants');
+{
+  const armor = { id: I.IRON_BOOTS, count: 1 } as Stack;
+  check('new families are accessible at the real table', ['fireward', 'arrowguard', 'tidewalker'].every((id) =>
+    ENCHANTS.some((def) => def.id === id) && canEnchant(armor.id, id)));
+  check('swimming enchant is restricted to boots', !canEnchant(I.IRON_HELMET, 'tidewalker') && canEnchant(I.LEATHER_BOOTS, 'tidewalker'));
+  check('protection families conflict but swimming remains compatible', conflicts('protection', 'fireward') &&
+    conflicts('arrowguard', 'fireward') && !conflicts('tidewalker', 'fireward'));
+  addEnch(armor, 'fireward', 4);
+  check('another protection cannot be applied to the same piece', !canAddEnch(armor, 'protection') &&
+    !canAddEnch(armor, 'arrowguard'));
+  addEnch(armor, 'arrowguard', 4);
+  check('direct enchant entry does not bypass conflicts', armor.ench?.arrowguard === undefined);
+  eq('anvil keeps first item when merging incompatible protections', mergeEnchants({ fireward: 2 }, { protection: 4 })?.protection, undefined);
+  check('table offers omit conflicting enchantments after selection', !rollEnchantOptions(armor, 15, () => 0.5).some((o) =>
+    o.ench === 'arrowguard' || o.ench === 'protection'));
+  eq('specialized armor protects against its own source', sourceProtection([null, null, null, armor], 'fire'), 0.32);
+  eq('fire armor does not reduce projectiles', sourceProtection([null, null, null, armor], 'projectile'), 0);
+  check('four armor pieces cap source resistance', sourceProtection([armor, armor, armor, armor], 'fire') === 0.4);
+  check('empty boots retain old swimming speed', swimSpeedFactor(null) === 1);
+  addEnch(armor, 'tidewalker', 3);
+  eq('enchanted boots improve only the water multiplier', swimSpeedFactor(armor), 1.45);
+  check('old protection enchantment remains usable', canEnchant(I.IRON_BOOTS, 'protection') &&
+    totalProtection([{ id: I.IRON_BOOTS, count: 1, ench: { protection: 2 } }]) === 2);
+
+  // Exercise the actual engine damage path (the old armor system still runs).
+  const g = Object.create(Game.prototype) as any;
+  g.mode = 'survival'; g.ui = 'playing'; g.armor = [null, null, null, armor];
+  g.body = { pos: new THREE.Vector3(0, 65, 0) }; g.health = 100; g.hurtCount = 0; g.shake = 0;
+  g.wearArmor = () => {}; g.buzz = () => {}; g.emitHud = () => {};
+  g.damage(10, false, 'fire');
+  const fireHit = 100 - g.health;
+  g.health = 100;
+  g.damage(10, false, 'projectile');
+  const projectileHit = 100 - g.health;
+  check('engine fire damage is smaller than arrow damage with heat armor', fireHit < projectileHit, `${fireHit}, ${projectileHit}`);
+  const arrowBoots = { id: I.IRON_BOOTS, count: 1, ench: { arrowguard: 4 } };
+  g.armor[3] = arrowBoots; g.health = 100;
+  g.damage(10, false, 'projectile');
+  check('engine arrow damage responds to arrowguard, not fireward', 100 - g.health < projectileHit);
+  g.armor[3] = { id: I.IRON_BOOTS, count: 1 }; g.health = 100;
+  g.damage(10, false, 'fire');
+  check('old unechanted armor retains its previous damage value', 100 - g.health === projectileHit);
+  g.armor[3] = armor; g.health = 100;
+  g.damage(1, false, 'fire');
+  check('fireward reduces single-point magma ticks rather than losing fractional protection to rounding', 100 - g.health < 1);
+
+  const table = Object.create(Game.prototype) as any;
+  table.mode = 'survival'; table.inventory = new Inventory();
+  table.enchantItem = { id: I.IRON_BOOTS, count: 1 };
+  table.enchOptions = [{ ench: 'fireward', level: 2, cost: 2, lapis: 1 }];
+  table.enchantPower = () => 15;
+  table.body = { pos: new THREE.Vector3(0, 64, 0) };
+  table.spawnParticles = () => {}; table.message = () => {}; table.emitHud = () => {}; table.unlock = () => {};
+  let xpSpent = 0;
+  table.xp = { canSpend: () => true, spend: (n: number) => { xpSpent += n; return true; } };
+  check('table rejects an offer with missing lapis without spending XP', !table.enchantWith(0) && xpSpent === 0);
+  table.inventory.slots[0] = { id: I.LAPIS, count: 3 };
+  check('Survival can buy new armor enchant at the actual table', table.canEnchantWith(0) && table.enchantWith(0) &&
+    table.enchantItem.ench.fireward === 2 && xpSpent === 2 && table.inventory.countOf(I.LAPIS) === 2);
+  table.enchOptions = [{ ench: 'arrowguard', level: 4, cost: 1, lapis: 1 }];
+  check('incompatible offer is refused without charging currency', !table.canEnchantWith(0) && !table.enchantWith(0) && xpSpent === 2 && table.inventory.countOf(I.LAPIS) === 2);
+  table.mode = 'creative'; table.enchantItem = { id: I.IRON_BOOTS, count: 1 };
+  table.enchOptions = [{ ench: 'tidewalker', level: 2, cost: 1, lapis: 1 }];
+  table.inventory.slots[0] = null;
+  check('Creative can enchant swimming boots at the table without lapis', table.enchantWith(0) &&
+    table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
 }
 
 section('3.0 #75: directional shield parry and dodge');

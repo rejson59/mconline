@@ -5,7 +5,7 @@
  */
 import type { Stack } from './inventory';
 import { ITEMS, durabilityMax } from './items';
-import { MAX_ENCHS } from './enchant';
+import { MAX_ENCHS, conflicts } from './enchant';
 
 export const ANVIL_SLOTS = 3;
 export const MAX_ITEM_NAME = 28;
@@ -42,6 +42,9 @@ export function canMerge(a: Stack | null, b: Stack | null): a is Stack {
 export function mergeEnchants(a?: Record<string, number>, b?: Record<string, number>): Record<string, number> | undefined {
   const out: Record<string, number> = { ...(a ?? {}) };
   for (const [id, lvl] of Object.entries(b ?? {})) {
+    // The first item's mutually exclusive protection family wins; repairs
+    // cannot combine incompatible table enchantments into one stack.
+    if (Object.keys(out).some((existing) => conflicts(existing, id))) continue;
     if (out[id] === undefined) out[id] = lvl;
     else out[id] = Math.max(out[id], lvl);
   }
