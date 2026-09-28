@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/engine';
-import { I } from '../game/items';
+import { ITEMS } from '../game/items';
 import type { Settings } from '../utils/settings';
 
 /** True on phones/tablets – 2.5: tylko pomocniczo, tryb wybiera utils/input. */
@@ -203,7 +203,7 @@ export default function TouchControls({
   const startHold = (info: PointerInfo) => {
     const sel = game.selectedStack();
     // Łuk w dłoni: przytrzymanie naciąga, puszczenie strzela – oba tryby.
-    if (sel?.id === I.BOW) {
+    if (sel && ITEMS[sel.id]?.tool === 'bow') {
       info.gesture = 'draw';
       game.touchAim = ndc(info.lastX, info.lastY);
       game.mouseRight = true;

@@ -1,5 +1,5 @@
 import { B } from './blocks';
-import { I, stackLimit } from './items';
+import { I, stackLimit, durabilityMax } from './items';
 
 export interface Stack {
   id: number;
@@ -159,6 +159,10 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.GOLD, count: 9 }, inputs: [{ id: B.GOLD_BLOCK, count: 1 }], table: false },
   { out: { id: I.DIAMOND, count: 9 }, inputs: [{ id: B.DIAMOND_BLOCK, count: 1 }], table: false },
   { out: { id: I.BOW, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 3 }], table: true, pattern: [' #S', '# S', ' #S'], key: { '#': I.STICK, S: I.STRING } },
+  { out: { id: I.LIGHT_STRING, count: 1 }, inputs: [{ id: I.STRING, count: 2 }, { id: I.FEATHER, count: 1 }], table: false },
+  { out: { id: I.STRONG_STRING, count: 1 }, inputs: [{ id: I.STRING, count: 2 }, { id: I.IRON, count: 1 }], table: false },
+  { out: { id: I.LIGHT_BOW, count: 1 }, inputs: [{ id: I.BOW, count: 1 }, { id: I.LIGHT_STRING, count: 1 }], table: false },
+  { out: { id: I.STRONG_BOW, count: 1 }, inputs: [{ id: I.BOW, count: 1 }, { id: I.STRONG_STRING, count: 1 }], table: false },
   { out: { id: I.IRON_SPEAR, count: 1 }, inputs: [{ id: I.IRON, count: 2 }, { id: I.STICK, count: 2 }], table: true, pattern: ['  I', ' IS', 'S  '], key: { I: I.IRON, S: I.STICK } },
   { out: { id: I.IRON_DAGGER, count: 1 }, inputs: [{ id: I.IRON, count: 1 }, { id: I.STICK, count: 1 }], table: false, pattern: ['I', 'S'], key: { I: I.IRON, S: I.STICK } },
   { out: { id: I.DIAMOND_DAGGER, count: 1 }, inputs: [{ id: I.DIAMOND, count: 2 }, { id: I.STICK, count: 1 }], table: true, pattern: ['DD', 'S '], key: { D: I.DIAMOND, S: I.STICK } },
@@ -431,11 +435,23 @@ export class Inventory {
     }
   }
 
+  /** Upgrading a bowstring does not secretly repair or disenchant the old bow. */
+  private bowUpgrade(r: Recipe, bow: Stack | null | undefined): Stack {
+    const result = { ...r.out };
+    if ((result.id === I.LIGHT_BOW || result.id === I.STRONG_BOW) && bow?.id === I.BOW) {
+      if (bow.dur !== undefined) result.dur = Math.max(1, Math.min(durabilityMax(result.id),
+        Math.round(bow.dur * durabilityMax(result.id) / durabilityMax(I.BOW))));
+      if (bow.ench) result.ench = { ...bow.ench };
+      if (bow.name) result.name = bow.name;
+    }
+    return result;
+  }
+
   /** Takes the current grid result, consuming one of every ingredient. */
   craftGrid(table: boolean): Stack | null {
     const r = this.gridMatch(table);
     if (!r) return null;
-    const out: Stack = { ...r.out };
+    const out: Stack = this.bowUpgrade(r, this.grid.find((cell) => cell?.id === I.BOW));
     for (let i = 0; i < 9; i++) {
       const cell = this.grid[i];
       if (!cell) continue;
@@ -474,8 +490,9 @@ export class Inventory {
   craft(r: Recipe): boolean {
     if (!this.canCraftToInventory(r)) return false;
     const previous = this.slots.map((slot) => slot ? copyStack(slot) : null);
+    const out = this.bowUpgrade(r, this.slots.find((slot) => slot?.id === I.BOW));
     for (const inp of r.inputs) this.remove(inp.id, inp.count);
-    if (!this.add(r.out.id, r.out.count, r.out.dur, r.out.ench, r.out.name)) {
+    if (!this.add(out.id, out.count, out.dur, out.ench, out.name)) {
       // Defensive rollback: output insertion is normally guaranteed by the
       // preflight above, but never consume a recipe if that assumption changes.
       this.slots = previous;

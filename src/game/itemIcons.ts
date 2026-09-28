@@ -1356,6 +1356,15 @@ const RABBIT_LEG = [
 ];
 ART[357] = [{ M: '#b77572', L: '#e9b4aa', D: '#7b514a', F: '#eee7d8' }, RABBIT_LEG];
 ART[358] = [{ M: '#91542e', L: '#dca772', D: '#58331c', F: '#e9d9bd' }, RABBIT_LEG];
+// Crafted bowstrings have separate woven-pixel silhouettes, not ingot stand-ins.
+const BOWSTRING_ART = [
+  '................', '...SS......SS...', '..S..S....S..S..', '..S..S....S..S..',
+  '...SS......SS...', '....SS....SS....', '.....SS..SS.....', '......SSSS......',
+  '......SSSS......', '.....SS..SS.....', '....SS....SS....', '...SS......SS...',
+  '..S..S....S..S..', '..S..S....S..S..', '...SS......SS...', '................',
+];
+ART[I.LIGHT_STRING] = [{ S: '#9be5ec' }, BOWSTRING_ART];
+ART[I.STRONG_STRING] = [{ S: '#e5ad6b' }, BOWSTRING_ART];
 Object.assign(ART, POTION_ART);
 
 // ---------------------------------------------------------------------------
@@ -1375,7 +1384,7 @@ function toolPal(it: ItemDef): Record<string, string> {
     w: HANDLE_LIGHT,
     d: HANDLE_DARK,
     v: HANDLE_HI,
-    S: '#e8e8ea', // bow string
+    S: it.id === I.LIGHT_BOW ? '#80e3f2' : it.id === I.STRONG_BOW ? '#f3c262' : '#e8e8ea', // bow string
     f: '#ffd84a', // sparks
     F: '#4a4a52', // flint
     P: '#c44848', // pivot screw

@@ -56,7 +56,7 @@ import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeComp
 import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, CREATIVE_ITEMS, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
-  pickHint, mineSeconds, toolHelps, attackDamage, attackCooldown, attackReach, shieldDamageFactor, shieldWeightFactor, shieldWear, blockDrops, smeltResult, fuelSeconds, resolveId,
+  pickHint, mineSeconds, toolHelps, attackDamage, attackCooldown, attackReach, bowDrawSeconds, bowStrength, shieldDamageFactor, shieldWeightFactor, shieldWear, blockDrops, smeltResult, fuelSeconds, resolveId,
   displayName,
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
@@ -1502,6 +1502,89 @@ section('3.0 #77: mutually exclusive defense and swimming enchants');
   table.inventory.slots[0] = null;
   check('Creative can enchant swimming boots at the table without lapis', table.enchantWith(0) &&
     table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
+}
+
+section('3.0 #42: craftable bowstrings change actual draw speed and projectile strength');
+{
+  check('all four bow upgrades have append-only IDs, Creative slots and own icons',
+    I.LIGHT_STRING === 368 && I.STRONG_STRING === 369 && I.LIGHT_BOW === 370 && I.STRONG_BOW === 371 &&
+    [I.LIGHT_STRING, I.STRONG_STRING, I.LIGHT_BOW, I.STRONG_BOW].every((id) =>
+      CREATIVE_ITEMS.includes(id) && !!buildItemIcons()[id]) &&
+    ITEMS[I.LIGHT_BOW]?.tool === 'bow' && ITEMS[I.STRONG_BOW]?.tool === 'bow');
+  check('unchanged bow retains old timing, strength, durability, original crafting recipe',
+    bowDrawSeconds(I.BOW) === 1 && bowStrength(I.BOW) === 1 && durabilityMax(I.BOW) === 200 &&
+    RECIPES.find((r) => r.out.id === I.BOW)?.inputs.some((i) => i.id === I.STRING && i.count === 3));
+  check('light vs strong string bows have contrasting balanced draw and power',
+    bowDrawSeconds(I.LIGHT_BOW) === 0.65 && bowStrength(I.LIGHT_BOW) === 0.8 &&
+    bowDrawSeconds(I.STRONG_BOW) === 1.4 && bowStrength(I.STRONG_BOW) === 1.3 &&
+    canEnchant(I.LIGHT_BOW, 'power') && canEnchant(I.STRONG_BOW, 'infinity'));
+  for (const [stringId, bowId, ingredient] of [
+    [I.LIGHT_STRING, I.LIGHT_BOW, I.FEATHER], [I.STRONG_STRING, I.STRONG_BOW, I.IRON],
+  ] as const) {
+    const stringRecipe = RECIPES.find((r) => r.out.id === stringId)!;
+    const bowRecipe = RECIPES.find((r) => r.out.id === bowId)!;
+    const inv = new Inventory(); inv.add(I.STRING, 2); inv.add(ingredient, 1); inv.add(I.BOW, 1);
+    check(`${ITEMS[stringId]?.name} crafts and consumes raw materials in Survival`,
+      !stringRecipe.table && inv.craft(stringRecipe) && inv.countOf(I.STRING) === 0 &&
+      inv.countOf(ingredient) === 0 && inv.countOf(stringId) === 1);
+    check(`${ITEMS[bowId]?.name} converts one old bow using one string without duplication`,
+      !bowRecipe.table && inv.craft(bowRecipe) && inv.countOf(I.BOW) === 0 &&
+      inv.countOf(stringId) === 0 && inv.countOf(bowId) === 1 && !inv.craft(bowRecipe));
+    const upgraded = new Inventory();
+    upgraded.slots[0] = { id: I.BOW, count: 1, dur: 80, ench: { power: 2 }, name: 'Łuk łowcy' };
+    upgraded.add(stringId, 1);
+    const ok = upgraded.craft(bowRecipe);
+    const crafted = upgraded.slots.find((slot) => slot?.id === bowId);
+    const grid = new Inventory();
+    grid.grid[0] = { id: I.BOW, count: 1, dur: 80, ench: { power: 2 }, name: 'Łuk łowcy' };
+    grid.grid[1] = { id: stringId, count: 1 };
+    const gridOut = grid.craftGrid(false);
+    const expectedDur = Math.round(80 * durabilityMax(bowId) / durabilityMax(I.BOW));
+    check(`${ITEMS[bowId]?.name} retains old bow wear, enchants and name in inventory and grid`,
+      ok && crafted?.dur === expectedDur && crafted?.ench?.power === 2 && crafted.name === 'Łuk łowcy' &&
+      gridOut?.dur === expectedDur && gridOut?.ench?.power === 2 && gridOut.name === 'Łuk łowcy' &&
+      grid.grid[0] === null && grid.grid[1] === null);
+  }
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.selected = 0; g.ui = 'playing'; g.mode = 'survival';
+  g.inventory.slots[1] = { id: I.ARROW, count: 3 };
+  g.selectedStack = () => g.inventory.slots[g.selected];
+  g.body = { pos: new THREE.Vector3(0, 64, 0), vel: new THREE.Vector3() };
+  g.world = { raycast: () => null };
+  g.selection = { visible: false }; g.crackMesh = { visible: false };
+  g.mouseLeft = false; g.mouseRight = true; g.touchInput = true;
+  g.bowDraw = 0.0001; g.swingT = 1; g.placeCooldown = 1;
+  g.breakCooldown = 0; g.pearlCd = 0; g.eatCooldown = 0;
+  g.eyePos = () => new THREE.Vector3(0, 65.6, 0);
+  g.lookDir = () => new THREE.Vector3(0, 0, -1); g.updateHand = () => {};
+  g.wearTool = () => { worn++; }; g.unlock = () => {}; g.message = () => {};
+  let worn = 0;
+  const shots: { speed: number; power: number; dir: THREE.Vector3 }[] = [];
+  g.spawnArrow = (_p: unknown, d: THREE.Vector3, speed: number, _from: unknown, power: number) =>
+    shots.push({ speed, power, dir: d.clone() });
+  for (const [id, seconds, expected] of [
+    [I.BOW, 1, 9], [I.LIGHT_BOW, 0.65, 7.2], [I.STRONG_BOW, 1.4, 11.7],
+  ]) {
+    g.inventory.slots[0] = { id, count: 1 };
+    g.bowDraw = 0.0001; g.mouseRight = true; g.placeCooldown = 10;
+    g.updateInteraction(seconds / 2);
+    check(`${ITEMS[id]?.name} actually draws half charge at half of its own nock time`,
+      g.bowDraw > 0.49 && g.bowDraw < 0.51);
+    g.updateInteraction(seconds / 2);
+    check(`${ITEMS[id]?.name} draws fully in its specified time`, g.bowDraw === 1);
+    g.mouseRight = false;
+    g.updateInteraction(0.01);
+    check(`${ITEMS[id]?.name} fires with the matching damage and one arrow cost`,
+      Math.abs(shots.at(-1)!.power - expected) < 1e-8 && shots.at(-1)!.dir.z === -1 &&
+      g.inventory.countOf(I.ARROW) === 3 - shots.length && g.bowDraw === -1);
+  }
+  check('all bows share durability wear, arrow speed and ammunition behaviour',
+    shots.length === 3 && worn === 3 && shots.every((s) => s.speed === 48));
+  g.inventory.slots[0] = { id: I.LIGHT_BOW, count: 1 }; g.bowDraw = 1; g.mode = 'creative';
+  g.aimDir = new THREE.Vector3(0.6, 0, -0.8);
+  g.releaseBow();
+  check('upgraded bow fires along touch aim, including when Creative has no arrows',
+    shots.at(-1)!.dir.x === 0.6 && shots.at(-1)!.dir.z === -0.8 && shots.at(-1)!.power === 7.2);
 }
 
 section('3.0 #38: leather and iron shields preserve the original shield');

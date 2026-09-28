@@ -34,7 +34,7 @@ import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
   ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown, attackReach,
   blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
-  shieldDamageFactor, shieldWeightFactor, shieldWear,
+  shieldDamageFactor, shieldWeightFactor, shieldWear, bowDrawSeconds, bowStrength,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
@@ -3330,7 +3330,7 @@ export class Game {
     // 2.5: na dotyku strzała leci tam, gdzie celuje palec (touchAim),
     // a nie w środek ekranu – wcześniej naciąganie łuku celowało „obok”.
     const d = this.aimDir ?? this.lookDir();
-    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, (4 + charge * 5) * power);
+    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, (4 + charge * 5) * power * bowStrength(bow?.id ?? I.BOW));
     Sfx.playBow();
     this.swingT = 0;
     this.wearTool();
@@ -3744,7 +3744,7 @@ export class Game {
       this.swingT = 0;
       return;
     }
-    if (s.id === I.BOW) {
+    if (ITEMS[s.id]?.tool === 'bow') {
       // holding RMB keeps drawing; only a fresh press starts a new draw
       if (this.bowDraw < 0) this.bowDraw = 0.0001;
       this.swingT = 0;
@@ -4725,9 +4725,9 @@ export class Game {
     // 2.3: lorneta działa, dopóki prawy przycisk jest wciśnięty.
     if (!this.mouseRight && !this.touchInput) this.zooming = false;
     if (this.bowDraw >= 0) {
-      if (this.selectedStack()?.id === I.BOW && this.ui === 'playing') {
+      if (ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'bow' && this.ui === 'playing') {
         if (this.mouseRight) {
-          this.bowDraw = Math.min(1, this.bowDraw + dt);
+          this.bowDraw = Math.min(1, this.bowDraw + dt / bowDrawSeconds(this.selectedStack()?.id ?? I.BOW));
           if (this.swingT >= 1) this.swingT = 0.55;
         } else {
           this.releaseBow();
@@ -5270,6 +5270,9 @@ export class Game {
     if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
     if (id === I.IRON_SPEAR) return 'Włócznia: 5 bloków zasięgu · cios co 0,92 s · LPM / tap / ⛏';
     if (id === I.IRON_HAMMER) return 'Młot: 8 obrażeń · rozmach do 2 celów · cios co 1,1 s · LPM / tap / ⛏';
+    if (id === I.LIGHT_BOW || id === I.STRONG_BOW) return id === I.LIGHT_BOW
+      ? 'Lekki łuk: pełen naciąg w 0,65 s · 80% siły strzały · przytrzymaj PPM / palec'
+      : 'Mocny łuk: pełen naciąg w 1,4 s · 130% siły strzały · przytrzymaj PPM / palec';
     if (id === I.LEATHER_SHIELD) return 'Skórzana tarcza: lekka · 35% cios / 60% strzała · R / 🛡 paruj';
     if (id === I.IRON_SHIELD) return 'Żelazna tarcza: ciężka · 70% cios / 85% strzała · R / 🛡 paruj';
     if (id === I.IRON_DAGGER || id === I.DIAMOND_DAGGER) return 'Sztylet: 2,2 bloku · cios co 0,28 s · V / ↝ i LPM / tap / ⛏ = kontra +3';

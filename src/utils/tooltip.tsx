@@ -22,6 +22,8 @@ export function stackTooltip(s: Stack | null | undefined, fallback = ''): string
     s.id === I.IRON_HAMMER ? '\n8 obrażeń, 1,1 s między ciosami. Rozmach przy trafieniu do 2 dodatkowych celów; szybsze kruszenie kamienia, bruku, cegieł, czernitu i bazaltu, bez niszczenia sąsiednich bloków.' :
     s.id === I.LEATHER_SHIELD ? '\nLekka tarcza: 35% ochrony przed ciosem, 60% przed strzałą; szybsze zużycie, bez spowolnienia.' :
     s.id === I.IRON_SHIELD ? '\nCiężka tarcza: 70% ochrony przed ciosem, 85% przed strzałą; ruch o 15% wolniejszy w dłoni.' :
+    s.id === I.LIGHT_BOW ? '\nPełen naciąg w 0,65 s, 80% siły standardowego łuku. Ta sama amunicja i zaklęcia.' :
+    s.id === I.STRONG_BOW ? '\nPełen naciąg w 1,4 s, 130% siły standardowego łuku. Ta sama amunicja i zaklęcia.' :
     s.id === I.IRON_DAGGER || s.id === I.DIAMOND_DAGGER ?
       `\nZasięg 2,2 bloku, ${s.id === I.IRON_DAGGER ? 4 : 5} obrażeń, 0,28 s między ciosami. Po uniku: +3 obrażenia z kontry.` : '';
   return list.length ? `${name}\n§5${list.join('\n')}${desc}` : `${name}${desc}`;

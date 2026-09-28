@@ -29,7 +29,7 @@ import BrewingScreen from '../src/components/BrewingScreen';
 import InventoryScreen from '../src/components/InventoryScreen';
 import { anvilResult } from '../src/game/anvil';
 import { Inventory, RECIPES } from '../src/game/inventory';
-import { I, isFood, isPotion, stackLimit } from '../src/game/items';
+import { I, isFood, isPotion, stackLimit, displayName } from '../src/game/items';
 import { B, BLOCKS } from '../src/game/blocks';
 import { applyBrew, emptyBrewing, tickBrewing, POTIONS, HEAL_AMOUNT } from '../src/game/brewing';
 import type { Stack } from '../src/game/inventory';
@@ -155,6 +155,11 @@ section('inventory screen: recipe finder');
     stackTooltip({ id: I.LEATHER_SHIELD, count: 1 }).includes('35% ochrony') &&
     stackTooltip({ id: I.IRON_SHIELD, count: 1 }).includes('15% wolniejszy') &&
     renderToStaticMarkup(<Controls />).includes('Stara tarcza bez zmian'));
+  check('both string upgrades and bow tradeoffs are visible to PC and touch users',
+    [I.LIGHT_STRING, I.STRONG_STRING, I.LIGHT_BOW, I.STRONG_BOW].every((id) => html.includes(displayName(id))) &&
+    stackTooltip({ id: I.LIGHT_BOW, count: 1 }).includes('0,65 s') &&
+    stackTooltip({ id: I.STRONG_BOW, count: 1 }).includes('130% siły') &&
+    renderToStaticMarkup(<Controls />).includes('Stary łuk bez zmian'));
 }
 
 section('adventure journal: quests and progress');

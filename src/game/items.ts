@@ -113,6 +113,7 @@ export const I = {
   EMBER_BOOTS: 359, TIDE_BOOTS: 360, SOFT_BOOTS: 361,
   IRON_SPEAR: 362, IRON_DAGGER: 363, DIAMOND_DAGGER: 364, IRON_HAMMER: 365,
   LEATHER_SHIELD: 366, IRON_SHIELD: 367,
+  LIGHT_STRING: 368, STRONG_STRING: 369, LIGHT_BOW: 370, STRONG_BOW: 371,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger' | 'hammer';
@@ -210,6 +211,10 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.FEATHER, name: 'Pióro', keys: ['pioro', 'piórko', 'feather'], kind: 'material', color: '#f2f2f0' },
   { id: I.ARROW, name: 'Strzała', keys: ['strzala', 'strzała', 'arrow'], kind: 'material', color: '#c8b08a' },
   { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
+  { id: I.LIGHT_STRING, name: 'Lekka cięciwa', keys: ['lekka_cieciwa', 'light_bowstring'], kind: 'material', color: '#9be5ec' },
+  { id: I.STRONG_STRING, name: 'Mocna cięciwa', keys: ['mocna_cieciwa', 'strong_bowstring'], kind: 'material', color: '#e5ad6b' },
+  { id: I.LIGHT_BOW, name: 'Łuk z lekką cięciwą', keys: ['lekki_luk', 'light_bow'], kind: 'tool', tool: 'bow', durability: 180, color: '#829d9c' },
+  { id: I.STRONG_BOW, name: 'Łuk z mocną cięciwą', keys: ['mocny_luk', 'strong_bow'], kind: 'tool', tool: 'bow', durability: 250, color: '#b67745' },
   { id: I.IRON_SPEAR, name: 'Żelazna włócznia', keys: ['wlocznia', 'zelazna_wlocznia', 'iron_spear'], kind: 'tool', tool: 'spear', durability: 240, color: '#c9d3df' },
   { id: I.IRON_DAGGER, name: 'Żelazny sztylet', keys: ['sztylet', 'zelazny_sztylet', 'iron_dagger'], kind: 'tool', tool: 'dagger', tier: 2, durability: 200, color: '#c9d3df' },
   { id: I.DIAMOND_DAGGER, name: 'Diamentowy sztylet', keys: ['diamentowy_sztylet', 'diamond_dagger'], kind: 'tool', tool: 'dagger', tier: 4, durability: 600, color: '#5ce9dc' },
@@ -534,6 +539,14 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
 
 /** Fraction of frontal damage after an ordinary shield block (timed parries are total).
  *  The 2.7 shield retains exactly its old melee and projectile protection. */
+/** Normalised bow draw and damage multiplier. The old bow remains 1s / 1x. */
+export function bowDrawSeconds(id: number): number {
+  return id === I.LIGHT_BOW ? 0.65 : id === I.STRONG_BOW ? 1.4 : 1;
+}
+export function bowStrength(id: number): number {
+  return id === I.LIGHT_BOW ? 0.8 : id === I.STRONG_BOW ? 1.3 : 1;
+}
+
 export function shieldDamageFactor(id: number, projectile: boolean): number {
   if (id === I.LEATHER_SHIELD) return projectile ? 0.4 : 0.65;
   if (id === I.IRON_SHIELD) return projectile ? 0.15 : 0.3;
