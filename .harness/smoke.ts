@@ -1509,6 +1509,7 @@ section('saves: enchantments ride along');
   g.weather = 'clear';
   g.xp = new Xp(42);
   g.armor = [{ id: I.IRON_BOOTS, count: 1, dur: 100, ench: { featherfalling: 3 } }];
+  g.fishingBait = I.WORM_BAIT;
   g.discovery = new DiscoveryMap();
   g.discovery.survey('overworld', -1, -16, 'Bagno', 63);
   g.discovery.survey('nether', 0, 0, 'Nether', 40);
@@ -1522,6 +1523,7 @@ section('saves: enchantments ride along');
   eq('armor enchantments persist', stored.armor?.[0]?.ench?.featherfalling, 3);
   eq('durability still persists', stored.inv[0]?.dur, 300);
   eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
+  eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
   check('engine save retains surveyed tiles in both dimensions', DiscoveryMap.fromSave(stored.discovery).get('overworld', -1, -1)?.[2] === 8 && DiscoveryMap.fromSave(stored.discovery).get('nether', 0, 0)?.[2] === 11);
   check('world JSON export includes discovery', exportSave('ench-test')?.includes('discovery') === true);
   const beforeFailedWrite = localStorage.getItem('blockcraft-saves-v2');
@@ -2479,6 +2481,37 @@ section('2.0: automatic graphics and settings');
   store.delete(SETTINGS_KEY);
 }
 
+
+section('3.0: fishing bait, survival economy and loot odds');
+{
+  const seq = (...rolls: number[]) => { let i = 0; return () => rolls[i++ % rolls.length]; };
+  check('worms turn a marginal catch into a fish',
+    !isFishStack(rollCatch(seq(0.80, 0, 0))) && isFishStack(rollCatch(seq(0.80, 0, 0), I.WORM_BAIT)));
+  check('glow bait has a bounded treasure roll without changing old table',
+    rollCatch(seq(0.95, 0, 0)).id !== I.EMERALD && rollCatch(seq(0.95, 0, 0), I.GLOW_BAIT).id === I.EMERALD);
+  check('worm bait shortens wait but preserves bite window',
+    biteDelay(() => 0, I.WORM_BAIT) === 3 && biteDelay(() => 0.999, I.WORM_BAIT) < 8 && BITE_WINDOW === 1.7);
+  const rnd = Math.random;
+  try {
+    Math.random = () => 0;
+    const earth = blockDrops(B.DIRT, I.WOOD_SHOVEL);
+    check('digging dirt provides renewable bait without losing the dirt', earth.some((s) => s.id === B.DIRT) && earth.some((s) => s.id === I.WORM_BAIT));
+  } finally { Math.random = rnd; }
+  check('crafted rare bait uses string, honeycomb and Nether dust', RECIPES.some((r) => r.out.id === I.GLOW_BAIT &&
+    [I.STRING, I.HONEYCOMB, I.GLOWSTONE_DUST].every((id) => r.inputs.some((i) => i.id === id))));
+  const g = Object.create(Game.prototype) as any;
+  g.mode = 'survival'; g.fishingBait = null; g.bobber = null;
+  g.inventory = new Inventory();
+  g.inventory.slots[0] = { id: I.WORM_BAIT, count: 1 };
+  g.inventory.slots[1] = { id: I.FISHING_ROD, count: 1 };
+  g.selected = 0;
+  g.consumeSelected = () => { g.inventory.remove(I.WORM_BAIT, 1); };
+  g.message = () => {};
+  g.emitHud = () => {};
+  check('bait is consumed once on attachment to a real rod', g.attachBait(I.WORM_BAIT) &&
+    g.inventory.countOf(I.WORM_BAIT) === 0 && g.fishingBait === I.WORM_BAIT);
+  check('attaching again cannot duplicate or overwrite prepared bait', !g.attachBait(I.WORM_BAIT) && g.fishingBait === I.WORM_BAIT);
+}
 
 // ============================================ 2.3: wyprawa i ratunek
 section('2.3: fishing tables and timing');

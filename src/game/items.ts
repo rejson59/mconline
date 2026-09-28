@@ -106,6 +106,8 @@ export const I = {
   POTION_STRENGTH: 350,
   POTION_REGEN: 351,
   BIOME_COMPASS: 352,
+  WORM_BAIT: 353,
+  GLOW_BAIT: 354,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
@@ -222,6 +224,8 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.GLOWSTONE_DUST, name: 'Jasnogłazowy pył', keys: ['glowstone_dust', 'jasnoglazowy_pyl'], kind: 'material', color: '#e8c85a' },
   // 2.3 „Wyprawa i ratunek”
   { id: I.FISHING_ROD, name: 'Wędka', keys: ['wedka', 'fishing_rod'], kind: 'tool', tool: 'rod', durability: 64, color: '#9a6a34' },
+  { id: I.WORM_BAIT, name: 'Robak na haczyk', keys: ['robak', 'worm_bait'], kind: 'material', color: '#b56f78' },
+  { id: I.GLOW_BAIT, name: 'Świetlista przynęta', keys: ['swietlista_przyneta', 'glow_bait'], kind: 'material', color: '#efcc60' },
   { id: I.RAW_FISH, name: 'Surowa ryba', keys: ['surowa_ryba', 'ryba', 'raw_fish', 'cod'], kind: 'food', hunger: 2, color: '#c9ab84' },
   { id: I.COOKED_FISH, name: 'Pieczona ryba', keys: ['pieczona_ryba', 'cooked_fish'], kind: 'food', hunger: 6, heal: 1, color: '#d29a58' },
   { id: I.RAW_SALMON, name: 'Surowy łosoś', keys: ['surowy_losos', 'losos', 'raw_salmon', 'salmon'], kind: 'food', hunger: 2, color: '#e08a6a' },
@@ -549,6 +553,11 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   if (blockId === B.SPRUCE_LEAVES) return Math.random() < 0.12 ? [{ id: B.SPRUCE_SAPLING, count: 1 }] : [];
   if (blockId === B.DEAD_SHRUB) return Math.random() < 0.4 ? [{ id: I.STICK, count: 1 }] : [];
   if (blockId === B.TALLGRASS) return Math.random() < 0.18 ? [{ id: I.SEEDS, count: 1 }] : [];
+  if (blockId === B.DIRT || blockId === B.MUD || blockId === B.PODZOL) {
+    const out: Stack[] = [{ id: blockId, count: 1 }];
+    if (Math.random() < 0.08) out.push({ id: I.WORM_BAIT, count: 1 });
+    return out;
+  }
   if (blockId === B.GRASS || blockId === B.MEADOW_GRASS) {
     const out: Stack[] = [{ id: B.DIRT, count: 1 }];
     if (Math.random() < 0.12) out.push({ id: I.SEEDS, count: 1 });

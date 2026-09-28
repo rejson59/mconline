@@ -103,6 +103,7 @@ export function Controls() {
     ['Krzesiwo + PPM', 'Podpal TNT'],
     ['Łuk: przytrzymaj PPM, puść', 'Wystrzał ze strzałą'],
     ['Wędka: PPM', 'Zarzuć przynętę i zaciągnij brań'],
+    ['Robak / świetlista przynęta: PPM / tap', 'Załóż na wędkę w ekwipunku (jedna na branie)'],
     ['Lorneta: PPM + G / ⌖', 'Przybliż i oznacz widoczny punkt (na dotyku przycisk ⌖)'],
     ['PPM na kowadle', 'Scal dwa narzędzia i nadaj nazwę'],
     ['PPM na statywie alchemicznym', 'Warzy napoje'],

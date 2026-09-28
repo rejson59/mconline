@@ -168,7 +168,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
       {/* 2.3: stan wędkarstwa nad celownikiem (2.5: treść wg wersji sterowania) */}
       {hud.fishing !== 'idle' && (
         <div className="absolute left-1/2 top-[58%] -translate-x-1/2 px-2 py-0.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
-          {hud.fishing === 'bite' ? (touchControls ? '🎣 Brań! Dotknij, aby zaciągnąć' : '🎣 Brań! Kliknij, aby zaciągnąć') : hud.fishing === 'waiting' ? '🎣 Przynęta czeka…' : '🎣 Przynęta leci…'}
+          {hud.fishing === 'bite' ? (touchControls ? '🎣 Brań! Dotknij, aby zaciągnąć' : '🎣 Brań! Kliknij, aby zaciągnąć') : hud.fishing === 'waiting' ? `🎣 ${hud.bait ?? 'Przynęta'} czeka…` : '🎣 Przynęta leci…'}
         </div>
       )}
 

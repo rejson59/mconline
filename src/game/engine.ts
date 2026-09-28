@@ -3,7 +3,7 @@ import { World, CS, CH, SEA, plantTree, type Biome } from './world';
 import { DiscoveryMap, type DiscoverySave } from './discoveryMap';
 import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
-import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
+import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE, type BaitId } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
 import {
   BREW_FUELS, BREWING_INGREDIENTS, HEAL_AMOUNT, SPEED_FACTOR, STRENGTH_DAMAGE, POTIONS,
@@ -135,6 +135,7 @@ export interface HUDState {
   zoom: boolean;
   /** 2.3: stan wędkarstwa: 'idle' | 'cast' | 'waiting' | 'bite'. */
   fishing: 'idle' | 'cast' | 'waiting' | 'bite';
+  bait?: string | null;
   /** 2.4: aktywne efekty napojów (ikona, nazwa, sekundy pozostałe). */
   effects: { id: string; icon: string; name: string; left: number }[];
 }
@@ -189,6 +190,8 @@ export interface SaveData {
   anvils?: AnvilState[];
   /** 2.3: ile ryb udało się złowić (osiągnięcie „Wędkarz”). */
   fishCaught?: number;
+  /** Prepared bait, already removed from inventory; expires after a bite. */
+  fishingBait?: BaitId | null;
   /** 2.4: zawartość statywów alchemicznych (fiolki, składnik, paliwo). */
   brewings?: BrewingState[];
   /** 2.4: wypiłe typy napojów (osiągnięcie „Mistrz eliksirów”). */
@@ -499,6 +502,7 @@ export class Game {
   private bobberMat: THREE.MeshBasicMaterial | null = null;
   /** 2.3: licznik złowionych ryb (zapisuje się ze światem). */
   fishCaught = 0;
+  fishingBait: BaitId | null = null;
   /** 2.3: lorneta – prawy przycisk myszy w dłoni. */
   private zooming = false;
   /** 2.5: podgląd lornety dla sterowania dotykowego (spowolnienie gestu). */
@@ -766,6 +770,7 @@ export class Game {
         this.brewings.set((b.dim ? 'n:' : '') + brewingKey(b.x, b.y, b.z), clean);
       }
       this.fishCaught = Math.max(0, Math.floor(opts.save.fishCaught ?? 0));
+      this.fishingBait = opts.save.fishingBait === I.WORM_BAIT || opts.save.fishingBait === I.GLOW_BAIT ? opts.save.fishingBait : null;
       for (const id of Array.isArray(opts.save.potionsDrunk) ? opts.save.potionsDrunk : []) {
         if (typeof id === 'number' && POTIONS[id]) this.potionsDrunk.add(id);
       }
@@ -2766,6 +2771,7 @@ export class Game {
         discovery: (this.discovery ?? new DiscoveryMap()).serialize(),
         armor: this.armor.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
         fishCaught: this.fishCaught,
+        fishingBait: this.fishingBait,
         updated: Date.now(),
       };
       upsertSave({ ...data, id: this.worldId });
@@ -3068,6 +3074,19 @@ export class Game {
 
   // ---------- 2.3: wędkarstwo ----------
 
+  /** One bait is removed when prepared, never at pickup. It persists through
+   * save/load and is lost on a completed or missed bite or player death. */
+  attachBait(id: BaitId): boolean {
+    if (this.fishingBait) { this.message('Na haczyku jest już przynęta. Zużyj ją przed zmianą.'); return false; }
+    if (this.bobber) { this.message('Zwiń wędkę, zanim założysz przynętę.'); return false; }
+    if (this.inventory.countOf(I.FISHING_ROD) < 1) { this.message('Potrzebujesz wędki w ekwipunku.'); return false; }
+    if (this.mode === 'survival') this.consumeSelected();
+    this.fishingBait = id;
+    this.message(`Założono: ${displayName(id)}. Przełącz na wędkę i zarzuć.`);
+    this.emitHud();
+    return true;
+  }
+
   /** PPM z wędką: rzuca przynętę albo zwina haczyk. */
   useRod() {
     if (this.bobber) {
@@ -3115,7 +3134,8 @@ export class Game {
 
   /** Wynik zakończonego haczenia. */
   private landFish() {
-    const haul = rollCatch();
+    const haul = rollCatch(Math.random, this.fishingBait);
+    this.fishingBait = null;
     if (this.mode === 'survival') this.giveOrDrop({ ...haul });
     Sfx.playPop();
     this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, isFishStack(haul) ? I.RAW_FISH : I.STRING, 8, 0.4);
@@ -3178,6 +3198,7 @@ export class Game {
       const block = this.world.peekBlock(x, y, z);
       if (block === B.LAVA) {
         this.message('Przynęta spaliła się w lawie.');
+        this.fishingBait = null;
         this.removeBobber();
         return;
       }
@@ -3186,7 +3207,7 @@ export class Game {
         b.pos.y = y + 0.9;
         b.vel.set(0, 0, 0);
         b.wait = 0;
-        b.biteAt = biteDelay();
+        b.biteAt = biteDelay(Math.random, this.fishingBait);
         this.message('Przynęta w wodzie. Czekaj na brań…');
         return;
       }
@@ -3205,6 +3226,7 @@ export class Game {
       b.mesh.position.set(b.pos.x, b.pos.y + Math.abs(Math.sin(b.window * 9)) * -0.35 + 0.1, b.pos.z);
       if (b.window <= 0) {
         this.message('Ryba uciekła z przynęty.');
+        this.fishingBait = null;
         this.removeBobber();
       }
       return;
@@ -3213,7 +3235,7 @@ export class Game {
       b.state = 'water';
       b.pos.y = y + 0.9;
       b.wait = 0;
-      b.biteAt = biteDelay();
+      b.biteAt = biteDelay(Math.random, this.fishingBait);
       this.message('Przynęta w wodzie. Czekaj na brań…');
       return;
     }
@@ -3238,6 +3260,7 @@ export class Game {
       this.message('Brań! PPM, aby zaciągnąć.');
     } else if (b.wait > PATIENCE) {
       this.message('Woda zmyła przynętę.');
+      this.fishingBait = null;
       this.removeBobber();
     }
   }
@@ -3427,6 +3450,7 @@ export class Game {
     }
     // 2.3: wędka rzuca lub zwina przynętę, lorneta przybliża (trzymana w PPM).
     if (s.id === I.FISHING_ROD) { this.useRod(); return; }
+    if (s.id === I.WORM_BAIT || s.id === I.GLOW_BAIT) { this.attachBait(s.id); return; }
     // 2.3: bez przytrzymania (telefon) lorneta działa jak przełącznik.
     if (s.id === I.SPYGLASS) { this.zooming = this.touchInput ? !this.zooming : true; return; }
     if (s.id === I.BIOME_COMPASS) {
@@ -3867,6 +3891,7 @@ export class Game {
       }
       this.inventory.slots.fill(null);
       this.inventory.cursor = null;
+      this.fishingBait = null;
       this.setUI('dead');
     }
     this.emitHud();
@@ -4722,6 +4747,7 @@ export class Game {
       // Pointer Lock, więc podpowiedź tłumaczy, czemu klik „nic nie robi”.
       lockCooldown: !this.locked && !this.touchInput && this.lastLockExit > 0 && performance.now() - this.lastLockExit < 1600,
       fishing: this.fishingState(),
+      bait: this.fishingBait ? displayName(this.fishingBait) : null,
       // 2.4: aktywne wzmocnienia napojów (ikona + nazwa + sekundy)
       effects: [...this.effects.entries()]
         .filter(([id]) => id !== 'none')
@@ -4750,6 +4776,7 @@ export class Game {
     // 2.4: fiolki i napoje mają krótką podpowiedź pod celownikiem
     if (id === I.BOTTLE) return 'Fiolka: PPM nad wodą, aby napełnić';
     if (id !== undefined && isPotion(id)) return 'Napój: PPM, aby wypić';
+    if (id === I.WORM_BAIT || id === I.GLOW_BAIT) return 'Przynęta: PPM / tap, aby założyć na wędkę w ekwipunku';
     if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
     if (id === I.COMPASS) {
       const dx = this.spawnPoint.x - this.body.pos.x;
@@ -4772,7 +4799,7 @@ export class Game {
       if (f === 'bite') return 'Wędka: brań! Kliknij, aby zaciągnąć';
       if (f === 'waiting') return 'Wędka: przynęta czeka w wodzie…';
       if (f === 'cast') return 'Wędka: przynęta leci…';
-      return 'Wędka: PPM, aby zarzucić';
+      return this.fishingBait ? `Wędka: ${displayName(this.fishingBait)} na haczyku · PPM, aby zarzucić` : 'Wędka: PPM, aby zarzucić';
     }
     if (id === I.CLOCK) {
       const hour = (this.time * 24 + 6) % 24;

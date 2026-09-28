@@ -105,6 +105,7 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.PLANKS, count: 4 }, inputs: [{ id: B.BIRCH_LOG, count: 1 }], table: false },
   { out: { id: B.PLANKS, count: 4 }, inputs: [{ id: B.SPRUCE_LOG, count: 1 }], table: false },
   { out: { id: I.BIOME_COMPASS, count: 1 }, inputs: [{ id: I.COMPASS, count: 1 }, { id: I.PAPER, count: 2 }, { id: I.LAPIS, count: 1 }], table: true },
+  { out: { id: I.GLOW_BAIT, count: 4 }, inputs: [{ id: I.STRING, count: 1 }, { id: I.HONEYCOMB, count: 1 }, { id: I.GLOWSTONE_DUST, count: 1 }], table: true },
   { out: { id: B.CRAFTING, count: 1 }, inputs: [{ id: B.PLANKS, count: 4 }], table: false, pattern: ['PP', 'PP'], key: { P: B.PLANKS } },
   { out: { id: B.FURNACE, count: 1 }, inputs: [{ id: B.COBBLE, count: 8 }], table: true, pattern: ['CCC', 'C C', 'CCC'], key: { C: B.COBBLE } },
   { out: { id: B.GLASS, count: 1 }, inputs: [{ id: B.SAND, count: 1 }, { id: I.COAL, count: 1 }], table: true },
