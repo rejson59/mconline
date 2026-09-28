@@ -61,7 +61,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, batSpawnAllowed, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -1537,6 +1537,68 @@ section('3.0 #54: frogs at real water and their insect prey');
     g.unlock = () => {};
     g.mobLoot(frog);
     check('frog has a rare usable slimeball drop', drops.includes(I.SLIME_BALL));
+  } finally { Math.random = random; }
+}
+
+section('3.0 #57: nocturnal bats take flight and rest by day');
+{
+  eq('bats can spawn above forest grass after dusk', batSpawnAllowed(B.GRASS, 'Las', 0.2), true);
+  eq('bats can spawn in older birch forest worlds', batSpawnAllowed(B.GRASS, 'Brzozowy las', 0.2), true);
+  eq('bats never spawn in the daytime', batSpawnAllowed(B.GRASS, 'Las', 0.9), false);
+  eq('bats do not appear above bare desert sand', batSpawnAllowed(B.SAND, 'Pustynia', 0.2), false);
+  check('bat is passive, has a localized name and a winged model', (() => {
+    const m = new Mob('bat', 8, FLAT_H + 4, 8);
+    return MOB_NAMES.bat === 'Nietoperz' && !isHostileMob('bat') && m.arms.length === 2 && m.body.h < 0.5;
+  })());
+  const world = new World(777, true);
+  world.getChunk(0, 0);
+  world.getChunk(1, 0);
+  const flyer = new Mob('bat', 7.5, FLAT_H + 3.2, 7.5);
+  const player = new THREE.Vector3(45, FLAT_H + 1, 45);
+  for (let i = 0; i < 40; i++) flyer.update(1 / 30, world, player, () => {}, () => {}, false, [flyer], () => {}, 1, [], () => false, 0.2);
+  const flightAltitude = flyer.body.pos.y;
+  const flightDist = Math.hypot(flyer.body.pos.x - flyer.home.x, flyer.body.pos.z - flyer.home.z);
+  const inFlight = flyer.arms.some((arm) => Math.abs(arm.rotation.z) < 1);
+  check('night bat flies in a bounded area and flaps both wings', inFlight && flightDist > 0.25 && flightDist < 7 && Math.abs(flightAltitude - flyer.home.y) < 1);
+  for (let i = 0; i < 90; i++) flyer.update(1 / 30, world, player, () => {}, () => {}, false, [flyer], () => {}, 1, [], () => false, 1);
+  check('at dawn bat folds wings and settles nearer the ground', flyer.body.pos.y < flightAltitude - 0.8 && flyer.arms.every((arm) => Math.abs(arm.rotation.z) === 1.25));
+
+  // Spawn through the real world tick rather than a /summon-only code path.
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const originalSurface = world.surface.bind(world);
+  g.world = world;
+  g.world.surface = (x: number, z: number) => ({ ...originalSurface(x, z), biome: 'Las' });
+  g.body = { pos: new THREE.Vector3(8.5, FLAT_H + 1, 8.5) };
+  g.mode = 'survival';
+  g.time = 0.75;
+  g.isInNether = false;
+  g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  g.mobs = [];
+  g.spawnTimer = 0;
+  g.spawnVillageFolk = () => {};
+  g.scene = { remove: () => {} };
+  g.spawnMob = (type: MobType, x: number, y: number, z: number) => { const m = new Mob(type, x, y, z); g.mobs.push(m); return m; };
+  const random = Math.random;
+  try {
+    Math.random = () => 0;
+    g.updateMobs(1 / 30);
+    check('night forest in Survival actually spawns a bat', g.mobs.some((m: Mob) => m.type === 'bat'));
+    g.mobs = [];
+    g.time = 0.25;
+    g.spawnTimer = 0;
+    g.updateMobs(1 / 30);
+    check('daylight does not create new bats', !g.mobs.some((m: Mob) => m.type === 'bat'));
+    g.mobs = [];
+    g.isInNether = true;
+    g.time = 0.75;
+    g.spawnTimer = 0;
+    g.updateMobs(1 / 30);
+    check('Nether spawns no bats', !g.mobs.some((m: Mob) => m.type === 'bat'));
+    let gained = 0;
+    g.dropXpOrbs = () => { gained++; };
+    g.mobXp = Game.prototype['mobXp'];
+    g.mobXp(flyer, 0, 0, 0);
+    eq('bats cannot be farmed for XP', gained, 0);
   } finally { Math.random = random; }
 }
 

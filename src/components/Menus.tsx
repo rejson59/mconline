@@ -102,6 +102,7 @@ export function Controls() {
     ['PPM / tap na mieszkańcu', 'Handel: kartograf, rybak, ogrodnik, kowal i inni. Oferty rosną wraz z doświadczeniem'],
     ['PPM na skrzyni', 'Schowek'],
     ['Drabina + W / spacja', 'Wspinaczka'],
+    ['Nietoperze w lesie nocą', 'Latają i piszczą po zmierzchu, za dnia odpoczywają przy ziemi; nie atakują'],
     ['Żaby przy wodzie', 'Skaczą, rechoczą i polują na meszki nad brzegiem; meszki nie zostawiają łupu ani PD'],
     ['Lisy w tajdze i lasach', 'Uciekają przed graczem i wilkami; polują na króliki/kurczaki, kradną porzucone jedzenie'],
     ['Nożyce + LPM na owcy', 'Wełna bez zabijania'],

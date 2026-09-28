@@ -227,6 +227,7 @@ section('menus: static render');
   check('forced touch mode is labelled', forcedTouch.includes('Dotyk (telefon / tablet)'));
   check('fox behavior is explained to both PC and touch players', renderToStaticMarkup(<Controls />).includes('Lisy w tajdze i lasach'));
   check('frog and insect behaviors appear in in-game help', renderToStaticMarkup(<Controls />).includes('Żaby przy wodzie'));
+  check('nighttime bats are explained in in-game help', renderToStaticMarkup(<Controls />).includes('Nietoperze w lesie nocą'));
   const medium = renderToStaticMarkup(
     <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
   );

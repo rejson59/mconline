@@ -14,7 +14,7 @@ import {
 } from './brewing';
 import { getAtlas, compactAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, type FoxFood, type MobType } from './mobs';
+import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, batSpawnAllowed, type FoxFood, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
@@ -229,6 +229,7 @@ export const MOB_NAMES: Record<MobType, string> = {
   fox: 'Lis',
   frog: 'Żaba',
   midge: 'Meszka',
+  bat: 'Nietoperz',
   sheep: 'Owca',
   cow: 'Krowa',
   chicken: 'Kurczak',
@@ -1999,7 +2000,7 @@ export class Game {
 
   /** Mobs drop XP worth their type: hostiles 3–7, passives 1–3, wolves 2–5. */
   private mobXp(m: Mob, x: number, y: number, z: number) {
-    if (m.type === 'villager' || m.type === 'midge') return; // meszki nie dają PD (również kiedy zje je żaba)
+    if (m.type === 'villager' || m.type === 'midge' || m.type === 'bat') return; // meszki i nietoperze nie dają PD
     const total = m.type === 'golem'
       ? 5 + Math.floor(Math.random() * 4)
       : m.type === 'wolf'
@@ -2670,7 +2671,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2682,7 +2683,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, rabbit, fox, frog, midge, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, frog, midge, bat, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -4552,10 +4553,10 @@ export class Game {
         }
         if (m.body.pos.distanceTo(p) < 16) this.message('Lis porwał leżące jedzenie!');
         return true;
-      });
+      }, dl);
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
-        if (m.type !== 'midge' && m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
+        if (m.type !== 'midge' && (m.type !== 'bat' || dl < 0.5) && m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
       }
       // zombies burn in daylight (but never under the Nether roof)
       if (m.type === 'zombie' && dl > 0.7 && !m.dead && !this.isInNether) {
@@ -4627,6 +4628,14 @@ export class Game {
             const n = type === 'fox' ? 1 : type === 'rabbit' || type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
             for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
           }
+        }
+      }
+      // Nighttime forest bats use the same loaded surface candidate and
+      // passive cap; they rest by day rather than generating endlessly.
+      if (!this.isInNether && passive < 12 && alive.filter((m) => m.type === 'bat').length < 3 && dl < 0.45) {
+        const batPos = tryPos(18, 38);
+        if (batPos && batSpawnAllowed(batPos.top, this.world.surface(Math.floor(batPos.x), Math.floor(batPos.z)).biome, dl)) {
+          this.spawnMob('bat', batPos.x, batPos.y + 2.2, batPos.z);
         }
       }
       if (this.isInNether) {

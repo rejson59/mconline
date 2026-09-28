@@ -5,7 +5,7 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { isFood } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 /** A fox may target only abandoned, ordinary food stacks, not equipment or potions. */
 export interface FoxFood { id: number; count: number; age: number; pos: THREE.Vector3 }
@@ -27,6 +27,12 @@ export function shoreWaterNearby(world: Pick<World, 'peekBlock'>, x: number, y: 
         world.peekBlock(x + dx, y, z + dz) === B.WATER) return true;
   }
   return false;
+}
+
+/** Surface bats leave their daytime resting place only after dusk. */
+export function batSpawnAllowed(top: number, biome: Biome, daylight: number): boolean {
+  return daylight < 0.45 && (biome === 'Las' || biome === 'Brzozowy las' || biome === 'Tajga' || biome === 'Bagno') &&
+    (top === B.GRASS || top === B.PODZOL || top === B.MUD);
 }
 
 export function isHostileMob(type: MobType): boolean {
@@ -100,6 +106,7 @@ export class Mob {
     this.home.set(x, y, z);
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
+        : type === 'bat' ? 0.36
         : type === 'frog' ? 0.48
         : type === 'midge' ? 0.2
         : type === 'fox' ? 0.55
@@ -118,6 +125,7 @@ export class Mob {
             : type === 'enderman' ? 2.9
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
+                  : type === 'bat' ? 0.4
                   : type === 'frog' ? 0.47 : type === 'midge' ? 0.26
                   : type === 'fox' ? 0.72 : type === 'rabbit' ? 0.65 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
@@ -125,6 +133,7 @@ export class Mob {
       type === 'zombie' ? 20
         : type === 'creeper' ? 16
           : type === 'cow' ? 10
+            : type === 'bat' ? 4
             : type === 'frog' ? 5
             : type === 'midge' ? 1
             : type === 'fox' ? 9
@@ -226,6 +235,34 @@ export class Mob {
       this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
       this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
       this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'bat') {
+      const brown = 0x534741, wingColor = 0x867272;
+      const body = box(0.24, 0.29, 0.24, brown, sharedMats);
+      const head = new THREE.Group();
+      head.position.set(0, 0.13, 0.15);
+      const face = box(0.2, 0.16, 0.15, brown, sharedMats);
+      head.add(face);
+      this.meshes.push(body, face);
+      for (const side of [-1, 1]) {
+        const ear = box(0.055, 0.11, 0.055, wingColor, sharedMats);
+        ear.position.set(side * 0.07, 0.14, 0);
+        const eye = box(0.035, 0.04, 0.021, 0xf4b078, sharedMats);
+        eye.position.set(side * 0.055, 0.01, 0.087);
+        head.add(ear, eye);
+        this.meshes.push(ear, eye);
+      }
+      g.add(body, head);
+      this.head = head;
+      for (const side of [-1, 1]) {
+        const wing = new THREE.Group();
+        wing.position.set(side * 0.12, 0.04, 0);
+        const membrane = box(0.4, 0.02, 0.26, wingColor, sharedMats);
+        membrane.position.x = side * 0.18;
+        wing.add(membrane);
+        g.add(wing);
+        this.meshes.push(membrane);
+        this.arms.push(wing);
+      }
     } else if (this.type === 'frog') {
       const green = 0x4d9b40, dark = 0x28643d, cream = 0xd6de8e;
       const body = box(0.45, 0.29, 0.48, green, sharedMats);
@@ -938,6 +975,41 @@ export class Mob {
     return true;
   }
 
+  /** Nocturnal flight stays within a short loaded neighborhood. During the
+   * day bats descend onto solid ground and fold their wings to rest. */
+  private updateBat(dt: number, world: World, daylight: number): void {
+    const b = this.body;
+    const awake = daylight < 0.5;
+    this.aiTimer -= dt;
+    this.walkPhase += dt * (awake ? 4.5 : 0.8);
+    if (awake) {
+      if (this.aiTimer <= 0) {
+        this.aiTimer = 1 + Math.random() * 1.5;
+        const dx = this.home.x - b.pos.x, dz = this.home.z - b.pos.z;
+        this.yaw = Math.hypot(dx, dz) > 6 ? Math.atan2(dx, dz) : Math.random() * Math.PI * 2;
+      }
+      const nx = b.pos.x + Math.sin(this.yaw) * dt * 1.5;
+      const nz = b.pos.z + Math.cos(this.yaw) * dt * 1.5;
+      const goalY = this.home.y + Math.sin(this.walkPhase) * 0.7;
+      const ny = b.pos.y + (goalY - b.pos.y) * Math.min(1, dt * 4);
+      if (world.peekBlock(Math.floor(nx), Math.floor(ny), Math.floor(nz)) === B.AIR) b.pos.set(nx, ny, nz);
+      else { this.yaw += Math.PI / 2; this.aiTimer = 0.3; }
+    } else {
+      const nearGround = this.home.y - 1.55;
+      const targetY = world.peekBlock(Math.floor(this.home.x), Math.floor(nearGround), Math.floor(this.home.z)) === B.AIR
+        ? nearGround : this.home.y; // player-built blocks must not swallow resting bats
+      const dx = this.home.x - b.pos.x, dz = this.home.z - b.pos.z;
+      b.pos.x += dx * Math.min(1, dt * 2);
+      b.pos.z += dz * Math.min(1, dt * 2);
+      b.pos.y += (targetY - b.pos.y) * Math.min(1, dt * 2);
+    }
+    for (let i = 0; i < this.arms.length; i++) {
+      this.arms[i].rotation.z = (i ? -1 : 1) * (awake ? 0.15 + Math.sin(this.walkPhase * 8) * 0.65 : 1.25);
+    }
+    this.group.position.copy(b.pos);
+    this.group.rotation.y = this.yaw;
+  }
+
   /** Lightweight pond insect: short wandering flights around its spawn point;
    * movement checks only the current block, never generates a distant chunk. */
   private updateMidge(dt: number, world: World): void {
@@ -1093,7 +1165,8 @@ export class Mob {
     onBite: (mob: Mob) => void = () => {},
     aggressionSpeed = 1,
     food: readonly FoxFood[] = [],
-    onSnatch: (target: FoxFood) => boolean = () => false
+    onSnatch: (target: FoxFood) => boolean = () => false,
+    daylight = 1
   ) {
     const b = this.body;
     if (this.hurtTime > 0) {
@@ -1118,6 +1191,10 @@ export class Mob {
     }
     if (this.type === 'golem') {
       this.updateGolem(dt, world, player, allies, onAttack);
+      return;
+    }
+    if (this.type === 'bat') {
+      this.updateBat(dt, world, daylight);
       return;
     }
     if (this.type === 'midge') {

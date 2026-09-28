@@ -117,7 +117,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
+export function playMob(type: 'pig' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -127,6 +127,12 @@ export function playMob(type: 'pig' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'zom
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(260, t);
     o.frequency.linearRampToValueAtTime(180, t + 0.25);
+  } else if (type === 'bat') {
+    o.type = 'sine';
+    o.frequency.setValueAtTime(780, t);
+    o.frequency.linearRampToValueAtTime(1070, t + 0.06);
+    o.frequency.setValueAtTime(810, t + 0.12);
+    o.frequency.linearRampToValueAtTime(1160, t + 0.18);
   } else if (type === 'frog') {
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(115, t);
