@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, type Biome } from './world';
 import { DiscoveryMap, type DiscoverySave } from './discoveryMap';
 import { CHALLENGES, normalizeChallenges, type ChallengeId, type ChallengeProgress } from './challenges';
-import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, resourceDropCount, type WorldDifficulty } from './difficulty';
+import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, resourceDropCount, animalMeatYield, type WorldDifficulty } from './difficulty';
 import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE, type BaitId } from './fishing';
@@ -3875,14 +3875,18 @@ export class Game {
         fortune: enchLevel(this.selectedStack(), 'fortune'),
         silk: enchLevel(this.selectedStack(), 'silktouch') > 0,
       });
+      let yielded = false;
       for (const drop of drops) {
         const count = resourceDropCount(id, drop.id, drop.count, this.difficulty.resources, enchLevel(this.selectedStack(), 'silktouch') > 0);
-        if (count > 0) this.spawnDrop(drop.id, count, x + 0.5, y + 0.45, z + 0.5);
+        if (count > 0) {
+          yielded = true;
+          this.spawnDrop(drop.id, count, x + 0.5, y + 0.45, z + 0.5);
+        }
       }
       if (isDoorTop(id)) this.spawnDrop(B.DOOR_N, 1, x + 0.5, y + 0.2, z + 0.5);
       // ores that actually yielded something also drop XP
       const xp = oreXp(id);
-      if (drops.length > 0 && xp > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, xp);
+      if (yielded && xp > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, xp);
     }
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
@@ -5037,18 +5041,20 @@ export class Game {
 
   private mobLoot(m: Mob) {
     const x = m.body.pos.x, y = m.body.pos.y + 0.4, z = m.body.pos.z;
-    if (m.type === 'pig') this.spawnDrop(I.RAW_PORK, 1, x, y, z);
+    const meat = m.type === 'pig' || m.type === 'cow' || m.type === 'rabbit' || m.type === 'chicken'
+      ? animalMeatYield(this.difficulty?.resources ?? 'normalne') : 1;
+    if (m.type === 'pig') { if (meat) this.spawnDrop(I.RAW_PORK, meat, x, y, z); }
     else if (m.type === 'cow') {
-      this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
+      if (meat) this.spawnDrop(I.RAW_BEEF, meat, x, y, z);
       const hide = Math.floor(Math.random() * 3);
       for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
     }
     else if (m.type === 'rabbit') {
-      this.spawnDrop(I.RAW_RABBIT, 1, x, y, z);
+      if (meat) this.spawnDrop(I.RAW_RABBIT, meat, x, y, z);
       if (Math.random() < 0.25) this.spawnDrop(I.LEATHER, 1, x, y, z);
     }
     else if (m.type === 'chicken') {
-      this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
+      if (meat) this.spawnDrop(I.RAW_CHICKEN, meat, x, y, z);
       if (Math.random() < 0.4) this.spawnDrop(I.FEATHER, 1, x, y, z);
     } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
     else if (m.type === 'creeper') this.spawnDrop(I.GUNPOWDER, 1, x, y, z);

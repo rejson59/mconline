@@ -572,7 +572,7 @@ async function mountWithJsdom(): Promise<boolean> {
   await React.act(async () => { difficultyRoot.render(<DifficultyHarness />); });
   const button = (text: string) => Array.from(difficultyContainer.querySelectorAll('button')).find((b) => b.textContent?.includes(text)) as HTMLButtonElement;
   await React.act(async () => { button('Trudność świata').click(); });
-  check('three independent rules are presented in the world panel', difficultyContainer.textContent?.includes('Agresja mobów') && difficultyContainer.textContent.includes('Obrażenia od potworów') && difficultyContainer.textContent.includes('Zasoby (rudy)'));
+  check('three independent rules are presented in the world panel', difficultyContainer.textContent?.includes('Agresja mobów') && difficultyContainer.textContent.includes('Obrażenia od potworów') && difficultyContainer.textContent.includes('Zasoby (rudy, plony, mięso)'));
   await React.act(async () => { button('Spokojna:').click(); });
   await React.act(async () => { button('Surowe:').click(); });
   await React.act(async () => { button('Obfite:').click(); });

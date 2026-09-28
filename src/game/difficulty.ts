@@ -1,4 +1,5 @@
-import { isOre } from './items';
+import { I, isOre } from './items';
+import { B } from './blocks';
 
 /** Per-world rules. Optional in old saves; unrelated to device/graphics settings. */
 export type Aggression = 'spokojna' | 'normalna' | 'zaciekla';
@@ -40,8 +41,17 @@ export function oreYield(count: number, resources: ResourceLevel, roll?: number)
   return resources === 'skape' ? Math.max(0, count - ((roll ?? Math.random()) < 0.25 ? 1 : 0)) : resources === 'obfite' ? count + 1 : count;
 }
 
+/** Food from animals is not a placeable block, unlike wool or equipment. */
+export function animalMeatYield(resources: ResourceLevel, roll?: number): number {
+  return oreYield(1, resources, roll);
+}
+
 /** Placed ore blocks must never duplicate through rich-mode drops. */
 export function resourceDropCount(blockId: number, dropId: number, count: number, resources: ResourceLevel, silk: boolean, roll?: number): number {
-  if (!isOre(blockId) || silk) return count;
+  if (silk) return count;
+  // Only the ripe crop's edible yield varies. Seeds always survive harvest,
+  // preventing scarcity from making a one-seed farm impossible to replant.
+  if (blockId === B.CROP3 && dropId === I.WHEAT) return oreYield(count, resources, roll);
+  if (!isOre(blockId)) return count;
   return oreYield(count, resources === 'obfite' && blockId === dropId ? 'normalne' : resources, roll);
 }

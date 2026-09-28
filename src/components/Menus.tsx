@@ -681,7 +681,7 @@ export function PauseMenu({
             {([
               ['aggression', 'Agresja mobów', [['spokojna', 'Spokojna: bez ataków i nowych potworów'], ['normalna', 'Normalna'], ['zaciekla', 'Zacięta: szybsze i liczniejsze potwory']]],
               ['damage', 'Obrażenia od potworów', [['lagodne', 'Łagodne: ×0,7'], ['normalne', 'Normalne'], ['surowe', 'Surowe: ×1,4']]],
-              ['resources', 'Zasoby (rudy)', [['skape', 'Skąpe: 25% szans na utratę jednej sztuki'], ['normalne', 'Normalne'], ['obfite', 'Obfite: dodatkowy surowiec (bez duplikacji bloków rud)']]],
+              ['resources', 'Zasoby (rudy, plony, mięso)', [['skape', 'Skąpe: 25% szans na utratę jednej sztuki'], ['normalne', 'Normalne'], ['obfite', 'Obfite: dodatkowa sztuka rudy, pszenicy lub mięsa (bez duplikacji bloków)']]],
             ] as const).map(([key, title, options]) => (
               <div key={key} className="flex flex-col gap-1">
                 <strong>{title}</strong>

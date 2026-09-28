@@ -51,7 +51,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
 import { DiscoveryMap, MAP_LIMIT } from '../src/game/discoveryMap';
 import { CHALLENGES, normalizeChallenges } from '../src/game/challenges';
-import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, oreYield, resourceDropCount } from '../src/game/difficulty';
+import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, oreYield, resourceDropCount, animalMeatYield } from '../src/game/difficulty';
 import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeCompass';
 import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
@@ -1230,6 +1230,63 @@ section('3.0 #81: independent, live per-world difficulty');
   eq('rich mode cannot duplicate an iron ore block', resourceDropCount(B.IRON_ORE, B.IRON_ORE, 1, 'obfite', false), 1);
   eq('silk touch never applies resource multiplier', resourceDropCount(B.DIAMOND_ORE, B.DIAMOND_ORE, 1, 'obfite', true), 1);
   eq('ordinary stone ignores resource multiplier', resourceDropCount(B.STONE, B.COBBLE, 1, 'obfite', false), 1);
+  eq('ripe wheat gains a second harvest in rich worlds', resourceDropCount(B.CROP3, I.WHEAT, 1, 'obfite', false), 2);
+  eq('scarce harvest occasionally loses edible yield', resourceDropCount(B.CROP3, I.WHEAT, 1, 'skape', false, 0.1), 0);
+  eq('scarce world keeps seeds for sustainable replanting', resourceDropCount(B.CROP3, I.SEEDS, 1, 'skape', false, 0.1), 1);
+  eq('unripe crops never multiply seeds', resourceDropCount(B.CROP0, I.SEEDS, 1, 'obfite', false), 1);
+  eq('silk touch never multiplies a ripe crop block', resourceDropCount(B.CROP3, B.CROP3, 1, 'obfite', true), 1);
+  eq('old animal meat yield unchanged in normal worlds', animalMeatYield('normalne', 0), 1);
+  eq('animals give two pieces of meat in rich worlds', animalMeatYield('obfite'), 2);
+  eq('animals sometimes give no meat in scarce worlds', animalMeatYield('skape', 0.1), 0);
+  eq('animals can still provide meat in scarce worlds', animalMeatYield('skape', 0.9), 1);
+  const harvest = Object.create(Game.prototype) as unknown as Record<string, any>;
+  harvest.world = new World(37, true);
+  harvest.mode = 'survival';
+  harvest.difficulty = { ...DEFAULT_DIFFICULTY, resources: 'obfite' };
+  harvest.growables = new Map();
+  harvest.selectedStack = () => null;
+  harvest.spawnParticles = () => {};
+  harvest.fallGravity = () => {};
+  const harvestDrops: { id: number; count: number }[] = [];
+  harvest.spawnDrop = (id: number, count: number) => void harvestDrops.push({ id, count });
+  harvest.world.getChunk(0, 0);
+  harvest.world.setBlock(3, FLAT_H + 1, 3, B.CROP3);
+  harvest.breakBlock(3, FLAT_H + 1, 3);
+  check('live ripe crop harvest uses resource setting but preserves seeds', harvestDrops.some(d => d.id === I.WHEAT && d.count === 2) && harvestDrops.some(d => d.id === I.SEEDS && d.count >= 1));
+  harvestDrops.length = 0;
+  harvest.difficulty.resources = 'normalne';
+  harvest.world.setBlock(3, FLAT_H + 1, 3, B.CROP3);
+  harvest.breakBlock(3, FLAT_H + 1, 3);
+  check('reverting the difficulty instantly restores original crop yield', harvestDrops.some(d => d.id === I.WHEAT && d.count === 1));
+  const pig = new Mob('pig', 4, FLAT_H + 1, 4);
+  harvest.mobXp = () => {};
+  harvest.unlock = () => {};
+  harvestDrops.length = 0;
+  harvest.difficulty.resources = 'obfite';
+  harvest.mobLoot(pig);
+  check('live animal kill applies rich meat yield', harvestDrops.some(d => d.id === I.RAW_PORK && d.count === 2));
+  harvestDrops.length = 0;
+  harvest.difficulty.resources = 'normalne';
+  harvest.mobLoot(pig);
+  check('reverting the setting restores old animal meat yield', harvestDrops.some(d => d.id === I.RAW_PORK && d.count === 1));
+  harvest.selectedStack = () => ({ id: I.WOOD_PICK, count: 1 });
+  harvest.difficulty.resources = 'skape';
+  let orbCount = 0;
+  harvest.spawnOrb = () => { orbCount++; };
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0.1;
+    harvestDrops.length = 0;
+    harvest.world.setBlock(3, FLAT_H + 1, 3, B.COAL_ORE);
+    harvest.breakBlock(3, FLAT_H + 1, 3);
+    check('scarce ore that yields nothing grants no XP or items', harvestDrops.length === 0 && orbCount === 0);
+    harvest.difficulty.resources = 'normalne';
+    harvest.world.setBlock(3, FLAT_H + 1, 3, B.COAL_ORE);
+    harvest.breakBlock(3, FLAT_H + 1, 3);
+    check('returning to normal resources restores ore and XP immediately', harvestDrops.some(d => d.id === I.COAL && d.count === 1) && orbCount === 1);
+  } finally { Math.random = originalRandom; }
+
+
 
   const world = new World(17, true);
   world.getChunk(0, 0);
