@@ -1335,6 +1335,27 @@ const POTION_ART: Record<number, [Record<string, string>, string[]]> = {
   355: potionArt('#81b9ef', '#c9e5ff', '#376b9b'),
   356: potionArt('#e89d55', '#ffd29a', '#a15a24'),
 };
+// A small rabbit leg silhouette (raw and cooked), distinct from the larger pork icon.
+const RABBIT_LEG = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '......MMMM......',
+  '.....MLLLMM.....',
+  '....MLLLLLMM....',
+  '....MLLLLLDM....',
+  '.....MLLLDDM....',
+  '......MMDDM.....',
+  '.......DDM......',
+  '......FFDD......',
+  '.....FFF........',
+  '......F.........',
+  '................',
+  '................',
+];
+ART[357] = [{ M: '#b77572', L: '#e9b4aa', D: '#7b514a', F: '#eee7d8' }, RABBIT_LEG];
+ART[358] = [{ M: '#91542e', L: '#dca772', D: '#58331c', F: '#e9d9bd' }, RABBIT_LEG];
 Object.assign(ART, POTION_ART);
 
 // ---------------------------------------------------------------------------

@@ -462,6 +462,13 @@ section('2.4: brewing rules');
   check('stone is not a brewing ingredient', badIng.bottles[0]?.id === I.WATER_BOTTLE && badIng.progress === 0);
 }
 
+section('3.0 #52: rabbit food UI metadata');
+{
+  check('raw and cooked rabbit display as food', isFood(I.RAW_RABBIT) && isFood(I.COOKED_RABBIT));
+  check('rabbit items do not overwrite existing blocks', !BLOCKS[I.RAW_RABBIT] && !BLOCKS[I.COOKED_RABBIT]);
+  check('rabbit cuts use normal inventory stacks', stackLimit(I.RAW_RABBIT) === 64 && stackLimit(I.COOKED_RABBIT) === 64);
+}
+
 section('2.4: potion item metadata');
 {
   const potionIds = [I.POTION_AWKWARD, I.POTION_HEAL, I.POTION_FIRE, I.POTION_SPEED, I.POTION_NIGHT, I.POTION_STRENGTH, I.POTION_REGEN, I.POTION_FALL, I.POTION_SPRINT];

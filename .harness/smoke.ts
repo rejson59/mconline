@@ -59,7 +59,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, pickPassiveMob, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -1124,6 +1124,49 @@ section('engine: armor damage, equipping, xp');
   check('armor dropped on death', [I.LEATHER_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS].every((id) => droppedIds.includes(id)), JSON.stringify(droppedIds));
   eq('armor cleared on death', g.armor.every((s: any) => s === null), true);
   eq('active potion buffs cleared on death', g.effects.size, 0);
+}
+
+section('3.0 #52: meadow rabbits, fleeing, jumping, food and drops');
+{
+  eq('meadow spawn selects rabbits often', pickPassiveMob(0.3, 'Kwiecista łąka'), 'rabbit');
+  eq('old plains support rare rabbits', pickPassiveMob(0.01, 'Równiny'), 'rabbit');
+  eq('the rest of plains animal mix stays familiar', pickPassiveMob(0.3, 'Równiny'), 'cow');
+  eq('meadows still spawn other animals', pickPassiveMob(0.9, 'Kwiecista łąka'), 'sheep');
+  check('rabbits remain passive', !isHostileMob('rabbit'));
+  check('rabbit meat IDs are appended to the old range', I.RAW_RABBIT === 357 && I.COOKED_RABBIT === 358);
+  check('both cuts are usable in Creative', CREATIVE_ITEMS.includes(I.RAW_RABBIT) && CREATIVE_ITEMS.includes(I.COOKED_RABBIT));
+  eq('rabbit meat cooks in a furnace', smeltResult(I.RAW_RABBIT), I.COOKED_RABBIT);
+  check('cooked rabbit restores more hunger', (ITEMS[I.COOKED_RABBIT]?.hunger ?? 0) > (ITEMS[I.RAW_RABBIT]?.hunger ?? 0));
+  const rabbit = new Mob('rabbit', 8.5, FLAT_H + 1, 8.5);
+  check('rabbit is smaller than chicken', rabbit.body.w < new Mob('chicken', 0, 0, 0).body.w);
+  check('rabbit has long ears and a hopping gait', rabbit.head.children.length >= 7 && rabbit.legs.length === 4);
+  const flat = new World(456, true);
+  flat.getChunk(0, 0);
+  for (let z = 2; z <= 12; z++) for (let x = 7; x <= 9; x++) for (let y = FLAT_H + 1; y <= FLAT_H + 3; y++) flat.setBlock(x, y, z, B.AIR);
+  const near = new THREE.Vector3(8.5, FLAT_H + 1, 10.5);
+  const original = rabbit.body.pos.distanceTo(near);
+  let jumped = false;
+  for (let i = 0; i < 90; i++) {
+    rabbit.update(1 / 30, flat, near, () => {}, () => {}, false);
+    if (rabbit.body.pos.y > FLAT_H + 1.13) jumped = true;
+  }
+  check('rabbit flees the player without attacking', rabbit.body.pos.distanceTo(near) > original + 2, `${original.toFixed(2)} → ${rabbit.body.pos.distanceTo(near).toFixed(2)} at ${rabbit.body.pos.toArray()}`);
+  check('fleeing rabbit hops rather than sliding', jumped);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const drops: number[] = [];
+  g.spawnDrop = (id: number) => void drops.push(id);
+  g.mobXp = () => {};
+  g.unlock = () => {};
+  g.mobLoot(rabbit);
+  check('rabbit yields distinct meat on death', drops.includes(I.RAW_RABBIT));
+  g.inventory = new Inventory();
+  g.selected = 0;
+  g.body = { pos: new THREE.Vector3(0, 65, 0) };
+  g.consumeSelected = () => {};
+  g.message = () => {};
+  check('campfire cooks rabbit meat using the real engine path', g.cookOnCampfire({ id: I.RAW_RABBIT, count: 1 }));
+  eq('cooked rabbit lands in inventory', g.inventory.countOf(I.COOKED_RABBIT), 1);
+
 }
 
 // ======================================================================== wolf

@@ -109,6 +109,7 @@ export const I = {
   WORM_BAIT: 353,
   GLOW_BAIT: 354,
   POTION_FALL: 355, POTION_SPRINT: 356,
+  RAW_RABBIT: 357, COOKED_RABBIT: 358,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
@@ -247,6 +248,8 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.POTION_REGEN, name: 'Napój regeneracji', keys: ['napoj_regeneracji', 'potion_regen', 'regeneration'], kind: 'potion', potion: 'regen', stack: 16, color: '#e06090' },
   { id: I.POTION_FALL, name: 'Napój lekkiego lądowania', keys: ['napoj_ladowania', 'potion_fall'], kind: 'potion', potion: 'fall', stack: 16, color: '#81b9ef' },
   { id: I.POTION_SPRINT, name: 'Napój zrywu', keys: ['napoj_zrywu', 'potion_sprint'], kind: 'potion', potion: 'sprint', stack: 16, color: '#e89d55' },
+  { id: I.RAW_RABBIT, name: 'Surowe mięso królika', keys: ['surowy_krolik', 'raw_rabbit'], kind: 'food', hunger: 2, color: '#d9a1a0' },
+  { id: I.COOKED_RABBIT, name: 'Pieczony królik', keys: ['pieczony_krolik', 'cooked_rabbit'], kind: 'food', hunger: 5, heal: 1, color: '#aa7856' },
 ];
 
 const ARMOR_TIERS: {
@@ -612,6 +615,8 @@ export function smeltResult(id: number): number | null {
       return I.COOKED_BEEF;
     case I.RAW_CHICKEN:
       return I.COOKED_CHICKEN;
+    case I.RAW_RABBIT:
+      return I.COOKED_RABBIT;
     case I.RAW_FISH:
       return I.COOKED_FISH;
     case I.RAW_SALMON:

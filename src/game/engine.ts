@@ -12,7 +12,7 @@ import {
 } from './brewing';
 import { getAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, type MobType } from './mobs';
+import { Mob, isHostileMob, pickPassiveMob, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
@@ -219,6 +219,7 @@ const EFFECT_META: Record<Exclude<PotionEffectId, 'none'>, { icon: string; name:
 /** Polskie nazwy mobów – używane w podpowiedzi pod celownikiem. */
 export const MOB_NAMES: Record<MobType, string> = {
   pig: 'Świnia',
+  rabbit: 'Królik',
   sheep: 'Owca',
   cow: 'Krowa',
   chicken: 'Kurczak',
@@ -2385,7 +2386,7 @@ export class Game {
 
   private cookOnCampfire(s: Stack): boolean {
     // mięso i ryby piecze się tu jak w piecu – cookedOf() łączy reguły 2.3
-    const meats: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN };
+    const meats: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN, [I.RAW_RABBIT]: I.COOKED_RABBIT };
     const out = meats[s.id] ?? cookedOf(s.id);
     if (!out) return false;
     this.consumeSelected();
@@ -2596,7 +2597,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -4496,10 +4497,11 @@ export class Game {
       };
       if (!this.isInNether && passive < 12 && dl > 0.5) {
         const pos = tryPos(20, 48);
-        if (pos && pos.top === B.GRASS) {
+        if (pos && (pos.top === B.GRASS || pos.top === B.MEADOW_GRASS)) {
+          const biome = this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome;
           const roll = Math.random();
-          const type: MobType = roll < 0.1 ? 'wolf' : roll < 0.4 ? 'cow' : roll < 0.65 ? 'chicken' : roll < 0.88 ? 'pig' : 'sheep';
-          const n = type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+          const type = pickPassiveMob(roll, biome);
+          const n = type === 'rabbit' || type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
           for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
         }
       }
@@ -4949,6 +4951,10 @@ export class Game {
       const hide = Math.floor(Math.random() * 3);
       for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
     }
+    else if (m.type === 'rabbit') {
+      this.spawnDrop(I.RAW_RABBIT, 1, x, y, z);
+      if (Math.random() < 0.25) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
     else if (m.type === 'chicken') {
       this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
       if (Math.random() < 0.4) this.spawnDrop(I.FEATHER, 1, x, y, z);
@@ -4987,7 +4993,8 @@ export class Game {
         else if (m.type === 'cow') {
           this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
           if (Math.random() < 0.6) this.spawnDrop(I.LEATHER, 1, x, y, z);
-        } else if (m.type === 'chicken') {
+        } else if (m.type === 'rabbit') this.spawnDrop(I.RAW_RABBIT, 1, x, y, z);
+        else if (m.type === 'chicken') {
           this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
           if (Math.random() < 0.6) this.spawnDrop(I.FEATHER, 1, x, y, z);
         } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);

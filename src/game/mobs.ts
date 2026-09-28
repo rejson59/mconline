@@ -1,10 +1,16 @@
 import * as THREE from 'three';
-import type { World } from './world';
+import type { World, Biome } from './world';
 import { stepBody, type Body } from './physics';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
-export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+export type MobType = 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
+
+/** Rabbits prefer flower meadows, with a small plains population in older worlds. */
+export function pickPassiveMob(roll: number, biome: Biome): MobType {
+  if ((biome === 'Kwiecista łąka' && roll < 0.42) || (biome === 'Równiny' && roll < 0.025)) return 'rabbit';
+  return roll < 0.1 ? 'wolf' : roll < 0.4 ? 'cow' : roll < 0.65 ? 'chicken' : roll < 0.88 ? 'pig' : 'sheep';
+}
 
 export function isHostileMob(type: MobType): boolean {
   return type === 'zombie' || type === 'creeper' || type === 'spider' || type === 'skeleton' || type === 'enderman' || type === 'slime' || type === 'ghast';
@@ -73,6 +79,7 @@ export class Mob {
     this.home.set(x, y, z);
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
+        : type === 'rabbit' ? 0.38
         : type === 'chicken' ? 0.45
           : type === 'cow' ? 1.1
             : type === 'golem' ? 1.0
@@ -87,12 +94,13 @@ export class Mob {
             : type === 'enderman' ? 2.9
               : type === 'slime' ? 0.9
                 : type === 'ghast' ? 2.0
-                  : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
+                  : type === 'rabbit' ? 0.65 : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
     this.maxHealth = this.health =
       type === 'zombie' ? 20
         : type === 'creeper' ? 16
           : type === 'cow' ? 10
+            : type === 'rabbit' ? 4
             : type === 'chicken' ? 4
               : type === 'sheep' ? 8
                 : type === 'skeleton' ? 20
@@ -190,6 +198,37 @@ export class Mob {
       this.addLeg(lx, legH, fz, lw, legH, lw, lc, this.legs);
       this.addLeg(-lx, legH, bz, lw, legH, lw, lc, this.legs);
       this.addLeg(lx, legH, bz, lw, legH, lw, lc, this.legs);
+    } else if (this.type === 'rabbit') {
+      // Small silhouette, large upright ears, bright tail; two hind-leg pivots
+      // double as a readable hopping animation on low graphics presets.
+      const fur = 0xb4a28a, pale = 0xeadcc5, inner = 0xd58c8a;
+      const torso = box(0.38, 0.32, 0.56, fur, sharedMats);
+      torso.position.set(0, 0.27, 0);
+      const tail = box(0.18, 0.18, 0.18, pale, sharedMats);
+      tail.position.set(0, 0.31, -0.36);
+      g.add(torso, tail);
+      this.meshes.push(torso, tail);
+      const head = new THREE.Group();
+      head.position.set(0, 0.45, 0.28);
+      const face = box(0.32, 0.27, 0.28, fur, sharedMats);
+      head.add(face);
+      this.meshes.push(face);
+      for (const side of [-1, 1]) {
+        const ear = box(0.12, 0.38, 0.1, fur, sharedMats);
+        ear.position.set(side * 0.105, 0.32, -0.02);
+        const lining = box(0.065, 0.28, 0.025, inner, sharedMats);
+        lining.position.set(side * 0.105, 0.32, 0.042);
+        const eye = box(0.055, 0.055, 0.025, 0x211b19, sharedMats);
+        eye.position.set(side * 0.11, 0.02, 0.15);
+        head.add(ear, lining, eye);
+        this.meshes.push(ear, lining, eye);
+      }
+      g.add(head);
+      this.head = head;
+      for (const side of [-1, 1]) {
+        this.addLeg(side * 0.13, 0.14, -0.16, 0.16, 0.22, 0.24, fur, this.legs);
+        this.addLeg(side * 0.12, 0.12, 0.22, 0.09, 0.18, 0.12, pale, this.legs);
+      }
     } else if (this.type === 'chicken') {
       const body = box(0.36, 0.32, 0.48, 0xf4f4f4, sharedMats);
       body.position.set(0, 0.42, 0);
@@ -820,6 +859,27 @@ export class Mob {
       this.updateGolem(dt, world, player, allies, onAttack);
       return;
     }
+    if (this.type === 'rabbit') {
+      const dx = b.pos.x - player.x, dz = b.pos.z - player.z;
+      const threatened = Math.hypot(dx, dz) < 7 && Math.abs(b.pos.y - player.y) < 3;
+      this.aiTimer -= dt;
+      if (threatened) {
+        this.yaw = Math.atan2(dx, dz);
+        this.walking = true;
+        this.soundTimer = Math.min(this.soundTimer, 2);
+      } else if (this.aiTimer <= 0) {
+        this.aiTimer = 1.5 + Math.random() * 3;
+        this.walking = Math.random() < 0.55;
+        this.yaw = Math.random() * Math.PI * 2;
+      }
+      if (this.walking && b.onGround && this.attackCooldown <= 0) {
+        b.vel.y = threatened ? 7.2 : 5.3;
+        this.attackCooldown = threatened ? 0.45 : 0.85;
+      }
+      this.moveAndAnimate(dt, world, player, this.walking ? (threatened ? 4.2 : 1.3) : 0);
+      return;
+    }
+
 
     let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : this.type === 'wolf' ? 1.6 : this.type === 'enderman' ? 3.2 : this.type === 'slime' ? 2.0 : this.type === 'ghast' ? 1.5 : 1.2;
     const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
