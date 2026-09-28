@@ -88,6 +88,8 @@ export function Controls() {
     ['Spacja x2 / F', 'Latanie (tryb kreatywny)'],
     ['Shift', 'Skradanie / lot w dół (lewy lub prawy)'],
     ['W x2 lub Ctrl', 'Sprint'],
+    ['V / ↝ na dotyku', 'Unik w kierunku ruchu (bez kierunku: w tył); krótkie okno ochrony, koszt 1 głodu, odnowienie 2,7 s'],
+    ['R / 🛡 na dotyku', 'Parowanie z tarczą w ręku: 0,42 s na cios lub strzałę z przodu, odnowienie 1,7 s'],
     ['LPM (przytrzymaj)', 'Kopanie · atak bije dalej z cooldownem'],
     ['PPM', 'Stawianie bloku / użycie stołu'],
     ['ŚPM', 'Wybierz blok'],

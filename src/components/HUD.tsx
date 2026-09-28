@@ -236,7 +236,9 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
           width={96}
           height={96}
           className="pixelated absolute right-3 top-3 hidden sm:block"
-          style={{ width: 112, height: 112, border: '2px solid #111', boxShadow: '0 0 0 2px rgba(255,255,255,0.25)', background: '#111' }}
+          style={{ width: 112, height: 112, border: '2px solid #111', boxShadow: '0 0 0 2px rgba(255,255,255,0.25)', background: '#111',
+            // On short landscape touch screens the dodge/parry row occupies this corner.
+            display: touchControls && typeof window !== 'undefined' && window.innerHeight < 530 ? 'none' : undefined }}
         />
       )}
 
@@ -254,6 +256,12 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         {label && (
           <div key={label.key} className="mb-2 text-lg mc-text">
             {label.text}
+          </div>
+        )}
+        {hud.combat && (hud.combat.dodgeCooldown > 0 || hud.combat.guardCooldown > 0 || hud.combat.shield) && (
+          <div className="mb-1 flex gap-2 bg-black/60 px-2 py-0.5 text-[11px] mc-text" role="status">
+            <span className={hud.combat.dodgeActive ? 'text-green-300' : ''}>↝ {hud.combat.dodgeActive ? 'unik!' : hud.combat.dodgeCooldown > 0 ? `${hud.combat.dodgeCooldown.toFixed(1)}s` : 'gotów'}</span>
+            {hud.combat.shield && <span className={hud.combat.guardActive ? 'text-green-300' : ''}>🛡 {hud.combat.guardActive ? 'paruj!' : hud.combat.guardCooldown > 0 ? `${hud.combat.guardCooldown.toFixed(1)}s` : 'gotowa'}</span>}
           </div>
         )}
         {/* 2.4: aktywne wzmocnienia napojów */}

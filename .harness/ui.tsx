@@ -234,6 +234,7 @@ section('menus: static render');
   check('campfire avoidance appears in help', renderToStaticMarkup(<Controls />).includes('Ognisko i pochodnie'));
   check('bounded mob route finding appears in help', renderToStaticMarkup(<Controls />).includes('Omijanie przeszkód'));
   check('biome ambience and global mute are explained in help', renderToStaticMarkup(<Controls />).includes('Dźwięki biomów') && renderToStaticMarkup(<Controls />).includes('0% wycisza'));
+  check('PC and touch defensive controls are explained in help', renderToStaticMarkup(<Controls />).includes('V / ↝') && renderToStaticMarkup(<Controls />).includes('R / 🛡'));
   check('volume slider explicitly exposes mute in the settings tab', renderToStaticMarkup(<SettingsScreen settings={DEFAULT_SETTINGS} onChange={noop} onClose={noop} />).includes('wyciszenie wszystkich dźwięków'));
   check('wolf trust requires three feedings and persists in help', renderToStaticMarkup(<Controls />).includes('Zaufanie wilka') && renderToStaticMarkup(<Controls />).includes('3/3'));
   check('telegraphed attacks and counters are explained in help', renderToStaticMarkup(<Controls />).includes('Sygnały walki'));
@@ -564,8 +565,9 @@ async function mountWithJsdom(): Promise<boolean> {
   const touchContainer = w.document.createElement('div');
   w.document.body.appendChild(touchContainer);
   const touchRoot = createRoot(touchContainer);
-  let thrown = 0;
-  const touchGame = { flying: false, mode: 'survival', keys: new Set<string>(), isZooming: () => false, dropItem: () => { thrown++; } };
+  let thrown = 0, dodged = 0, parried = 0;
+  const touchGame = { flying: false, mode: 'survival', keys: new Set<string>(), isZooming: () => false,
+    dropItem: () => { thrown++; }, tryDodge: () => { dodged++; }, tryTimedGuard: () => { parried++; } };
   await React.act(async () => {
     touchRoot.render(<TouchControls game={touchGame as unknown as Game} settings={{ ...DEFAULT_SETTINGS, touchMode: 'tap' }}
       onInventory={noop} onPause={noop} onChat={noop} onWaypoints={noop} />);
@@ -576,6 +578,19 @@ async function mountWithJsdom(): Promise<boolean> {
     throwButton?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
   });
   check('touch throw action calls the same real item-dropping method as Q', thrown === 1);
+  const dodgeButton = touchContainer.querySelector('[aria-label="Unik"]') as HTMLButtonElement | null;
+  const guardButton = touchContainer.querySelector('[aria-label="Parowanie tarczą"]') as HTMLButtonElement | null;
+  check('both defensive actions are accessible in touch tap mode', !!dodgeButton && !!guardButton);
+  await React.act(async () => {
+    for (const button of [dodgeButton, guardButton])
+      button?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
+  });
+  check('touch defense buttons call the live Game defensive methods', dodged === 1 && parried === 1);
+  await React.act(async () => {
+    touchRoot.render(<TouchControls game={touchGame as unknown as Game} settings={{ ...DEFAULT_SETTINGS, touchMode: 'buttons' }}
+      onInventory={noop} onPause={noop} onChat={noop} onWaypoints={noop} />);
+  });
+  check('dodge and parry remain available in touch button mode', !!touchContainer.querySelector('[aria-label="Unik"]') && !!touchContainer.querySelector('[aria-label="Parowanie tarczą"]'));
   await React.act(async () => { touchRoot.unmount(); });
   touchContainer.remove();
 

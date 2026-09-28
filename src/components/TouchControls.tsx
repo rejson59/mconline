@@ -509,6 +509,12 @@ export default function TouchControls({
         />
       )}
 
+      {/* Obrona dostępna także bez klawiatury, również w trybie tap. */}
+      <div className="pointer-events-none absolute right-3 flex gap-2" style={{ top: vh < 530 ? 72 : 136 }}>
+        <ActionButton label="↝" hint="Unik" size={48} onDown={() => game.tryDodge()} haptics={settings.haptics} />
+        <ActionButton label="🛡" hint="Parowanie tarczą" size={48} onDown={() => game.tryTimedGuard()} haptics={settings.haptics} />
+      </div>
+
       {/* przyciski akcji – diament pod prawym kciukiem */}
       <div
         className="pointer-events-none absolute"
@@ -617,7 +623,7 @@ export default function TouchControls({
       )}
 
       {/* krótka ściągka trybu tap – pod paskiem górnym, żeby nie zasłaniać HUD-u */}
-      {settings.touchMode === 'tap' && (
+      {settings.touchMode === 'tap' && vh >= 530 && (
         <div className="pointer-events-none absolute left-3 max-w-[240px] text-[12px] leading-tight opacity-55 mc-text" style={{ top: 92 }}>
           tapnij = postaw / użyj<br />przytrzymaj = kop<br />przeciągnij = rozglądaj się
         </div>

@@ -27,6 +27,7 @@ import {
 } from './enchant';
 import * as Sfx from './audio';
 import { chooseAmbient } from './ambience';
+import { dodgeDirection, threatInFront } from './combatMoves';
 import { patchChunkMaterial } from './lighting';
 import { buildItemIcons } from './itemIcons';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
@@ -142,6 +143,7 @@ export interface HUDState {
   /** 2.4: aktywne efekty napojów (ikona, nazwa, sekundy pozostałe). */
   effects: { id: string; icon: string; name: string; left: number }[];
   challenges: ChallengeProgress;
+  combat?: { dodgeCooldown: number; guardCooldown: number; dodgeActive: boolean; guardActive: boolean; shield: boolean };
 }
 
 export interface TradeRow {
@@ -593,6 +595,11 @@ export class Game {
   private orbMat!: THREE.MeshBasicMaterial;
   /** Seconds the bow has been drawn, -1 when idle. */
   private bowDraw = -1;
+  /** Short, timed defensive actions. Timers are transient and reset on reload. */
+  private dodgeTime = 0;
+  private dodgeCooldown = 0;
+  private guardTime = 0;
+  private guardCooldown = 0;
   /** Rzuty perłą Endu mają krótki odstęp (1.9). */
   private pearlCd = 0;
   private pearlGeo: THREE.SphereGeometry | null = null;
@@ -1249,6 +1256,8 @@ export class Game {
     if (e.code === 'KeyT' || e.code === 'Slash') { e.preventDefault(); this.setUI('chat'); return; }
     // 2.5: Ctrl+Q wyrzuca cały stos (Q – pojedynczy przedmiot, jak w klasyku).
     if (e.code === 'KeyQ') { this.dropItem(e.ctrlKey); }
+    if (e.code === 'KeyV') { e.preventDefault(); this.tryDodge(); return; }
+    if (e.code === 'KeyR') { e.preventDefault(); this.tryTimedGuard(); return; }
     if (e.code === 'KeyF' && this.mode === 'creative') { this.toggleFly(); }
     if (e.code === 'Space') {
       const now = performance.now();
@@ -2158,6 +2167,41 @@ export class Game {
       this.message('Tarcza się zniszczyła.');
     }
     this.emitHud();
+  }
+
+  /** Quick movement uses the ordinary collision solver, not teleportation. */
+  tryDodge(): boolean {
+    if (this.ui !== 'playing' || this.flying || !this.body.onGround || this.dodgeCooldown > 0 ||
+        (this.mode === 'survival' && this.hunger < 1)) return false;
+    const dir = dodgeDirection(this.yaw, this.keys);
+    this.body.vel.x = dir.x * 8;
+    this.body.vel.z = dir.z * 8;
+    this.dodgeTime = 0.29;
+    this.dodgeCooldown = 2.7;
+    if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 1);
+    this.message('Unik! Krótkie okno bezpieczeństwa.');
+    this.emitHud();
+    return true;
+  }
+
+  tryTimedGuard(): boolean {
+    if (this.ui !== 'playing' || !this.holdingShield() || this.guardCooldown > 0) return false;
+    this.guardTime = 0.42;
+    this.guardCooldown = 1.7;
+    this.message('Tarcza w górze — paruj cios z przodu!');
+    this.emitHud();
+    return true;
+  }
+
+  private parryFrom(threat: THREE.Vector3): boolean {
+    if (this.guardTime <= 0 || !this.holdingShield() ||
+        !threatInFront(this.yaw, this.body.pos.x, this.body.pos.z, threat.x, threat.z)) return false;
+    this.guardTime = 0; // one successful parry per press
+    Sfx.playShield();
+    this.wearShield(4);
+    this.unlock('guardian');
+    this.message('Parowanie!');
+    return true;
   }
 
   private holdingShield(): boolean {
@@ -3498,7 +3542,14 @@ export class Game {
             a.pos.y > p.y - 0.1 && a.pos.y < p.y + this.body.h + 0.1 &&
             a.pos.z > p.z - 0.45 && a.pos.z < p.z + 0.45
           ) {
-            if (this.holdingShield()) {
+            // Use the incoming trajectory, not the shooter's possibly changed position.
+            const incoming = new THREE.Vector3(p.x - dir.x, p.y, p.z - dir.z);
+            const front = threatInFront(this.yaw, p.x, p.z, incoming.x, incoming.z);
+            if (this.dodgeTime > 0) {
+              this.message('Strzała minęła cię podczas uniku!');
+            } else if (this.parryFrom(incoming)) {
+              // A well-timed frontal parry absorbs a single arrow completely.
+            } else if (this.holdingShield() && front) {
               Sfx.playShield();
               this.wearShield(12);
               this.unlock('guardian');
@@ -4147,6 +4198,7 @@ export class Game {
     this.air = this.maxAir;
     this.body.pos.copy(this.spawnPoint);
     this.body.vel.set(0, 0, 0);
+    this.dodgeTime = this.dodgeCooldown = this.guardTime = this.guardCooldown = 0;
     this.fallStart = this.body.pos.y;
     if (this.mode === 'creative') this.giveStarterItems();
     this.setUI('playing');
@@ -4274,6 +4326,10 @@ export class Game {
   }
 
   private updatePlayer(dt: number) {
+    this.dodgeTime = Math.max(0, (this.dodgeTime || 0) - dt);
+    this.dodgeCooldown = Math.max(0, (this.dodgeCooldown || 0) - dt);
+    this.guardTime = Math.max(0, (this.guardTime || 0) - dt);
+    this.guardCooldown = Math.max(0, (this.guardCooldown || 0) - dt);
     const b = this.body;
     const k = this.keys;
     const playing = this.ui === 'playing';
@@ -4320,7 +4376,7 @@ export class Game {
     const onIce = feetBelow === B.ICE;
     let accel = this.flying ? 8 : b.onGround ? 14 : inWater ? 6 : 2.5;
     if (onIce && !this.flying) accel = hasInput ? 1.4 : 0.45;
-    const a = Math.min(1, accel * dt * (hasInput || b.onGround || this.flying ? 1 : 0.3));
+    const a = Math.min(1, (this.dodgeTime > 0 ? 2 : accel) * dt * (hasInput || b.onGround || this.flying ? 1 : 0.3));
     b.vel.x += (tx - b.vel.x) * a;
     b.vel.z += (tz - b.vel.z) * a;
 
@@ -4628,8 +4684,10 @@ export class Game {
       if (m.type === 'wolf' && m.trust > 0 && !m.dead && m.body.pos.distanceTo(p) > 90) continue;
       m.update(dt, this.world, p, (dmg, mob) => {
         if (this.ui === 'dead') return;
+        if (this.dodgeTime > 0) { this.message('Cios chybiony — unik!'); return; }
+        if (this.parryFrom(mob.body.pos)) return;
         // A raised shield halves the hit and absorbs most of the knockback.
-        const shielded = this.holdingShield();
+        const shielded = this.holdingShield() && threatInFront(this.yaw, p.x, p.z, mob.body.pos.x, mob.body.pos.z);
         if (shielded) {
           Sfx.playShield();
           this.wearShield(8);
@@ -5066,6 +5124,8 @@ export class Game {
       weather: this.weather,
       toast: this.toast && now - this.toast.at < 4600 ? { title: this.toast.title, text: this.toast.text } : null,
       sprinting: this.sprinting,
+      combat: { dodgeCooldown: this.dodgeCooldown, guardCooldown: this.guardCooldown,
+        dodgeActive: this.dodgeTime > 0, guardActive: this.guardTime > 0, shield: this.holdingShield() },
       worldName: this.worldName,
       worldType: this.worldType,
       minimap: this.showMinimap,

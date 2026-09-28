@@ -63,6 +63,7 @@ import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { boundedPathStep } from '../src/game/pathfinding';
 import { chooseAmbient } from '../src/game/ambience';
+import { dodgeDirection, threatInFront } from '../src/game/combatMoves';
 import * as Sfx from '../src/game/audio';
 import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, villagerActivity, villagerWorkSpot, villagerWalkable, merchantProfession, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
@@ -1134,6 +1135,100 @@ section('engine: armor damage, equipping, xp');
   check('armor dropped on death', [I.LEATHER_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS].every((id) => droppedIds.includes(id)), JSON.stringify(droppedIds));
   eq('armor cleared on death', g.armor.every((s: any) => s === null), true);
   eq('active potion buffs cleared on death', g.effects.size, 0);
+}
+
+section('3.0 #75: directional shield parry and dodge');
+{
+  check('frontal sector faces the camera, not a world axis', threatInFront(0, 0, 0, 0, -3) &&
+    !threatInFront(0, 0, 0, 0, 3) && threatInFront(Math.PI / 2, 0, 0, -3, 0));
+  check('a coincident or invalid threat cannot be parried', !threatInFront(0, 0, 0, 0, 0) && !threatInFront(NaN, 0, 0, 0, -1));
+  const back = dodgeDirection(0, new Set());
+  eq('dodge without input retreats', `${back.x},${back.z}`, '0,1');
+  const forward = dodgeDirection(0, new Set(['KeyW']));
+  eq('dodge follows forward input', `${forward.x},${forward.z}`, '0,-1');
+  const diagonal = dodgeDirection(Math.PI / 2, new Set(['KeyW', 'KeyD']));
+  check('rotated diagonal dodge is normalised', Math.abs(Math.hypot(diagonal.x, diagonal.z) - 1) < 1e-9 && diagonal.x < 0 && diagonal.z < 0);
+
+  const g = Object.create(Game.prototype) as any;
+  g.ui = 'playing'; g.mode = 'survival'; g.hunger = 4; g.flying = false; g.yaw = 0;
+  g.keys = new Set<string>(); g.body = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(), onGround: true, h: 1.8 };
+  g.inventory = new Inventory(); g.selected = 0;
+  g.selectedStack = () => g.inventory.slots[g.selected] ?? null;
+  g.message = () => {}; g.emitHud = () => {}; g.unlock = () => {};
+  let hits = 0, lastHit = 0;
+  g.damage = (amount: number) => { hits++; lastHit = amount; };
+  check('grounded survival player can dodge', g.tryDodge());
+  eq('dodge spends exactly one hunger', g.hunger, 3);
+  check('dodge grants only a short window, with cooldown', g.dodgeTime === 0.29 && !g.tryDodge());
+  g.dodgeTime = 0; g.dodgeCooldown = 0; g.body.onGround = false;
+  check('mid-air dodge is rejected', !g.tryDodge());
+  g.body.onGround = true; g.hunger = 0;
+  check('starving player cannot dodge', !g.tryDodge());
+  g.hunger = 3; g.ui = 'paused';
+  check('no defensive actions while paused', !g.tryDodge() && !g.tryTimedGuard());
+  g.ui = 'playing';
+  check('parry requires a shield in the selected slot', !g.tryTimedGuard());
+  g.inventory.slots[0] = { id: I.SHIELD, count: 1 };
+  check('shield initiates a timed guard', g.tryTimedGuard() && g.guardTime === 0.42 && !g.tryTimedGuard());
+  const durability = g.inventory.slots[0].dur;
+  check('rear attacker does not consume timed parry', !g.parryFrom(new THREE.Vector3(0, 0, 2)) && g.guardTime > 0);
+  check('frontal attacker is parried once and wears shield', g.parryFrom(new THREE.Vector3(0, 0, -2)) && g.guardTime === 0 &&
+    g.inventory.slots[0].dur < (durability ?? 999));
+  check('spent parry does not block a second attacker', !g.parryFrom(new THREE.Vector3(0, 0, -2)));
+  g.guardCooldown = 0; g.guardTime = 0;
+  g.onKeyDown({ code: 'KeyR', repeat: false, preventDefault() {} });
+  check('PC R activates the real shield timing window', g.guardTime === 0.42);
+  g.guardTime = 0; g.guardCooldown = 0; g.dodgeCooldown = 0;
+  g.onKeyDown({ code: 'KeyV', repeat: false, preventDefault() {} });
+  check('PC V activates the real dodge', g.dodgeTime === 0.29 && g.hunger === 2);
+  g.dodgeTime = 0; g.dodgeCooldown = 0;
+  g.onKeyDown({ code: 'KeyV', repeat: true, preventDefault() {} });
+  check('holding V cannot spam dodge', g.dodgeTime === 0 && g.hunger === 2);
+  g.inventory.slots[0] = null;
+  check('guard cannot be activated after shield is unequipped', !g.tryTimedGuard());
+  g.inventory.slots[0] = { id: I.SHIELD, count: 1 };
+  g.world = { peekBlock: () => B.AIR };
+  g.scene = { remove: () => {} };
+  g.difficulty = DEFAULT_DIFFICULTY;
+  g.arrows = [];
+  const shoot = (z: number, velZ: number) => {
+    g.arrows.push({ life: 0, pos: new THREE.Vector3(0, 1, z), vel: new THREE.Vector3(0, 0, velZ),
+      mesh: { position: new THREE.Vector3(), lookAt() {} }, from: { body: { pos: new THREE.Vector3(0, 0, z) } }, power: 4 });
+    g.updateArrows(0.1);
+  };
+  g.guardCooldown = 0;
+  g.tryTimedGuard();
+  shoot(-0.5, 4);
+  check('front arrow is consumed by a well-timed guard', hits === 0 && g.guardTime === 0 && g.arrows.length === 0);
+  g.guardCooldown = 0;
+  g.tryTimedGuard();
+  shoot(0.5, -4);
+  check('rear arrow bypasses shield and parry without consuming the timing window', hits === 1 && g.guardTime > 0 && g.arrows.length === 0);
+  g.inventory.slots[0] = null;
+  g.guardTime = 0; g.dodgeTime = 0.2;
+  shoot(0.5, -4);
+  check('dodge window avoids a rear arrow even without a shield', hits === 1 && g.arrows.length === 0);
+  g.dodgeTime = 0; g.guardTime = 0; g.guardCooldown = 0;
+  const foe = { type: 'skeleton', dead: false, soundTimer: 10, body: { pos: new THREE.Vector3(0, 0, -2) },
+    group: {}, update(_dt: number, _world: unknown, _p: unknown, hit: (d: number, m: unknown) => void) { hit(4, this); } };
+  g.mobs = [foe]; g.spawnTimer = 100; g.daylight = () => 0; g.weather = 'clear'; g.isInNether = false;
+  g.drops = []; g.time = 0;
+  g.inventory.slots[0] = { id: I.SHIELD, count: 1 };
+  g.tryTimedGuard(); g.updateMobs(0.01);
+  check('real mob attack callback is parried before applying damage', hits === 1 && g.guardTime === 0);
+  foe.body.pos.z = 2; g.guardCooldown = 0; g.tryTimedGuard(); g.updateMobs(0.01);
+  check('rear mob attack bypasses passive shield and timed parry', hits === 2 && g.guardTime > 0);
+  g.dodgeTime = 0.2; g.updateMobs(0.01);
+  check('mob strike in the dodge window misses', hits === 2);
+  g.dodgeTime = 0; g.guardTime = 0;
+  foe.body.pos.z = -2;
+  g.updateMobs(0.01);
+  check('passive shield reduces only frontal mob strikes', hits === 3 && lastHit === Math.ceil(mobDamage(4, g.difficulty.damage) / 2));
+  foe.body.pos.z = 2;
+  g.updateMobs(0.01);
+  check('passive shield does not stop a rear mob strike', hits === 4 && lastHit === mobDamage(4, g.difficulty.damage));
+  g.mode = 'creative'; g.hunger = 0; g.inventory.slots[0] = null;
+  check('Creative can dodge without food, retaining existing sandbox access', g.tryDodge() && g.hunger === 0);
 }
 
 section('3.0 #79: build, combat and exploration challenges');
