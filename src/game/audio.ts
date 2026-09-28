@@ -1,6 +1,8 @@
 // Procedural sound effects generated with the Web Audio API.
 // Every entry point is fail-safe: if the browser has no (or a blocked)
 // AudioContext the game keeps running silently instead of throwing.
+import type { AmbientCue } from './ambience';
+
 type Kind = 'stone' | 'wood' | 'grass' | 'sand' | 'glass' | 'cloth' | 'slime';
 
 let ctx: AudioContext | null = null;
@@ -41,7 +43,7 @@ function ensure(): AudioContext | null {
 }
 
 export function setVolume(v: number) {
-  volume = Math.max(0, Math.min(1, v));
+  volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.5;
   if (master) {
     try {
       master.gain.value = volume;
@@ -433,6 +435,46 @@ export function playShield() {
   o.connect(og).connect(master);
   o.start(t);
   o.stop(t + 0.1);
+}
+
+/** A single low-cost, short atmospheric sound, shaped by the existing master
+ * gain. Loop the pre-generated buffer rather than allocate minutes of audio. */
+function playAtmosphere(frequency: number, duration: number, gain: number, rate = 0.65) {
+  const c = ensure();
+  if (!c || !master || !noiseBuf) return;
+  const source = c.createBufferSource();
+  source.buffer = noiseBuf;
+  source.loop = true;
+  source.playbackRate.value = rate;
+  const filter = c.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = frequency;
+  filter.Q.value = 0.55;
+  const amp = c.createGain();
+  const t = c.currentTime;
+  amp.gain.setValueAtTime(0.0001, t);
+  amp.gain.exponentialRampToValueAtTime(gain, t + duration * 0.42);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+  source.connect(filter).connect(amp).connect(master);
+  source.start(t);
+  source.stop(t + duration + 0.02);
+}
+
+/** Sparse location signatures, all controlled by the same persisted 0–100%
+ * volume setting as steps and combat. Silence when muted without allocation. */
+export function playBiomeAmbient(cue: AmbientCue) {
+  if (volume <= 0) return;
+  switch (cue) {
+    case 'bird': playBird(); break;
+    case 'wind': playWind(); break;
+    case 'cave': playCave(); break;
+    case 'marsh': playAtmosphere(210, 1.6, 0.055, 0.45); playMob('frog'); break;
+    case 'insects': playAtmosphere(2600, 2.2, 0.025, 1.1); break;
+    case 'surf': playAtmosphere(420, 3.4, 0.08, 0.8); break;
+    case 'snow': playAtmosphere(720, 3.1, 0.052, 0.75); break;
+    case 'sand': playAtmosphere(1550, 2.6, 0.042, 0.7); break;
+    case 'nether': playAtmosphere(110, 3.5, 0.065, 0.35); break;
+  }
 }
 
 /** A short wind gust – filtered noise that slowly opens up. */

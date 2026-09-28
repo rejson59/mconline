@@ -233,6 +233,8 @@ section('menus: static render');
   check('rain shelter behavior appears in help', renderToStaticMarkup(<Controls />).includes('Deszcz i zwierzęta'));
   check('campfire avoidance appears in help', renderToStaticMarkup(<Controls />).includes('Ognisko i pochodnie'));
   check('bounded mob route finding appears in help', renderToStaticMarkup(<Controls />).includes('Omijanie przeszkód'));
+  check('biome ambience and global mute are explained in help', renderToStaticMarkup(<Controls />).includes('Dźwięki biomów') && renderToStaticMarkup(<Controls />).includes('0% wycisza'));
+  check('volume slider explicitly exposes mute in the settings tab', renderToStaticMarkup(<SettingsScreen settings={DEFAULT_SETTINGS} onChange={noop} onClose={noop} />).includes('wyciszenie wszystkich dźwięków'));
   check('wolf trust requires three feedings and persists in help', renderToStaticMarkup(<Controls />).includes('Zaufanie wilka') && renderToStaticMarkup(<Controls />).includes('3/3'));
   check('telegraphed attacks and counters are explained in help', renderToStaticMarkup(<Controls />).includes('Sygnały walki'));
   check('cave listener quiet steps and Q decoy appear in help', renderToStaticMarkup(<Controls />).includes('Jaskiniowy nasłuchiwacz') && renderToStaticMarkup(<Controls />).includes('Shift'));

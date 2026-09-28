@@ -26,6 +26,7 @@ import {
   type EnchOption,
 } from './enchant';
 import * as Sfx from './audio';
+import { chooseAmbient } from './ambience';
 import { patchChunkMaterial } from './lighting';
 import { buildItemIcons } from './itemIcons';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
@@ -5626,19 +5627,17 @@ export class Game {
       this.ambientTimer -= dt;
       if (this.ambientTimer <= 0) {
         this.ambientTimer = 16 + Math.random() * 26;
-        Sfx.playCave();
+        Sfx.playBiomeAmbient('nether');
       }
       return;
     }
-    // Ambient sound: wind and birds on the surface, drones in a cave.
+    // One sparse, biome-specific cue at a time; no per-frame audio allocation.
     this.ambientTimer -= dt;
     if (this.ambientTimer <= 0) {
       this.ambientTimer = this.underground ? 18 + Math.random() * 26 : 16 + Math.random() * 30;
-      const roll = Math.random();
-      if (this.underground) Sfx.playCave();
-      else if (this.weather === 'rain') { if (roll < 0.6) Sfx.playWind(); }
-      else if (this.daylight() > 0.55) { if (roll < 0.45) Sfx.playBird(); else if (roll < 0.8) Sfx.playWind(); }
-      else if (roll < 0.5) Sfx.playWind();
+      const biome = this.world.surface(Math.floor(this.body.pos.x), Math.floor(this.body.pos.z)).biome;
+      const cue = chooseAmbient(biome, this.underground, this.weather === 'rain', this.daylight(), Math.random());
+      if (cue) Sfx.playBiomeAmbient(cue);
     }
     this.weatherTimer -= dt;
     if (this.weatherTimer <= 0) this.setWeather(this.weather === 'clear' ? 'rain' : 'clear');

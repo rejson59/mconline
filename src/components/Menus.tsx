@@ -108,6 +108,7 @@ export function Controls() {
     ['Dzień mieszkańców', 'Rano i wieczorem mieszkańcy spotykają się, w dzień pracują przy stanowiskach zawodu, nocą odpoczywają. Zagrożenie zawsze przerywa rutynę.'],
     ['Żółwie i jaja', 'Żółwie przy wodzie znoszą jaja na piasku. Jaja rosną w trzech etapach i wylęgają się; etapy zapisują się w świecie.'],
     ['Sygnały walki', 'Zombie, pająk, enderman, slime i nasłuchiwacz ostrzegają pomarańczowym znakiem oraz głosem przed ciosem. Szkielet i ghast ostrzegają przed strzałem. Odskocz, schowaj się za blokiem albo traf potwora, by przerwać zamach.'],
+    ['Dźwięki biomów', 'Las, dżungla, bagno, pustynia, tundra i wybrzeże mają odmienne, rzadkie odgłosy; jaskinie i Nether własne tło. Kroki, kopanie i ciosy zależą od otoczenia. Suwak głośności w ustawieniach (0% wycisza) obejmuje wszystkie dźwięki.'],
     ['Jaskiniowy nasłuchiwacz', 'W głębokich jaskiniach słyszy kroki, sprint i kopanie, lecz nie widzi gracza. Przytrzymaj Shift lub ⇣, by przemknąć bezszelestnie; wyrzuć przedmiot (Q lub ↗), a pobiegnie do miejsca jego upadku.'],
     ['Zasadzkarz pustynny', 'Spod piasku wystaje kopiec. Pomarańczowy grzebień i syk ostrzegają przez ponad sekundę przed wyskokiem — oddal się, aby przerwać zasadzkę.'],
     ['Omijanie przeszkód', 'Moby ścigające cel szukają krótkiej, bezpiecznej drogi wokół murów. Nie wchodzą w lawę ani ognisko i nie próbują przechodzić przez zamkniętą ścianę.'],

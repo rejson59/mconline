@@ -62,6 +62,8 @@ import {
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { boundedPathStep } from '../src/game/pathfinding';
+import { chooseAmbient } from '../src/game/ambience';
+import * as Sfx from '../src/game/audio';
 import { Mob, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, villagerActivity, villagerWorkSpot, villagerWalkable, merchantProfession, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
@@ -1926,6 +1928,57 @@ section('3.0 #69: cancellable melee telegraph and combat hit reaction');
   for (let i = 0; i < 30; i++) calm.update(1 / 30, world, new THREE.Vector3(8.6, y, 7.5), () => { hits++; }, () => {}, true);
   check('peaceful monsters never show a threatening warning or hit',
     !(calm as unknown as { strikeWarning: THREE.Mesh }).strikeWarning.visible && hits === 0);
+}
+
+section('3.0 #99: sparse biome soundscape and shared volume');
+{
+  const cue = (b: Parameters<typeof chooseAmbient>[0], day = 1, rain = false, roll = 0.2) =>
+    chooseAmbient(b, false, rain, day, roll);
+  eq('forest has daytime birds', cue('Las'), 'bird');
+  eq('old birch forest retains forest birds', cue('Brzozowy las'), 'bird');
+  eq('new taiga has bird calls', cue('Tajga'), 'bird');
+  eq('plains and meadows have daylight birds', `${cue('Równiny')}/${cue('Kwiecista łąka')}`, 'bird/bird');
+  eq('swamp has its own frog-and-water ambience', cue('Bagno'), 'marsh');
+  eq('jungle and savanna have insect ambience', `${cue('Dżungla')}/${cue('Sawanna')}`, 'insects/insects');
+  eq('coast and ocean have waves', `${cue('Ocean')}/${cue('Plaża')}`, 'surf/surf');
+  eq('mountains and tundra have cold wind', `${cue('Góry')}/${cue('Tundra')}`, 'snow/snow');
+  eq('desert and wasteland use sand gusts', `${cue('Pustynia')}/${cue('Pustkowie')}`, 'sand/sand');
+  eq('night forest has no daytime birds', cue('Las', 0.2), 'wind');
+  eq('surface does not override underground cave audio', chooseAmbient('Dżungla', true, false, 1, 0), 'cave');
+  eq('Nether does not play surface rain or birds', chooseAmbient('Nether', true, true, 1, 0), 'nether');
+  eq('rain suppresses birds in forests', cue('Las', 1, true), 'wind');
+  eq('snowfall retains distinct cold wind', cue('Tundra', 1, true), 'snow');
+  eq('rain at a coast keeps audible waves', cue('Plaża', 1, true), 'surf');
+  eq('desert rain never creates false water ambience', cue('Pustynia', 1, true), 'sand');
+  eq('non-finite randomness cannot schedule arbitrary ambience', cue('Las', 1, false, NaN), null);
+  // Run the actual weather scheduler: it must sample the player's exact
+  // position sparsely, without generating chunks for audio alone.
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const samples: Array<[number, number]> = [];
+  g.world = { surface: (x: number, z: number) => { samples.push([x, z]); return { biome: x < 16 ? 'Bagno' : 'Ocean' }; } };
+  g.body = { pos: new THREE.Vector3(6.5, FLAT_H + 1, 6.5) };
+  g.ui = 'paused'; g.isInNether = false; g.underground = false;
+  g.weather = 'clear'; g.weatherTimer = 100; g.ambientTimer = 0;
+  g.lightning = 0; g.time = 0.25;
+  g.rain = { visible: false }; g.biomeAt = () => 'Bagno';
+  Sfx.setVolume(0);
+  g.updateWeather(1 / 30);
+  check('real ambience tick samples local swamp biome once', samples.length === 1 && samples[0][0] === 6 && g.ambientTimer > 15);
+  for (let i = 0; i < 30; i++) g.updateWeather(1 / 30);
+  eq('one-second render loop creates no new ambient cues', samples.length, 1);
+  g.body.pos.x = 19.5; g.ambientTimer = 0; g.biomeAt = () => 'Ocean';
+  g.updateWeather(1 / 30);
+  check('moving to coast changes cue at next scheduled tick, not chunk-centre cache', samples.length === 2 && samples[1][0] === 19);
+  g.isInNether = true; g.ambientTimer = 0; g.weatherTimer = 1;
+  g.updateWeather(1 / 30);
+  check('Nether ambient tick never samples overworld biome or starts rain', samples.length === 2 && !g.rain.visible && g.weatherTimer >= 40);
+  Sfx.setVolume(0);
+  eq('all procedural audio uses one mute setting', Sfx.volume, 0);
+  Sfx.playBiomeAmbient('nether'); // must not allocate/resume WebAudio while muted
+  Sfx.setVolume(2);
+  eq('shared sound control clamps to 100%', Sfx.volume, 1);
+  Sfx.setVolume(NaN);
+  eq('invalid direct audio volume cannot poison master gain', Sfx.volume, 0.5);
 }
 
 section('3.0 #70: earned wolf trust, save migration and dimension-safe companions');

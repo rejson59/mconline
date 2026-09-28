@@ -193,7 +193,7 @@ export default function SettingsScreen({
       </div>
 
       <div id="settings-panel-sound" role="tabpanel" aria-labelledby="settings-tab-sound" hidden={tab !== 'sound'} className="flex flex-col gap-3">
-          <OptionSlider label="Głośność" value={settings.volume} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ volume: v })} />
+          <OptionSlider label="Głośność (0% = wyciszenie wszystkich dźwięków)" value={settings.volume} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ volume: v })} />
           <Btn active={settings.minimap} onClick={() => set({ minimap: !settings.minimap })}>
             Minimapa: {settings.minimap ? 'włączona' : 'wyłączona'}
           </Btn>
