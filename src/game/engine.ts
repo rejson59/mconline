@@ -3203,6 +3203,34 @@ export class Game {
 
   private meleeReach(): number { return attackReach(this.selectedStack()?.id ?? 0); }
 
+  /** Hammer cleaves only live mobs in front of the player, after a real main hit.
+   *  A separate ray to each secondary target keeps blocks and walls untouched. */
+  private hammerSweep(primary: Mob): number {
+    const eye = this.eyePos();
+    const facing = this.lookDir();
+    let count = 0;
+    for (const mob of this.mobs) {
+      if (mob === primary || mob.dead || count >= 2) continue;
+      const dx = mob.body.pos.x - this.body.pos.x;
+      const dz = mob.body.pos.z - this.body.pos.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance < 0.05 || distance > 3.5 ||
+          (dx * facing.x + dz * facing.z) / distance < 0.55 ||
+          mob.body.pos.distanceTo(primary.body.pos) > 2.4) continue;
+      const aim = mob.body.pos.clone().add(new THREE.Vector3(0, Math.min(1.2, mob.body.h * 0.65), 0)).sub(eye);
+      const length = aim.length();
+      const dir = aim.normalize();
+      const wall = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, length);
+      if (wall && wall.dist < length - 0.15) continue;
+      if (!mob.damage(5, this.body.pos.x, this.body.pos.z)) continue;
+      count++;
+      if (mob.type === 'guard') mob.provoked = Math.max(mob.provoked, 8);
+      if (mob.type === 'villager') this.provokeGolems(mob.body.pos.x, mob.body.pos.z, 26, 20);
+      if (mob.dead && isHostileMob(mob.type)) this.advanceChallenge('challenge_hunter');
+    }
+    return count;
+  }
+
   tryAttack() {
     this.swingT = 0;
     const blockDist = this.target ? this.target.dist : 99;
@@ -3252,6 +3280,10 @@ export class Game {
         if (mob.dead && isHostileMob(mob.type)) this.advanceChallenge('challenge_hunter');
         Sfx.playHurt();
         Sfx.playMob(mob.type);
+        if (ITEMS[toolId]?.tool === 'hammer') {
+          const swept = this.hammerSweep(mob);
+          this.message(swept ? `Młot: trafiono dodatkowo ${swept} cel${swept === 1 ? '' : 'e'}!` : 'Młot: trafienie!');
+        }
         this.wearTool();
         if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
         // Grabież: remember the level so mobLoot() can roll extras once
@@ -4589,6 +4621,7 @@ export class Game {
     this.pearlCd = Math.max(0, this.pearlCd - dt);
     this.eatCooldown = Math.max(0, this.eatCooldown - dt);
     if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * (this.selectedStack()?.id === I.IRON_SPEAR ? 1.65 :
+      ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'hammer' ? 1.5 :
       ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'dagger' ? 7.2 : 4));
 
     const e = this.eyePos();
@@ -5035,7 +5068,11 @@ export class Game {
 
     // hand
     const sw = Math.sin(this.swingT * Math.PI);
-    if (ITEMS[this.handId]?.tool === 'dagger') {
+    if (ITEMS[this.handId]?.tool === 'hammer') {
+      // Heavy overhead arc, with a deliberate recovery after the impact.
+      this.hand.position.set(bobX - sw * 0.12, -Math.abs(bob) * 0.6 + sw * 0.28, -sw * 0.25);
+      this.hand.rotation.set(-sw * 1.4, 0, -sw * 0.5);
+    } else if (ITEMS[this.handId]?.tool === 'dagger') {
       // Short horizontal flick, visibly faster and shallower than the long spear thrust.
       this.hand.position.set(bobX + sw * 0.12, -Math.abs(bob) * 0.6 + sw * 0.08, -sw * 0.25);
       this.hand.rotation.set(-sw * 0.25, sw * 1.15, sw * 0.48);
@@ -5226,6 +5263,7 @@ export class Game {
     if (id === I.WORM_BAIT || id === I.GLOW_BAIT) return 'Przynęta: PPM / tap, aby założyć na wędkę w ekwipunku';
     if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
     if (id === I.IRON_SPEAR) return 'Włócznia: 5 bloków zasięgu · cios co 0,92 s · LPM / tap / ⛏';
+    if (id === I.IRON_HAMMER) return 'Młot: 8 obrażeń · rozmach do 2 celów · cios co 1,1 s · LPM / tap / ⛏';
     if (id === I.IRON_DAGGER || id === I.DIAMOND_DAGGER) return 'Sztylet: 2,2 bloku · cios co 0,28 s · V / ↝ i LPM / tap / ⛏ = kontra +3';
     if (id === I.COMPASS) {
       const dx = this.spawnPoint.x - this.body.pos.x;

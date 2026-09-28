@@ -147,6 +147,9 @@ section('inventory screen: recipe finder');
     stackTooltip({ id: I.IRON_DAGGER, count: 1 }).includes('Zasięg 2,2 bloku') &&
     stackTooltip({ id: I.DIAMOND_DAGGER, count: 1 }).includes('0,28 s') &&
     renderToStaticMarkup(<Controls />).includes('kontrę: +3 obrażenia'));
+  check('hammer is discoverable with masonry and safe area-attack instructions',
+    html.includes('Żelazny młot') && stackTooltip({ id: I.IRON_HAMMER, count: 1 }).includes('8 obrażeń') &&
+    renderToStaticMarkup(<Controls />).includes('bez niszczenia sąsiednich bloków'));
 }
 
 section('adventure journal: quests and progress');

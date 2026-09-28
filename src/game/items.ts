@@ -111,10 +111,10 @@ export const I = {
   POTION_FALL: 355, POTION_SPRINT: 356,
   RAW_RABBIT: 357, COOKED_RABBIT: 358,
   EMBER_BOOTS: 359, TIDE_BOOTS: 360, SOFT_BOOTS: 361,
-  IRON_SPEAR: 362, IRON_DAGGER: 363, DIAMOND_DAGGER: 364,
+  IRON_SPEAR: 362, IRON_DAGGER: 363, DIAMOND_DAGGER: 364, IRON_HAMMER: 365,
 } as const;
 
-export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger';
+export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger' | 'hammer';
 
 /** 2.4: effect a potion applies when drunk ('none' = base awkward brew). */
 export type PotionEffectId = 'none' | 'heal' | 'fire' | 'speed' | 'night' | 'strength' | 'regen' | 'fall' | 'sprint';
@@ -212,6 +212,7 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.IRON_SPEAR, name: 'Żelazna włócznia', keys: ['wlocznia', 'zelazna_wlocznia', 'iron_spear'], kind: 'tool', tool: 'spear', durability: 240, color: '#c9d3df' },
   { id: I.IRON_DAGGER, name: 'Żelazny sztylet', keys: ['sztylet', 'zelazny_sztylet', 'iron_dagger'], kind: 'tool', tool: 'dagger', tier: 2, durability: 200, color: '#c9d3df' },
   { id: I.DIAMOND_DAGGER, name: 'Diamentowy sztylet', keys: ['diamentowy_sztylet', 'diamond_dagger'], kind: 'tool', tool: 'dagger', tier: 4, durability: 600, color: '#5ce9dc' },
+  { id: I.IRON_HAMMER, name: 'Żelazny młot', keys: ['mlot', 'zelazny_mlot', 'iron_hammer'], kind: 'tool', tool: 'hammer', durability: 300, color: '#afb5bc' },
   { id: I.LAPIS, name: 'Lazuryt', keys: ['lazuryt', 'lapis', 'lapis_lazuli'], kind: 'material', color: '#3a5fd0' },
   { id: I.PAPER, name: 'Papier', keys: ['papier', 'paper'], kind: 'material', color: '#f2f2ee' },
   { id: I.BOOK, name: 'Książka', keys: ['ksiazka', 'książka', 'book'], kind: 'material', color: '#9a4a3a' },
@@ -452,6 +453,7 @@ export function requiredPickTier(blockId: number): number {
 }
 
 export function pickHint(blockId: number, toolId: number): string | null {
+  if (ITEMS[toolId]?.tool === 'hammer' && HAMMER_BLOCKS.has(blockId)) return null;
   if (pickTier(toolId) >= requiredPickTier(blockId)) return null;
   const need = requiredPickTier(blockId);
   if (need >= 4) return 'Obsydian kruszy tylko diamentowy kilof.';
@@ -460,6 +462,9 @@ export function pickHint(blockId: number, toolId: number): string | null {
   if (need >= 1) return 'Do tego bloku potrzebny jest kilof.';
   return null;
 }
+
+/** Only these masonry blocks benefit from the hammer; ore still requires a pickaxe. */
+const HAMMER_BLOCKS = new Set<number>([B.STONE, B.COBBLE, B.STONE_BRICKS, B.BLACKSTONE, B.BASALT]);
 
 /** Seconds of holding LMB to break this block with the given tool (0 = hand).
  *  `eff` is the Efficiency level of the held item (update 1.5). */
@@ -473,6 +478,9 @@ export function mineSeconds(blockId: number, toolId: number, eff = 0): number {
   const tier = pickTier(toolId);
   if (blockId === B.OBSIDIAN) return tier >= 4 ? 7.5 : Infinity;
   if (need >= 2 && tier < need) return Infinity;
+  // Masonry only: faster controlled mining of the selected block, never a 3x3 excavation.
+  if (tool?.tool === 'hammer' && HAMMER_BLOCKS.has(blockId))
+    return (def.hardness * 0.5 + 0.06) / (4 * (eff > 0 ? 1 + eff * 0.35 + eff * eff * 0.12 : 1));
   let speed = 1;
   let penalty = 1;
   if (PICK_BLOCKS.has(blockId)) {
@@ -492,6 +500,7 @@ export function mineSeconds(blockId: number, toolId: number, eff = 0): number {
 export function toolHelps(blockId: number, toolId: number): boolean {
   const tool = ITEMS[toolId];
   if (!tool?.tool) return false;
+  if (tool.tool === 'hammer') return HAMMER_BLOCKS.has(blockId);
   if (tool.tool === 'pick') return PICK_BLOCKS.has(blockId);
   if (tool.tool === 'axe') return AXE_BLOCKS.has(blockId) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || blockId === B.FENCE || blockId === B.CHEST || blockId === B.LOOT_CHEST || blockId === B.CAMPFIRE;
   if (tool.tool === 'shovel') return SHOVEL_BLOCKS.has(blockId);
@@ -507,6 +516,7 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
   if (tool?.tool === 'sword') d = [0, 5, 6, 7, 9][tool.tier ?? 1];
   if (tool?.tool === 'spear') d = 7;
   if (tool?.tool === 'dagger') d = tool.tier === 4 ? 5 : 4;
+  if (tool?.tool === 'hammer') d = 8;
   if (sharp > 0) d += sharp * 0.5 + 0.5;
   else if (tool?.tool === 'shield') d = 2;
   else if (tool?.tool === 'shears' || tool?.tool === 'igniter' || tool?.tool === 'bow') d = 1;
@@ -514,7 +524,7 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
   else if (tool?.tool === 'rod' || tool?.tool === 'spyglass') d = 1;
   // 2.3: ten `else if` kasował wcześniej obrażenia miecza (trafiał tu każdy
   // miecz), więc diamentowy miecz bił jak drewniany topór – 4 zamiast 9.
-  else if (tool?.tool && tool.tool !== 'sword' && tool.tool !== 'spear' && tool.tool !== 'dagger') d = 4;
+  else if (tool?.tool && tool.tool !== 'sword' && tool.tool !== 'spear' && tool.tool !== 'dagger' && tool.tool !== 'hammer') d = 4;
   if (sprinting) d += 2;
   return d;
 }
@@ -522,6 +532,7 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
 export function attackCooldown(toolId: number): number {
   if (ITEMS[toolId]?.tool === 'spear') return 0.92;
   if (ITEMS[toolId]?.tool === 'dagger') return 0.28;
+  if (ITEMS[toolId]?.tool === 'hammer') return 1.1;
   return ITEMS[toolId]?.tool === 'sword' ? 0.42 : 0.5;
 }
 

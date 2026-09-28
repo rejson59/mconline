@@ -1137,6 +1137,86 @@ section('engine: armor damage, equipping, xp');
   eq('active potion buffs cleared on death', g.effects.size, 0);
 }
 
+section('3.0 #40: slow hammer cleaves visible mobs and mines only selected masonry');
+{
+  check('hammer has a new durable ID, separate icon, Creative entry and iron recipe',
+    I.IRON_HAMMER === 365 && ITEMS[I.IRON_HAMMER]?.tool === 'hammer' &&
+    durabilityMax(I.IRON_HAMMER) === 300 && stackLimit(I.IRON_HAMMER) === 1 &&
+    CREATIVE_ITEMS.includes(I.IRON_HAMMER) && !!buildItemIcons()[I.IRON_HAMMER]);
+  const r = RECIPES.find((recipe) => recipe.out.id === I.IRON_HAMMER)!;
+  const inv = new Inventory(); inv.add(I.IRON, 5); inv.add(I.STICK, 2);
+  check('Survival crafts one hammer, paying 5 iron and 2 sticks at a table', r.table &&
+    inv.craft(r) && inv.countOf(I.IRON_HAMMER) === 1 && inv.countOf(I.IRON) === 0 &&
+    inv.countOf(I.STICK) === 0 && !inv.craft(r));
+  const grid = new Inventory();
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+    const ch = r.pattern![y][x];
+    if (ch !== ' ') grid.grid[y * 3 + x] = { id: r.key![ch], count: 1 };
+  }
+  check('actual grid shape does not collide with an old pickaxe recipe and needs a table',
+    grid.gridMatch(true)?.out.id === I.IRON_HAMMER && grid.gridMatch(false) === null &&
+    grid.craftGrid(true)?.id === I.IRON_HAMMER);
+  check('hammer is slower than sword and dagger but hits harder than iron sword',
+    attackCooldown(I.IRON_HAMMER) === 1.1 && attackCooldown(I.IRON_HAMMER) > attackCooldown(I.IRON_SPEAR) &&
+    attackDamage(I.IRON_HAMMER, false) === 8 && attackDamage(I.IRON_SWORD, false) === 7 &&
+    attackReach(I.IRON_HAMMER) === 3.5);
+  check('hammer is faster on named masonry but cannot mine ore or obsidian instead of a pick',
+    [B.STONE, B.COBBLE, B.STONE_BRICKS, B.BLACKSTONE, B.BASALT].every((id) =>
+      toolHelps(id, I.IRON_HAMMER) && mineSeconds(id, I.IRON_HAMMER) < mineSeconds(id, 0)) &&
+    !toolHelps(B.DIAMOND_ORE, I.IRON_HAMMER) &&
+    !Number.isFinite(mineSeconds(B.DIAMOND_ORE, I.IRON_HAMMER)) &&
+    !Number.isFinite(mineSeconds(B.OBSIDIAN, I.IRON_HAMMER)) &&
+    blockDrops(B.DIAMOND_ORE, I.IRON_HAMMER).length === 0 && pickHint(B.STONE, I.IRON_HAMMER) === null);
+  check('hammer supports combat, durability and masonry efficiency enchants',
+    canEnchant(I.IRON_HAMMER, 'sharpness') && canEnchant(I.IRON_HAMMER, 'unbreaking') &&
+    canEnchant(I.IRON_HAMMER, 'efficiency') && !canEnchant(I.IRON_HAMMER, 'silktouch') &&
+    mineSeconds(B.COBBLE, I.IRON_HAMMER, 2) < mineSeconds(B.COBBLE, I.IRON_HAMMER));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.IRON_HAMMER, count: 1 };
+  g.selected = 0; g.selectedStack = () => g.inventory.slots[0];
+  g.mode = 'survival'; g.ui = 'playing'; g.body = { pos: new THREE.Vector3(0, 64, 0), vel: new THREE.Vector3(), onGround: true };
+  g.target = null; g.attackCooldown = 0; g.sprinting = false; g.hunger = 20;
+  g.hasEffect = () => false; g.wearTool = () => worn++;
+  g.message = (s: string) => notices.push(s); g.advanceChallenge = () => {}; g.emitHud = () => {};
+  g.eyePos = () => new THREE.Vector3(0, 65.6, 0); g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  const notices: string[] = [], damage = new Map<number, number>();
+  let worn = 0, blockBroken = 0;
+  const mk = (id: number, x: number, z: number) => ({ type: 'zombie', dead: false, bonusLoot: 0,
+    body: { pos: new THREE.Vector3(x, 64, z), vel: new THREE.Vector3(), h: 1.8 },
+    damage: (d: number) => { damage.set(id, d); return true; } });
+  const primary = mk(0, 0, -2), exposed = mk(1, 0.8, -2), behindWall = mk(2, -0.8, -2),
+    exposed2 = mk(3, 0.4, -2.3), exposed3 = mk(4, 1, -1.9), behind = mk(5, 0, 1);
+  g.mobs = [primary, exposed, behindWall, exposed2, exposed3, behind];
+  g.findMobTarget = (reach: number) => ({ mob: reach >= 2 ? primary : null, dist: 2 });
+  g.world = { raycast: (_x: number, _y: number, _z: number, dx: number) => dx < -0.1 ? { dist: 0.7 } : null };
+  g.tryAttack();
+  check('real melee path hits the center and at most two nearby unobstructed frontal mobs',
+    damage.get(0) === 8 && damage.get(1) === 5 && damage.get(3) === 5 &&
+    !damage.has(2) && !damage.has(4) && !damage.has(5) && g.attackCooldown === 1.1 && worn === 1 &&
+    notices.some((m) => m.includes('dodatkowo 2')) && blockBroken === 0);
+  g.tryAttack();
+  check('swing cannot apply repeated splash damage during cooldown', damage.size === 3 && worn === 1);
+  g.target = { id: B.STONE, dist: 1 };
+  g.attackCooldown = 0; g.tryAttack();
+  check('wall between player and primary target prevents the whole sweep', damage.size === 3);
+  // Digging uses ordinary held-LPM mining and must break only the aimed stone.
+  g.mobs = []; g.findMobTarget = () => ({ mob: null, dist: 3.5 });
+  g.world.raycast = () => ({ id: B.STONE, x: 0, y: 64, z: -2, dist: 2, nx: 0, ny: 1, nz: 0 });
+  g.selection = { visible: false, scale: { set: () => {} }, position: { set: () => {} } };
+  g.crackMesh = { visible: false }; g.breakBlock = () => { blockBroken++; };
+  g.blockAt = () => B.AIR; g.spawnParticles = () => {}; g.updateHand = () => {};
+  g.mouseLeft = true; g.mouseRight = false; g.breakCooldown = 0; g.placeCooldown = 1;
+  g.breakProgress = 0; g.breakKey = ''; g.digSoundTimer = 1;
+  g.bowDraw = -1; g.swingT = 1; g.pearlCd = 0; g.eatCooldown = 0;
+  g.updateInteraction(0.3);
+  check('holding hammer mines just the targeted block and wears once', blockBroken === 1 && worn === 2);
+  g.touchAim = null; g.refreshTarget = () => { g.target = null; };
+  g.mobs = [primary]; g.world.raycast = () => null; g.attackCooldown = 0;
+  g.findMobTarget = () => ({ mob: primary, dist: 2 }); g.keys = new Set();
+  g.touchTap(0.4, 0.4);
+  check('touch tap uses the same cooldown and main strike', damage.get(0) === 8 && g.attackCooldown === 1.1 && g.touchAim === null);
+}
+
 section('3.0 #41: fast daggers, short range and one dodge counter');
 {
   check('dagger IDs append without moving old spear, and both are durable Creative items',
