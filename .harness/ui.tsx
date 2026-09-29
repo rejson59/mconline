@@ -118,6 +118,36 @@ section('3.0 dagger: compact combat feedback in HUD');
   check('counter hit is distinguished visually and reports actual damage', counter.includes('Kontra!') && counter.includes('7 obrażeń'));
 }
 
+section('3.0 #45: camp UI explains assembly, respawn and touch-safe placement');
+{
+  const controls = renderToStaticMarkup(<Controls />);
+  check('in-game help names all three playable camp components and their materials',
+    controls.includes('Zestaw biwakowy') && controls.includes('namiot, posłanie i zwykłe ognisko') &&
+    controls.includes('3 patyki + węgiel'));
+  check('help explains PC/touch placement, removal and safe temporary respawn',
+    controls.includes('PPM/tap') && controls.includes('trzech suchych, wolnych polach') &&
+    controls.includes('poprzedni bezpieczny punkt odrodzenia') && controls.includes('nie działa w Netherze'));
+  check('camp kit icon and matching recoverable block labels exist for compact inventory',
+    displayName(I.CAMP_KIT) === 'Zestaw biwakowy' &&
+    BLOCKS[B.CAMP_TENT].name.includes('Namiot') && BLOCKS[B.CAMP_COT].name.includes('Posłanie') &&
+    CREATIVE_BLOCKS.includes(B.CAMP_TENT) && CREATIVE_BLOCKS.includes(B.CAMP_COT));
+  check('item tooltips distinguish portable kit, tent and sleeping cot',
+    stackTooltip({ id: I.CAMP_KIT, count: 1 }).includes('3 wolne pola') &&
+    stackTooltip({ id: B.CAMP_TENT, count: 1 }).includes('namiot') &&
+    stackTooltip({ id: B.CAMP_COT, count: 1 }).includes('tymczasowe odrodzenie'));
+  const base = {
+    mode: 'survival', health: 20, hunger: 20, air: 10, maxAir: 10,
+    hotbar: Array(9).fill(null), selected: 0, armor: [null, null, null, null],
+    time: 0, fishing: 'idle', messages: [], effects: [], bow: -1,
+    level: 0, xpFrac: 0, loading: 1,
+  };
+  const touch = renderToStaticMarkup(<HUD hud={{ ...base,
+    heldHint: 'Posłanie: PPM / tap ustawia odrodzenie; rozbij, by przywrócić poprzedni punkt',
+  } as never} icons={{}} touchControls />);
+  check('small-screen touch HUD announces how cot sleep and dismantling work',
+    touch.includes('Posłanie') && touch.includes('tap ustawia odrodzenie') && touch.includes('rozbij'));
+}
+
 section('3.0 #44: hunting snare visuals, help and compact touch feedback');
 {
   const help = renderToStaticMarkup(<Controls />);

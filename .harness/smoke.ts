@@ -1504,6 +1504,128 @@ section('3.0 #77: mutually exclusive defense and swimming enchants');
     table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
 }
 
+section('3.0 #45: portable camp deployment, component recovery and safe respawn');
+{
+  check('new component IDs append without modifying saved snare/bed/campfire meanings',
+    B.CAMP_TENT === 420 && B.CAMP_COT === 421 && I.CAMP_KIT === 375 &&
+    B.BED === 52 && B.CAMPFIRE === 73 && CREATIVE_BLOCKS.includes(B.CAMP_TENT) &&
+    CREATIVE_BLOCKS.includes(B.CAMP_COT) && CREATIVE_ITEMS.includes(I.CAMP_KIT) &&
+    !!buildItemIcons()[I.CAMP_KIT]);
+  check('tent stays light and walkable, cot is solid and recoverable',
+    BLOCKS[B.CAMP_TENT].render === 'cross' && !IS_SOLID[B.CAMP_TENT] &&
+    BLOCKS[B.CAMP_COT].render === 'cube' && !!IS_SOLID[B.CAMP_COT] &&
+    blockDrops(B.CAMP_TENT, 0)[0]?.id === B.CAMP_TENT && blockDrops(B.CAMP_COT, 0)[0]?.id === B.CAMP_COT);
+  for (const [id, inputs, table] of [
+    [B.CAMP_TENT, [[B.WOOL_WHITE, 3], [I.STICK, 3]], true],
+    [B.CAMP_COT, [[B.WOOL_WHITE, 2], [B.PLANKS, 2]], false],
+    [I.CAMP_KIT, [[B.CAMP_TENT, 1], [B.CAMP_COT, 1], [B.CAMPFIRE, 1]], false],
+  ] as const) {
+    const recipe = RECIPES.find((r) => r.out.id === id)!;
+    const inventory = new Inventory();
+    for (const [material, count] of inputs) inventory.add(material, count);
+    check(`${displayName(id)} reachable in Survival for the exact material cost`,
+      recipe.table === table && inventory.craft(recipe) && inventory.countOf(id) === 1 &&
+      inputs.every(([material]) => inventory.countOf(material) === 0) && !inventory.craft(recipe));
+  }
+  const tentRecipe = RECIPES.find((r) => r.out.id === B.CAMP_TENT)!;
+  const grid = new Inventory();
+  for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) {
+    const symbol = tentRecipe.pattern![row][col];
+    if (symbol !== ' ') grid.grid[row * 3 + col] = { id: tentRecipe.key![symbol], count: 1 };
+  }
+  check('tent needs the full crafting table, no personal-grid phantom material',
+    !grid.gridMatch(false) && grid.gridMatch(true)?.out.id === B.CAMP_TENT &&
+    grid.craftGrid(true)?.id === B.CAMP_TENT && grid.grid.every((v) => !v));
+  const world = new World(45045, true); world.getChunk(0, 0);
+  const x = 8, y = FLAT_H + 1, z = 8;
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.homeWorld = world; g.netherWorld = new World(45045, false, true);
+  g.isInNether = false; g.mode = 'survival'; g.ui = 'playing';
+  g.keys = new Set(); g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.CAMP_KIT, count: 1 };
+  g.selected = 0; g.mobs = []; g.growables = new Map(); g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.body = { pos: new THREE.Vector3(x + 0.5, y, z + 3.5), vel: new THREE.Vector3(), w: 0.6, h: 1.8 };
+  g.spawnPoint = new THREE.Vector3(2.5, y, 2.5);
+  g.target = { id: B.GRASS, x, y: FLAT_H, z, nx: 0, ny: 1, nz: 0 };
+  g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  g.findMobTarget = () => ({ mob: null, dist: Infinity });
+  const notices: string[] = [], drops: number[] = [];
+  g.message = (msg: string) => notices.push(msg); g.emitHud = () => {};
+  g.settle = () => {}; g.onBlockChanged = () => {}; g.advanceChallenge = () => {};
+  g.spawnParticles = () => {}; g.fallGravity = () => {}; g.spawnDrop = (id: number) => void drops.push(id);
+  g.daylight = () => 0.9; g.day = 1; g.health = 15; g.maxAir = 12;
+  // All-or-nothing validation: one blocked or unsupported cell may not spend or overwrite anything.
+  world.setBlock(x - 1, y, z, B.STONE);
+  g.tryUse();
+  check('occupied footprint blocks the whole kit without losing components',
+    g.inventory.countOf(I.CAMP_KIT) === 1 && world.getBlock(x, y, z) === B.AIR &&
+    world.getBlock(x, y, z - 1) === B.AIR && world.getBlock(x - 1, y, z) === B.STONE);
+  world.setBlock(x - 1, y, z, B.AIR);
+  world.setBlock(x, y - 1, z - 1, B.AIR);
+  g.tryUse();
+  check('unsupported campfire prevents partial deployment or item consumption',
+    world.getBlock(x, y, z) === B.AIR && g.inventory.countOf(I.CAMP_KIT) === 1);
+  world.setBlock(x, y - 1, z - 1, B.GRASS);
+  g.tryUse();
+  check('real PC/tap use turns ONE crafted kit into three accessible separate blocks',
+    world.getBlock(x, y, z) === B.CAMP_TENT && world.getBlock(x - 1, y, z) === B.CAMP_COT &&
+    world.getBlock(x, y, z - 1) === B.CAMPFIRE && g.inventory.countOf(I.CAMP_KIT) === 0);
+  check('all three components survive world mod roundtrip without extra inventory', (() => {
+    const restored = new World(45045, true); restored.loadMods(world.serializeMods());
+    return restored.getBlock(x, y, z) === B.CAMP_TENT && restored.getBlock(x - 1, y, z) === B.CAMP_COT &&
+      restored.getBlock(x, y, z - 1) === B.CAMPFIRE;
+  })());
+  g.target = { id: B.CAMP_COT, x: x - 1, y, z };
+  g.tryUse();
+  check('cot sets a temporary overworld spawn by daylight, preserving the previous spawn',
+    g.spawnPoint.equals(new THREE.Vector3(x - 0.5, y + 1, z + 0.5)) &&
+    g.campRespawn?.cot.join() === [x - 1, y, z].join() && g.campRespawn?.previous.join() === [2.5, y, 2.5].join() &&
+    notices.some((msg) => msg.includes('tylko w nocy')));
+  g.daylight = () => 0.1; g.unlock = () => {}; g.tryUse();
+  check('travel cot follows existing bed rule: night advances day and heals',
+    g.day === 2 && g.health === 17 && g.spawnPoint.x === x - 0.5);
+  check('old saves without camp metadata do not acquire an active camp',
+    g.validCampRespawn(undefined, g.spawnPoint) === undefined);
+  check('malformed imported camp metadata cannot hijack saved spawn',
+    g.validCampRespawn({ cot: [Infinity, y, z], previous: [0, y, 0] }, g.spawnPoint) === undefined &&
+    g.validCampRespawn({ cot: [x - 1, y, z], previous: [2.5, y, 2.5] }, new THREE.Vector3(400, y, 0)) === undefined);
+  const saved = { cot: [...g.campRespawn.cot], previous: [...g.campRespawn.previous] };
+  check('valid JSON camp metadata roundtrips with its actual selected spawn',
+    g.validCampRespawn(JSON.parse(JSON.stringify(saved)), g.spawnPoint)?.cot.join() === saved.cot.join());
+  g.breakBlock(x - 1, y, z);
+  check('dismantling cot drops exactly its component and restores the old safe spawn',
+    world.getBlock(x - 1, y, z) === B.AIR && drops.filter((id) => id === B.CAMP_COT).length === 1 &&
+    g.spawnPoint.equals(new THREE.Vector3(2.5, y, 2.5)) && !g.campRespawn);
+  g.breakBlock(x, y, z); g.breakBlock(x, y, z - 1);
+  check('dismantling the kit yields exactly its three original reusable components',
+    [B.CAMP_TENT, B.CAMP_COT, B.CAMPFIRE].every((id) => drops.filter((d) => d === id).length === 1));
+  const rebuilt = new Inventory(); for (const id of [B.CAMP_TENT, B.CAMP_COT, B.CAMPFIRE]) rebuilt.add(id, 1);
+  check('recovered parts re-craft one kit without item or fuel duplication',
+    rebuilt.craft(RECIPES.find((r) => r.out.id === I.CAMP_KIT)!) && rebuilt.countOf(I.CAMP_KIT) === 1 &&
+    rebuilt.countOf(B.CAMPFIRE) === 0);
+  g.mode = 'creative'; g.inventory.slots[0] = { id: I.CAMP_KIT, count: 1 }; g.target = { id: B.GRASS, x, y: FLAT_H, z, nx: 0, ny: 1, nz: 0 };
+  g.tryUse();
+  check('Creative can deploy kit without reducing its inventory count',
+    world.getBlock(x - 1, y, z) === B.CAMP_COT && g.inventory.countOf(I.CAMP_KIT) === 1);
+  g.isInNether = true; const previous = g.spawnPoint.clone(); g.target = { id: B.CAMP_COT, x: x - 1, y, z };
+  g.tryUse();
+  check('cot in Nether cannot overwrite overworld respawn or advance time',
+    g.spawnPoint.equals(previous) && g.day === 2);
+  g.isInNether = false; g.mode = 'survival'; g.target = { id: B.CAMP_COT, x: x - 1, y, z };
+  g.tryUse();
+  // TNT/explosion can delete cot without going through breakBlock.
+  g.spawnSmoke = () => {}; g.damage = () => {}; g.body.pos.set(40, y, 40);
+  g.explode(x - 0.5, y + 0.5, z + 0.5, 1.1);
+  check('explosion also invalidates the camp spawn without generating new kit items',
+    !g.campRespawn && g.spawnPoint.equals(new THREE.Vector3(2.5, y, 2.5)) && drops.length === 3);
+  world.setBlock(x - 1, y, z, B.CAMP_COT);
+  g.campRespawn = { cot: [x - 1, y, z], previous: [2.5, y, 2.5] };
+  g.spawnPoint.set(x - 0.5, y + 1, z + 0.5);
+  world.setBlock(x - 1, y, z, B.AIR); // simulate a deleted mod from import while dead
+  g.setUI = () => {}; g.respawn();
+  check('respawn revalidates removed cot after import/reload and safely returns to old spawn',
+    !g.campRespawn && g.body.pos.equals(new THREE.Vector3(2.5, y, 2.5)));
+}
+
 section('3.0 #44: persistent single-use hunting snares and one-string rearming');
 {
   check('snare IDs append past turtle eggs with base block only in Creative',
@@ -3977,7 +4099,9 @@ section('saves: enchantments ride along');
   g.time = 0.3; g.health = 17; g.hunger = 15; g.day = 4;
   g.inventory = new Inventory();
   g.inventory.slots[0] = { id: I.DIAMOND_PICK, count: 1, dur: 300, ench: { efficiency: 4, unbreaking: 2 } };
-  g.spawnPoint = new THREE.Vector3(1, 70, 2);
+  g.spawnPoint = new THREE.Vector3(1.5, 70, 2.5);
+  g.campRespawn = { cot: [1, 69, 2], previous: [2.5, 70, 3.5] };
+  w.setBlock(1, 69, 2, B.CAMP_COT);
   g.furnaces = new Map(); g.chests = new Map();
   g.brewings = new Map();
   g.effects = new Map([['night', 17000], ['fall', 34500], ['sprint', 8000]]);
@@ -4012,6 +4136,9 @@ section('saves: enchantments ride along');
   eq('durability still persists', stored.inv[0]?.dur, 300);
   eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
+  check('camp spawn and prior safe spawn persist through real save and JSON export',
+    stored.spawn?.join() === [1.5, 70, 2.5].join() && stored.campRespawn?.cot.join() === [1, 69, 2].join() &&
+    stored.campRespawn?.previous.join() === [2.5, 70, 3.5].join() && exportSave('ench-test')?.includes('campRespawn'));
   check('first-visit biome progress persists in a world export', stored.unlocked?.includes('biome_swamp') && exportSave('ench-test')?.includes('biome_swamp'));
   eq('building challenge counter persists in world save', stored.challengeProgress?.challenge_builder, 7);
   check('challenge progress survives export without changing inventory', exportSave('ench-test')?.includes('challenge_builder') === true);

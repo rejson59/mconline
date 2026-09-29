@@ -875,6 +875,25 @@ export function buildAtlas(): AtlasResult {
     }
   }
 
+  // Camp: cut-out triangular canvas with dark entrance; bedroll on wood legs.
+  clear(T.camp_tent);
+  for (let y = 2; y < 16; y++) {
+    const half = Math.round((y - 1) * 0.46);
+    for (let x = Math.max(0, 8 - half); x <= Math.min(15, 8 + half); x++) {
+      const entrance = y > 9 && x >= 6 && x <= 10;
+      setPx(T.camp_tent, x, y, entrance ? 48 : (x === 8 - half || x === 8 + half ? 128 : 190),
+        entrance ? 47 : 151, entrance ? 51 : 102);
+    }
+  }
+  for (let x = 2; x < 15; x++) {
+    setPx(T.camp_tent, x, 15, 88, 62, 43);
+  }
+  noiseFill(T.camp_cot_top, [112, 145, 123], 0.09, R(172));
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 3; x++) setPx(T.camp_cot_top, x, y, 212, 207, 179);
+  for (let y = 13; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.camp_cot_top, x, y, 102, 69, 48);
+  noiseFill(T.camp_cot_side, [96, 71, 54], 0.12, R(173));
+  for (let x = 1; x < 15; x++) for (let y = 1; y < 5; y++) setPx(T.camp_cot_side, x, y, 99, 139, 110);
+
   // Commit every appended tile to the GPU atlas BEFORE generating block icons.
   // Previously the 2.7 tiles were painted into ImageData only after the sole
   // putImageData call, so their inventory icons and rendered faces were blank.

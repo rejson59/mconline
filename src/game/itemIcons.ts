@@ -1365,6 +1365,12 @@ const BOWSTRING_ART = [
 ];
 ART[I.LIGHT_STRING] = [{ S: '#9be5ec' }, BOWSTRING_ART];
 ART[I.STRONG_STRING] = [{ S: '#e5ad6b' }, BOWSTRING_ART];
+ART[I.CAMP_KIT] = [{ C: '#c7966c', D: '#5f544a', L: '#f1dab3', W: '#9ac1a2', R: '#a65c38' }, [
+  '................', '................', '......LL........', '.....LCCL.......',
+  '....LCCCCL......', '...LCCCCCCL.....', '..LCCCCCCCCL....', '.LCCCCCCCCCCL...',
+  '.LCCCWWWWCCCL...', '.LCCCDDDDCCCL...', '.LCCCDDDDCCCL...', '.LCCCDDDDCCCL...',
+  '.DDDDDDDDDDDD...', '..RRRRRRRRRR....', '................', '................',
+]];
 ART[I.GLOW_ARROW] = [{ H: '#f6df54', L: '#fff4af', w: '#8a6a3a', d: '#6a4e28', F: '#fff4af', f: '#eecf38' }, ART[I.ARROW][1]];
 ART[I.SLOW_ARROW] = [{ H: '#6aafda', L: '#b1e7fa', w: '#8a6a3a', d: '#6a4e28', F: '#9cd1ed', f: '#60a6d4' }, ART[I.ARROW][1]];
 ART[I.MARK_ARROW] = [{ H: '#d97064', L: '#f9b9a0', w: '#8a6a3a', d: '#6a4e28', F: '#e59b82', f: '#ae4744' }, ART[I.ARROW][1]];

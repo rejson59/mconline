@@ -216,6 +216,8 @@ export interface SaveData {
   updated?: number;
   hunger?: number;
   spawn?: [number, number, number];
+  /** Optional temporary camp spawn; older worlds retain their original spawn semantics. */
+  campRespawn?: { cot: [number, number, number]; previous: [number, number, number] };
   furnaces?: FurnaceState[];
   chests?: ChestState[];
   unlocked?: string[];
@@ -503,6 +505,7 @@ export class Game {
   bobPhase = 0;
   shake = 0;
   spawnPoint = new THREE.Vector3();
+  private campRespawn: SaveData['campRespawn'] = undefined;
 
   // input
   keys = new Set<string>();
@@ -905,6 +908,7 @@ export class Game {
       if ((opts.save.day || 1) >= 2) this.unlocked.add('night');
       this.findSpawn();
       if (opts.save.spawn) this.spawnPoint.set(...opts.save.spawn);
+      this.campRespawn = this.validCampRespawn(opts.save.campRespawn, this.spawnPoint);
       // Zapis w Netherze: aktywuj wymiar PRZED wczytaniem chunków wokół gracza.
       if (opts.save.isInNether) {
         this.world = this.netherWorld;
@@ -2629,13 +2633,44 @@ export class Game {
     return true;
   }
 
+  /** Validate optional import metadata without changing legacy 2.7 spawn coordinates. */
+  private validCampRespawn(value: SaveData['campRespawn'], spawn: THREE.Vector3): SaveData['campRespawn'] {
+    if (!value || !Array.isArray(value.cot) || !Array.isArray(value.previous) ||
+        value.cot.length !== 3 || value.previous.length !== 3) return undefined;
+    const [x, y, z] = value.cot, [px, py, pz] = value.previous;
+    if (![x, y, z, px, py, pz].every((n) => Number.isFinite(n) && Math.abs(n) < 1e7) ||
+        ![x, y, z].every(Number.isInteger) || y < 1 || y > CH - 3 || py < 1 || py >= CH - 2 ||
+        spawn.x !== x + 0.5 || spawn.y !== y + 1 || spawn.z !== z + 0.5) return undefined;
+    return { cot: [x, y, z], previous: [px, py, pz] };
+  }
+
+  /** Dismantling or an explosion invalidates only the currently active cot. */
+  private invalidateCampRespawn(x: number, y: number, z: number) {
+    const camp = this.campRespawn;
+    if (this.isInNether || !camp || camp.cot[0] !== x || camp.cot[1] !== y || camp.cot[2] !== z) return;
+    this.campRespawn = undefined;
+    const [px, py, pz] = camp.previous;
+    const bx = Math.floor(px), by = Math.floor(py), bz = Math.floor(pz);
+    if (IS_SOLID[this.homeWorld.getBlock(bx, by - 1, bz)] &&
+        !IS_SOLID[this.homeWorld.getBlock(bx, by, bz)] &&
+        !IS_SOLID[this.homeWorld.getBlock(bx, by + 1, bz)]) this.spawnPoint.set(px, py, pz);
+    else this.findSpawn();
+    this.message('Posłanie usunięte: punkt odrodzenia przywrócony.');
+  }
+
   private trySleep(x: number, y: number, z: number) {
     if (this.isInNether) {
       this.message('W Netheru nie da się spać – wróć przez portal.');
       return;
     }
+    const portable = this.world.getBlock(x, y, z) === B.CAMP_COT;
+    if (portable) {
+      const previous = this.campRespawn?.previous ??
+        [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z] as [number, number, number];
+      this.campRespawn = { cot: [x, y, z], previous };
+    } else this.campRespawn = undefined;
     this.spawnPoint.set(x + 0.5, y + 1, z + 0.5);
-    this.message('Punkt odrodzenia ustawiony.');
+    this.message(portable ? 'Podróżny punkt odrodzenia ustawiony (do rozbicia posłania).' : 'Punkt odrodzenia ustawiony.');
     if (this.daylight() > 0.55) {
       this.message('Możesz spać tylko w nocy.');
       return;
@@ -3000,6 +3035,7 @@ export class Game {
         hunger: this.hunger,
         day: this.day,
         spawn: [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z],
+        campRespawn: this.campRespawn ? { cot: [...this.campRespawn.cot], previous: [...this.campRespawn.previous] } : undefined,
         furnaces: [...this.furnaces.values()],
         chests: [...this.chests.values()],
         anvils: this.anvils ? [...this.anvils.values()] : [],
@@ -3772,6 +3808,44 @@ export class Game {
     return false;
   }
 
+  /** One kit becomes exactly three independent, recoverable components.
+   * Validate ALL spots before writing any blocks or spending the item. */
+  private deployCamp(target: ReturnType<World['raycast']>) {
+    if (!target || target.ny !== 1) { this.message('Biwak rozstawia się na ziemi.'); return; }
+    const dir = this.lookDir();
+    const fx = Math.abs(dir.x) > Math.abs(dir.z) ? Math.sign(dir.x) : 0;
+    const fz = fx === 0 ? Math.sign(dir.z) || 1 : 0;
+    const x = target.x, y = target.y + 1, z = target.z;
+    const cells = [
+      { x, y, z, id: B.CAMP_TENT },
+      { x: x + fz, y, z: z - fx, id: B.CAMP_COT },
+      { x: x + fx, y, z: z + fz, id: B.CAMPFIRE },
+    ];
+    const b = this.body;
+    for (const c of cells) {
+      const below = this.world.getBlock(c.x, c.y - 1, c.z);
+      if (c.y < 1 || c.y >= CH - 2 || this.world.getBlock(c.x, c.y, c.z) !== B.AIR ||
+          this.world.getBlock(c.x, c.y + 1, c.z) !== B.AIR || !IS_SOLID[below] ||
+          below === B.MAGMA || below === B.CAMPFIRE || below === B.LEAVES ||
+          below === B.BIRCH_LEAVES || below === B.ACACIA_LEAVES || below === B.JUNGLE_LEAVES || below === B.SPRUCE_LEAVES ||
+          aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, c.x, c.y, c.z) ||
+          this.mobs.some((m) => !m.dead && aabbIntersectsBlock(m.body.pos.x, m.body.pos.y, m.body.pos.z, m.body.w, m.body.h, c.x, c.y, c.z))) {
+        this.message('Biwak wymaga trzech wolnych pól na suchym, równym podłożu (w tym miejsca z dala od gracza).');
+        return;
+      }
+    }
+    for (const c of cells) {
+      this.world.setBlock(c.x, c.y, c.z, c.id);
+      this.settle(c.x, c.y, c.z);
+      this.onBlockChanged(c.x, c.y, c.z);
+      this.advanceChallenge('challenge_builder');
+    }
+    this.consumeSelected();
+    Sfx.playPlace('cloth');
+    this.message('Rozstawiono namiot, posłanie i ognisko. PPM / tap na posłanie ustawia odrodzenie.');
+    this.swingT = 0;
+  }
+
   tryUse() {
     const t = this.target;
     this.placeCooldown = 0.22;
@@ -3791,7 +3865,7 @@ export class Game {
       if (t.id === B.CRAFTING) { this.openInventory(true); return; }
       if (t.id === B.FURNACE || t.id === B.FURNACE_ON) { this.openFurnace(t.x, t.y, t.z); return; }
       if (t.id === B.ENCHANT) { this.openEnchant(t.x, t.y, t.z); return; }
-      if (t.id === B.BED) { this.trySleep(t.x, t.y, t.z); return; }
+      if (t.id === B.BED || t.id === B.CAMP_COT) { this.trySleep(t.x, t.y, t.z); return; }
       if (t.id === B.LEVER || t.id === B.LEVER_ON) { this.toggleLever(t.x, t.y, t.z); return; }
       if (t.id === B.BUTTON || t.id === B.BUTTON_ON) { this.pressButton(t.x, t.y, t.z); return; }
       if (t.id === B.NOTE_BLOCK) { this.playNoteBlock(t.x, t.y, t.z); return; }
@@ -3803,6 +3877,7 @@ export class Game {
     }
     const s = this.selectedStack();
     if (!s) return;
+    if (s.id === I.CAMP_KIT) { this.deployCamp(t); return; }
     // 2.4: fiolka nad wodą staje się fiolką z wodą (źródło wody zostaje).
     if (s.id === I.BOTTLE && t && t.id === B.WATER) {
       s.id = I.WATER_BOTTLE;
@@ -3918,6 +3993,8 @@ export class Game {
     } else if (id === B.LEVER || id === B.BUTTON || id === B.REDSTONE_TORCH || id === B.REDSTONE_TORCH_OFF) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
       if (!IS_SOLID[attached]) { this.message('Dźwignia/przycisk musi być na solidnej ścianie.'); return; }
+    } else if (id === B.CAMP_TENT || id === B.CAMP_COT) {
+      if (!IS_SOLID[below] || below === B.MAGMA) { this.message('Namiot i posłanie wymagają solidnego podłoża.'); return; }
     } else if (id === B.SNARE) {
       if (!IS_SOLID[below] || below === B.CAMPFIRE) { this.message('Sidła stawia się na suchym, solidnym podłożu.'); return; }
     } else if (id === B.RAIL || id === B.POWERED_RAIL || id === B.DETECTOR_RAIL) {
@@ -4180,6 +4257,7 @@ export class Game {
     if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
     if (id === B.ANVIL) this.spillAnvil(x, y, z);
     if (id === B.BREWING) this.spillBrewing(x, y, z);
+    if (id === B.CAMP_COT) this.invalidateCampRespawn(x, y, z);
     this.world.setBlock(x, y, z, fill);
     if (!silent && this.body?.pos && Math.hypot(x + 0.5 - this.body.pos.x, z + 0.5 - this.body.pos.z) < 7)
       this.emitCaveNoise(x + 0.5, y, z + 0.5, 13);
@@ -4226,7 +4304,7 @@ export class Game {
     }
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
-    if (RENDER[above] === 1 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
+    if (RENDER[above] === 1 || above === B.CAMP_COT || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
     this.fallGravity(x, y + 1, z);
   }
 
@@ -4260,6 +4338,7 @@ export class Game {
           if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
           if (id === B.ANVIL) this.spillAnvil(x, y, z);
           if (id === B.BREWING) this.spillBrewing(x, y, z);
+          if (id === B.CAMP_COT) this.invalidateCampRespawn(x, y, z);
           this.world.setBlock(x, y, z, B.AIR);
           if (Math.random() < 0.05) this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 3, 0.4);
         }
@@ -4377,6 +4456,11 @@ export class Game {
     this.health = 20;
     this.hunger = 20;
     this.air = this.maxAir;
+    if (this.campRespawn) {
+      const [x, y, z] = this.campRespawn.cot;
+      if (this.homeWorld.getBlock(x, y, z) !== B.CAMP_COT ||
+          IS_SOLID[this.homeWorld.getBlock(x, y + 1, z)] || IS_SOLID[this.homeWorld.getBlock(x, y + 2, z)]) this.invalidateCampRespawn(x, y, z);
+    }
     this.body.pos.copy(this.spawnPoint);
     this.body.vel.set(0, 0, 0);
     this.dodgeTime = this.dodgeCooldown = this.daggerCounter = this.guardTime = this.guardCooldown = 0;
@@ -5397,6 +5481,7 @@ export class Game {
   }
 
   private heldHint(): string | null {
+    if (this.target?.id === B.CAMP_COT) return 'Posłanie: PPM / tap ustawia odrodzenie; rozbij, by przywrócić poprzedni punkt';
     if (this.target?.id === B.SNARE) return 'Sidła: PPM / tap, aby uzbroić za 1 strunę';
     if (this.target?.id === B.SNARE_ARMED) return 'Sidła uzbrojone: PPM / tap, aby rozbroić';
     if (this.target?.id === B.SNARE_RABBIT || this.target?.id === B.SNARE_CHICKEN) return 'Sidła ze zdobyczą: PPM / tap, aby zebrać mięso';
@@ -5408,6 +5493,7 @@ export class Game {
     if (id !== undefined && isPotion(id)) return 'Napój: PPM, aby wypić';
     if (id === I.WORM_BAIT || id === I.GLOW_BAIT) return 'Przynęta: PPM / tap, aby założyć na wędkę w ekwipunku';
     if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
+    if (id === I.CAMP_KIT) return 'Zestaw biwakowy: PPM / tap na suchym, równym podłożu; potrzebne 3 wolne pola';
     if (id === I.IRON_SPEAR) return 'Włócznia: 5 bloków zasięgu · cios co 0,92 s · LPM / tap / ⛏';
     if (id === I.IRON_HAMMER) return 'Młot: 8 obrażeń · rozmach do 2 celów · cios co 1,1 s · LPM / tap / ⛏';
     if (ITEMS[id ?? 0]?.tool === 'bow') {

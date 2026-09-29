@@ -115,6 +115,7 @@ export const I = {
   LEATHER_SHIELD: 366, IRON_SHIELD: 367,
   LIGHT_STRING: 368, STRONG_STRING: 369, LIGHT_BOW: 370, STRONG_BOW: 371,
   GLOW_ARROW: 372, SLOW_ARROW: 373, MARK_ARROW: 374,
+  CAMP_KIT: 375,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger' | 'hammer';
@@ -214,6 +215,7 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.GLOW_ARROW, name: 'Świetlna strzała', keys: ['swietlna_strzala', 'glow_arrow'], kind: 'material', color: '#ffec85' },
   { id: I.SLOW_ARROW, name: 'Spowalniająca strzała', keys: ['spowalniajaca_strzala', 'slow_arrow'], kind: 'material', color: '#83bde9' },
   { id: I.MARK_ARROW, name: 'Znakująca strzała', keys: ['znakujaca_strzala', 'mark_arrow'], kind: 'material', color: '#ee9381' },
+  { id: I.CAMP_KIT, name: 'Zestaw biwakowy', keys: ['zestaw_biwakowy', 'camp_kit'], kind: 'material', color: '#e2b77e', stack: 16 },
   { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
   { id: I.LIGHT_STRING, name: 'Lekka cięciwa', keys: ['lekka_cieciwa', 'light_bowstring'], kind: 'material', color: '#9be5ec' },
   { id: I.STRONG_STRING, name: 'Mocna cięciwa', keys: ['mocna_cieciwa', 'strong_bowstring'], kind: 'material', color: '#e5ad6b' },
