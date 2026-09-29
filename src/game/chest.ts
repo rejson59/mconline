@@ -44,6 +44,10 @@ export function chestLoot(seed: number, x: number, y: number, z: number): Stack[
   if (r() < 0.10) out.push({ id: I.BOOK, count: 1 });
   if (r() < 0.06) out.push({ id: I.LAPIS, count: 2 + Math.floor(r() * 4) });
   if (r() < 0.08) out.push({ id: I.NETHER_WART, count: 1 + Math.floor(r() * 3) });
+  // One rare charm per cave chest at most. Appended after 2.7 rolls so old loot stays identical.
+  const charm = r();
+  if (charm < 0.025) out.push({ id: I.WANDER_CHARM, count: 1 });
+  else if (charm < 0.05) out.push({ id: I.TIDE_CHARM, count: 1 });
   return out;
 }
 

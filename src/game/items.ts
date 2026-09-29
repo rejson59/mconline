@@ -118,6 +118,7 @@ export const I = {
   CAMP_KIT: 375,
   CARROT: 376, ROASTED_CARROT: 377, PUMPKIN_SLICE: 378, ROASTED_PUMPKIN: 379,
   WOOD_BOWL: 380, PUMPKIN_SOUP: 381, RABBIT_STEW: 382, HARVEST_PLATE: 383,
+  WANDER_CHARM: 384, TIDE_CHARM: 385,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger' | 'hammer';
@@ -226,6 +227,8 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.PUMPKIN_SOUP, name: 'Zupa dyniowa', keys: ['zupa_dyniowa', 'pumpkin_soup'], kind: 'food', hunger: 6, heal: 1, color: '#e6aa4d', stack: 1 },
   { id: I.RABBIT_STEW, name: 'Gulasz z królika', keys: ['gulasz_z_krolika', 'rabbit_stew'], kind: 'food', hunger: 8, heal: 2, color: '#ad7548', stack: 1 },
   { id: I.HARVEST_PLATE, name: 'Talerz żniwiarza', keys: ['talerz_zniwiarza', 'harvest_plate'], kind: 'food', hunger: 7, heal: 1, color: '#b7a849', stack: 1 },
+  { id: I.WANDER_CHARM, name: 'Talizman wędrowca', keys: ['talizman_wedrowca', 'wander_charm'], kind: 'material', color: '#d2b979', stack: 1 },
+  { id: I.TIDE_CHARM, name: 'Talizman pływaka', keys: ['talizman_plywaka', 'tide_charm'], kind: 'material', color: '#7abed5', stack: 1 },
   { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
   { id: I.LIGHT_STRING, name: 'Lekka cięciwa', keys: ['lekka_cieciwa', 'light_bowstring'], kind: 'material', color: '#9be5ec' },
   { id: I.STRONG_STRING, name: 'Mocna cięciwa', keys: ['mocna_cieciwa', 'strong_bowstring'], kind: 'material', color: '#e5ad6b' },

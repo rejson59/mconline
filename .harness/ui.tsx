@@ -120,6 +120,34 @@ section('3.0 dagger: compact combat feedback in HUD');
   check('counter hit is distinguished visually and reports actual damage', counter.includes('Kontra!') && counter.includes('7 obrażeń'));
 }
 
+section('3.0 #49: one charm slot and active effect on compact HUD');
+{
+  const fake = { inventory: new Inventory(), mode: 'survival', craftingTable: false,
+    armor: [null, null, null, null], selected: 0, talisman: { id: I.WANDER_CHARM, count: 1 },
+    clickArmorSlot: noop, clickTalismanSlot: noop, onCraft: noop,
+    body: { pos: { x: 0, y: 65, z: 0 } }, spawnDrop: noop, message: noop };
+  const inventory = renderToStaticMarkup(<InventoryScreen game={fake as unknown as Game} icons={{}} onChange={noop} />);
+  check('Survival inventory exposes one equipped charm slot with an exact bounded effect',
+    inventory.includes('Talizman · tylko jeden aktywny') && inventory.includes('Ruch pieszo +5%'));
+  const creative = renderToStaticMarkup(<InventoryScreen game={{ ...fake, mode: 'creative' } as unknown as Game} icons={{}} onChange={noop} />);
+  check('Creative item catalogue and equipment screen contain the same charms',
+    creative.includes('Talizman · tylko jeden aktywny') && creative.includes('Przedmioty'));
+  const base = { mode: 'survival', health: 20, hunger: 20, air: 10, maxAir: 10,
+    hotbar: Array(9).fill(null), selected: 0, armor: [null, null, null, null],
+    time: 0, fishing: 'idle', messages: [], effects: [], bow: -1,
+    level: 0, xpFrac: 0, loading: 1 };
+  const hud = renderToStaticMarkup(<HUD hud={{ ...base, talisman: { id: I.TIDE_CHARM, count: 1 } } as never} icons={{}} touchControls />);
+  check('equipped diving talisman stays labeled and visible on touch HUD at low graphics',
+    hud.includes('Talizman pływaka') && hud.includes('powietrze +25%') && hud.includes('role="status"'));
+  check('none of the charm effects is implied by merely carrying a spare item',
+    !renderToStaticMarkup(<HUD hud={{ ...base, talisman: null, hotbar: [{ id: I.TIDE_CHARM, count: 1 }, ...Array(8).fill(null)] } as never} icons={{}} touchControls />).includes('powietrze +25%'));
+  const controls = renderToStaticMarkup(<Controls />);
+  check('help and tooltips explain cave rarity, single equipped slot, both effects and no stacking',
+    controls.includes('Talizmany') && controls.includes('około 5%') && controls.includes('jedynego miejsca') &&
+    stackTooltip({ id: I.WANDER_CHARM, count: 1 }).includes('+5%') &&
+    stackTooltip({ id: I.TIDE_CHARM, count: 1 }).includes('20% wolniej'));
+}
+
 section('3.0 #47: food, tooltip and short buff HUD on PC and touch');
 {
   const controls = renderToStaticMarkup(<Controls />);
@@ -757,6 +785,32 @@ async function mountWithJsdom(): Promise<boolean> {
   // Canvas drawing is stubbed; gestures/buttons are mounted for real with React.
   const canvasProto = (w as unknown as { HTMLCanvasElement: typeof HTMLCanvasElement }).HTMLCanvasElement.prototype;
   canvasProto.getContext = ((kind: string) => kind === '2d' ? { fillStyle: '', fillRect() {} } : null) as typeof canvasProto.getContext;
+  const charmContainer = w.document.createElement('div');
+  w.document.body.appendChild(charmContainer);
+  const charmRoot = createRoot(charmContainer);
+  const charmInv = new Inventory();
+  const charmFake = { inventory: charmInv, mode: 'survival', craftingTable: false,
+    armor: [null, null, null, null], selected: 0, talisman: null as Stack | null,
+    clickArmorSlot: noop, clickTalismanSlot: () => {
+      const old = charmFake.talisman;
+      charmFake.talisman = charmInv.cursor;
+      charmInv.cursor = old;
+    }, onCraft: noop, body: { pos: { x: 0, y: 65, z: 0 } },
+    spawnDrop: noop, message: noop };
+  charmInv.cursor = { id: I.WANDER_CHARM, count: 1 };
+  await React.act(async () => {
+    charmRoot.render(<InventoryScreen game={charmFake as unknown as Game} icons={{}} onChange={noop} />);
+  });
+  const charmSlot = charmContainer.querySelector('[data-testid="talisman-slot"] .mc-slot');
+  await React.act(async () => {
+    charmSlot?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerup', { bubbles: true }));
+  });
+  check('touch tap on real equipment UI routes to the talisman slot, not inventory grid',
+    charmFake.talisman?.id === I.WANDER_CHARM && charmInv.cursor === null &&
+    charmContainer.textContent?.includes('Ruch pieszo +5%'));
+  await React.act(async () => { charmRoot.unmount(); });
+  charmContainer.remove();
+
   const potContainer = w.document.createElement('div');
   w.document.body.appendChild(potContainer);
   const potRoot = createRoot(potContainer);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { HUDState } from '../game/engine';
-import { displayName, durabilityMax } from '../game/items';
+import { I, displayName, durabilityMax } from '../game/items';
 import { enchList } from '../game/enchant';
 import { GAME_VERSION } from '../utils/version';
 
@@ -303,6 +303,12 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
                 <span className="leading-none text-green-300">{Math.ceil(e.left)}s</span>
               </div>
             ))}
+          </div>
+        )}
+        {hud.talisman && (
+          <div className="mb-0.5 flex items-center gap-1 rounded bg-black/60 px-2 py-0.5 text-[11px] mc-text" role="status">
+            <img src={icons[hud.talisman.id]} width={18} height={18} className="pixelated" alt="" />
+            <span>{displayName(hud.talisman.id)} · {hud.talisman.id === I.WANDER_CHARM ? 'ruch +5%' : 'powietrze +25%'}</span>
           </div>
         )}
         {hud.armor.some((s) => s) && (

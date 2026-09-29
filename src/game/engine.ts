@@ -39,6 +39,7 @@ import {
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
 import { mealBonus } from './meals';
+import { breathCharmFactor, isTalisman, restoreTalisman, walkCharmFactor } from './talismans';
 import { emptyTravelCauldron, restoreTravelCauldron, tickTravelCauldron, travelFuel, travelRecipe,
   TRAVEL_CAULDRON_LIMIT, type TravelCauldronState } from './travelCauldron';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
@@ -123,6 +124,7 @@ export interface HUDState {
   xpFrac: number;
   /** Four equipped armor pieces (head, chest, legs, feet). */
   armor: (Stack | null)[];
+  talisman?: Stack | null;
   /** Sum of armor points of the equipped pieces. */
   armorPoints: number;
   /** 1.6: co jest pod celownikiem (mob) – nazwa i wskazówka. */
@@ -227,6 +229,8 @@ export interface SaveData {
   weather?: 'clear' | 'rain';
   xp?: number;
   armor?: (Stack | null)[];
+  /** Optional 3.0 single equipped charm; old saves have an empty slot. */
+  talisman?: Stack | null;
   /** 1.6: licznik wymian (osiągnięcie „Kupiec”). */
   trades?: number;
   /** 1.8: modyfikacje bloków w Netherze – osobny wymiar, osobny zapis. */
@@ -611,6 +615,7 @@ export class Game {
   xp = new Xp(0);
   /** Equipped armor: [head, chest, legs, feet]. */
   armor: (Stack | null)[] = new Array(ARMOR_SLOT_COUNT).fill(null);
+  talisman: Stack | null = null;
   /** Floating XP orbs dropped by mobs and ores. */
   private orbs: { mesh: THREE.Mesh; pos: THREE.Vector3; vel: THREE.Vector3; value: number; age: number }[] = [];
   private orbGeo!: THREE.BufferGeometry;
@@ -911,6 +916,7 @@ export class Game {
         (w.dimension === 'overworld' || w.dimension === 'nether')
       ).slice(0, 12).map((w) => ({ ...w, name: w.name.slice(0, 32) }));
       this.activeWaypointId = this.waypoints.some((w) => w.id === opts.save?.activeWaypointId) ? (opts.save.activeWaypointId ?? null) : null;
+      this.talisman = restoreTalisman(opts.save.talisman);
       if (opts.save.armor) {
         for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
           const s = opts.save.armor[i];
@@ -2261,6 +2267,19 @@ export class Game {
     this.emitHud();
   }
 
+  /** One charm slot: equipping a new one swaps instead of stacking effects. */
+  clickTalismanSlot() {
+    const cur = this.inventory.cursor;
+    if (cur && (!isTalisman(cur.id) || cur.count !== 1)) {
+      this.message('Tu pasuje tylko jeden talizman ze skrzyni jaskiniowej.');
+      return;
+    }
+    if (!cur && !this.talisman) return;
+    this.inventory.cursor = this.talisman;
+    this.talisman = cur ? { id: cur.id, count: 1 } : null;
+    this.emitHud();
+  }
+
   /** Every equipped piece takes a quarter of the hit; broken pieces fall off. */
   private wearArmor(dealt: number) {
     if (this.mode !== 'survival') return;
@@ -3168,6 +3187,7 @@ export class Game {
         activeWaypointId: this.activeWaypointId ?? null,
         discovery: (this.discovery ?? new DiscoveryMap()).serialize(),
         armor: this.armor.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
+        talisman: this.talisman ? { ...this.talisman } : null,
         fishCaught: this.fishCaught,
         fishingBait: this.fishingBait,
         updated: Date.now(),
@@ -4753,6 +4773,7 @@ export class Game {
     // 2.4: napój szybkości przyspiesza bieg (nie wpływa na latanie w trybie kreatywnym)
     if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
     if (!this.flying) speed *= sprintFactor(this.hasEffect('sprint'), this.sprinting);
+    if (!this.flying) speed *= walkCharmFactor(this.talisman);
     if (!this.flying && this.holdingShield()) speed *= shieldWeightFactor(this.selectedStack()?.id ?? 0);
 
     const len = Math.hypot(fx, fz) || 1;
@@ -4837,7 +4858,7 @@ export class Game {
 
     // drowning
     if (eyeInWater && this.mode === 'survival') {
-      this.air -= dt;
+      this.air -= dt * breathCharmFactor(this.talisman);
       if (this.air <= 0) {
         this.air = 0;
         this.drownAcc += dt;
@@ -5565,6 +5586,7 @@ export class Game {
       level: this.xp.info().level,
       xpFrac: (() => { const i = this.xp.info(); return i.need > 0 ? i.inLevel / i.need : 0; })(),
       armor: this.armor.map((s) => (s ? { ...s } : null)),
+      talisman: this.talisman ? { ...this.talisman } : null,
       armorPoints: armorPoints(this.armor),
       mobHint: this.mobHint(),
       village: this.villageName,

@@ -61,6 +61,7 @@ import {
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
 import { mealBonus } from '../src/game/meals';
+import { breathCharmFactor, isTalisman, restoreTalisman, walkCharmFactor } from '../src/game/talismans';
 import { TRAVEL_CAULDRON_LIMIT, emptyTravelCauldron, restoreTravelCauldron, tickTravelCauldron, travelFuel, travelRecipe } from '../src/game/travelCauldron';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { boundedPathStep } from '../src/game/pathfinding';
@@ -1504,6 +1505,60 @@ section('3.0 #77: mutually exclusive defense and swimming enchants');
   table.inventory.slots[0] = null;
   check('Creative can enchant swimming boots at the table without lapis', table.enchantWith(0) &&
     table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
+}
+
+section('3.0 #49: one rare, saved and equipped utility talisman at a time');
+{
+  check('two talismans append IDs after meals, exist in Creative and never stack',
+    I.WANDER_CHARM === 384 && I.TIDE_CHARM === 385 &&
+    CREATIVE_ITEMS.includes(I.WANDER_CHARM) && CREATIVE_ITEMS.includes(I.TIDE_CHARM) &&
+    stackLimit(I.WANDER_CHARM) === 1 && stackLimit(I.TIDE_CHARM) === 1);
+  const held = { id: I.WANDER_CHARM, count: 1 }, other = { id: I.TIDE_CHARM, count: 1 };
+  check('backpack is passive-free; effects are intentionally small and separate',
+    walkCharmFactor(null) === 1 && breathCharmFactor(null) === 1 &&
+    walkCharmFactor(held) === 1.05 && breathCharmFactor(held) === 1 &&
+    walkCharmFactor(other) === 1 && breathCharmFactor(other) === 0.8);
+  check('old worlds and malicious oversized or non-charm save stacks cannot equip',
+    restoreTalisman(undefined) === null && restoreTalisman({ id: I.IRON, count: 1 }) === null &&
+    restoreTalisman({ id: I.WANDER_CHARM, count: 999 }) === null &&
+    restoreTalisman({ id: I.TIDE_CHARM, count: 1 })?.id === I.TIDE_CHARM &&
+    !isTalisman(I.IRON));
+  let walker = 0, diver = 0, both = 0, max = 0, deterministic = true;
+  for (let x = -1000; x < 1000; x++) {
+    const loot = chestLoot(49049, x, 37, 2);
+    const found = loot.filter((v) => isTalisman(v.id));
+    if (found.length) {
+      max = Math.max(max, found.length);
+      if (found[0].id === I.WANDER_CHARM) walker++;
+      else diver++;
+    }
+    if (found.length > 1) both++;
+    deterministic &&= JSON.stringify(loot) === JSON.stringify(chestLoot(49049, x, 37, 2));
+  }
+  check('rare cave chest loot yields both charms and never two in one chest',
+    deterministic && walker > 12 && diver > 12 && walker + diver < 150 && both === 0 && max === 1,
+    `wander=${walker} tide=${diver}`);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.talisman = null; g.emitHud = () => {};
+  const messages: string[] = []; g.message = (m: string) => messages.push(m);
+  g.inventory.slots[0] = { id: I.WANDER_CHARM, count: 1 };
+  check('carrying a charm in the hotbar does not activate it', walkCharmFactor(g.talisman) === 1);
+  g.inventory.cursor = { id: I.WANDER_CHARM, count: 1 }; g.clickTalismanSlot();
+  check('actual single-slot equip applies one factor and consumes cursor',
+    g.talisman?.id === I.WANDER_CHARM && g.inventory.cursor === null && walkCharmFactor(g.talisman) === 1.05);
+  g.inventory.cursor = { id: I.IRON, count: 1 }; g.clickTalismanSlot();
+  check('non-talisman cursor rejected, equip unchanged and player gets an explanation',
+    g.talisman?.id === I.WANDER_CHARM && g.inventory.cursor?.id === I.IRON && messages.length === 1);
+  g.inventory.cursor = { id: I.TIDE_CHARM, count: 2 }; g.clickTalismanSlot();
+  check('oversized invalid stack never enters the equipped slot',
+    g.talisman?.id === I.WANDER_CHARM && g.inventory.cursor?.count === 2);
+  g.inventory.cursor = { id: I.TIDE_CHARM, count: 1 }; g.clickTalismanSlot();
+  check('swapping to a dive charm returns old one on cursor and removes movement bonus',
+    g.talisman?.id === I.TIDE_CHARM && g.inventory.cursor?.id === I.WANDER_CHARM &&
+    walkCharmFactor(g.talisman) === 1 && breathCharmFactor(g.talisman) === 0.8);
+  g.inventory.cursor = null; g.clickTalismanSlot();
+  check('unequip removes bonus and returns exactly one charm, no copies',
+    g.talisman === null && g.inventory.cursor?.id === I.TIDE_CHARM && g.inventory.cursor?.count === 1);
 }
 
 section('3.0 #47: renewable vegetables, real meal recipes and bounded short bonuses');
@@ -3044,6 +3099,31 @@ section('3.0 #64: blind cave listener tracks real sounds, not silent players');
   const ironShieldDistance = walkWith(I.IRON_SHIELD);
   check('actual movement is slower only while carrying the heavy iron shield',
     oldShieldDistance > 0.5 && ironShieldDistance > 0 && ironShieldDistance < oldShieldDistance * 0.94);
+  walker.talisman = null;
+  const normal = walkWith(I.STICK);
+  walker.talisman = { id: I.WANDER_CHARM, count: 1 };
+  const withCharm = walkWith(I.STICK);
+  check('real walking is a small amount faster only while traveler charm is equipped',
+    withCharm > normal * 1.02 && withCharm < normal * 1.07,
+    `normal=${normal.toFixed(3)} charm=${withCharm.toFixed(3)}`);
+  walker.talisman = { id: I.TIDE_CHARM, count: 1 };
+  check('swapping charms removes the old speed bonus in the same physics loop',
+    Math.abs(walkWith(I.STICK) - normal) < 0.04);
+  walker.keys = new Set(); walker.mode = 'survival';
+  walker.body.pos.set(4.5, y, 4.5); walker.body.vel.set(0, 0, 0);
+  walker.body.onGround = true;
+  world.setBlock(4, y + 1, 4, B.WATER);
+  walker.air = 10; walker.talisman = null;
+  walker.updatePlayer(0.1);
+  const unprotected = walker.air;
+  walker.body.pos.set(4.5, y, 4.5); walker.body.vel.set(0, 0, 0); walker.body.onGround = true;
+  walker.air = 10; walker.talisman = { id: I.TIDE_CHARM, count: 1 };
+  walker.updatePlayer(0.1);
+  check('real underwater air consumption is 20% slower only with equipped dive charm',
+    Math.abs(unprotected - 9.9) < 0.002 && Math.abs(walker.air - 9.92) < 0.002);
+  world.setBlock(4, y + 1, 4, B.AIR);
+
+
 
   // Exercise Q + real dropped entity physics; ordinary block loot must not
   // lure the listener, whereas a player-thrown item makes one impact cue.
@@ -4364,6 +4444,7 @@ section('saves: enchantments ride along');
   g.weather = 'clear';
   g.xp = new Xp(42);
   g.armor = [{ id: I.IRON_BOOTS, count: 1, dur: 100, ench: { featherfalling: 3 } }];
+  g.talisman = { id: I.WANDER_CHARM, count: 1 };
   g.fishingBait = I.WORM_BAIT;
   g.discovery = new DiscoveryMap();
   g.discovery.survey('overworld', -1, -16, 'Bagno', 63);
@@ -4387,6 +4468,9 @@ section('saves: enchantments ride along');
   eq('durability still persists', stored.inv[0]?.dur, 300);
   eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
+  check('equipped charm persists in world export, while old worlds retain empty slot',
+    stored.talisman?.id === I.WANDER_CHARM && restoreTalisman(JSON.parse(exportSave('ench-test') ?? '{}').saves?.[0]?.talisman)?.id === I.WANDER_CHARM &&
+    restoreTalisman(undefined) === null);
   check('cauldron input, output and mid-batch progress survive world save and JSON export',
     stored.travelCauldrons?.[0]?.input?.id === I.RAW_RABBIT &&
     stored.travelCauldrons?.[0]?.output?.id === I.COOKED_RABBIT &&

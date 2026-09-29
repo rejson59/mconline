@@ -23,6 +23,8 @@ export function stackTooltip(s: Stack | null | undefined, fallback = ''): string
     s.id === I.IRON_HAMMER ? '\n8 obrażeń, 1,1 s między ciosami. Rozmach przy trafieniu do 2 dodatkowych celów; szybsze kruszenie kamienia, bruku, cegieł, czernitu i bazaltu, bez niszczenia sąsiednich bloków.' :
     s.id === I.LEATHER_SHIELD ? '\nLekka tarcza: 35% ochrony przed ciosem, 60% przed strzałą; szybsze zużycie, bez spowolnienia.' :
     s.id === I.IRON_SHIELD ? '\nCiężka tarcza: 70% ochrony przed ciosem, 85% przed strzałą; ruch o 15% wolniejszy w dłoni.' :
+    s.id === I.WANDER_CHARM ? '\nWłóż do jednego miejsca na talizman w ekwipunku. Ruch pieszo +5% (bez lotu). Nie działa z plecaka ani drugiego slotu.' :
+    s.id === I.TIDE_CHARM ? '\nWłóż do jednego miejsca na talizman w ekwipunku. Powietrze pod wodą zużywa się o 20% wolniej. Nie działa z plecaka.' :
     s.id === I.CARROT ? '\nPosadź na roli PPM/tap (można znaleźć w wysokiej trawie). Ugotuj w piecu/kotle na pieczoną marchew.' :
     s.id === I.PUMPKIN_SOUP ? '\n+6 głodu, +1 zdrowia. Szybkość 8 s, nie kumuluje czasu; zwraca drewnianą miskę.' :
     s.id === I.RABBIT_STEW ? '\n+8 głodu, +2 zdrowia. Regeneracja 6 s, nie kumuluje czasu; zwraca drewnianą miskę.' :
