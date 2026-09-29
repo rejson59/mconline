@@ -2998,6 +2998,8 @@ section('3.0 #70: fox and rabbit trust, behavior and mixed-species persistence')
   check('rabbit eventually follows but does not become a wolf fighter', rabbit.tamed && rabbit.trust === 3 &&
     g.inventory.countOf(I.WHEAT) === 1 && rabbitMark.visible);
   rabbit.body.pos.set(6.5, y, 6.5);
+  // Reset momentum left over from random wild wandering; assert trained steering, not a prior frame.
+  rabbit.body.vel.set(0, 0, 0);
   let rabbitBites = 0;
   rabbit.update(1 / 30, world, new THREE.Vector3(12.5, y, 6.5), () => {}, () => {}, false,
     [new Mob('zombie', 7.5, y, 7.5)], () => { rabbitBites++; });
