@@ -1,4 +1,4 @@
-import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap } from './blocks';
+import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, paintingBase, chairBase } from './blocks';
 import type { Stack } from './inventory';
 
 /** Item ids sit above block ids so a stack can hold either. */
@@ -606,6 +606,8 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   const fortune = Math.max(0, Math.floor(opts.fortune ?? 0));
   // A caught snare never drops its saved loot or its armed state as an item.
   if (blockId >= B.SNARE && blockId <= B.SNARE_CHICKEN) return [{ id: B.SNARE, count: 1 }];
+  if (paintingBase(blockId) !== null || chairBase(blockId) !== null)
+    return [{ id: paintingBase(blockId) ?? chairBase(blockId)!, count: 1 }];
   // Jedwabny dotyk: blok wypada taki, jaki stał (kamień, szkło, ruda, liście…)
   if (opts.silk) {
     if (blockId === B.AIR || BLOCKS[blockId]?.hardness < 0) return [];

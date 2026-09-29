@@ -23,6 +23,9 @@ export function stackTooltip(s: Stack | null | undefined, fallback = ''): string
     s.id === I.IRON_HAMMER ? '\n8 obrażeń, 1,1 s między ciosami. Rozmach przy trafieniu do 2 dodatkowych celów; szybsze kruszenie kamienia, bruku, cegieł, czernitu i bazaltu, bez niszczenia sąsiednich bloków.' :
     s.id === I.LEATHER_SHIELD ? '\nLekka tarcza: 35% ochrony przed ciosem, 60% przed strzałą; szybsze zużycie, bez spowolnienia.' :
     s.id === I.IRON_SHIELD ? '\nCiężka tarcza: 70% ochrony przed ciosem, 85% przed strzałą; ruch o 15% wolniejszy w dłoni.' :
+    (s.id >= B.PAINTING_LAND_N && s.id <= B.PAINTING_SUN_W) ? '\nPPM/tap na solidnej ścianie, nie na podłodze. Kierunek utrzymuje się po zapisie. Po odkopaniu ściany obraz spada.' :
+    (s.id === B.BANNER_RED || s.id === B.BANNER_BLUE || s.id === B.VASE) ? '\nPostaw na stabilnej podłodze PPM/tap. Zebrana dekoracja zwraca jeden przedmiot.' :
+    (s.id >= B.CHAIR_N && s.id <= B.CHAIR_W) || s.id === B.TABLE ? '\nDrewniany mebel do wnętrz. Stawiaj na stabilnej podłodze; krzesło obraca się do spojrzenia.' :
     s.id === I.WANDER_CHARM ? '\nWłóż do jednego miejsca na talizman w ekwipunku. Ruch pieszo +5% (bez lotu). Nie działa z plecaka ani drugiego slotu.' :
     s.id === I.TIDE_CHARM ? '\nWłóż do jednego miejsca na talizman w ekwipunku. Powietrze pod wodą zużywa się o 20% wolniej. Nie działa z plecaka.' :
     s.id === I.CARROT ? '\nPosadź na roli PPM/tap (można znaleźć w wysokiej trawie). Ugotuj w piecu/kotle na pieczoną marchew.' :

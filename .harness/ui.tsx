@@ -120,6 +120,31 @@ section('3.0 dagger: compact combat feedback in HUD');
   check('counter hit is distinguished visually and reports actual damage', counter.includes('Kontra!') && counter.includes('7 obrażeń'));
 }
 
+section('3.0 #50: decorative art and furniture icons, crafting help and touch placement');
+{
+  const decor = [B.PAINTING_LAND_N, B.PAINTING_SUN_N, B.BANNER_RED,
+    B.BANNER_BLUE, B.VASE, B.CHAIR_N, B.TABLE];
+  const icons = Object.fromEntries(decor.map((id) => [id, `data:image/png;base64,decor-${id}`]));
+  const fake = { inventory: new Inventory(), mode: 'creative', craftingTable: false,
+    selected: 0, talisman: null, clickTalismanSlot: noop, body: { pos: { x: 1, y: 65, z: 1 } } };
+  const creative = renderToStaticMarkup(<InventoryScreen game={fake as unknown as Game} icons={icons} onChange={noop} />);
+  check('seven unique decoration icons are actually in Creative block catalogue',
+    decor.every((id) => creative.includes(`decor-${id}`)) &&
+    !creative.includes(`decor-${B.PAINTING_LAND_E}`));
+  const help = renderToStaticMarkup(<Controls />);
+  check('in-game help explains all materials, wall/floor placement and recovery via PC or tap',
+    help.includes('Dekorowanie wnętrz') && help.includes('obrazy') &&
+    help.includes('chorągiew') && help.includes('wazon') && help.includes('krzesło') &&
+    help.includes('stolik') && help.includes('ścianie') && help.includes('PPM/tap'));
+  check('painting/furniture tooltips communicate placement and avoid blank detail on small screens',
+    stackTooltip({ id: B.PAINTING_SUN_N, count: 1 }).includes('solidnej ścianie') &&
+    stackTooltip({ id: B.VASE, count: 1 }).includes('stabilnej podłodze') &&
+    stackTooltip({ id: B.CHAIR_N, count: 1 }).includes('obraca się'));
+  check('every decor texture remains inside low-preset 16x16 GPU atlas and has a visible tile',
+    [T.painting_land, T.painting_sun, T.banner_red, T.banner_blue, T.vase,
+      T.chair_seat, T.chair_back, T.table_top, T.table_leg].every((n) => n >= 180 && n < 256));
+}
+
 section('3.0 #49: one charm slot and active effect on compact HUD');
 {
   const fake = { inventory: new Inventory(), mode: 'survival', craftingTable: false,

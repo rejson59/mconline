@@ -3,7 +3,7 @@ import { World, CS, CH, SEA, plantTree, type Biome } from './world';
 import { DiscoveryMap, type DiscoverySave } from './discoveryMap';
 import { CHALLENGES, normalizeChallenges, type ChallengeId, type ChallengeProgress } from './challenges';
 import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, resourceDropCount, animalMeatYield, type WorldDifficulty } from './difficulty';
-import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
+import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, paintingBase, paintingSupport, chairBase, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE, type BaitId } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -4114,6 +4114,12 @@ export class Game {
       if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, px, py, pz)) return;
       for (const m of this.mobs) if (!m.dead && aabbIntersectsBlock(m.body.pos.x, m.body.pos.y, m.body.pos.z, m.body.w, m.body.h, px, py, pz)) return;
     }
+    if (paintingBase(id) !== null) {
+      if (t.ny !== 0 || !IS_SOLID[t.id] || !BLOCKS[t.id]?.opaque) {
+        this.message('Obraz wymaga solidnej ściany.'); return;
+      }
+      placeId = paintingBase(id)! + facingFromNormal(-t.nx, -t.nz);
+    }
     if (id === B.WATER || id === B.LAVA) {
       const below = this.world.getBlock(px, py - 1, pz);
       const around = [this.world.getBlock(px + 1, py, pz), this.world.getBlock(px - 1, py, pz), this.world.getBlock(px, py, pz + 1), this.world.getBlock(px, py, pz - 1)];
@@ -4130,6 +4136,15 @@ export class Game {
     } else if (id === B.LEVER || id === B.BUTTON || id === B.REDSTONE_TORCH || id === B.REDSTONE_TORCH_OFF) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
       if (!IS_SOLID[attached]) { this.message('Dźwignia/przycisk musi być na solidnej ścianie.'); return; }
+    } else if (id === B.BANNER_RED || id === B.BANNER_BLUE || id === B.VASE ||
+               chairBase(id) !== null || id === B.TABLE) {
+      if (!IS_SOLID[below] || below === B.MAGMA || below === B.CAMPFIRE) {
+        this.message('Dekoracja wymaga stabilnej podłogi.'); return;
+      }
+      if (chairBase(id) !== null) {
+        const dir = this.lookDir();
+        placeId = B.CHAIR_N + facingFromNormal(-dir.x, -dir.z);
+      }
     } else if (id === B.TRAVEL_POT) {
       if (!IS_SOLID[below] || below === B.MAGMA) { this.message('Kocioł wymaga suchego, solidnego podłoża.'); return; }
     } else if (id === B.CAMP_TENT || id === B.CAMP_COT) {
@@ -4218,7 +4233,7 @@ export class Game {
     if (!this.target) return;
     // Never pick an armed/filled trap state into an inventory stack.
     const id = this.target.id >= B.SNARE_ARMED && this.target.id <= B.SNARE_CHICKEN
-      ? B.SNARE : this.target.id;
+      ? B.SNARE : paintingBase(this.target.id) ?? chairBase(this.target.id) ?? this.target.id;
     const hot = this.inventory.slots.findIndex((s, i) => i < 9 && s && s.id === id);
     if (hot >= 0) { this.selected = hot; this.emitHud(); return; }
     // 2.3: ŚPM działa też dla przedmiotu leżącego poza paskiem – przenosimy
@@ -4380,6 +4395,27 @@ export class Game {
     this.leafDecay = keep;
   }
 
+  /** Remove wall/floor decor when its anchor is mined or blown up. Uses block IDs
+   * as persisted state, never spawns inventory-only representations or duplicates. */
+  private detachDecorations(x: number, y: number, z: number, drop: boolean) {
+    const floor = this.world.peekBlock(x, y + 1, z);
+    const floorDecor = floor === B.BANNER_RED || floor === B.BANNER_BLUE || floor === B.VASE ||
+      chairBase(floor) !== null || floor === B.TABLE;
+    if (floorDecor && !IS_SOLID[this.world.peekBlock(x, y, z)]) {
+      this.world.setBlock(x, y + 1, z, B.AIR);
+      if (drop && this.mode === 'survival') this.spawnDrop(chairBase(floor) ?? floor, 1, x + 0.5, y + 1.2, z + 0.5);
+    }
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const px = x + dx, pz = z + dz;
+      const id = this.world.peekBlock(px, y, pz);
+      const support = paintingSupport(id, px, y, pz);
+      if (!support || support[0] !== x || support[1] !== y || support[2] !== z ||
+          IS_SOLID[this.world.peekBlock(x, y, z)]) continue;
+      this.world.setBlock(px, y, pz, B.AIR);
+      if (drop && this.mode === 'survival') this.spawnDrop(paintingBase(id)!, 1, px + 0.5, y + 0.5, pz + 0.5);
+    }
+  }
+
   breakBlock(x: number, y: number, z: number, silent = false) {
     const id = this.world.getBlock(x, y, z);
     if (id === B.AIR || BLOCKS[id].hardness < 0) return;
@@ -4399,6 +4435,7 @@ export class Game {
     if (id === B.TRAVEL_POT) this.spillTravelCauldron(x, y, z);
     if (id === B.CAMP_COT) this.invalidateCampRespawn(x, y, z);
     this.world.setBlock(x, y, z, fill);
+    this.detachDecorations(x, y, z, !silent);
     if (!silent && this.body?.pos && Math.hypot(x + 0.5 - this.body.pos.x, z + 0.5 - this.body.pos.z) < 7)
       this.emitCaveNoise(x + 0.5, y, z + 0.5, 13);
     if (isDoor(id)) {
@@ -4481,6 +4518,7 @@ export class Game {
           if (id === B.TRAVEL_POT) this.spillTravelCauldron(x, y, z);
           if (id === B.CAMP_COT) this.invalidateCampRespawn(x, y, z);
           this.world.setBlock(x, y, z, B.AIR);
+          this.detachDecorations(x, y, z, false);
           if (Math.random() < 0.05) this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 3, 0.4);
         }
     this.spawnSmoke(cx, cy, cz, 40, power * 1.5);

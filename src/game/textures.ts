@@ -919,6 +919,54 @@ export function buildAtlas(): AtlasResult {
     }
   }
 
+  // #50: readable even in the 8px low-quality atlas. Every tile has its own
+  // silhouette/color; no externally loaded image or per-frame render cost.
+  for (const [tile, sunset] of [[T.painting_land, false], [T.painting_sun, true]] as const) {
+    noiseFill(tile, [85, 55, 34], 0.14, R(tile));
+    for (let y = 2; y < 14; y++) for (let x = 2; x < 14; x++) {
+      if (x === 2 || x === 13 || y === 2 || y === 13) {
+        setPx(tile, x, y, 215, 166, 91); continue;
+      }
+      const hill = y > 8 + Math.sin(x * 0.65) * 1.2;
+      if (sunset) {
+        const sun = (x - 10) ** 2 + (y - 6) ** 2 < 6;
+        setPx(tile, x, y, hill ? 62 : sun ? 255 : 212,
+          hill ? 48 : sun ? 229 : 92, hill ? 62 : sun ? 141 : 91);
+      } else {
+        setPx(tile, x, y, hill ? 60 : 105, hill ? 146 : 175, hill ? 75 : 195);
+      }
+    }
+  }
+  for (const [tile, blue] of [[T.banner_red, false], [T.banner_blue, true]] as const) {
+    clear(tile);
+    for (let y = 1; y < 16; y++) for (let x = 1; x < 3; x++) setPx(tile, x, y, 119, 84, 49);
+    for (let y = 3; y <= 13; y++) for (let x = 3; x <= 12; x++) {
+      if (y >= 12 && Math.abs(x - 8) < 2) continue; // fishtail
+      const border = x === 3 || x === 12 || y === 3;
+      setPx(tile, x, y, border ? 225 : blue ? 49 : 158,
+        border ? 187 : blue ? 93 : 51, border ? 94 : blue ? 175 : 57);
+      if ((x === 7 || x === 8) && y >= 6 && y <= 10) setPx(tile, x, y, 245, 212, 123);
+      if (y === 8 && x >= 5 && x <= 10) setPx(tile, x, y, 245, 212, 123);
+    }
+  }
+  clear(T.vase);
+  for (let y = 1; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const stem = (x === 7 || x === 8) && y >= 3 && y <= 9;
+    const flower = (x - 8) ** 2 + (y - 2) ** 2 <= 3;
+    const pot = y >= 9 && y <= 14 && Math.abs(x - 7.5) <= (y < 12 ? 3 : 4 - (y - 12));
+    if (stem) setPx(T.vase, x, y, 58, 138, 76);
+    if (flower) setPx(T.vase, x, y, 207, 77, 77);
+    if (pot) setPx(T.vase, x, y, x % 3 ? 183 : 87, 118, x % 3 ? 89 : 122);
+  }
+  noiseFill(T.chair_seat, [139, 91, 53], 0.16, R(185));
+  noiseFill(T.chair_back, [102, 65, 41], 0.16, R(186));
+  for (let y = 2; y < 14; y++) for (let x = 4; x < 12; x++)
+    if (x === 4 || x === 11 || (y >= 10 && y <= 12)) setPx(T.chair_back, x, y, 186, 130, 73);
+  noiseFill(T.table_top, [146, 103, 63], 0.17, R(187));
+  for (let y = 2; y < 14; y++) for (let x = 2; x < 14; x++)
+    if (x === 2 || x === 13 || y === 2 || y === 13) setPx(T.table_top, x, y, 214, 158, 85);
+  noiseFill(T.table_leg, [95, 67, 44], 0.13, R(188));
+
   // Commit every appended tile to the GPU atlas BEFORE generating block icons.
   // Previously the 2.7 tiles were painted into ImageData only after the sole
   // putImageData call, so their inventory icons and rendered faces were blank.

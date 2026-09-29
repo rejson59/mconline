@@ -1507,6 +1507,116 @@ section('3.0 #77: mutually exclusive defense and swimming enchants');
     table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
 }
 
+section('3.0 #50: decorative wall art, banners, pottery and real furniture');
+{
+  const bases = [B.PAINTING_LAND_N, B.PAINTING_SUN_N, B.BANNER_RED, B.BANNER_BLUE, B.VASE, B.CHAIR_N, B.TABLE];
+  check('decor appended after carrots, each base available in Creative without exposing orientation states',
+    B.PAINTING_LAND_N === 427 && B.TABLE === 442 &&
+    bases.every((id) => CREATIVE_BLOCKS.includes(id)) &&
+    !CREATIVE_BLOCKS.includes(B.PAINTING_SUN_E) && !CREATIVE_BLOCKS.includes(B.CHAIR_W));
+  check('wall images, banners, vase and wood furniture use distinct painted atlas tiles',
+    new Set(bases.map((id) => BLOCKS[id]?.top)).size === bases.length &&
+    bases.every((id) => !!BLOCKS[id] && BLOCKS[id].hardness >= 0));
+  for (const id of bases) {
+    const recipe = RECIPES.find((r) => r.out.id === id)!;
+    const inv = new Inventory();
+    for (let row = 0; row < recipe.pattern!.length; row++)
+      for (let col = 0; col < recipe.pattern![row].length; col++) {
+        const symbol = recipe.pattern![row][col];
+        if (symbol !== ' ' && symbol !== '.') inv.grid[row * 3 + col] = { id: recipe.key![symbol], count: 1 };
+      }
+    check(`${displayName(id)} has a real table-grid recipe with charged inputs`,
+      recipe.table && !inv.gridMatch(false) && inv.gridMatch(true)?.out.id === id &&
+      inv.craftGrid(true)?.id === id && inv.grid.every((v) => v === null));
+    const stock = new Inventory();
+    for (const ingredient of recipe.inputs) stock.add(ingredient.id, ingredient.count);
+    check(`${displayName(id)} is actually craftable once from Survival materials`,
+      stock.craft(recipe) && stock.countOf(id) === recipe.out.count && !stock.craft(recipe));
+  }
+  const dye = RECIPES.find((r) => r.out.id === B.WOOL_BLUE && r.inputs.some((it) => it.id === B.FLOWER_BLUE))!;
+  const cheapBlue = new Inventory(); cheapBlue.add(B.WOOL_WHITE, 1); cheapBlue.add(B.FLOWER_BLUE, 1);
+  check('Meadow blue flower gives a real Survival dye route without spending a diamond',
+    !!dye && !dye.table && cheapBlue.craft(dye) && cheapBlue.countOf(B.WOOL_BLUE) === 1);
+  check('silk touch and normal mining return the base item, not a rotated painting or chair',
+    [B.PAINTING_LAND_N, B.PAINTING_LAND_E, B.PAINTING_LAND_S, B.PAINTING_LAND_W].every((id) =>
+      blockDrops(id, I.IRON_PICK)[0]?.id === B.PAINTING_LAND_N && blockDrops(id, I.IRON_PICK, { silk: true })[0]?.id === B.PAINTING_LAND_N) &&
+    [B.CHAIR_N, B.CHAIR_E, B.CHAIR_S, B.CHAIR_W].every((id) => blockDrops(id, 0)[0]?.id === B.CHAIR_N));
+  const world = new World(5050, true); world.getChunk(0, 0);
+  const y = FLAT_H + 2;
+  world.setBlock(7, y, 8, B.STONE); world.setBlock(7, y, 9, B.STONE);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.body = { pos: new THREE.Vector3(2.5, FLAT_H + 1, 2.5), w: 0.6, h: 1.8 };
+  g.inventory = new Inventory(); g.selected = 0; g.mode = 'survival';
+  g.mobs = []; g.keys = new Set(); g.growables = new Map(); g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.findMobTarget = () => ({ mob: null, dist: Infinity }); g.emitHud = () => {};
+  g.lookDir = () => new THREE.Vector3(0, 0, 1);
+  g.settle = () => {}; g.onBlockChanged = () => {}; g.advanceChallenge = () => {}; g.updateHand = () => {};
+  g.unlock = () => {}; g.spawnParticles = () => {};
+  const dropped: number[] = [], messages: string[] = [];
+  g.spawnDrop = (id: number, count: number) => { for (let i = 0; i < count; i++) dropped.push(id); };
+  g.message = (m: string) => messages.push(m);
+  g.inventory.slots[0] = { id: B.PAINTING_LAND_N, count: 1 };
+  g.target = { id: B.STONE, x: 7, y, z: 8, nx: 1, ny: 0, nz: 0 };
+  g.tryUse();
+  check('right click/tap places a painting flush to clicked wall, oriented and consumed once',
+    world.getBlock(8, y, 8) === B.PAINTING_LAND_W && !g.inventory.slots[0]);
+  g.inventory.slots[0] = { id: B.PAINTING_SUN_N, count: 1 };
+  g.target = { id: B.STONE, x: 7, y, z: 9, nx: 1, ny: 0, nz: 0 };
+  g.tryUse();
+  check('second painting has separate art and its own wall direction',
+    world.getBlock(8, y, 9) === B.PAINTING_SUN_W &&
+    BLOCKS[world.getBlock(8, y, 8)].top !== BLOCKS[world.getBlock(8, y, 9)].top);
+  const portable = new World(5050, true); portable.loadMods(world.serializeMods());
+  check('orientations persist in the old world modification format with no new save field',
+    portable.getBlock(8, y, 8) === B.PAINTING_LAND_W && portable.getBlock(8, y, 9) === B.PAINTING_SUN_W);
+  g.inventory.slots[0] = { id: B.PAINTING_LAND_N, count: 1 };
+  g.target = { id: B.GRASS, x: 10, y: FLAT_H, z: 8, nx: 0, ny: 1, nz: 0 };
+  g.tryUse();
+  check('painting cannot float over floor, preserves stock and explains wall support',
+    world.getBlock(10, FLAT_H + 1, 8) === B.AIR && g.inventory.slots[0]?.count === 1 && messages.some((m) => m.includes('ściany')));
+  const floorPieces = [B.BANNER_RED, B.BANNER_BLUE, B.VASE, B.CHAIR_N, B.TABLE];
+  for (let i = 0; i < floorPieces.length; i++) {
+    const x = 9 + i;
+    g.target = { id: B.GRASS, x, y: FLAT_H, z: 11, nx: 0, ny: 1, nz: 0 };
+    g.inventory.slots[0] = { id: floorPieces[i], count: 1 };
+    g.tryUse();
+    check(`${displayName(floorPieces[i])} can be placed on an ordinary interior floor and spent`,
+      world.getBlock(x, FLAT_H + 1, 11) === floorPieces[i] && !g.inventory.slots[0]);
+  }
+  g.mode = 'creative'; g.target = { id: B.CHAIR_N, x: 12, y: FLAT_H + 1, z: 11 };
+  g.pickBlock();
+  check('Creative middle click on rotated furniture selects a reusable base chair',
+    g.inventory.slots[0]?.id === B.CHAIR_N);
+  g.target = { id: B.PAINTING_SUN_W, x: 8, y, z: 9 };
+  g.pickBlock();
+  check('Creative middle click on oriented art selects its original wall painting',
+    g.inventory.slots[0]?.id === B.PAINTING_SUN_N);
+  g.mode = 'survival'; g.inventory.slots[0] = null;
+  const geom = world.buildMesh(world.getChunk(0, 0));
+  const positions = geom.flatMap((mesh) => {
+    const pos = mesh.getAttribute('position');
+    const values: [number, number, number][] = [];
+    if (!pos) return values;
+    for (let i = 0; i < pos.count; i++) values.push([pos.getX(i), pos.getY(i), pos.getZ(i)]);
+    return values;
+  });
+  check('painting is a thin wall panel, not an invisible block or full-cube facade',
+    positions.filter(([x, yy, z]) => x >= 8 && x <= 9 && yy > y + 0.05 && yy < y + 0.95 && z >= 8 && z < 8.2).length > 0);
+  check('chair and table use visible separated seats, backs and legs at low preset',
+    positions.some(([x, yy, z]) => x > 12 && x < 13 && yy > FLAT_H + 1.4 && yy < FLAT_H + 1.58 && z > 11 && z < 12) &&
+    positions.some(([x, yy, z]) => x > 13 && x < 14 && yy > FLAT_H + 1.68 && yy < FLAT_H + 1.9 && z > 11 && z < 12));
+  geom.forEach((mesh) => mesh.dispose());
+  g.breakBlock(7, y, 8);
+  check('mining wall removes supported art and returns one framed item, not a floating picture',
+    world.getBlock(8, y, 8) === B.AIR && dropped.filter((id) => id === B.PAINTING_LAND_N).length === 1 &&
+    world.getBlock(8, y, 9) === B.PAINTING_SUN_W);
+  g.breakBlock(7, y, 8);
+  check('repeating wall destruction cannot duplicate dropped painting', dropped.filter((id) => id === B.PAINTING_LAND_N).length === 1);
+  g.breakBlock(11, FLAT_H, 11);
+  check('removing floor support recovers a vase once, without leaving a floating ornament',
+    world.getBlock(11, FLAT_H + 1, 11) === B.AIR && dropped.filter((id) => id === B.VASE).length === 1);
+}
+
 section('3.0 #49: one rare, saved and equipped utility talisman at a time');
 {
   check('two talismans append IDs after meals, exist in Creative and never stack',

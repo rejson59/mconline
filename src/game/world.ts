@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
+import { B, T, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
 import { tileUV } from './textures';
 import { CH, CS, FLAT_H, SEA } from './constants';
 import {
@@ -130,6 +130,14 @@ function addBox(
 
 /** Local bounds of a thin panel. null = draw a normal cube. */
 function panelBounds(id: number): [number, number, number, number, number, number] | null {
+  if (id >= B.PAINTING_LAND_N && id <= B.PAINTING_SUN_W) {
+    // Wall paintings are thin panels, not floating full cubes or crossed plants.
+    const facing = (id - B.PAINTING_LAND_N) % 4;
+    if (facing === 0) return [0.08, 0.08, 0, 0.92, 0.92, 0.0625];
+    if (facing === 1) return [0.9375, 0.08, 0.08, 1, 0.92, 0.92];
+    if (facing === 2) return [0.08, 0.08, 0.9375, 0.92, 0.92, 1];
+    return [0, 0.08, 0.08, 0.0625, 0.92, 0.92];
+  }
   if (id >= B.TURTLE_EGG0 && id <= B.TURTLE_EGG2) return [0.26, 0, 0.27, 0.74, 0.36, 0.73];
   const t = 0.1875;
   const face = ladderFacing(id);
@@ -857,6 +865,29 @@ export class World {
         for (let x = 0; x < CS; x++) {
           const id = c.data[idx(x, y, z)];
           if (id === 0) continue;
+          // Six small boxes instead of full cubes: table legs, chair legs and
+          // chair back stay visibly readable even in the lowest atlas preset.
+          if ((id >= B.CHAIR_N && id <= B.CHAIR_W) || id === B.TABLE) {
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const buf = bufs[LAYER[id]];
+            const wx = ox + x, wz = oz + z;
+            const seat = id !== B.TABLE;
+            addBox(buf, wx, y, wz, 0.12, seat ? 0.42 : 0.69, 0.12, 0.88,
+              seat ? 0.55 : 0.79, 0.88, seat ? T.chair_seat : T.table_top, sky, blk);
+            for (const xx of [0.14, 0.73]) for (const zz of [0.14, 0.73])
+              addBox(buf, wx, y, wz, xx, 0, zz, xx + 0.13,
+                seat ? 0.42 : 0.69, zz + 0.13, seat ? T.chair_back : T.table_leg, sky, blk);
+            if (seat) {
+              const facing = id - B.CHAIR_N;
+              const bounds: [number, number, number, number] = facing === 0 ? [0.12, 0.12, 0.88, 0.25] :
+                facing === 1 ? [0.75, 0.12, 0.88, 0.88] :
+                facing === 2 ? [0.12, 0.75, 0.88, 0.88] : [0.12, 0.12, 0.25, 0.88];
+              addBox(buf, wx, y, wz, bounds[0], 0.55, bounds[1],
+                bounds[2], 0.97, bounds[3], T.chair_back, sky, blk);
+            }
+            continue;
+          }
           const panel = panelBounds(id);
           if (panel) {
             const sky = skyLight(x, y, z);
