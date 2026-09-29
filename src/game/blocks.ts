@@ -38,6 +38,7 @@ export const T = {
   dry_soil: 158, dead_shrub: 159, flower_blue: 160, meadow_top: 161, meadow_side: 162, podzol: 163, turtle_egg0: 164, turtle_egg1: 165, turtle_egg2: 166,
   snare_empty: 167, snare_armed: 168, snare_rabbit: 169, snare_chicken: 170,
   camp_tent: 171, camp_cot_top: 172, camp_cot_side: 173,
+  travel_pot_top: 174, travel_pot_side: 175,
 } as const;
 
 export const B = {
@@ -99,7 +100,7 @@ export const B = {
   SPRUCE_LOG: 405, SPRUCE_LEAVES: 406, SPRUCE_SAPLING: 407, DRY_SOIL: 408,
   DEAD_SHRUB: 409, FLOWER_BLUE: 410, MEADOW_GRASS: 411, PODZOL: 412, TURTLE_EGG0: 413, TURTLE_EGG1: 414, TURTLE_EGG2: 415,
   SNARE: 416, SNARE_ARMED: 417, SNARE_RABBIT: 418, SNARE_CHICKEN: 419,
-  CAMP_TENT: 420, CAMP_COT: 421,
+  CAMP_TENT: 420, CAMP_COT: 421, TRAVEL_POT: 422,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail';
@@ -340,6 +341,10 @@ def(B.CAMP_TENT, 'Namiot biwakowy', T.camp_tent, { solid: false, opaque: false, 
   render: 'cross', hardness: 0.7, sound: 'cloth' });
 def(B.CAMP_COT, 'Posłanie podróżne', [T.camp_cot_top, T.planks, T.camp_cot_side], {
   opaque: false, layer: 1, hardness: 0.8, sound: 'cloth',
+});
+
+def(B.TRAVEL_POT, 'Kocioł podróżny', [T.travel_pot_top, T.iron_block, T.travel_pot_side], {
+  hardness: 2, sound: 'stone', opaque: false, layer: 1,
 });
 
 export const BLOCKS = defs;

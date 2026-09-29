@@ -26,12 +26,14 @@ import { DiscoveryMap } from '../src/game/discoveryMap';
 import { World } from '../src/game/world';
 import AnvilScreen from '../src/components/AnvilScreen';
 import BrewingScreen from '../src/components/BrewingScreen';
+import TravelCauldronScreen from '../src/components/TravelCauldronScreen';
 import InventoryScreen from '../src/components/InventoryScreen';
 import { anvilResult } from '../src/game/anvil';
 import { Inventory, RECIPES } from '../src/game/inventory';
 import { I, isFood, isPotion, stackLimit, displayName } from '../src/game/items';
 import { B, T, BLOCKS, CREATIVE_BLOCKS } from '../src/game/blocks';
 import { applyBrew, emptyBrewing, tickBrewing, POTIONS, HEAL_AMOUNT } from '../src/game/brewing';
+import { emptyTravelCauldron } from '../src/game/travelCauldron';
 import type { Stack } from '../src/game/inventory';
 import { rollEnchantOptions } from '../src/game/enchant';
 import { createVillagerState, offersFor } from '../src/game/trading';
@@ -116,6 +118,31 @@ section('3.0 dagger: compact combat feedback in HUD');
   check('dodge counter readiness is visibly announced on small HUD', ready.includes('kontra gotowa!'));
   check('successful dagger hit shows a short-lived damage confirmation', hit.includes('Trafienie') && hit.includes('4 obrażeń'));
   check('counter hit is distinguished visually and reports actual damage', counter.includes('Kontra!') && counter.includes('7 obrażeń'));
+}
+
+section('3.0 #46: compact cauldron screen shows fuel, limited recipes and persisted progress');
+{
+  const cauldron = emptyTravelCauldron(0, 65, 0);
+  const fake = { inventory: new Inventory(), currentTravelCauldron: () => cauldron,
+    clickTravelCauldron: noop, closeInventory: noop };
+  const empty = renderToStaticMarkup(<TravelCauldronScreen game={fake as unknown as Game} icons={{}} onChange={noop} />);
+  check('field station shows accessible four slots, fuel and close action on small screens',
+    empty.includes('Kocioł podróżny') && empty.includes('Mięso / fiolka') &&
+    empty.includes('Łza / cukier') && empty.includes('Patyk / węgiel') && empty.includes('Wynik') &&
+    empty.includes('Zamknij · E / Esc') && empty.includes('grid-cols-2') && empty.includes('role="progressbar"'));
+  cauldron.input = { id: I.WATER_BOTTLE, count: 1 };
+  cauldron.ingredient = { id: I.SUGAR, count: 1 };
+  cauldron.fuel = { id: I.COAL, count: 1 };
+  cauldron.progress = 4.5;
+  const brewing = renderToStaticMarkup(<TravelCauldronScreen game={fake as unknown as Game} icons={{}} onChange={noop} />);
+  check('real potion recipe and saved progress appear in cauldron UI',
+    brewing.includes('Napój szybkości') && brewing.includes('9 s') && brewing.includes('aria-valuenow="50"'));
+  const controls = renderToStaticMarkup(<Controls />);
+  check('in-game help lists crafting, portable fuel, cooking and brewing limits',
+    controls.includes('Kocioł podróżny') && controls.includes('5 sztabek żelaza') &&
+    controls.includes('Jeden węgiel albo patyk') && controls.includes('nie przetapia rud'));
+  check('field item tooltip describes real state save and non-duplicating block break',
+    stackTooltip({ id: B.TRAVEL_POT, count: 1 }).includes('Zawartość zostaje zapisana'));
 }
 
 section('3.0 #45: camp UI explains assembly, respawn and touch-safe placement');
@@ -700,6 +727,32 @@ async function mountWithJsdom(): Promise<boolean> {
   // Canvas drawing is stubbed; gestures/buttons are mounted for real with React.
   const canvasProto = (w as unknown as { HTMLCanvasElement: typeof HTMLCanvasElement }).HTMLCanvasElement.prototype;
   canvasProto.getContext = ((kind: string) => kind === '2d' ? { fillStyle: '', fillRect() {} } : null) as typeof canvasProto.getContext;
+  const potContainer = w.document.createElement('div');
+  w.document.body.appendChild(potContainer);
+  const potRoot = createRoot(potContainer);
+  const pot = emptyTravelCauldron(3, 65, 3);
+  pot.input = { id: I.RAW_RABBIT, count: 1 };
+  const clicks: string[] = [];
+  const fakePot = { inventory: new Inventory(), currentTravelCauldron: () => pot,
+    clickTravelCauldron: (slot: string, right: boolean) => { clicks.push(`${slot}:${right}`); },
+    closeInventory: () => { clicks.push('close'); } };
+  await React.act(async () => {
+    potRoot.render(<TravelCauldronScreen game={fakePot as unknown as Game} icons={{}} onChange={noop} />);
+  });
+  const potSlots = potContainer.querySelectorAll('.mc-slot');
+  check('cauldron screen really mounts its four usable slots and inventory on touch DOM', potSlots.length === 40);
+  await React.act(async () => {
+    for (const i of [0, 2, 3]) potSlots[i]?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerup', { bubbles: true }));
+  });
+  check('tap dispatches live input, fuel and output slot actions',
+    clicks.join() === 'input:false,fuel:false,output:false');
+  await React.act(async () => {
+    potContainer.querySelector('button')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('cauldron close button works without a keyboard', clicks.at(-1) === 'close');
+  await React.act(async () => { potRoot.unmount(); });
+  potContainer.remove();
+
   const touchContainer = w.document.createElement('div');
   w.document.body.appendChild(touchContainer);
   const touchRoot = createRoot(touchContainer);

@@ -894,6 +894,18 @@ export function buildAtlas(): AtlasResult {
   noiseFill(T.camp_cot_side, [96, 71, 54], 0.12, R(173));
   for (let x = 1; x < 15; x++) for (let y = 1; y < 5; y++) setPx(T.camp_cot_side, x, y, 99, 139, 110);
 
+  noiseFill(T.travel_pot_top, [81, 90, 96], 0.1, R(174));
+  for (let y = 2; y < 14; y++) for (let x = 2; x < 14; x++) {
+    const edge = x < 4 || x > 11 || y < 4 || y > 11;
+    setPx(T.travel_pot_top, x, y, edge ? 176 : 49, edge ? 178 : 76, edge ? 179 : 86);
+  }
+  for (let x = 3; x < 13; x++) for (let y = 3; y < 13; y++)
+    if (x === 3 || x === 12 || y === 3 || y === 12) setPx(T.travel_pot_top, x, y, 207, 209, 205);
+  noiseFill(T.travel_pot_side, [82, 89, 92], 0.14, R(175));
+  for (let x = 2; x < 14; x++) for (let y = 2; y < 5; y++) setPx(T.travel_pot_side, x, y, 158, 169, 171);
+  for (let x of [3, 12]) for (let y = 5; y < 11; y++) setPx(T.travel_pot_side, x, y, 202, 210, 207);
+  for (let x = 5; x < 11; x++) for (let y = 12; y < 15; y++) setPx(T.travel_pot_side, x, y, 176, 77, 38);
+
   // Commit every appended tile to the GPU atlas BEFORE generating block icons.
   // Previously the 2.7 tiles were painted into ImageData only after the sole
   // putImageData call, so their inventory icons and rendered faces were blank.

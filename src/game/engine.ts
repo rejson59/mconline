@@ -38,6 +38,8 @@ import {
   ARROW_AMMO, arrowDuration, type ArrowAmmoId,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
+import { emptyTravelCauldron, restoreTravelCauldron, tickTravelCauldron, travelFuel, travelRecipe,
+  TRAVEL_CAULDRON_LIMIT, type TravelCauldronState } from './travelCauldron';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
 import { achievementById, BIOME_DISCOVERY_GOALS } from './achievements';
 import { upsertSave } from './saves';
@@ -64,7 +66,7 @@ import { villageSpawnSpots } from './village';
 import { isVillageMob } from './mobs';
 
 export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'biomeCompass' | 'anvil' | 'brewing';
+export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'biomeCompass' | 'anvil' | 'brewing' | 'travelCauldron';
 
 export interface Waypoint {
   id: string;
@@ -243,6 +245,8 @@ export interface SaveData {
   fishingBait?: BaitId | null;
   /** 2.4: zawartość statywów alchemicznych (fiolki, składnik, paliwo). */
   brewings?: BrewingState[];
+  /** 3.0: limited portable field cauldrons, separate for both dimensions. */
+  travelCauldrons?: TravelCauldronState[];
   /** 2.4: wypiłe typy napojów (osiągnięcie „Mistrz eliksirów”). */
   potionsDrunk?: number[];
   /** Milliseconds remaining per effect; optional in saves predating 3.0. */
@@ -569,6 +573,8 @@ export class Game {
   /** 2.4: statywy alchemiczne – PPM otwiera ekran warzenia napojów. */
   brewings = new Map<string, BrewingState>();
   brewingPos: { x: number; y: number; z: number } | null = null;
+  travelCauldrons = new Map<string, TravelCauldronState>();
+  travelCauldronPos: { x: number; y: number; z: number } | null = null;
   /** Aktywne efekty napojów (id → pozostałe ms), zachowywane w zapisie. */
   private effects = new Map<PotionEffectId, number>();
   difficulty: WorldDifficulty = { ...DEFAULT_DIFFICULTY };
@@ -873,6 +879,11 @@ export class Game {
         clean.fuelLeft = Math.max(0, Math.min(BREW_FUELS, Math.floor(b.fuelLeft ?? 0)));
         clean.progress = Math.max(0, Math.min(8, b.progress ?? 0));
         this.brewings.set((b.dim ? 'n:' : '') + brewingKey(b.x, b.y, b.z), clean);
+      }
+      for (const raw of (Array.isArray(opts.save.travelCauldrons) ? opts.save.travelCauldrons : []).slice(0, TRAVEL_CAULDRON_LIMIT)) {
+        const c = restoreTravelCauldron(raw);
+        if (!c) continue;
+        this.travelCauldrons.set((c.dim ? 'n:' : '') + `${c.x},${c.y},${c.z}`, c);
       }
       this.effects = restoreEffects(opts.save.effects);
       this.difficulty = normalizeDifficulty(opts.save.difficulty);
@@ -1204,7 +1215,7 @@ export class Game {
         this.setUI('playing');
         return;
       }
-      if (['inventory', 'furnace', 'chest', 'enchant', 'trade', 'anvil', 'brewing'].includes(this.ui)) {
+      if (['inventory', 'furnace', 'chest', 'enchant', 'trade', 'anvil', 'brewing', 'travelCauldron'].includes(this.ui)) {
         e.preventDefault();
         this.closeInventory();
         return;
@@ -1228,7 +1239,7 @@ export class Game {
       }
       return;
     }
-    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'anvil' || this.ui === 'brewing') {
+    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'anvil' || this.ui === 'brewing' || this.ui === 'travelCauldron') {
       if (e.code === 'KeyE') {
         e.preventDefault();
         this.closeInventory();
@@ -1354,6 +1365,7 @@ export class Game {
     this.touchAim = null;
     if (s !== 'anvil') this.anvilPos = null;
     if (s !== 'brewing') this.brewingPos = null;
+    if (s !== 'travelCauldron') this.travelCauldronPos = null;
     if (s === 'anvil' && this.anvilPos) this.returnHeldStack();
     this.onUI(s);
   }
@@ -1375,6 +1387,7 @@ export class Game {
   closeInventory() {
     this.returnHeldStack();
     this.furnacePos = null;
+    this.travelCauldronPos = null;
     this.chestPos = null;
     this.enchantPos = null;
     this.setUI('playing');
@@ -1787,6 +1800,99 @@ export class Game {
           this.message(`Zawarzone: ${displayName(after[first])}.`);
           this.unlock('alchemist');
         }
+      }
+    }
+  }
+
+  private travelKey(x: number, y: number, z: number) {
+    return (this.isInNether ? 'n:' : '') + `${x},${y},${z}`;
+  }
+
+  openTravelCauldron(x: number, y: number, z: number) {
+    const key = this.travelKey(x, y, z);
+    if (!this.travelCauldrons.has(key)) {
+      if (this.travelCauldrons.size >= TRAVEL_CAULDRON_LIMIT) {
+        this.message('Zbyt wiele kotłów w jednym świecie. Zbierz nieużywane, aby otworzyć nowy.');
+        return;
+      }
+      const c = emptyTravelCauldron(x, y, z);
+      c.dim = this.isInNether ? 1 : 0;
+      this.travelCauldrons.set(key, c);
+    }
+    this.travelCauldronPos = { x, y, z };
+    this.setUI('travelCauldron');
+    this.emitHud();
+  }
+
+  currentTravelCauldron(): TravelCauldronState | null {
+    const p = this.travelCauldronPos;
+    return p ? this.travelCauldrons.get(this.travelKey(p.x, p.y, p.z)) ?? null : null;
+  }
+
+  clickTravelCauldron(slot: 'input' | 'ingredient' | 'fuel' | 'output', right: boolean) {
+    const c = this.currentTravelCauldron();
+    if (!c) return;
+    const cur = this.inventory.cursor;
+    if (slot === 'output') {
+      if (!c.output) return;
+      // Do not accept cursor items in the output; share the furnace's stack limits.
+      if (!cur) {
+        if (right && c.output.count > 1) {
+          const half = Math.ceil(c.output.count / 2);
+          this.inventory.cursor = { id: c.output.id, count: half };
+          c.output.count -= half;
+        } else { this.inventory.cursor = c.output; c.output = null; }
+      } else if (cur.id === c.output.id && cur.count < stackLimit(cur.id)) {
+        const n = Math.min(stackLimit(cur.id) - cur.count, c.output.count);
+        cur.count += n; c.output.count -= n;
+        if (c.output.count <= 0) c.output = null;
+      }
+      if (this.inventory.cursor) this.notePickup(this.inventory.cursor.id);
+      this.emitHud();
+      return;
+    }
+    if (cur && slot === 'input' && cur.id !== I.WATER_BOTTLE && !travelRecipe(cur.id, null)) {
+      this.message('W podróży kocioł gotuje tylko mięso i ryby albo warzy fiolkę wody.'); return;
+    }
+    if (cur && slot === 'ingredient' && cur.id !== I.GHAST_TEAR && cur.id !== I.SUGAR) {
+      this.message('Kocioł używa łzy ghasta lub cukru do warzenia.'); return;
+    }
+    if (cur && slot === 'fuel' && !travelFuel(cur.id)) {
+      this.message('Kocioł spala jedną sztukę węgla albo patyka na porcję.'); return;
+    }
+    const get = () => c[slot];
+    const set = (value: Stack | null) => { c[slot] = value; };
+    const before = c[slot]?.id;
+    this.transfer(get, set, right);
+    if (c[slot]?.id !== before && slot !== 'fuel') c.progress = 0;
+    this.emitHud();
+  }
+
+  private spillTravelCauldron(x: number, y: number, z: number) {
+    const key = this.travelKey(x, y, z);
+    const c = this.travelCauldrons.get(key);
+    if (!c) return;
+    this.travelCauldrons.delete(key); // consume state before spawning any drops
+    for (const stack of [c.input, c.ingredient, c.fuel, c.output]) {
+      if (stack) this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.6, z + 0.5);
+    }
+  }
+
+  private updateTravelCauldrons(dt: number) {
+    const dim = this.isInNether ? 1 : 0;
+    for (const c of this.travelCauldrons.values()) {
+      if ((c.dim ?? 0) !== dim || !this.world.hasChunk(Math.floor(c.x / CS), Math.floor(c.z / CS))) continue;
+      if (this.world.peekBlock(c.x, c.y, c.z) !== B.TRAVEL_POT) {
+        if (this.travelCauldronPos && this.travelCauldronPos.x === c.x && this.travelCauldronPos.y === c.y && this.travelCauldronPos.z === c.z) this.closeInventory();
+        this.spillTravelCauldron(c.x, c.y, c.z);
+        continue;
+      }
+      const result = tickTravelCauldron(c, dt);
+      if (result !== null) {
+        this.message(`Kocioł: gotowe ${displayName(result)}.`);
+        if (result === I.COOKED_FISH || result === I.COOKED_SALMON) this.unlock('chef');
+        if (result === I.POTION_HEAL || result === I.POTION_SPEED) this.unlock('alchemist');
+        Sfx.playPlace('stone');
       }
     }
   }
@@ -3040,6 +3146,7 @@ export class Game {
         chests: [...this.chests.values()],
         anvils: this.anvils ? [...this.anvils.values()] : [],
         brewings: this.brewings ? [...this.brewings.values()] : [],
+        travelCauldrons: [...(this.travelCauldrons?.values() ?? [])],
         potionsDrunk: this.potionsDrunk ? [...this.potionsDrunk] : [],
         effects: Object.fromEntries(this.effects ?? []),
         difficulty: normalizeDifficulty(this.difficulty),
@@ -3874,6 +3981,7 @@ export class Game {
       if (t.id === B.ANVIL) { this.openAnvil(t.x, t.y, t.z); return; }
       // 2.4: statyw alchemiczny – PPM otwiera kocioł, a woda leci do fiolki.
       if (t.id === B.BREWING) { this.openBrewing(t.x, t.y, t.z); return; }
+      if (t.id === B.TRAVEL_POT) { this.openTravelCauldron(t.x, t.y, t.z); return; }
     }
     const s = this.selectedStack();
     if (!s) return;
@@ -3993,6 +4101,8 @@ export class Game {
     } else if (id === B.LEVER || id === B.BUTTON || id === B.REDSTONE_TORCH || id === B.REDSTONE_TORCH_OFF) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
       if (!IS_SOLID[attached]) { this.message('Dźwignia/przycisk musi być na solidnej ścianie.'); return; }
+    } else if (id === B.TRAVEL_POT) {
+      if (!IS_SOLID[below] || below === B.MAGMA) { this.message('Kocioł wymaga suchego, solidnego podłoża.'); return; }
     } else if (id === B.CAMP_TENT || id === B.CAMP_COT) {
       if (!IS_SOLID[below] || below === B.MAGMA) { this.message('Namiot i posłanie wymagają solidnego podłoża.'); return; }
     } else if (id === B.SNARE) {
@@ -4257,6 +4367,7 @@ export class Game {
     if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
     if (id === B.ANVIL) this.spillAnvil(x, y, z);
     if (id === B.BREWING) this.spillBrewing(x, y, z);
+    if (id === B.TRAVEL_POT) this.spillTravelCauldron(x, y, z);
     if (id === B.CAMP_COT) this.invalidateCampRespawn(x, y, z);
     this.world.setBlock(x, y, z, fill);
     if (!silent && this.body?.pos && Math.hypot(x + 0.5 - this.body.pos.x, z + 0.5 - this.body.pos.z) < 7)
@@ -4338,6 +4449,7 @@ export class Game {
           if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
           if (id === B.ANVIL) this.spillAnvil(x, y, z);
           if (id === B.BREWING) this.spillBrewing(x, y, z);
+          if (id === B.TRAVEL_POT) this.spillTravelCauldron(x, y, z);
           if (id === B.CAMP_COT) this.invalidateCampRespawn(x, y, z);
           this.world.setBlock(x, y, z, B.AIR);
           if (Math.random() < 0.05) this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 3, 0.4);
@@ -4531,7 +4643,7 @@ export class Game {
       }
     }
 
-    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
+    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'travelCauldron' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);
@@ -4547,6 +4659,7 @@ export class Game {
       this.updateFurnaces(dt);
       this.updateAnvils(dt);
       this.updateBrewings(dt);
+      this.updateTravelCauldrons(dt);
       this.updateEffects(dt);
       this.updateFishing(dt);
       this.updateRedstone(dt);
@@ -5481,6 +5594,7 @@ export class Game {
   }
 
   private heldHint(): string | null {
+    if (this.target?.id === B.TRAVEL_POT) return 'Kocioł podróżny: PPM / tap · mięso lub fiolka + składnik; paliwo: 1 węgiel/patyk na porcję';
     if (this.target?.id === B.CAMP_COT) return 'Posłanie: PPM / tap ustawia odrodzenie; rozbij, by przywrócić poprzedni punkt';
     if (this.target?.id === B.SNARE) return 'Sidła: PPM / tap, aby uzbroić za 1 strunę';
     if (this.target?.id === B.SNARE_ARMED) return 'Sidła uzbrojone: PPM / tap, aby rozbroić';

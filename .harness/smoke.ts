@@ -60,6 +60,7 @@ import {
   displayName,
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
+import { TRAVEL_CAULDRON_LIMIT, emptyTravelCauldron, restoreTravelCauldron, tickTravelCauldron, travelFuel, travelRecipe } from '../src/game/travelCauldron';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { boundedPathStep } from '../src/game/pathfinding';
 import { chooseAmbient } from '../src/game/ambience';
@@ -1502,6 +1503,143 @@ section('3.0 #77: mutually exclusive defense and swimming enchants');
   table.inventory.slots[0] = null;
   check('Creative can enchant swimming boots at the table without lapis', table.enchantWith(0) &&
     table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
+}
+
+section('3.0 #46: fuelled field cauldron cooks and brews without becoming a second furnace');
+{
+  check('field cauldron ID appends after travel bed with visible texture and Creative access',
+    B.TRAVEL_POT === 422 && !!BLOCKS[B.TRAVEL_POT] && CREATIVE_BLOCKS.includes(B.TRAVEL_POT) &&
+    blockDrops(B.TRAVEL_POT, I.IRON_PICK)[0]?.id === B.TRAVEL_POT);
+  const recipe = RECIPES.find((r) => r.out.id === B.TRAVEL_POT)!;
+  const materials = new Inventory(); materials.add(I.IRON, 5); materials.add(B.CAMPFIRE, 1);
+  check('Survival crafts travel cauldron from five iron and a real campfire at a table once',
+    recipe.table && materials.craft(recipe) && materials.countOf(B.TRAVEL_POT) === 1 &&
+    materials.countOf(I.IRON) === 0 && materials.countOf(B.CAMPFIRE) === 0 && !materials.craft(recipe));
+  const grid = new Inventory();
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+    const symbol = recipe.pattern![y][x];
+    if (symbol !== ' ') grid.grid[y * 3 + x] = { id: recipe.key![symbol], count: 1 };
+  }
+  check('six distinct table-grid cells are required; personal grid cannot craft it',
+    !grid.gridMatch(false) && grid.gridMatch(true)?.out.id === B.TRAVEL_POT &&
+    grid.craftGrid(true)?.id === B.TRAVEL_POT && grid.grid.every((v) => !v));
+  check('field station accepts six cooked rations and exactly two water-bottle brews',
+    [I.RAW_PORK, I.RAW_BEEF, I.RAW_CHICKEN, I.RAW_RABBIT, I.RAW_FISH, I.RAW_SALMON].every((id) =>
+      travelRecipe(id, null)?.seconds === 5 && travelRecipe(id, null)!.output !== id) &&
+    travelRecipe(I.WATER_BOTTLE, I.GHAST_TEAR)?.output === I.POTION_HEAL &&
+    travelRecipe(I.WATER_BOTTLE, I.SUGAR)?.output === I.POTION_SPEED &&
+    travelRecipe(I.WATER_BOTTLE, I.SUGAR)?.seconds === 9);
+  check('ores, glass, blaze brewing and other potion families require a base station',
+    !travelRecipe(B.IRON_ORE, null) && !travelRecipe(B.SAND, null) &&
+    !travelRecipe(I.WATER_BOTTLE, I.GLOWSTONE_DUST) && !travelRecipe(I.POTION_AWKWARD, I.FEATHER) &&
+    travelFuel(I.STICK) && travelFuel(I.COAL) && !travelFuel(I.BLAZE_ROD));
+  const partial = emptyTravelCauldron(8, FLAT_H + 1, 8);
+  partial.input = { id: I.RAW_RABBIT, count: 2 };
+  partial.fuel = { id: I.COAL, count: 2 };
+  tickTravelCauldron(partial, 2);
+  check('one fuel pays at start, progress stored; not another charge for partial ticks',
+    partial.progress > 2 && partial.fuel.count === 1 && !partial.output);
+  const restored = restoreTravelCauldron(JSON.parse(JSON.stringify(partial)))!;
+  check('save mid-batch resumes without spending another fuel or making duplicate output',
+    tickTravelCauldron(restored, 3) === I.COOKED_RABBIT && restored.fuel?.count === 1 &&
+    restored.input?.count === 1 && restored.output?.count === 1);
+  check('full output refuses to charge additional fuel or spawn items', (() => {
+    restored.output!.count = stackLimit(I.COOKED_RABBIT);
+    const fuel = restored.fuel!.count;
+    return tickTravelCauldron(restored, 99) === null && restored.fuel!.count === fuel && restored.input!.count === 1;
+  })());
+  const brew = emptyTravelCauldron(1, 65, 2);
+  brew.input = { id: I.WATER_BOTTLE, count: 1 }; brew.ingredient = { id: I.GHAST_TEAR, count: 1 };
+  brew.fuel = { id: I.STICK, count: 1 };
+  check('one brew charges one stick and spends exactly one water bottle and reagent',
+    tickTravelCauldron(brew, 9) === I.POTION_HEAL && brew.input === null &&
+    brew.ingredient === null && brew.fuel === null && brew.output?.count === 1);
+  check('invalid imported cauldrons are dropped, stack counts limited and timing clamped',
+    restoreTravelCauldron({ x: Infinity, y: 1, z: 2 }) === null &&
+    restoreTravelCauldron({ x: 1, y: 70, z: 2, input: { id: I.IRON, count: 999 }, fuel: { id: I.COAL, count: 999 }, progress: 1e20 })?.input === null &&
+    restoreTravelCauldron({ x: 1, y: 70, z: 2, input: { id: I.RAW_RABBIT, count: 1000 }, fuel: { id: I.COAL, count: 999 }, progress: 1e20 })?.fuel?.count === 64 &&
+    restoreTravelCauldron({ x: 1, y: 70, z: 2, input: { id: I.RAW_RABBIT, count: 1000 }, fuel: { id: I.COAL, count: 999 }, progress: 1e20 })?.progress === 0);
+
+  const world = new World(46046, true); world.getChunk(0, 0);
+  const x = 8, y = FLAT_H + 1, z = 8;
+  world.setBlock(x, y, z, B.TRAVEL_POT);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.homeWorld = world; g.travelCauldrons = new Map(); g.inventory = new Inventory();
+  g.keys = new Set(); g.mobs = []; g.ui = 'playing'; g.mode = 'survival'; g.isInNether = false;
+  g.body = { pos: new THREE.Vector3(x + 0.5, y, z + 2.5) };
+  g.target = { id: B.TRAVEL_POT, x, y, z }; g.selected = 0;
+  g.findMobTarget = () => ({ mob: null, dist: Infinity }); g.emitHud = () => {}; g.onUI = () => {};
+  g.message = (message: string) => messages.push(message); g.unlock = () => {};
+  const messages: string[] = [], dropped: number[] = [];
+  g.spawnDrop = (id: number) => void dropped.push(id);
+  g.tryUse();
+  check('real PC/touch interaction opens a new one-block station with empty saved state',
+    g.ui === 'travelCauldron' && g.currentTravelCauldron()?.input === null &&
+    g.travelCauldrons.size === 1);
+  g.inventory.cursor = { id: B.IRON_ORE, count: 1 }; g.clickTravelCauldron('input', false);
+  check('iron ore rejected without eating the cursor or fuel', g.currentTravelCauldron()?.input === null && g.inventory.cursor?.id === B.IRON_ORE);
+  g.inventory.cursor = { id: I.RAW_RABBIT, count: 2 }; g.clickTravelCauldron('input', false);
+  g.inventory.cursor = { id: I.BLAZE_ROD, count: 1 }; g.clickTravelCauldron('fuel', false);
+  check('unauthorized blaze fuel cannot be inserted via live slot API',
+    g.currentTravelCauldron()?.fuel === null && g.inventory.cursor?.id === I.BLAZE_ROD);
+  g.inventory.cursor = { id: I.STICK, count: 2 }; g.clickTravelCauldron('fuel', false);
+  g.updateTravelCauldrons(5);
+  check('actual engine tick cooks one rabbit, not two, and consumes one stick',
+    g.currentTravelCauldron()?.output?.id === I.COOKED_RABBIT &&
+    g.currentTravelCauldron()?.input?.count === 1 && g.currentTravelCauldron()?.fuel?.count === 1);
+  g.updateTravelCauldrons(5);
+  check('second batch consumes remaining stick and counts an independent output',
+    g.currentTravelCauldron()?.output?.count === 2 && !g.currentTravelCauldron()?.input && !g.currentTravelCauldron()?.fuel);
+  g.inventory.cursor = null; g.clickTravelCauldron('output', true);
+  check('right click takes half an output stack without generating a second stack',
+    g.inventory.cursor?.count === 1 && g.currentTravelCauldron()?.output?.count === 1);
+  g.clickTravelCauldron('output', false);
+  check('left click joins the other half back on the cursor and clears the output',
+    g.inventory.cursor?.count === 2 && g.currentTravelCauldron()?.output === null);
+  g.inventory.cursor = { id: I.WATER_BOTTLE, count: 1 }; g.clickTravelCauldron('input', false);
+  g.inventory.cursor = { id: I.SUGAR, count: 1 }; g.clickTravelCauldron('ingredient', false);
+  g.inventory.cursor = { id: I.COAL, count: 1 }; g.clickTravelCauldron('fuel', false);
+  g.updateTravelCauldrons(9);
+  check('the same placed station can brew a real speed potion with one fuel and sugar',
+    g.currentTravelCauldron()?.output?.id === I.POTION_SPEED &&
+    !g.currentTravelCauldron()?.ingredient && !g.currentTravelCauldron()?.fuel &&
+    messages.some((m) => m.includes('Napój szybkości')));
+  const state = g.currentTravelCauldron();
+  const nether = new World(46046, false, true);
+  nether.getChunk(0, 0); nether.setBlock(x, y, z, B.TRAVEL_POT);
+  g.isInNether = true; g.world = nether;
+  g.openTravelCauldron(x, y, z);
+  check('same coordinates in Nether have a different, empty cauldron inventory',
+    g.currentTravelCauldron()?.output === null && g.travelCauldrons.size === 2);
+  g.isInNether = false; g.world = world; g.openTravelCauldron(x, y, z);
+  check('return to overworld retains the brewed potion without cross-dimension duplication',
+    g.currentTravelCauldron() === state && state?.output?.id === I.POTION_SPEED);
+  const limited = Object.create(Game.prototype) as unknown as Record<string, any>;
+  limited.travelCauldrons = new Map(Array.from({ length: TRAVEL_CAULDRON_LIMIT }, (_, i) =>
+    [`${i},65,0`, emptyTravelCauldron(i, 65, 0)]));
+  const limitMessages: string[] = [];
+  limited.isInNether = false; limited.message = (m: string) => limitMessages.push(m);
+  limited.openTravelCauldron(999, 65, 0);
+  check('saved station limit refuses opening extra pots instead of silently truncating contents',
+    limited.travelCauldrons.size === TRAVEL_CAULDRON_LIMIT && limitMessages.at(-1)?.includes('Zbyt wiele'));
+  const reloaded = new World(46046, true); reloaded.loadMods(world.serializeMods());
+  check('cauldron block and separate station inventory survive world mod+JSON roundtrip',
+    reloaded.getBlock(x, y, z) === B.TRAVEL_POT && restoreTravelCauldron(JSON.parse(JSON.stringify(state)))?.output?.id === I.POTION_SPEED);
+  g.growables = new Map(); g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.spawnParticles = () => {}; g.fallGravity = () => {}; g.advanceChallenge = () => {};
+  g.breakBlock(x, y, z);
+  check('breaking cauldron drops each real slot and one cauldron, never duplicates potions on second break',
+    dropped.filter((id) => id === I.POTION_SPEED).length === 1 &&
+    dropped.filter((id) => id === B.TRAVEL_POT).length === 1 && !g.travelCauldrons.has(`${x},${y},${z}`) &&
+    g.travelCauldrons.has(`n:${x},${y},${z}`));
+  g.breakBlock(x, y, z);
+  check('second block break cannot repeat its stored loot', dropped.filter((id) => id === I.POTION_SPEED).length === 1);
+  const stale = emptyTravelCauldron(11, y, 11);
+  stale.output = { id: I.POTION_HEAL, count: 1 };
+  g.travelCauldrons.set('11,' + y + ',11', stale);
+  g.updateTravelCauldrons(1); g.updateTravelCauldrons(1);
+  check('vanished block after world import spills stored potion only once',
+    !g.travelCauldrons.has('11,' + y + ',11') && dropped.filter((id) => id === I.POTION_HEAL).length === 1);
 }
 
 section('3.0 #45: portable camp deployment, component recovery and safe respawn');
@@ -4104,6 +4242,8 @@ section('saves: enchantments ride along');
   w.setBlock(1, 69, 2, B.CAMP_COT);
   g.furnaces = new Map(); g.chests = new Map();
   g.brewings = new Map();
+  g.travelCauldrons = new Map([['3,70,3', { ...emptyTravelCauldron(3, 70, 3), input: { id: I.RAW_RABBIT, count: 1 }, output: { id: I.COOKED_RABBIT, count: 1 }, progress: 2.5 }]]);
+  w.setBlock(3, 70, 3, B.TRAVEL_POT);
   g.effects = new Map([['night', 17000], ['fall', 34500], ['sprint', 8000]]);
   g.difficulty = { ...DEFAULT_DIFFICULTY };
   g.emitHud = () => {};
@@ -4136,6 +4276,10 @@ section('saves: enchantments ride along');
   eq('durability still persists', stored.inv[0]?.dur, 300);
   eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
+  check('cauldron input, output and mid-batch progress survive world save and JSON export',
+    stored.travelCauldrons?.[0]?.input?.id === I.RAW_RABBIT &&
+    stored.travelCauldrons?.[0]?.output?.id === I.COOKED_RABBIT &&
+    stored.travelCauldrons?.[0]?.progress === 2.5 && exportSave('ench-test')?.includes('travelCauldrons'));
   check('camp spawn and prior safe spawn persist through real save and JSON export',
     stored.spawn?.join() === [1.5, 70, 2.5].join() && stored.campRespawn?.cot.join() === [1, 69, 2].join() &&
     stored.campRespawn?.previous.join() === [2.5, 70, 3.5].join() && exportSave('ench-test')?.includes('campRespawn'));

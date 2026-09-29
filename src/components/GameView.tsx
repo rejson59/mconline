@@ -9,6 +9,7 @@ import EnchantScreen from './EnchantScreen';
 import TradeScreen from './TradeScreen';
 import AnvilScreen from './AnvilScreen';
 import BrewingScreen from './BrewingScreen';
+import TravelCauldronScreen from './TravelCauldronScreen';
 import JournalScreen from './JournalScreen';
 import WaypointsScreen from './WaypointsScreen';
 import BiomeCompassScreen from './BiomeCompassScreen';
@@ -266,6 +267,7 @@ export default function GameView({
       {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'anvil' && <AnvilScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'brewing' && <BrewingScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'travelCauldron' && <TravelCauldronScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && hud && ui === 'journal' && <JournalScreen hud={hud} unlocked={game.achievementIds()} onClose={() => game.setUI('playing')} />}
       {game && ui === 'waypoints' && <WaypointsScreen game={game} onClose={() => game.setUI('playing')} />}

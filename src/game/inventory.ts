@@ -172,6 +172,8 @@ export const RECIPES: Recipe[] = [
     pattern: ['WWW', ' S ', 'S S'], key: { W: B.WOOL_WHITE, S: I.STICK } },
   { out: { id: B.CAMP_COT, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 2 }, { id: B.PLANKS, count: 2 }], table: false,
     pattern: ['WW', 'PP'], key: { W: B.WOOL_WHITE, P: B.PLANKS } },
+  { out: { id: B.TRAVEL_POT, count: 1 }, inputs: [{ id: I.IRON, count: 5 }, { id: B.CAMPFIRE, count: 1 }], table: true,
+    pattern: ['I I', 'ICI', ' I '], key: { I: I.IRON, C: B.CAMPFIRE } },
   { out: { id: I.CAMP_KIT, count: 1 }, inputs: [{ id: B.CAMP_TENT, count: 1 }, { id: B.CAMP_COT, count: 1 }, { id: B.CAMPFIRE, count: 1 }], table: false },
   { out: { id: B.SNARE, count: 1 }, inputs: [{ id: I.STRING, count: 2 }, { id: I.STICK, count: 2 }], table: false, pattern: ['SS', 'TT'], key: { S: I.STRING, T: I.STICK } },
   { out: { id: I.GLOW_ARROW, count: 4 }, inputs: [{ id: I.ARROW, count: 4 }, { id: I.GLOWSTONE_DUST, count: 1 }], table: true },
