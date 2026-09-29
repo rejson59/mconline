@@ -120,6 +120,18 @@ section('3.0 dagger: compact combat feedback in HUD');
   check('counter hit is distinguished visually and reports actual damage', counter.includes('Kontra!') && counter.includes('7 obrażeń'));
 }
 
+section('3.0 #3: river and lake navigation on PC and compact touch menus');
+{
+  const compass = renderToStaticMarkup(<BiomeCompassScreen game={{} as Game} onClose={noop} />);
+  const help = renderToStaticMarkup(<Controls />);
+  check('water biomes can be selected on touch or PC biome compass',
+    compass.includes('<option value="Rzeka">Rzeka</option>') &&
+    compass.includes('<option value="Jezioro">Jezioro</option>'));
+  check('in-game help describes source lake, riverbank navigation and old saves',
+    help.includes('Rzeki i jeziora') && help.includes('glinianym dnem') &&
+    help.includes('brzeg') && help.includes('światy v2, v3 i v4'));
+}
+
 section('3.0 #2: accessible terrain navigation and instructions on compact UI');
 {
   const compass = renderToStaticMarkup(<BiomeCompassScreen game={{} as Game} onClose={noop} />);

@@ -21,6 +21,8 @@ export interface VillageSurface {
 
 export interface VillageContext {
   seed: number;
+  /** Used only for cache isolation: never changes saved village keys. */
+  terrainVersion?: number;
   flat: boolean;
   sea: number;
   surface: (x: number, z: number) => VillageSurface;
@@ -205,7 +207,7 @@ export function doorCell(b: VillageBuilding): { x: number; z: number } {
 
 /** Wioska w danej komórce siatki albo null, gdy teren na nią nie pozwala. */
 export function villageInCell(gx: number, gz: number, ctx: VillageContext): Village | null {
-  const key = `${ctx.seed}:${gx},${gz}`;
+  const key = `${ctx.seed}:${ctx.terrainVersion ?? 2}:${ctx.flat ? 1 : 0}:${gx},${gz}`;
   return cached(key, () => {
     const chance = hash(gx, 11, gz, ctx.seed);
     if (chance > 0.62) return null;
@@ -227,6 +229,10 @@ export function villageInCell(gx: number, gz: number, ctx: VillageContext): Vill
       }
       if (max - min > 7) return null;
       y = min + Math.min(3, Math.round((max - min) / 2));
+      // v5 may excavate below the surrounding river's water table.
+      // A dry centre alone is insufficient if the flattened village deck
+      // would sit in water; reject that site, keep legacy layouts intact.
+      if ((ctx.terrainVersion ?? 2) >= 5 && y <= ctx.sea + 2) return null;
     }
     const radius = 20 + Math.floor(hash(gx, 15, gz, ctx.seed) * 8);
     const desert = info.biome === 'Pustynia';

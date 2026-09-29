@@ -16,7 +16,7 @@ import {
 // ale stare importy z world.ts nadal działają.
 export { CH, CS, FLAT_H, SEA };
 
-export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Tajga' | 'Pustkowie' | 'Kwiecista łąka' | 'Ośnieżone szczyty' | 'Płaskowyż' | 'Wąwóz' | 'Głęboka dolina' | 'Nether';
+export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Tajga' | 'Pustkowie' | 'Kwiecista łąka' | 'Ośnieżone szczyty' | 'Płaskowyż' | 'Wąwóz' | 'Głęboka dolina' | 'Rzeka' | 'Jezioro' | 'Nether';
 
 const idx = (x: number, y: number, z: number) => (y * CS + z) * CS + x;
 
@@ -171,7 +171,7 @@ export class World {
    */
   readonly isNether: boolean;
   /** Generator v2 reproduces pre-3.0 seeds for worlds created before the upgrade. */
-  readonly terrainVersion: 2 | 3 | 4;
+  readonly terrainVersion: 2 | 3 | 4 | 5;
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
@@ -183,7 +183,7 @@ export class World {
   private nTemp: SimplexNoise;
   private vctx: VillageContext | null = null;
 
-  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 | 4 = 4) {
+  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 | 4 | 5 = 5) {
     this.terrainVersion = terrainVersion;
     this.seed = seed;
     this.flat = flat && !nether;
@@ -260,6 +260,26 @@ export class World {
       h = Math.floor(Math.max(7, Math.min(CH - 12, h)));
       if (h >= 105 && (biome === 'Góry' || biome === 'Tundra')) biome = 'Ośnieżone szczyty';
     }
+    if (this.terrainVersion >= 5) {
+      // The zero contours of a smooth, seeded field form long continuous
+      // meandering waterways. The second field widens occasional reaches into
+      // source lakes; the central source blocks remain connected to the river.
+      // Only global coordinates are used, including across negative chunks.
+      const line = Math.abs(this.nCave2.noise2D(x / 195 + 271, z / 195 - 149));
+      const lakeField = this.n1.fbm2D(x / 260 - 93, z / 260 + 157, 2);
+      const lake = smoothTerrain(0.08, 0.33, lakeField);
+      const width = 0.055 + lake * 0.105;
+      const bank = 1 - smoothTerrain(width, width + 0.17, line);
+      const water = 1 - smoothTerrain(width * 0.42, width, line);
+      // Never build a dam on a pre-existing ocean floor: only excavate.
+      h += (Math.min(h, SEA + 2) - h) * bank;
+      h += (Math.min(h, SEA - 4 - lake * 2) - h) * water;
+      h = Math.floor(Math.max(7, h));
+      // A snowy summit excavated into a river bank is exposed stone, not
+      // a snow layer mysteriously surviving below sea level.
+      if (biome === 'Ośnieżone szczyty' && h < 95) biome = 'Góry';
+      if (water > 0.62 && h < SEA - 1) biome = lake > 0.63 ? 'Jezioro' : 'Rzeka';
+    }
     // Marshes sit close to sea level, so shallow pools naturally appear in
     // their low spots and the existing water table creates a wetland feel.
     if (biome === 'Bagno') h = Math.min(h, SEA + 2);
@@ -314,6 +334,7 @@ export class World {
             else if (sandy) id = B.SAND;
             else if (biome === 'Tundra' || biome === 'Ośnieżone szczyty') id = B.SNOW;
             else if (biome === 'Wąwóz') id = h < SEA + 6 ? B.GRAVEL : B.STONE;
+            else if (biome === 'Rzeka' || biome === 'Jezioro') id = biome === 'Jezioro' ? B.CLAY : B.GRAVEL;
             else if (biome === 'Płaskowyż') id = h > 94 ? B.STONE : B.GRASS;
             else if (biome === 'Głęboka dolina') id = h < SEA + 4 ? B.DIRT : B.GRASS;
             else if (biome === 'Bagno') id = B.MUD;
@@ -364,6 +385,19 @@ export class World {
     const village = applyVillages(d, c.cx, c.cz, this.villageContext());
     const vmask = village.mask;
     if (village.top > maxY) maxY = village.top;
+    if (this.terrainVersion >= 5 && village.top) {
+      // Village foundations are above the water table. Leave their walkable
+      // deck intact, but make a two-block-high culvert below it where a river
+      // crosses; otherwise applying the village would dam the source water.
+      for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
+        const ground = village.ground[z * CS + x];
+        const info = surf[z * CS + x];
+        if (ground <= SEA + 2 || (info.biome !== 'Rzeka' && info.biome !== 'Jezioro')) continue;
+        d[idx(x, info.h, z)] = info.biome === 'Jezioro' ? B.CLAY : B.GRAVEL;
+        for (let y = info.h + 1; y <= SEA; y++) d[idx(x, y, z)] = B.WATER;
+        for (let y = SEA + 1; y < ground && y <= SEA + 2; y++) d[idx(x, y, z)] = B.AIR;
+      }
+    }
 
     // Surface decoration (pomija kolumny zajęte przez wioskę)
     for (let z = 0; z < CS; z++)
@@ -611,7 +645,7 @@ export class World {
   /** Deterministyczny kontekst generatora wsi (ten sam dla całego świata). */
   villageContext(): VillageContext {
     if (!this.vctx) {
-      this.vctx = { seed: this.seed, flat: this.flat, sea: SEA, surface: (x, z) => this.surface(x, z) };
+      this.vctx = { seed: this.seed, terrainVersion: this.terrainVersion, flat: this.flat, sea: SEA, surface: (x, z) => this.surface(x, z) };
     }
     return this.vctx;
   }

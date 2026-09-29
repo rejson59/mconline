@@ -213,11 +213,12 @@ section('world: determinism and terrain');
 
 section('3.0 #2: height biomes with append-only v4 terrain and seam-safe samples');
 {
-  check('save migration selects v2 for absent field, v3 for existing saves and v4 only for new/v4 worlds',
-    terrainVersionForSave() === 4 && terrainVersionForSave({}) === 2 &&
+  check('save migration preserves v2/v3/v4 and starts new worlds with v5',
+    terrainVersionForSave() === 5 && terrainVersionForSave({}) === 2 &&
     terrainVersionForSave({ terrainVersion: 2 }) === 2 &&
     terrainVersionForSave({ terrainVersion: 3 }) === 3 &&
-    terrainVersionForSave({ terrainVersion: 4 }) === 4);
+    terrainVersionForSave({ terrainVersion: 4 }) === 4 &&
+    terrainVersionForSave({ terrainVersion: 5 }) === 5);
   const previous = new World(12345, false, false, 3);
   let v3 = 2166136261;
   for (const block of previous.getChunk(0, 0).data) v3 = Math.imul(v3 ^ block, 16777619) >>> 0;
@@ -225,9 +226,9 @@ section('3.0 #2: height biomes with append-only v4 terrain and seam-safe samples
   check('saved v3 terrain never silently gains v4 labels',
     ['Ośnieżone szczyty', 'Płaskowyż', 'Wąwóz', 'Głęboka dolina'].every((label) =>
       previous.surface(912, -240).biome !== label) && previous.terrainVersion === 3);
-  const v4 = new World(12345);
-  check('new Overworlds use generator v4 while old v2, v3 and Nether remain separate',
-    v4.terrainVersion === 4 && new World(12345, false, false, 2).terrainVersion === 2 &&
+  const v4 = new World(12345, false, false, 4);
+  check('v4 saves keep their generator while new Overworlds use v5',
+    v4.terrainVersion === 4 && new World(12345).terrainVersion === 5 && new World(12345, false, false, 2).terrainVersion === 2 &&
     new World(12345, false, true).surface(0, 0).biome === 'Nether');
   const samples = [
     { x: -576, z: -960, biome: 'Głęboka dolina', base: B.GRASS },
@@ -237,12 +238,12 @@ section('3.0 #2: height biomes with append-only v4 terrain and seam-safe samples
   ];
   for (const site of samples) {
     const a = v4.surface(site.x, site.z);
-    const b = new World(12345).surface(site.x, site.z);
+    const b = new World(12345, false, false, 4).surface(site.x, site.z);
     check(`v4 ${site.biome} has a real accessible top and stable analytic height`,
       a.biome === site.biome && a.h === b.h && a.h > 10 && a.h < CH - 4 &&
       v4.getBlock(site.x, a.h, site.z) === site.base);
   }
-  const negA = new World(12345), negB = new World(12345);
+  const negA = new World(12345, false, false, 4), negB = new World(12345, false, false, 4);
   for (const [cx, cz] of [[-11, -17], [-10, -17], [56, -15], [57, -15]]) negA.getChunk(cx, cz);
   for (const [cx, cz] of [[57, -15], [56, -15], [-10, -17], [-11, -17]]) negB.getChunk(cx, cz);
   check('positive and negative chunk seams and ravine terrain are independent of generation order',
@@ -265,6 +266,97 @@ section('3.0 #2: height biomes with append-only v4 terrain and seam-safe samples
   check('old discovery indices remain unchanged and new height biomes have map colors/navigation',
     MAP_BIOMES[0] === 'Równiny' && MAP_BIOMES[14] === 'Kwiecista łąka' &&
     samples.every((site) => MAP_BIOMES.includes(site.biome as Biome) && BIOME_TARGETS.includes(site.biome as Biome)));
+}
+
+section('3.0 #3: connected waterways, source lakes and shore navigation on v5');
+{
+  const river = new World(12345);
+  const old = new World(12345, false, false, 4);
+  const lake = { x: -544, z: -1200 };
+  const stream = { x: -551, z: -1245 };
+  check('water generation leaves existing v4 terrain and its saved modifications unchanged',
+    old.surface(lake.x, lake.z).biome === 'Płaskowyż' && old.surface(lake.x, lake.z).h === 93 &&
+    river.surface(lake.x, lake.z).biome === 'Jezioro' && river.terrainVersion === 5);
+  check('source lake and downstream river have flooded, cave-safe gravel/clay beds',
+    river.surface(stream.x, stream.z).biome === 'Rzeka' &&
+    [lake, stream].every(({ x, z }) => {
+      const { h } = river.surface(x, z);
+      return h < SEA - 1 && river.getBlock(x, SEA, z) === B.WATER &&
+        river.getBlock(x, SEA + 1, z) === B.AIR &&
+        river.getBlock(x, h, z) === (x === lake.x ? B.CLAY : B.GRAVEL);
+    }));
+  // Flood-fill the actual traversable water (not merely coincident labels).
+  // The test window straddles both x and z negative chunk boundaries.
+  const queue: [number, number][] = [[lake.x, lake.z]];
+  const visited = new Set([`${lake.x},${lake.z}`]);
+  const crossed = new Set<string>();
+  let foundRiver = false;
+  for (let i = 0; i < queue.length; i++) {
+    const [x, z] = queue[i];
+    crossed.add(`${Math.floor(x / CS)},${Math.floor(z / CS)}`);
+    if (river.surface(x, z).biome === 'Rzeka') foundRiver = true;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const xx = x + dx, zz = z + dz, key = `${xx},${zz}`;
+      if (xx < -610 || xx > -480 || zz < -1270 || zz > -1150 || visited.has(key)) continue;
+      const info = river.surface(xx, zz);
+      if (info.h > SEA - 2 || (info.biome !== 'Jezioro' && info.biome !== 'Rzeka')) continue;
+      visited.add(key); queue.push([xx, zz]);
+    }
+  }
+  check('a navigable connected source lake feeds a river across many chunks',
+    foundRiver && crossed.size >= 8 && visited.has(`${stream.x},${stream.z}`),
+    `wet tiles ${visited.size}, chunks ${crossed.size}`);
+  const boundaryPairs: [[number, number], [number, number]][] = [];
+  for (const [x, z] of queue) {
+    if (boundaryPairs.length >= 6) break;
+    for (const [dx, dz] of [[1, 0], [0, 1]]) {
+      const xx = x + dx, zz = z + dz;
+      if (((dx && Math.floor(x / CS) !== Math.floor(xx / CS)) ||
+           (dz && Math.floor(z / CS) !== Math.floor(zz / CS))) && visited.has(`${xx},${zz}`)) {
+        if (!boundaryPairs.some((pair) => pair[0][0] === x && pair[0][1] === z))
+          boundaryPairs.push([[x, z], [xx, zz]]);
+      }
+    }
+  }
+  check('water source blocks on both sides of real negative chunk boundaries remain swimmable',
+    boundaryPairs.length >= 4 && boundaryPairs.every((pair) =>
+      pair.every(([x, z]) => river.getBlock(x, SEA, z) === B.WATER && river.getBlock(x, SEA + 1, z) === B.AIR)));
+  check('v5 shores remain dry and excavated summits do not leave snow below sea level',
+    river.surface(-552, -1200).h > SEA + 2 &&
+    river.getBlock(-552, river.surface(-552, -1200).h + 1, -1200) === B.AIR &&
+    river.surface(-545, -1245).biome !== 'Ośnieżone szczyty');
+  const villageWorld = new World(20260926);
+  const safeVillages = [];
+  for (let gx = -6; gx <= 6; gx++) for (let gz = -6; gz <= 6; gz++) {
+    const v = villageInCell(gx, gz, villageWorld.villageContext());
+    if (v) safeVillages.push(v);
+  }
+  check('new waterways do not remove all villages or generate drowned village decks',
+    safeVillages.length >= 2 && safeVillages.every((v) => v.y > SEA + 2));
+  const seamA = new World(12345), seamB = new World(12345);
+  const sectors: [number, number][] = [[-35, -75], [-34, -75], [-35, -76], [-34, -76]];
+  for (const [cx, cz] of sectors) seamA.getChunk(cx, cz);
+  for (const [cx, cz] of [...sectors].reverse()) seamB.getChunk(cx, cz);
+  check('river/lake excavation and water sources never depend on chunk generation order',
+    sectors.every(([cx, cz]) => seamA.getChunk(cx, cz).data.every((id, index) => id === seamB.getChunk(cx, cz).data[index])));
+  const bridgeWorld = new World(12345);
+  const bridge = bridgeWorld.villageAt(-167, 749);
+  check('village deck stays walkable while a two-high water culvert connects the river under it',
+    !!bridge && bridge.y > SEA + 2 && bridgeWorld.surface(-167, 749).biome === 'Rzeka' &&
+    bridgeWorld.getBlock(-167, SEA, 749) === B.WATER &&
+    bridgeWorld.getBlock(-167, SEA + 1, 749) === B.AIR &&
+    bridgeWorld.getBlock(-167, SEA + 2, 749) === B.AIR &&
+    bridgeWorld.getBlock(-167, bridge.y, 749) !== B.AIR &&
+    bridgeWorld.getBlock(-167, bridge.y, 749) !== B.WATER);
+  const survey = new DiscoveryMap();
+  for (const site of [lake, stream]) survey.survey('overworld', site.x, site.z,
+    river.surface(site.x, site.z).biome, river.surface(site.x, site.z).h);
+  const loaded = DiscoveryMap.fromSave(survey.serialize());
+  check('river and lake colors, compass entries and append-only saved map IDs are distinct',
+    MAP_BIOMES[18] === 'Głęboka dolina' && MAP_BIOMES[19] === 'Rzeka' && MAP_BIOMES[20] === 'Jezioro' &&
+    BIOME_TARGETS.includes('Jezioro') && BIOME_TARGETS.includes('Rzeka') &&
+    loaded.get('overworld', Math.floor(lake.x / CS), Math.floor(lake.z / CS))?.[2] === 20 &&
+    loaded.get('overworld', Math.floor(stream.x / CS), Math.floor(stream.z / CS))?.[2] === 19);
 }
 
 // =================================================== generator v3: six biomes
@@ -4632,7 +4724,7 @@ section('saves: enchantments ride along');
   eq('second enchantment persists', stored.inv[0]?.ench?.unbreaking, 2);
   eq('armor enchantments persist', stored.armor?.[0]?.ench?.featherfalling, 3);
   eq('durability still persists', stored.inv[0]?.dur, 300);
-  eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 4);
+  eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 5);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
   check('equipped charm persists in world export, while old worlds retain empty slot',
     stored.talisman?.id === I.WANDER_CHARM && restoreTalisman(JSON.parse(exportSave('ench-test') ?? '{}').saves?.[0]?.talisman)?.id === I.WANDER_CHARM &&
