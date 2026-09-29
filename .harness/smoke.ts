@@ -48,8 +48,8 @@ if (typeof globalThis.localStorage === 'undefined') {
 }
 
 // ------------------------------------------------------------------ imports
-import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
-import { DiscoveryMap, MAP_LIMIT } from '../src/game/discoveryMap';
+import { World, CS, CH, SEA, FLAT_H, plantTree, type Biome } from '../src/game/world';
+import { DiscoveryMap, MAP_BIOMES, MAP_LIMIT } from '../src/game/discoveryMap';
 import { CHALLENGES, normalizeChallenges } from '../src/game/challenges';
 import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, oreYield, resourceDropCount, animalMeatYield } from '../src/game/difficulty';
 import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeCompass';
@@ -85,7 +85,7 @@ import {
   fallDamageFactor, sourceProtection, swimSpeedFactor, MAX_ENCHS,
 } from '../src/game/enchant';
 import { Xp as XpClass } from '../src/game/xp';
-import { Game, MOB_NAMES, normalizeCompanions, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
+import { Game, MOB_NAMES, normalizeCompanions, terrainVersionForSave, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
 import { tryCreatePortal } from '../src/game/redstone';
 import { brewingKey, emptyBrewing, brewResult, tickBrewing, POTIONS, sprintFactor, fallDamageAfterPotion, restoreEffects } from '../src/game/brewing';
 import { VILLAGE_CELL, villageInCell, villageSpawnSpots, type Village } from '../src/game/village';
@@ -209,6 +209,62 @@ section('world: determinism and terrain');
     }
   }
   check('world has trees', trees > 0, `${trees} trunks`);
+}
+
+section('3.0 #2: height biomes with append-only v4 terrain and seam-safe samples');
+{
+  check('save migration selects v2 for absent field, v3 for existing saves and v4 only for new/v4 worlds',
+    terrainVersionForSave() === 4 && terrainVersionForSave({}) === 2 &&
+    terrainVersionForSave({ terrainVersion: 2 }) === 2 &&
+    terrainVersionForSave({ terrainVersion: 3 }) === 3 &&
+    terrainVersionForSave({ terrainVersion: 4 }) === 4);
+  const previous = new World(12345, false, false, 3);
+  let v3 = 2166136261;
+  for (const block of previous.getChunk(0, 0).data) v3 = Math.imul(v3 ^ block, 16777619) >>> 0;
+  eq('previous v3 world generator retains its original chunk bit for bit', v3, 1615416434);
+  check('saved v3 terrain never silently gains v4 labels',
+    ['Ośnieżone szczyty', 'Płaskowyż', 'Wąwóz', 'Głęboka dolina'].every((label) =>
+      previous.surface(912, -240).biome !== label) && previous.terrainVersion === 3);
+  const v4 = new World(12345);
+  check('new Overworlds use generator v4 while old v2, v3 and Nether remain separate',
+    v4.terrainVersion === 4 && new World(12345, false, false, 2).terrainVersion === 2 &&
+    new World(12345, false, true).surface(0, 0).biome === 'Nether');
+  const samples = [
+    { x: -576, z: -960, biome: 'Głęboka dolina', base: B.GRASS },
+    { x: -408, z: -960, biome: 'Płaskowyż', base: B.GRASS },
+    { x: -168, z: -264, biome: 'Ośnieżone szczyty', base: B.SNOW },
+    { x: 912, z: -240, biome: 'Wąwóz', base: B.GRAVEL },
+  ];
+  for (const site of samples) {
+    const a = v4.surface(site.x, site.z);
+    const b = new World(12345).surface(site.x, site.z);
+    check(`v4 ${site.biome} has a real accessible top and stable analytic height`,
+      a.biome === site.biome && a.h === b.h && a.h > 10 && a.h < CH - 4 &&
+      v4.getBlock(site.x, a.h, site.z) === site.base);
+  }
+  const negA = new World(12345), negB = new World(12345);
+  for (const [cx, cz] of [[-11, -17], [-10, -17], [56, -15], [57, -15]]) negA.getChunk(cx, cz);
+  for (const [cx, cz] of [[57, -15], [56, -15], [-10, -17], [-11, -17]]) negB.getChunk(cx, cz);
+  check('positive and negative chunk seams and ravine terrain are independent of generation order',
+    [[-11, -17], [-10, -17], [56, -15], [57, -15]].every(([cx, cz]) =>
+      negA.getChunk(cx, cz).data.every((id, idx) => id === negB.getChunk(cx, cz).data[idx])));
+  const map = new DiscoveryMap();
+  for (const site of samples) map.survey('overworld', site.x, site.z, site.biome as Biome, v4.surface(site.x, site.z).h);
+  const reopened = DiscoveryMap.fromSave(map.serialize());
+  check('v4 height biome map tiles keep their append-only indices and heights on save/import',
+    samples.every((site) => {
+      const tile = reopened.get('overworld', Math.floor(site.x / CS), Math.floor(site.z / CS));
+      return tile?.[2] === MAP_BIOMES.indexOf(site.biome as Biome) && tile?.[3] === v4.surface(site.x, site.z).h;
+    }));
+  const before = v4.surface(912, -240);
+  const mods = v4.serializeMods();
+  const restored = new World(12345, false, false, 4); restored.loadMods(mods);
+  check('v4 ravine remains walkable, loaded height survives world serialization and cannot fill to lava',
+    before.h >= SEA + 2 && restored.getBlock(912, before.h, -240) === B.GRAVEL &&
+    restored.surface(912, -240).h === before.h);
+  check('old discovery indices remain unchanged and new height biomes have map colors/navigation',
+    MAP_BIOMES[0] === 'Równiny' && MAP_BIOMES[14] === 'Kwiecista łąka' &&
+    samples.every((site) => MAP_BIOMES.includes(site.biome as Biome) && BIOME_TARGETS.includes(site.biome as Biome)));
 }
 
 // =================================================== generator v3: six biomes
@@ -4576,7 +4632,7 @@ section('saves: enchantments ride along');
   eq('second enchantment persists', stored.inv[0]?.ench?.unbreaking, 2);
   eq('armor enchantments persist', stored.armor?.[0]?.ench?.featherfalling, 3);
   eq('durability still persists', stored.inv[0]?.dur, 300);
-  eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 3);
+  eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 4);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
   check('equipped charm persists in world export, while old worlds retain empty slot',
     stored.talisman?.id === I.WANDER_CHARM && restoreTalisman(JSON.parse(exportSave('ench-test') ?? '{}').saves?.[0]?.talisman)?.id === I.WANDER_CHARM &&

@@ -10,11 +10,12 @@ export interface DiscoverySave { overworld: MapTile[]; nether: MapTile[] }
 export const MAP_LIMIT = 16384;
 export const MAP_BIOMES: Biome[] = [
   'Równiny', 'Las', 'Pustynia', 'Tundra', 'Góry', 'Plaża', 'Ocean',
-  'Brzozowy las', 'Bagno', 'Sawanna', 'Dżungla', 'Nether', 'Tajga', 'Pustkowie', 'Kwiecista łąka',
+  'Brzozowy las', 'Bagno', 'Sawanna', 'Dżungla', 'Nether', 'Tajga', 'Pustkowie', 'Kwiecista łąka', 'Ośnieżone szczyty', 'Płaskowyż', 'Wąwóz', 'Głęboka dolina',
 ];
 export const MAP_COLORS = [
   '#79a655', '#426e41', '#d4bf79', '#dce3df', '#89959b', '#dfd299', '#316d9b',
   '#89ac75', '#617c66', '#afa861', '#317259', '#914c38', '#395b50', '#a8967a', '#91bf68',
+  '#eef5f8', '#a08f67', '#575661', '#5a874f',
 ] as const;
 
 function validTile(t: unknown): t is MapTile {

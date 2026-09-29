@@ -120,6 +120,18 @@ section('3.0 dagger: compact combat feedback in HUD');
   check('counter hit is distinguished visually and reports actual damage', counter.includes('Kontra!') && counter.includes('7 obrażeń'));
 }
 
+section('3.0 #2: accessible terrain navigation and instructions on compact UI');
+{
+  const compass = renderToStaticMarkup(<BiomeCompassScreen game={{} as Game} onClose={noop} />);
+  const help = renderToStaticMarkup(<Controls />);
+  check('all four v4 terrain variants appear as selectable compass destinations',
+    ['Ośnieżone szczyty', 'Płaskowyż', 'Wąwóz', 'Głęboka dolina'].every((name) =>
+      compass.includes(`<option value="${name}">${name}</option>`)));
+  check('help explains the v4-only world terrain and tells players how to find it',
+    help.includes('Nowe krainy wysokościowe') && help.includes('generator v4') &&
+    help.includes('nowego świata') && help.includes('wąwozy') && help.includes('kompas biomów'));
+}
+
 section('3.0 #50: decorative art and furniture icons, crafting help and touch placement');
 {
   const decor = [B.PAINTING_LAND_N, B.PAINTING_SUN_N, B.BANNER_RED,

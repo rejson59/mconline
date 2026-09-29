@@ -217,7 +217,7 @@ export interface SaveData {
   name?: string;
   worldType?: 'normal' | 'flat';
   /** Missing in older saves: keep the original 2.7 generator for them. */
-  terrainVersion?: 2 | 3;
+  terrainVersion?: 2 | 3 | 4;
   updated?: number;
   hunger?: number;
   spawn?: [number, number, number];
@@ -263,6 +263,12 @@ export interface SaveData {
   companions?: CompanionSave[];
   /** Explored chunk tiles, stored separately for both dimensions. Absent in 2.x saves. */
   discovery?: DiscoverySave;
+}
+
+/** Missing revision means a 2.7 world. Never upgrade unvisited chunks of a saved world. */
+export function terrainVersionForSave(save?: Pick<SaveData, 'terrainVersion'>): 2 | 3 | 4 {
+  if (!save) return 4;
+  return save.terrainVersion === 4 ? 4 : save.terrainVersion === 3 ? 3 : 2;
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
@@ -728,7 +734,7 @@ export class Game {
     const seed = opts.save ? opts.save.seed : opts.seed;
     const worldType = opts.save?.worldType ?? opts.worldType ?? 'normal';
     this.worldType = worldType;
-    this.world = new World(seed, worldType === 'flat', false, opts.save && opts.save.terrainVersion !== 3 ? 2 : 3);
+    this.world = new World(seed, worldType === 'flat', false, terrainVersionForSave(opts.save));
     this.homeWorld = this.world;
     // Nether istnieje od razu jako osobny wymiar – nigdy nie nadpisuje nadświatu.
     this.netherWorld = new World(seed, false, true);

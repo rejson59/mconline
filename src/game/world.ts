@@ -16,9 +16,14 @@ import {
 // ale stare importy z world.ts nadal działają.
 export { CH, CS, FLAT_H, SEA };
 
-export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Tajga' | 'Pustkowie' | 'Kwiecista łąka' | 'Nether';
+export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Tajga' | 'Pustkowie' | 'Kwiecista łąka' | 'Ośnieżone szczyty' | 'Płaskowyż' | 'Wąwóz' | 'Głęboka dolina' | 'Nether';
 
 const idx = (x: number, y: number, z: number) => (y * CS + z) * CS + x;
+
+function smoothTerrain(a: number, b: number, n: number): number {
+  const t = Math.max(0, Math.min(1, (n - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
 
 function hash(x: number, y: number, z: number, s: number): number {
   let h = (x * 374761393 + y * 668265263 + z * 2147483647 + s * 144665) | 0;
@@ -166,7 +171,7 @@ export class World {
    */
   readonly isNether: boolean;
   /** Generator v2 reproduces pre-3.0 seeds for worlds created before the upgrade. */
-  readonly terrainVersion: 2 | 3;
+  readonly terrainVersion: 2 | 3 | 4;
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
@@ -178,7 +183,7 @@ export class World {
   private nTemp: SimplexNoise;
   private vctx: VillageContext | null = null;
 
-  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 = 3) {
+  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 | 4 = 4) {
     this.terrainVersion = terrainVersion;
     this.seed = seed;
     this.flat = flat && !nether;
@@ -225,6 +230,36 @@ export class World {
     else if (temp > -0.08 && temp < 0.12 && forest > 0.18 && forest < 0.42) biome = 'Bagno';
     else if (forest > 0.15) biome = forest > 0.35 ? 'Brzozowy las' : 'Las';
     else biome = 'Równiny';
+    if (this.terrainVersion >= 4) {
+      // v4 only: old v2/v3 seeds and already saved chunks remain untouched.
+      // The added profiles use GLOBAL coordinates, not per-chunk randomness,
+      // so generation order and chunk boundaries cannot add a new seam.
+      const region = this.n1.fbm2D(x / 580 + 101, z / 580 - 37, 2);
+      const plateau = smoothTerrain(0.11, 0.34, region) * smoothTerrain(SEA + 7, SEA + 18, h) *
+        (1 - smoothTerrain(105, 115, h));
+      if (plateau > 0) {
+        const cap = 88 + this.n2.noise2D(x / 75 + 87, z / 75) * 2;
+        h += (cap - h) * plateau * 0.82;
+        if (plateau > 0.65) biome = 'Płaskowyż';
+      }
+      const valleyRegion = this.n3.fbm2D(x / 500 - 111, z / 500 + 63, 2);
+      const valley = smoothTerrain(0.10, 0.34, -valleyRegion) * smoothTerrain(SEA + 8, SEA + 23, h);
+      if (valley > 0) {
+        const floor = SEA + 3 + this.n2.noise2D(x / 92, z / 92 + 131) * 2;
+        h += (floor - h) * valley * 0.82;
+        if (valley > 0.65) biome = 'Głęboka dolina';
+      }
+      const ravineRegion = this.n2.fbm2D(x / 510 + 197, z / 510 - 63, 2);
+      const ravineLine = Math.abs(this.nCave.noise2D(x / 135 + 111, z / 135 - 317));
+      const ravine = smoothTerrain(0.14, 0.35, ravineRegion) * (1 - smoothTerrain(0.018, 0.095, ravineLine)) *
+        smoothTerrain(SEA + 14, SEA + 28, h);
+      if (ravine > 0) {
+        h = Math.max(SEA + 2, h - ravine * 29);
+        if (ravine > 0.56) biome = 'Wąwóz';
+      }
+      h = Math.floor(Math.max(7, Math.min(CH - 12, h)));
+      if (h >= 105 && (biome === 'Góry' || biome === 'Tundra')) biome = 'Ośnieżone szczyty';
+    }
     // Marshes sit close to sea level, so shallow pools naturally appear in
     // their low spots and the existing water table creates a wetland feel.
     if (biome === 'Bagno') h = Math.min(h, SEA + 2);
@@ -272,11 +307,15 @@ export class World {
             if (biome === 'Pustynia' && y > h - 8) id = B.SANDSTONE;
           } else if (y < h) {
             id = sandy ? (biome === 'Ocean' && y < SEA - 6 ? B.GRAVEL : B.SAND) : biome === 'Bagno' && y >= h - 3 ? B.MUD : biome === 'Pustkowie' && y >= h - 3 ? B.DRY_SOIL : B.DIRT;
-            if (biome === 'Góry' && h > 100) id = B.STONE;
+            if ((biome === 'Góry' && h > 100) ||
+                (this.terrainVersion >= 4 && (biome === 'Ośnieżone szczyty' || biome === 'Wąwóz') && h > 92)) id = B.STONE;
           } else if (y === h) {
             if (biome === 'Ocean') id = hash(wx, 7, wz, s) < 0.2 ? B.CLAY : h < SEA - 8 ? B.GRAVEL : B.SAND;
             else if (sandy) id = B.SAND;
-            else if (biome === 'Tundra') id = B.SNOW;
+            else if (biome === 'Tundra' || biome === 'Ośnieżone szczyty') id = B.SNOW;
+            else if (biome === 'Wąwóz') id = h < SEA + 6 ? B.GRAVEL : B.STONE;
+            else if (biome === 'Płaskowyż') id = h > 94 ? B.STONE : B.GRASS;
+            else if (biome === 'Głęboka dolina') id = h < SEA + 4 ? B.DIRT : B.GRASS;
             else if (biome === 'Bagno') id = B.MUD;
             else if (biome === 'Pustkowie') id = hash(wx, 23, wz, s) < 0.14 ? B.GRAVEL : B.DRY_SOIL;
             else if (biome === 'Tajga') id = h > 87 ? B.SNOW : B.PODZOL;
