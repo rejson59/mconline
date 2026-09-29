@@ -26,7 +26,7 @@ export default function TravelCauldronScreen({ game, icons, onChange }: {
   const recipe = cauldron.input ? travelRecipe(cauldron.input.id, cauldron.ingredient?.id ?? null) : null;
   const progress = recipe ? Math.min(100, Math.round(cauldron.progress / recipe.seconds * 100)) : 0;
   const slots: { id: 'input' | 'ingredient' | 'fuel' | 'output'; label: string; stack: Stack | null }[] = [
-    { id: 'input', label: 'Mięso / fiolka', stack: cauldron.input },
+    { id: 'input', label: 'Mięso, warzywo / fiolka', stack: cauldron.input },
     { id: 'ingredient', label: 'Łza / cukier', stack: cauldron.ingredient },
     { id: 'fuel', label: 'Patyk / węgiel', stack: cauldron.fuel },
     { id: 'output', label: 'Wynik', stack: cauldron.output },
@@ -52,7 +52,7 @@ export default function TravelCauldronScreen({ game, icons, onChange }: {
         </div>
         <div className="text-center text-xs text-[#333]" role="status">
           {recipe ? `${displayName(cauldron.input!.id)} → ${displayName(recipe.output)} · ${recipe.seconds} s${!cauldron.fuel && cauldron.progress <= 0 ? ' · brak paliwa' : ''}`
-            : 'Surowe mięso / ryba bez składnika: 5 s. Fiolka wody + łza ghasta lub cukier: 9 s. Inne przepisy wymagają stałego pieca lub statywu.'}
+            : 'Mięso, marchew lub dynia bez składnika: 5 s. Fiolka wody + łza ghasta lub cukier: 9 s. Inne przepisy wymagają stałego pieca lub statywu.'}
         </div>
         <div className="grid grid-cols-9 self-center max-w-full overflow-x-auto">
           {inventory.slots.map((s, i) => (

@@ -906,6 +906,19 @@ export function buildAtlas(): AtlasResult {
   for (let x of [3, 12]) for (let y = 5; y < 11; y++) setPx(T.travel_pot_side, x, y, 202, 210, 207);
   for (let x = 5; x < 11; x++) for (let y = 12; y < 15; y++) setPx(T.travel_pot_side, x, y, 176, 77, 38);
 
+  // Young carrot leaves are slim green stalks; mature roots peek out below.
+  for (let stage = 0; stage < 4; stage++) {
+    const tile = T.carrot0 + stage;
+    copyTile(T.wheat0 + stage, tile);
+    for (let y = 1; y < 15; y++) for (let x = 0; x < 16; x++) {
+      const [red, green, , alpha] = getPx(tile, x, y);
+      if (alpha && green > red * 0.72) setPx(tile, x, y, 67 + stage * 5, 115 + stage * 12, 49);
+    }
+    if (stage >= 2) for (let y = 10; y < 15; y++) for (let x = 6; x < 10; x++) {
+      if ((x + y) % 3) setPx(tile, x, y, 230 - (y - 10) * 12, 104 - (y - 10) * 6, 34);
+    }
+  }
+
   // Commit every appended tile to the GPU atlas BEFORE generating block icons.
   // Previously the 2.7 tiles were painted into ImageData only after the sole
   // putImageData call, so their inventory icons and rendered faces were blank.

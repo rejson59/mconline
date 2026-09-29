@@ -116,6 +116,8 @@ export const I = {
   LIGHT_STRING: 368, STRONG_STRING: 369, LIGHT_BOW: 370, STRONG_BOW: 371,
   GLOW_ARROW: 372, SLOW_ARROW: 373, MARK_ARROW: 374,
   CAMP_KIT: 375,
+  CARROT: 376, ROASTED_CARROT: 377, PUMPKIN_SLICE: 378, ROASTED_PUMPKIN: 379,
+  WOOD_BOWL: 380, PUMPKIN_SOUP: 381, RABBIT_STEW: 382, HARVEST_PLATE: 383,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger' | 'hammer';
@@ -216,6 +218,14 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.SLOW_ARROW, name: 'Spowalniająca strzała', keys: ['spowalniajaca_strzala', 'slow_arrow'], kind: 'material', color: '#83bde9' },
   { id: I.MARK_ARROW, name: 'Znakująca strzała', keys: ['znakujaca_strzala', 'mark_arrow'], kind: 'material', color: '#ee9381' },
   { id: I.CAMP_KIT, name: 'Zestaw biwakowy', keys: ['zestaw_biwakowy', 'camp_kit'], kind: 'material', color: '#e2b77e', stack: 16 },
+  { id: I.CARROT, name: 'Marchew', keys: ['marchew', 'carrot'], kind: 'food', hunger: 2, color: '#e68e31' },
+  { id: I.ROASTED_CARROT, name: 'Pieczona marchew', keys: ['pieczona_marchew', 'roasted_carrot'], kind: 'food', hunger: 4, heal: 1, color: '#d76b2d' },
+  { id: I.PUMPKIN_SLICE, name: 'Kawałek dyni', keys: ['kawalek_dyni', 'pumpkin_slice'], kind: 'food', hunger: 2, color: '#e9a337' },
+  { id: I.ROASTED_PUMPKIN, name: 'Pieczona dynia', keys: ['pieczona_dynia', 'roasted_pumpkin'], kind: 'food', hunger: 4, heal: 1, color: '#a85c24' },
+  { id: I.WOOD_BOWL, name: 'Drewniana miska', keys: ['miska', 'bowl'], kind: 'material', color: '#a37751', stack: 16 },
+  { id: I.PUMPKIN_SOUP, name: 'Zupa dyniowa', keys: ['zupa_dyniowa', 'pumpkin_soup'], kind: 'food', hunger: 6, heal: 1, color: '#e6aa4d', stack: 1 },
+  { id: I.RABBIT_STEW, name: 'Gulasz z królika', keys: ['gulasz_z_krolika', 'rabbit_stew'], kind: 'food', hunger: 8, heal: 2, color: '#ad7548', stack: 1 },
+  { id: I.HARVEST_PLATE, name: 'Talerz żniwiarza', keys: ['talerz_zniwiarza', 'harvest_plate'], kind: 'food', hunger: 7, heal: 1, color: '#b7a849', stack: 1 },
   { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
   { id: I.LIGHT_STRING, name: 'Lekka cięciwa', keys: ['lekka_cieciwa', 'light_bowstring'], kind: 'material', color: '#9be5ec' },
   { id: I.STRONG_STRING, name: 'Mocna cięciwa', keys: ['mocna_cieciwa', 'strong_bowstring'], kind: 'material', color: '#e5ad6b' },
@@ -638,7 +648,10 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   if (blockId === B.BIRCH_LEAVES) return Math.random() < 0.1 ? [{ id: B.BIRCH_SAPLING, count: 1 }] : [];
   if (blockId === B.SPRUCE_LEAVES) return Math.random() < 0.12 ? [{ id: B.SPRUCE_SAPLING, count: 1 }] : [];
   if (blockId === B.DEAD_SHRUB) return Math.random() < 0.4 ? [{ id: I.STICK, count: 1 }] : [];
-  if (blockId === B.TALLGRASS) return Math.random() < 0.18 ? [{ id: I.SEEDS, count: 1 }] : [];
+  if (blockId === B.TALLGRASS) {
+    const roll = Math.random();
+    return roll < 0.04 ? [{ id: I.CARROT, count: 1 }] : roll < 0.22 ? [{ id: I.SEEDS, count: 1 }] : [];
+  }
   if (blockId === B.DIRT || blockId === B.MUD || blockId === B.PODZOL) {
     const out: Stack[] = [{ id: blockId, count: 1 }];
     if (Math.random() < 0.08) out.push({ id: I.WORM_BAIT, count: 1 });
@@ -648,6 +661,10 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
     const out: Stack[] = [{ id: B.DIRT, count: 1 }];
     if (Math.random() < 0.12) out.push({ id: I.SEEDS, count: 1 });
     return out;
+  }
+  if (blockId >= B.CARROT_CROP0 && blockId <= B.CARROT_CROP3) {
+    const extra = blockId === B.CARROT_CROP3 ? 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) : 0;
+    return [{ id: I.CARROT, count: 1 + extra }];
   }
   if (blockId === B.CROP0 || blockId === B.CROP1 || blockId === B.CROP2) return [{ id: I.SEEDS, count: 1 }];
   if (blockId === B.CROP3) {
@@ -665,6 +682,8 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
 
 export function smeltResult(id: number): number | null {
   switch (id) {
+    case I.CARROT: return I.ROASTED_CARROT;
+    case I.PUMPKIN_SLICE: return I.ROASTED_PUMPKIN;
     case B.IRON_ORE:
       return I.IRON;
     case B.GOLD_ORE:

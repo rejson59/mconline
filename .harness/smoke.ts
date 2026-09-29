@@ -60,6 +60,7 @@ import {
   displayName,
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
+import { mealBonus } from '../src/game/meals';
 import { TRAVEL_CAULDRON_LIMIT, emptyTravelCauldron, restoreTravelCauldron, tickTravelCauldron, travelFuel, travelRecipe } from '../src/game/travelCauldron';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { boundedPathStep } from '../src/game/pathfinding';
@@ -1503,6 +1504,116 @@ section('3.0 #77: mutually exclusive defense and swimming enchants');
   table.inventory.slots[0] = null;
   check('Creative can enchant swimming boots at the table without lapis', table.enchantWith(0) &&
     table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
+}
+
+section('3.0 #47: renewable vegetables, real meal recipes and bounded short bonuses');
+{
+  check('all new items and carrot stages append IDs after the old inventory/biome ranges',
+    I.CARROT === 376 && I.HARVEST_PLATE === 383 && B.CARROT_CROP0 === 423 && B.CARROT_CROP3 === 426 &&
+    [I.CARROT, I.ROASTED_CARROT, I.PUMPKIN_SLICE, I.ROASTED_PUMPKIN, I.WOOD_BOWL,
+      I.PUMPKIN_SOUP, I.RABBIT_STEW, I.HARVEST_PLATE].every((id) => CREATIVE_ITEMS.includes(id)));
+  const random = Math.random;
+  try { Math.random = () => 0.02;
+    check('ordinary tall grass is an actual renewable carrot source without commands',
+      blockDrops(B.TALLGRASS, 0)[0]?.id === I.CARROT);
+  } finally { Math.random = random; }
+  check('carrot crop gives 1 seed vegetable early, 2+ at maturity, not a placeable crop block',
+    blockDrops(B.CARROT_CROP0, 0)[0]?.id === I.CARROT &&
+    blockDrops(B.CARROT_CROP0, 0)[0]?.count === 1 &&
+    blockDrops(B.CARROT_CROP3, 0)[0]?.count >= 2);
+  check('two distinct vegetables roast with real fuel in furnace or travel cauldron',
+    smeltResult(I.CARROT) === I.ROASTED_CARROT && smeltResult(I.PUMPKIN_SLICE) === I.ROASTED_PUMPKIN &&
+    travelRecipe(I.CARROT, null)?.output === I.ROASTED_CARROT &&
+    travelRecipe(I.PUMPKIN_SLICE, null)?.output === I.ROASTED_PUMPKIN &&
+    restoreTravelCauldron({ x: 4, y: 70, z: 4, output: { id: I.ROASTED_PUMPKIN, count: 1 } })?.output?.id === I.ROASTED_PUMPKIN);
+  const slices = new Inventory(); slices.add(B.PUMPKIN, 1);
+  const sliceRecipe = RECIPES.find((r) => r.out.id === I.PUMPKIN_SLICE)!;
+  check('existing naturally generated pumpkin becomes four craftable slices',
+    slices.craft(sliceRecipe) && slices.countOf(I.PUMPKIN_SLICE) === 4 && slices.countOf(B.PUMPKIN) === 0);
+  const bowlRecipe = RECIPES.find((r) => r.out.id === I.WOOD_BOWL)!;
+  const grid = new Inventory();
+  for (const i of [0, 2, 4]) grid.grid[i] = { id: B.PLANKS, count: 1 };
+  check('three planks in a V at a real table yield four reusable bowls',
+    !grid.gridMatch(false) && grid.gridMatch(true)?.out.id === bowlRecipe.out.id &&
+    grid.craftGrid(true)?.count === 4 && grid.grid.every((slot) => slot === null));
+  const meals = [
+    [I.PUMPKIN_SOUP, [I.PUMPKIN_SLICE, I.WHEAT, I.WOOD_BOWL], 'speed', 8],
+    [I.RABBIT_STEW, [I.COOKED_RABBIT, I.ROASTED_CARROT, I.WOOD_BOWL], 'regen', 6],
+    [I.HARVEST_PLATE, [I.ROASTED_CARROT, I.ROASTED_PUMPKIN, I.BREAD], 'sprint', 7],
+  ] as const;
+  for (const [id, materials, effect, duration] of meals) {
+    const r = RECIPES.find((recipe) => recipe.out.id === id)!;
+    const inv = new Inventory();
+    for (const entry of r.inputs) inv.add(entry.id, entry.count);
+    check(`${displayName(id)} requires all materials and is craftable in Survival`,
+      r.table && materials.every((entry) => r.inputs.some((v) => v.id === entry)) &&
+      inv.craft(r) && inv.countOf(id) === 1 && !inv.craft(r));
+    check(`${displayName(id)} grants a short named buff with no other hidden potion`,
+      mealBonus(id)?.effect === effect && mealBonus(id)?.seconds === duration &&
+      ITEMS[id]?.kind === 'food' && stackLimit(id) === 1);
+  }
+  const world = new World(47047, true); world.getChunk(0, 0);
+  const x = 8, y = FLAT_H + 1, z = 8;
+  world.setBlock(x, y - 1, z, B.FARMLAND);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.body = { pos: new THREE.Vector3(x, y, z) };
+  g.inventory = new Inventory(); g.selected = 0; g.mode = 'survival'; g.ui = 'playing';
+  g.target = { x, y: y - 1, z, nx: 0, ny: 1, nz: 0, id: B.FARMLAND };
+  g.keys = new Set(); g.mobs = []; g.growables = new Map(); g.growCursor = 0; g.growAcc = 0;
+  g.isInNether = false; g.hunger = 12; g.health = 8; g.eatCooldown = 0;
+  g.effects = new Map(); g.potionRegenAcc = 0; g.emitHud = () => {}; g.unlock = () => {};
+  g.findMobTarget = () => ({ mob: null, dist: Infinity });
+  const messages: string[] = [], dropped: number[] = [];
+  g.message = (m: string) => messages.push(m); g.spawnDrop = (id: number) => void dropped.push(id);
+  g.inventory.slots[0] = { id: I.CARROT, count: 2 };
+  g.tryUse();
+  check('actual right-click/tap plants edible carrot on farmland before hunger eats it',
+    world.getBlock(x, y, z) === B.CARROT_CROP0 && g.inventory.slots[0]?.count === 1 && g.hunger === 12);
+  const key = `${x},${y},${z}`;
+  for (let stage = 1; stage <= 3; stage++) {
+    g.growables.set(key, performance.now() - 20_000);
+    g.growCursor = 0;
+    g.updateGrowth(0.45);
+    eq(`carrot stage ${stage} grows on old farmland`, world.getBlock(x, y, z), B.CARROT_CROP0 + stage);
+  }
+  const reload = new World(47047, true); reload.loadMods(world.serializeMods());
+  eq('mature crop stage survives saving existing worlds', reload.getBlock(x, y, z), B.CARROT_CROP3);
+  g.target = null; g.tryUse();
+  check('without farmland target the same carrot is eaten, never silently planted',
+    !g.inventory.slots[0] && g.hunger === 14);
+  g.inventory.slots[0] = { id: I.PUMPKIN_SOUP, count: 1 }; g.eatCooldown = 0;
+  g.hunger = 10; g.tryUse();
+  check('eating soup restores hunger/health, applies 8s visible speed and returns exactly one bowl',
+    g.hunger === 16 && g.health === 9 && g.effectLeft('speed') === 8 &&
+    g.inventory.countOf(I.WOOD_BOWL) === 1 && g.inventory.countOf(I.PUMPKIN_SOUP) === 0 &&
+    messages.some((m) => m.includes('Szybkość (8 s)')), JSON.stringify({ hunger: g.hunger, health: g.health, speed: g.effectLeft('speed'), bowl: g.inventory.countOf(I.WOOD_BOWL), soup: g.inventory.countOf(I.PUMPKIN_SOUP), messages }));
+  g.applyEffect('speed', 20); g.selected = 1; g.inventory.slots[1] = { id: I.PUMPKIN_SOUP, count: 1 };
+  g.eatCooldown = 0; g.tryUse();
+  check('food neither adds duration to nor downgrades a 20s potion', g.effectLeft('speed') === 20 && g.inventory.countOf(I.WOOD_BOWL) === 2);
+  g.inventory.slots[1] = { id: I.RABBIT_STEW, count: 1 }; g.eatCooldown = 0;
+  g.hunger = 7; g.health = 12; g.tryUse();
+  check('rabbit stew restores health, refreshes 6s regeneration and returns a bowl',
+    g.hunger === 15 && g.health === 14 && g.effectLeft('regen') === 6 && g.inventory.countOf(I.WOOD_BOWL) === 3);
+  g.inventory.slots[1] = { id: I.HARVEST_PLATE, count: 1 }; g.eatCooldown = 0;
+  g.hunger = 6; g.tryUse();
+  check('roasted vegetable dish gives 7s sprint but no empty bowl',
+    g.effectLeft('sprint') === 7 && g.inventory.countOf(I.WOOD_BOWL) === 3 && !g.inventory.slots[1]);
+  g.updateEffects(7.1);
+  check('temporary meal buffs expire via normal saved potion timer and HUD machinery',
+    !g.hasEffect('sprint') && !g.hasEffect('regen') && g.hasEffect('speed'));
+  check('meal buff is reloadable by the established potion-effect save migration',
+    restoreEffects(Object.fromEntries(g.effects)).get('speed') === 12900);
+  g.mode = 'creative'; g.inventory.slots[1] = { id: I.RABBIT_STEW, count: 1 };
+  g.eatCooldown = 0; g.tryUse();
+  check('Creative meals remain usable but never mint bowls without spending a meal',
+    g.inventory.slots[1]?.id === I.RABBIT_STEW && g.inventory.countOf(I.WOOD_BOWL) === 3);
+  g.mode = 'survival'; g.inventory.slots[1] = null;
+  world.setBlock(x, y - 1, z, B.DIRT); g.growCursor = 0;
+  g.updateGrowth(0.45); g.growCursor = 0; g.updateGrowth(0.45);
+  check('removing farmland clears a ripe carrot crop and refunds one carrot just once',
+    world.getBlock(x, y, z) === B.AIR && dropped.filter((id) => id === I.CARROT).length === 1);
+  check('no recipe duplicates potions or vegetables when farmland is removed',
+    dropped.filter((id) => id !== I.CARROT).length === 0);
 }
 
 section('3.0 #46: fuelled field cauldron cooks and brews without becoming a second furnace');

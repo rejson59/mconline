@@ -38,6 +38,7 @@ import {
   ARROW_AMMO, arrowDuration, type ArrowAmmoId,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
+import { mealBonus } from './meals';
 import { emptyTravelCauldron, restoreTravelCauldron, tickTravelCauldron, travelFuel, travelRecipe,
   TRAVEL_CAULDRON_LIMIT, type TravelCauldronState } from './travelCauldron';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
@@ -1852,7 +1853,7 @@ export class Game {
       return;
     }
     if (cur && slot === 'input' && cur.id !== I.WATER_BOTTLE && !travelRecipe(cur.id, null)) {
-      this.message('W podróży kocioł gotuje tylko mięso i ryby albo warzy fiolkę wody.'); return;
+      this.message('W podróży kocioł gotuje mięso, marchew i dynię albo warzy fiolkę wody.'); return;
     }
     if (cur && slot === 'ingredient' && cur.id !== I.GHAST_TEAR && cur.id !== I.SUGAR) {
       this.message('Kocioł używa łzy ghasta lub cukru do warzenia.'); return;
@@ -2354,7 +2355,15 @@ export class Game {
     this.swingT = 0;
     Sfx.playEat();
     this.unlock('food');
+    const bonus = mealBonus(s.id);
     this.consumeSelected();
+    if (bonus) {
+      this.applyEffect(bonus.effect, bonus.seconds); // refresh, never add durations
+      this.message(`${food.name}: ${EFFECT_META[bonus.effect as Exclude<PotionEffectId, 'none'>].name} (${bonus.seconds} s).`);
+      // Empty bowls are only returned after Survival actually consumes a meal.
+      if (bonus.bowl && this.mode === 'survival') this.giveOrDrop({ id: I.WOOD_BOWL, count: 1 });
+    }
+    this.emitHud();
   }
 
   private tryTill(t: NonNullable<ReturnType<World['raycast']>>): boolean {
@@ -2380,11 +2389,10 @@ export class Game {
     }
     if (this.world.getBlock(x, y - 1, z) !== B.FARMLAND) return false;
     if (this.world.getBlock(x, y, z) !== B.AIR) return false;
-    this.world.setBlock(x, y, z, B.CROP0);
+    this.world.setBlock(x, y, z, s.id === I.CARROT ? B.CARROT_CROP0 : B.CROP0);
     this.growables.set(`${x},${y},${z}`, performance.now());
     Sfx.playPlace('grass');
     this.swingT = 0;
-    void s;
     this.consumeSelected();
     return true;
   }
@@ -2724,13 +2732,13 @@ export class Game {
 
   private cookOnCampfire(s: Stack): boolean {
     // mięso i ryby piecze się tu jak w piecu – cookedOf() łączy reguły 2.3
-    const meats: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN, [I.RAW_RABBIT]: I.COOKED_RABBIT };
+    const meats: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN, [I.RAW_RABBIT]: I.COOKED_RABBIT, [I.CARROT]: I.ROASTED_CARROT, [I.PUMPKIN_SLICE]: I.ROASTED_PUMPKIN };
     const out = meats[s.id] ?? cookedOf(s.id);
     if (!out) return false;
     this.consumeSelected();
     if (!this.inventory.add(out, 1)) {
       this.spawnDrop(out, 1, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z);
-      this.message('Brak miejsca – mięso upadło na ziemię.');
+      this.message('Brak miejsca – posiłek upadł na ziemię.');
     } else this.message(`Upieczono: ${displayName(out)}.`);
     Sfx.playEat();
     this.unlock('food');
@@ -4060,6 +4068,7 @@ export class Game {
       this.throwPearl();
       return;
     }
+    if (s.id === I.CARROT && t && this.tryPlant(t, s)) return;
     if (isFood(s.id)) { this.tryEat(s); return; }
     // 2.4: fiolki pije się dokładnie tak jak jedzenie – PPM w powietrzu.
     if (isPotion(s.id)) { this.drinkPotion(s); return; }
@@ -4093,7 +4102,7 @@ export class Game {
     const below = this.world.getBlock(px, py - 1, pz);
     if (id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING) {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.FARMLAND && below !== B.PODZOL && below !== B.MEADOW_GRASS) return;
-    } else if (id === B.CROP0 || id === B.CROP1 || id === B.CROP2 || id === B.CROP3) {
+    } else if ((id >= B.CROP0 && id <= B.CROP3) || (id >= B.CARROT_CROP0 && id <= B.CARROT_CROP3)) {
       if (below !== B.FARMLAND) return;
     } else if (id === B.TORCH || id === B.REDSTONE_TORCH) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
@@ -4177,7 +4186,7 @@ export class Game {
     this.settle(px, py, pz);
     // redstone update
     this.onBlockChanged(px, py, pz);
-    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SPRUCE_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2) || finalId === B.TURTLE_EGG0) this.growables.set(`${px},${py},${pz}`, performance.now());
+    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SPRUCE_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2) || (finalId >= B.CARROT_CROP0 && finalId <= B.CARROT_CROP2) || finalId === B.TURTLE_EGG0) this.growables.set(`${px},${py},${pz}`, performance.now());
     if (finalId === B.TORCH || finalId === B.REDSTONE_TORCH) this.unlock('torch');
     if (finalId === B.NETHER_BRICKS || finalId === B.QUARTZ_BLOCK) this.unlock('nether');
     Sfx.playPlace(BLOCKS[finalId].sound);
@@ -5949,7 +5958,7 @@ export class Game {
     const ox = c.cx * CS, oz = c.cz * CS;
     for (let i = 0; i < c.data.length; i++) {
       const id = c.data[i];
-      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SPRUCE_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2) && (id < B.TURTLE_EGG0 || id > B.TURTLE_EGG2)) continue;
+      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SPRUCE_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2) && (id < B.CARROT_CROP0 || id > B.CARROT_CROP3) && (id < B.TURTLE_EGG0 || id > B.TURTLE_EGG2)) continue;
       const y = (i / (CS * CS)) | 0;
       const rem = i % (CS * CS);
       const z = (rem / CS) | 0;
@@ -5957,6 +5966,14 @@ export class Game {
       const key = `${ox + x},${y},${oz + z}`;
       if (!this.growables.has(key)) this.growables.set(key, performance.now());
       const elapsed = (performance.now() - (this.growables.get(key) ?? 0)) / 1000;
+      if (id >= B.CARROT_CROP0 && id <= B.CARROT_CROP3 &&
+          this.world.peekBlock(ox + x, y - 1, oz + z) !== B.FARMLAND) {
+        this.world.setBlock(ox + x, y, oz + z, B.AIR);
+        this.spawnDrop(I.CARROT, 1, ox + x + 0.5, y + 0.2, oz + z + 0.5);
+        this.growables.delete(key);
+        continue;
+      }
+      if (id === B.CARROT_CROP3) continue; // ripe, harvest with normal break action
       if (id >= B.TURTLE_EGG0 && id <= B.TURTLE_EGG2) {
         if (this.world.peekBlock(ox + x, y - 1, oz + z) !== B.SAND) {
           this.world.setBlock(ox + x, y, oz + z, B.AIR); // unsupported eggs cannot float
@@ -6004,7 +6021,7 @@ export class Game {
         Sfx.playPlace('grass');
       } else if (elapsed > (this.cropWatered(ox + x, y, oz + z) ? 9 : 18)) {
         this.world.setBlock(ox + x, y, oz + z, id + 1);
-        if (id + 1 >= B.CROP3) this.growables.delete(key);
+        if (id + 1 === B.CROP3 || id + 1 === B.CARROT_CROP3) this.growables.delete(key);
         else this.growables.set(key, performance.now());
       }
     }

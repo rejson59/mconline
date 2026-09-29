@@ -30,6 +30,8 @@ export function travelRecipe(input: number, ingredient: number | null): { output
       case I.RAW_RABBIT: return { output: I.COOKED_RABBIT, seconds: 5 };
       case I.RAW_FISH: return { output: I.COOKED_FISH, seconds: 5 };
       case I.RAW_SALMON: return { output: I.COOKED_SALMON, seconds: 5 };
+      case I.CARROT: return { output: I.ROASTED_CARROT, seconds: 5 };
+      case I.PUMPKIN_SLICE: return { output: I.ROASTED_PUMPKIN, seconds: 5 };
     }
   } else if (input === I.WATER_BOTTLE) {
     if (ingredient === I.GHAST_TEAR) return { output: I.POTION_HEAL, seconds: 9 };
@@ -80,7 +82,7 @@ export function restoreTravelCauldron(raw: unknown): TravelCauldronState | null 
   const ingredient = stack(r.ingredient, (id) => id === I.GHAST_TEAR || id === I.SUGAR);
   const fuel = stack(r.fuel, travelFuel);
   const output = stack(r.output, (id) =>
-    ([I.COOKED_PORK, I.COOKED_BEEF, I.COOKED_CHICKEN, I.COOKED_RABBIT, I.COOKED_FISH, I.COOKED_SALMON, I.POTION_HEAL, I.POTION_SPEED] as number[]).includes(id));
+    ([I.COOKED_PORK, I.COOKED_BEEF, I.COOKED_CHICKEN, I.COOKED_RABBIT, I.COOKED_FISH, I.COOKED_SALMON, I.ROASTED_CARROT, I.ROASTED_PUMPKIN, I.POTION_HEAL, I.POTION_SPEED] as number[]).includes(id));
   const seconds = input ? travelRecipe(input.id, ingredient?.id ?? null)?.seconds : undefined;
   const progress = typeof r.progress === 'number' && Number.isFinite(r.progress) && seconds && r.progress > 0 && r.progress < seconds
     ? r.progress : 0;

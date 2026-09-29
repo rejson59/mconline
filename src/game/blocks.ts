@@ -39,6 +39,7 @@ export const T = {
   snare_empty: 167, snare_armed: 168, snare_rabbit: 169, snare_chicken: 170,
   camp_tent: 171, camp_cot_top: 172, camp_cot_side: 173,
   travel_pot_top: 174, travel_pot_side: 175,
+  carrot0: 176, carrot1: 177, carrot2: 178, carrot3: 179,
 } as const;
 
 export const B = {
@@ -101,6 +102,7 @@ export const B = {
   DEAD_SHRUB: 409, FLOWER_BLUE: 410, MEADOW_GRASS: 411, PODZOL: 412, TURTLE_EGG0: 413, TURTLE_EGG1: 414, TURTLE_EGG2: 415,
   SNARE: 416, SNARE_ARMED: 417, SNARE_RABBIT: 418, SNARE_CHICKEN: 419,
   CAMP_TENT: 420, CAMP_COT: 421, TRAVEL_POT: 422,
+  CARROT_CROP0: 423, CARROT_CROP1: 424, CARROT_CROP2: 425, CARROT_CROP3: 426,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail';
@@ -346,6 +348,13 @@ def(B.CAMP_COT, 'Posłanie podróżne', [T.camp_cot_top, T.planks, T.camp_cot_si
 def(B.TRAVEL_POT, 'Kocioł podróżny', [T.travel_pot_top, T.iron_block, T.travel_pot_side], {
   hardness: 2, sound: 'stone', opaque: false, layer: 1,
 });
+
+// Carrots share the old farmland/growth rules but have their own harvest and texture.
+for (let stage = 0; stage < 4; stage++) {
+  def(B.CARROT_CROP0 + stage, ['Pędy marchwi', 'Młoda marchew', 'Marchew', 'Dojrzała marchew'][stage],
+    T.carrot0 + stage, { solid: false, opaque: false, layer: 1, render: 'cross',
+      hardness: 0, drop: -1, sound: 'grass' });
+}
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;

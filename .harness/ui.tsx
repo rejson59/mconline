@@ -120,6 +120,36 @@ section('3.0 dagger: compact combat feedback in HUD');
   check('counter hit is distinguished visually and reports actual damage', counter.includes('Kontra!') && counter.includes('7 obrażeń'));
 }
 
+section('3.0 #47: food, tooltip and short buff HUD on PC and touch');
+{
+  const controls = renderToStaticMarkup(<Controls />);
+  check('Survival recipe guide includes carrots, roasting, soup and reusable bowl',
+    controls.includes('Posiłki i uprawy') && controls.includes('co najmniej dwie marchewki') &&
+    controls.includes('Zupa dyniowa') && controls.includes('Gulasz:') &&
+    controls.includes('piec') && controls.includes('zwracają miskę'));
+  check('all three new meals show exact duration, stack role and bowl return in their tooltips',
+    stackTooltip({ id: I.PUMPKIN_SOUP, count: 1 }).includes('Szybkość 8 s') &&
+    stackTooltip({ id: I.RABBIT_STEW, count: 1 }).includes('Regeneracja 6 s') &&
+    stackTooltip({ id: I.HARVEST_PLATE, count: 1 }).includes('Zryw 7 s') &&
+    stackTooltip({ id: I.CARROT, count: 1 }).includes('Posadź na roli'));
+  const base = { mode: 'survival', health: 17, hunger: 14, air: 10, maxAir: 10,
+    hotbar: Array(9).fill(null), selected: 0, armor: [null, null, null, null],
+    time: 0, fishing: 'idle', messages: [], bow: -1, level: 0, xpFrac: 0, loading: 1,
+    effects: [
+      { id: 'speed', icon: '🏃', name: 'Szybkość', left: 8 },
+      { id: 'regen', icon: '✚', name: 'Regeneracja', left: 6 },
+      { id: 'sprint', icon: '⚡', name: 'Zryw', left: 7 },
+    ],
+  };
+  const mobile = renderToStaticMarkup(<HUD hud={base as never} icons={{}} touchControls />);
+  check('small/touch HUD shows all three meals as existing bounded buff timers',
+    mobile.includes('Szybkość') && mobile.includes('Regeneracja') && mobile.includes('Zryw') &&
+    mobile.includes('8s') && mobile.includes('6s') && mobile.includes('7s') && mobile.includes('flex-wrap'));
+  const pc = renderToStaticMarkup(<HUD hud={base as never} icons={{}} touchControls={false} />);
+  check('desktop HUD shows the same timed meal effects without separate menu',
+    pc.includes('Szybkość') && pc.includes('Regeneracja') && pc.includes('Zryw'));
+}
+
 section('3.0 #46: compact cauldron screen shows fuel, limited recipes and persisted progress');
 {
   const cauldron = emptyTravelCauldron(0, 65, 0);
@@ -127,7 +157,7 @@ section('3.0 #46: compact cauldron screen shows fuel, limited recipes and persis
     clickTravelCauldron: noop, closeInventory: noop };
   const empty = renderToStaticMarkup(<TravelCauldronScreen game={fake as unknown as Game} icons={{}} onChange={noop} />);
   check('field station shows accessible four slots, fuel and close action on small screens',
-    empty.includes('Kocioł podróżny') && empty.includes('Mięso / fiolka') &&
+    empty.includes('Kocioł podróżny') && empty.includes('Mięso, warzywo / fiolka') &&
     empty.includes('Łza / cukier') && empty.includes('Patyk / węgiel') && empty.includes('Wynik') &&
     empty.includes('Zamknij · E / Esc') && empty.includes('grid-cols-2') && empty.includes('role="progressbar"'));
   cauldron.input = { id: I.WATER_BOTTLE, count: 1 };

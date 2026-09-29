@@ -23,7 +23,11 @@ export function stackTooltip(s: Stack | null | undefined, fallback = ''): string
     s.id === I.IRON_HAMMER ? '\n8 obrażeń, 1,1 s między ciosami. Rozmach przy trafieniu do 2 dodatkowych celów; szybsze kruszenie kamienia, bruku, cegieł, czernitu i bazaltu, bez niszczenia sąsiednich bloków.' :
     s.id === I.LEATHER_SHIELD ? '\nLekka tarcza: 35% ochrony przed ciosem, 60% przed strzałą; szybsze zużycie, bez spowolnienia.' :
     s.id === I.IRON_SHIELD ? '\nCiężka tarcza: 70% ochrony przed ciosem, 85% przed strzałą; ruch o 15% wolniejszy w dłoni.' :
-    s.id === B.TRAVEL_POT ? '\nPrzenośne gotowanie mięsa i ryb oraz fiolka wody + łza ghasta/cukier. Jedna porcja na 5–9 s; węgiel lub patyk płaci za każdą porcję. Zawartość zostaje zapisana lub wypada po rozbiciu.' :
+    s.id === I.CARROT ? '\nPosadź na roli PPM/tap (można znaleźć w wysokiej trawie). Ugotuj w piecu/kotle na pieczoną marchew.' :
+    s.id === I.PUMPKIN_SOUP ? '\n+6 głodu, +1 zdrowia. Szybkość 8 s, nie kumuluje czasu; zwraca drewnianą miskę.' :
+    s.id === I.RABBIT_STEW ? '\n+8 głodu, +2 zdrowia. Regeneracja 6 s, nie kumuluje czasu; zwraca drewnianą miskę.' :
+    s.id === I.HARVEST_PLATE ? '\n+7 głodu, +1 zdrowia. Zryw 7 s, nie kumuluje czasu.' :
+    s.id === B.TRAVEL_POT ? '\nPrzenośne gotowanie mięsa, ryb, marchwi i dyni oraz fiolka wody + łza ghasta/cukier. Jedna porcja na 5–9 s; węgiel lub patyk płaci za każdą porcję. Zawartość zostaje zapisana lub wypada po rozbiciu.' :
     s.id === I.CAMP_KIT ? '\nPPM/tap na suchej, równej ziemi rozstawia namiot, posłanie i ognisko (3 wolne pola). Każdy blok można osobno zebrać i złożyć zestaw ponownie.' :
     s.id === B.CAMP_TENT ? '\nTkaninowy namiot. Możesz z niego wraz z posłaniem i ogniskiem zrobić przenośny zestaw biwakowy.' :
     s.id === B.CAMP_COT ? '\nPPM/tap ustawia tymczasowe odrodzenie i nocą pozwala spać. Rozbicie przywraca poprzedni punkt; w Netherze nie można spać.' :
