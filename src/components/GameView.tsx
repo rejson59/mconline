@@ -18,6 +18,7 @@ import TouchControls from './TouchControls';
 import {
   effectiveSettings,
   effectiveDetail,
+  chunkGenerationBudget,
   loadSettings,
   saveSettings,
   type Settings,
@@ -124,6 +125,7 @@ export default function GameView({
     g.setRenderDistance(effective.renderDistance);
     g.applyGfx({
       ...effectiveDetail(effective, profile),
+      ...chunkGenerationBudget(effective, profile),
       renderDistance: effective.renderDistance,
       pixelRatio: effective.pixelRatio,
       particles: effective.particles,

@@ -656,14 +656,28 @@ export function PauseMenu({
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)' }}>
-      <div className="flex max-h-[92vh] w-full max-w-[420px] flex-col items-center gap-3 overflow-y-auto px-4">
+    <div className="absolute inset-0 flex items-start justify-center overflow-y-auto p-3" style={{ background: 'rgba(0,0,0,0.55)' }}>
+      <div className="my-auto flex w-full max-w-[420px] flex-col items-center gap-3 px-4 py-2">
         {view === 'main' && (
           <>
             <div className="mb-1 text-2xl mc-text">Menu gry</div>
             {worldName && <div className="mb-3 text-sm opacity-80">{worldName}</div>}
             <button className="mc-btn" onClick={onResume}>
               Wróć do gry
+            </button>
+            <button
+              className="mc-btn"
+              onClick={() => {
+                const ok = onSave();
+                setSaved(ok);
+                setSaveFailed(!ok);
+                setTimeout(() => { setSaved(false); setSaveFailed(false); }, 3000);
+              }}
+            >
+              {saveFailed ? 'Błąd zapisu — sprawdź pamięć przeglądarki' : saved ? 'Zapisano ✓' : 'Zapisz świat'}
+            </button>
+            <button className="mc-btn" onClick={onQuit}>
+              Zapisz i wyjdź do menu
             </button>
             <button className="mc-btn" onClick={() => setView('options')}>
               Opcje...
@@ -690,20 +704,6 @@ export function PauseMenu({
             </button>
             <button className="mc-btn" onClick={toggleFullscreen}>
               Pełny ekran
-            </button>
-            <button
-              className="mc-btn"
-              onClick={() => {
-                const ok = onSave();
-                setSaved(ok);
-                setSaveFailed(!ok);
-                setTimeout(() => { setSaved(false); setSaveFailed(false); }, 3000);
-              }}
-            >
-              {saveFailed ? 'Błąd zapisu — sprawdź pamięć przeglądarki' : saved ? 'Zapisano ✓' : 'Zapisz świat'}
-            </button>
-            <button className="mc-btn" onClick={onQuit}>
-              Zapisz i wyjdź do menu
             </button>
           </>
         )}

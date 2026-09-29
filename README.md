@@ -376,3 +376,14 @@ Runner `.harness/run.mjs` bundluje testy przez **esbuild** i uruchamia je w Node
 
 Kod gry: **MIT** – rób z nim, co chcesz.
 Projekt inspirowany grą *Minecraft* (Mojang Studios); nie jest z nią powiązany i nie zawiera jej zasobów – wszystkie tekstury rysowane są proceduralnie w przeglądarce.
+
+
+### Próba gry w prawdziwej przeglądarce (WebGL)
+
+Po `npm ci` uruchom w jednym terminalu `npm run dev -- --host 0.0.0.0`,
+a w drugim `CHROME_BIN=/ścieżka/do/chromium npm run test:browser`.
+Opcjonalne `BROWSER_SCREENSHOTS=/katalog/poza-repo` zapisuje obrazy z PC i
+emulowanego telefonu do obejrzenia. Test otwiera światy Creative/Survival,
+weryfikuje WebGL2 i zapis/odczyt wersji generatora v5/v4 oraz sterowanie
+dotykowe na niskim presecie. Wymaga osobno zainstalowanego Chromium z WebGL2;
+programowy SwiftShader w headless nie zastępuje fizycznego telefonu i GPU.

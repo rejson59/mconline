@@ -22,6 +22,7 @@
     "test": "node .harness/run.mjs",
     "test:engine": "node .harness/run.mjs smoke",
     "test:ui": "node .harness/run.mjs ui",
+    "test:browser": "node .harness/browser.js",
     "deploy:branch": "npm run build && npx --yes gh-pages -d dist"
   },
   "dependencies": {
@@ -41,6 +42,7 @@
     "@vitejs/plugin-react": "5.1.1",
     "esbuild": "^0.28.2",
     "jsdom": "^26.1.0",
+    "playwright-core": "^1.63.0",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
     "vite": "^7.3.6",

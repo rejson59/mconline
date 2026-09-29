@@ -103,6 +103,18 @@ export function effectiveSettings(s: Settings, profile: DeviceProfile): Settings
   return applyPreset(s, recommendPreset(profile), true);
 }
 
+/** Preset CPU budgets must accompany the saved pixel/particle settings.
+ * These are not persisted individually, so changing the quality selector or
+ * opening an older save still adjusts generation cost on slow devices. */
+export function chunkGenerationBudget(s: Settings, profile: DeviceProfile) {
+  const preset = PRESETS[s.quality === 'auto' ? recommendPreset(profile) : s.quality];
+  return {
+    chunkBudgetMs: preset.chunkBudgetMs,
+    chunksPerFrame: preset.chunksPerFrame,
+    unloadMargin: preset.unloadMargin,
+  };
+}
+
 /** Resolve each visual detail axis without overwriting the stored Auto choice. */
 export function effectiveDetail(s: Settings, profile: DeviceProfile): { textureDetail: 'low' | 'full'; effectDetail: 'low' | 'full' } {
   const low = (s.quality === 'auto' ? recommendPreset(profile) : s.quality) === 'low';

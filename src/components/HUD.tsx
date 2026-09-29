@@ -238,13 +238,11 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
           ))}
         </div>
       ) : hud.showFps ? (
-        <div className="absolute left-2 top-2 px-1.5 py-0.5 text-[13px] leading-tight mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
+        <div className="absolute left-2 px-1.5 py-0.5 text-[13px] leading-tight mc-text" style={{ top: touchControls ? (typeof window !== 'undefined' && window.innerHeight < 530 ? 72 : 142) : 8, background: 'rgba(0,0,0,0.45)' }}>
           <div>{hud.fps} FPS{hud.resScale < 1 ? ` · skala ${Math.round(hud.resScale * 100)}%` : ''}</div>
           <div className="opacity-70">chunki: {hud.chunks} · kresl.: {hud.drawCalls}</div>
         </div>
-      ) : (
-        <div className="absolute left-2 top-2 text-sm opacity-70 mc-text">{hud.fps} FPS</div>
-      )}
+      ) : null}
 
       {hud.toast && (
         <div className="absolute left-1/2 top-16 w-[min(420px,90vw)] -translate-x-1/2 px-4 py-2 text-center" style={{ background: 'rgba(0,0,0,0.72)', border: '2px solid #3a3a3a' }}>

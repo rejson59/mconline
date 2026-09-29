@@ -102,6 +102,20 @@ section('trade screen: static render');
   }
 }
 
+section('3.0 #100: touch overlay keeps the optional FPS readout away from toolbar');
+{
+  const state = { mode: 'survival', health: 20, hunger: 20, air: 10, maxAir: 10,
+    hotbar: Array(9).fill(null), selected: 0, armor: [null, null, null, null],
+    time: 0, fishing: 'idle', messages: [], effects: [], bow: -1,
+    level: 0, xpFrac: 0, loading: 1, fps: 30, chunks: 4, drawCalls: 2, resScale: 1 };
+  const quiet = renderToStaticMarkup(<HUD hud={{ ...state, showFps: false } as never} icons={{}} touchControls />);
+  const verbose = renderToStaticMarkup(<HUD hud={{ ...state, showFps: true } as never} icons={{}} touchControls />);
+  check('default HUD does not force an FPS overlay over phone pause and inventory controls',
+    !quiet.includes('30 FPS') && verbose.includes('30 FPS'));
+  check('requested touch FPS readout moves below the top toolbar',
+    verbose.includes('top:142px') || verbose.includes('top:72px'));
+}
+
 section('3.0 dagger: compact combat feedback in HUD');
 {
   const base = {
@@ -457,6 +471,10 @@ section('menus: static render');
     <PauseMenu settings={DEFAULT_SETTINGS} shareUrl="http://x/#seed=1" onSettings={noop} onResume={noop} onJournal={noop} onQuit={noop} onSave={() => true} />
   );
   check('pause menu offers resume and save', pause.includes('Wróć do gry') && pause.includes('Zapisz świat'));
+  check('pause keeps save/exit visible above long menus and scrolls on compact viewports',
+    pause.indexOf('Zapisz i wyjdź do menu') < pause.indexOf('Opcje...') &&
+    pause.includes('overflow-y-auto'));
+
   check('pause menu opens the adventure journal', pause.includes('Dziennik przygód'));
   check('pause menu counts achievements', pause.includes(`/${ACHIEVEMENTS.length}`));
   const worldPause = renderToStaticMarkup(<PauseMenu settings={DEFAULT_SETTINGS} shareUrl="http://x/#seed=1"

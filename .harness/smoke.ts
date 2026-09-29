@@ -9,7 +9,7 @@
  */
 import * as THREE from 'three';
 import { PRESETS, detectDeviceProfile, recommendPreset, describeProfile, type DeviceProfile } from '../src/utils/performance';
-import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, effectiveDetail, loadSettings, normalizeSettings, saveSettings, SETTINGS_KEY } from '../src/utils/settings';
+import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, effectiveDetail, chunkGenerationBudget, loadSettings, normalizeSettings, saveSettings, SETTINGS_KEY } from '../src/utils/settings';
 
 // ---------------------------------------------------------------- DOM stubs
 let committedAtlas: Uint8ClampedArray | null = null;
@@ -5724,6 +5724,14 @@ section('2.0: automatic graphics and settings');
   eq('effective auto keeps quality=auto flag', auto.quality, 'auto');
   const manual = effectiveSettings({ ...DEFAULT_SETTINGS, quality: 'high', renderDistance: 10 }, weakPhone);
   eq('manual quality wins over recommendation', manual.renderDistance, 10);
+  check('actual game chunk budgets follow manual low quality, not the previous high default',
+    chunkGenerationBudget(s, gamingPC).chunkBudgetMs === PRESETS.low.chunkBudgetMs &&
+    chunkGenerationBudget(s, gamingPC).chunksPerFrame === PRESETS.low.chunksPerFrame &&
+    chunkGenerationBudget(s, gamingPC).unloadMargin === PRESETS.low.unloadMargin);
+  check('auto phone budget is low while an explicit high preset keeps its own budget',
+    chunkGenerationBudget(DEFAULT_SETTINGS, weakPhone).chunkBudgetMs === PRESETS.low.chunkBudgetMs &&
+    chunkGenerationBudget({ ...DEFAULT_SETTINGS, quality: 'high' }, weakPhone).chunkBudgetMs === PRESETS.high.chunkBudgetMs);
+
 
   // nowe klucze ustawień mają domyślne wartości (migracja starych zapisów)
   check('defaults contain touch mode tap', DEFAULT_SETTINGS.touchMode === 'tap');
