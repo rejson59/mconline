@@ -89,12 +89,52 @@ try {
   await page.evaluate(() => window.blockcraft.game.openInventory(false));
   check((await page.locator('body').innerText()).includes('Bloki'), 'Creative: otwarto rzeczywisty ekwipunek');
   await screenshot(page, 'desktop-inventory');
-  await page.evaluate(() => window.blockcraft.game.setUI('playing'));
+  // Select a decorative block through the actual Creative inventory, not by
+  // injecting an item into the hotbar; then aim at a wall and place it.
+  await page.getByPlaceholder('Szukaj...').fill('Obraz: krajobraz');
+  await page.locator('.inventory-main-panel .grid .mc-slot').first().click();
+  await page.locator('.inventory-main-panel .flex.gap-0 .mc-slot').first().click();
+  check(await page.evaluate(() => window.blockcraft.game.inventory.slots[0]?.id === 427),
+    'Creative: obraz trafia z katalogu na pasek');
+  const target = await page.evaluate(() => {
+    const g = window.blockcraft.game;
+    g.flying = true;
+    g.setRenderDistance(2); // keep the close-up screenshot independent of distant chunk work
+    g.body.pos.set(0.5, 111, 0.5);
+    g.body.vel.set(0, 0, 0);
+    for (let x = -2; x <= 4; x++) for (let z = -2; z <= 2; z++)
+      g.world.setBlock(x, 110, z, 3); // test platform, stone
+    for (let z = -1; z <= 1; z++) for (let y = 111; y <= 114; y++)
+      g.world.setBlock(3, y, z, 3); // solid wall
+    g.yaw = -Math.PI / 2;
+    g.pitch = 0;
+    g.setUI('playing');
+    g.refreshTarget();
+    return g.target && { x: g.target.x, y: g.target.y, z: g.target.z, nx: g.target.nx };
+  });
+  check(target?.x === 3 && target?.y === 112 && target?.z === 0 && target?.nx === -1,
+    `Creative: celownik trafił w ścianę: ${JSON.stringify(target)}`);
+  await page.evaluate(() => window.blockcraft.game.tryUse());
+  check(await page.evaluate(() => window.blockcraft.game.world.getBlock(2, 112, 0) >= 427 &&
+    window.blockcraft.game.world.getBlock(2, 112, 0) <= 430),
+    'Creative: silnik faktycznie postawił obraz na ścianie');
+  await page.evaluate(() => {
+    const g = window.blockcraft.game;
+    g.yaw = -Math.PI / 2;
+    g.pitch = 0;
+    g.buildChunk(0, 0);
+    g.camera.rotation.set(0, -Math.PI / 2, 0);
+  });
+  await page.waitForTimeout(1200);
+  await page.evaluate(() => { const g = window.blockcraft.game; g.yaw = -Math.PI / 2; g.pitch = 0; g.camera.rotation.set(0, g.yaw, 0); });
+  await screenshot(page, 'desktop-painting');
   check(await page.evaluate(() => window.blockcraft.game.save()), 'PC: zapis świata v5');
   await exitToMenu(page);
   await page.locator('button').filter({ hasText: 'WebGL-v5' }).first().click();
   await page.waitForFunction(() => window.blockcraft?.game?.renderer?.info?.render?.frame > 0, undefined, { timeout: 60000 });
   check((await gameInfo(page)).version === 5, 'PC: ponowne otwarcie świata v5');
+  check(await page.evaluate(() => { const b = window.blockcraft.game.world.getBlock(2, 112, 0); return b >= 427 && b <= 430; }),
+    'PC: postawiony obraz nadal istnieje po zapisie i odczycie');
   await page.getByRole('button', { name: 'Kliknij, aby grać' }).click();
   await exitToMenu(page);
   // Reuse the real serialized world shape, representing a previously saved v4

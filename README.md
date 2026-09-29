@@ -384,6 +384,7 @@ Po `npm ci` uruchom w jednym terminalu `npm run dev -- --host 0.0.0.0`,
 a w drugim `CHROME_BIN=/ścieżka/do/chromium npm run test:browser`.
 Opcjonalne `BROWSER_SCREENSHOTS=/katalog/poza-repo` zapisuje obrazy z PC i
 emulowanego telefonu do obejrzenia. Test otwiera światy Creative/Survival,
-weryfikuje WebGL2 i zapis/odczyt wersji generatora v5/v4 oraz sterowanie
+weryfikuje WebGL2, obraz wybrany z katalogu Creative i zapis/odczyt
+wersji generatora v5/v4 oraz sterowanie
 dotykowe na niskim presecie. Wymaga osobno zainstalowanego Chromium z WebGL2;
 programowy SwiftShader w headless nie zastępuje fizycznego telefonu i GPU.
