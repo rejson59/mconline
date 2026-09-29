@@ -513,6 +513,9 @@ export default function TouchControls({
       <div className="pointer-events-none absolute right-3 flex gap-2" style={{ top: vh < 530 ? 72 : 136 }}>
         <ActionButton label="↝" hint="Unik" size={48} onDown={() => game.tryDodge()} haptics={settings.haptics} />
         <ActionButton label="🛡" hint="Parowanie tarczą" size={48} onDown={() => game.tryTimedGuard()} haptics={settings.haptics} />
+        {ITEMS[game.selectedStack?.()?.id ?? 0]?.tool === 'bow' && (
+          <ActionButton label="➟" hint="Wybierz strzałę" size={48} onDown={() => game.cycleArrowAmmo()} haptics={settings.haptics} />
+        )}
       </div>
 
       {/* przyciski akcji – diament pod prawym kciukiem */}

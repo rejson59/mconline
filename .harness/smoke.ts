@@ -56,7 +56,7 @@ import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeComp
 import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, CREATIVE_ITEMS, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
-  pickHint, mineSeconds, toolHelps, attackDamage, attackCooldown, attackReach, bowDrawSeconds, bowStrength, shieldDamageFactor, shieldWeightFactor, shieldWear, blockDrops, smeltResult, fuelSeconds, resolveId,
+  pickHint, mineSeconds, toolHelps, attackDamage, attackCooldown, attackReach, bowDrawSeconds, bowStrength, arrowDuration, shieldDamageFactor, shieldWeightFactor, shieldWear, blockDrops, smeltResult, fuelSeconds, resolveId,
   displayName,
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
@@ -1502,6 +1502,237 @@ section('3.0 #77: mutually exclusive defense and swimming enchants');
   table.inventory.slots[0] = null;
   check('Creative can enchant swimming boots at the table without lapis', table.enchantWith(0) &&
     table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
+}
+
+section('3.0 #44: persistent single-use hunting snares and one-string rearming');
+{
+  check('snare IDs append past turtle eggs with base block only in Creative',
+    B.SNARE === 416 && B.SNARE_CHICKEN === 419 && CREATIVE_BLOCKS.includes(B.SNARE) &&
+    [B.SNARE_ARMED, B.SNARE_RABBIT, B.SNARE_CHICKEN].every((id) => !CREATIVE_BLOCKS.includes(id) &&
+      BLOCKS[id].drop === B.SNARE && !IS_SOLID[id]));
+  const inv = new Inventory(); inv.add(I.STRING, 2); inv.add(I.STICK, 2);
+  const r = RECIPES.find((recipe) => recipe.out.id === B.SNARE)!;
+  check('Survival crafts the real placed block in a personal 2x2 grid',
+    !r.table && inv.craft(r) && inv.countOf(B.SNARE) === 1 && !inv.craft(r));
+  const grid = new Inventory();
+  grid.grid[0] = { id: I.STRING, count: 1 }; grid.grid[1] = { id: I.STRING, count: 1 };
+  grid.grid[3] = { id: I.STICK, count: 1 }; grid.grid[4] = { id: I.STICK, count: 1 };
+  check('2x2 pattern really consumes the two strings and two sticks once',
+    grid.gridMatch(false)?.out.id === B.SNARE && grid.craftGrid(false)?.id === B.SNARE &&
+    grid.grid.every((cell) => !cell));
+  check('breaking any state, including with Silk Touch, never duplicates meat or strings',
+    [B.SNARE, B.SNARE_ARMED, B.SNARE_RABBIT, B.SNARE_CHICKEN].every((id) =>
+      [false, true].every((silk) => {
+        const drops = blockDrops(id, I.DIAMOND_PICK, { silk });
+        return drops.length === 1 && drops[0].id === B.SNARE && drops[0].count === 1;
+      })));
+  const world = new World(44044, true); world.getChunk(0, 0);
+  const x = 8, y = FLAT_H + 1, z = 8;
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.mode = 'survival'; g.ui = 'playing';
+  g.inventory = new Inventory(); g.keys = new Set<string>();
+  g.inventory.slots[0] = { id: B.SNARE, count: 1 }; g.selected = 0;
+  g.mobs = []; g.body = { pos: new THREE.Vector3(x + 0.5, y, z + 2) };
+  g.findMobTarget = () => ({ mob: null, dist: Infinity });
+  g.message = (msg: string) => notices.push(msg); g.emitHud = () => {};
+  g.advanceChallenge = () => {}; g.settle = () => {}; g.onBlockChanged = () => {};
+  g.consumeSelected = () => { g.inventory.remove(B.SNARE, 1); }; g.spawnDrop = (id: number, count: number) => void loot.push([id, count]);
+  const notices: string[] = [], loot: [number, number][] = [];
+  g.target = { id: B.GRASS, x, y: FLAT_H, z, nx: 0, ny: 1, nz: 0 };
+  g.tryUse();
+  check('real PC/tap use path places an unarmed snare on solid ground and spends the block',
+    world.getBlock(x, y, z) === B.SNARE && g.inventory.countOf(B.SNARE) === 0);
+  g.target = { id: B.SNARE, x, y, z };
+  g.tryUse();
+  check('without string use does not arm or silently mint resources', world.getBlock(x, y, z) === B.SNARE &&
+    notices.at(-1)?.includes('struny') && loot.length === 0);
+  g.inventory.add(I.STRING, 2);
+  g.tryUse();
+  check('arming via same interaction costs exactly one Survival string',
+    world.getBlock(x, y, z) === B.SNARE_ARMED && g.inventory.countOf(I.STRING) === 1);
+  const trusted = new Mob('rabbit', x + 0.5, y, z + 0.5); trusted.trust = 1;
+  check('friendly animals cannot be trapped', !g.trySnareMob(trusted) && !trusted.dead && world.getBlock(x, y, z) === B.SNARE_ARMED);
+  const rabbit = new Mob('rabbit', x + 0.5, y, z + 0.5);
+  check('actual wild rabbit triggers the saved catch and suppresses its normal death loot',
+    g.trySnareMob(rabbit) && rabbit.dead && rabbit.looted &&
+    world.getBlock(x, y, z) === B.SNARE_RABBIT && loot.length === 0);
+  const secondRabbit = new Mob('rabbit', x + 0.5, y, z + 0.5);
+  check('caught snare cannot catch a second animal without harvesting and rearming',
+    !g.trySnareMob(secondRabbit) && !secondRabbit.dead);
+  const saved = world.serializeMods();
+  const copy = new World(44044, true); copy.loadMods(saved);
+  check('catch state survives a world save and reload without respawning prey',
+    copy.getBlock(x, y, z) === B.SNARE_RABBIT && copy.serializeMods()[World.key(0, 0)]?.length > 0);
+  g.world = copy; g.target.id = B.SNARE_RABBIT; g.tryUse();
+  check('harvest drops precisely one raw rabbit and disarms before any second tap',
+    copy.getBlock(x, y, z) === B.SNARE && loot.length === 1 && loot[0][0] === I.RAW_RABBIT && loot[0][1] === 1);
+  g.target.id = B.SNARE; g.tryUse();
+  check('rearming after harvest costs another string, not a free timer tick',
+    copy.getBlock(x, y, z) === B.SNARE_ARMED && g.inventory.countOf(I.STRING) === 0);
+  const chicken = new Mob('chicken', x + 0.5, y, z + 0.5);
+  check('chickens generate a different one-time catch state without death loot',
+    g.trySnareMob(chicken) && chicken.looted && copy.getBlock(x, y, z) === B.SNARE_CHICKEN);
+  g.target.id = B.SNARE_CHICKEN; g.tryUse();
+  check('chicken reward is exactly one raw chicken and cannot be harvested again',
+    loot.length === 2 && loot[1][0] === I.RAW_CHICKEN && copy.getBlock(x, y, z) === B.SNARE);
+  g.target.id = B.SNARE; g.tryUse();
+  check('cannot farm a third reward without another string', copy.getBlock(x, y, z) === B.SNARE && loot.length === 2);
+  g.mode = 'creative'; g.tryUse();
+  check('Creative can arm an empty snare without a Survival string', copy.getBlock(x, y, z) === B.SNARE_ARMED);
+  g.target.id = B.SNARE_ARMED; g.tryUse();
+  check('Creative can disarm with the same PC/touch action', copy.getBlock(x, y, z) === B.SNARE);
+  copy.setBlock(x, y, z, B.SNARE_RABBIT); g.target.id = B.SNARE_RABBIT;
+  g.updateHand = () => {}; g.pickBlock();
+  check('Creative middle click picks empty base snare, never a harvest-ready block',
+    g.inventory.slots[0]?.id === B.SNARE && g.inventory.slots[0]?.count === 64);
+  trusted.dispose(); rabbit.dispose(); secondRabbit.dispose(); chicken.dispose();
+}
+
+section('3.0 #43: glowing, slowing and marking arrows with selectable real ammo');
+{
+  check('three arrow IDs append after bowstrings with distinct icons and Creative access',
+    I.GLOW_ARROW === 372 && I.SLOW_ARROW === 373 && I.MARK_ARROW === 374 &&
+    [I.GLOW_ARROW, I.SLOW_ARROW, I.MARK_ARROW].every((id) =>
+      CREATIVE_ITEMS.includes(id) && stackLimit(id) === 64 && !!buildItemIcons()[id]));
+  for (const [id, reagent, seconds] of [
+    [I.GLOW_ARROW, I.GLOWSTONE_DUST, 12], [I.SLOW_ARROW, I.SLIME_BALL, 6], [I.MARK_ARROW, I.REDSTONE, 18],
+  ] as const) {
+    const r = RECIPES.find((recipe) => recipe.out.id === id)!;
+    const inv = new Inventory(); inv.add(I.ARROW, 4); inv.add(reagent, 1);
+    check(`${ITEMS[id]?.name} Survival consumes exactly four arrows and one reagent`,
+      r.table && r.out.count === 4 && inv.craft(r) && inv.countOf(id) === 4 &&
+      inv.countOf(I.ARROW) === 0 && inv.countOf(reagent) === 0 && !inv.craft(r));
+    const grid = new Inventory();
+    for (const cell of [0, 1, 3, 4]) grid.grid[cell] = { id: I.ARROW, count: 1 };
+    grid.grid[2] = { id: reagent, count: 1 };
+    check(`${ITEMS[id]?.name} table-grid recipe uses all five cells without duplication`,
+      grid.gridMatch(false) === null && grid.gridMatch(true)?.out.id === id &&
+      grid.craftGrid(true)?.count === 4 && grid.grid.every((cell) => !cell) && !grid.craftGrid(true));
+    eq(`${ITEMS[id]?.name} effect duration`, arrowDuration(id), seconds);
+  }
+  eq('ordinary arrow has no status and unchanged ID', arrowDuration(I.ARROW), 0);
+  const world = new World(33043, true); world.getChunk(0, 0);
+  const player = new THREE.Vector3(5.5, FLAT_H + 1, 14.5);
+  const plain = new Mob('zombie', 5.5, FLAT_H + 1, 5.5);
+  const slowed = new Mob('zombie', 5.5, FLAT_H + 1, 5.5);
+  check('slowing arrow attaches a real transient mob status', slowed.applyArrowEffect(I.SLOW_ARROW) &&
+    slowed.arrowSlow === 6 && slowed.applyArrowEffect(I.SLOW_ARROW) && slowed.arrowSlow === 6);
+  for (let i = 0; i < 30; i++) {
+    plain.update(1 / 30, world, player, () => {}, () => {}, false);
+    slowed.update(1 / 30, world, player, () => {}, () => {}, false);
+  }
+  check('real chasing AI covers less distance while slowed, including world collision',
+    slowed.body.pos.distanceTo(player) > plain.body.pos.distanceTo(player) + 0.25 &&
+    slowed.arrowSlow > 4.9 && slowed.arrowSlow < 5.1);
+  slowed.update(5.1, world, player, () => {}, () => {}, true);
+  check('slow effect expires without permanent movement mutation', slowed.arrowSlow === 0);
+  const marked = new Mob('zombie', 3, FLAT_H + 1, 3);
+  check('glow and mark both create distinct visible indicators without tinting other mobs',
+    marked.applyArrowEffect(I.GLOW_ARROW) && marked.applyArrowEffect(I.MARK_ARROW) &&
+    marked.arrowGlow === 12 && marked.arrowMark === 18 && marked.group.children.length > plain.group.children.length);
+  marked.setTint(true); marked.setTint(false);
+  marked.update(12.2, world, player, () => {}, () => {}, true);
+  check('glow turns off at 12 seconds while target mark remains until 18', marked.arrowGlow === 0 && marked.arrowMark > 5);
+  marked.update(6, world, player, () => {}, () => {}, true);
+  check('target marker also expires instead of leaving a permanent tag', marked.arrowMark === 0);
+  check('dead mob cannot be given a new marker', (() => { marked.dead = true; return !marked.applyArrowEffect(I.MARK_ARROW); })());
+  plain.dispose(); slowed.dispose(); marked.dispose();
+
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.BOW, count: 1 };
+  g.selected = 0; g.selectedStack = () => g.inventory.slots[0];
+  g.mode = 'survival'; g.ui = 'playing'; g.keys = new Set<string>();
+  g.body = { pos: new THREE.Vector3(0, FLAT_H + 1, 0), vel: new THREE.Vector3(), h: 1.8 };
+  g.arrowAmmo = I.ARROW; g.gfx = { effectDetail: 'full' };
+  g.inventory.add(I.ARROW, 2); g.inventory.add(I.GLOW_ARROW, 1);
+  g.inventory.add(I.SLOW_ARROW, 1); g.inventory.add(I.MARK_ARROW, 1);
+  g.message = (s: string) => notices.push(s); g.emitHud = () => {};
+  const notices: string[] = [];
+  const pc = { code: 'KeyX', repeat: false, preventDefault() {} };
+  g.onKeyDown(pc);
+  check('PC X cycles to a stocked special arrow and announces the inventory count',
+    g.arrowAmmo === I.GLOW_ARROW && notices.at(-1)?.includes('Świetlna strzała (1)'));
+  g.cycleArrowAmmo();
+  check('touch-facing API cycles through available ammo without creating any',
+    g.arrowAmmo === I.SLOW_ARROW && g.inventory.countOf(I.SLOW_ARROW) === 1);
+  g.arrowAmmo = I.MARK_ARROW;
+  g.inventory.remove(I.MARK_ARROW, 1);
+  check('unavailable selected ammo falls back to normal, not an empty shot', g.selectedArrowAmmo() === I.ARROW);
+  g.inventory.add(I.MARK_ARROW, 1);
+  g.mode = 'creative'; g.inventory.remove(I.ARROW, 2);
+  g.inventory.remove(I.GLOW_ARROW, 1);
+  check('Creative can select every arrow even without Survival ammo',
+    g.selectedArrowAmmo() === I.ARROW && (g.cycleArrowAmmo(), g.arrowAmmo === I.GLOW_ARROW));
+  g.mode = 'survival'; g.inventory.add(I.ARROW, 2); g.inventory.add(I.GLOW_ARROW, 1);
+  g.wearTool = () => {}; g.unlock = () => {};
+  g.eyePos = () => new THREE.Vector3(0, FLAT_H + 2.6, 0);
+  g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  const launches: number[] = [];
+  g.spawnArrow = (_origin: unknown, _dir: unknown, _speed: number, _from: unknown, _power: number, ammo: number) => { launches.push(ammo); };
+  for (const id of [I.GLOW_ARROW, I.SLOW_ARROW, I.MARK_ARROW]) {
+    g.arrowAmmo = id; g.bowDraw = 1; g.releaseBow();
+    check(`${ITEMS[id]?.name} fires with precisely its ammo ID and spends one actual item`,
+      launches.at(-1) === id && g.inventory.countOf(id) === 0);
+    g.inventory.add(id, 1);
+  }
+  g.inventory.slots[0] = { id: I.BOW, count: 1, ench: { infinity: 1 } };
+  g.arrowAmmo = I.GLOW_ARROW; g.bowDraw = 1; g.releaseBow();
+  check('Infinity does not duplicate special reagent arrows', g.inventory.countOf(I.GLOW_ARROW) === 0);
+  g.arrowAmmo = I.ARROW; g.bowDraw = 1; g.releaseBow();
+  check('Infinity still retains the ordinary 2.7 arrow requirement and does not consume it',
+    launches.at(-1) === I.ARROW && g.inventory.countOf(I.ARROW) === 2);
+  g.inventory.remove(I.ARROW, 2); g.arrowAmmo = I.MARK_ARROW; g.bowDraw = 1;
+  g.releaseBow();
+  check('when normal ammo is absent, a stocked special arrow can still fire',
+    launches.at(-1) === I.MARK_ARROW && g.inventory.countOf(I.MARK_ARROW) === 0);
+  g.inventory.remove(I.SLOW_ARROW, 1);
+  g.inventory.add(I.GLOW_ARROW, 1); g.arrowAmmo = I.GLOW_ARROW; g.arrows = Array(49).fill(null);
+  const cappedCount = g.inventory.countOf(I.GLOW_ARROW), cappedShots = launches.length;
+  g.bowDraw = 1; g.releaseBow();
+  check('projectile cap does not eat reagent ammo without spawning a projectile',
+    g.inventory.countOf(I.GLOW_ARROW) === cappedCount && launches.length === cappedShots);
+  g.arrows = []; g.inventory.remove(I.GLOW_ARROW, 1);
+  g.bowDraw = 1; const shotsBefore = launches.length; g.releaseBow();
+  check('when every ammo stack is empty, the bow does not create a projectile',
+    launches.length === shotsBefore && notices.some((s) => s.includes('Brak strzał')));
+
+  // Exercise the real projectile collision path, not just direct Mob.applyArrowEffect.
+  const impact = Object.create(Game.prototype) as unknown as Record<string, any>;
+  impact.scene = { add: () => {}, remove: () => {} };
+  impact.arrowGeo = new THREE.BoxGeometry(0.09, 0.09, 0.78);
+  impact.arrowMat = new THREE.MeshBasicMaterial(); impact.arrowMats = new Map(); impact.impactGlows = [];
+  impact.gfx = { effectDetail: 'full' }; impact.arrows = [];
+  impact.mode = 'survival'; impact.mobs = [];
+  impact.world = { peekBlock: () => B.AIR };
+  impact.message = (s: string) => impacts.push(s); impact.wearTool = () => {};
+  impact.advanceChallenge = () => {};
+  const impacts: string[] = [];
+  for (const id of [I.GLOW_ARROW, I.SLOW_ARROW, I.MARK_ARROW] as const) {
+    const target = new Mob('zombie', 0, 64, -1);
+    impact.mobs = [target];
+    impact.spawnArrow(new THREE.Vector3(0, 65.2, -1.6), new THREE.Vector3(0, 0, 1), 8, null, 1, id);
+    impact.updateArrows(0.15);
+    check(`${ITEMS[id]?.name} really applies its duration on a hit and removes the spent arrow`,
+      target.health < target.maxHealth && impact.arrows.length === 0 &&
+      (id === I.GLOW_ARROW ? target.arrowGlow === 12 : id === I.SLOW_ARROW ? target.arrowSlow === 6 : target.arrowMark === 18));
+    target.dispose();
+  }
+  check('special arrow hit is reported once per landed projectile', impacts.length === 3);
+  impact.mobs = [];
+  impact.world.peekBlock = (_x: number, _y: number, z: number) => z <= -1 ? B.STONE : B.AIR;
+  impact.spawnArrow(new THREE.Vector3(0, 65.2, -0.5), new THREE.Vector3(0, 0, -1), 10, null, 1, I.GLOW_ARROW);
+  impact.updateArrows(0.1);
+  check('glow arrow also creates an illuminated, temporary marker on a solid wall',
+    impact.impactGlows.length === 1 && impact.impactGlows[0].light.visible && impact.impactGlows[0].time === 12);
+  impact.gfx.effectDetail = 'low'; impact.updateArrows(0.1);
+  check('low preset keeps readable marker but turns off dynamic light',
+    impact.impactGlows[0].mesh.visible && !impact.impactGlows[0].light.visible);
+  for (let i = 0; i < 10; i++) impact.addImpactGlow(new THREE.Vector3(i, 66, 0));
+  check('glow markers have a strict performance cap', impact.impactGlows.length === 8);
+  impact.updateArrows(18);
+  check('wall markers expire and release scene resources', impact.impactGlows.length === 0);
+  impact.arrowGeo.dispose(); impact.arrowMat.dispose();
+  for (const mat of impact.arrowMats.values()) mat.dispose();
 }
 
 section('3.0 #42: craftable bowstrings change actual draw speed and projectile strength');

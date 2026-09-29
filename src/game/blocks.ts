@@ -36,6 +36,7 @@ export const T = {
   mud: 149, acacia_side: 150, acacia_top: 151, jungle_leaves: 152, lily_pad: 153,
   spruce_side: 154, spruce_top: 155, spruce_leaves: 156, spruce_sapling: 157,
   dry_soil: 158, dead_shrub: 159, flower_blue: 160, meadow_top: 161, meadow_side: 162, podzol: 163, turtle_egg0: 164, turtle_egg1: 165, turtle_egg2: 166,
+  snare_empty: 167, snare_armed: 168, snare_rabbit: 169, snare_chicken: 170,
 } as const;
 
 export const B = {
@@ -96,6 +97,7 @@ export const B = {
   MUD: 400, ACACIA_LOG: 401, ACACIA_LEAVES: 402, JUNGLE_LEAVES: 403, LILY_PAD: 404,
   SPRUCE_LOG: 405, SPRUCE_LEAVES: 406, SPRUCE_SAPLING: 407, DRY_SOIL: 408,
   DEAD_SHRUB: 409, FLOWER_BLUE: 410, MEADOW_GRASS: 411, PODZOL: 412, TURTLE_EGG0: 413, TURTLE_EGG1: 414, TURTLE_EGG2: 415,
+  SNARE: 416, SNARE_ARMED: 417, SNARE_RABBIT: 418, SNARE_CHICKEN: 419,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail';
@@ -320,6 +322,16 @@ def(B.PODZOL, 'Bielica', T.podzol, { hardness: 0.6, sound: 'grass' });
 for (const [id, tile] of [[B.TURTLE_EGG0, T.turtle_egg0], [B.TURTLE_EGG1, T.turtle_egg1], [B.TURTLE_EGG2, T.turtle_egg2]])
   def(id, 'Jajo żółwia', tile, { solid: false, opaque: false, layer: 1, hardness: 0.2, drop: B.TURTLE_EGG0, sound: 'sand' });
 
+// Each snare state is an append-only block ID in saved world mods: no hidden
+// cooldown or loot inventory that could be reset by a reload or dimension swap.
+for (const [id, tile, name] of [
+  [B.SNARE, T.snare_empty, 'Sidła (rozbrojone)'],
+  [B.SNARE_ARMED, T.snare_armed, 'Sidła (uzbrojone)'],
+  [B.SNARE_RABBIT, T.snare_rabbit, 'Sidła: królik'],
+  [B.SNARE_CHICKEN, T.snare_chicken, 'Sidła: kurczak'],
+] as const) def(id, name, tile, { solid: false, opaque: false, layer: 1, render: 'cross',
+  hardness: 0.4, sound: 'wood', drop: B.SNARE });
+
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;
 
@@ -374,7 +386,7 @@ function creativeVisible(id: number): boolean {
   if (id === B.TURTLE_EGG1 || id === B.TURTLE_EGG2) return false;
   if (id === B.AIR || id === B.WATER || id === B.LAVA || id === B.FURNACE_ON || id === B.CROP1 || id === B.CROP2 || id === B.LOOT_CHEST) return false;
   if (id === B.REDSTONE_LAMP_ON || id === B.REDSTONE_TORCH_OFF || id === B.LEVER_ON || id === B.BUTTON_ON) return false;
-  if (id === B.PISTON_HEAD) return false;
+  if (id === B.PISTON_HEAD || (id >= B.SNARE_ARMED && id <= B.SNARE_CHICKEN)) return false;
   if (id === B.OAK_SLAB_TOP || id === B.STONE_SLAB_TOP || id === B.COBBLE_SLAB_TOP || id === B.BRICK_SLAB_TOP || id === B.SANDSTONE_SLAB_TOP || id === B.NETHER_BRICK_SLAB_TOP || id === B.QUARTZ_SLAB_TOP) return false;
   if (id >= B.DOOR_E && id <= B.DOOR_OW) return false;
   if (id >= B.DOOR_UN && id <= B.DOOR_UOW) return false;

@@ -114,6 +114,7 @@ export const I = {
   IRON_SPEAR: 362, IRON_DAGGER: 363, DIAMOND_DAGGER: 364, IRON_HAMMER: 365,
   LEATHER_SHIELD: 366, IRON_SHIELD: 367,
   LIGHT_STRING: 368, STRONG_STRING: 369, LIGHT_BOW: 370, STRONG_BOW: 371,
+  GLOW_ARROW: 372, SLOW_ARROW: 373, MARK_ARROW: 374,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger' | 'hammer';
@@ -210,6 +211,9 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.BONE, name: 'Kość', keys: ['kosc', 'kość', 'bone'], kind: 'material', color: '#efe9d8' },
   { id: I.FEATHER, name: 'Pióro', keys: ['pioro', 'piórko', 'feather'], kind: 'material', color: '#f2f2f0' },
   { id: I.ARROW, name: 'Strzała', keys: ['strzala', 'strzała', 'arrow'], kind: 'material', color: '#c8b08a' },
+  { id: I.GLOW_ARROW, name: 'Świetlna strzała', keys: ['swietlna_strzala', 'glow_arrow'], kind: 'material', color: '#ffec85' },
+  { id: I.SLOW_ARROW, name: 'Spowalniająca strzała', keys: ['spowalniajaca_strzala', 'slow_arrow'], kind: 'material', color: '#83bde9' },
+  { id: I.MARK_ARROW, name: 'Znakująca strzała', keys: ['znakujaca_strzala', 'mark_arrow'], kind: 'material', color: '#ee9381' },
   { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
   { id: I.LIGHT_STRING, name: 'Lekka cięciwa', keys: ['lekka_cieciwa', 'light_bowstring'], kind: 'material', color: '#9be5ec' },
   { id: I.STRONG_STRING, name: 'Mocna cięciwa', keys: ['mocna_cieciwa', 'strong_bowstring'], kind: 'material', color: '#e5ad6b' },
@@ -539,6 +543,12 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
 
 /** Fraction of frontal damage after an ordinary shield block (timed parries are total).
  *  The 2.7 shield retains exactly its old melee and projectile protection. */
+export const ARROW_AMMO = [I.ARROW, I.GLOW_ARROW, I.SLOW_ARROW, I.MARK_ARROW] as const;
+export type ArrowAmmoId = typeof ARROW_AMMO[number];
+export function arrowDuration(id: number): number {
+  return id === I.GLOW_ARROW ? 12 : id === I.SLOW_ARROW ? 6 : id === I.MARK_ARROW ? 18 : 0;
+}
+
 /** Normalised bow draw and damage multiplier. The old bow remains 1s / 1x. */
 export function bowDrawSeconds(id: number): number {
   return id === I.LIGHT_BOW ? 0.65 : id === I.STRONG_BOW ? 1.4 : 1;
@@ -579,6 +589,8 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   const tier = pickTier(toolId);
   const shears = ITEMS[toolId]?.tool === 'shears';
   const fortune = Math.max(0, Math.floor(opts.fortune ?? 0));
+  // A caught snare never drops its saved loot or its armed state as an item.
+  if (blockId >= B.SNARE && blockId <= B.SNARE_CHICKEN) return [{ id: B.SNARE, count: 1 }];
   // Jedwabny dotyk: blok wypada taki, jaki stał (kamień, szkło, ruda, liście…)
   if (opts.silk) {
     if (blockId === B.AIR || BLOCKS[blockId]?.hardness < 0) return [];

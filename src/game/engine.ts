@@ -35,6 +35,7 @@ import {
   ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown, attackReach,
   blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
   shieldDamageFactor, shieldWeightFactor, shieldWear, bowDrawSeconds, bowStrength,
+  ARROW_AMMO, arrowDuration, type ArrowAmmoId,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
@@ -110,6 +111,9 @@ export interface HUDState {
   heldHint: string | null;
   /** -1 when the bow is idle, otherwise the draw charge 0–1. */
   bow: number;
+  ammo?: { id: ArrowAmmoId; count: number } | null;
+  arrowStatus?: { name: string; glow: number; slow: number; marked: number; distance: number; direction: string }[];
+  impactGlow?: { left: number; distance: number } | null;
   /** Experience level (bar above the hotbar). */
   level: number;
   /** 0–1 progress inside the current level. */
@@ -346,6 +350,8 @@ interface ArrowEntity {
   power: number;
   /** The mob that fired it, or null when the player shot it. */
   from: Mob | null;
+  /** Optional ammo type; old, hostile and imported arrows behave normally. */
+  ammoId?: ArrowAmmoId;
   /** Perła Endu: nie rani, tylko teleportuje gracza w miejsce upadku (1.9). */
   pearl?: boolean;
 }
@@ -587,6 +593,10 @@ export class Game {
   private arrows: ArrowEntity[] = [];
   private arrowGeo!: THREE.BufferGeometry;
   private arrowMat!: THREE.MeshBasicMaterial;
+  private arrowMats = new Map<number, THREE.MeshBasicMaterial>();
+  private arrowAmmo: ArrowAmmoId = I.ARROW;
+  /** Light sources from glow arrows in blocks are transient, capped and never generate chunks. */
+  private impactGlows: { mesh: THREE.Mesh; time: number; light: THREE.PointLight }[] = [];
   /** Experience – persisted as a total, level derived from the curve. */
   xp = new Xp(0);
   /** Equipped armor: [head, chest, legs, feet]. */
@@ -1254,6 +1264,7 @@ export class Game {
     if (e.code === 'KeyM') { this.showMinimap = !this.showMinimap; this.emitHud(); return; }
     if (e.code === 'KeyJ') { e.preventDefault(); this.setUI('journal'); return; }
     if (e.code === 'KeyK') { e.preventDefault(); this.setUI('waypoints'); return; }
+    if (e.code === 'KeyX') { e.preventDefault(); this.cycleArrowAmmo(); return; }
     if (e.code === 'KeyG' && this.zooming) { e.preventDefault(); this.markSpyglass(); return; }
     if (e.code.startsWith('Digit') || e.code.startsWith('Numpad')) {
       const n = parseInt(e.code.slice(e.code.startsWith('Digit') ? 5 : 6), 10);
@@ -2501,6 +2512,8 @@ export class Game {
   }
 
   private stashLiveEntities() {
+    for (const glow of this.impactGlows ?? []) this.removeImpactGlow(glow);
+    this.impactGlows = [];
     const s = this.dimStash[this.isInNether ? 'nether' : 'home'];
     for (const m of this.mobs) this.scene.remove(m.group);
     for (const d of this.drops) this.scene.remove(d.mesh);
@@ -3313,6 +3326,24 @@ export class Game {
     }
   }
 
+  /** Choose arrow type with X or the touch button, never creating ammo. */
+  cycleArrowAmmo(): ArrowAmmoId {
+    if (this.ui !== 'playing' || ITEMS[this.selectedStack()?.id ?? 0]?.tool !== 'bow') return this.arrowAmmo;
+    const available = ARROW_AMMO.filter((id) => this.mode === 'creative' || this.inventory.countOf(id) > 0);
+    if (!available.length) { this.message('Nie masz żadnych strzał.'); return this.arrowAmmo; }
+    const index = available.indexOf(this.arrowAmmo);
+    this.arrowAmmo = available[(index + 1) % available.length];
+    this.message(`Amunicja: ${displayName(this.arrowAmmo)} (${this.mode === 'creative' ? '∞' : this.inventory.countOf(this.arrowAmmo)})`);
+    return this.arrowAmmo;
+  }
+
+  /** Fallback to available arrows if the selected stack runs out; no phantom ammo. */
+  private selectedArrowAmmo(): ArrowAmmoId {
+    if (this.mode === 'creative' || this.inventory.countOf(this.arrowAmmo) > 0) return this.arrowAmmo;
+    this.arrowAmmo = ARROW_AMMO.find((id) => this.inventory.countOf(id) > 0) ?? I.ARROW;
+    return this.arrowAmmo;
+  }
+
   /** Fires an arrow when the player lets go of RMB while holding a bow. */
   private releaseBow() {
     const charge = Math.max(0.12, Math.min(1, this.bowDraw));
@@ -3320,17 +3351,21 @@ export class Game {
     const bow = this.selectedStack();
     const power = powerFactor(enchLevel(bow, 'power'));
     const infinite = enchLevel(bow, 'infinity') > 0;
-    if (this.mode === 'survival' && this.inventory.countOf(I.ARROW) <= 0) {
+    const ammo = this.selectedArrowAmmo();
+    if (this.mode === 'survival' && this.inventory.countOf(ammo) <= 0) {
       this.message('Brak strzał. Wytwórz je z krzemienia, patyka i pióra.');
       return;
     }
+    // Do not spend finite special ammo if the projectile budget cannot spawn a shot.
+    if (this.arrows?.length > 48) { this.message('Za dużo strzał w locie.'); return; }
     // Nieskończoność: jedna strzała w ekwipunku wystarczy na wiele wystrzałów
-    if (this.mode === 'survival' && !infinite) this.inventory.remove(I.ARROW, 1);
+    // Infinity stays compatible with the ordinary bow, but cannot duplicate special reagents.
+    if (this.mode === 'survival' && (!infinite || ammo !== I.ARROW)) this.inventory.remove(ammo, 1);
     const eye = this.eyePos();
     // 2.5: na dotyku strzała leci tam, gdzie celuje palec (touchAim),
     // a nie w środek ekranu – wcześniej naciąganie łuku celowało „obok”.
     const d = this.aimDir ?? this.lookDir();
-    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, (4 + charge * 5) * power * bowStrength(bow?.id ?? I.BOW));
+    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, (4 + charge * 5) * power * bowStrength(bow?.id ?? I.BOW), ammo);
     Sfx.playBow();
     this.swingT = 0;
     this.wearTool();
@@ -3566,15 +3601,47 @@ export class Game {
   }
 
   /** Spawns a flying arrow. `from` is the mob that shot it (null = player). */
-  spawnArrow(origin: THREE.Vector3, dir: THREE.Vector3, speed: number, from: Mob | null, power: number) {
+  spawnArrow(origin: THREE.Vector3, dir: THREE.Vector3, speed: number, from: Mob | null, power: number, ammoId: ArrowAmmoId = I.ARROW) {
     if (this.arrows.length > 48) return;
-    const mesh = new THREE.Mesh(this.arrowGeo, this.arrowMat);
+    let material = this.arrowMat;
+    this.arrowMats ??= new Map();
+    if (!from && ammoId !== I.ARROW) {
+      material = this.arrowMats.get(ammoId) ?? new THREE.MeshBasicMaterial({ color:
+        ammoId === I.GLOW_ARROW ? 0xffee79 : ammoId === I.SLOW_ARROW ? 0x72c2ed : 0xee8477 });
+      this.arrowMats.set(ammoId, material);
+    }
+    const mesh = new THREE.Mesh(this.arrowGeo, material);
     mesh.position.copy(origin);
     this.scene.add(mesh);
-    this.arrows.push({ mesh, pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), life: 0, power, from });
+    this.arrows.push({ mesh, pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), life: 0, power, from, ammoId: from ? I.ARROW : ammoId });
+  }
+
+  private addImpactGlow(pos: THREE.Vector3) {
+    if (this.impactGlows.length >= 8) this.removeImpactGlow(this.impactGlows.shift()!);
+    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffe668, depthWrite: false }));
+    mesh.position.copy(pos);
+    const light = new THREE.PointLight(0xffe077, 1, 5, 2);
+    light.visible = this.gfx?.effectDetail === 'full' && this.impactGlows.length < 3;
+    mesh.add(light);
+    this.scene.add(mesh);
+    this.impactGlows.push({ mesh, light, time: arrowDuration(I.GLOW_ARROW) });
+  }
+
+  private removeImpactGlow(g: { mesh: THREE.Mesh }) {
+    this.scene.remove(g.mesh);
+    g.mesh.geometry.dispose();
+    (g.mesh.material as THREE.Material).dispose();
   }
 
   private updateArrows(dt: number) {
+    this.impactGlows ??= [];
+    this.impactGlows = this.impactGlows.filter((g, index) => {
+      g.time -= dt;
+      if (g.time <= 0) { this.removeImpactGlow(g); return false; }
+      g.light.visible = this.gfx?.effectDetail === 'full' && index < 3;
+      return true;
+    });
     const keep: ArrowEntity[] = [];
     for (const a of this.arrows) {
       a.life += dt;
@@ -3590,7 +3657,10 @@ export class Game {
         prev = a.pos.clone();
         a.pos.addScaledVector(dir, stepLen);
         const block = this.world.peekBlock(Math.floor(a.pos.x), Math.floor(a.pos.y), Math.floor(a.pos.z));
-        if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) { spent = true; break; }
+        if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) {
+          if (a.ammoId === I.GLOW_ARROW && !a.from) this.addImpactGlow(prev ?? a.pos);
+          spent = true; break;
+        }
         if (a.from) {
           // hostile arrow vs player – a shield in hand parries it
           const p = this.body.pos;
@@ -3633,6 +3703,8 @@ export class Game {
             ) {
               if (a.pearl) { spent = true; break; }
               if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2)) {
+                if (a.ammoId && a.ammoId !== I.ARROW && m.applyArrowEffect(a.ammoId))
+                  this.message(`${displayName(a.ammoId)}: ${arrowDuration(a.ammoId)} s na ${MOB_NAMES[m.type] ?? m.type}`);
                 if (m.dead && isHostileMob(m.type)) this.advanceChallenge('challenge_hunter');
                 mb.vel.x += dir.x * 4;
                 mb.vel.z += dir.z * 4;
@@ -3660,6 +3732,46 @@ export class Game {
     this.arrows = keep;
   }
 
+  /** Hunting snares have no hidden loot state: the block ID is the saved state.
+   * One string arms one catch. Harvest consumes the catch before spawning loot. */
+  private useSnare(x: number, y: number, z: number) {
+    const id = this.world.getBlock(x, y, z);
+    if (id === B.SNARE) {
+      if (this.mode === 'survival' && this.inventory.countOf(I.STRING) < 1) {
+        this.message('Sidła: potrzebujesz 1 struny, aby je uzbroić.'); return;
+      }
+      if (this.mode === 'survival') this.inventory.remove(I.STRING, 1);
+      this.world.setBlock(x, y, z, B.SNARE_ARMED);
+      this.message('Sidła uzbrojone. Zostaw je na ścieżce dzikich królików lub kurczaków.');
+    } else if (id === B.SNARE_ARMED) {
+      this.world.setBlock(x, y, z, B.SNARE);
+      this.message('Sidła rozbrojone.');
+    } else if (id === B.SNARE_RABBIT || id === B.SNARE_CHICKEN) {
+      this.world.setBlock(x, y, z, B.SNARE); // consume first: no duplicate on second tap / reload
+      if (this.mode === 'survival') this.spawnDrop(id === B.SNARE_RABBIT ? I.RAW_RABBIT : I.RAW_CHICKEN,
+        1, x + 0.5, y + 0.2, z + 0.5);
+      this.message('Zebrano zdobycz z sideł. Do kolejnego łowu potrzebna jest nowa struna.');
+    }
+    this.emitHud();
+  }
+
+  /** Only a wild, living animal on an armed, already loaded ground tile can be caught.
+   * Prevent normal death loot, so a single animal never pays twice. */
+  private trySnareMob(m: Mob) {
+    if (m.dead || m.trust > 0 || (m.type !== 'rabbit' && m.type !== 'chicken')) return false;
+    const p = m.body.pos;
+    const x = Math.floor(p.x), z = Math.floor(p.z), y = Math.floor(p.y);
+    if (Math.abs(p.x - x - 0.5) > 0.57 || Math.abs(p.z - z - 0.5) > 0.57) return false;
+    for (const ty of [y, y - 1]) {
+      if (p.y - ty > 1.25 || this.world.peekBlock(x, ty, z) !== B.SNARE_ARMED) continue;
+      this.world.setBlock(x, ty, z, m.type === 'rabbit' ? B.SNARE_RABBIT : B.SNARE_CHICKEN);
+      m.health = 0; m.dead = true; m.deathTime = 0; m.looted = true;
+      if (p.distanceTo(this.body.pos) < 16) this.message(`Sidła złapały ${m.type === 'rabbit' ? 'królika' : 'kurczaka'}!`);
+      return true;
+    }
+    return false;
+  }
+
   tryUse() {
     const t = this.target;
     this.placeCooldown = 0.22;
@@ -3674,6 +3786,7 @@ export class Game {
       if (t.id === B.BELL) { this.ringBell(t.x, t.y, t.z); return; }
       if (isDoor(t.id)) { this.toggleDoor(t.x, t.y, t.z); return; }
       if (isTrap(t.id)) { this.toggleTrap(t.x, t.y, t.z, t.nx, t.nz); return; }
+      if (t.id >= B.SNARE && t.id <= B.SNARE_CHICKEN) { this.useSnare(t.x, t.y, t.z); return; }
       if (t.id === B.CHEST || t.id === B.LOOT_CHEST) { this.openChest(t.x, t.y, t.z); return; }
       if (t.id === B.CRAFTING) { this.openInventory(true); return; }
       if (t.id === B.FURNACE || t.id === B.FURNACE_ON) { this.openFurnace(t.x, t.y, t.z); return; }
@@ -3805,6 +3918,8 @@ export class Game {
     } else if (id === B.LEVER || id === B.BUTTON || id === B.REDSTONE_TORCH || id === B.REDSTONE_TORCH_OFF) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
       if (!IS_SOLID[attached]) { this.message('Dźwignia/przycisk musi być na solidnej ścianie.'); return; }
+    } else if (id === B.SNARE) {
+      if (!IS_SOLID[below] || below === B.CAMPFIRE) { this.message('Sidła stawia się na suchym, solidnym podłożu.'); return; }
     } else if (id === B.RAIL || id === B.POWERED_RAIL || id === B.DETECTOR_RAIL) {
       if (!IS_SOLID[below]) { this.message('Tory kładzie się na solidnym podłożu.'); return; }
     } else if (isStairs(id)) {
@@ -3885,7 +4000,9 @@ export class Game {
 
   pickBlock() {
     if (!this.target) return;
-    const id = this.target.id;
+    // Never pick an armed/filled trap state into an inventory stack.
+    const id = this.target.id >= B.SNARE_ARMED && this.target.id <= B.SNARE_CHICKEN
+      ? B.SNARE : this.target.id;
     const hot = this.inventory.slots.findIndex((s, i) => i < 9 && s && s.id === id);
     if (hot >= 0) { this.selected = hot; this.emitHud(); return; }
     // 2.3: ŚPM działa też dla przedmiotu leżącego poza paskiem – przenosimy
@@ -4749,6 +4866,7 @@ export class Game {
     const p = this.body.pos;
     const dl = this.daylight();
     const peaceful = this.mode === 'creative';
+    let arrowLights = 0;
     for (const m of this.mobs) {
       if (isTrustAnimal(m.type) && m.trust > 0 && !m.dead && m.body.pos.distanceTo(p) > 90) continue;
       m.update(dt, this.world, p, (dmg, mob) => {
@@ -4800,6 +4918,10 @@ export class Game {
         return true;
       }, dl, this.weather === 'rain' && !this.isInNether &&
         this.world.surface(Math.floor(m.body.pos.x), Math.floor(m.body.pos.z)).biome !== 'Pustynia', this.time, this.noiseEvents);
+      this.trySnareMob(m);
+      const lit = this.gfx?.effectDetail === 'full' && m.arrowGlow > 0 && !m.dead && arrowLights < 3;
+      m.setArrowGlowLight?.(lit);
+      if (lit) arrowLights++;
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
         if (m.type !== 'midge' && (m.type !== 'bat' || dl < 0.5) && m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
@@ -5219,6 +5341,21 @@ export class Game {
       minimap: this.showMinimap,
       heldHint: this.heldHint(),
       bow: this.bowDraw,
+      ammo: ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'bow' ? {
+        id: this.selectedArrowAmmo(), count: this.mode === 'creative' ? -1 : this.inventory.countOf(this.arrowAmmo),
+      } : null,
+      arrowStatus: this.mobs.filter((m) => !m.dead && (m.arrowGlow > 0 || m.arrowSlow > 0 || m.arrowMark > 0))
+        .map((m) => {
+          const dx = m.body.pos.x - p.x, dz = m.body.pos.z - p.z;
+          const angle = Math.atan2(-dx, -dz) - this.yaw;
+          const turn = Math.atan2(Math.sin(angle), Math.cos(angle));
+          return { name: MOB_NAMES[m.type] ?? m.type, glow: m.arrowGlow, slow: m.arrowSlow,
+            marked: m.arrowMark, distance: Math.round(Math.hypot(dx, dz)),
+            direction: Math.abs(turn) < Math.PI / 4 ? '↑' : Math.abs(turn) > 3 * Math.PI / 4 ? '↓' : turn > 0 ? '→' : '←' };
+        }).filter((m) => m.distance <= (m.marked > 0 ? 96 : 24))
+        .sort((a, b) => (b.marked > 0 ? 1 : 0) - (a.marked > 0 ? 1 : 0) || a.distance - b.distance).slice(0, 3),
+      impactGlow: this.impactGlows.map((g) => ({ left: g.time, distance: Math.round(g.mesh.position.distanceTo(p)) }))
+        .filter((g) => g.distance < 24).sort((a, b) => a.distance - b.distance)[0] ?? null,
       level: this.xp.info().level,
       xpFrac: (() => { const i = this.xp.info(); return i.need > 0 ? i.inLevel / i.need : 0; })(),
       armor: this.armor.map((s) => (s ? { ...s } : null)),
@@ -5260,6 +5397,9 @@ export class Game {
   }
 
   private heldHint(): string | null {
+    if (this.target?.id === B.SNARE) return 'Sidła: PPM / tap, aby uzbroić za 1 strunę';
+    if (this.target?.id === B.SNARE_ARMED) return 'Sidła uzbrojone: PPM / tap, aby rozbroić';
+    if (this.target?.id === B.SNARE_RABBIT || this.target?.id === B.SNARE_CHICKEN) return 'Sidła ze zdobyczą: PPM / tap, aby zebrać mięso';
     const sel = this.selectedStack();
     const id = sel?.id;
     const ench = sel?.ench ? enchList(sel) : null;
@@ -5270,9 +5410,11 @@ export class Game {
     if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
     if (id === I.IRON_SPEAR) return 'Włócznia: 5 bloków zasięgu · cios co 0,92 s · LPM / tap / ⛏';
     if (id === I.IRON_HAMMER) return 'Młot: 8 obrażeń · rozmach do 2 celów · cios co 1,1 s · LPM / tap / ⛏';
-    if (id === I.LIGHT_BOW || id === I.STRONG_BOW) return id === I.LIGHT_BOW
-      ? 'Lekki łuk: pełen naciąg w 0,65 s · 80% siły strzały · przytrzymaj PPM / palec'
-      : 'Mocny łuk: pełen naciąg w 1,4 s · 130% siły strzały · przytrzymaj PPM / palec';
+    if (ITEMS[id ?? 0]?.tool === 'bow') {
+      const label = id === I.LIGHT_BOW ? 'Lekki łuk: 0,65 s / 80%' :
+        id === I.STRONG_BOW ? 'Mocny łuk: 1,4 s / 130%' : 'Łuk: 1 s / 100%';
+      return `${label} · X / ➟ wybierz strzałę · przytrzymaj i puść PPM / palec`;
+    }
     if (id === I.LEATHER_SHIELD) return 'Skórzana tarcza: lekka · 35% cios / 60% strzała · R / 🛡 paruj';
     if (id === I.IRON_SHIELD) return 'Żelazna tarcza: ciężka · 70% cios / 85% strzała · R / 🛡 paruj';
     if (id === I.IRON_DAGGER || id === I.DIAMOND_DAGGER) return 'Sztylet: 2,2 bloku · cios co 0,28 s · V / ↝ i LPM / tap / ⛏ = kontra +3';
@@ -5326,7 +5468,10 @@ export class Game {
       const name = MOB_NAMES[mob.type];
       return mob.tamed ? `${name} oswojony · zaufanie 3/3` : `${name} · zaufanie ${mob.trust}/3 · karm ${food}`;
     }
-    return `${MOB_NAMES[mob.type] ?? mob.type} · ${Math.max(0, Math.round(mob.health))}/${mob.maxHealth} HP`;
+    const statuses = [mob.arrowGlow > 0 ? `światło ${Math.ceil(mob.arrowGlow)}s` : '',
+      mob.arrowSlow > 0 ? `spowolnienie ${Math.ceil(mob.arrowSlow)}s` : '',
+      mob.arrowMark > 0 ? `znak ${Math.ceil(mob.arrowMark)}s` : ''].filter(Boolean).join(' · ');
+    return `${MOB_NAMES[mob.type] ?? mob.type} · ${Math.max(0, Math.round(mob.health))}/${mob.maxHealth} HP${statuses ? ' · ' + statuses : ''}`;
   }
 
   /** Rozgląda się, czy gracz stoi w wiosce; pierwsze wejście to osiągnięcie. */
@@ -5966,6 +6111,10 @@ export class Game {
     this.handMat.dispose();
     this.dropMat.dispose();
     this.arrowMat.dispose();
+    for (const mat of this.arrowMats.values()) mat.dispose();
+    this.arrowMats.clear();
+    for (const glow of this.impactGlows ?? []) this.removeImpactGlow(glow);
+    this.impactGlows = [];
     this.arrowGeo.dispose();
     this.tntGeo.dispose();
     this.selection.geometry.dispose();

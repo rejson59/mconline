@@ -1,5 +1,6 @@
 import type { Stack } from '../game/inventory';
 import { displayName, I } from '../game/items';
+import { B } from '../game/blocks';
 import { enchList } from '../game/enchant';
 import { POTIONS } from '../game/brewing';
 
@@ -22,6 +23,10 @@ export function stackTooltip(s: Stack | null | undefined, fallback = ''): string
     s.id === I.IRON_HAMMER ? '\n8 obrażeń, 1,1 s między ciosami. Rozmach przy trafieniu do 2 dodatkowych celów; szybsze kruszenie kamienia, bruku, cegieł, czernitu i bazaltu, bez niszczenia sąsiednich bloków.' :
     s.id === I.LEATHER_SHIELD ? '\nLekka tarcza: 35% ochrony przed ciosem, 60% przed strzałą; szybsze zużycie, bez spowolnienia.' :
     s.id === I.IRON_SHIELD ? '\nCiężka tarcza: 70% ochrony przed ciosem, 85% przed strzałą; ruch o 15% wolniejszy w dłoni.' :
+    s.id === B.SNARE ? '\nUłóż 2 struny nad 2 patykami. Postaw na ziemi, PPM/tap uzbrój za kolejną strunę. Dziki królik lub kurczak zostawi jedno mięso; zbierz PPM/tap. Bez automatycznych łupów przy rozbiciu.' :
+    s.id === I.GLOW_ARROW ? '\nŚwieci 12 s na trafionej istocie lub ścianie. Wybierz X lub przyciskiem ➟.' :
+    s.id === I.SLOW_ARROW ? '\nTrafioną istotę spowalnia o 45% na 6 s. Wybierz X lub przyciskiem ➟.' :
+    s.id === I.MARK_ARROW ? '\nPokazuje trafioną istotę i kierunek na HUD przez 18 s. Wybierz X lub przyciskiem ➟.' :
     s.id === I.LIGHT_BOW ? '\nPełen naciąg w 0,65 s, 80% siły standardowego łuku. Ta sama amunicja i zaklęcia.' :
     s.id === I.STRONG_BOW ? '\nPełen naciąg w 1,4 s, 130% siły standardowego łuku. Ta sama amunicja i zaklęcia.' :
     s.id === I.IRON_DAGGER || s.id === I.DIAMOND_DAGGER ?

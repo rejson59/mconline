@@ -3,7 +3,7 @@ import { CS, type World, type Biome } from './world';
 import { stepBody, type Body } from './physics';
 import { boundedPathStep } from './pathfinding';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
-import { I, isFood } from './items';
+import { I, isFood, arrowDuration } from './items';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 
 export type MobType = 'echolurker' | 'sandstalker' | 'merchant' | 'pack_animal' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
@@ -229,6 +229,13 @@ export class Mob {
   health: number;
   maxHealth: number;
   hurtTime = 0;
+  /** Arrow statuses are transient like hurtTime, never persisted in older saves. */
+  arrowGlow = 0;
+  arrowSlow = 0;
+  arrowMark = 0;
+  private glowTag: THREE.Mesh | null = null;
+  private markTag: THREE.Mesh | null = null;
+  private glowLight: THREE.PointLight | null = null;
   dead = false;
   deathTime = 0;
   aiTimer = 0;
@@ -1236,17 +1243,53 @@ export class Mob {
     }
   }
 
+  /** Status timers refresh but never stack beyond one effect of each kind. */
+  applyArrowEffect(ammoId: number): boolean {
+    if (this.dead) return false;
+    const seconds = arrowDuration(ammoId);
+    if (!seconds) return false;
+    if (ammoId === I.SLOW_ARROW) this.arrowSlow = seconds;
+    else if (ammoId === I.GLOW_ARROW) {
+      this.arrowGlow = seconds;
+      if (!this.glowTag) {
+        this.glowTag = this.arrowTag(0xffe86b, -0.23);
+        this.glowLight = new THREE.PointLight(0xffdf72, 1.1, 5, 2);
+        this.glowLight.visible = false; // low preset never pays the lighting cost
+        this.glowTag.add(this.glowLight);
+      }
+      this.glowTag.visible = true;
+    } else if (ammoId === I.MARK_ARROW) {
+      this.arrowMark = seconds;
+      if (!this.markTag) this.markTag = this.arrowTag(0xf48a84, 0.23);
+      this.markTag.visible = true;
+    }
+    return true;
+  }
+
+  private arrowTag(color: number, offset: number): THREE.Mesh {
+    const tag = new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0),
+      new THREE.MeshBasicMaterial({ color, depthWrite: false }));
+    tag.userData.arrowTag = true;
+    tag.position.set(offset, this.body.h + 0.25, 0);
+    this.group.add(tag);
+    return tag;
+  }
+
+  setArrowGlowLight(enabled: boolean) {
+    if (this.glowLight) this.glowLight.visible = enabled && this.arrowGlow > 0 && !this.dead;
+  }
+
   setTint(red: boolean) {
     this.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      if (mesh.isMesh) (mesh.material as THREE.MeshLambertMaterial).emissive.setHex(red ? 0x770000 : 0x000000);
+      if (mesh.isMesh && !mesh.userData.arrowTag) (mesh.material as THREE.MeshLambertMaterial).emissive.setHex(red ? 0x770000 : 0x000000);
     });
   }
 
   setFlash(on: boolean) {
     this.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      if (mesh.isMesh) (mesh.material as THREE.MeshLambertMaterial).emissive.setHex(on ? 0xaaaaaa : 0x000000);
+      if (mesh.isMesh && !mesh.userData.arrowTag) (mesh.material as THREE.MeshLambertMaterial).emissive.setHex(on ? 0xaaaaaa : 0x000000);
     });
   }
 
@@ -1700,8 +1743,8 @@ export class Mob {
         const dx = this.home.x - b.pos.x, dz = this.home.z - b.pos.z;
         this.yaw = Math.hypot(dx, dz) > 6 ? Math.atan2(dx, dz) : Math.random() * Math.PI * 2;
       }
-      const nx = b.pos.x + Math.sin(this.yaw) * dt * 1.5;
-      const nz = b.pos.z + Math.cos(this.yaw) * dt * 1.5;
+      const nx = b.pos.x + Math.sin(this.yaw) * dt * 1.5 * (this.arrowSlow > 0 ? 0.55 : 1);
+      const nz = b.pos.z + Math.cos(this.yaw) * dt * 1.5 * (this.arrowSlow > 0 ? 0.55 : 1);
       const goalY = this.home.y + Math.sin(this.walkPhase) * 0.7;
       const ny = b.pos.y + (goalY - b.pos.y) * Math.min(1, dt * 4);
       if (world.peekBlock(Math.floor(nx), Math.floor(ny), Math.floor(nz)) === B.AIR) b.pos.set(nx, ny, nz);
@@ -1732,8 +1775,8 @@ export class Mob {
       const dx = this.home.x - b.pos.x, dz = this.home.z - b.pos.z;
       this.yaw = Math.hypot(dx, dz) > 3 ? Math.atan2(dx, dz) : Math.random() * Math.PI * 2;
     }
-    const nx = b.pos.x + Math.sin(this.yaw) * dt * 0.9;
-    const nz = b.pos.z + Math.cos(this.yaw) * dt * 0.9;
+    const nx = b.pos.x + Math.sin(this.yaw) * dt * 0.9 * (this.arrowSlow > 0 ? 0.55 : 1);
+    const nz = b.pos.z + Math.cos(this.yaw) * dt * 0.9 * (this.arrowSlow > 0 ? 0.55 : 1);
     const ny = this.home.y + Math.sin(this.walkPhase * 1.6) * 0.23;
     if (world.peekBlock(Math.floor(nx), Math.floor(ny), Math.floor(nz)) === B.AIR) b.pos.set(nx, ny, nz);
     else this.yaw += Math.PI / 2;
@@ -2023,6 +2066,12 @@ export class Mob {
     noises: readonly CaveNoise[] = []
   ) {
     const b = this.body;
+    this.arrowGlow = Math.max(0, this.arrowGlow - dt);
+    this.arrowSlow = Math.max(0, this.arrowSlow - dt);
+    this.arrowMark = Math.max(0, this.arrowMark - dt);
+    if (this.glowTag) this.glowTag.visible = this.arrowGlow > 0 && !this.dead;
+    if (this.markTag) this.markTag.visible = this.arrowMark > 0 && !this.dead;
+    if (this.glowLight && this.arrowGlow <= 0) this.glowLight.visible = false;
     if (this.hurtTime > 0) {
       this.hurtTime -= dt;
       if (this.hurtTime <= 0 && !this.dead) this.setTint(false);
@@ -2296,6 +2345,7 @@ export class Mob {
    */
   private moveAndAnimate(dt: number, world: World, player: THREE.Vector3, speed = 0): void {
     const b = this.body;
+    if (this.arrowSlow > 0) speed *= 0.55;
     if (speed > 0) {
       const tx = Math.sin(this.yaw) * speed, tz = Math.cos(this.yaw) * speed;
       b.vel.x += (tx - b.vel.x) * Math.min(1, dt * 10);

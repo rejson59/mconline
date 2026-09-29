@@ -854,6 +854,27 @@ export function buildAtlas(): AtlasResult {
     }
   }
 
+  // Simple cutout silhouette on ground: brown pegs/rope, bright armed loop,
+  // red/buff caught contents. The same 16px tile is downsampled in low preset.
+  for (const [tile, armed, catchColor] of [
+    [T.snare_empty, false, null], [T.snare_armed, true, null],
+    [T.snare_rabbit, false, [213, 139, 126]], [T.snare_chicken, false, [238, 210, 145]],
+  ] as const) {
+    clear(tile);
+    for (let y = 6; y < 16; y++) {
+      setPx(tile, 4, y, 90, 56, 34); setPx(tile, 11, y, 90, 56, 34);
+    }
+    for (let x = 4; x <= 11; x++) {
+      setPx(tile, x, 7, armed ? 240 : 179, armed ? 199 : 148, armed ? 77 : 106);
+      setPx(tile, x, 12, 179, 148, 106);
+    }
+    if (catchColor) for (let y = 8; y < 12; y++) for (let x = 6; x <= 9; x++)
+      setPx(tile, x, y, catchColor[0], catchColor[1], catchColor[2]);
+    if (armed) for (let y = 8; y < 12; y++) {
+      setPx(tile, 5, y, 240, 199, 77); setPx(tile, 10, y, 240, 199, 77);
+    }
+  }
+
   // Commit every appended tile to the GPU atlas BEFORE generating block icons.
   // Previously the 2.7 tiles were painted into ImageData only after the sole
   // putImageData call, so their inventory icons and rendered faces were blank.

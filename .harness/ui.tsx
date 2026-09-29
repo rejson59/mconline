@@ -30,7 +30,7 @@ import InventoryScreen from '../src/components/InventoryScreen';
 import { anvilResult } from '../src/game/anvil';
 import { Inventory, RECIPES } from '../src/game/inventory';
 import { I, isFood, isPotion, stackLimit, displayName } from '../src/game/items';
-import { B, BLOCKS } from '../src/game/blocks';
+import { B, T, BLOCKS, CREATIVE_BLOCKS } from '../src/game/blocks';
 import { applyBrew, emptyBrewing, tickBrewing, POTIONS, HEAL_AMOUNT } from '../src/game/brewing';
 import type { Stack } from '../src/game/inventory';
 import { rollEnchantOptions } from '../src/game/enchant';
@@ -116,6 +116,57 @@ section('3.0 dagger: compact combat feedback in HUD');
   check('dodge counter readiness is visibly announced on small HUD', ready.includes('kontra gotowa!'));
   check('successful dagger hit shows a short-lived damage confirmation', hit.includes('Trafienie') && hit.includes('4 obrażeń'));
   check('counter hit is distinguished visually and reports actual damage', counter.includes('Kontra!') && counter.includes('7 obrażeń'));
+}
+
+section('3.0 #44: hunting snare visuals, help and compact touch feedback');
+{
+  const help = renderToStaticMarkup(<Controls />);
+  check('controls explain crafting, placement, per-catch string cost and touch collection',
+    help.includes('Sidła łowieckie') && help.includes('2 struny nad 2 patykami') &&
+    help.includes('PPM/tap') && help.includes('Każdy kolejny łów wymaga nowej struny'));
+  const tooltip = stackTooltip({ id: B.SNARE, count: 1 });
+  check('snare inventory tooltip explains hunting without direct combat and no break loot',
+    tooltip.includes('Dziki królik lub kurczak') && tooltip.includes('Bez automatycznych łupów'));
+  check('snare states have distinct textures while only base block is obtainable in Creative',
+    BLOCKS[B.SNARE].top === T.snare_empty && BLOCKS[B.SNARE_ARMED].top === T.snare_armed &&
+    BLOCKS[B.SNARE_RABBIT].top === T.snare_rabbit && BLOCKS[B.SNARE_CHICKEN].top === T.snare_chicken &&
+    CREATIVE_BLOCKS.includes(B.SNARE) && !CREATIVE_BLOCKS.includes(B.SNARE_RABBIT));
+  const base = {
+    mode: 'survival', health: 20, hunger: 20, air: 10, maxAir: 10,
+    hotbar: Array(9).fill(null), selected: 0, armor: [null, null, null, null],
+    time: 0, fishing: 'idle', messages: [], effects: [], bow: -1,
+    level: 0, xpFrac: 0, loading: 1,
+  };
+  const touch = renderToStaticMarkup(<HUD hud={{ ...base, heldHint: 'Sidła ze zdobyczą: PPM / tap, aby zebrać mięso' } as never} icons={{}} touchControls />);
+  check('small/touch HUD displays snare harvest hint without a separate modal',
+    touch.includes('Sidła ze zdobyczą') && touch.includes('tap, aby zebrać mięso'));
+}
+
+section('3.0 #43: arrow ammo, durations and target directions stay visible on compact HUD');
+{
+  const base = {
+    mode: 'survival', health: 20, hunger: 20, air: 10, maxAir: 10,
+    hotbar: Array(9).fill(null), selected: 0, armor: [null, null, null, null],
+    time: 0, fishing: 'idle', messages: [], effects: [], bow: -1,
+    level: 0, xpFrac: 0, loading: 1,
+  };
+  const marked = renderToStaticMarkup(<HUD hud={{ ...base,
+    ammo: { id: I.GLOW_ARROW, count: 3 },
+    arrowStatus: [{ name: 'Zombie', glow: 11.2, slow: 5.1, marked: 17.2, direction: '←', distance: 12 }],
+    impactGlow: { left: 9.1, distance: 7 },
+  } as never} icons={{ [I.GLOW_ARROW]: 'data:image/png;base64,AAA' }} />);
+  check('selected special arrow icon, ammo count and PC shortcut render',
+    marked.includes('Świetlna strzała') && marked.includes('· 3 · X zmień') && marked.includes('data:image/png;base64,AAA'));
+  check('marked target shows direction and distance with rounded-down time remaining',
+    marked.includes('← 12 m') && marked.includes('Światło 12 s') && marked.includes('Spowolnienie 6 s') && marked.includes('Znak 18 s'));
+  check('wall glow offers a duration and range even without particles',
+    marked.includes('Światło na ścianie 10 s') && marked.includes('7 m'));
+  const touch = renderToStaticMarkup(<HUD hud={{ ...base, ammo: { id: I.MARK_ARROW, count: -1 }, arrowStatus: [], impactGlow: null } as never} icons={{}} touchControls />);
+  check('Creative touch HUD announces free special ammo and the touch switch',
+    touch.includes('Znakująca strzała') && touch.includes('∞') && touch.includes('➟ zmień'));
+  const controls = renderToStaticMarkup(<Controls />);
+  check('PC and touch control hints document all three arrow effects',
+    controls.includes('świetlne') && controls.includes('spowolnienie') && controls.includes('oznaczenie celu') && controls.includes('X'));
 }
 
 section('inventory screen: recipe finder');
@@ -622,8 +673,9 @@ async function mountWithJsdom(): Promise<boolean> {
   const touchContainer = w.document.createElement('div');
   w.document.body.appendChild(touchContainer);
   const touchRoot = createRoot(touchContainer);
-  let thrown = 0, dodged = 0, parried = 0;
+  let thrown = 0, dodged = 0, parried = 0, ammoSwitches = 0;
   const touchGame = { flying: false, mode: 'survival', keys: new Set<string>(), isZooming: () => false,
+    selectedStack: () => ({ id: I.BOW, count: 1 }), cycleArrowAmmo: () => { ammoSwitches++; },
     dropItem: () => { thrown++; }, tryDodge: () => { dodged++; }, tryTimedGuard: () => { parried++; } };
   await React.act(async () => {
     touchRoot.render(<TouchControls game={touchGame as unknown as Game} settings={{ ...DEFAULT_SETTINGS, touchMode: 'tap' }}
@@ -643,11 +695,21 @@ async function mountWithJsdom(): Promise<boolean> {
       button?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
   });
   check('touch defense buttons call the live Game defensive methods', dodged === 1 && parried === 1);
+  const ammoButton = touchContainer.querySelector('[aria-label="Wybierz strzałę"]') as HTMLButtonElement | null;
+  await React.act(async () => {
+    ammoButton?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
+  });
+  check('bow in touch tap mode exposes an accessible ammo switch wired to Game', !!ammoButton && ammoSwitches === 1);
   await React.act(async () => {
     touchRoot.render(<TouchControls game={touchGame as unknown as Game} settings={{ ...DEFAULT_SETTINGS, touchMode: 'buttons' }}
       onInventory={noop} onPause={noop} onChat={noop} onWaypoints={noop} />);
   });
   check('dodge and parry remain available in touch button mode', !!touchContainer.querySelector('[aria-label="Unik"]') && !!touchContainer.querySelector('[aria-label="Parowanie tarczą"]'));
+  const secondAmmo = touchContainer.querySelector('[aria-label="Wybierz strzałę"]') as HTMLButtonElement | null;
+  await React.act(async () => {
+    secondAmmo?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
+  });
+  check('touch button mode also cycles ammo without a keyboard', !!secondAmmo && ammoSwitches === 2);
   await React.act(async () => { touchRoot.unmount(); });
   touchContainer.remove();
 

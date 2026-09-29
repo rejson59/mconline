@@ -181,6 +181,21 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         </div>
       )}
 
+      {/* Lightweight indicators remain readable without particles and on low graphics. */}
+      {(hud.arrowStatus?.length || hud.impactGlow) ? (
+        <div className="pointer-events-none absolute left-2 top-[32%] max-w-[min(46vw,230px)] space-y-1 text-xs mc-text sm:left-auto sm:right-2 sm:top-[28%]" role="status">
+          {hud.arrowStatus?.map((m, i) => (
+            <div key={`${m.name}-${i}`} className="bg-black/70 px-1.5 py-1">
+              <span className="text-yellow-200">{m.marked > 0 ? `⌖ ${m.direction} ${m.distance} m · ` : ''}{m.name}</span>
+              {m.glow > 0 && <span className="block text-yellow-200">✦ Światło {Math.ceil(m.glow)} s</span>}
+              {m.slow > 0 && <span className="block text-blue-200">❄ Spowolnienie {Math.ceil(m.slow)} s</span>}
+              {m.marked > 0 && <span className="block text-red-200">⌖ Znak {Math.ceil(m.marked)} s</span>}
+            </div>
+          ))}
+          {hud.impactGlow && <div className="bg-black/70 px-1.5 py-1 text-yellow-200">✦ Światło na ścianie {Math.ceil(hud.impactGlow.left)} s · {hud.impactGlow.distance} m</div>}
+        </div>
+      ) : null}
+
       {/* 2.2: aktywny punkt podróży — strzałka obraca się względem kierunku patrzenia. */}
       {hud.waypoint && !hud.debug && (
         <div className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2 border border-black bg-black/60 px-3 py-1 text-sm mc-text">
@@ -309,7 +324,11 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
             <div className="flex gap-[2px]">{drums}</div>
           </div>
         )}
-        {hud.heldHint && <div className="mb-1 text-sm text-yellow-200 mc-text">{hud.heldHint}</div>}
+        {hud.heldHint && <div className="mb-1 max-w-[min(95vw,580px)] text-center text-sm text-yellow-200 mc-text">{hud.heldHint}</div>}
+        {hud.ammo && <div className="mb-1 flex items-center gap-1 bg-black/70 px-2 py-0.5 text-xs mc-text" role="status">
+          <img src={icons[hud.ammo.id]} alt="" width={16} height={16} className="pixelated" />
+          {displayName(hud.ammo.id)} · {hud.ammo.count < 0 ? '∞' : hud.ammo.count} · {touchControls ? '➟' : 'X'} zmień
+        </div>}
         {hud.bow >= 0 && (
           <div className="mb-1 flex items-center gap-2">
             <span className="text-sm mc-text">Naciąg</span>
