@@ -517,6 +517,9 @@ section('menus: static render');
   check('wolf trust requires three feedings and persists in help', renderToStaticMarkup(<Controls />).includes('Zaufanie wilka') && renderToStaticMarkup(<Controls />).includes('3/3'));
   check('fox and rabbit trust food and touch controls are explained in help', renderToStaticMarkup(<Controls />).includes('Zaufanie lisów i królików') && renderToStaticMarkup(<Controls />).includes('surowego kurczaka') && renderToStaticMarkup(<Controls />).includes('pszenicę') && renderToStaticMarkup(<Controls />).includes('tap'));
   check('telegraphed attacks and counters are explained in help', renderToStaticMarkup(<Controls />).includes('Sygnały walki'));
+  check('v6 caves and exits have discoverable in-game instructions on desktop and touch',
+    renderToStaticMarkup(<Controls />).includes('Komory i podziemne jeziora') &&
+    renderToStaticMarkup(<Controls />).includes('v2–v5'));
   check('cave listener quiet steps and Q decoy appear in help', renderToStaticMarkup(<Controls />).includes('Jaskiniowy nasłuchiwacz') && renderToStaticMarkup(<Controls />).includes('Shift'));
   check('sand ambush warning and escape appears in help', renderToStaticMarkup(<Controls />).includes('Zasadzkarz pustynny'));
   check('turtle eggs and saved hatching stages appear in help', renderToStaticMarkup(<Controls />).includes('Żółwie i jaja'));

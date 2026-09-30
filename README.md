@@ -385,6 +385,6 @@ a w drugim `CHROME_BIN=/ścieżka/do/chromium npm run test:browser`.
 Opcjonalne `BROWSER_SCREENSHOTS=/katalog/poza-repo` zapisuje obrazy z PC i
 emulowanego telefonu do obejrzenia. Test otwiera światy Creative/Survival,
 weryfikuje WebGL2, obraz wybrany z katalogu Creative i zapis/odczyt
-wersji generatora v5/v4 oraz sterowanie
+wersji generatora v6/v5/v4, komorę jaskini oraz sterowanie
 dotykowe na niskim presecie. Wymaga osobno zainstalowanego Chromium z WebGL2;
 programowy SwiftShader w headless nie zastępuje fizycznego telefonu i GPU.

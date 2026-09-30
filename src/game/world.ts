@@ -3,6 +3,7 @@ import { SimplexNoise } from './noise';
 import { B, T, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
 import { tileUV } from './textures';
 import { CH, CS, FLAT_H, SEA } from './constants';
+import { carveCaveNetwork } from './caves';
 import {
   applyVillages,
   nearestVillage,
@@ -171,7 +172,7 @@ export class World {
    */
   readonly isNether: boolean;
   /** Generator v2 reproduces pre-3.0 seeds for worlds created before the upgrade. */
-  readonly terrainVersion: 2 | 3 | 4 | 5;
+  readonly terrainVersion: 2 | 3 | 4 | 5 | 6;
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
@@ -183,7 +184,7 @@ export class World {
   private nTemp: SimplexNoise;
   private vctx: VillageContext | null = null;
 
-  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 | 4 | 5 = 5) {
+  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 | 4 | 5 | 6 = 6) {
     this.terrainVersion = terrainVersion;
     this.seed = seed;
     this.flat = flat && !nether;
@@ -347,8 +348,8 @@ export class World {
             id = biome === 'Tundra' && y === SEA ? B.ICE : B.WATER;
           }
 
-          // Caves
-          if (id !== B.AIR && id !== B.WATER && id !== B.BEDROCK && id !== B.ICE && y > 4) {
+          // Preserve the old cave topology bit-for-bit for saved v2-v5 worlds.
+          if (this.terrainVersion < 6 && id !== B.AIR && id !== B.WATER && id !== B.BEDROCK && id !== B.ICE && y > 4) {
             const underWater = h < SEA + 2 && y > h - 4;
             if (!underWater && y < h + 1) {
               const a = this.nCave.noise3D(wx / 45, y / 28, wz / 45);
@@ -368,7 +369,7 @@ export class World {
             const cl3 = hash(wx >> 1, y >> 1, wz >> 1, s + 41);
             const cl4 = hash(wx >> 1, y >> 1, wz >> 1, s + 59);
             if (y < 16 && cl < 0.012 && r < 0.6) id = B.DIAMOND_ORE;
-            else if (y > 6 && y < 40 && cl3 > (biome === 'Góry' ? 0.986 : 0.9965) && r < 0.6) id = B.EMERALD_ORE;
+            else if (y > 6 && y < 40 && cl3 > (biome === 'Góry' ? (this.terrainVersion >= 6 ? 0.987 : 0.986) : (this.terrainVersion >= 6 ? 0.9967 : 0.9965)) && r < 0.6) id = B.EMERALD_ORE;
             else if (y < 16 && cl4 > 0.04 && cl4 < 0.07 && r < 0.55) id = B.REDSTONE_ORE;
             else if (y < 32 && cl > 0.985 && r < 0.6) id = B.GOLD_ORE;
             else if (y < 64 && cl > 0.02 && cl < 0.045 && r < 0.6) id = B.IRON_ORE;
@@ -380,6 +381,12 @@ export class World {
         }
 
       }
+
+    if (this.terrainVersion >= 6) {
+      carveCaveNetwork(d, c.cx, c.cz, s,
+        (x, z) => this.surface(x, z).h,
+        (x, z) => villageAt(x, z, this.villageContext()) !== null);
+    }
 
     // Wioski: wyrównują teren i stawiają budynki, zanim pojawią się dekoracje.
     const village = applyVillages(d, c.cx, c.cz, this.villageContext());
