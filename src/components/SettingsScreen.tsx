@@ -10,6 +10,19 @@ import {
   type PresetName,
 } from '../utils/performance';
 
+// Keep the button component identity stable: the HUD refreshes frequently
+// during play, and defining this inside SettingsScreen remounted every option
+// button on each refresh, interrupting touch taps on slower devices.
+const Btn = ({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active?: boolean }) => (
+  <button
+    className={`mc-btn !py-2 !text-[15px] ${active ? 'ring-2 ring-inset ring-yellow-300' : ''}`}
+    onClick={onClick}
+    aria-pressed={active}
+  >
+    {children}
+  </button>
+);
+
 /**
  * BlockCraft 2.0 – wspólny ekran opcji dla menu głównego i pauzy.
  * Zakładki: Grafika (automat jakości + szczegóły), Sterowanie (mysz + dotyk),
@@ -35,7 +48,7 @@ export default function SettingsScreen({
   const set = (patch: Partial<Settings>) => onChange({ ...settings, ...patch });
 
   const pickQuality = (name: 'auto' | PresetName) => {
-    if (name === 'auto') onChange(applyPreset(settings, auto, true));
+    if (name === 'auto') onChange(applyPreset({ ...settings, quality: 'auto' }, auto, true));
     else onChange(applyPreset(settings, name));
   };
 
@@ -67,16 +80,6 @@ export default function SettingsScreen({
     desktop: 'Komputer (mysz + klawiatura)',
     touch: 'Dotyk (telefon / tablet)',
   };
-
-  const Btn = ({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active?: boolean }) => (
-    <button
-      className={`mc-btn !py-2 !text-[15px] ${active ? 'ring-2 ring-inset ring-yellow-300' : ''}`}
-      onClick={onClick}
-      aria-pressed={active}
-    >
-      {children}
-    </button>
-  );
 
   return (
     <div className="flex w-full flex-col gap-3 bg-black/55 p-4">

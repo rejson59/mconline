@@ -911,8 +911,9 @@ async function mountWithJsdom(): Promise<boolean> {
   const touchContainer = w.document.createElement('div');
   w.document.body.appendChild(touchContainer);
   const touchRoot = createRoot(touchContainer);
-  let thrown = 0, dodged = 0, parried = 0, ammoSwitches = 0;
-  const touchGame = { flying: false, mode: 'survival', keys: new Set<string>(), isZooming: () => false,
+  let thrown = 0, dodged = 0, parried = 0, ammoSwitches = 0, used = 0, targeted = 0;
+  const touchGame = { flying: false, mode: 'survival', ui: 'playing', keys: new Set<string>(), isZooming: () => false,
+    mouseRight: false, refreshTarget: () => { targeted++; }, tryUse: () => { used++; },
     selectedStack: () => ({ id: I.BOW, count: 1 }), cycleArrowAmmo: () => { ammoSwitches++; },
     dropItem: () => { thrown++; }, tryDodge: () => { dodged++; }, tryTimedGuard: () => { parried++; } };
   await React.act(async () => {
@@ -948,6 +949,27 @@ async function mountWithJsdom(): Promise<boolean> {
     secondAmmo?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
   });
   check('touch button mode also cycles ammo without a keyboard', !!secondAmmo && ammoSwitches === 2);
+  const placeButton = touchContainer.querySelector('[aria-label="▣"]') as HTMLButtonElement | null;
+  await React.act(async () => {
+    placeButton?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
+    placeButton?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerup', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  check('a quick touch use in button mode works before the next animation frame',
+    !!placeButton && used === 1 && targeted === 2 && !touchGame.mouseRight,
+    `used=${used} targeted=${targeted} held=${touchGame.mouseRight}`);
+  await React.act(async () => {
+    placeButton?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
+    placeButton?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointercancel', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  check('cancelled touch never uses the held item', used === 1 && !touchGame.mouseRight);
+  await React.act(async () => {
+    placeButton?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerdown', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 275));
+    placeButton?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('pointerup', { bubbles: true }));
+  });
+  check('held touch starts use and releases cleanly without a second action', used === 2 && !touchGame.mouseRight);
   await React.act(async () => { touchRoot.unmount(); });
   touchContainer.remove();
 
@@ -965,6 +987,11 @@ async function mountWithJsdom(): Promise<boolean> {
   check('live texture and effect controls respond independently to clicks', gfxContainer.textContent?.includes('Tekstury: Oszczędne') && gfxContainer.textContent?.includes('Efekty: Oszczędne'), gfxContainer.textContent ?? '');
   await React.act(async () => { gfxButton('Tekstury:').click(); });
   check('texture detail cycles to full without changing effects', gfxContainer.textContent?.includes('Tekstury: Pełne') && gfxContainer.textContent?.includes('Efekty: Oszczędne'), gfxContainer.textContent ?? '');
+  await React.act(async () => { gfxButton('Niskie').click(); });
+  check('low quality is selected before returning to Auto', gfxButton('Niskie').getAttribute('aria-pressed') === 'true');
+  await React.act(async () => { gfxButton('Jakość: Auto').click(); });
+  check('Auto is really selected after a manual low preset', gfxButton('Jakość: Auto').getAttribute('aria-pressed') === 'true' &&
+    gfxButton('Niskie').getAttribute('aria-pressed') === 'false');
   await React.act(async () => { gfxRoot.unmount(); });
   gfxContainer.remove();
 

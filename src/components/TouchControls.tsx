@@ -48,11 +48,12 @@ interface BtnProps {
   hint?: string;
   onDown: () => void;
   onUp?: () => void;
+  onCancel?: () => void;
   haptics: boolean;
 }
 
 /** Okrągły przycisk akcji – duży, półprzezroczysty, „majstrowany” pod palec. */
-function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22, hint, onDown, onUp, haptics }: BtnProps) {
+function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22, hint, onDown, onUp, onCancel, haptics }: BtnProps) {
   const [held, setHeld] = useState(false);
   return (
     <button
@@ -84,7 +85,7 @@ function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22,
       }}
       onPointerCancel={() => {
         setHeld(false);
-        onUp?.();
+        if (onCancel) onCancel(); else onUp?.();
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -126,6 +127,8 @@ export default function TouchControls({
   const [jumping, setJumping] = useState(false);
   const [breaking, setBreaking] = useState(false);
   const [placing, setPlacing] = useState(false);
+  const placeTimer = useRef<number | null>(null);
+  const placeTapTimer = useRef<number | null>(null);
   const [sneaking, setSneaking] = useState(false);
   const [flying, setFlying] = useState(game.flying);
   const [creative, setCreative] = useState(game.mode === 'creative');
@@ -156,6 +159,9 @@ export default function TouchControls({
   // Opuszczanie ekranu nigdy nie może zostawić „wciśniętych” klawiszy.
   useEffect(() => {
     const stop = () => {
+      if (placeTimer.current !== null) window.clearTimeout(placeTimer.current);
+      if (placeTapTimer.current !== null) window.clearTimeout(placeTapTimer.current);
+      placeTimer.current = placeTapTimer.current = null;
       pointers.current.clear();
       setStick(null);
       setJumping(false);
@@ -408,14 +414,32 @@ export default function TouchControls({
     } else game.breakProgress = 0;
   };
 
-  const pressPlace = (down: boolean) => {
+  const pressPlace = (down: boolean, cancelled = false) => {
     setPlacing(down);
-    game.mouseRight = down;
     if (down) {
-      // refreshTarget natychmiast przelicza cel, a updateInteraction (już
-      // z wciśniętym mouseRight) wykonuje tryUse dokładnie raz.
-      game.placeCooldown = 0;
+      // The click that follows touch pointerup can land on a newly opened
+      // dialog's Close button. Wait until after that click for a short tap.
+      // A long hold still begins placing/repeating after HOLD_MS.
+      game.mouseRight = false;
       game.refreshTarget();
+      placeTimer.current = window.setTimeout(() => {
+        placeTimer.current = null;
+        if (game.ui !== 'playing') return;
+        game.mouseRight = true;
+        game.tryUse();
+      }, HOLD_MS);
+    } else {
+      game.mouseRight = false;
+      if (placeTimer.current !== null) {
+        window.clearTimeout(placeTimer.current);
+        placeTimer.current = null;
+        if (!cancelled) placeTapTimer.current = window.setTimeout(() => {
+          placeTapTimer.current = null;
+          if (game.ui !== 'playing') return;
+          game.refreshTarget();
+          game.tryUse();
+        }, 0);
+      }
     }
   };
 
@@ -550,7 +574,7 @@ export default function TouchControls({
         {settings.touchMode === 'buttons' && (
           <>
             <div className="absolute" style={{ right: 86, bottom: 148 }}>
-              <ActionButton label="▣" size={58} opacity={placing ? 1 : 0.66} onDown={() => pressPlace(true)} onUp={() => pressPlace(false)} haptics={settings.haptics} />
+              <ActionButton label="▣" size={58} opacity={placing ? 1 : 0.66} onDown={() => pressPlace(true)} onUp={() => pressPlace(false)} onCancel={() => pressPlace(false, true)} haptics={settings.haptics} />
             </div>
             <div className="absolute" style={{ right: 8, bottom: 148 }}>
               <ActionButton label="⛏" size={58} opacity={breaking ? 1 : 0.66} onDown={() => pressBreak(true)} onUp={() => pressBreak(false)} haptics={settings.haptics} />

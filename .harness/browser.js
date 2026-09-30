@@ -187,6 +187,28 @@ try {
   await page.waitForTimeout(1200);
   await page.evaluate(() => { const g = window.blockcraft.game; g.yaw = -Math.PI / 2; g.pitch = 0; g.camera.rotation.set(0, g.yaw, 0); });
   await screenshot(page, 'desktop-painting');
+  // The spyglass must mark a real visible block through the keyboard action,
+  // then release zoom when RMB is released (not get stuck at 24° FOV).
+  await page.evaluate(() => {
+    const g = window.blockcraft.game;
+    g.inventory.slots[0] = { id: 247, count: 1 }; g.selected = 0;
+    g.yaw = -Math.PI / 2; g.pitch = 0;
+  });
+  await page.mouse.click(640, 360, { button: 'right' }); // reacquire pointer lock if needed
+  await page.mouse.down({ button: 'right' });
+  await page.waitForFunction(() => window.blockcraft.game.isZooming(), undefined, { timeout: 5000 });
+  await page.keyboard.press('g');
+  const spyglassMark = await page.evaluate(() => {
+    const g = window.blockcraft.game;
+    return { yaw: g.yaw, pitch: g.pitch, zoom: g.isZooming(),
+      active: g.activeWaypointId, marks: g.waypoints.filter((w) => w.name.startsWith('Namierzono:')) };
+  });
+  check(spyglassMark.marks.some((w) => w.id === spyglassMark.active),
+    `PC: lorneta G namierza widoczny blok: ${JSON.stringify(spyglassMark)}`);
+  await screenshot(page, 'desktop-spyglass');
+  await page.mouse.up({ button: 'right' });
+  await page.waitForFunction(() => !window.blockcraft.game.isZooming(), undefined, { timeout: 5000 });
+  check(await page.evaluate(() => !window.blockcraft.game.isZooming()), 'PC: puszczenie PPM kończy przybliżenie');
   check(await page.evaluate(() => window.blockcraft.game.save()), 'PC: zapis świata v6');
   await exitToMenu(page);
   await page.locator('button').filter({ hasText: 'WebGL-v6' }).first().click();
@@ -194,6 +216,9 @@ try {
   check((await gameInfo(page)).version === 6, 'PC: ponowne otwarcie świata v6');
   check(await page.evaluate(() => { const b = window.blockcraft.game.world.getBlock(2, 112, 0); return b >= 427 && b <= 430; }),
     'PC: postawiony obraz nadal istnieje po zapisie i odczycie');
+  check(await page.evaluate(() => window.blockcraft.game.waypoints.some((w) =>
+    w.name.startsWith('Namierzono:') && w.id === window.blockcraft.game.activeWaypointId)),
+    'PC: cel lornety i jego aktywna nawigacja przeżywają wczytanie świata');
   await page.getByRole('button', { name: 'Kliknij, aby grać' }).click();
   await exitToMenu(page);
   // Simulate a save from before #4 and make sure it uses its original v5
@@ -273,6 +298,39 @@ try {
   check(await mobile.evaluate(() => !!window.blockcraft.game.activeWaypointId && window.blockcraft.game.waypoints.length === 1),
     'Dotyk: zaznaczenie odkrytego miejsca na mapie');
   await mobile.getByRole('button', { name: 'Wróć do gry' }).tap();
+  await mobile.evaluate(() => {
+    const g = window.blockcraft.game;
+    g.inventory.slots[0] = { id: 352, count: 1 }; g.selected = 0;
+  });
+  await mobile.getByRole('button', { name: '▣' }).tap();
+  await mobile.getByRole('heading', { name: 'Kompas biomów' }).waitFor();
+  check(await mobile.evaluate(() => window.blockcraft.game.ui === 'biomeCompass'),
+    'Dotyk: ekranowy przycisk używa prawdziwego kompasu biomów');
+  await mobile.getByLabel('Szukany biom').selectOption('Tajga');
+  await mobile.getByRole('button', { name: 'Szukaj biomu' }).tap();
+  await mobile.getByRole('button', { name: 'Zaznacz i śledź na HUD' }).waitFor({ timeout: 30000 });
+  await screenshot(mobile, 'mobile-compass');
+  await mobile.getByRole('button', { name: 'Zaznacz i śledź na HUD' }).tap();
+  check(await mobile.evaluate(() => window.blockcraft.game.waypoints.some((w) =>
+    w.name === 'Biom: Tajga' && w.id === window.blockcraft.game.activeWaypointId) &&
+    window.blockcraft.game.ui === 'playing'),
+    'Dotyk: znaleziony biom trafia do aktywnej nawigacji HUD');
+  await mobile.evaluate(() => {
+    const g = window.blockcraft.game;
+    g.inventory.slots[0] = { id: 247, count: 1 }; g.selected = 0;
+    g.yaw = -Math.PI / 2; g.pitch = 0;
+    g.world.setBlock(-36, 35, -45, 3);
+    g.world.setBlock(-36, 36, -45, 3);
+    g.buildChunk(-3, -3);
+  });
+  await mobile.getByRole('button', { name: '▣' }).tap();
+  await mobile.waitForFunction(() => window.blockcraft.game.isZooming());
+  await mobile.getByRole('button', { name: /Zaznacz cel/ }).tap();
+  check(await mobile.evaluate(() => window.blockcraft.game.waypoints.some((w) =>
+    w.name.startsWith('Namierzono:') && w.id === window.blockcraft.game.activeWaypointId)),
+    'Dotyk: lorneta oznacza widoczny blok ekranowym przyciskiem');
+  await mobile.getByRole('button', { name: '▣' }).tap();
+  await mobile.waitForFunction(() => !window.blockcraft.game.isZooming());
   await mobile.getByRole('button', { name: '🎒' }).tap();
   check(await mobile.evaluate(() => window.blockcraft.game.ui === 'inventory'), 'Dotyk: otwieranie ekwipunku');
   await screenshot(mobile, 'mobile-inventory');
@@ -280,6 +338,24 @@ try {
   await mobile.getByRole('button', { name: '⏸' }).tap();
   check(await mobile.evaluate(() => window.blockcraft.game.ui === 'paused'), 'Dotyk: pauza');
   await screenshot(mobile, 'mobile-pause');
+  await mobile.getByRole('button', { name: 'Opcje...' }).tap();
+  const beforeDetail = await mobile.evaluate(() => ({
+    width: window.blockcraft.game.atlasTex.image.width,
+    effect: window.blockcraft.game.gfx.effectDetail,
+  }));
+  await mobile.getByRole('button', { name: /Tekstury: Oszczędne/ }).tap();
+  await mobile.getByRole('button', { name: /Efekty: Oszczędne/ }).tap();
+  await mobile.waitForFunction((width) => window.blockcraft.game.atlasTex.image.width > width &&
+    window.blockcraft.game.gfx.effectDetail === 'full', beforeDetail.width);
+  check(beforeDetail.effect === 'low' && await mobile.evaluate(() =>
+    window.blockcraft.game.atlasTex.image.width > 0 && window.blockcraft.game.gfx.effectDetail === 'full'),
+  'Dotyk: zmiana szczegółowości tekstur GPU i efektów działa bez restartu świata');
+  await mobile.getByRole('button', { name: /Jakość: Auto/ }).tap();
+  await mobile.waitForFunction(() => JSON.parse(localStorage.getItem('blockcraft-settings')).quality === 'auto');
+  check(await mobile.evaluate(() => JSON.parse(localStorage.getItem('blockcraft-settings')).quality === 'auto'),
+    'Dotyk: Auto zapisuje wybór do ustawień');
+  await screenshot(mobile, 'mobile-quality');
+  await mobile.getByRole('button', { name: 'Gotowe' }).tap();
   check(await mobile.evaluate(() => window.blockcraft.game.save()), 'Telefon emulowany: zapis świata');
   check(mobileErrors.length === 0, `Telefon emulowany: błędy JS/dialogi: ${mobileErrors.join('; ')}`);
   await phone.close();

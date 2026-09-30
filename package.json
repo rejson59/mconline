@@ -23,6 +23,7 @@
     "test:engine": "node .harness/run.mjs smoke",
     "test:ui": "node .harness/run.mjs ui",
     "test:browser": "node .harness/browser.js",
+    "test:legacy-browser": "node .harness/legacy-browser.js",
     "deploy:branch": "npm run build && npx --yes gh-pages -d dist"
   },
   "dependencies": {

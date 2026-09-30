@@ -657,7 +657,7 @@ export function PauseMenu({
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <div className="absolute inset-0 flex items-start justify-center overflow-y-auto p-3" style={{ background: 'rgba(0,0,0,0.55)' }}>
+    <div className="absolute inset-0 z-50 flex items-start justify-center overflow-y-auto p-3" style={{ background: 'rgba(0,0,0,0.75)' }}>
       <div className="my-auto flex w-full max-w-[420px] flex-col items-center gap-3 px-4 py-2">
         {view === 'main' && (
           <>
