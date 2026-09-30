@@ -16,8 +16,8 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  'BlockCraft 2.7: odkryj Bagna, Sawannę i Dżunglę!',
-  '2.7: nowe drzewa, błoto i lilie wodne!',
+  '2.8: wędruj przez sześć biomów i nowe doliny!',
+  '2.8: rzeki, jeziora i połączone podziemia!',
   'Na kwiecistych łąkach mieszkają płochliwe króliki!',
   'Dżungla kryje gęste zarośla, Sawanna – akacje!',
   'Ekwipunek nie gubi ani nie duplikuje przedmiotów!',

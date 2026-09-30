@@ -1,6 +1,10 @@
-# BlockCraft 2.7 🟩
+# BlockCraft 2.8 RC1 — Szlaki i podziemia 🟩
 
-Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.7 „Nowe horyzonty”** rozbudowuje eksplorację o trzy nowe biomy, ich roślinność i nowe bloki. Gra działa na komputerach i urządzeniach dotykowych.
+Gra sandboxowa działająca lokalnie w przeglądarce na PC i urządzeniach dotykowych. **To kandydat 2.8, a nie opublikowane wydanie stabilne ani ukończone 3.0.** Pełny plan 100 punktów pozostaje w [`PLAN-100-BLOCKCRAFT-3.0.md`](PLAN-100-BLOCKCRAFT-3.0.md); przypisanie każdego punktu do etapu odbioru znajduje się w [`ROADMAP-2.8-3.0.md`](ROADMAP-2.8-3.0.md).
+
+**Cel odbioru 2.8:** sześć biomów, wysokości, połączone rzeki i podziemia (generator nowych światów v6), mapa odkrywania, kompas biomów, namierzanie lornetką i presety jakości (#1–4, #15, #33–34, #100). Starsze zapisy nadal używają własnej wersji generatora v2–v5. Istnieją też częściowo wdrożone mechaniki zaplanowane do późniejszych etapów; ich obecność w kodzie nie oznacza zaliczenia całego punktu. Szczegóły i otwarte próby: [`3.0-STATUS.md`](3.0-STATUS.md). Testy i przegląd w grze wykonuje autor zmian, nie gracz.
+
+## Poprzednia wersja 2.7
 
 **Wersja 2.7 „Nowe horyzonty”**:
 - trzy nowe, generowane proceduralnie biomy: **Bagno**, **Sawanna** i **Dżungla**; ich rozmieszczenie jest stabilne dla ziarna świata,
@@ -11,7 +15,7 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwer
 
 Pełny plan przyszłego wydania 3.0 znajduje się w [`PLAN-100-BLOCKCRAFT-3.0.md`](PLAN-100-BLOCKCRAFT-3.0.md). **Ta gałąź jest pracą w toku, nie wydaniem 3.0.** Stan wymagań i zakres braków: [`3.0-STATUS.md`](3.0-STATUS.md).
 
-**Dalsze zmiany w gałęzi roboczej (nadal nie wydanie 3.0):** nowe światy mają także **Tajgę**, **Pustkowie** i **Kwiecistą łąkę**. Tajga zawiera świerki i bielicę, pustkowie spękaną ziemię i suche krzewy, łąka błękitne kwiaty i gęstszą roślinność. Świerk daje sadzonki z igieł; sadzonki rosną, a pień można przerobić na deski. Starsze zapisy bez wersji generatora zachowują dokładnie dawny teren 2.7, a nowy generator zapisuje numer rewizji świata. Przedmiot **Kompas biomów** (kompas + 2 papiery + lazuryt przy stole) wybiera biom z menu, szuka przybliżonego najbliższego obszaru w promieniu 1024 bloków bez generowania chunków i pozwala śledzić wynik. Gdy biomu nie ma w zasięgu, wyświetla komunikat. Dostępny również w Creative; nie działa w Netherze.
+**Zmiany obecnego kandydata (nadal nie wydanie 3.0):** nowe światy mają także **Tajgę**, **Pustkowie** i **Kwiecistą łąkę**. Tajga zawiera świerki i bielicę, pustkowie spękaną ziemię i suche krzewy, łąka błękitne kwiaty i gęstszą roślinność. Świerk daje sadzonki z igieł; sadzonki rosną, a pień można przerobić na deski. Starsze zapisy bez wersji generatora zachowują dokładnie dawny teren 2.7, a nowy generator zapisuje numer rewizji świata. Przedmiot **Kompas biomów** (kompas + 2 papiery + lazuryt przy stole) wybiera biom z menu, szuka przybliżonego najbliższego obszaru w promieniu 1024 bloków bez generowania chunków i pozwala śledzić wynik. Gdy biomu nie ma w zasięgu, wyświetla komunikat. Dostępny również w Creative; nie działa w Netherze.
 
 **Przynęty do wędki:** robak wypada czasem przy kopaniu ziemi, błota lub bielicy (8%), a świetlistą przynętę tworzy się ze struny, plastra miodu i pyłu jasnogłazu przy stole. Mając wędkę w ekwipunku, `PPM`/tap trzymaną przynętą zakłada ją na haczyk. Robak skraca oczekiwanie i zwiększa udział ryb z 70% do 86%; świetlista przynęta daje 8% szans na rzadki łup (szmaragd/lazuryt/żelazo), bez zmiany 1,7-sekundowego okna zacięcia. Jedna przynęta jest zużywana przy udanym lub przegapionym braniu, znika po śmierci; założona przynęta jest zapisywana ze światem. Nie wykonano próby ręcznej WebGL.
 

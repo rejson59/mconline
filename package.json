@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.7.0",
-  "description": "BlockCraft 2.7 „Nowe horyzonty” – polska gra sandboxowa w przeglądarce z nowymi biomami, blokami, zapisem lokalnym i sterowaniem dotykowym.",
+  "version": "2.8.0-rc.1",
+  "description": "BlockCraft 2.8 RC1 „Szlaki i podziemia” – kandydat z nowymi biomami, rzekami, jaskiniami i mapą, ze zgodnością starych zapisów.",
   "type": "module",
   "license": "MIT",
   "keywords": [

@@ -256,9 +256,9 @@ export default function GameView({
         />
       )}
       {touch && portraitHint && ui === 'playing' && (
-        <div className="absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-2 px-3 py-1.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.6)', border: '2px solid #3a3a3a' }}>
+        <div className="pointer-events-none absolute left-1/2 top-16 z-40 flex -translate-x-1/2 items-center gap-2 px-3 py-1.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.6)', border: '2px solid #3a3a3a' }}>
           <span>Obróć telefon poziomo – będzie wygodniej</span>
-          <button className="px-1 text-base opacity-80" onClick={() => setPortraitHint(false)}>
+          <button className="pointer-events-auto px-1 text-base opacity-80" onClick={() => setPortraitHint(false)}>
             ✕
           </button>
         </div>

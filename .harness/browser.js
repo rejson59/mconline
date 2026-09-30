@@ -39,6 +39,8 @@ const attachErrors = (page) => {
 };
 const createWorld = async (page, name, seed, creative = false, touch = false) => {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.getByText('WERSJA 2.8 RC1', { exact: true }).waitFor();
+  check((await page.title()).startsWith('BlockCraft 2.8 RC1'), '2.8: tytuł i oznaczenie kandydata są spójne w grze');
   await page.getByRole('button', { name: 'Nowy świat', exact: true }).click();
   await page.getByPlaceholder('np. Wyspa').fill(name);
   await page.getByPlaceholder('np. 12345 lub dowolny tekst').fill(String(seed));
@@ -86,6 +88,35 @@ try {
     await screenshot(page, `desktop-${x}-${z}`);
   }
   check((await gameInfo(page)).frames > info.frames + 6, 'PC: świat renderuje następne klatki');
+  // 2.8 navigation: open the map with the real keyboard shortcut, inspect
+  // surveyed tiles, and place a waypoint on the visited central chunk.
+  await page.keyboard.press('k');
+  await page.getByRole('heading', { name: 'Punkty podróży' }).waitFor();
+  check(await page.evaluate(() => window.blockcraft.game.ui === 'waypoints' &&
+    window.blockcraft.game.discovery.count('overworld') > 0),
+    'PC: K otwiera mapę z naprawdę odkrytymi polami');
+  await screenshot(page, 'desktop-map');
+  await page.getByRole('button', { name: 'Zaznacz środek mapy' }).click();
+  check(await page.evaluate(() => window.blockcraft.game.waypoints.length > 0 &&
+    !!window.blockcraft.game.activeWaypointId), 'PC: mapa tworzy i śledzi znacznik');
+  await page.getByRole('button', { name: 'Wróć do gry' }).click();
+  // The real use action opens the biome compass, and a nearby lake is found
+  // without waiting for any off-screen chunk generation.
+  await page.evaluate(() => {
+    const g = window.blockcraft.game;
+    g.inventory.slots[0] = { id: 352, count: 1 }; g.selected = 0;
+    g.tryUse();
+  });
+  await page.getByRole('heading', { name: 'Kompas biomów' }).waitFor();
+  check(await page.evaluate(() => window.blockcraft.game.ui === 'biomeCompass'),
+    'PC: użycie prawdziwego przedmiotu otwiera kompas biomów');
+  await page.getByLabel('Szukany biom').selectOption('Jezioro');
+  await page.getByRole('button', { name: 'Szukaj biomu' }).click();
+  await page.getByRole('button', { name: 'Zaznacz i śledź na HUD' }).waitFor({ timeout: 30000 });
+  await screenshot(page, 'desktop-compass');
+  await page.getByRole('button', { name: 'Zaznacz i śledź na HUD' }).click();
+  check(await page.evaluate(() => window.blockcraft.game.waypoints.some((w) => w.name === 'Biom: Jezioro') &&
+    window.blockcraft.game.ui === 'playing'), 'PC: kompas dopisuje biomowy cel do nawigacji');
   // Look at a real underground room in the renderer; this is not just a
   // detached pure-function generator test. Torch makes the dark geometry
   // inspectable in screenshots, and the dry tunnel joins the next cell.
@@ -234,6 +265,14 @@ try {
     `Telefon: podziemna komora na niskim presecie ${JSON.stringify(phoneCave)}`);
   await mobile.waitForTimeout(500);
   await screenshot(mobile, 'mobile-cave');
+  await mobile.getByRole('button', { name: 'Punkty podróży' }).tap();
+  check(await mobile.evaluate(() => window.blockcraft.game.ui === 'waypoints'),
+    'Dotyk: otwarcie mapy przyciskiem ekranowym');
+  await screenshot(mobile, 'mobile-map');
+  await mobile.getByRole('button', { name: 'Zaznacz środek mapy' }).tap();
+  check(await mobile.evaluate(() => !!window.blockcraft.game.activeWaypointId && window.blockcraft.game.waypoints.length === 1),
+    'Dotyk: zaznaczenie odkrytego miejsca na mapie');
+  await mobile.getByRole('button', { name: 'Wróć do gry' }).tap();
   await mobile.getByRole('button', { name: '🎒' }).tap();
   check(await mobile.evaluate(() => window.blockcraft.game.ui === 'inventory'), 'Dotyk: otwieranie ekwipunku');
   await screenshot(mobile, 'mobile-inventory');

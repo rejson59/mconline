@@ -7,6 +7,7 @@
  * Everything that touches the DOM (canvas atlas, localStorage) is stubbed at
  * the top of this file so the real modules can be imported unchanged.
  */
+import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { CAVE_CELL, caveEntrance, caveNode } from '../src/game/caves';
 import { PRESETS, detectDeviceProfile, recommendPreset, describeProfile, type DeviceProfile } from '../src/utils/performance';
@@ -106,6 +107,7 @@ import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
 import { filterRecipes } from '../src/utils/recipeSearch';
+import { GAME_VERSION, GAME_RELEASE_NAME } from '../src/utils/version';
 
 // ------------------------------------------------------------------- runner
 let pass = 0;
@@ -121,6 +123,23 @@ function eq(name: string, got: unknown, want: unknown) {
 function section(t: string) { console.log(`\n— ${t}`); }
 
 const playerAt = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+
+section('2.8 candidate: milestone coverage and consistent release label');
+{
+  const roadmap = readFileSync('ROADMAP-2.8-3.0.md', 'utf8');
+  const rows = [...roadmap.matchAll(/^\| \*\*(2\.\d+)[^|]*\| \*\*([\d, –]+)\*\*/gm)];
+  const assigned = rows.flatMap(([, , ids]) => ids.split(',').flatMap((part) => {
+    const bounds = [...part.matchAll(/\d+/g)].map(([n]) => Number(n));
+    return Array.from({ length: bounds[bounds.length - 1] - bounds[0] + 1 }, (_, i) => bounds[0] + i);
+  }));
+  check('the six milestone rows assign every original requirement exactly once',
+    rows.length === 6 && assigned.length === 100 && new Set(assigned).size === 100 &&
+    assigned.every((id) => id >= 1 && id <= 100));
+  check('2.8 milestone is focused on exploration rather than claiming all 100 complete',
+    rows[0]?.[1] === '2.8' && rows[0][2] === '1–4, 15, 33–34, 100' &&
+    GAME_VERSION === '2.8 RC1' && GAME_RELEASE_NAME === 'Szlaki i podziemia' &&
+    roadmap.includes('kandydatem, nie gotowym wydaniem'));
+}
 
 // =========================================================== world / terrain
 section('world: determinism and terrain');
