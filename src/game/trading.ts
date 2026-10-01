@@ -112,6 +112,42 @@ export const PROFESSIONS: Profession[] = [
       offer('bell', 4, [{ id: I.EMERALD, count: 6 }], { id: B.BELL, count: 1 }, 2, 5),
     ],
   },
+  // Append-only profession indices: saved 1.6 villagers keep their old jobs.
+  {
+    id: 'kartograf',
+    name: 'Kartograf',
+    color: '#4b9ca1',
+    offers: [
+      offer('map_paper', 1, [{ id: I.PAPER, count: 16 }], { id: I.EMERALD, count: 1 }, 12, 2),
+      offer('map_compass', 1, [{ id: I.EMERALD, count: 3 }], { id: I.COMPASS, count: 1 }, 6, 2),
+      offer('map_biome', 2, [{ id: I.EMERALD, count: 6 }, { id: I.COMPASS, count: 1 }], { id: I.BIOME_COMPASS, count: 1 }, 4, 3),
+      offer('map_spyglass', 3, [{ id: I.EMERALD, count: 5 }], { id: I.SPYGLASS, count: 1 }, 4, 4),
+    ],
+  },
+  {
+    id: 'rybak',
+    name: 'Rybak',
+    color: '#39759b',
+    offers: [
+      offer('fish_cod', 1, [{ id: I.RAW_FISH, count: 12 }], { id: I.EMERALD, count: 1 }, 12, 2),
+      offer('fish_rod', 1, [{ id: I.EMERALD, count: 3 }], { id: I.FISHING_ROD, count: 1 }, 6, 2),
+      offer('fish_bait', 2, [{ id: I.EMERALD, count: 1 }], { id: I.WORM_BAIT, count: 3 }, 10, 2),
+      offer('fish_salmon', 2, [{ id: I.RAW_SALMON, count: 10 }], { id: I.EMERALD, count: 1 }, 10, 2),
+      offer('fish_glow', 3, [{ id: I.EMERALD, count: 4 }, { id: I.GLOWSTONE_DUST, count: 2 }], { id: I.GLOW_BAIT, count: 2 }, 4, 4),
+    ],
+  },
+  {
+    id: 'ogrodnik',
+    name: 'Ogrodnik',
+    color: '#709646',
+    offers: [
+      offer('garden_seeds', 1, [{ id: I.SEEDS, count: 32 }], { id: I.EMERALD, count: 1 }, 12, 2),
+      offer('garden_sapling', 1, [{ id: I.EMERALD, count: 1 }], { id: B.SPRUCE_SAPLING, count: 2 }, 10, 2),
+      offer('garden_flowers', 2, [{ id: B.FLOWER_BLUE, count: 10 }], { id: I.EMERALD, count: 1 }, 12, 2),
+      offer('garden_meadow', 2, [{ id: I.EMERALD, count: 3 }], { id: B.MEADOW_GRASS, count: 4 }, 6, 3),
+      offer('garden_honey', 3, [{ id: I.EMERALD, count: 3 }], { id: I.HONEY_BOTTLE, count: 2 }, 4, 4),
+    ],
+  },
 ];
 
 export interface VillagerState {

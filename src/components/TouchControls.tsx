@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/engine';
-import { I } from '../game/items';
+import { ITEMS } from '../game/items';
 import type { Settings } from '../utils/settings';
 
 /** True on phones/tablets – 2.5: tylko pomocniczo, tryb wybiera utils/input. */
@@ -48,14 +48,17 @@ interface BtnProps {
   hint?: string;
   onDown: () => void;
   onUp?: () => void;
+  onCancel?: () => void;
   haptics: boolean;
 }
 
 /** Okrągły przycisk akcji – duży, półprzezroczysty, „majstrowany” pod palec. */
-function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22, onDown, onUp, haptics }: BtnProps) {
+function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22, hint, onDown, onUp, onCancel, haptics }: BtnProps) {
   const [held, setHeld] = useState(false);
   return (
     <button
+      title={hint}
+      aria-label={hint || label}
       className="pointer-events-auto flex select-none items-center justify-center border-2 border-black mc-text"
       style={{
         width: size,
@@ -82,7 +85,7 @@ function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22,
       }}
       onPointerCancel={() => {
         setHeld(false);
-        onUp?.();
+        if (onCancel) onCancel(); else onUp?.();
       }}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -99,7 +102,7 @@ function ActionButton({ label, size = 62, active, opacity = 0.66, fontSize = 22,
  *    przytrzymanie kopie blok pod palcem (celownik leci za palcem, nie na środek),
  *  • tryb „Przyciski”: klasyczne ⛏ i ▣ celujące w środek ekranu,
  *  • łuk: przytrzymaj i puść w obu trybach,
- *  • podwójne tapnięcie skoku w trybie kreatywnym = latanie.
+ *  • podwójne tapnięcie skoku w trybie kreatywnym = latanie; ↗ = rzut przedmiotu.
  */
 export default function TouchControls({
   game,
@@ -124,6 +127,8 @@ export default function TouchControls({
   const [jumping, setJumping] = useState(false);
   const [breaking, setBreaking] = useState(false);
   const [placing, setPlacing] = useState(false);
+  const placeTimer = useRef<number | null>(null);
+  const placeTapTimer = useRef<number | null>(null);
   const [sneaking, setSneaking] = useState(false);
   const [flying, setFlying] = useState(game.flying);
   const [creative, setCreative] = useState(game.mode === 'creative');
@@ -154,6 +159,9 @@ export default function TouchControls({
   // Opuszczanie ekranu nigdy nie może zostawić „wciśniętych” klawiszy.
   useEffect(() => {
     const stop = () => {
+      if (placeTimer.current !== null) window.clearTimeout(placeTimer.current);
+      if (placeTapTimer.current !== null) window.clearTimeout(placeTapTimer.current);
+      placeTimer.current = placeTapTimer.current = null;
       pointers.current.clear();
       setStick(null);
       setJumping(false);
@@ -201,7 +209,7 @@ export default function TouchControls({
   const startHold = (info: PointerInfo) => {
     const sel = game.selectedStack();
     // Łuk w dłoni: przytrzymanie naciąga, puszczenie strzela – oba tryby.
-    if (sel?.id === I.BOW) {
+    if (sel && ITEMS[sel.id]?.tool === 'bow') {
       info.gesture = 'draw';
       game.touchAim = ndc(info.lastX, info.lastY);
       game.mouseRight = true;
@@ -406,14 +414,32 @@ export default function TouchControls({
     } else game.breakProgress = 0;
   };
 
-  const pressPlace = (down: boolean) => {
+  const pressPlace = (down: boolean, cancelled = false) => {
     setPlacing(down);
-    game.mouseRight = down;
     if (down) {
-      // refreshTarget natychmiast przelicza cel, a updateInteraction (już
-      // z wciśniętym mouseRight) wykonuje tryUse dokładnie raz.
-      game.placeCooldown = 0;
+      // The click that follows touch pointerup can land on a newly opened
+      // dialog's Close button. Wait until after that click for a short tap.
+      // A long hold still begins placing/repeating after HOLD_MS.
+      game.mouseRight = false;
       game.refreshTarget();
+      placeTimer.current = window.setTimeout(() => {
+        placeTimer.current = null;
+        if (game.ui !== 'playing') return;
+        game.mouseRight = true;
+        game.tryUse();
+      }, HOLD_MS);
+    } else {
+      game.mouseRight = false;
+      if (placeTimer.current !== null) {
+        window.clearTimeout(placeTimer.current);
+        placeTimer.current = null;
+        if (!cancelled) placeTapTimer.current = window.setTimeout(() => {
+          placeTapTimer.current = null;
+          if (game.ui !== 'playing') return;
+          game.refreshTarget();
+          game.tryUse();
+        }, 0);
+      }
     }
   };
 
@@ -507,6 +533,15 @@ export default function TouchControls({
         />
       )}
 
+      {/* Obrona dostępna także bez klawiatury, również w trybie tap. */}
+      <div className="pointer-events-none absolute right-3 flex gap-2" style={{ top: vh < 530 ? 72 : 136 }}>
+        <ActionButton label="↝" hint="Unik" size={48} onDown={() => game.tryDodge()} haptics={settings.haptics} />
+        <ActionButton label="🛡" hint="Parowanie tarczą" size={48} onDown={() => game.tryTimedGuard()} haptics={settings.haptics} />
+        {ITEMS[game.selectedStack?.()?.id ?? 0]?.tool === 'bow' && (
+          <ActionButton label="➟" hint="Wybierz strzałę" size={48} onDown={() => game.cycleArrowAmmo()} haptics={settings.haptics} />
+        )}
+      </div>
+
       {/* przyciski akcji – diament pod prawym kciukiem */}
       <div
         className="pointer-events-none absolute"
@@ -517,6 +552,10 @@ export default function TouchControls({
         </div>
         <div className="absolute" style={{ right: 84, bottom: 6 }}>
           <ActionButton label={sneaking ? '⇩' : '⇣'} size={56} active={sneaking} onDown={() => pressSneak(!sneaking)} haptics={settings.haptics} />
+        </div>
+        {/* A decoy must be usable on touch as well as with keyboard Q. */}
+        <div className="absolute" style={{ right: 8, bottom: 80 }}>
+          <ActionButton label="↗" hint="Rzuć przedmiot" size={48} onDown={() => game.dropItem()} haptics={settings.haptics} />
         </div>
         {creative && (
           <div className="absolute" style={{ right: 94, bottom: 76 }}>
@@ -535,7 +574,7 @@ export default function TouchControls({
         {settings.touchMode === 'buttons' && (
           <>
             <div className="absolute" style={{ right: 86, bottom: 148 }}>
-              <ActionButton label="▣" size={58} opacity={placing ? 1 : 0.66} onDown={() => pressPlace(true)} onUp={() => pressPlace(false)} haptics={settings.haptics} />
+              <ActionButton label="▣" size={58} opacity={placing ? 1 : 0.66} onDown={() => pressPlace(true)} onUp={() => pressPlace(false)} onCancel={() => pressPlace(false, true)} haptics={settings.haptics} />
             </div>
             <div className="absolute" style={{ right: 8, bottom: 148 }}>
               <ActionButton label="⛏" size={58} opacity={breaking ? 1 : 0.66} onDown={() => pressBreak(true)} onUp={() => pressBreak(false)} haptics={settings.haptics} />
@@ -603,8 +642,15 @@ export default function TouchControls({
         </button>
       </div>
 
+      {game.isZooming() && (
+        <button className="pointer-events-auto absolute left-1/2 top-16 z-40 -translate-x-1/2 border-2 border-yellow-300 bg-stone-900/90 px-3 py-2 text-sm mc-text"
+          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); game.markSpyglass(); }}>
+          ⌖ Zaznacz cel
+        </button>
+      )}
+
       {/* krótka ściągka trybu tap – pod paskiem górnym, żeby nie zasłaniać HUD-u */}
-      {settings.touchMode === 'tap' && (
+      {settings.touchMode === 'tap' && vh >= 530 && (
         <div className="pointer-events-none absolute left-3 max-w-[240px] text-[12px] leading-tight opacity-55 mc-text" style={{ top: 92 }}>
           tapnij = postaw / użyj<br />przytrzymaj = kop<br />przeciągnij = rozglądaj się
         </div>

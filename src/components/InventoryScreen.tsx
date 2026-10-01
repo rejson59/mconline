@@ -6,6 +6,7 @@ import { filterRecipes } from '../utils/recipeSearch';
 import { CREATIVE_ITEMS, displayName, stackLimit } from '../game/items';
 import { TooltipBody } from '../utils/tooltip';
 import { ARMOR, armorPoints, ARMOR_SLOT_NAMES } from '../game/armor';
+import { TALISMANS } from '../game/talismans';
 import Slot from './Slot';
 
 export default function InventoryScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
@@ -134,6 +135,11 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
               <div className="mt-2 text-xs opacity-80">LPM: weź/połóż stos · PPM: połowa / jeden · dotyk: przytrzymaj = PPM</div>
             </>
           )}
+          <div className="mt-3 flex items-center gap-2 text-xs" data-testid="talisman-slot">
+            <Slot stack={game.talisman} icons={icons} onClick={() => { game.clickTalismanSlot(); refresh(); }}
+              onHover={(name) => setHover(name ? `${name}\n${TALISMANS[game.talisman!.id]?.description ?? ''}` : 'Miejsce na jeden talizman. PPM/tap z talizmanem na kursorze.')} />
+            <span className="max-w-[210px]">Talizman · tylko jeden aktywny. {game.talisman ? TALISMANS[game.talisman.id]?.description : 'Rzadki łup ze skrzyń jaskiniowych.'}</span>
+          </div>
         </div>
 
         {!creative && (

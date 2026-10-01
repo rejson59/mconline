@@ -31,6 +31,8 @@ export const POTIONS: Record<number, PotionDef> = {
   [I.POTION_NIGHT]: { id: I.POTION_NIGHT, name: 'Napój nocnego widzenia', effect: 'night', duration: 30, color: '#4ad0a8', desc: 'Jaskinie i nocy nie straszne przez 30 s.' },
   [I.POTION_STRENGTH]: { id: I.POTION_STRENGTH, name: 'Napój siły', effect: 'strength', duration: 15, color: '#e0a030', desc: '+4 obrażeń w zwarciu przez 15 s.' },
   [I.POTION_REGEN]: { id: I.POTION_REGEN, name: 'Napój regeneracji', effect: 'regen', duration: 10, color: '#e06090', desc: 'Odnowienie: +1 serce co 2 s przez 10 s.' },
+  [I.POTION_FALL]: { id: I.POTION_FALL, name: 'Napój lekkiego lądowania', effect: 'fall', duration: 35, color: '#81b9ef', desc: 'Nie otrzymujesz obrażeń od upadku przez 35 s (nie chroni przed pustką).' },
+  [I.POTION_SPRINT]: { id: I.POTION_SPRINT, name: 'Napój zrywu', effect: 'sprint', duration: 12, color: '#e89d55', desc: 'Biegniesz o 45% szybciej przez 12 s. Nie przyspiesza zwykłego chodu.' },
 };
 
 /** Instant heal value of the healing potion. */
@@ -40,6 +42,29 @@ export const STRENGTH_DAMAGE = 4;
 /** Move-speed multiplier while the speed potion is active. */
 export const SPEED_FACTOR = 1.3;
 
+/** Extra speed only when sprinting (ordinary walking is unchanged). */
+export function sprintFactor(buffed: boolean, sprinting: boolean): number {
+  return buffed && sprinting ? 1.45 : 1;
+}
+
+/** Active fall resistance nullifies fall damage, never other damage or void. */
+export function fallDamageAfterPotion(damage: number, protectedByPotion: boolean): number {
+  return protectedByPotion ? 0 : damage;
+}
+
+/** Validate per-world remaining duration from older/untrusted imported saves. */
+export function restoreEffects(raw: unknown): Map<PotionEffectId, number> {
+  const result = new Map<PotionEffectId, number>();
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return result;
+  const allowed = new Set<PotionEffectId>(Object.values(POTIONS).map((p) => p.effect).filter((id) => id !== 'none' && id !== 'heal'));
+  for (const [name, ms] of Object.entries(raw)) {
+    if (allowed.has(name as PotionEffectId) && typeof ms === 'number' && Number.isFinite(ms) && ms > 0) {
+      result.set(name as PotionEffectId, Math.min(120_000, ms));
+    }
+  }
+  return result;
+}
+
 /** A batch takes this many seconds on the stand. */
 export const BREW_TIME = 8;
 /** One blaze rod keeps the fire going this many batches. */
@@ -47,7 +72,7 @@ export const BREW_FUELS = 3;
 
 /** Item ids the stand accepts in its ingredient cup. */
 export const BREWING_INGREDIENTS = new Set<number>([
-  I.NETHER_WART, I.GHAST_TEAR, I.MAGMA_CREAM, I.SUGAR, I.GLOWSTONE_DUST, I.BLAZE_ROD,
+  I.NETHER_WART, I.GHAST_TEAR, I.MAGMA_CREAM, I.SUGAR, I.GLOWSTONE_DUST, I.BLAZE_ROD, I.FEATHER,
 ]);
 
 /**
@@ -67,12 +92,14 @@ export function brewResult(bottleId: number, ingredientId: number): number | nul
     case I.MAGMA_CREAM:
       return isWater ? I.POTION_FIRE : null;
     case I.SUGAR:
-      return isWater ? I.POTION_SPEED : null;
+      return isWater ? I.POTION_SPEED : I.POTION_SPRINT;
     case I.GLOWSTONE_DUST:
       // two paths: water + dust = night sight, awkward + dust = regeneration
       return isWater ? I.POTION_NIGHT : I.POTION_REGEN;
     case I.BLAZE_ROD:
       return isWater ? I.POTION_STRENGTH : null;
+    case I.FEATHER:
+      return isAwkward ? I.POTION_FALL : null;
     default:
       return null;
   }

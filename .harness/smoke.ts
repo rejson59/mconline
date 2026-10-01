@@ -7,11 +7,14 @@
  * Everything that touches the DOM (canvas atlas, localStorage) is stubbed at
  * the top of this file so the real modules can be imported unchanged.
  */
+import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
+import { CAVE_CELL, caveEntrance, caveNode } from '../src/game/caves';
 import { PRESETS, detectDeviceProfile, recommendPreset, describeProfile, type DeviceProfile } from '../src/utils/performance';
-import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, loadSettings, normalizeSettings, SETTINGS_KEY } from '../src/utils/settings';
+import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, effectiveDetail, chunkGenerationBudget, loadSettings, normalizeSettings, saveSettings, SETTINGS_KEY } from '../src/utils/settings';
 
 // ---------------------------------------------------------------- DOM stubs
+let committedAtlas: Uint8ClampedArray | null = null;
 const ctx2d = {
   canvas: { width: 16, height: 16 },
   fillStyle: '', strokeStyle: '', lineWidth: 1, globalAlpha: 1, imageSmoothingEnabled: true,
@@ -19,7 +22,9 @@ const ctx2d = {
   fillRect() {}, strokeRect() {}, clearRect() {}, beginPath() {}, closePath() {}, moveTo() {}, lineTo() {},
   arc() {}, arcTo() {}, quadraticCurveTo() {}, bezierCurveTo() {}, fill() {}, stroke() {}, clip() {},
   drawImage() {}, save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, setTransform() {},
-  resetTransform() {}, putImageData() {},
+  resetTransform() {}, putImageData(data: { width: number; data: Uint8ClampedArray }) {
+    if (data.width === 256) committedAtlas = new Uint8ClampedArray(data.data);
+  },
   createImageData: (a: number, b: number) => ({ width: a, height: b, data: new Uint8ClampedArray(a * b * 4) }),
   getImageData: (_x: number, _y: number, w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
   measureText: () => ({ width: 10 }),
@@ -45,41 +50,52 @@ if (typeof globalThis.localStorage === 'undefined') {
 }
 
 // ------------------------------------------------------------------ imports
-import { World, CS, CH, SEA, FLAT_H } from '../src/game/world';
-import { B, BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
+import { World, CS, CH, SEA, FLAT_H, plantTree, type Biome } from '../src/game/world';
+import { DiscoveryMap, MAP_BIOMES, MAP_LIMIT } from '../src/game/discoveryMap';
+import { CHALLENGES, normalizeChallenges } from '../src/game/challenges';
+import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, oreYield, resourceDropCount, animalMeatYield } from '../src/game/difficulty';
+import { BiomeSearch, COMPASS_RANGE, BIOME_TARGETS } from '../src/game/biomeCompass';
+import { B, T, BLOCKS, CREATIVE_BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
-  ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
-  pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
+  ITEMS, I, CREATIVE_ITEMS, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
+  pickHint, mineSeconds, toolHelps, attackDamage, attackCooldown, attackReach, bowDrawSeconds, bowStrength, arrowDuration, shieldDamageFactor, shieldWeightFactor, shieldWear, blockDrops, smeltResult, fuelSeconds, resolveId,
   displayName,
 } from '../src/game/items';
 import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
+import { mealBonus } from '../src/game/meals';
+import { breathCharmFactor, isTalisman, restoreTalisman, walkCharmFactor } from '../src/game/talismans';
+import { TRAVEL_CAULDRON_LIMIT, emptyTravelCauldron, restoreTravelCauldron, tickTravelCauldron, travelFuel, travelRecipe } from '../src/game/travelCauldron';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
+import { boundedPathStep } from '../src/game/pathfinding';
+import { chooseAmbient } from '../src/game/ambience';
+import { dodgeDirection, threatInFront } from '../src/game/combatMoves';
+import * as Sfx from '../src/game/audio';
+import { Mob, isTrustFood, isHostileMob, isVillageMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, findTurtleNest, villagerActivity, villagerWorkSpot, villagerWalkable, merchantProfession, batSpawnAllowed, findNearbyShelter, nearestFire, fireEscapeHeading, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
   cleanWorldName, deleteSave, duplicateSave, exportSave, exportSaves, importSaves,
   loadSaves, renameSave, toggleFavoriteSave, upsertSave, MAX_WORLD_NAME,
 } from '../src/game/saves';
-import { ACHIEVEMENTS, achievementById } from '../src/game/achievements';
+import { ACHIEVEMENTS, achievementById, BIOME_DISCOVERY_GOALS } from '../src/game/achievements';
 import { Xp, xpToNext, totalXpForLevel, levelFromXp } from '../src/game/xp';
-import { ARMOR, isArmor, armorPoints, damageReduction, armorSlotOf } from '../src/game/armor';
+import { ARMOR, isArmor, armorPoints, damageReduction, armorSlotOf, bootHeatReduction, bootSwimFactor, bootFallFactor, waterSpeedFactor, landingFactor } from '../src/game/armor';
 import {
   ENCHANTS, enchName, resolveEnch, canEnchant, conflicts, canAddEnch, addEnch,
   enchLevel, enchList, stackName, countShelves, rollEnchantOptions, efficiencyFactor,
   wearChance, sharpnessDamage, powerFactor, knockbackFactor, totalProtection,
-  fallDamageFactor, MAX_ENCHS,
+  fallDamageFactor, sourceProtection, swimSpeedFactor, MAX_ENCHS,
 } from '../src/game/enchant';
 import { Xp as XpClass } from '../src/game/xp';
-import { Game, MOB_NAMES, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
+import { Game, MOB_NAMES, normalizeCompanions, terrainVersionForSave, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
 import { tryCreatePortal } from '../src/game/redstone';
-import { brewingKey, emptyBrewing } from '../src/game/brewing';
+import { brewingKey, emptyBrewing, brewResult, tickBrewing, POTIONS, sprintFactor, fallDamageAfterPotion, restoreEffects } from '../src/game/brewing';
 import { VILLAGE_CELL, villageInCell, villageSpawnSpots, type Village } from '../src/game/village';
 import {
   PROFESSIONS, VILLAGER_LEVEL_XP, applyTrade, canTrade, createVillagerState, offersFor,
   professionFor, restockIfDue, restockIn, usesLeft, villagerLevel, villagerProgress, villagerTitle,
 } from '../src/game/trading';
-import { getAtlas, AVG_COLOR } from '../src/game/textures';
+import { getAtlas, compactAtlas, AVG_COLOR } from '../src/game/textures';
 import { BITE_MAX, BITE_MIN, BITE_WINDOW, PATIENCE, biteDelay, cookedOf, isFishStack, rollCatch } from '../src/game/fishing';
 import {
   MERGE_COST, RENAME_COST, anvilKey, anvilResult, canMerge, cleanItemName, emptyAnvil,
@@ -91,6 +107,7 @@ import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
 import { filterRecipes } from '../src/utils/recipeSearch';
+import { GAME_VERSION, GAME_RELEASE_NAME } from '../src/utils/version';
 
 // ------------------------------------------------------------------- runner
 let pass = 0;
@@ -106,6 +123,43 @@ function eq(name: string, got: unknown, want: unknown) {
 function section(t: string) { console.log(`\n— ${t}`); }
 
 const playerAt = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+
+section('2.8 candidate: milestone coverage and consistent release label');
+{
+  const roadmap = readFileSync('ROADMAP-2.8-5.0.md', 'utf8');
+  const rows = [...roadmap.matchAll(/^\| \*\*([234]\.\d+)[^|]*\| \*\*([\d, –]+)\*\*/gm)];
+  const assigned = rows.flatMap(([, , ids]) => ids.split(',').flatMap((part) => {
+    const bounds = [...part.matchAll(/\d+/g)].map(([n]) => Number(n));
+    return Array.from({ length: bounds[bounds.length - 1] - bounds[0] + 1 }, (_, i) => bounds[0] + i);
+  }));
+  check('the nineteen smaller releases assign every original requirement exactly once',
+    rows.length === 19 && assigned.length === 100 && new Set(assigned).size === 100 &&
+    assigned.every((id) => id >= 1 && id <= 100));
+  const spec = readFileSync('PLAN-100-BLOCKCRAFT-3.0.md', 'utf8');
+  const original = new Map([...spec.matchAll(/^(\d{1,3})\. \[ \] \*\*(.*?):\*\*/gm)]
+    .map(([, id, title]) => [Number(id), title]));
+  const lists = [...roadmap.matchAll(/^### ([234]\.\d+) — (?:teraz|później):[^\n]+\n\n((?:- \*\*#\d+ — [^\n]+\*\*\n)+)/gm)];
+  const listed = lists.flatMap(([, version, lines]) =>
+    [...lines.matchAll(/^- \*\*#(\d+) — ([^\n]+)\*\*$/gm)]
+      .map(([, id, title]) => ({ version, id: Number(id), title })));
+  check('the named future-update list contains exactly the 100 original titles',
+    original.size === 100 && lists.length === 19 && listed.length === 100 &&
+    listed.every(({ id, title }) => original.get(id) === title) &&
+    new Set(listed.map(({ id }) => id)).size === 100);
+  check('the named update list agrees with the nineteen milestone rows',
+    lists.every(([, version], i) => rows[i]?.[1] === version &&
+      listed.filter((entry) => entry.version === version).map((entry) => entry.id).join(',') ===
+      rows[i][2].split(',').flatMap((part) => {
+        const bounds = [...part.matchAll(/\d+/g)].map(([n]) => Number(n));
+        return Array.from({ length: bounds.at(-1)! - bounds[0] + 1 }, (_, offset) => bounds[0] + offset);
+      }).join(',')));
+  check('2.8 milestone is focused on exploration rather than claiming all 100 complete',
+    rows[0]?.[1] === '2.8' && rows[0][2] === '1, 15, 33–34' && rows[1]?.[2] === '2–3, 100' &&
+    rows[2]?.[2] === '4, 31–32' &&
+    GAME_VERSION === '2.8 RC3' && GAME_RELEASE_NAME === 'Szlaki i nawigacja' &&
+    roadmap.includes('2.8 pozostaje kandydatem') &&
+    roadmap.includes('5.0 — odbiór całości'));
+}
 
 // =========================================================== world / terrain
 section('world: determinism and terrain');
@@ -195,6 +249,348 @@ section('world: determinism and terrain');
     }
   }
   check('world has trees', trees > 0, `${trees} trunks`);
+}
+
+section('3.0 #2: height biomes with append-only v4 terrain and seam-safe samples');
+{
+  check('save migration preserves v2–v6 and starts new worlds with v7',
+    terrainVersionForSave() === 7 && terrainVersionForSave({}) === 2 &&
+    terrainVersionForSave({ terrainVersion: 2 }) === 2 &&
+    terrainVersionForSave({ terrainVersion: 3 }) === 3 &&
+    terrainVersionForSave({ terrainVersion: 4 }) === 4 &&
+    terrainVersionForSave({ terrainVersion: 5 }) === 5 &&
+    terrainVersionForSave({ terrainVersion: 6 }) === 6 &&
+    terrainVersionForSave({ terrainVersion: 7 }) === 7);
+  const previous = new World(12345, false, false, 3);
+  let v3 = 2166136261;
+  for (const block of previous.getChunk(0, 0).data) v3 = Math.imul(v3 ^ block, 16777619) >>> 0;
+  eq('previous v3 world generator retains its original chunk bit for bit', v3, 1615416434);
+  check('saved v3 terrain never silently gains v4 labels',
+    ['Ośnieżone szczyty', 'Płaskowyż', 'Wąwóz', 'Głęboka dolina'].every((label) =>
+      previous.surface(912, -240).biome !== label) && previous.terrainVersion === 3);
+  const v4 = new World(12345, false, false, 4);
+  check('v4 saves keep their generator while new Overworlds use v7',
+    v4.terrainVersion === 4 && new World(12345).terrainVersion === 7 && new World(12345, false, false, 2).terrainVersion === 2 &&
+    new World(12345, false, true).surface(0, 0).biome === 'Nether');
+  const samples = [
+    { x: -576, z: -960, biome: 'Głęboka dolina', base: B.GRASS },
+    { x: -408, z: -960, biome: 'Płaskowyż', base: B.GRASS },
+    { x: -168, z: -264, biome: 'Ośnieżone szczyty', base: B.SNOW },
+    { x: 912, z: -240, biome: 'Wąwóz', base: B.GRAVEL },
+  ];
+  for (const site of samples) {
+    const a = v4.surface(site.x, site.z);
+    const b = new World(12345, false, false, 4).surface(site.x, site.z);
+    check(`v4 ${site.biome} has a real accessible top and stable analytic height`,
+      a.biome === site.biome && a.h === b.h && a.h > 10 && a.h < CH - 4 &&
+      v4.getBlock(site.x, a.h, site.z) === site.base);
+  }
+  const negA = new World(12345, false, false, 4), negB = new World(12345, false, false, 4);
+  for (const [cx, cz] of [[-11, -17], [-10, -17], [56, -15], [57, -15]]) negA.getChunk(cx, cz);
+  for (const [cx, cz] of [[57, -15], [56, -15], [-10, -17], [-11, -17]]) negB.getChunk(cx, cz);
+  check('positive and negative chunk seams and ravine terrain are independent of generation order',
+    [[-11, -17], [-10, -17], [56, -15], [57, -15]].every(([cx, cz]) =>
+      negA.getChunk(cx, cz).data.every((id, idx) => id === negB.getChunk(cx, cz).data[idx])));
+  const map = new DiscoveryMap();
+  for (const site of samples) map.survey('overworld', site.x, site.z, site.biome as Biome, v4.surface(site.x, site.z).h);
+  const reopened = DiscoveryMap.fromSave(map.serialize());
+  check('v4 height biome map tiles keep their append-only indices and heights on save/import',
+    samples.every((site) => {
+      const tile = reopened.get('overworld', Math.floor(site.x / CS), Math.floor(site.z / CS));
+      return tile?.[2] === MAP_BIOMES.indexOf(site.biome as Biome) && tile?.[3] === v4.surface(site.x, site.z).h;
+    }));
+  const before = v4.surface(912, -240);
+  const mods = v4.serializeMods();
+  const restored = new World(12345, false, false, 4); restored.loadMods(mods);
+  check('v4 ravine remains walkable, loaded height survives world serialization and cannot fill to lava',
+    before.h >= SEA + 2 && restored.getBlock(912, before.h, -240) === B.GRAVEL &&
+    restored.surface(912, -240).h === before.h);
+  check('old discovery indices remain unchanged and new height biomes have map colors/navigation',
+    MAP_BIOMES[0] === 'Równiny' && MAP_BIOMES[14] === 'Kwiecista łąka' &&
+    samples.every((site) => MAP_BIOMES.includes(site.biome as Biome) && BIOME_TARGETS.includes(site.biome as Biome)));
+}
+
+section('3.0 #4: versioned walkable cave lattice with connected rooms, pools and exits');
+{
+  const seed = 12345;
+  const world = new World(seed);
+  const old = new World(seed, false, false, 5);
+  let v5Digest = 2166136261;
+  for (const block of old.getChunk(-34, -75).data) v5Digest = Math.imul(v5Digest ^ block, 16777619) >>> 0;
+  // Captured from the pre-v6 generator at this source-lake chunk.
+  eq('v5 worlds retain their original chunk after switching to v7', v5Digest, 983727665);
+  const rc1 = new World(seed, false, false, 6);
+  const digest = (cx: number, cz: number) => {
+    let h = 2166136261;
+    for (const id of rc1.getChunk(cx, cz).data) h = Math.imul(h ^ id, 16777619) >>> 0;
+    return h;
+  };
+  check('previously saved RC1 v6 caves, mouth and surrounding chunks retain exact geometry',
+    digest(-28, 2) === 1367259331 && digest(-25, 3) === 596249321 && digest(-20, 4) === 3293505039);
+  check('only newly created normal worlds receive the v7 underground, not existing v5/flat/Nether worlds',
+    world.terrainVersion === 7 && old.terrainVersion === 5 &&
+    world.surface(40, 40).h === old.surface(40, 40).h &&
+    new World(seed, true).getBlock(40, 30, 40) !== B.WATER);
+  const a = caveNode(seed, -1, -1), east = caveNode(seed, 0, -1), south = caveNode(seed, -1, 0);
+  check('cave node centers are deterministic across positive and negative cell boundaries',
+    a.x < 0 && a.z < 0 && east.x > 0 && south.z > 0 &&
+    JSON.stringify(a) === JSON.stringify(caveNode(seed, -1, -1)));
+  check('the dry chamber joins its sloping passages without a three-block pit',
+    !a.lake && [-4, -2, 0, 2, 4].every((dx) =>
+      [a.y - 3, a.y - 4].some((y) => world.getBlock(a.x + dx, y, a.z) !== B.AIR) &&
+      world.getBlock(a.x + dx, a.y - 2, a.z) === B.AIR));
+  const passable = (x: number, y: number, z: number) =>
+    world.getBlock(x, y, z) === B.AIR && world.getBlock(x, y + 1, z) === B.AIR;
+  for (const b of [east, south]) {
+    let connected = true;
+    for (let i = 0; i <= 96; i++) {
+      const t = i / 96;
+      const x = Math.round(a.x + (b.x - a.x) * t),
+        y = Math.round(a.y + (b.y - a.y) * t),
+        z = Math.round(a.z + (b.z - a.z) * t);
+      if (!passable(x, y, z)) { connected = false; break; }
+    }
+    check('a two-high passage actually crosses neighbouring chunks and heights',
+      connected && a.y !== b.y && Math.hypot(a.x - b.x, a.z - b.z) >= CAVE_CELL - 20);
+  }
+  const pool = Array.from({ length: 81 }, (_, k) => caveNode(seed, Math.floor(k / 9) - 4, k % 9 - 4)).find((p) => p.lake)!;
+  check('underground lake has water, an unblocked room over it and a clay bed',
+    !!pool && world.getBlock(pool.x, pool.y - 3, pool.z) === B.WATER &&
+    passable(pool.x, pool.y, pool.z) && world.getBlock(pool.x, pool.y - 6, pool.z) === B.CLAY);
+  const synthetic = caveNode(seed, 0, 0);
+  check('surface ramp cannot cut through an occupied village between chamber and mouth',
+    caveEntrance(seed, 0, 0, () => SEA + 12,
+      (x, z) => x === synthetic.x + 60 && z === synthetic.z + 18) === null);
+  let entrance: { gx: number; gz: number; x: number; y: number; z: number } | null = null;
+  for (let gx = -5; gx <= 5 && !entrance; gx++) for (let gz = -5; gz <= 5; gz++) {
+    const mouth = caveEntrance(seed, gx, gz, (x, z) => world.surface(x, z).h,
+      (x, z) => world.villageAt(x, z) !== null);
+    if (mouth && !caveNode(seed, gx, gz).lake) { entrance = { gx, gz, ...mouth }; break; }
+  }
+  check('a dry, non-village cave entrance is reachable from the surface', !!entrance &&
+    passable(entrance.x, entrance.y, entrance.z));
+  if (entrance) {
+    const node = caveNode(seed, entrance.gx, entrance.gz);
+    let ramp = true;
+    for (let i = 0; i <= 96; i++) {
+      const t = i / 96;
+      const x = Math.round(node.x + (entrance.x - node.x) * t),
+        y = Math.round(node.y + (entrance.y - node.y) * Math.max(0,
+          (t * Math.hypot(entrance.x - node.x, entrance.z - node.z) - 12) /
+          (Math.hypot(entrance.x - node.x, entrance.z - node.z) - 12))),
+        z = Math.round(node.z + (entrance.z - node.z) * t);
+      if (!passable(x, y, z)) { ramp = false; break; }
+    }
+    check('the entire walkable exit ramp remains open between the chamber and daylight',
+      ramp && Math.abs(entrance.y - node.y) < Math.hypot(entrance.x - node.x, entrance.z - node.z));
+    // Move a real player-sized AABB through the generated ramp with the same
+    // collision and gravity as the game, jumping on one-block steps. Sampling
+    // air blocks alone cannot detect a lip that strands a walking player.
+    const body: Body = {
+      pos: new THREE.Vector3(node.x + 0.5, node.y - 2 + 0.001, node.z + 0.5),
+      vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: false, hitWall: false,
+    };
+    const dx = entrance.x - node.x, dz = entrance.z - node.z;
+    const len = Math.hypot(dx, dz);
+    let best = 0;
+    for (let tick = 0; tick < 2400; tick++) {
+      const dt = 1 / 60;
+      const t = ((body.pos.x - node.x) * dx + (body.pos.z - node.z) * dz) / (len * len);
+      best = Math.max(best, t);
+      if (t >= 0.97) break;
+      // Aim just ahead along the same segment; lateral correction keeps the
+      // body inside the 4-block-wide corridor at chunk boundaries.
+      const ahead = Math.min(1, t + 0.08);
+      const tx = node.x + dx * ahead + 0.5 - body.pos.x;
+      const tz = node.z + dz * ahead + 0.5 - body.pos.z;
+      const mag = Math.hypot(tx, tz) || 1;
+      body.vel.x += (tx / mag * 4.3 - body.vel.x) * Math.min(1, 14 * dt);
+      body.vel.z += (tz / mag * 4.3 - body.vel.z) * Math.min(1, 14 * dt);
+      body.vel.y = Math.max(-78, body.vel.y - 32 * dt);
+      if (body.onGround && body.hitWall) body.vel.y = 9.1;
+      stepBody(world, body, dt);
+    }
+    check('a player-sized body can climb from a dry cave chamber to the surface',
+      best >= 0.97 && body.pos.y > entrance.y - 6,
+      `node=${JSON.stringify(node)}, exit=${JSON.stringify(entrance)}, progress=${best.toFixed(2)}, pos=${body.pos.toArray().map((n) => n.toFixed(2))}, vel=${body.vel.toArray().map((n) => n.toFixed(2))}, ground=${body.onGround}, hitWall=${body.hitWall}`);
+  }
+  const reverse = new World(seed);
+  for (const [cx, cz] of [[-1, -4], [0, -4], [-4, -1], [-4, 0]]) reverse.getChunk(cx, cz);
+  check('reordering negative/positive chunk generation does not shift corridor cuts or lake shores',
+    [[-4, 0], [-4, -1], [0, -4], [-1, -4]].every(([cx, cz]) =>
+      world.getChunk(cx, cz).data.every((b, i) => b === reverse.getChunk(cx, cz).data[i])));
+  check('old v5 terrain still uses its original cave geometry at a v7 node',
+    old.getBlock(a.x, a.y, a.z) !== B.WATER && old.terrainVersion === 5);
+}
+
+section('3.0 #3: connected waterways, source lakes and shore navigation on v5');
+{
+  const river = new World(12345, false, false, 5);
+  const old = new World(12345, false, false, 4);
+  const lake = { x: -544, z: -1200 };
+  const stream = { x: -551, z: -1245 };
+  check('water generation leaves existing v4 terrain and its saved modifications unchanged',
+    old.surface(lake.x, lake.z).biome === 'Płaskowyż' && old.surface(lake.x, lake.z).h === 93 &&
+    river.surface(lake.x, lake.z).biome === 'Jezioro' && river.terrainVersion === 5);
+  check('source lake and downstream river have flooded, cave-safe gravel/clay beds',
+    river.surface(stream.x, stream.z).biome === 'Rzeka' &&
+    [lake, stream].every(({ x, z }) => {
+      const { h } = river.surface(x, z);
+      return h < SEA - 1 && river.getBlock(x, SEA, z) === B.WATER &&
+        river.getBlock(x, SEA + 1, z) === B.AIR &&
+        river.getBlock(x, h, z) === (x === lake.x ? B.CLAY : B.GRAVEL);
+    }));
+  // Flood-fill the actual traversable water (not merely coincident labels).
+  // The test window straddles both x and z negative chunk boundaries.
+  const queue: [number, number][] = [[lake.x, lake.z]];
+  const visited = new Set([`${lake.x},${lake.z}`]);
+  const crossed = new Set<string>();
+  let foundRiver = false;
+  for (let i = 0; i < queue.length; i++) {
+    const [x, z] = queue[i];
+    crossed.add(`${Math.floor(x / CS)},${Math.floor(z / CS)}`);
+    if (river.surface(x, z).biome === 'Rzeka') foundRiver = true;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const xx = x + dx, zz = z + dz, key = `${xx},${zz}`;
+      if (xx < -610 || xx > -480 || zz < -1270 || zz > -1150 || visited.has(key)) continue;
+      const info = river.surface(xx, zz);
+      if (info.h > SEA - 2 || (info.biome !== 'Jezioro' && info.biome !== 'Rzeka')) continue;
+      visited.add(key); queue.push([xx, zz]);
+    }
+  }
+  check('a navigable connected source lake feeds a river across many chunks',
+    foundRiver && crossed.size >= 8 && visited.has(`${stream.x},${stream.z}`),
+    `wet tiles ${visited.size}, chunks ${crossed.size}`);
+  const boundaryPairs: [[number, number], [number, number]][] = [];
+  for (const [x, z] of queue) {
+    if (boundaryPairs.length >= 6) break;
+    for (const [dx, dz] of [[1, 0], [0, 1]]) {
+      const xx = x + dx, zz = z + dz;
+      if (((dx && Math.floor(x / CS) !== Math.floor(xx / CS)) ||
+           (dz && Math.floor(z / CS) !== Math.floor(zz / CS))) && visited.has(`${xx},${zz}`)) {
+        if (!boundaryPairs.some((pair) => pair[0][0] === x && pair[0][1] === z))
+          boundaryPairs.push([[x, z], [xx, zz]]);
+      }
+    }
+  }
+  check('water source blocks on both sides of real negative chunk boundaries remain swimmable',
+    boundaryPairs.length >= 4 && boundaryPairs.every((pair) =>
+      pair.every(([x, z]) => river.getBlock(x, SEA, z) === B.WATER && river.getBlock(x, SEA + 1, z) === B.AIR)));
+  check('v5 shores remain dry and excavated summits do not leave snow below sea level',
+    river.surface(-552, -1200).h > SEA + 2 &&
+    river.getBlock(-552, river.surface(-552, -1200).h + 1, -1200) === B.AIR &&
+    river.surface(-545, -1245).biome !== 'Ośnieżone szczyty');
+  const villageWorld = new World(20260926);
+  const safeVillages = [];
+  for (let gx = -6; gx <= 6; gx++) for (let gz = -6; gz <= 6; gz++) {
+    const v = villageInCell(gx, gz, villageWorld.villageContext());
+    if (v) safeVillages.push(v);
+  }
+  check('new waterways do not remove all villages or generate drowned village decks',
+    safeVillages.length >= 2 && safeVillages.every((v) => v.y > SEA + 2));
+  const seamA = new World(12345), seamB = new World(12345);
+  const sectors: [number, number][] = [[-35, -75], [-34, -75], [-35, -76], [-34, -76]];
+  for (const [cx, cz] of sectors) seamA.getChunk(cx, cz);
+  for (const [cx, cz] of [...sectors].reverse()) seamB.getChunk(cx, cz);
+  check('river/lake excavation and water sources never depend on chunk generation order',
+    sectors.every(([cx, cz]) => seamA.getChunk(cx, cz).data.every((id, index) => id === seamB.getChunk(cx, cz).data[index])));
+  const bridgeWorld = new World(12345);
+  const bridge = bridgeWorld.villageAt(-167, 749);
+  check('village deck stays walkable while a two-high water culvert connects the river under it',
+    !!bridge && bridge.y > SEA + 2 && bridgeWorld.surface(-167, 749).biome === 'Rzeka' &&
+    bridgeWorld.getBlock(-167, SEA, 749) === B.WATER &&
+    bridgeWorld.getBlock(-167, SEA + 1, 749) === B.AIR &&
+    bridgeWorld.getBlock(-167, SEA + 2, 749) === B.AIR &&
+    bridgeWorld.getBlock(-167, bridge.y, 749) !== B.AIR &&
+    bridgeWorld.getBlock(-167, bridge.y, 749) !== B.WATER);
+  const survey = new DiscoveryMap();
+  for (const site of [lake, stream]) survey.survey('overworld', site.x, site.z,
+    river.surface(site.x, site.z).biome, river.surface(site.x, site.z).h);
+  const loaded = DiscoveryMap.fromSave(survey.serialize());
+  check('river and lake colors, compass entries and append-only saved map IDs are distinct',
+    MAP_BIOMES[18] === 'Głęboka dolina' && MAP_BIOMES[19] === 'Rzeka' && MAP_BIOMES[20] === 'Jezioro' &&
+    BIOME_TARGETS.includes('Jezioro') && BIOME_TARGETS.includes('Rzeka') &&
+    loaded.get('overworld', Math.floor(lake.x / CS), Math.floor(lake.z / CS))?.[2] === 20 &&
+    loaded.get('overworld', Math.floor(stream.x / CS), Math.floor(stream.z / CS))?.[2] === 19);
+}
+
+// =================================================== generator v3: six biomes
+section('3.0: biome expansion and legacy terrain');
+{
+  const world = new World(12345);
+  const copy = new World(12345);
+  const legacy = new World(12345, false, false, 2);
+  const seen = new Set<string>();
+  let repeatable = true;
+  for (let x = -2000; x <= 2000; x += 64) for (let z = -2000; z <= 2000; z += 64) {
+    const a = world.surface(x, z), b = copy.surface(x, z);
+    seen.add(a.biome);
+    if (a.biome !== b.biome || a.h !== b.h) repeatable = false;
+  }
+  check('all six requested biomes generate deterministically', repeatable &&
+    ['Bagno', 'Sawanna', 'Dżungla', 'Tajga', 'Pustkowie', 'Kwiecista łąka'].every((b) => seen.has(b)));
+  const table = [
+    { x: -2000, z: -1136, biome: 'Tajga', top: B.PODZOL, vegetation: B.SPRUCE_LOG },
+    { x: -2000, z: -144, biome: 'Pustkowie', top: B.DRY_SOIL, vegetation: B.DEAD_SHRUB },
+    { x: -2000, z: -1616, biome: 'Kwiecista łąka', top: B.MEADOW_GRASS, vegetation: B.FLOWER_BLUE },
+  ];
+  for (const site of table) {
+    const surface = world.surface(site.x, site.z);
+    const c = world.getChunk(Math.floor(site.x / CS), Math.floor(site.z / CS));
+    check(`${site.biome} has biome-specific ground and vegetation`, surface.biome === site.biome &&
+      c.data.includes(site.top) && c.data.includes(site.vegetation));
+  }
+  const lc = legacy.getChunk(0, 0).data;
+  let checksum = 2166136261;
+  for (const n of lc) checksum = Math.imul(checksum ^ n, 16777619) >>> 0;
+  eq('pre-upgrade world generator chunk is unchanged', checksum, 1020360066);
+  check('old generator never silently introduces new biomes',
+    legacy.surface(-2000, -1136).biome !== 'Tajga' && legacy.terrainVersion === 2);
+  const a = new World(12345), b = new World(12345);
+  const cx = Math.floor(-2000 / CS), cz = Math.floor(-1136 / CS);
+  a.getChunk(cx, cz); a.getChunk(cx + 1, cz);
+  b.getChunk(cx + 1, cz); b.getChunk(cx, cz);
+  check('spruce forest is independent of chunk load order across seams',
+    a.getChunk(cx, cz).data.every((n, i) => n === b.getChunk(cx, cz).data[i]) &&
+    a.getChunk(cx + 1, cz).data.every((n, i) => n === b.getChunk(cx + 1, cz).data[i]));
+  check('new terrain/trees and flowers are accessible in Creative',
+    [B.SPRUCE_LOG, B.SPRUCE_LEAVES, B.SPRUCE_SAPLING, B.PODZOL, B.MEADOW_GRASS,
+      B.FLOWER_BLUE, B.DRY_SOIL, B.DEAD_SHRUB].every((id) => CREATIVE_BLOCKS.includes(id)));
+  const f = new World(9876, true);
+  const y = FLAT_H + 1;
+  f.setBlock(3, y, 3, B.SPRUCE_SAPLING);
+  check('spruce sapling grows on planted ground and yields a cone canopy',
+    plantTree(f, 3, y, 3, false, true) && f.getBlock(3, y, 3) === B.SPRUCE_LOG &&
+      [7, 8, 9].some((dy) => f.getBlock(3, y + dy, 3) === B.SPRUCE_LEAVES));
+  const rand = Math.random;
+  try {
+    Math.random = () => 0;
+    check('spruce leaves drop a renewable sapling in Survival', blockDrops(B.SPRUCE_LEAVES, 0)[0]?.id === B.SPRUCE_SAPLING);
+    check('wasteland shrubs drop useful sticks', blockDrops(B.DEAD_SHRUB, 0)[0]?.id === I.STICK);
+  } finally { Math.random = rand; }
+  check('spruce logs craft into usable planks',
+    RECIPES.some((r) => r.out.id === B.PLANKS && r.inputs.some((v) => v.id === B.SPRUCE_LOG)));
+}
+
+section('3.0: craftable biome compass search');
+{
+  const w = new World(12345);
+  const found = new BiomeSearch(w, -2000, -1136, 'Tajga');
+  check('search can be advanced with a bounded per-frame budget', found.advance(1) && found.checked === 1);
+  check('nearby taiga located without generating chunks', found.result?.distance === 0 && w.chunks.size === 0);
+  const far = new BiomeSearch(w, -2000, -1136, 'Kwiecista łąka');
+  while (!far.advance(96)) { /* bounded frame batches */ }
+  check('a different biome is found inside range', !!far.result && far.result.distance <= COMPASS_RANGE &&
+    w.surface(far.result.x, far.result.z).biome === 'Kwiecista łąka' && w.chunks.size === 0);
+  const flat = new World(42, true);
+  const absent = new BiomeSearch(flat, 0, 0, 'Tajga');
+  while (!absent.advance(96)) { /* finite search */ }
+  check('missing biome is reported after capped search', absent.done && absent.result === null && absent.checked === absent.total);
+  check('compass refuses the Nether', new BiomeSearch(new World(42, false, true), 0, 0, 'Tajga').done);
+  check('all selectable biomes belong to the overworld', !BIOME_TARGETS.includes('Nether'));
+  check('recipe uses existing compass, paper and lapis', RECIPES.some((r) => r.out.id === I.BIOME_COMPASS &&
+    [I.COMPASS, I.PAPER, I.LAPIS].every((id) => r.inputs.some((i) => i.id === id))));
+  check('biome compass exists as a separate Creative item', isItem(I.BIOME_COMPASS) && stackLimit(I.BIOME_COMPASS) === 1);
 }
 
 // ============================================================== flat worlds
@@ -881,6 +1277,17 @@ section('textures and icons');
     return true;
   })());
   check('atlas has crack frames', atlas.cracks.length > 0);
+  const small = compactAtlas(atlas.canvas);
+  eq('low-detail world atlas is half-size on each GPU axis', small.width, atlas.canvas.width / 2);
+  eq('low-detail world atlas does not overwrite inventory icons', getAtlas().canvas.width, atlas.canvas.width);
+  const tileAlpha = (tile: number, x: number, y: number) => committedAtlas?.[((Math.floor(tile / 16) * 16 + y) * 256 + (tile % 16) * 16 + x) * 4 + 3] ?? 0;
+  check('three turtle egg stages have committed atlas pixels even in low graphics',
+    [T.turtle_egg0, T.turtle_egg1, T.turtle_egg2].every((t) => tileAlpha(t, 8, 8) > 0));
+  check('new and old 2.7 textures are actually committed to the rendered atlas',
+    tileAlpha(T.mud, 8, 8) > 0 && tileAlpha(T.acacia_side, 8, 8) > 0 &&
+    tileAlpha(T.spruce_side, 8, 8) > 0 && tileAlpha(T.dry_soil, 8, 8) > 0 &&
+    tileAlpha(T.flower_blue, 8, 4) > 0);
+
   check('atlas average colours are filled', BLOCKS.slice(1, 40).every((d) => d && (atlas.canvas ? true : true)));
 
   const icons = buildItemIcons();
@@ -1024,7 +1431,8 @@ section('engine: armor damage, equipping, xp');
   g.gainXp(9);
   eq('24 xp is level 3', g.xp.info().level, 3);
 
-  // death: armor drops with the inventory
+  // death: armor drops with the inventory, and all active buffs end
+  g.effects = new Map([['fall', 2000]]);
   g.health = 1;
   g.ui = 'playing';
   g.damage(1000, true);
@@ -1032,6 +1440,3023 @@ section('engine: armor damage, equipping, xp');
   const droppedIds = drops.map((d) => d[0]);
   check('armor dropped on death', [I.LEATHER_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS].every((id) => droppedIds.includes(id)), JSON.stringify(droppedIds));
   eq('armor cleared on death', g.armor.every((s: any) => s === null), true);
+  eq('active potion buffs cleared on death', g.effects.size, 0);
+}
+
+section('3.0 #40: slow hammer cleaves visible mobs and mines only selected masonry');
+{
+  check('hammer has a new durable ID, separate icon, Creative entry and iron recipe',
+    I.IRON_HAMMER === 365 && ITEMS[I.IRON_HAMMER]?.tool === 'hammer' &&
+    durabilityMax(I.IRON_HAMMER) === 300 && stackLimit(I.IRON_HAMMER) === 1 &&
+    CREATIVE_ITEMS.includes(I.IRON_HAMMER) && !!buildItemIcons()[I.IRON_HAMMER]);
+  const r = RECIPES.find((recipe) => recipe.out.id === I.IRON_HAMMER)!;
+  const inv = new Inventory(); inv.add(I.IRON, 5); inv.add(I.STICK, 2);
+  check('Survival crafts one hammer, paying 5 iron and 2 sticks at a table', r.table &&
+    inv.craft(r) && inv.countOf(I.IRON_HAMMER) === 1 && inv.countOf(I.IRON) === 0 &&
+    inv.countOf(I.STICK) === 0 && !inv.craft(r));
+  const grid = new Inventory();
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+    const ch = r.pattern![y][x];
+    if (ch !== ' ') grid.grid[y * 3 + x] = { id: r.key![ch], count: 1 };
+  }
+  check('actual grid shape does not collide with an old pickaxe recipe and needs a table',
+    grid.gridMatch(true)?.out.id === I.IRON_HAMMER && grid.gridMatch(false) === null &&
+    grid.craftGrid(true)?.id === I.IRON_HAMMER);
+  check('hammer is slower than sword and dagger but hits harder than iron sword',
+    attackCooldown(I.IRON_HAMMER) === 1.1 && attackCooldown(I.IRON_HAMMER) > attackCooldown(I.IRON_SPEAR) &&
+    attackDamage(I.IRON_HAMMER, false) === 8 && attackDamage(I.IRON_SWORD, false) === 7 &&
+    attackReach(I.IRON_HAMMER) === 3.5);
+  check('hammer is faster on named masonry but cannot mine ore or obsidian instead of a pick',
+    [B.STONE, B.COBBLE, B.STONE_BRICKS, B.BLACKSTONE, B.BASALT].every((id) =>
+      toolHelps(id, I.IRON_HAMMER) && mineSeconds(id, I.IRON_HAMMER) < mineSeconds(id, 0)) &&
+    !toolHelps(B.DIAMOND_ORE, I.IRON_HAMMER) &&
+    !Number.isFinite(mineSeconds(B.DIAMOND_ORE, I.IRON_HAMMER)) &&
+    !Number.isFinite(mineSeconds(B.OBSIDIAN, I.IRON_HAMMER)) &&
+    blockDrops(B.DIAMOND_ORE, I.IRON_HAMMER).length === 0 && pickHint(B.STONE, I.IRON_HAMMER) === null);
+  check('hammer supports combat, durability and masonry efficiency enchants',
+    canEnchant(I.IRON_HAMMER, 'sharpness') && canEnchant(I.IRON_HAMMER, 'unbreaking') &&
+    canEnchant(I.IRON_HAMMER, 'efficiency') && !canEnchant(I.IRON_HAMMER, 'silktouch') &&
+    mineSeconds(B.COBBLE, I.IRON_HAMMER, 2) < mineSeconds(B.COBBLE, I.IRON_HAMMER));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.IRON_HAMMER, count: 1 };
+  g.selected = 0; g.selectedStack = () => g.inventory.slots[0];
+  g.mode = 'survival'; g.ui = 'playing'; g.body = { pos: new THREE.Vector3(0, 64, 0), vel: new THREE.Vector3(), onGround: true };
+  g.target = null; g.attackCooldown = 0; g.sprinting = false; g.hunger = 20;
+  g.hasEffect = () => false; g.wearTool = () => worn++;
+  g.message = (s: string) => notices.push(s); g.advanceChallenge = () => {}; g.emitHud = () => {};
+  g.eyePos = () => new THREE.Vector3(0, 65.6, 0); g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  const notices: string[] = [], damage = new Map<number, number>();
+  let worn = 0, blockBroken = 0;
+  const mk = (id: number, x: number, z: number) => ({ type: 'zombie', dead: false, bonusLoot: 0,
+    body: { pos: new THREE.Vector3(x, 64, z), vel: new THREE.Vector3(), h: 1.8 },
+    damage: (d: number) => { damage.set(id, d); return true; } });
+  const primary = mk(0, 0, -2), exposed = mk(1, 0.8, -2), behindWall = mk(2, -0.8, -2),
+    exposed2 = mk(3, 0.4, -2.3), exposed3 = mk(4, 1, -1.9), behind = mk(5, 0, 1);
+  g.mobs = [primary, exposed, behindWall, exposed2, exposed3, behind];
+  g.findMobTarget = (reach: number) => ({ mob: reach >= 2 ? primary : null, dist: 2 });
+  g.world = { raycast: (_x: number, _y: number, _z: number, dx: number) => dx < -0.1 ? { dist: 0.7 } : null };
+  g.tryAttack();
+  check('real melee path hits the center and at most two nearby unobstructed frontal mobs',
+    damage.get(0) === 8 && damage.get(1) === 5 && damage.get(3) === 5 &&
+    !damage.has(2) && !damage.has(4) && !damage.has(5) && g.attackCooldown === 1.1 && worn === 1 &&
+    notices.some((m) => m.includes('dodatkowo 2')) && blockBroken === 0);
+  g.tryAttack();
+  check('swing cannot apply repeated splash damage during cooldown', damage.size === 3 && worn === 1);
+  g.target = { id: B.STONE, dist: 1 };
+  g.attackCooldown = 0; g.tryAttack();
+  check('wall between player and primary target prevents the whole sweep', damage.size === 3);
+  // Digging uses ordinary held-LPM mining and must break only the aimed stone.
+  g.mobs = []; g.findMobTarget = () => ({ mob: null, dist: 3.5 });
+  g.world.raycast = () => ({ id: B.STONE, x: 0, y: 64, z: -2, dist: 2, nx: 0, ny: 1, nz: 0 });
+  g.selection = { visible: false, scale: { set: () => {} }, position: { set: () => {} } };
+  g.crackMesh = { visible: false }; g.breakBlock = () => { blockBroken++; };
+  g.blockAt = () => B.AIR; g.spawnParticles = () => {}; g.updateHand = () => {};
+  g.mouseLeft = true; g.mouseRight = false; g.breakCooldown = 0; g.placeCooldown = 1;
+  g.breakProgress = 0; g.breakKey = ''; g.digSoundTimer = 1;
+  g.bowDraw = -1; g.swingT = 1; g.pearlCd = 0; g.eatCooldown = 0;
+  g.updateInteraction(0.3);
+  check('holding hammer mines just the targeted block and wears once', blockBroken === 1 && worn === 2);
+  g.touchAim = null; g.refreshTarget = () => { g.target = null; };
+  g.mobs = [primary]; g.world.raycast = () => null; g.attackCooldown = 0;
+  g.findMobTarget = () => ({ mob: primary, dist: 2 }); g.keys = new Set();
+  g.touchTap(0.4, 0.4);
+  check('touch tap uses the same cooldown and main strike', damage.get(0) === 8 && g.attackCooldown === 1.1 && g.touchAim === null);
+}
+
+section('3.0 #41: fast daggers, short range and one dodge counter');
+{
+  check('dagger IDs append without moving old spear, and both are durable Creative items',
+    I.IRON_SPEAR === 362 && I.IRON_DAGGER === 363 && I.DIAMOND_DAGGER === 364 &&
+    [I.IRON_DAGGER, I.DIAMOND_DAGGER].every((id) => CREATIVE_ITEMS.includes(id) &&
+      stackLimit(id) === 1 && !!buildItemIcons()[id]));
+  check('iron and diamond daggers trade reach and damage for rate against legacy swords',
+    attackReach(I.IRON_DAGGER) === 2.2 && attackReach(I.DIAMOND_DAGGER) === 2.2 &&
+    attackReach(I.IRON_SWORD) === 3.5 && attackCooldown(I.IRON_DAGGER) === 0.28 &&
+    attackCooldown(I.DIAMOND_DAGGER) === 0.28 && attackCooldown(I.IRON_SWORD) === 0.42 &&
+    attackDamage(I.IRON_DAGGER, false) === 4 && attackDamage(I.DIAMOND_DAGGER, false) === 5 &&
+    attackDamage(I.IRON_SWORD, false) === 7 && durabilityMax(I.DIAMOND_DAGGER) === 600);
+  for (const [id, material, amount, table] of [
+    [I.IRON_DAGGER, I.IRON, 1, false], [I.DIAMOND_DAGGER, I.DIAMOND, 2, true],
+  ] as const) {
+    const r = RECIPES.find((candidate) => candidate.out.id === id)!;
+    const inv = new Inventory(); inv.add(material, amount); inv.add(I.STICK, 1);
+    check(`${ITEMS[id]?.name} Survival recipe consumes material and stick`, r.table === table &&
+      inv.craft(r) && inv.countOf(id) === 1 && inv.countOf(material) === 0 && inv.countOf(I.STICK) === 0 && !inv.craft(r));
+    const grid = new Inventory();
+    for (let y = 0; y < r.pattern!.length; y++) for (let x = 0; x < r.pattern![y].length; x++) {
+      const symbol = r.pattern![y][x];
+      if (symbol !== ' ') grid.grid[y * 3 + x] = { id: r.key![symbol], count: 1 };
+    }
+    check(`${ITEMS[id]?.name} grid validates the actual shape and table constraint`,
+      grid.gridMatch(true)?.out.id === id && grid.gridMatch(false)?.out.id === (table ? undefined : id) &&
+      grid.craftGrid(true)?.id === id);
+  }
+  check('daggers accept combat enchants but not mining enchants',
+    canEnchant(I.IRON_DAGGER, 'sharpness') && canEnchant(I.DIAMOND_DAGGER, 'looting') &&
+    canEnchant(I.IRON_DAGGER, 'unbreaking') && !canEnchant(I.IRON_DAGGER, 'efficiency') &&
+    attackDamage(I.IRON_DAGGER, false, 2) > attackDamage(I.IRON_DAGGER, false));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.IRON_DAGGER, count: 1 };
+  g.selected = 0; g.selectedStack = () => g.inventory.slots[0];
+  g.mode = 'survival'; g.ui = 'playing'; g.keys = new Set(); g.target = null; g.yaw = 0;
+  g.body = { pos: new THREE.Vector3(0, 64, 0), vel: new THREE.Vector3(), onGround: true };
+  g.dodgeTime = 0; g.dodgeCooldown = 0; g.daggerCounter = 0;
+  g.attackCooldown = 0; g.sprinting = false; g.hunger = 20; g.swingT = 1;
+  g.flying = false; g.emitHud = () => {}; g.hasEffect = () => false;
+  g.wearTool = () => {}; g.advanceChallenge = () => {}; g.message = (s: string) => messages.push(s);
+  const messages: string[] = [], damages: number[] = [], ranges: number[] = [];
+  const mob = { type: 'zombie', dead: false, hurtTime: 0,
+    body: { pos: new THREE.Vector3(0, 64, -2), vel: new THREE.Vector3() }, bonusLoot: 0,
+    damage: (d: number) => { if (mob.hurtTime > 0) return false; damages.push(d); mob.hurtTime = 0.5; return true; } };
+  g.findMobTarget = (range: number) => { ranges.push(range); const dist = Math.abs(mob.body.pos.z);
+    return range >= dist ? { mob, dist } : { mob: null, dist: range }; };
+  check('dodge starts a single counter window with hunger cost and cannot be spammed',
+    g.tryDodge() && !g.tryDodge() && g.daggerCounter === 0.65 && g.hunger === 19 && g.dodgeCooldown === 2.7);
+  g.tryAttack();
+  check('successful counter hits once at short range with hit feedback and shorter hit immunity',
+    damages[0] === 7 && ranges.at(-1) === 2.2 && g.daggerCounter === 0 &&
+    mob.hurtTime === 0.28 && g.attackCooldown === 0.28 &&
+    messages.some((m) => m.includes('Kontra sztyletem')));
+  g.tryAttack();
+  check('dagger cooldown prevents attacks before recovery', damages.length === 1);
+  g.attackCooldown = 0; mob.hurtTime = 0;
+  g.tryAttack();
+  check('next quick hit uses only base damage, no repeated counter', damages[1] === 4);
+  g.attackCooldown = 0; mob.hurtTime = 0;
+  g.dodgeCooldown = 0; g.tryDodge();
+  g.target = { id: B.STONE, dist: 1.4 }; g.tryAttack();
+  check('wall prevents the counter and does not consume its opportunity', damages.length === 2 && g.daggerCounter === 0.65);
+  g.target = null; g.attackCooldown = 0; g.daggerCounter = 0;
+  g.tryAttack();
+  check('expired counter does not grant bonus damage', damages[2] === 4);
+  g.attackCooldown = 0; mob.hurtTime = 0;
+  mob.body.pos.z = -2.8; g.tryAttack();
+  check('dagger cannot hit at sword range', damages.length === 3 && ranges.at(-1) === 2.2);
+  mob.body.pos.z = -2; mob.hurtTime = 0; g.attackCooldown = 0; g.daggerCounter = 0.65;
+  g.refreshTarget = () => { g.target = null; };
+  g.touchAim = null;
+  g.touchTap(0.3, 0.4);
+  check('touch tap uses short reach and triggers the same dodge counter', damages[3] === 7 &&
+    ranges.at(-1) === 2.2 && g.daggerCounter === 0 && g.touchAim === null);
+  mob.hurtTime = 0; g.attackCooldown = 0; g.mouseLeft = true; g.placeCooldown = 1;
+  g.pearlCd = 0; g.eatCooldown = 0; g.breakCooldown = 0; g.breakProgress = 0;
+  g.mouseRight = false; g.bowDraw = -1;
+  g.selection = { visible: false }; g.crackMesh = { visible: false };
+  g.world = { raycast: () => null };
+  g.eyePos = () => new THREE.Vector3(0, 65.6, 0); g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  g.updateHand = () => {};
+  g.updateInteraction(1 / 30);
+  check('held attack on PC or touch respects dagger speed and reach without mining',
+    damages[4] === 4 && ranges.slice(-2).every((r) => r === 2.2) &&
+    g.breakProgress === 0 && g.mouseLeft);
+}
+
+section('3.0 #39: crafted long-reach spear with slower PC and touch attacks');
+{
+  eq('new spear ID is appended without changing existing armor/item IDs', I.IRON_SPEAR, 362);
+  check('iron spear is a unique durable Creative item with icon', ITEMS[I.IRON_SPEAR]?.tool === 'spear' &&
+    CREATIVE_ITEMS.includes(I.IRON_SPEAR) && stackLimit(I.IRON_SPEAR) === 1 &&
+    durabilityMax(I.IRON_SPEAR) === 240 && !!buildItemIcons()[I.IRON_SPEAR]);
+  const recipe = RECIPES.find((r) => r.out.id === I.IRON_SPEAR);
+  check('crafting recipe requires 2 iron and 2 sticks at a table', !!recipe && recipe.table &&
+    recipe.inputs.some((a) => a.id === I.IRON && a.count === 2) &&
+    recipe.inputs.some((a) => a.id === I.STICK && a.count === 2));
+  const inv = new Inventory();
+  inv.add(I.IRON, 2); inv.add(I.STICK, 2);
+  check('Survival crafts spear using real inventory, without duplication', inv.craft(recipe!) &&
+    inv.countOf(I.IRON_SPEAR) === 1 && inv.countOf(I.IRON) === 0 && inv.countOf(I.STICK) === 0 && !inv.craft(recipe!));
+  const grid = new Inventory();
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+    const symbol = recipe!.pattern![y][x];
+    if (symbol !== ' ') grid.grid[y * 3 + x] = { id: recipe!.key![symbol], count: 1 };
+  }
+  check('3×3 grid yields a spear, 2×2 personal crafting does not', grid.craftGrid(true)?.id === I.IRON_SPEAR && grid.craftGrid(false) === null);
+  check('spear reaches farther but recovers slower than every old sword', attackReach(I.IRON_SPEAR) === 5 &&
+    attackReach(I.IRON_SWORD) === 3.5 && attackCooldown(I.IRON_SPEAR) === 0.92 &&
+    attackCooldown(I.IRON_SWORD) === 0.42);
+  check('damage is balanced between iron and diamond sword', attackDamage(I.IRON_SPEAR, false) === 7 &&
+    attackDamage(I.IRON_SPEAR, false) < attackDamage(I.DIAMOND_SWORD, false) &&
+    attackDamage(I.IRON_SPEAR, true) === 9);
+  check('spear can take sharpness without changing legacy enchant applicability', canEnchant(I.IRON_SPEAR, 'sharpness') &&
+    canEnchant(I.IRON_SPEAR, 'unbreaking') && !canEnchant(I.IRON_SPEAR, 'efficiency') &&
+    attackDamage(I.IRON_SPEAR, false, 2) > attackDamage(I.IRON_SPEAR, false));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.selected = 0; g.inventory.slots[0] = { id: I.IRON_SPEAR, count: 1 };
+  g.mode = 'survival'; g.ui = 'playing'; g.keys = new Set(); g.target = null;
+  g.body = { pos: new THREE.Vector3(0, 64, 0), vel: new THREE.Vector3() };
+  g.attackCooldown = 0; g.sprinting = false; g.hunger = 20; g.swingT = 1;
+  g.hasEffect = () => false; g.wearTool = () => {}; g.advanceChallenge = () => {}; g.message = () => {};
+  g.selectedStack = () => g.inventory.slots[g.selected] ?? null;
+  let attacks = 0, lastDamage = 0;
+  const mob = { type: 'zombie', dead: false, body: { pos: new THREE.Vector3(0, 64, -4.5), vel: new THREE.Vector3() },
+    bonusLoot: 0, damage: (d: number) => { attacks++; lastDamage = d; return true; } };
+  const ranges: number[] = [];
+  g.findMobTarget = (range: number) => { ranges.push(range); return range >= 4.5 ? { mob, dist: 4.5 } : { mob: null, dist: range }; };
+  g.tryAttack();
+  check('real PC combat path hits at 4.5 blocks with spear and applies cooldown', attacks === 1 &&
+    lastDamage === 7 && g.attackCooldown === 0.92 && ranges.at(-1) === 5);
+  g.tryAttack();
+  check('repeat clicks during spear recovery cannot spam hits', attacks === 1);
+  g.attackCooldown = 0;
+  g.inventory.slots[0] = { id: I.IRON_SWORD, count: 1 };
+  g.tryAttack();
+  check('existing swords do not inherit extra reach', attacks === 1 && ranges.at(-1) === 3.5);
+  g.inventory.slots[0] = { id: I.IRON_SPEAR, count: 1 };
+  g.target = { id: B.STONE, dist: 2 };
+  g.tryAttack();
+  check('closer wall blocks the extended spear strike', attacks === 1);
+  g.target = null; g.attackCooldown = 0; g.touchAim = null;
+  g.refreshTarget = () => { g.target = null; };
+  g.touchTap(0.3, 0.4);
+  check('touch tap reaches the same distant mob and restores aim', attacks === 2 &&
+    g.touchAim === null && ranges.at(-1) === 5);
+  g.attackCooldown = 0; g.mouseLeft = true; g.placeCooldown = 1; g.pearlCd = 0; g.eatCooldown = 0;
+  g.breakCooldown = 0; g.breakProgress = 0; g.mouseRight = false; g.bowDraw = -1;
+  g.selection = { visible: false }; g.crackMesh = { visible: false };
+  g.world = { raycast: () => null };
+  g.eyePos = () => new THREE.Vector3(0, 65.6, 0); g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  g.updateHand = () => {};
+  g.updateInteraction(1 / 30);
+  check('held PC/touch attack scans long reach on each swing without mining', attacks === 3 && g.mouseLeft &&
+    ranges.slice(-2).every((r) => r === 5) && g.breakProgress === 0);
+  check('equipped spear shows its range and rate in crosshair help', g.heldHint().includes('0,92 s'));
+}
+
+section('3.0 #76: specialized boots with crafting and equipment');
+{
+  const ids = [I.EMBER_BOOTS, I.TIDE_BOOTS, I.SOFT_BOOTS];
+  check('three boot IDs extend existing item space without replacing old items', ids.join(',') === '359,360,361' &&
+    ids.every((id) => !!ITEMS[id] && CREATIVE_ITEMS.includes(id) && stackLimit(id) === 1));
+  check('all variants use the feet slot with less protection than iron boots', ids.every((id) =>
+    armorSlotOf(id) === 3 && armorPoints([null, null, null, { id, count: 1 }]) === 1) &&
+    armorPoints([null, null, null, { id: I.IRON_BOOTS, count: 1 }]) === 2);
+  const icons = buildItemIcons();
+  check('new boots receive equipment icons', ids.every((id) => !!icons[id]));
+  const inputs = [
+    [I.IRON, I.MAGMA_CREAM], [I.IRON, I.RAW_FISH, I.LAPIS], [I.IRON, I.FEATHER, I.GLOWSTONE_DUST],
+  ];
+  for (let j = 0; j < ids.length; j++) {
+    const id = ids[j];
+    const recipe = RECIPES.find((r) => r.out.id === id);
+    check(`boots ${id} have a table recipe with accessible existing resources`, !!recipe && recipe.table &&
+      inputs[j].every((input) => recipe.inputs.some((s) => s.id === input)));
+    const inv = new Inventory();
+    for (const input of recipe!.inputs) inv.add(input.id, input.count);
+    check(`Survival can craft ${id} using actual inventory transaction`, inv.craft(recipe!) &&
+      inv.countOf(id) === 1 && recipe!.inputs.every((input) => inv.countOf(input.id) === 0));
+    check(`no free second craft of ${id}`, !inv.craft(recipe!));
+  }
+  const grid = new Inventory();
+  const pattern = RECIPES.find((r) => r.out.id === I.TIDE_BOOTS)!;
+  for (let y = 0; y < 2; y++) for (let x = 0; x < 3; x++) {
+    const symbol = pattern.pattern![y][x];
+    if (symbol !== ' ') grid.grid[y * 3 + x] = { id: pattern.key![symbol], count: 1 };
+  }
+  check('placing the swim recipe in the real 3×3 grid shows the correct output', grid.craftGrid(true)?.id === I.TIDE_BOOTS);
+  check('2×2 personal grid cannot craft the specialized boots', grid.craftGrid(false) === null);
+
+  const g = Object.create(Game.prototype) as any;
+  g.mode = 'survival'; g.ui = 'playing'; g.inventory = new Inventory();
+  g.armor = [null, null, null, null]; g.emitHud = () => {}; g.unlock = () => {};
+  g.inventory.cursor = { id: I.EMBER_BOOTS, count: 1 };
+  g.clickArmorSlot(3);
+  check('new boots equip through the real armor slot, not only the hotbar', g.armor[3]?.id === I.EMBER_BOOTS && g.inventory.cursor === null);
+  check('fire boots have situational heat resistance only', bootHeatReduction(g.armor[3]) === 0.24 &&
+    bootHeatReduction({ id: I.IRON_BOOTS, count: 1 }) === 0);
+  check('water boots only multiply swimming speed', bootSwimFactor({ id: I.TIDE_BOOTS, count: 1 }) === 1.35 &&
+    bootSwimFactor(g.armor[3]) === 1);
+  check('soft boots only reduce fall damage', bootFallFactor({ id: I.SOFT_BOOTS, count: 1 }) === 0.6 &&
+    bootFallFactor(g.armor[3]) === 1);
+  check('stacked swimming upgrades have a bounded multiplier', waterSpeedFactor({ id: I.TIDE_BOOTS, count: 1, ench: { tidewalker: 3 } }) === 1.75 && waterSpeedFactor(null) === 1);
+  check('soft boots and feather falling cannot reduce drops below 40%', landingFactor({ id: I.SOFT_BOOTS, count: 1, ench: { featherfalling: 4 } }) === 0.4 && landingFactor(null) === 1);
+  g.health = 100; g.hurtCount = 0; g.shake = 0;
+  g.body = { pos: new THREE.Vector3(0, 64, 0) };
+  g.wearArmor = () => {}; g.buzz = () => {};
+  g.damage(4, false, 'fire');
+  const protectedHit = 100 - g.health;
+  g.health = 100;
+  g.damage(4, false, 'projectile');
+  check('equipped fire boots only protect against heat in the real engine', protectedHit < 100 - g.health);
+  g.armor[3] = null;
+  check('removing boots immediately removes the bonus', bootHeatReduction(g.armor[3]) === 0);
+}
+
+section('3.0 #77: mutually exclusive defense and swimming enchants');
+{
+  const armor = { id: I.IRON_BOOTS, count: 1 } as Stack;
+  check('new families are accessible at the real table', ['fireward', 'arrowguard', 'tidewalker'].every((id) =>
+    ENCHANTS.some((def) => def.id === id) && canEnchant(armor.id, id)));
+  check('swimming enchant is restricted to boots', !canEnchant(I.IRON_HELMET, 'tidewalker') && canEnchant(I.LEATHER_BOOTS, 'tidewalker'));
+  check('protection families conflict but swimming remains compatible', conflicts('protection', 'fireward') &&
+    conflicts('arrowguard', 'fireward') && !conflicts('tidewalker', 'fireward'));
+  addEnch(armor, 'fireward', 4);
+  check('another protection cannot be applied to the same piece', !canAddEnch(armor, 'protection') &&
+    !canAddEnch(armor, 'arrowguard'));
+  addEnch(armor, 'arrowguard', 4);
+  check('direct enchant entry does not bypass conflicts', armor.ench?.arrowguard === undefined);
+  eq('anvil keeps first item when merging incompatible protections', mergeEnchants({ fireward: 2 }, { protection: 4 })?.protection, undefined);
+  check('table offers omit conflicting enchantments after selection', !rollEnchantOptions(armor, 15, () => 0.5).some((o) =>
+    o.ench === 'arrowguard' || o.ench === 'protection'));
+  eq('specialized armor protects against its own source', sourceProtection([null, null, null, armor], 'fire'), 0.32);
+  eq('fire armor does not reduce projectiles', sourceProtection([null, null, null, armor], 'projectile'), 0);
+  check('four armor pieces cap source resistance', sourceProtection([armor, armor, armor, armor], 'fire') === 0.4);
+  check('empty boots retain old swimming speed', swimSpeedFactor(null) === 1);
+  addEnch(armor, 'tidewalker', 3);
+  eq('enchanted boots improve only the water multiplier', swimSpeedFactor(armor), 1.45);
+  check('old protection enchantment remains usable', canEnchant(I.IRON_BOOTS, 'protection') &&
+    totalProtection([{ id: I.IRON_BOOTS, count: 1, ench: { protection: 2 } }]) === 2);
+
+  // Exercise the actual engine damage path (the old armor system still runs).
+  const g = Object.create(Game.prototype) as any;
+  g.mode = 'survival'; g.ui = 'playing'; g.armor = [null, null, null, armor];
+  g.body = { pos: new THREE.Vector3(0, 65, 0) }; g.health = 100; g.hurtCount = 0; g.shake = 0;
+  g.wearArmor = () => {}; g.buzz = () => {}; g.emitHud = () => {};
+  g.damage(10, false, 'fire');
+  const fireHit = 100 - g.health;
+  g.health = 100;
+  g.damage(10, false, 'projectile');
+  const projectileHit = 100 - g.health;
+  check('engine fire damage is smaller than arrow damage with heat armor', fireHit < projectileHit, `${fireHit}, ${projectileHit}`);
+  const arrowBoots = { id: I.IRON_BOOTS, count: 1, ench: { arrowguard: 4 } };
+  g.armor[3] = arrowBoots; g.health = 100;
+  g.damage(10, false, 'projectile');
+  check('engine arrow damage responds to arrowguard, not fireward', 100 - g.health < projectileHit);
+  g.armor[3] = { id: I.IRON_BOOTS, count: 1 }; g.health = 100;
+  g.damage(10, false, 'fire');
+  check('old unechanted armor retains its previous damage value', 100 - g.health === projectileHit);
+  g.armor[3] = armor; g.health = 100;
+  g.damage(1, false, 'fire');
+  check('fireward reduces single-point magma ticks rather than losing fractional protection to rounding', 100 - g.health < 1);
+
+  const table = Object.create(Game.prototype) as any;
+  table.mode = 'survival'; table.inventory = new Inventory();
+  table.enchantItem = { id: I.IRON_BOOTS, count: 1 };
+  table.enchOptions = [{ ench: 'fireward', level: 2, cost: 2, lapis: 1 }];
+  table.enchantPower = () => 15;
+  table.body = { pos: new THREE.Vector3(0, 64, 0) };
+  table.spawnParticles = () => {}; table.message = () => {}; table.emitHud = () => {}; table.unlock = () => {};
+  let xpSpent = 0;
+  table.xp = { canSpend: () => true, spend: (n: number) => { xpSpent += n; return true; } };
+  check('table rejects an offer with missing lapis without spending XP', !table.enchantWith(0) && xpSpent === 0);
+  table.inventory.slots[0] = { id: I.LAPIS, count: 3 };
+  check('Survival can buy new armor enchant at the actual table', table.canEnchantWith(0) && table.enchantWith(0) &&
+    table.enchantItem.ench.fireward === 2 && xpSpent === 2 && table.inventory.countOf(I.LAPIS) === 2);
+  table.enchOptions = [{ ench: 'arrowguard', level: 4, cost: 1, lapis: 1 }];
+  check('incompatible offer is refused without charging currency', !table.canEnchantWith(0) && !table.enchantWith(0) && xpSpent === 2 && table.inventory.countOf(I.LAPIS) === 2);
+  table.mode = 'creative'; table.enchantItem = { id: I.IRON_BOOTS, count: 1 };
+  table.enchOptions = [{ ench: 'tidewalker', level: 2, cost: 1, lapis: 1 }];
+  table.inventory.slots[0] = null;
+  check('Creative can enchant swimming boots at the table without lapis', table.enchantWith(0) &&
+    table.enchantItem.ench.tidewalker === 2 && xpSpent === 2);
+}
+
+section('3.0 #50: decorative wall art, banners, pottery and real furniture');
+{
+  const bases = [B.PAINTING_LAND_N, B.PAINTING_SUN_N, B.BANNER_RED, B.BANNER_BLUE, B.VASE, B.CHAIR_N, B.TABLE];
+  check('decor appended after carrots, each base available in Creative without exposing orientation states',
+    B.PAINTING_LAND_N === 427 && B.TABLE === 442 &&
+    bases.every((id) => CREATIVE_BLOCKS.includes(id)) &&
+    !CREATIVE_BLOCKS.includes(B.PAINTING_SUN_E) && !CREATIVE_BLOCKS.includes(B.CHAIR_W));
+  check('wall images, banners, vase and wood furniture use distinct painted atlas tiles',
+    new Set(bases.map((id) => BLOCKS[id]?.top)).size === bases.length &&
+    bases.every((id) => !!BLOCKS[id] && BLOCKS[id].hardness >= 0));
+  for (const id of bases) {
+    const recipe = RECIPES.find((r) => r.out.id === id)!;
+    const inv = new Inventory();
+    for (let row = 0; row < recipe.pattern!.length; row++)
+      for (let col = 0; col < recipe.pattern![row].length; col++) {
+        const symbol = recipe.pattern![row][col];
+        if (symbol !== ' ' && symbol !== '.') inv.grid[row * 3 + col] = { id: recipe.key![symbol], count: 1 };
+      }
+    check(`${displayName(id)} has a real table-grid recipe with charged inputs`,
+      recipe.table && !inv.gridMatch(false) && inv.gridMatch(true)?.out.id === id &&
+      inv.craftGrid(true)?.id === id && inv.grid.every((v) => v === null));
+    const stock = new Inventory();
+    for (const ingredient of recipe.inputs) stock.add(ingredient.id, ingredient.count);
+    check(`${displayName(id)} is actually craftable once from Survival materials`,
+      stock.craft(recipe) && stock.countOf(id) === recipe.out.count && !stock.craft(recipe));
+  }
+  const dye = RECIPES.find((r) => r.out.id === B.WOOL_BLUE && r.inputs.some((it) => it.id === B.FLOWER_BLUE))!;
+  const cheapBlue = new Inventory(); cheapBlue.add(B.WOOL_WHITE, 1); cheapBlue.add(B.FLOWER_BLUE, 1);
+  check('Meadow blue flower gives a real Survival dye route without spending a diamond',
+    !!dye && !dye.table && cheapBlue.craft(dye) && cheapBlue.countOf(B.WOOL_BLUE) === 1);
+  check('silk touch and normal mining return the base item, not a rotated painting or chair',
+    [B.PAINTING_LAND_N, B.PAINTING_LAND_E, B.PAINTING_LAND_S, B.PAINTING_LAND_W].every((id) =>
+      blockDrops(id, I.IRON_PICK)[0]?.id === B.PAINTING_LAND_N && blockDrops(id, I.IRON_PICK, { silk: true })[0]?.id === B.PAINTING_LAND_N) &&
+    [B.CHAIR_N, B.CHAIR_E, B.CHAIR_S, B.CHAIR_W].every((id) => blockDrops(id, 0)[0]?.id === B.CHAIR_N));
+  const world = new World(5050, true); world.getChunk(0, 0);
+  const y = FLAT_H + 2;
+  world.setBlock(7, y, 8, B.STONE); world.setBlock(7, y, 9, B.STONE);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.body = { pos: new THREE.Vector3(2.5, FLAT_H + 1, 2.5), w: 0.6, h: 1.8 };
+  g.inventory = new Inventory(); g.selected = 0; g.mode = 'survival';
+  g.mobs = []; g.keys = new Set(); g.growables = new Map(); g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.findMobTarget = () => ({ mob: null, dist: Infinity }); g.emitHud = () => {};
+  g.lookDir = () => new THREE.Vector3(0, 0, 1);
+  g.settle = () => {}; g.onBlockChanged = () => {}; g.advanceChallenge = () => {}; g.updateHand = () => {};
+  g.unlock = () => {}; g.spawnParticles = () => {};
+  const dropped: number[] = [], messages: string[] = [];
+  g.spawnDrop = (id: number, count: number) => { for (let i = 0; i < count; i++) dropped.push(id); };
+  g.message = (m: string) => messages.push(m);
+  g.inventory.slots[0] = { id: B.PAINTING_LAND_N, count: 1 };
+  g.target = { id: B.STONE, x: 7, y, z: 8, nx: 1, ny: 0, nz: 0 };
+  g.tryUse();
+  check('right click/tap places a painting flush to clicked wall, oriented and consumed once',
+    world.getBlock(8, y, 8) === B.PAINTING_LAND_W && !g.inventory.slots[0]);
+  g.inventory.slots[0] = { id: B.PAINTING_SUN_N, count: 1 };
+  g.target = { id: B.STONE, x: 7, y, z: 9, nx: 1, ny: 0, nz: 0 };
+  g.tryUse();
+  check('second painting has separate art and its own wall direction',
+    world.getBlock(8, y, 9) === B.PAINTING_SUN_W &&
+    BLOCKS[world.getBlock(8, y, 8)].top !== BLOCKS[world.getBlock(8, y, 9)].top);
+  const portable = new World(5050, true); portable.loadMods(world.serializeMods());
+  check('orientations persist in the old world modification format with no new save field',
+    portable.getBlock(8, y, 8) === B.PAINTING_LAND_W && portable.getBlock(8, y, 9) === B.PAINTING_SUN_W);
+  g.inventory.slots[0] = { id: B.PAINTING_LAND_N, count: 1 };
+  g.target = { id: B.GRASS, x: 10, y: FLAT_H, z: 8, nx: 0, ny: 1, nz: 0 };
+  g.tryUse();
+  check('painting cannot float over floor, preserves stock and explains wall support',
+    world.getBlock(10, FLAT_H + 1, 8) === B.AIR && g.inventory.slots[0]?.count === 1 && messages.some((m) => m.includes('ściany')));
+  const floorPieces = [B.BANNER_RED, B.BANNER_BLUE, B.VASE, B.CHAIR_N, B.TABLE];
+  for (let i = 0; i < floorPieces.length; i++) {
+    const x = 9 + i;
+    g.target = { id: B.GRASS, x, y: FLAT_H, z: 11, nx: 0, ny: 1, nz: 0 };
+    g.inventory.slots[0] = { id: floorPieces[i], count: 1 };
+    g.tryUse();
+    check(`${displayName(floorPieces[i])} can be placed on an ordinary interior floor and spent`,
+      world.getBlock(x, FLAT_H + 1, 11) === floorPieces[i] && !g.inventory.slots[0]);
+  }
+  g.mode = 'creative'; g.target = { id: B.CHAIR_N, x: 12, y: FLAT_H + 1, z: 11 };
+  g.pickBlock();
+  check('Creative middle click on rotated furniture selects a reusable base chair',
+    g.inventory.slots[0]?.id === B.CHAIR_N);
+  g.target = { id: B.PAINTING_SUN_W, x: 8, y, z: 9 };
+  g.pickBlock();
+  check('Creative middle click on oriented art selects its original wall painting',
+    g.inventory.slots[0]?.id === B.PAINTING_SUN_N);
+  g.mode = 'survival'; g.inventory.slots[0] = null;
+  const geom = world.buildMesh(world.getChunk(0, 0));
+  const positions = geom.flatMap((mesh) => {
+    const pos = mesh.getAttribute('position');
+    const values: [number, number, number][] = [];
+    if (!pos) return values;
+    for (let i = 0; i < pos.count; i++) values.push([pos.getX(i), pos.getY(i), pos.getZ(i)]);
+    return values;
+  });
+  check('painting is a thin wall panel, not an invisible block or full-cube facade',
+    positions.filter(([x, yy, z]) => x >= 8 && x <= 9 && yy > y + 0.05 && yy < y + 0.95 && z >= 8 && z < 8.2).length > 0);
+  check('chair and table use visible separated seats, backs and legs at low preset',
+    positions.some(([x, yy, z]) => x > 12 && x < 13 && yy > FLAT_H + 1.4 && yy < FLAT_H + 1.58 && z > 11 && z < 12) &&
+    positions.some(([x, yy, z]) => x > 13 && x < 14 && yy > FLAT_H + 1.68 && yy < FLAT_H + 1.9 && z > 11 && z < 12));
+  geom.forEach((mesh) => mesh.dispose());
+  g.breakBlock(7, y, 8);
+  check('mining wall removes supported art and returns one framed item, not a floating picture',
+    world.getBlock(8, y, 8) === B.AIR && dropped.filter((id) => id === B.PAINTING_LAND_N).length === 1 &&
+    world.getBlock(8, y, 9) === B.PAINTING_SUN_W);
+  g.breakBlock(7, y, 8);
+  check('repeating wall destruction cannot duplicate dropped painting', dropped.filter((id) => id === B.PAINTING_LAND_N).length === 1);
+  g.breakBlock(11, FLAT_H, 11);
+  check('removing floor support recovers a vase once, without leaving a floating ornament',
+    world.getBlock(11, FLAT_H + 1, 11) === B.AIR && dropped.filter((id) => id === B.VASE).length === 1);
+}
+
+section('3.0 #49: one rare, saved and equipped utility talisman at a time');
+{
+  check('two talismans append IDs after meals, exist in Creative and never stack',
+    I.WANDER_CHARM === 384 && I.TIDE_CHARM === 385 &&
+    CREATIVE_ITEMS.includes(I.WANDER_CHARM) && CREATIVE_ITEMS.includes(I.TIDE_CHARM) &&
+    stackLimit(I.WANDER_CHARM) === 1 && stackLimit(I.TIDE_CHARM) === 1);
+  const held = { id: I.WANDER_CHARM, count: 1 }, other = { id: I.TIDE_CHARM, count: 1 };
+  check('backpack is passive-free; effects are intentionally small and separate',
+    walkCharmFactor(null) === 1 && breathCharmFactor(null) === 1 &&
+    walkCharmFactor(held) === 1.05 && breathCharmFactor(held) === 1 &&
+    walkCharmFactor(other) === 1 && breathCharmFactor(other) === 0.8);
+  check('old worlds and malicious oversized or non-charm save stacks cannot equip',
+    restoreTalisman(undefined) === null && restoreTalisman({ id: I.IRON, count: 1 }) === null &&
+    restoreTalisman({ id: I.WANDER_CHARM, count: 999 }) === null &&
+    restoreTalisman({ id: I.TIDE_CHARM, count: 1 })?.id === I.TIDE_CHARM &&
+    !isTalisman(I.IRON));
+  let walker = 0, diver = 0, both = 0, max = 0, deterministic = true;
+  for (let x = -1000; x < 1000; x++) {
+    const loot = chestLoot(49049, x, 37, 2);
+    const found = loot.filter((v) => isTalisman(v.id));
+    if (found.length) {
+      max = Math.max(max, found.length);
+      if (found[0].id === I.WANDER_CHARM) walker++;
+      else diver++;
+    }
+    if (found.length > 1) both++;
+    deterministic &&= JSON.stringify(loot) === JSON.stringify(chestLoot(49049, x, 37, 2));
+  }
+  check('rare cave chest loot yields both charms and never two in one chest',
+    deterministic && walker > 12 && diver > 12 && walker + diver < 150 && both === 0 && max === 1,
+    `wander=${walker} tide=${diver}`);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.talisman = null; g.emitHud = () => {};
+  const messages: string[] = []; g.message = (m: string) => messages.push(m);
+  g.inventory.slots[0] = { id: I.WANDER_CHARM, count: 1 };
+  check('carrying a charm in the hotbar does not activate it', walkCharmFactor(g.talisman) === 1);
+  g.inventory.cursor = { id: I.WANDER_CHARM, count: 1 }; g.clickTalismanSlot();
+  check('actual single-slot equip applies one factor and consumes cursor',
+    g.talisman?.id === I.WANDER_CHARM && g.inventory.cursor === null && walkCharmFactor(g.talisman) === 1.05);
+  g.inventory.cursor = { id: I.IRON, count: 1 }; g.clickTalismanSlot();
+  check('non-talisman cursor rejected, equip unchanged and player gets an explanation',
+    g.talisman?.id === I.WANDER_CHARM && g.inventory.cursor?.id === I.IRON && messages.length === 1);
+  g.inventory.cursor = { id: I.TIDE_CHARM, count: 2 }; g.clickTalismanSlot();
+  check('oversized invalid stack never enters the equipped slot',
+    g.talisman?.id === I.WANDER_CHARM && g.inventory.cursor?.count === 2);
+  g.inventory.cursor = { id: I.TIDE_CHARM, count: 1 }; g.clickTalismanSlot();
+  check('swapping to a dive charm returns old one on cursor and removes movement bonus',
+    g.talisman?.id === I.TIDE_CHARM && g.inventory.cursor?.id === I.WANDER_CHARM &&
+    walkCharmFactor(g.talisman) === 1 && breathCharmFactor(g.talisman) === 0.8);
+  g.inventory.cursor = null; g.clickTalismanSlot();
+  check('unequip removes bonus and returns exactly one charm, no copies',
+    g.talisman === null && g.inventory.cursor?.id === I.TIDE_CHARM && g.inventory.cursor?.count === 1);
+}
+
+section('3.0 #47: renewable vegetables, real meal recipes and bounded short bonuses');
+{
+  check('all new items and carrot stages append IDs after the old inventory/biome ranges',
+    I.CARROT === 376 && I.HARVEST_PLATE === 383 && B.CARROT_CROP0 === 423 && B.CARROT_CROP3 === 426 &&
+    [I.CARROT, I.ROASTED_CARROT, I.PUMPKIN_SLICE, I.ROASTED_PUMPKIN, I.WOOD_BOWL,
+      I.PUMPKIN_SOUP, I.RABBIT_STEW, I.HARVEST_PLATE].every((id) => CREATIVE_ITEMS.includes(id)));
+  const random = Math.random;
+  try { Math.random = () => 0.02;
+    check('ordinary tall grass is an actual renewable carrot source without commands',
+      blockDrops(B.TALLGRASS, 0)[0]?.id === I.CARROT);
+  } finally { Math.random = random; }
+  check('carrot crop gives 1 seed vegetable early, 2+ at maturity, not a placeable crop block',
+    blockDrops(B.CARROT_CROP0, 0)[0]?.id === I.CARROT &&
+    blockDrops(B.CARROT_CROP0, 0)[0]?.count === 1 &&
+    blockDrops(B.CARROT_CROP3, 0)[0]?.count >= 2);
+  check('two distinct vegetables roast with real fuel in furnace or travel cauldron',
+    smeltResult(I.CARROT) === I.ROASTED_CARROT && smeltResult(I.PUMPKIN_SLICE) === I.ROASTED_PUMPKIN &&
+    travelRecipe(I.CARROT, null)?.output === I.ROASTED_CARROT &&
+    travelRecipe(I.PUMPKIN_SLICE, null)?.output === I.ROASTED_PUMPKIN &&
+    restoreTravelCauldron({ x: 4, y: 70, z: 4, output: { id: I.ROASTED_PUMPKIN, count: 1 } })?.output?.id === I.ROASTED_PUMPKIN);
+  const slices = new Inventory(); slices.add(B.PUMPKIN, 1);
+  const sliceRecipe = RECIPES.find((r) => r.out.id === I.PUMPKIN_SLICE)!;
+  check('existing naturally generated pumpkin becomes four craftable slices',
+    slices.craft(sliceRecipe) && slices.countOf(I.PUMPKIN_SLICE) === 4 && slices.countOf(B.PUMPKIN) === 0);
+  const bowlRecipe = RECIPES.find((r) => r.out.id === I.WOOD_BOWL)!;
+  const grid = new Inventory();
+  for (const i of [0, 2, 4]) grid.grid[i] = { id: B.PLANKS, count: 1 };
+  check('three planks in a V at a real table yield four reusable bowls',
+    !grid.gridMatch(false) && grid.gridMatch(true)?.out.id === bowlRecipe.out.id &&
+    grid.craftGrid(true)?.count === 4 && grid.grid.every((slot) => slot === null));
+  const meals = [
+    [I.PUMPKIN_SOUP, [I.PUMPKIN_SLICE, I.WHEAT, I.WOOD_BOWL], 'speed', 8],
+    [I.RABBIT_STEW, [I.COOKED_RABBIT, I.ROASTED_CARROT, I.WOOD_BOWL], 'regen', 6],
+    [I.HARVEST_PLATE, [I.ROASTED_CARROT, I.ROASTED_PUMPKIN, I.BREAD], 'sprint', 7],
+  ] as const;
+  for (const [id, materials, effect, duration] of meals) {
+    const r = RECIPES.find((recipe) => recipe.out.id === id)!;
+    const inv = new Inventory();
+    for (const entry of r.inputs) inv.add(entry.id, entry.count);
+    check(`${displayName(id)} requires all materials and is craftable in Survival`,
+      r.table && materials.every((entry) => r.inputs.some((v) => v.id === entry)) &&
+      inv.craft(r) && inv.countOf(id) === 1 && !inv.craft(r));
+    check(`${displayName(id)} grants a short named buff with no other hidden potion`,
+      mealBonus(id)?.effect === effect && mealBonus(id)?.seconds === duration &&
+      ITEMS[id]?.kind === 'food' && stackLimit(id) === 1);
+  }
+  const world = new World(47047, true); world.getChunk(0, 0);
+  const x = 8, y = FLAT_H + 1, z = 8;
+  world.setBlock(x, y - 1, z, B.FARMLAND);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.body = { pos: new THREE.Vector3(x, y, z) };
+  g.inventory = new Inventory(); g.selected = 0; g.mode = 'survival'; g.ui = 'playing';
+  g.target = { x, y: y - 1, z, nx: 0, ny: 1, nz: 0, id: B.FARMLAND };
+  g.keys = new Set(); g.mobs = []; g.growables = new Map(); g.growCursor = 0; g.growAcc = 0;
+  g.isInNether = false; g.hunger = 12; g.health = 8; g.eatCooldown = 0;
+  g.effects = new Map(); g.potionRegenAcc = 0; g.emitHud = () => {}; g.unlock = () => {};
+  g.findMobTarget = () => ({ mob: null, dist: Infinity });
+  const messages: string[] = [], dropped: number[] = [];
+  g.message = (m: string) => messages.push(m); g.spawnDrop = (id: number) => void dropped.push(id);
+  g.inventory.slots[0] = { id: I.CARROT, count: 2 };
+  g.tryUse();
+  check('actual right-click/tap plants edible carrot on farmland before hunger eats it',
+    world.getBlock(x, y, z) === B.CARROT_CROP0 && g.inventory.slots[0]?.count === 1 && g.hunger === 12);
+  const key = `${x},${y},${z}`;
+  for (let stage = 1; stage <= 3; stage++) {
+    g.growables.set(key, performance.now() - 20_000);
+    g.growCursor = 0;
+    g.updateGrowth(0.45);
+    eq(`carrot stage ${stage} grows on old farmland`, world.getBlock(x, y, z), B.CARROT_CROP0 + stage);
+  }
+  const reload = new World(47047, true); reload.loadMods(world.serializeMods());
+  eq('mature crop stage survives saving existing worlds', reload.getBlock(x, y, z), B.CARROT_CROP3);
+  g.target = null; g.tryUse();
+  check('without farmland target the same carrot is eaten, never silently planted',
+    !g.inventory.slots[0] && g.hunger === 14);
+  g.inventory.slots[0] = { id: I.PUMPKIN_SOUP, count: 1 }; g.eatCooldown = 0;
+  g.hunger = 10; g.tryUse();
+  check('eating soup restores hunger/health, applies 8s visible speed and returns exactly one bowl',
+    g.hunger === 16 && g.health === 9 && g.effectLeft('speed') === 8 &&
+    g.inventory.countOf(I.WOOD_BOWL) === 1 && g.inventory.countOf(I.PUMPKIN_SOUP) === 0 &&
+    messages.some((m) => m.includes('Szybkość (8 s)')), JSON.stringify({ hunger: g.hunger, health: g.health, speed: g.effectLeft('speed'), bowl: g.inventory.countOf(I.WOOD_BOWL), soup: g.inventory.countOf(I.PUMPKIN_SOUP), messages }));
+  g.applyEffect('speed', 20); g.selected = 1; g.inventory.slots[1] = { id: I.PUMPKIN_SOUP, count: 1 };
+  g.eatCooldown = 0; g.tryUse();
+  check('food neither adds duration to nor downgrades a 20s potion', g.effectLeft('speed') === 20 && g.inventory.countOf(I.WOOD_BOWL) === 2);
+  g.inventory.slots[1] = { id: I.RABBIT_STEW, count: 1 }; g.eatCooldown = 0;
+  g.hunger = 7; g.health = 12; g.tryUse();
+  check('rabbit stew restores health, refreshes 6s regeneration and returns a bowl',
+    g.hunger === 15 && g.health === 14 && g.effectLeft('regen') === 6 && g.inventory.countOf(I.WOOD_BOWL) === 3);
+  g.inventory.slots[1] = { id: I.HARVEST_PLATE, count: 1 }; g.eatCooldown = 0;
+  g.hunger = 6; g.tryUse();
+  check('roasted vegetable dish gives 7s sprint but no empty bowl',
+    g.effectLeft('sprint') === 7 && g.inventory.countOf(I.WOOD_BOWL) === 3 && !g.inventory.slots[1]);
+  g.updateEffects(7.1);
+  check('temporary meal buffs expire via normal saved potion timer and HUD machinery',
+    !g.hasEffect('sprint') && !g.hasEffect('regen') && g.hasEffect('speed'));
+  check('meal buff is reloadable by the established potion-effect save migration',
+    restoreEffects(Object.fromEntries(g.effects)).get('speed') === 12900);
+  g.mode = 'creative'; g.inventory.slots[1] = { id: I.RABBIT_STEW, count: 1 };
+  g.eatCooldown = 0; g.tryUse();
+  check('Creative meals remain usable but never mint bowls without spending a meal',
+    g.inventory.slots[1]?.id === I.RABBIT_STEW && g.inventory.countOf(I.WOOD_BOWL) === 3);
+  g.mode = 'survival'; g.inventory.slots[1] = null;
+  world.setBlock(x, y - 1, z, B.DIRT); g.growCursor = 0;
+  g.updateGrowth(0.45); g.growCursor = 0; g.updateGrowth(0.45);
+  check('removing farmland clears a ripe carrot crop and refunds one carrot just once',
+    world.getBlock(x, y, z) === B.AIR && dropped.filter((id) => id === I.CARROT).length === 1);
+  check('no recipe duplicates potions or vegetables when farmland is removed',
+    dropped.filter((id) => id !== I.CARROT).length === 0);
+}
+
+section('3.0 #46: fuelled field cauldron cooks and brews without becoming a second furnace');
+{
+  check('field cauldron ID appends after travel bed with visible texture and Creative access',
+    B.TRAVEL_POT === 422 && !!BLOCKS[B.TRAVEL_POT] && CREATIVE_BLOCKS.includes(B.TRAVEL_POT) &&
+    blockDrops(B.TRAVEL_POT, I.IRON_PICK)[0]?.id === B.TRAVEL_POT);
+  const recipe = RECIPES.find((r) => r.out.id === B.TRAVEL_POT)!;
+  const materials = new Inventory(); materials.add(I.IRON, 5); materials.add(B.CAMPFIRE, 1);
+  check('Survival crafts travel cauldron from five iron and a real campfire at a table once',
+    recipe.table && materials.craft(recipe) && materials.countOf(B.TRAVEL_POT) === 1 &&
+    materials.countOf(I.IRON) === 0 && materials.countOf(B.CAMPFIRE) === 0 && !materials.craft(recipe));
+  const grid = new Inventory();
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+    const symbol = recipe.pattern![y][x];
+    if (symbol !== ' ') grid.grid[y * 3 + x] = { id: recipe.key![symbol], count: 1 };
+  }
+  check('six distinct table-grid cells are required; personal grid cannot craft it',
+    !grid.gridMatch(false) && grid.gridMatch(true)?.out.id === B.TRAVEL_POT &&
+    grid.craftGrid(true)?.id === B.TRAVEL_POT && grid.grid.every((v) => !v));
+  check('field station accepts six cooked rations and exactly two water-bottle brews',
+    [I.RAW_PORK, I.RAW_BEEF, I.RAW_CHICKEN, I.RAW_RABBIT, I.RAW_FISH, I.RAW_SALMON].every((id) =>
+      travelRecipe(id, null)?.seconds === 5 && travelRecipe(id, null)!.output !== id) &&
+    travelRecipe(I.WATER_BOTTLE, I.GHAST_TEAR)?.output === I.POTION_HEAL &&
+    travelRecipe(I.WATER_BOTTLE, I.SUGAR)?.output === I.POTION_SPEED &&
+    travelRecipe(I.WATER_BOTTLE, I.SUGAR)?.seconds === 9);
+  check('ores, glass, blaze brewing and other potion families require a base station',
+    !travelRecipe(B.IRON_ORE, null) && !travelRecipe(B.SAND, null) &&
+    !travelRecipe(I.WATER_BOTTLE, I.GLOWSTONE_DUST) && !travelRecipe(I.POTION_AWKWARD, I.FEATHER) &&
+    travelFuel(I.STICK) && travelFuel(I.COAL) && !travelFuel(I.BLAZE_ROD));
+  const partial = emptyTravelCauldron(8, FLAT_H + 1, 8);
+  partial.input = { id: I.RAW_RABBIT, count: 2 };
+  partial.fuel = { id: I.COAL, count: 2 };
+  tickTravelCauldron(partial, 2);
+  check('one fuel pays at start, progress stored; not another charge for partial ticks',
+    partial.progress > 2 && partial.fuel.count === 1 && !partial.output);
+  const restored = restoreTravelCauldron(JSON.parse(JSON.stringify(partial)))!;
+  check('save mid-batch resumes without spending another fuel or making duplicate output',
+    tickTravelCauldron(restored, 3) === I.COOKED_RABBIT && restored.fuel?.count === 1 &&
+    restored.input?.count === 1 && restored.output?.count === 1);
+  check('full output refuses to charge additional fuel or spawn items', (() => {
+    restored.output!.count = stackLimit(I.COOKED_RABBIT);
+    const fuel = restored.fuel!.count;
+    return tickTravelCauldron(restored, 99) === null && restored.fuel!.count === fuel && restored.input!.count === 1;
+  })());
+  const brew = emptyTravelCauldron(1, 65, 2);
+  brew.input = { id: I.WATER_BOTTLE, count: 1 }; brew.ingredient = { id: I.GHAST_TEAR, count: 1 };
+  brew.fuel = { id: I.STICK, count: 1 };
+  check('one brew charges one stick and spends exactly one water bottle and reagent',
+    tickTravelCauldron(brew, 9) === I.POTION_HEAL && brew.input === null &&
+    brew.ingredient === null && brew.fuel === null && brew.output?.count === 1);
+  check('invalid imported cauldrons are dropped, stack counts limited and timing clamped',
+    restoreTravelCauldron({ x: Infinity, y: 1, z: 2 }) === null &&
+    restoreTravelCauldron({ x: 1, y: 70, z: 2, input: { id: I.IRON, count: 999 }, fuel: { id: I.COAL, count: 999 }, progress: 1e20 })?.input === null &&
+    restoreTravelCauldron({ x: 1, y: 70, z: 2, input: { id: I.RAW_RABBIT, count: 1000 }, fuel: { id: I.COAL, count: 999 }, progress: 1e20 })?.fuel?.count === 64 &&
+    restoreTravelCauldron({ x: 1, y: 70, z: 2, input: { id: I.RAW_RABBIT, count: 1000 }, fuel: { id: I.COAL, count: 999 }, progress: 1e20 })?.progress === 0);
+
+  const world = new World(46046, true); world.getChunk(0, 0);
+  const x = 8, y = FLAT_H + 1, z = 8;
+  world.setBlock(x, y, z, B.TRAVEL_POT);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.homeWorld = world; g.travelCauldrons = new Map(); g.inventory = new Inventory();
+  g.keys = new Set(); g.mobs = []; g.ui = 'playing'; g.mode = 'survival'; g.isInNether = false;
+  g.body = { pos: new THREE.Vector3(x + 0.5, y, z + 2.5) };
+  g.target = { id: B.TRAVEL_POT, x, y, z }; g.selected = 0;
+  g.findMobTarget = () => ({ mob: null, dist: Infinity }); g.emitHud = () => {}; g.onUI = () => {};
+  g.message = (message: string) => messages.push(message); g.unlock = () => {};
+  const messages: string[] = [], dropped: number[] = [];
+  g.spawnDrop = (id: number) => void dropped.push(id);
+  g.tryUse();
+  check('real PC/touch interaction opens a new one-block station with empty saved state',
+    g.ui === 'travelCauldron' && g.currentTravelCauldron()?.input === null &&
+    g.travelCauldrons.size === 1);
+  g.inventory.cursor = { id: B.IRON_ORE, count: 1 }; g.clickTravelCauldron('input', false);
+  check('iron ore rejected without eating the cursor or fuel', g.currentTravelCauldron()?.input === null && g.inventory.cursor?.id === B.IRON_ORE);
+  g.inventory.cursor = { id: I.RAW_RABBIT, count: 2 }; g.clickTravelCauldron('input', false);
+  g.inventory.cursor = { id: I.BLAZE_ROD, count: 1 }; g.clickTravelCauldron('fuel', false);
+  check('unauthorized blaze fuel cannot be inserted via live slot API',
+    g.currentTravelCauldron()?.fuel === null && g.inventory.cursor?.id === I.BLAZE_ROD);
+  g.inventory.cursor = { id: I.STICK, count: 2 }; g.clickTravelCauldron('fuel', false);
+  g.updateTravelCauldrons(5);
+  check('actual engine tick cooks one rabbit, not two, and consumes one stick',
+    g.currentTravelCauldron()?.output?.id === I.COOKED_RABBIT &&
+    g.currentTravelCauldron()?.input?.count === 1 && g.currentTravelCauldron()?.fuel?.count === 1);
+  g.updateTravelCauldrons(5);
+  check('second batch consumes remaining stick and counts an independent output',
+    g.currentTravelCauldron()?.output?.count === 2 && !g.currentTravelCauldron()?.input && !g.currentTravelCauldron()?.fuel);
+  g.inventory.cursor = null; g.clickTravelCauldron('output', true);
+  check('right click takes half an output stack without generating a second stack',
+    g.inventory.cursor?.count === 1 && g.currentTravelCauldron()?.output?.count === 1);
+  g.clickTravelCauldron('output', false);
+  check('left click joins the other half back on the cursor and clears the output',
+    g.inventory.cursor?.count === 2 && g.currentTravelCauldron()?.output === null);
+  g.inventory.cursor = { id: I.WATER_BOTTLE, count: 1 }; g.clickTravelCauldron('input', false);
+  g.inventory.cursor = { id: I.SUGAR, count: 1 }; g.clickTravelCauldron('ingredient', false);
+  g.inventory.cursor = { id: I.COAL, count: 1 }; g.clickTravelCauldron('fuel', false);
+  g.updateTravelCauldrons(9);
+  check('the same placed station can brew a real speed potion with one fuel and sugar',
+    g.currentTravelCauldron()?.output?.id === I.POTION_SPEED &&
+    !g.currentTravelCauldron()?.ingredient && !g.currentTravelCauldron()?.fuel &&
+    messages.some((m) => m.includes('Napój szybkości')));
+  const state = g.currentTravelCauldron();
+  const nether = new World(46046, false, true);
+  nether.getChunk(0, 0); nether.setBlock(x, y, z, B.TRAVEL_POT);
+  g.isInNether = true; g.world = nether;
+  g.openTravelCauldron(x, y, z);
+  check('same coordinates in Nether have a different, empty cauldron inventory',
+    g.currentTravelCauldron()?.output === null && g.travelCauldrons.size === 2);
+  g.isInNether = false; g.world = world; g.openTravelCauldron(x, y, z);
+  check('return to overworld retains the brewed potion without cross-dimension duplication',
+    g.currentTravelCauldron() === state && state?.output?.id === I.POTION_SPEED);
+  const limited = Object.create(Game.prototype) as unknown as Record<string, any>;
+  limited.travelCauldrons = new Map(Array.from({ length: TRAVEL_CAULDRON_LIMIT }, (_, i) =>
+    [`${i},65,0`, emptyTravelCauldron(i, 65, 0)]));
+  const limitMessages: string[] = [];
+  limited.isInNether = false; limited.message = (m: string) => limitMessages.push(m);
+  limited.openTravelCauldron(999, 65, 0);
+  check('saved station limit refuses opening extra pots instead of silently truncating contents',
+    limited.travelCauldrons.size === TRAVEL_CAULDRON_LIMIT && limitMessages.at(-1)?.includes('Zbyt wiele'));
+  const reloaded = new World(46046, true); reloaded.loadMods(world.serializeMods());
+  check('cauldron block and separate station inventory survive world mod+JSON roundtrip',
+    reloaded.getBlock(x, y, z) === B.TRAVEL_POT && restoreTravelCauldron(JSON.parse(JSON.stringify(state)))?.output?.id === I.POTION_SPEED);
+  g.growables = new Map(); g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.spawnParticles = () => {}; g.fallGravity = () => {}; g.advanceChallenge = () => {};
+  g.breakBlock(x, y, z);
+  check('breaking cauldron drops each real slot and one cauldron, never duplicates potions on second break',
+    dropped.filter((id) => id === I.POTION_SPEED).length === 1 &&
+    dropped.filter((id) => id === B.TRAVEL_POT).length === 1 && !g.travelCauldrons.has(`${x},${y},${z}`) &&
+    g.travelCauldrons.has(`n:${x},${y},${z}`));
+  g.breakBlock(x, y, z);
+  check('second block break cannot repeat its stored loot', dropped.filter((id) => id === I.POTION_SPEED).length === 1);
+  const stale = emptyTravelCauldron(11, y, 11);
+  stale.output = { id: I.POTION_HEAL, count: 1 };
+  g.travelCauldrons.set('11,' + y + ',11', stale);
+  g.updateTravelCauldrons(1); g.updateTravelCauldrons(1);
+  check('vanished block after world import spills stored potion only once',
+    !g.travelCauldrons.has('11,' + y + ',11') && dropped.filter((id) => id === I.POTION_HEAL).length === 1);
+}
+
+section('3.0 #45: portable camp deployment, component recovery and safe respawn');
+{
+  check('new component IDs append without modifying saved snare/bed/campfire meanings',
+    B.CAMP_TENT === 420 && B.CAMP_COT === 421 && I.CAMP_KIT === 375 &&
+    B.BED === 52 && B.CAMPFIRE === 73 && CREATIVE_BLOCKS.includes(B.CAMP_TENT) &&
+    CREATIVE_BLOCKS.includes(B.CAMP_COT) && CREATIVE_ITEMS.includes(I.CAMP_KIT) &&
+    !!buildItemIcons()[I.CAMP_KIT]);
+  check('tent stays light and walkable, cot is solid and recoverable',
+    BLOCKS[B.CAMP_TENT].render === 'cross' && !IS_SOLID[B.CAMP_TENT] &&
+    BLOCKS[B.CAMP_COT].render === 'cube' && !!IS_SOLID[B.CAMP_COT] &&
+    blockDrops(B.CAMP_TENT, 0)[0]?.id === B.CAMP_TENT && blockDrops(B.CAMP_COT, 0)[0]?.id === B.CAMP_COT);
+  for (const [id, inputs, table] of [
+    [B.CAMP_TENT, [[B.WOOL_WHITE, 3], [I.STICK, 3]], true],
+    [B.CAMP_COT, [[B.WOOL_WHITE, 2], [B.PLANKS, 2]], false],
+    [I.CAMP_KIT, [[B.CAMP_TENT, 1], [B.CAMP_COT, 1], [B.CAMPFIRE, 1]], false],
+  ] as const) {
+    const recipe = RECIPES.find((r) => r.out.id === id)!;
+    const inventory = new Inventory();
+    for (const [material, count] of inputs) inventory.add(material, count);
+    check(`${displayName(id)} reachable in Survival for the exact material cost`,
+      recipe.table === table && inventory.craft(recipe) && inventory.countOf(id) === 1 &&
+      inputs.every(([material]) => inventory.countOf(material) === 0) && !inventory.craft(recipe));
+  }
+  const tentRecipe = RECIPES.find((r) => r.out.id === B.CAMP_TENT)!;
+  const grid = new Inventory();
+  for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) {
+    const symbol = tentRecipe.pattern![row][col];
+    if (symbol !== ' ') grid.grid[row * 3 + col] = { id: tentRecipe.key![symbol], count: 1 };
+  }
+  check('tent needs the full crafting table, no personal-grid phantom material',
+    !grid.gridMatch(false) && grid.gridMatch(true)?.out.id === B.CAMP_TENT &&
+    grid.craftGrid(true)?.id === B.CAMP_TENT && grid.grid.every((v) => !v));
+  const world = new World(45045, true); world.getChunk(0, 0);
+  const x = 8, y = FLAT_H + 1, z = 8;
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.homeWorld = world; g.netherWorld = new World(45045, false, true);
+  g.isInNether = false; g.mode = 'survival'; g.ui = 'playing';
+  g.keys = new Set(); g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.CAMP_KIT, count: 1 };
+  g.selected = 0; g.mobs = []; g.growables = new Map(); g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.body = { pos: new THREE.Vector3(x + 0.5, y, z + 3.5), vel: new THREE.Vector3(), w: 0.6, h: 1.8 };
+  g.spawnPoint = new THREE.Vector3(2.5, y, 2.5);
+  g.target = { id: B.GRASS, x, y: FLAT_H, z, nx: 0, ny: 1, nz: 0 };
+  g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  g.findMobTarget = () => ({ mob: null, dist: Infinity });
+  const notices: string[] = [], drops: number[] = [];
+  g.message = (msg: string) => notices.push(msg); g.emitHud = () => {};
+  g.settle = () => {}; g.onBlockChanged = () => {}; g.advanceChallenge = () => {};
+  g.spawnParticles = () => {}; g.fallGravity = () => {}; g.spawnDrop = (id: number) => void drops.push(id);
+  g.daylight = () => 0.9; g.day = 1; g.health = 15; g.maxAir = 12;
+  // All-or-nothing validation: one blocked or unsupported cell may not spend or overwrite anything.
+  world.setBlock(x - 1, y, z, B.STONE);
+  g.tryUse();
+  check('occupied footprint blocks the whole kit without losing components',
+    g.inventory.countOf(I.CAMP_KIT) === 1 && world.getBlock(x, y, z) === B.AIR &&
+    world.getBlock(x, y, z - 1) === B.AIR && world.getBlock(x - 1, y, z) === B.STONE);
+  world.setBlock(x - 1, y, z, B.AIR);
+  world.setBlock(x, y - 1, z - 1, B.AIR);
+  g.tryUse();
+  check('unsupported campfire prevents partial deployment or item consumption',
+    world.getBlock(x, y, z) === B.AIR && g.inventory.countOf(I.CAMP_KIT) === 1);
+  world.setBlock(x, y - 1, z - 1, B.GRASS);
+  g.tryUse();
+  check('real PC/tap use turns ONE crafted kit into three accessible separate blocks',
+    world.getBlock(x, y, z) === B.CAMP_TENT && world.getBlock(x - 1, y, z) === B.CAMP_COT &&
+    world.getBlock(x, y, z - 1) === B.CAMPFIRE && g.inventory.countOf(I.CAMP_KIT) === 0);
+  check('all three components survive world mod roundtrip without extra inventory', (() => {
+    const restored = new World(45045, true); restored.loadMods(world.serializeMods());
+    return restored.getBlock(x, y, z) === B.CAMP_TENT && restored.getBlock(x - 1, y, z) === B.CAMP_COT &&
+      restored.getBlock(x, y, z - 1) === B.CAMPFIRE;
+  })());
+  g.target = { id: B.CAMP_COT, x: x - 1, y, z };
+  g.tryUse();
+  check('cot sets a temporary overworld spawn by daylight, preserving the previous spawn',
+    g.spawnPoint.equals(new THREE.Vector3(x - 0.5, y + 1, z + 0.5)) &&
+    g.campRespawn?.cot.join() === [x - 1, y, z].join() && g.campRespawn?.previous.join() === [2.5, y, 2.5].join() &&
+    notices.some((msg) => msg.includes('tylko w nocy')));
+  g.daylight = () => 0.1; g.unlock = () => {}; g.tryUse();
+  check('travel cot follows existing bed rule: night advances day and heals',
+    g.day === 2 && g.health === 17 && g.spawnPoint.x === x - 0.5);
+  check('old saves without camp metadata do not acquire an active camp',
+    g.validCampRespawn(undefined, g.spawnPoint) === undefined);
+  check('malformed imported camp metadata cannot hijack saved spawn',
+    g.validCampRespawn({ cot: [Infinity, y, z], previous: [0, y, 0] }, g.spawnPoint) === undefined &&
+    g.validCampRespawn({ cot: [x - 1, y, z], previous: [2.5, y, 2.5] }, new THREE.Vector3(400, y, 0)) === undefined);
+  const saved = { cot: [...g.campRespawn.cot], previous: [...g.campRespawn.previous] };
+  check('valid JSON camp metadata roundtrips with its actual selected spawn',
+    g.validCampRespawn(JSON.parse(JSON.stringify(saved)), g.spawnPoint)?.cot.join() === saved.cot.join());
+  g.breakBlock(x - 1, y, z);
+  check('dismantling cot drops exactly its component and restores the old safe spawn',
+    world.getBlock(x - 1, y, z) === B.AIR && drops.filter((id) => id === B.CAMP_COT).length === 1 &&
+    g.spawnPoint.equals(new THREE.Vector3(2.5, y, 2.5)) && !g.campRespawn);
+  g.breakBlock(x, y, z); g.breakBlock(x, y, z - 1);
+  check('dismantling the kit yields exactly its three original reusable components',
+    [B.CAMP_TENT, B.CAMP_COT, B.CAMPFIRE].every((id) => drops.filter((d) => d === id).length === 1));
+  const rebuilt = new Inventory(); for (const id of [B.CAMP_TENT, B.CAMP_COT, B.CAMPFIRE]) rebuilt.add(id, 1);
+  check('recovered parts re-craft one kit without item or fuel duplication',
+    rebuilt.craft(RECIPES.find((r) => r.out.id === I.CAMP_KIT)!) && rebuilt.countOf(I.CAMP_KIT) === 1 &&
+    rebuilt.countOf(B.CAMPFIRE) === 0);
+  g.mode = 'creative'; g.inventory.slots[0] = { id: I.CAMP_KIT, count: 1 }; g.target = { id: B.GRASS, x, y: FLAT_H, z, nx: 0, ny: 1, nz: 0 };
+  g.tryUse();
+  check('Creative can deploy kit without reducing its inventory count',
+    world.getBlock(x - 1, y, z) === B.CAMP_COT && g.inventory.countOf(I.CAMP_KIT) === 1);
+  g.isInNether = true; const previous = g.spawnPoint.clone(); g.target = { id: B.CAMP_COT, x: x - 1, y, z };
+  g.tryUse();
+  check('cot in Nether cannot overwrite overworld respawn or advance time',
+    g.spawnPoint.equals(previous) && g.day === 2);
+  g.isInNether = false; g.mode = 'survival'; g.target = { id: B.CAMP_COT, x: x - 1, y, z };
+  g.tryUse();
+  // TNT/explosion can delete cot without going through breakBlock.
+  g.spawnSmoke = () => {}; g.damage = () => {}; g.body.pos.set(40, y, 40);
+  g.explode(x - 0.5, y + 0.5, z + 0.5, 1.1);
+  check('explosion also invalidates the camp spawn without generating new kit items',
+    !g.campRespawn && g.spawnPoint.equals(new THREE.Vector3(2.5, y, 2.5)) && drops.length === 3);
+  world.setBlock(x - 1, y, z, B.CAMP_COT);
+  g.campRespawn = { cot: [x - 1, y, z], previous: [2.5, y, 2.5] };
+  g.spawnPoint.set(x - 0.5, y + 1, z + 0.5);
+  world.setBlock(x - 1, y, z, B.AIR); // simulate a deleted mod from import while dead
+  g.setUI = () => {}; g.respawn();
+  check('respawn revalidates removed cot after import/reload and safely returns to old spawn',
+    !g.campRespawn && g.body.pos.equals(new THREE.Vector3(2.5, y, 2.5)));
+}
+
+section('3.0 #44: persistent single-use hunting snares and one-string rearming');
+{
+  check('snare IDs append past turtle eggs with base block only in Creative',
+    B.SNARE === 416 && B.SNARE_CHICKEN === 419 && CREATIVE_BLOCKS.includes(B.SNARE) &&
+    [B.SNARE_ARMED, B.SNARE_RABBIT, B.SNARE_CHICKEN].every((id) => !CREATIVE_BLOCKS.includes(id) &&
+      BLOCKS[id].drop === B.SNARE && !IS_SOLID[id]));
+  const inv = new Inventory(); inv.add(I.STRING, 2); inv.add(I.STICK, 2);
+  const r = RECIPES.find((recipe) => recipe.out.id === B.SNARE)!;
+  check('Survival crafts the real placed block in a personal 2x2 grid',
+    !r.table && inv.craft(r) && inv.countOf(B.SNARE) === 1 && !inv.craft(r));
+  const grid = new Inventory();
+  grid.grid[0] = { id: I.STRING, count: 1 }; grid.grid[1] = { id: I.STRING, count: 1 };
+  grid.grid[3] = { id: I.STICK, count: 1 }; grid.grid[4] = { id: I.STICK, count: 1 };
+  check('2x2 pattern really consumes the two strings and two sticks once',
+    grid.gridMatch(false)?.out.id === B.SNARE && grid.craftGrid(false)?.id === B.SNARE &&
+    grid.grid.every((cell) => !cell));
+  check('breaking any state, including with Silk Touch, never duplicates meat or strings',
+    [B.SNARE, B.SNARE_ARMED, B.SNARE_RABBIT, B.SNARE_CHICKEN].every((id) =>
+      [false, true].every((silk) => {
+        const drops = blockDrops(id, I.DIAMOND_PICK, { silk });
+        return drops.length === 1 && drops[0].id === B.SNARE && drops[0].count === 1;
+      })));
+  const world = new World(44044, true); world.getChunk(0, 0);
+  const x = 8, y = FLAT_H + 1, z = 8;
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.mode = 'survival'; g.ui = 'playing';
+  g.inventory = new Inventory(); g.keys = new Set<string>();
+  g.inventory.slots[0] = { id: B.SNARE, count: 1 }; g.selected = 0;
+  g.mobs = []; g.body = { pos: new THREE.Vector3(x + 0.5, y, z + 2) };
+  g.findMobTarget = () => ({ mob: null, dist: Infinity });
+  g.message = (msg: string) => notices.push(msg); g.emitHud = () => {};
+  g.advanceChallenge = () => {}; g.settle = () => {}; g.onBlockChanged = () => {};
+  g.consumeSelected = () => { g.inventory.remove(B.SNARE, 1); }; g.spawnDrop = (id: number, count: number) => void loot.push([id, count]);
+  const notices: string[] = [], loot: [number, number][] = [];
+  g.target = { id: B.GRASS, x, y: FLAT_H, z, nx: 0, ny: 1, nz: 0 };
+  g.tryUse();
+  check('real PC/tap use path places an unarmed snare on solid ground and spends the block',
+    world.getBlock(x, y, z) === B.SNARE && g.inventory.countOf(B.SNARE) === 0);
+  g.target = { id: B.SNARE, x, y, z };
+  g.tryUse();
+  check('without string use does not arm or silently mint resources', world.getBlock(x, y, z) === B.SNARE &&
+    notices.at(-1)?.includes('struny') && loot.length === 0);
+  g.inventory.add(I.STRING, 2);
+  g.tryUse();
+  check('arming via same interaction costs exactly one Survival string',
+    world.getBlock(x, y, z) === B.SNARE_ARMED && g.inventory.countOf(I.STRING) === 1);
+  const trusted = new Mob('rabbit', x + 0.5, y, z + 0.5); trusted.trust = 1;
+  check('friendly animals cannot be trapped', !g.trySnareMob(trusted) && !trusted.dead && world.getBlock(x, y, z) === B.SNARE_ARMED);
+  const rabbit = new Mob('rabbit', x + 0.5, y, z + 0.5);
+  check('actual wild rabbit triggers the saved catch and suppresses its normal death loot',
+    g.trySnareMob(rabbit) && rabbit.dead && rabbit.looted &&
+    world.getBlock(x, y, z) === B.SNARE_RABBIT && loot.length === 0);
+  const secondRabbit = new Mob('rabbit', x + 0.5, y, z + 0.5);
+  check('caught snare cannot catch a second animal without harvesting and rearming',
+    !g.trySnareMob(secondRabbit) && !secondRabbit.dead);
+  const saved = world.serializeMods();
+  const copy = new World(44044, true); copy.loadMods(saved);
+  check('catch state survives a world save and reload without respawning prey',
+    copy.getBlock(x, y, z) === B.SNARE_RABBIT && copy.serializeMods()[World.key(0, 0)]?.length > 0);
+  g.world = copy; g.target.id = B.SNARE_RABBIT; g.tryUse();
+  check('harvest drops precisely one raw rabbit and disarms before any second tap',
+    copy.getBlock(x, y, z) === B.SNARE && loot.length === 1 && loot[0][0] === I.RAW_RABBIT && loot[0][1] === 1);
+  g.target.id = B.SNARE; g.tryUse();
+  check('rearming after harvest costs another string, not a free timer tick',
+    copy.getBlock(x, y, z) === B.SNARE_ARMED && g.inventory.countOf(I.STRING) === 0);
+  const chicken = new Mob('chicken', x + 0.5, y, z + 0.5);
+  check('chickens generate a different one-time catch state without death loot',
+    g.trySnareMob(chicken) && chicken.looted && copy.getBlock(x, y, z) === B.SNARE_CHICKEN);
+  g.target.id = B.SNARE_CHICKEN; g.tryUse();
+  check('chicken reward is exactly one raw chicken and cannot be harvested again',
+    loot.length === 2 && loot[1][0] === I.RAW_CHICKEN && copy.getBlock(x, y, z) === B.SNARE);
+  g.target.id = B.SNARE; g.tryUse();
+  check('cannot farm a third reward without another string', copy.getBlock(x, y, z) === B.SNARE && loot.length === 2);
+  g.mode = 'creative'; g.tryUse();
+  check('Creative can arm an empty snare without a Survival string', copy.getBlock(x, y, z) === B.SNARE_ARMED);
+  g.target.id = B.SNARE_ARMED; g.tryUse();
+  check('Creative can disarm with the same PC/touch action', copy.getBlock(x, y, z) === B.SNARE);
+  copy.setBlock(x, y, z, B.SNARE_RABBIT); g.target.id = B.SNARE_RABBIT;
+  g.updateHand = () => {}; g.pickBlock();
+  check('Creative middle click picks empty base snare, never a harvest-ready block',
+    g.inventory.slots[0]?.id === B.SNARE && g.inventory.slots[0]?.count === 64);
+  trusted.dispose(); rabbit.dispose(); secondRabbit.dispose(); chicken.dispose();
+}
+
+section('3.0 #43: glowing, slowing and marking arrows with selectable real ammo');
+{
+  check('three arrow IDs append after bowstrings with distinct icons and Creative access',
+    I.GLOW_ARROW === 372 && I.SLOW_ARROW === 373 && I.MARK_ARROW === 374 &&
+    [I.GLOW_ARROW, I.SLOW_ARROW, I.MARK_ARROW].every((id) =>
+      CREATIVE_ITEMS.includes(id) && stackLimit(id) === 64 && !!buildItemIcons()[id]));
+  for (const [id, reagent, seconds] of [
+    [I.GLOW_ARROW, I.GLOWSTONE_DUST, 12], [I.SLOW_ARROW, I.SLIME_BALL, 6], [I.MARK_ARROW, I.REDSTONE, 18],
+  ] as const) {
+    const r = RECIPES.find((recipe) => recipe.out.id === id)!;
+    const inv = new Inventory(); inv.add(I.ARROW, 4); inv.add(reagent, 1);
+    check(`${ITEMS[id]?.name} Survival consumes exactly four arrows and one reagent`,
+      r.table && r.out.count === 4 && inv.craft(r) && inv.countOf(id) === 4 &&
+      inv.countOf(I.ARROW) === 0 && inv.countOf(reagent) === 0 && !inv.craft(r));
+    const grid = new Inventory();
+    for (const cell of [0, 1, 3, 4]) grid.grid[cell] = { id: I.ARROW, count: 1 };
+    grid.grid[2] = { id: reagent, count: 1 };
+    check(`${ITEMS[id]?.name} table-grid recipe uses all five cells without duplication`,
+      grid.gridMatch(false) === null && grid.gridMatch(true)?.out.id === id &&
+      grid.craftGrid(true)?.count === 4 && grid.grid.every((cell) => !cell) && !grid.craftGrid(true));
+    eq(`${ITEMS[id]?.name} effect duration`, arrowDuration(id), seconds);
+  }
+  eq('ordinary arrow has no status and unchanged ID', arrowDuration(I.ARROW), 0);
+  const world = new World(33043, true); world.getChunk(0, 0);
+  const player = new THREE.Vector3(5.5, FLAT_H + 1, 14.5);
+  const plain = new Mob('zombie', 5.5, FLAT_H + 1, 5.5);
+  const slowed = new Mob('zombie', 5.5, FLAT_H + 1, 5.5);
+  check('slowing arrow attaches a real transient mob status', slowed.applyArrowEffect(I.SLOW_ARROW) &&
+    slowed.arrowSlow === 6 && slowed.applyArrowEffect(I.SLOW_ARROW) && slowed.arrowSlow === 6);
+  for (let i = 0; i < 30; i++) {
+    plain.update(1 / 30, world, player, () => {}, () => {}, false);
+    slowed.update(1 / 30, world, player, () => {}, () => {}, false);
+  }
+  check('real chasing AI covers less distance while slowed, including world collision',
+    slowed.body.pos.distanceTo(player) > plain.body.pos.distanceTo(player) + 0.25 &&
+    slowed.arrowSlow > 4.9 && slowed.arrowSlow < 5.1);
+  slowed.update(5.1, world, player, () => {}, () => {}, true);
+  check('slow effect expires without permanent movement mutation', slowed.arrowSlow === 0);
+  const marked = new Mob('zombie', 3, FLAT_H + 1, 3);
+  check('glow and mark both create distinct visible indicators without tinting other mobs',
+    marked.applyArrowEffect(I.GLOW_ARROW) && marked.applyArrowEffect(I.MARK_ARROW) &&
+    marked.arrowGlow === 12 && marked.arrowMark === 18 && marked.group.children.length > plain.group.children.length);
+  marked.setTint(true); marked.setTint(false);
+  marked.update(12.2, world, player, () => {}, () => {}, true);
+  check('glow turns off at 12 seconds while target mark remains until 18', marked.arrowGlow === 0 && marked.arrowMark > 5);
+  marked.update(6, world, player, () => {}, () => {}, true);
+  check('target marker also expires instead of leaving a permanent tag', marked.arrowMark === 0);
+  check('dead mob cannot be given a new marker', (() => { marked.dead = true; return !marked.applyArrowEffect(I.MARK_ARROW); })());
+  plain.dispose(); slowed.dispose(); marked.dispose();
+
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.BOW, count: 1 };
+  g.selected = 0; g.selectedStack = () => g.inventory.slots[0];
+  g.mode = 'survival'; g.ui = 'playing'; g.keys = new Set<string>();
+  g.body = { pos: new THREE.Vector3(0, FLAT_H + 1, 0), vel: new THREE.Vector3(), h: 1.8 };
+  g.arrowAmmo = I.ARROW; g.gfx = { effectDetail: 'full' };
+  g.inventory.add(I.ARROW, 2); g.inventory.add(I.GLOW_ARROW, 1);
+  g.inventory.add(I.SLOW_ARROW, 1); g.inventory.add(I.MARK_ARROW, 1);
+  g.message = (s: string) => notices.push(s); g.emitHud = () => {};
+  const notices: string[] = [];
+  const pc = { code: 'KeyX', repeat: false, preventDefault() {} };
+  g.onKeyDown(pc);
+  check('PC X cycles to a stocked special arrow and announces the inventory count',
+    g.arrowAmmo === I.GLOW_ARROW && notices.at(-1)?.includes('Świetlna strzała (1)'));
+  g.cycleArrowAmmo();
+  check('touch-facing API cycles through available ammo without creating any',
+    g.arrowAmmo === I.SLOW_ARROW && g.inventory.countOf(I.SLOW_ARROW) === 1);
+  g.arrowAmmo = I.MARK_ARROW;
+  g.inventory.remove(I.MARK_ARROW, 1);
+  check('unavailable selected ammo falls back to normal, not an empty shot', g.selectedArrowAmmo() === I.ARROW);
+  g.inventory.add(I.MARK_ARROW, 1);
+  g.mode = 'creative'; g.inventory.remove(I.ARROW, 2);
+  g.inventory.remove(I.GLOW_ARROW, 1);
+  check('Creative can select every arrow even without Survival ammo',
+    g.selectedArrowAmmo() === I.ARROW && (g.cycleArrowAmmo(), g.arrowAmmo === I.GLOW_ARROW));
+  g.mode = 'survival'; g.inventory.add(I.ARROW, 2); g.inventory.add(I.GLOW_ARROW, 1);
+  g.wearTool = () => {}; g.unlock = () => {};
+  g.eyePos = () => new THREE.Vector3(0, FLAT_H + 2.6, 0);
+  g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  const launches: number[] = [];
+  g.spawnArrow = (_origin: unknown, _dir: unknown, _speed: number, _from: unknown, _power: number, ammo: number) => { launches.push(ammo); };
+  for (const id of [I.GLOW_ARROW, I.SLOW_ARROW, I.MARK_ARROW]) {
+    g.arrowAmmo = id; g.bowDraw = 1; g.releaseBow();
+    check(`${ITEMS[id]?.name} fires with precisely its ammo ID and spends one actual item`,
+      launches.at(-1) === id && g.inventory.countOf(id) === 0);
+    g.inventory.add(id, 1);
+  }
+  g.inventory.slots[0] = { id: I.BOW, count: 1, ench: { infinity: 1 } };
+  g.arrowAmmo = I.GLOW_ARROW; g.bowDraw = 1; g.releaseBow();
+  check('Infinity does not duplicate special reagent arrows', g.inventory.countOf(I.GLOW_ARROW) === 0);
+  g.arrowAmmo = I.ARROW; g.bowDraw = 1; g.releaseBow();
+  check('Infinity still retains the ordinary 2.7 arrow requirement and does not consume it',
+    launches.at(-1) === I.ARROW && g.inventory.countOf(I.ARROW) === 2);
+  g.inventory.remove(I.ARROW, 2); g.arrowAmmo = I.MARK_ARROW; g.bowDraw = 1;
+  g.releaseBow();
+  check('when normal ammo is absent, a stocked special arrow can still fire',
+    launches.at(-1) === I.MARK_ARROW && g.inventory.countOf(I.MARK_ARROW) === 0);
+  g.inventory.remove(I.SLOW_ARROW, 1);
+  g.inventory.add(I.GLOW_ARROW, 1); g.arrowAmmo = I.GLOW_ARROW; g.arrows = Array(49).fill(null);
+  const cappedCount = g.inventory.countOf(I.GLOW_ARROW), cappedShots = launches.length;
+  g.bowDraw = 1; g.releaseBow();
+  check('projectile cap does not eat reagent ammo without spawning a projectile',
+    g.inventory.countOf(I.GLOW_ARROW) === cappedCount && launches.length === cappedShots);
+  g.arrows = []; g.inventory.remove(I.GLOW_ARROW, 1);
+  g.bowDraw = 1; const shotsBefore = launches.length; g.releaseBow();
+  check('when every ammo stack is empty, the bow does not create a projectile',
+    launches.length === shotsBefore && notices.some((s) => s.includes('Brak strzał')));
+
+  // Exercise the real projectile collision path, not just direct Mob.applyArrowEffect.
+  const impact = Object.create(Game.prototype) as unknown as Record<string, any>;
+  impact.scene = { add: () => {}, remove: () => {} };
+  impact.arrowGeo = new THREE.BoxGeometry(0.09, 0.09, 0.78);
+  impact.arrowMat = new THREE.MeshBasicMaterial(); impact.arrowMats = new Map(); impact.impactGlows = [];
+  impact.gfx = { effectDetail: 'full' }; impact.arrows = [];
+  impact.mode = 'survival'; impact.mobs = [];
+  impact.world = { peekBlock: () => B.AIR };
+  impact.message = (s: string) => impacts.push(s); impact.wearTool = () => {};
+  impact.advanceChallenge = () => {};
+  const impacts: string[] = [];
+  for (const id of [I.GLOW_ARROW, I.SLOW_ARROW, I.MARK_ARROW] as const) {
+    const target = new Mob('zombie', 0, 64, -1);
+    impact.mobs = [target];
+    impact.spawnArrow(new THREE.Vector3(0, 65.2, -1.6), new THREE.Vector3(0, 0, 1), 8, null, 1, id);
+    impact.updateArrows(0.15);
+    check(`${ITEMS[id]?.name} really applies its duration on a hit and removes the spent arrow`,
+      target.health < target.maxHealth && impact.arrows.length === 0 &&
+      (id === I.GLOW_ARROW ? target.arrowGlow === 12 : id === I.SLOW_ARROW ? target.arrowSlow === 6 : target.arrowMark === 18));
+    target.dispose();
+  }
+  check('special arrow hit is reported once per landed projectile', impacts.length === 3);
+  impact.mobs = [];
+  impact.world.peekBlock = (_x: number, _y: number, z: number) => z <= -1 ? B.STONE : B.AIR;
+  impact.spawnArrow(new THREE.Vector3(0, 65.2, -0.5), new THREE.Vector3(0, 0, -1), 10, null, 1, I.GLOW_ARROW);
+  impact.updateArrows(0.1);
+  check('glow arrow also creates an illuminated, temporary marker on a solid wall',
+    impact.impactGlows.length === 1 && impact.impactGlows[0].light.visible && impact.impactGlows[0].time === 12);
+  impact.gfx.effectDetail = 'low'; impact.updateArrows(0.1);
+  check('low preset keeps readable marker but turns off dynamic light',
+    impact.impactGlows[0].mesh.visible && !impact.impactGlows[0].light.visible);
+  for (let i = 0; i < 10; i++) impact.addImpactGlow(new THREE.Vector3(i, 66, 0));
+  check('glow markers have a strict performance cap', impact.impactGlows.length === 8);
+  impact.updateArrows(18);
+  check('wall markers expire and release scene resources', impact.impactGlows.length === 0);
+  impact.arrowGeo.dispose(); impact.arrowMat.dispose();
+  for (const mat of impact.arrowMats.values()) mat.dispose();
+}
+
+section('3.0 #42: craftable bowstrings change actual draw speed and projectile strength');
+{
+  check('all four bow upgrades have append-only IDs, Creative slots and own icons',
+    I.LIGHT_STRING === 368 && I.STRONG_STRING === 369 && I.LIGHT_BOW === 370 && I.STRONG_BOW === 371 &&
+    [I.LIGHT_STRING, I.STRONG_STRING, I.LIGHT_BOW, I.STRONG_BOW].every((id) =>
+      CREATIVE_ITEMS.includes(id) && !!buildItemIcons()[id]) &&
+    ITEMS[I.LIGHT_BOW]?.tool === 'bow' && ITEMS[I.STRONG_BOW]?.tool === 'bow');
+  check('unchanged bow retains old timing, strength, durability, original crafting recipe',
+    bowDrawSeconds(I.BOW) === 1 && bowStrength(I.BOW) === 1 && durabilityMax(I.BOW) === 200 &&
+    RECIPES.find((r) => r.out.id === I.BOW)?.inputs.some((i) => i.id === I.STRING && i.count === 3));
+  check('light vs strong string bows have contrasting balanced draw and power',
+    bowDrawSeconds(I.LIGHT_BOW) === 0.65 && bowStrength(I.LIGHT_BOW) === 0.8 &&
+    bowDrawSeconds(I.STRONG_BOW) === 1.4 && bowStrength(I.STRONG_BOW) === 1.3 &&
+    canEnchant(I.LIGHT_BOW, 'power') && canEnchant(I.STRONG_BOW, 'infinity'));
+  for (const [stringId, bowId, ingredient] of [
+    [I.LIGHT_STRING, I.LIGHT_BOW, I.FEATHER], [I.STRONG_STRING, I.STRONG_BOW, I.IRON],
+  ] as const) {
+    const stringRecipe = RECIPES.find((r) => r.out.id === stringId)!;
+    const bowRecipe = RECIPES.find((r) => r.out.id === bowId)!;
+    const inv = new Inventory(); inv.add(I.STRING, 2); inv.add(ingredient, 1); inv.add(I.BOW, 1);
+    check(`${ITEMS[stringId]?.name} crafts and consumes raw materials in Survival`,
+      !stringRecipe.table && inv.craft(stringRecipe) && inv.countOf(I.STRING) === 0 &&
+      inv.countOf(ingredient) === 0 && inv.countOf(stringId) === 1);
+    check(`${ITEMS[bowId]?.name} converts one old bow using one string without duplication`,
+      !bowRecipe.table && inv.craft(bowRecipe) && inv.countOf(I.BOW) === 0 &&
+      inv.countOf(stringId) === 0 && inv.countOf(bowId) === 1 && !inv.craft(bowRecipe));
+    const upgraded = new Inventory();
+    upgraded.slots[0] = { id: I.BOW, count: 1, dur: 80, ench: { power: 2 }, name: 'Łuk łowcy' };
+    upgraded.add(stringId, 1);
+    const ok = upgraded.craft(bowRecipe);
+    const crafted = upgraded.slots.find((slot) => slot?.id === bowId);
+    const grid = new Inventory();
+    grid.grid[0] = { id: I.BOW, count: 1, dur: 80, ench: { power: 2 }, name: 'Łuk łowcy' };
+    grid.grid[1] = { id: stringId, count: 1 };
+    const gridOut = grid.craftGrid(false);
+    const expectedDur = Math.round(80 * durabilityMax(bowId) / durabilityMax(I.BOW));
+    check(`${ITEMS[bowId]?.name} retains old bow wear, enchants and name in inventory and grid`,
+      ok && crafted?.dur === expectedDur && crafted?.ench?.power === 2 && crafted.name === 'Łuk łowcy' &&
+      gridOut?.dur === expectedDur && gridOut?.ench?.power === 2 && gridOut.name === 'Łuk łowcy' &&
+      grid.grid[0] === null && grid.grid[1] === null);
+  }
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.inventory = new Inventory(); g.selected = 0; g.ui = 'playing'; g.mode = 'survival';
+  g.inventory.slots[1] = { id: I.ARROW, count: 3 };
+  g.selectedStack = () => g.inventory.slots[g.selected];
+  g.body = { pos: new THREE.Vector3(0, 64, 0), vel: new THREE.Vector3() };
+  g.world = { raycast: () => null };
+  g.selection = { visible: false }; g.crackMesh = { visible: false };
+  g.mouseLeft = false; g.mouseRight = true; g.touchInput = true;
+  g.bowDraw = 0.0001; g.swingT = 1; g.placeCooldown = 1;
+  g.breakCooldown = 0; g.pearlCd = 0; g.eatCooldown = 0;
+  g.eyePos = () => new THREE.Vector3(0, 65.6, 0);
+  g.lookDir = () => new THREE.Vector3(0, 0, -1); g.updateHand = () => {};
+  g.wearTool = () => { worn++; }; g.unlock = () => {}; g.message = () => {};
+  let worn = 0;
+  const shots: { speed: number; power: number; dir: THREE.Vector3 }[] = [];
+  g.spawnArrow = (_p: unknown, d: THREE.Vector3, speed: number, _from: unknown, power: number) =>
+    shots.push({ speed, power, dir: d.clone() });
+  for (const [id, seconds, expected] of [
+    [I.BOW, 1, 9], [I.LIGHT_BOW, 0.65, 7.2], [I.STRONG_BOW, 1.4, 11.7],
+  ]) {
+    g.inventory.slots[0] = { id, count: 1 };
+    g.bowDraw = 0.0001; g.mouseRight = true; g.placeCooldown = 10;
+    g.updateInteraction(seconds / 2);
+    check(`${ITEMS[id]?.name} actually draws half charge at half of its own nock time`,
+      g.bowDraw > 0.49 && g.bowDraw < 0.51);
+    g.updateInteraction(seconds / 2);
+    check(`${ITEMS[id]?.name} draws fully in its specified time`, g.bowDraw === 1);
+    g.mouseRight = false;
+    g.updateInteraction(0.01);
+    check(`${ITEMS[id]?.name} fires with the matching damage and one arrow cost`,
+      Math.abs(shots.at(-1)!.power - expected) < 1e-8 && shots.at(-1)!.dir.z === -1 &&
+      g.inventory.countOf(I.ARROW) === 3 - shots.length && g.bowDraw === -1);
+  }
+  check('all bows share durability wear, arrow speed and ammunition behaviour',
+    shots.length === 3 && worn === 3 && shots.every((s) => s.speed === 48));
+  g.inventory.slots[0] = { id: I.LIGHT_BOW, count: 1 }; g.bowDraw = 1; g.mode = 'creative';
+  g.aimDir = new THREE.Vector3(0.6, 0, -0.8);
+  g.releaseBow();
+  check('upgraded bow fires along touch aim, including when Creative has no arrows',
+    shots.at(-1)!.dir.x === 0.6 && shots.at(-1)!.dir.z === -0.8 && shots.at(-1)!.power === 7.2);
+}
+
+section('3.0 #38: leather and iron shields preserve the original shield');
+{
+  check('append-only shield IDs, durability, palette and Creative access',
+    I.LEATHER_SHIELD === 366 && I.IRON_SHIELD === 367 && I.SHIELD === 217 &&
+    [I.SHIELD, I.LEATHER_SHIELD, I.IRON_SHIELD].every((id) =>
+      ITEMS[id]?.tool === 'shield' && stackLimit(id) === 1 && CREATIVE_ITEMS.includes(id) && !!buildItemIcons()[id]) &&
+    durabilityMax(I.SHIELD) === 300 && durabilityMax(I.LEATHER_SHIELD) === 180 &&
+    durabilityMax(I.IRON_SHIELD) === 600);
+  for (const [id, inputs] of [
+    [I.LEATHER_SHIELD, [[I.LEATHER, 4], [B.PLANKS, 2], [I.STICK, 1]]],
+    [I.IRON_SHIELD, [[I.IRON, 5], [B.PLANKS, 2]]],
+  ] as const) {
+    const r = RECIPES.find((candidate) => candidate.out.id === id)!;
+    const inv = new Inventory();
+    for (const [item, n] of inputs) inv.add(item, n);
+    const crafted = inv.craft(r);
+    check(`${ITEMS[id]?.name} Survival recipe consumes every ingredient exactly once`, r.table && crafted &&
+      inv.countOf(id) === 1 && inputs.every(([item]) => inv.countOf(item) === 0) && !inv.craft(r));
+    const grid = new Inventory();
+    for (let y = 0; y < r.pattern!.length; y++) for (let x = 0; x < r.pattern![y].length; x++) {
+      const ch = r.pattern![y][x];
+      if (ch !== ' ') grid.grid[y * 3 + x] = { id: r.key![ch], count: 1 };
+    }
+    check(`${ITEMS[id]?.name} matches only its table grid`,
+      grid.gridMatch(true)?.out.id === id && grid.gridMatch(false) === null && grid.craftGrid(true)?.id === id);
+  }
+  check('legacy shield keeps exact 2.7 melee/arrow defense and wear',
+    shieldDamageFactor(I.SHIELD, false) === 0.5 && shieldDamageFactor(I.SHIELD, true) === 0 &&
+    shieldWeightFactor(I.SHIELD) === 1 && shieldWear(I.SHIELD, 8) === 8);
+  check('light leather trades protection and life for mobility',
+    shieldDamageFactor(I.LEATHER_SHIELD, false) === 0.65 &&
+    shieldDamageFactor(I.LEATHER_SHIELD, true) === 0.4 &&
+    shieldWeightFactor(I.LEATHER_SHIELD) === 1 && shieldWear(I.LEATHER_SHIELD, 8) === 12);
+  check('iron shield protects more but weighs more and lasts longer',
+    shieldDamageFactor(I.IRON_SHIELD, false) === 0.3 &&
+    shieldDamageFactor(I.IRON_SHIELD, true) === 0.15 &&
+    shieldWeightFactor(I.IRON_SHIELD) === 0.85 && shieldWear(I.IRON_SHIELD, 8) === 6);
+  check('all shield variants accept durability enchants, not Sharpness',
+    canEnchant(I.LEATHER_SHIELD, 'unbreaking') && canEnchant(I.IRON_SHIELD, 'unbreaking') &&
+    !canEnchant(I.IRON_SHIELD, 'sharpness'));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.ui = 'playing'; g.mode = 'survival'; g.yaw = 0; g.hunger = 20; g.flying = false;
+  g.body = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(), onGround: true, h: 1.8 };
+  g.inventory = new Inventory(); g.selected = 0; g.selectedStack = () => g.inventory.slots[0];
+  g.message = () => {}; g.emitHud = () => {}; g.unlock = () => {}; g.keys = new Set();
+  g.world = { peekBlock: () => B.AIR }; g.scene = { remove: () => {} };
+  g.difficulty = DEFAULT_DIFFICULTY; g.arrows = [];
+  let hit = 0, damage = 0;
+  g.damage = (d: number) => { hit++; damage = d; };
+  const shoot = (z: number, velZ: number) => {
+    g.arrows.push({ life: 0, pos: new THREE.Vector3(0, 1, z), vel: new THREE.Vector3(0, 0, velZ),
+      mesh: { position: new THREE.Vector3(), lookAt() {} }, from: { body: { pos: new THREE.Vector3(0, 0, z) } }, power: 10 });
+    g.updateArrows(0.1);
+  };
+  const foe = { type: 'skeleton', dead: false, soundTimer: 10, body: { pos: new THREE.Vector3(0, 0, -2) },
+    group: {}, update(_dt: number, _world: unknown, _p: unknown, onAttack: (d: number, m: unknown) => void) { onAttack(10, this); } };
+  g.mobs = [foe]; g.spawnTimer = 100; g.daylight = () => 0; g.weather = 'clear'; g.isInNether = false;
+  g.drops = []; g.time = 0;
+  for (const [id, melee, arrow, wear] of [
+    [I.SHIELD, 5, 0, 8], [I.LEATHER_SHIELD, 7, 4, 12], [I.IRON_SHIELD, 3, 2, 6],
+  ]) {
+    g.inventory.slots[0] = { id, count: 1 };
+    g.guardTime = 0; g.dodgeTime = 0;
+    const before = hit; g.updateMobs(0.01);
+    check(`${ITEMS[id]?.name} actually reduces frontal mob damage and wears`,
+      hit === before + 1 && damage === melee && g.inventory.slots[0].dur === durabilityMax(id) - wear);
+    const afterMelee = hit; shoot(-0.5, 4);
+    check(`${ITEMS[id]?.name} blocks frontal arrow by its own rate`,
+      hit === afterMelee + (arrow > 0 ? 1 : 0) && (arrow === 0 || damage === arrow));
+    const afterArrow = hit; shoot(0.5, -4);
+    check(`${ITEMS[id]?.name} does not block a rear arrow`, hit === afterArrow + 1 && damage === 10);
+    g.guardCooldown = 0;
+    check(`${ITEMS[id]?.name} still parries fully with correct timing`,
+      g.tryTimedGuard() && g.parryFrom(new THREE.Vector3(0, 0, -2)) && g.guardTime === 0);
+  }
+}
+
+section('3.0 #75: directional shield parry and dodge');
+{
+  check('frontal sector faces the camera, not a world axis', threatInFront(0, 0, 0, 0, -3) &&
+    !threatInFront(0, 0, 0, 0, 3) && threatInFront(Math.PI / 2, 0, 0, -3, 0));
+  check('a coincident or invalid threat cannot be parried', !threatInFront(0, 0, 0, 0, 0) && !threatInFront(NaN, 0, 0, 0, -1));
+  const back = dodgeDirection(0, new Set());
+  eq('dodge without input retreats', `${back.x},${back.z}`, '0,1');
+  const forward = dodgeDirection(0, new Set(['KeyW']));
+  eq('dodge follows forward input', `${forward.x},${forward.z}`, '0,-1');
+  const diagonal = dodgeDirection(Math.PI / 2, new Set(['KeyW', 'KeyD']));
+  check('rotated diagonal dodge is normalised', Math.abs(Math.hypot(diagonal.x, diagonal.z) - 1) < 1e-9 && diagonal.x < 0 && diagonal.z < 0);
+
+  const g = Object.create(Game.prototype) as any;
+  g.ui = 'playing'; g.mode = 'survival'; g.hunger = 4; g.flying = false; g.yaw = 0;
+  g.keys = new Set<string>(); g.body = { pos: new THREE.Vector3(0, 0, 0), vel: new THREE.Vector3(), onGround: true, h: 1.8 };
+  g.inventory = new Inventory(); g.selected = 0;
+  g.selectedStack = () => g.inventory.slots[g.selected] ?? null;
+  g.message = () => {}; g.emitHud = () => {}; g.unlock = () => {};
+  let hits = 0, lastHit = 0;
+  g.damage = (amount: number) => { hits++; lastHit = amount; };
+  check('grounded survival player can dodge', g.tryDodge());
+  eq('dodge spends exactly one hunger', g.hunger, 3);
+  check('dodge grants only a short window, with cooldown', g.dodgeTime === 0.29 && !g.tryDodge());
+  g.dodgeTime = 0; g.dodgeCooldown = 0; g.body.onGround = false;
+  check('mid-air dodge is rejected', !g.tryDodge());
+  g.body.onGround = true; g.hunger = 0;
+  check('starving player cannot dodge', !g.tryDodge());
+  g.hunger = 3; g.ui = 'paused';
+  check('no defensive actions while paused', !g.tryDodge() && !g.tryTimedGuard());
+  g.ui = 'playing';
+  check('parry requires a shield in the selected slot', !g.tryTimedGuard());
+  g.inventory.slots[0] = { id: I.SHIELD, count: 1 };
+  check('shield initiates a timed guard', g.tryTimedGuard() && g.guardTime === 0.42 && !g.tryTimedGuard());
+  const durability = g.inventory.slots[0].dur;
+  check('rear attacker does not consume timed parry', !g.parryFrom(new THREE.Vector3(0, 0, 2)) && g.guardTime > 0);
+  check('frontal attacker is parried once and wears shield', g.parryFrom(new THREE.Vector3(0, 0, -2)) && g.guardTime === 0 &&
+    g.inventory.slots[0].dur < (durability ?? 999));
+  check('spent parry does not block a second attacker', !g.parryFrom(new THREE.Vector3(0, 0, -2)));
+  g.guardCooldown = 0; g.guardTime = 0;
+  g.onKeyDown({ code: 'KeyR', repeat: false, preventDefault() {} });
+  check('PC R activates the real shield timing window', g.guardTime === 0.42);
+  g.guardTime = 0; g.guardCooldown = 0; g.dodgeCooldown = 0;
+  g.onKeyDown({ code: 'KeyV', repeat: false, preventDefault() {} });
+  check('PC V activates the real dodge', g.dodgeTime === 0.29 && g.hunger === 2);
+  g.dodgeTime = 0; g.dodgeCooldown = 0;
+  g.onKeyDown({ code: 'KeyV', repeat: true, preventDefault() {} });
+  check('holding V cannot spam dodge', g.dodgeTime === 0 && g.hunger === 2);
+  g.inventory.slots[0] = null;
+  check('guard cannot be activated after shield is unequipped', !g.tryTimedGuard());
+  g.inventory.slots[0] = { id: I.SHIELD, count: 1 };
+  g.world = { peekBlock: () => B.AIR };
+  g.scene = { remove: () => {} };
+  g.difficulty = DEFAULT_DIFFICULTY;
+  g.arrows = [];
+  const shoot = (z: number, velZ: number) => {
+    g.arrows.push({ life: 0, pos: new THREE.Vector3(0, 1, z), vel: new THREE.Vector3(0, 0, velZ),
+      mesh: { position: new THREE.Vector3(), lookAt() {} }, from: { body: { pos: new THREE.Vector3(0, 0, z) } }, power: 4 });
+    g.updateArrows(0.1);
+  };
+  g.guardCooldown = 0;
+  g.tryTimedGuard();
+  shoot(-0.5, 4);
+  check('front arrow is consumed by a well-timed guard', hits === 0 && g.guardTime === 0 && g.arrows.length === 0);
+  g.guardCooldown = 0;
+  g.tryTimedGuard();
+  shoot(0.5, -4);
+  check('rear arrow bypasses shield and parry without consuming the timing window', hits === 1 && g.guardTime > 0 && g.arrows.length === 0);
+  g.inventory.slots[0] = null;
+  g.guardTime = 0; g.dodgeTime = 0.2;
+  shoot(0.5, -4);
+  check('dodge window avoids a rear arrow even without a shield', hits === 1 && g.arrows.length === 0);
+  g.dodgeTime = 0; g.guardTime = 0; g.guardCooldown = 0;
+  const foe = { type: 'skeleton', dead: false, soundTimer: 10, body: { pos: new THREE.Vector3(0, 0, -2) },
+    group: {}, update(_dt: number, _world: unknown, _p: unknown, hit: (d: number, m: unknown) => void) { hit(4, this); } };
+  g.mobs = [foe]; g.spawnTimer = 100; g.daylight = () => 0; g.weather = 'clear'; g.isInNether = false;
+  g.drops = []; g.time = 0;
+  g.inventory.slots[0] = { id: I.SHIELD, count: 1 };
+  g.tryTimedGuard(); g.updateMobs(0.01);
+  check('real mob attack callback is parried before applying damage', hits === 1 && g.guardTime === 0);
+  foe.body.pos.z = 2; g.guardCooldown = 0; g.tryTimedGuard(); g.updateMobs(0.01);
+  check('rear mob attack bypasses passive shield and timed parry', hits === 2 && g.guardTime > 0);
+  g.dodgeTime = 0.2; g.updateMobs(0.01);
+  check('mob strike in the dodge window misses', hits === 2);
+  g.dodgeTime = 0; g.guardTime = 0;
+  foe.body.pos.z = -2;
+  g.updateMobs(0.01);
+  check('passive shield reduces only frontal mob strikes', hits === 3 && lastHit === Math.ceil(mobDamage(4, g.difficulty.damage) / 2));
+  foe.body.pos.z = 2;
+  g.updateMobs(0.01);
+  check('passive shield does not stop a rear mob strike', hits === 4 && lastHit === mobDamage(4, g.difficulty.damage));
+  g.mode = 'creative'; g.hunger = 0; g.inventory.slots[0] = null;
+  check('Creative can dodge without food, retaining existing sandbox access', g.tryDodge() && g.hunger === 0);
+}
+
+section('3.0 #79: build, combat and exploration challenges');
+{
+  check('all three challenge goals exist as journal achievements', Object.keys(CHALLENGES).every((id) => !!achievementById(id)));
+  const base = normalizeChallenges(null);
+  eq('2.7 saves start with no challenge counters', Object.values(base).join(','), '0,0,0');
+  const migrated = normalizeChallenges({ challenge_builder: 7.9, challenge_hunter: -10, challenge_explorer: 999, bogus: 99 }, ['biome_swamp', 'biome_savanna']);
+  eq('building progress is sanitized on import', migrated.challenge_builder, 7);
+  eq('negative combat progress is rejected', migrated.challenge_hunter, 0);
+  eq('old first-visit achievements contribute to exploration', migrated.challenge_explorer, 2);
+  eq('three pre-existing biome visits can complete the challenge on load', normalizeChallenges({}, ['biome_swamp', 'biome_savanna', 'biome_jungle']).challenge_explorer, 3);
+  eq('completed challenge cannot be demoted by a bad save', normalizeChallenges({}, ['challenge_hunter']).challenge_hunter, CHALLENGES.challenge_hunter.target);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.challengeProgress = normalizeChallenges(undefined);
+  g.unlocked = new Set();
+  g.mode = 'survival';
+  g.emitHud = () => {};
+  g.message = () => {};
+  let xp = 0;
+  g.gainXp = (n: number) => { xp += n; };
+  for (let i = 0; i < 19; i++) g.advanceChallenge('challenge_builder');
+  check('nineteen placed blocks show partial progress with no reward', g.challengeProgress.challenge_builder === 19 && xp === 0 && !g.unlocked.has('challenge_builder'));
+  g.advanceChallenge('challenge_builder');
+  check('twentieth placed block awards once', g.challengeProgress.challenge_builder === 20 && xp === 10 && g.unlocked.has('challenge_builder'));
+  g.advanceChallenge('challenge_builder');
+  eq('repeated actions after completion cannot farm rewards', xp, 10);
+  for (let i = 0; i < 5; i++) g.advanceChallenge('challenge_hunter');
+  check('combat challenge uses its own counter and reward', g.challengeProgress.challenge_hunter === 5 && xp === 20);
+  g.advanceChallenge('challenge_explorer');
+  check('exploration does not increment combat or building', g.challengeProgress.challenge_explorer === 1 && xp === 20);
+  eq('saved counters and achievements cannot repay completed reward', normalizeChallenges(JSON.parse(JSON.stringify(g.challengeProgress)), g.unlocked).challenge_builder, 20);
+  // The live placement and melee paths (shared by PC clicks and touch taps)
+  // advance counters only after successful actions, never on invalid targets.
+  const live = Object.create(Game.prototype) as unknown as Record<string, any>;
+  live.mode = 'survival';
+  live.challengeProgress = normalizeChallenges(undefined);
+  live.unlocked = new Set();
+  live.message = () => {};
+  live.emitHud = () => {};
+  live.keys = new Set();
+  live.mobs = [];
+  live.body = { pos: new THREE.Vector3(5.5, 65, 5.5), w: 0.6, h: 1.8 };
+  live.findMobTarget = () => ({ mob: null, dist: Infinity });
+  live.selectedStack = () => ({ id: B.COBBLE, count: 1 });
+  live.tryMakePath = () => false;
+  live.settle = () => {};
+  live.onBlockChanged = () => {};
+  live.growables = new Map();
+  live.consumeSelected = () => {};
+  live.target = null;
+  live.tryUse();
+  eq('using an item without a target does not build', live.challengeProgress.challenge_builder, 0);
+  let placed = 0;
+  live.world = {
+    getBlock: (_x: number, y: number) => y <= 64 ? B.STONE : B.AIR,
+    setBlock: () => { placed++; },
+  };
+  live.target = { id: B.STONE, x: 2, y: 64, z: 2, nx: 0, ny: 1, nz: 0 };
+  live.tryUse();
+  check('placing a real block advances construction', placed === 1 && live.challengeProgress.challenge_builder === 1);
+  const zombie = new Mob('zombie', 6, 65, 6);
+  zombie.health = 1;
+  live.findMobTarget = () => ({ mob: zombie, dist: 1 });
+  live.target = null;
+  live.selectedStack = () => null;
+  live.attackCooldown = 0;
+  live.sprinting = false;
+  live.hunger = 20;
+  live.wearTool = () => {};
+  live.hasEffect = () => false;
+  live.tryAttack();
+  check('a direct lethal melee hit counts as combat', zombie.dead && live.challengeProgress.challenge_hunter === 1);
+  live.attackCooldown = 0;
+  live.tryAttack();
+  eq('dead enemies cannot grant a second kill', live.challengeProgress.challenge_hunter, 1);
+
+}
+
+section('3.0 #81: independent, live per-world difficulty');
+{
+  eq('legacy saves use 2.7 normal settings', JSON.stringify(normalizeDifficulty(undefined)), JSON.stringify(DEFAULT_DIFFICULTY));
+  const normalized = normalizeDifficulty({ aggression: 'spokojna', damage: 'surowe', resources: 'invalid', foreign: true });
+  eq('valid axes survive, invalid axes default independently', JSON.stringify(normalized),
+    JSON.stringify({ aggression: 'spokojna', damage: 'surowe', resources: 'normalne' }));
+  eq('arrays cannot smuggle difficulty settings', normalizeDifficulty(['zaciekla']).aggression, 'normalna');
+  eq('calm world stops spawning hostiles', hostileCap('spokojna'), 0);
+  check('fierce world allows more hostile mobs', hostileCap('zaciekla') > hostileCap('normalna'));
+  eq('fierce hostile movement is faster', hostileSpeed('zaciekla'), 1.25);
+  eq('normal mob hits preserve old damage', mobDamage(4, 'normalne'), 4);
+  eq('gentle mob hits still hurt', mobDamage(1, 'lagodne'), 1);
+  eq('gentle mob hits are reduced', mobDamage(10, 'lagodne'), 7);
+  eq('harsh mob hits are increased', mobDamage(10, 'surowe'), 14);
+  eq('scarce ore sometimes yields nothing', oreYield(1, 'skape', 0.1), 0);
+  eq('scarce ore still sometimes yields its normal amount', oreYield(1, 'skape', 0.9), 1);
+  eq('rich ore grants one extra resource', oreYield(4, 'obfite'), 5);
+  eq('normal ore preserves 2.7 yield', oreYield(4, 'normalne'), 4);
+  eq('rich diamonds add material', resourceDropCount(B.DIAMOND_ORE, I.DIAMOND, 1, 'obfite', false), 2);
+  eq('rich mode cannot duplicate an iron ore block', resourceDropCount(B.IRON_ORE, B.IRON_ORE, 1, 'obfite', false), 1);
+  eq('silk touch never applies resource multiplier', resourceDropCount(B.DIAMOND_ORE, B.DIAMOND_ORE, 1, 'obfite', true), 1);
+  eq('ordinary stone ignores resource multiplier', resourceDropCount(B.STONE, B.COBBLE, 1, 'obfite', false), 1);
+  eq('ripe wheat gains a second harvest in rich worlds', resourceDropCount(B.CROP3, I.WHEAT, 1, 'obfite', false), 2);
+  eq('scarce harvest occasionally loses edible yield', resourceDropCount(B.CROP3, I.WHEAT, 1, 'skape', false, 0.1), 0);
+  eq('scarce world keeps seeds for sustainable replanting', resourceDropCount(B.CROP3, I.SEEDS, 1, 'skape', false, 0.1), 1);
+  eq('unripe crops never multiply seeds', resourceDropCount(B.CROP0, I.SEEDS, 1, 'obfite', false), 1);
+  eq('silk touch never multiplies a ripe crop block', resourceDropCount(B.CROP3, B.CROP3, 1, 'obfite', true), 1);
+  eq('old animal meat yield unchanged in normal worlds', animalMeatYield('normalne', 0), 1);
+  eq('animals give two pieces of meat in rich worlds', animalMeatYield('obfite'), 2);
+  eq('animals sometimes give no meat in scarce worlds', animalMeatYield('skape', 0.1), 0);
+  eq('animals can still provide meat in scarce worlds', animalMeatYield('skape', 0.9), 1);
+  const harvest = Object.create(Game.prototype) as unknown as Record<string, any>;
+  harvest.world = new World(37, true);
+  harvest.mode = 'survival';
+  harvest.difficulty = { ...DEFAULT_DIFFICULTY, resources: 'obfite' };
+  harvest.growables = new Map();
+  harvest.selectedStack = () => null;
+  harvest.spawnParticles = () => {};
+  harvest.fallGravity = () => {};
+  const harvestDrops: { id: number; count: number }[] = [];
+  harvest.spawnDrop = (id: number, count: number) => void harvestDrops.push({ id, count });
+  harvest.world.getChunk(0, 0);
+  harvest.world.setBlock(3, FLAT_H + 1, 3, B.CROP3);
+  harvest.breakBlock(3, FLAT_H + 1, 3);
+  check('live ripe crop harvest uses resource setting but preserves seeds', harvestDrops.some(d => d.id === I.WHEAT && d.count === 2) && harvestDrops.some(d => d.id === I.SEEDS && d.count >= 1));
+  harvestDrops.length = 0;
+  harvest.difficulty.resources = 'normalne';
+  harvest.world.setBlock(3, FLAT_H + 1, 3, B.CROP3);
+  harvest.breakBlock(3, FLAT_H + 1, 3);
+  check('reverting the difficulty instantly restores original crop yield', harvestDrops.some(d => d.id === I.WHEAT && d.count === 1));
+  const pig = new Mob('pig', 4, FLAT_H + 1, 4);
+  harvest.mobXp = () => {};
+  harvest.unlock = () => {};
+  harvestDrops.length = 0;
+  harvest.difficulty.resources = 'obfite';
+  harvest.mobLoot(pig);
+  check('live animal kill applies rich meat yield', harvestDrops.some(d => d.id === I.RAW_PORK && d.count === 2));
+  harvestDrops.length = 0;
+  harvest.difficulty.resources = 'normalne';
+  harvest.mobLoot(pig);
+  check('reverting the setting restores old animal meat yield', harvestDrops.some(d => d.id === I.RAW_PORK && d.count === 1));
+  harvest.selectedStack = () => ({ id: I.WOOD_PICK, count: 1 });
+  harvest.difficulty.resources = 'skape';
+  let orbCount = 0;
+  harvest.spawnOrb = () => { orbCount++; };
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0.1;
+    harvestDrops.length = 0;
+    harvest.world.setBlock(3, FLAT_H + 1, 3, B.COAL_ORE);
+    harvest.breakBlock(3, FLAT_H + 1, 3);
+    check('scarce ore that yields nothing grants no XP or items', harvestDrops.length === 0 && orbCount === 0);
+    harvest.difficulty.resources = 'normalne';
+    harvest.world.setBlock(3, FLAT_H + 1, 3, B.COAL_ORE);
+    harvest.breakBlock(3, FLAT_H + 1, 3);
+    check('returning to normal resources restores ore and XP immediately', harvestDrops.some(d => d.id === I.COAL && d.count === 1) && orbCount === 1);
+  } finally { Math.random = originalRandom; }
+
+
+
+  const world = new World(17, true);
+  world.getChunk(0, 0);
+  const near = new THREE.Vector3(9.5, FLAT_H + 1, 12.5);
+  const calmCreeper = new Mob('creeper', 9.5, FLAT_H + 1, 9.5);
+  calmCreeper.fuse = 0.2;
+  calmCreeper.update(0.3, world, near, () => {}, () => {}, true);
+  check('calm setting defuses already-lit creepers without explosions', calmCreeper.fuse === -1 && !calmCreeper.exploded);
+  const slow = new Mob('zombie', 9.5, FLAT_H + 1, 9.5);
+  const fast = new Mob('zombie', 9.5, FLAT_H + 1, 9.5);
+  slow.update(1 / 30, world, near, () => {}, () => {}, false, [], () => {}, hostileSpeed('normalna'));
+  fast.update(1 / 30, world, near, () => {}, () => {}, false, [], () => {}, hostileSpeed('zaciekla'));
+  check('fierce aggression moves chasing mobs faster in the actual AI', Math.hypot(fast.body.vel.x, fast.body.vel.z) > Math.hypot(slow.body.vel.x, slow.body.vel.z));
+}
+
+section('3.0 #80: first-visit biome rewards');
+{
+  const expected = ['Bagno', 'Sawanna', 'Dżungla', 'Tajga', 'Pustkowie', 'Kwiecista łąka'] as const;
+  check('six exploration goals are real achievements', expected.every((b) => achievementById(BIOME_DISCOVERY_GOALS[b]!) !== undefined));
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.unlocked = new Set();
+  g.challengeProgress = normalizeChallenges(undefined);
+  g.mode = 'survival';
+  g.toast = null;
+  g.message = () => {};
+  g.emitHud = () => {};
+  let xp = 0;
+  g.gainXp = (n: number) => { xp += n; };
+  g.discoverBiome('Bagno');
+  check('entering swamp adds the goal to the saved unlocked set', g.unlocked.has('biome_swamp'));
+  eq('one visit pays exactly 3 experience', xp, 3);
+  g.discoverBiome('Bagno');
+  eq('revisiting same biome never farms extra rewards', xp, 3);
+  g.discoverBiome('Równiny');
+  eq('ordinary terrain has no discovery reward', xp, 3);
+  g.discoverBiome('Kwiecista łąka');
+  eq('different biome has its own reward', xp, 6);
+  g.mode = 'creative';
+  g.discoverBiome('Tajga');
+  check('Creative earns journal entry without experience', xp === 6 && g.unlocked.has('biome_taiga'));
+  g.discoverBiome('Nether');
+  check('the Nether does not award overworld goals', g.unlocked.size === 4 && !g.unlocked.has('biome_nether'));
+  let samples = 0;
+  g.mode = 'survival';
+  g.lastBiomeVisitKey = '';
+  g.body = { pos: new THREE.Vector3(-0.2, 66, -0.2) };
+  g.currentDimension = () => 'overworld';
+  g.world = { surface: (x: number, z: number) => { samples++; return { biome: x === -1 && z === -1 ? 'Pustkowie' : 'Sawanna' }; } };
+  g.observeBiomeAtPlayer();
+  check('negative block coordinates select the actually visited biome', g.unlocked.has('biome_wasteland'));
+  g.observeBiomeAtPlayer();
+  eq('staying inside a block does not resample terrain', samples, 1);
+  g.body.pos.x = 0.1;
+  g.observeBiomeAtPlayer();
+  check('crossing a biome border in one chunk gives a different goal', samples === 2 && g.unlocked.has('biome_savanna'));
+  g.currentDimension = () => 'nether';
+  g.observeBiomeAtPlayer();
+  eq('dimension swap invalidates last-position cache', samples, 3);
+
+}
+
+section('3.0 #52: meadow rabbits, fleeing, jumping, food and drops');
+{
+  eq('meadow spawn selects rabbits often', pickPassiveMob(0.3, 'Kwiecista łąka'), 'rabbit');
+  eq('old plains support rare rabbits', pickPassiveMob(0.01, 'Równiny'), 'rabbit');
+  eq('the rest of plains animal mix stays familiar', pickPassiveMob(0.3, 'Równiny'), 'cow');
+  eq('meadows still spawn other animals', pickPassiveMob(0.9, 'Kwiecista łąka'), 'sheep');
+  check('rabbits remain passive', !isHostileMob('rabbit'));
+  check('rabbit meat IDs are appended to the old range', I.RAW_RABBIT === 357 && I.COOKED_RABBIT === 358);
+  check('both cuts are usable in Creative', CREATIVE_ITEMS.includes(I.RAW_RABBIT) && CREATIVE_ITEMS.includes(I.COOKED_RABBIT));
+  eq('rabbit meat cooks in a furnace', smeltResult(I.RAW_RABBIT), I.COOKED_RABBIT);
+  check('cooked rabbit restores more hunger', (ITEMS[I.COOKED_RABBIT]?.hunger ?? 0) > (ITEMS[I.RAW_RABBIT]?.hunger ?? 0));
+  const rabbit = new Mob('rabbit', 8.5, FLAT_H + 1, 8.5);
+  check('rabbit is smaller than chicken', rabbit.body.w < new Mob('chicken', 0, 0, 0).body.w);
+  check('rabbit has long ears and a hopping gait', rabbit.head.children.length >= 7 && rabbit.legs.length === 4);
+  const flat = new World(456, true);
+  flat.getChunk(0, 0);
+  for (let z = 2; z <= 12; z++) for (let x = 7; x <= 9; x++) for (let y = FLAT_H + 1; y <= FLAT_H + 3; y++) flat.setBlock(x, y, z, B.AIR);
+  const near = new THREE.Vector3(8.5, FLAT_H + 1, 10.5);
+  const original = rabbit.body.pos.distanceTo(near);
+  let jumped = false;
+  for (let i = 0; i < 90; i++) {
+    rabbit.update(1 / 30, flat, near, () => {}, () => {}, false);
+    if (rabbit.body.pos.y > FLAT_H + 1.13) jumped = true;
+  }
+  check('rabbit flees the player without attacking', rabbit.body.pos.distanceTo(near) > original + 2, `${original.toFixed(2)} → ${rabbit.body.pos.distanceTo(near).toFixed(2)} at ${rabbit.body.pos.toArray()}`);
+  check('fleeing rabbit hops rather than sliding', jumped);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const drops: number[] = [];
+  g.spawnDrop = (id: number) => void drops.push(id);
+  g.mobXp = () => {};
+  g.unlock = () => {};
+  g.mobLoot(rabbit);
+  check('rabbit yields distinct meat on death', drops.includes(I.RAW_RABBIT));
+  g.inventory = new Inventory();
+  g.selected = 0;
+  g.body = { pos: new THREE.Vector3(0, 65, 0) };
+  g.consumeSelected = () => {};
+  g.message = () => {};
+  check('campfire cooks rabbit meat using the real engine path', g.cookOnCampfire({ id: I.RAW_RABBIT, count: 1 }));
+  eq('cooked rabbit lands in inventory', g.inventory.countOf(I.COOKED_RABBIT), 1);
+
+}
+
+section('3.0 #53: biome foxes hunt, flee and steal only dropped food');
+{
+  eq('taiga can naturally spawn foxes', pickPassiveMob(0.2, 'Tajga'), 'fox');
+  eq('flower meadow can also spawn foxes', pickPassiveMob(0.49, 'Kwiecista łąka'), 'fox');
+  eq('older forest worlds can spawn foxes', pickPassiveMob(0.15, 'Las'), 'fox');
+  eq('old meadow rabbits keep their original chance', pickPassiveMob(0.3, 'Kwiecista łąka'), 'rabbit');
+  eq('old forest other animals keep their spawn range', pickPassiveMob(0.8, 'Las'), 'pig');
+  check('foxes are passive to players', !isHostileMob('fox'));
+  check('fox has Polish target name and distinctive model', MOB_NAMES.fox === 'Lis' && (() => {
+    const fox = new Mob('fox', 0, 0, 0);
+    return fox.meshes.length >= 14 && fox.legs.length === 4 && fox.body.h < 0.9;
+  })());
+  const w = new World(786, true);
+  w.getChunk(0, 0);
+  const distantPlayer = new THREE.Vector3(35.5, FLAT_H + 1, 35.5);
+  const hunter = new Mob('fox', 8.5, FLAT_H + 1, 8.5);
+  const prey = new Mob('rabbit', 10.5, FLAT_H + 1, 8.5);
+  const hp = prey.health;
+  for (let i = 0; i < 180 && !prey.dead; i++) hunter.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [hunter, prey]);
+  check('fox catches and damages a small animal in the real AI path', prey.health < hp, `${prey.health}/${hp} (fox ${hunter.body.pos.toArray()})`);
+  const timid = new Mob('fox', 7.5, FLAT_H + 1, 7.5);
+  const nearPlayer = new THREE.Vector3(9.5, FLAT_H + 1, 9.5);
+  const firstDist = timid.body.pos.distanceTo(nearPlayer);
+  let attacks = 0;
+  for (let i = 0; i < 90; i++) timid.update(1 / 30, w, nearPlayer, () => { attacks++; }, () => {}, false, [timid]);
+  check('fox flees instead of attacking the player', timid.body.pos.distanceTo(nearPlayer) > firstDist + 2 && attacks === 0);
+  const wolf = new Mob('wolf', 7.5, FLAT_H + 1, 10.5);
+  const scared = new Mob('fox', 7.5, FLAT_H + 1, 7.5);
+  const wolfDistance = scared.body.pos.distanceTo(wolf.body.pos);
+  for (let i = 0; i < 70; i++) scared.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [scared, wolf]);
+  check('fox keeps away from wolves', scared.body.pos.distanceTo(wolf.body.pos) > wolfDistance + 2);
+
+  const snackFox = new Mob('fox', 8.5, FLAT_H + 1, 8.5);
+  const food = { id: I.APPLE, count: 2, age: 2, pos: new THREE.Vector3(8.6, FLAT_H + 1, 8.5) };
+  let eaten = 0;
+  const snatch = () => { eaten++; food.count--; return true; };
+  for (let i = 0; i < 30; i++) snackFox.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [snackFox], () => {}, 1, [food], snatch);
+  check('fox steals exactly one from a food stack with a cooldown', eaten === 1 && food.count === 1 && snackFox.foxSnack > 0);
+  const metal = { ...food, id: I.IRON, count: 1 };
+  let stolenMetal = 0;
+  snackFox.attackCooldown = 0;
+  snackFox.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [snackFox], () => {}, 1, [metal], () => { stolenMetal++; return true; });
+  eq('fox will not steal tools, materials or non-food items', stolenMetal, 0);
+  const newFood = { id: I.BREAD, count: 1, age: 0.3, pos: snackFox.body.pos.clone() };
+  snackFox.update(1 / 30, w, distantPlayer, () => {}, () => {}, false, [snackFox], () => {}, 1, [newFood], () => { stolenMetal++; return true; });
+  eq('newly dropped food is not stolen during pickup grace period', stolenMetal, 0);
+
+  // Exercise the actual game callback: stealing a stack decrements exactly one
+  // item and deleting the final one removes its world mesh, with no inventory.
+  const game = Object.create(Game.prototype) as unknown as Record<string, any>;
+  game.world = w;
+  game.time = 0.25;
+  game.mode = 'survival';
+  game.ui = 'playing';
+  game.isInNether = false;
+  game.difficulty = { ...DEFAULT_DIFFICULTY };
+  game.mobs = [new Mob('fox', 8.5, FLAT_H + 1, 8.5)];
+  game.body = { pos: new THREE.Vector3(20.5, FLAT_H + 1, 8.5) };
+  game.spawnTimer = 100;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.32), new THREE.MeshBasicMaterial());
+  game.drops = [{ id: I.APPLE, count: 2, age: 2, pos: new THREE.Vector3(8.55, FLAT_H + 1, 8.5), mesh, vel: new THREE.Vector3() }];
+  let removed = 0, feedback = 0;
+  game.scene = { remove: () => { removed++; } };
+  game.message = () => { feedback++; };
+  game.updateMobs(1 / 30);
+  check('real world drop loses one when fox eats; remainder can still be picked up', game.drops.length === 1 && game.drops[0].count === 1 && removed === 0 && feedback === 1, `${JSON.stringify(game.drops.map((d: {count:number}) => d.count))} removed=${removed} feedback=${feedback} fox=${game.mobs[0]?.body.pos.toArray()}`);
+  game.mobs[0].attackCooldown = 0;
+  game.updateMobs(1 / 30);
+  check('fox consuming last unit removes the entity rather than duplicating it', game.drops.length === 0 && removed === 1 && feedback === 2, `${JSON.stringify(game.drops.map((d: {count:number}) => d.count))} removed=${removed} feedback=${feedback}`);
+}
+
+section('3.0 #54: frogs at real water and their insect prey');
+{
+  const world = new World(78, true);
+  world.getChunk(0, 0);
+  world.getChunk(1, 0);
+  eq('flat dry land does not spawn pond life', shoreWaterNearby(world, 8, FLAT_H + 1, 8), false);
+  world.setBlock(11, FLAT_H, 8, B.WATER);
+  eq('water three blocks from a shore is detected', shoreWaterNearby(world, 8, FLAT_H + 1, 8), true);
+  eq('distant water is not mistaken for a pond', shoreWaterNearby(world, 4, FLAT_H + 1, 8), false);
+  const knownChunks = world.chunks.size;
+  shoreWaterNearby(world, -1, FLAT_H + 1, 8);
+  eq('pond check never creates neighboring chunks', world.chunks.size, knownChunks);
+  check('frog and insect have distinct Polish target names', MOB_NAMES.frog === 'Żaba' && MOB_NAMES.midge === 'Meszka');
+  check('frog is passive and compact with visible throat and eyes', (() => {
+    const frog = new Mob('frog', 8.5, FLAT_H + 1, 8.5);
+    return !isHostileMob('frog') && frog.body.h < 0.6 && frog.legs.length === 4 && frog.meshes.length >= 10;
+  })());
+  const flyer = new Mob('midge', 6.5, FLAT_H + 2, 6.5);
+  const flyY = flyer.body.pos.y;
+  for (let i = 0; i < 60; i++) flyer.update(1 / 30, world, new THREE.Vector3(40, 65, 40), () => {}, () => {}, false);
+  check('insects hover over the shore without falling', Math.abs(flyer.body.pos.y - flyY) < 0.3 && flyer.body.pos.y > FLAT_H + 1.5);
+  const frog = new Mob('frog', 8.5, FLAT_H + 1, 8.5);
+  const prey = new Mob('midge', 9.4, FLAT_H + 1.35, 8.5);
+  frog.update(1 / 30, world, new THREE.Vector3(40, 65, 40), () => {}, () => {}, false, [frog, prey]);
+  check('frog catches an actual insect and shows a tongue lunge', prey.dead && frog.head.children.some((part) => part instanceof THREE.Mesh && part.visible && (part as THREE.Mesh).position.z === 0.4));
+  const jumper = new Mob('frog', 5.5, FLAT_H + 1, 5.5);
+  jumper.walking = true;
+  jumper.aiTimer = 6;
+  let jumped = false;
+  for (let i = 0; i < 65; i++) {
+    jumper.update(1 / 30, world, new THREE.Vector3(40, 65, 40), () => {}, () => {}, false);
+    if (jumper.body.pos.y > FLAT_H + 1.35) jumped = true;
+  }
+  check('frogs jump instead of merely sliding', jumped);
+
+  // Real spawn pathway picks a loaded shoreline on the existing flat biome.
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world;
+  g.body = { pos: new THREE.Vector3(8.5, FLAT_H + 1, 8.5) };
+  g.mode = 'survival';
+  g.time = 0.25;
+  g.isInNether = false;
+  g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  g.mobs = [];
+  g.spawnTimer = 0;
+  g.spawnVillageFolk = () => {};
+  g.scene = { remove: () => {} };
+  g.spawnMob = (type: MobType, x: number, y: number, z: number) => { const m = new Mob(type, x, y, z); g.mobs.push(m); return m; };
+  world.setBlock(31, FLAT_H, 8, B.WATER);
+  const random = Math.random;
+  try {
+    Math.random = () => 0;
+    g.updateMobs(1 / 30);
+    check('engine spawns frogs with insects beside loaded water in Survival', g.mobs.some((m: Mob) => m.type === 'frog') && g.mobs.some((m: Mob) => m.type === 'midge'));
+    g.mobs = [];
+    world.setBlock(31, FLAT_H, 8, B.GRASS);
+    g.spawnTimer = 0;
+    g.updateMobs(1 / 30);
+    check('same seed/ground without water does not spawn a frog', !g.mobs.some((m: Mob) => m.type === 'frog' || m.type === 'midge'));
+    g.mobs = [];
+    g.isInNether = true;
+    g.spawnTimer = 0;
+    g.updateMobs(1 / 30);
+    check('Nether never spawns pond life', !g.mobs.some((m: Mob) => m.type === 'frog' || m.type === 'midge'));
+    g.mobXp = Game.prototype['mobXp'];
+    let orbs = 0;
+    g.dropXpOrbs = () => { orbs++; };
+    g.mobXp(prey, 0, 0, 0);
+    eq('insects cannot become an unlimited XP farm', orbs, 0);
+    const drops: number[] = [];
+    g.spawnDrop = (id: number) => { drops.push(id); };
+    g.mobXp = () => {};
+    g.unlock = () => {};
+    g.mobLoot(frog);
+    check('frog has a rare usable slimeball drop', drops.includes(I.SLIME_BALL));
+  } finally { Math.random = random; }
+}
+
+section('3.0 #57: nocturnal bats take flight and rest by day');
+{
+  eq('bats can spawn above forest grass after dusk', batSpawnAllowed(B.GRASS, 'Las', 0.2), true);
+  eq('bats can spawn in older birch forest worlds', batSpawnAllowed(B.GRASS, 'Brzozowy las', 0.2), true);
+  eq('bats never spawn in the daytime', batSpawnAllowed(B.GRASS, 'Las', 0.9), false);
+  eq('bats do not appear above bare desert sand', batSpawnAllowed(B.SAND, 'Pustynia', 0.2), false);
+  check('bat is passive, has a localized name and a winged model', (() => {
+    const m = new Mob('bat', 8, FLAT_H + 4, 8);
+    return MOB_NAMES.bat === 'Nietoperz' && !isHostileMob('bat') && m.arms.length === 2 && m.body.h < 0.5;
+  })());
+  const world = new World(777, true);
+  world.getChunk(0, 0);
+  world.getChunk(1, 0);
+  const flyer = new Mob('bat', 7.5, FLAT_H + 3.2, 7.5);
+  const player = new THREE.Vector3(45, FLAT_H + 1, 45);
+  for (let i = 0; i < 40; i++) flyer.update(1 / 30, world, player, () => {}, () => {}, false, [flyer], () => {}, 1, [], () => false, 0.2);
+  const flightAltitude = flyer.body.pos.y;
+  const flightDist = Math.hypot(flyer.body.pos.x - flyer.home.x, flyer.body.pos.z - flyer.home.z);
+  const inFlight = flyer.arms.some((arm) => Math.abs(arm.rotation.z) < 1);
+  check('night bat flies in a bounded area and flaps both wings', inFlight && flightDist > 0.25 && flightDist < 7 && Math.abs(flightAltitude - flyer.home.y) < 1);
+  for (let i = 0; i < 90; i++) flyer.update(1 / 30, world, player, () => {}, () => {}, false, [flyer], () => {}, 1, [], () => false, 1);
+  check('at dawn bat folds wings and settles nearer the ground', flyer.body.pos.y < flightAltitude - 0.8 && flyer.arms.every((arm) => Math.abs(arm.rotation.z) === 1.25));
+
+  // Spawn through the real world tick rather than a /summon-only code path.
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const originalSurface = world.surface.bind(world);
+  g.world = world;
+  g.world.surface = (x: number, z: number) => ({ ...originalSurface(x, z), biome: 'Las' });
+  g.body = { pos: new THREE.Vector3(8.5, FLAT_H + 1, 8.5) };
+  g.mode = 'survival';
+  g.time = 0.75;
+  g.isInNether = false;
+  g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  g.mobs = [];
+  g.spawnTimer = 0;
+  g.spawnVillageFolk = () => {};
+  g.scene = { remove: () => {} };
+  g.spawnMob = (type: MobType, x: number, y: number, z: number) => { const m = new Mob(type, x, y, z); g.mobs.push(m); return m; };
+  const random = Math.random;
+  try {
+    Math.random = () => 0;
+    g.updateMobs(1 / 30);
+    check('night forest in Survival actually spawns a bat', g.mobs.some((m: Mob) => m.type === 'bat'));
+    g.mobs = [];
+    g.time = 0.25;
+    g.spawnTimer = 0;
+    g.updateMobs(1 / 30);
+    check('daylight does not create new bats', !g.mobs.some((m: Mob) => m.type === 'bat'));
+    g.mobs = [];
+    g.isInNether = true;
+    g.time = 0.75;
+    g.spawnTimer = 0;
+    g.updateMobs(1 / 30);
+    check('Nether spawns no bats', !g.mobs.some((m: Mob) => m.type === 'bat'));
+    let gained = 0;
+    g.dropXpOrbs = () => { gained++; };
+    g.mobXp = Game.prototype['mobXp'];
+    g.mobXp(flyer, 0, 0, 0);
+    eq('bats cannot be farmed for XP', gained, 0);
+  } finally { Math.random = random; }
+}
+
+section('3.0 #58: visible camouflage for small swamp lizards');
+{
+  const world = new World(839, true);
+  world.getChunk(0, 0);
+  world.getChunk(1, 0);
+  world.setBlock(8, FLAT_H, 8, B.MUD);
+  const lizard = new Mob('lizard', 8.5, FLAT_H + 1, 8.5);
+  const player = new THREE.Vector3(40, FLAT_H + 1, 40);
+  for (let i = 0; i < 5; i++) lizard.update(1 / 30, world, player, () => {}, () => {}, false);
+  const skin = (lizard.meshes[0] as THREE.Mesh).material as THREE.MeshLambertMaterial;
+  const muddy = skin.color.getHex();
+  check('on mud lizard has opaque brown skin, pale stripe and bright eyes', muddy === 0x907a5b && skin.transparent === false && lizard.meshes.some((m) => (m.material as THREE.MeshLambertMaterial).color?.getHex() === 0xd9d69b), `skin=${muddy.toString(16)} onGround=${lizard.body.onGround} pos=${lizard.body.pos.toArray()} ground=${world.peekBlock(8,64,8)} cache=${(lizard as unknown as {camouflageGround: number}).camouflageGround} targetSkin=${(lizard as unknown as {lizardSkin: THREE.MeshLambertMaterial}).lizardSkin.color.getHex().toString(16)} at=${world.peekBlock(Math.floor(lizard.body.pos.x), Math.floor(lizard.body.pos.y-0.25),Math.floor(lizard.body.pos.z))}`);
+  world.setBlock(8, FLAT_H, 8, B.GRASS);
+  for (let i = 0; i < 5; i++) lizard.update(1 / 30, world, player, () => {}, () => {}, false);
+  check('grass changes skin without making it invisible', skin.color.getHex() === 0x4a8255 && skin.opacity === 1);
+  const another = new Mob('lizard', 9.5, FLAT_H + 1, 8.5);
+  for (let i = 0; i < 5; i++) another.update(1 / 30, world, player, () => {}, () => {}, false);
+  world.setBlock(8, FLAT_H, 8, B.MUD);
+  lizard.update(1 / 30, world, player, () => {}, () => {}, false);
+  check('camouflage is per-animal, not a global tint of every lizard', skin.color.getHex() === 0x907a5b && ((another.meshes[0] as THREE.Mesh).material as THREE.MeshLambertMaterial).color.getHex() === 0x4a8255, `skin=${skin.color.getHex().toString(16)} other=${((another.meshes[0] as THREE.Mesh).material as THREE.MeshLambertMaterial).color.getHex().toString(16)}`);
+  const shy = new Mob('lizard', 7.5, FLAT_H + 1, 7.5);
+  const near = new THREE.Vector3(9.5, FLAT_H + 1, 9.5);
+  const startDist = shy.body.pos.distanceTo(near);
+  let attacks = 0;
+  for (let i = 0; i < 70; i++) shy.update(1 / 30, world, near, () => { attacks++; }, () => {}, false);
+  check('lizard flees a nearby player without attacking', !isHostileMob('lizard') && shy.body.pos.distanceTo(near) > startDist + 1 && attacks === 0);
+  check('swamp lizard is identifiable in the target HUD', MOB_NAMES.lizard === 'Jaszczurka' && lizard.body.w < 0.5);
+
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const originalSurface = world.surface.bind(world);
+  g.world = world;
+  g.world.surface = (x: number, z: number) => ({ ...originalSurface(x, z), biome: 'Bagno' });
+  g.body = { pos: new THREE.Vector3(8.5, FLAT_H + 1, 8.5) };
+  g.mode = 'survival';
+  g.time = 0.25;
+  g.isInNether = false;
+  g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  g.mobs = [];
+  g.spawnTimer = 0;
+  g.spawnVillageFolk = () => {};
+  g.scene = { remove: () => {} };
+  g.spawnMob = (type: MobType, x: number, y: number, z: number) => { const m = new Mob(type, x, y, z); g.mobs.push(m); return m; };
+  world.setBlock(28, FLAT_H, 8, B.MUD);
+  const random = Math.random;
+  try {
+    Math.random = () => 0;
+    g.updateMobs(1 / 30);
+    check('swamp mud naturally spawns a lizard in Survival', g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
+    g.mobs = [];
+    g.spawnTimer = 0;
+    world.setBlock(28, FLAT_H + 1, 8, B.WATER);
+    g.updateMobs(1 / 30);
+    check('submerged mud cannot spawn a lizard or shore frog', !g.mobs.some((m: Mob) => m.type === 'lizard' || m.type === 'frog'));
+    g.mobs = [];
+    g.spawnTimer = 0;
+    g.isInNether = true;
+    g.updateMobs(1 / 30);
+    check('Nether has no swamp lizards', !g.mobs.some((m: Mob) => m.type === 'lizard'), `mobs=${g.mobs.map((m: Mob) => m.type).join(',')} mud=${world.getBlock(28,64,8)} feet=${world.peekBlock(28,65,8)} surface=${g.world.surface(28,8).biome}`);
+  } finally { Math.random = random; }
+}
+
+section('3.0 #65: sand ambusher warns before an escapable leap');
+{
+  check('sandstalker counts as a real hostile instead of passive mob', isHostileMob('sandstalker'));
+  const world = new World(265, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 4; x <= 13; x++) for (let z = 6; z <= 10; z++) {
+    world.setBlock(x, y - 1, z, B.SAND);
+    for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  }
+  const enemy = new Mob('sandstalker', 6.5, y, 8.5);
+  const player = new THREE.Vector3(11, y, 8.5);
+  let wounds = 0;
+  const tick = (mob: Mob, calm = false) => mob.update(1 / 30, world, player, () => { wounds++; }, () => {}, calm);
+  const model = enemy as unknown as { sandBody: THREE.Group; sandMound: THREE.Mesh; sandWarning: THREE.Mesh; sandBuried: boolean };
+  check('buried enemy has visible mound but not visible hidden body', model.sandMound.visible && !model.sandBody.visible);
+  check('buried mound has small target area, not invisible full-height hitbox',
+    enemy.rayHit(new THREE.Vector3(6.5, y + 1.1, 4), new THREE.Vector3(0, 0, 1), 10) === null &&
+    enemy.rayHit(new THREE.Vector3(6.5, y + 0.1, 4), new THREE.Vector3(0, 0, 1), 10) !== null);
+
+  tick(enemy);
+  for (let i = 0; i < 20; i++) tick(enemy);
+  check('crest warns for over half a second with no instant damage', model.sandWarning.visible && model.sandBuried && wounds === 0);
+  player.x = 18;
+  tick(enemy);
+  check('retreat beyond ten blocks cancels windup and prevents hit', !model.sandWarning.visible && model.sandBuried && wounds === 0);
+  player.x = 8.2;
+  for (let i = 0; i < 40; i++) tick(enemy);
+  check('only after full warning does monster leap visibly out of sand', !model.sandBuried && model.sandBody.visible && !model.sandMound.visible && wounds === 0);
+  for (let i = 0; i < 55; i++) tick(enemy);
+  check('emerged pursuer can attack after a dodgeable delay', wounds >= 1);
+  player.x = 30;
+  for (let i = 0; i < 120; i++) tick(enemy);
+  check('enemy reburies when target flees and sand is still underfoot', model.sandBuried && model.sandMound.visible);
+  const calmMob = new Mob('sandstalker', 6.5, y, 8.5);
+  const woundCount = wounds;
+  player.x = 8.2;
+  for (let i = 0; i < 50; i++) tick(calmMob, true);
+  check('peaceful aggression never starts warning or ambush', (calmMob as unknown as {sandBuried: boolean}).sandBuried && wounds === woundCount);
+  // Actual engine spawn: desert biome alone is insufficient; there must be
+  // a loaded, dry sand cell with room for the creature to emerge.
+  const desert = new World(265, true);
+  desert.getChunk(0, 1);
+  desert.surface = () => ({ h: FLAT_H, biome: 'Pustynia', temp: 1, forest: 0 });
+  desert.setBlock(14, y - 1, 27, B.SAND);
+  desert.setBlock(14, y, 27, B.AIR);
+  desert.setBlock(14, y + 1, 27, B.AIR);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = desert; g.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  g.scene = { add: () => {}, remove: () => {} };
+  g.mobs = []; g.drops = []; g.isInNether = false;
+  g.mode = 'survival'; g.weather = 'clear'; g.time = 0.25;
+  g.spawnTimer = 0; g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.nowSeconds = () => 0;
+  const random = Math.random;
+  try { Math.random = () => 0.2; g.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('loaded desert sand produces actual ambusher in day-time game tick', g.mobs.some((m: Mob) => m.type === 'sandstalker'));
+  g.mobs = []; g.spawnTimer = 0; g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  try { Math.random = () => 0.2; g.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('calm difficulty suppresses desert enemy spawns', !g.mobs.some((m: Mob) => m.type === 'sandstalker'));
+}
+
+section('3.0 #64: blind cave listener tracks real sounds, not silent players');
+{
+  check('listener is hostile and gets its own model', isHostileMob('echolurker'));
+  const world = new World(164, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 2; x <= 14; x++) for (let z = 2; z <= 14; z++) {
+    world.setBlock(x, y - 1, z, B.STONE);
+    for (let h = y; h <= y + 3; h++) world.setBlock(x, h, z, B.AIR);
+  }
+  const mob = new Mob('echolurker', 5.5, y, 6.5);
+  const player = new THREE.Vector3(8.5, y, 6.5);
+  let wounds = 0;
+  let noises: Array<{id: number; x: number; y: number; z: number; radius: number; ttl: number; source: 'player' | 'decoy'}> = [];
+  const tick = (subject = mob, calm = false) => subject.update(1 / 30, world, player, () => { wounds++; }, () => {}, calm,
+    [], () => {}, 1, [], () => false, 0, false, 0.25, noises);
+  const px = mob.body.pos.x;
+  for (let i = 0; i < 50; i++) tick();
+  check('without sounds the listener does not magically chase a nearby player', Math.abs(mob.body.pos.x - px) < 0.1 && wounds === 0);
+  noises = [{ id: 1, x: 8.5, y, z: 6.5, radius: 7, ttl: 1.3, source: 'player' }];
+  for (let i = 0; i < 55; i++) tick();
+  check('a footstep is investigated and can lead to a real melee attack', mob.body.pos.x > 7 && wounds > 0);
+  const woundsAfter = wounds;
+  player.set(12.5, y, 12.5);
+  noises = [{ id: 2, x: 4.5, y, z: 8.5, radius: 13, ttl: 1.3, source: 'decoy' }];
+  for (let i = 0; i < 40; i++) tick();
+  check('thrown-object impact redirects pursuit toward the landing point, away from player',
+    mob.body.pos.x < 7.5 && mob.body.pos.z > 6.5 && wounds === woundsAfter);
+  noises = [];
+  for (let i = 0; i < 160; i++) tick();
+  const stopped = mob.body.pos.clone();
+  player.set(mob.body.pos.x + 2, y, mob.body.pos.z);
+  for (let i = 0; i < 40; i++) tick();
+  check('expired sound memory lets a quiet player pass undetected',
+    mob.body.pos.distanceTo(stopped) < 0.2 && wounds === woundsAfter);
+  const calmMob = new Mob('echolurker', 5.5, y, 6.5);
+  noises = [{ id: 3, x: 8.5, y, z: 6.5, radius: 12, ttl: 1.3, source: 'player' }];
+  for (let i = 0; i < 65; i++) tick(calmMob, true);
+  check('peaceful mode prevents listener pursuit and attacks', Math.abs(calmMob.body.pos.x - 5.5) < 0.1 && wounds === woundsAfter);
+
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.body = { pos: new THREE.Vector3(5.5, y, 6.5) };
+  g.mode = 'creative'; g.growables = new Map();
+  g.spawnParticles = () => {}; g.fallGravity = () => {};
+  world.setBlock(8, y, 6, B.STONE);
+  g.breakBlock(8, y, 6);
+  check('actually breaking a block near player emits a louder positional mining cue',
+    g.noiseEvents.length === 1 && g.noiseEvents[0].radius === 13 && g.noiseEvents[0].source === 'player');
+  world.setBlock(8, y, 6, B.STONE);
+  g.breakBlock(8, y, 6, true);
+  eq('silent world edits do not emit player mining sounds', g.noiseEvents.length, 1);
+  for (let i = 0; i < 60; i++) g.emitCaveNoise(5, y, 5, 7);
+  check('sound queue is bounded even during mass block destruction', g.noiseEvents.length <= 32);
+
+  // Run the real player physics/update loop: sneaking suppresses footsteps,
+  // normal walking and sprinting emit cues from the player's *old position*.
+  const walker = Object.create(Game.prototype) as unknown as Record<string, any>;
+  walker.world = world; walker.mode = 'creative'; walker.ui = 'playing';
+  walker.inventory = new Inventory(); walker.selected = 0;
+  walker.body = { pos: new THREE.Vector3(4.5, y, 4.5), vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+  walker.keys = new Set(['KeyD', 'ShiftLeft']);
+  walker.yaw = 0; walker.eyeHeight = 1.62; walker.autoJump = false;
+  walker.flying = false; walker.sprinting = false; walker.hunger = 20;
+  walker.health = 20; walker.maxAir = 12; walker.air = 12;
+  walker.hasEffect = () => false;
+  walker.fallStart = y; walker.stepDist = 0; walker.bobPhase = 0;
+  for (let i = 0; i < 65; i++) walker.updatePlayer(1 / 30);
+  check('actual Shift movement covers distance without emitting any footstep cues',
+    walker.body.pos.x > 6 && (walker.noiseEvents?.length ?? 0) === 0);
+  walker.keys = new Set(['KeyD']); walker.stepDist = 0;
+  for (let i = 0; i < 20; i++) walker.updatePlayer(1 / 30);
+  check('normal walking emits real short-range step cues',
+    walker.noiseEvents?.some((n: {radius: number; source: string}) => n.radius === 7 && n.source === 'player'));
+  walker.noiseEvents = []; walker.stepDist = 0;
+  walker.keys = new Set(['KeyW', 'ControlRight']);
+  for (let i = 0; i < 28; i++) walker.updatePlayer(1 / 30);
+  check('right-Control sprint emits farther-reaching steps in the same movement loop',
+    walker.noiseEvents?.some((n: {radius: number}) => n.radius === 12));
+  // The iron shield's weight must affect actual ordinary walking, not only a stat tooltip.
+  const walkWith = (id: number) => {
+    walker.body.pos.set(4.5, y, 4.5); walker.body.vel.set(0, 0, 0);
+    walker.body.onGround = true; walker.sprinting = false;
+    walker.keys = new Set(['KeyD']); walker.inventory.slots[0] = { id, count: 1 };
+    for (let i = 0; i < 12; i++) walker.updatePlayer(1 / 30);
+    return walker.body.pos.x - 4.5;
+  };
+  const oldShieldDistance = walkWith(I.SHIELD);
+  const ironShieldDistance = walkWith(I.IRON_SHIELD);
+  check('actual movement is slower only while carrying the heavy iron shield',
+    oldShieldDistance > 0.5 && ironShieldDistance > 0 && ironShieldDistance < oldShieldDistance * 0.94);
+  walker.talisman = null;
+  const normal = walkWith(I.STICK);
+  walker.talisman = { id: I.WANDER_CHARM, count: 1 };
+  const withCharm = walkWith(I.STICK);
+  check('real walking is a small amount faster only while traveler charm is equipped',
+    withCharm > normal * 1.02 && withCharm < normal * 1.07,
+    `normal=${normal.toFixed(3)} charm=${withCharm.toFixed(3)}`);
+  walker.talisman = { id: I.TIDE_CHARM, count: 1 };
+  check('swapping charms removes the old speed bonus in the same physics loop',
+    Math.abs(walkWith(I.STICK) - normal) < 0.04);
+  walker.keys = new Set(); walker.mode = 'survival';
+  walker.body.pos.set(4.5, y, 4.5); walker.body.vel.set(0, 0, 0);
+  walker.body.onGround = true;
+  world.setBlock(4, y + 1, 4, B.WATER);
+  walker.air = 10; walker.talisman = null;
+  walker.updatePlayer(0.1);
+  const unprotected = walker.air;
+  walker.body.pos.set(4.5, y, 4.5); walker.body.vel.set(0, 0, 0); walker.body.onGround = true;
+  walker.air = 10; walker.talisman = { id: I.TIDE_CHARM, count: 1 };
+  walker.updatePlayer(0.1);
+  check('real underwater air consumption is 20% slower only with equipped dive charm',
+    Math.abs(unprotected - 9.9) < 0.002 && Math.abs(walker.air - 9.92) < 0.002);
+  world.setBlock(4, y + 1, 4, B.AIR);
+
+
+
+  // Exercise Q + real dropped entity physics; ordinary block loot must not
+  // lure the listener, whereas a player-thrown item makes one impact cue.
+  g.scene = { add: () => {}, remove: () => {} };
+  g.dropMat = new THREE.MeshBasicMaterial(); g.dropGeos = new Map(); g.drops = [];
+  g.inventory = new Inventory(); g.selected = 0;
+  g.inventory.slots[0] = { id: B.STONE, count: 2 };
+  g.eyePos = () => new THREE.Vector3(4.5, y + 3, 5.5);
+  g.lookDir = () => new THREE.Vector3(1, 0, 0);
+  g.emitHud = () => {}; g.noiseEvents = [];
+  g.dropItem();
+  check('Creative Q creates a tagged physics drop without consuming old item IDs', g.drops.length === 1 && g.drops[0].thrown && g.drops[0].id === B.STONE);
+  g.body.pos.set(40, y, 40); // no automatic pickup during this test
+  for (let i = 0; i < 60; i++) g.updateDrops(1 / 30);
+  check('first collision of thrown item creates exactly one decoy at impact',
+    g.noiseEvents.length === 1 && g.noiseEvents[0].source === 'decoy' && g.noiseEvents[0].radius === 13);
+  for (let i = 0; i < 35; i++) g.updateDrops(1 / 30);
+  eq('bouncing item never produces repeated lure cues', g.noiseEvents.length, 1);
+  g.spawnDrop(B.STONE, 1, 6.5, y + 3, 6.5);
+  for (let i = 0; i < 60; i++) g.updateDrops(1 / 30);
+  eq('ordinary loot landing makes no decoy noise', g.noiseEvents.length, 1);
+
+  // Spawn from loaded underground air above a solid cave floor; no new
+  // chunks and no surface spawns even when it is daytime outside.
+  const cave = new World(164, true);
+  cave.getChunk(1, 0);
+  cave.setBlock(22, 48, 8, B.AIR);
+  cave.setBlock(22, 49, 8, B.AIR);
+  const spawn = Object.create(Game.prototype) as unknown as Record<string, any>;
+  spawn.world = cave; spawn.body = { pos: new THREE.Vector3(8.5, 50, 8.5) };
+  spawn.scene = { add: () => {}, remove: () => {} };
+  spawn.mobs = []; spawn.drops = []; spawn.isInNether = false;
+  spawn.mode = 'survival'; spawn.weather = 'clear'; spawn.time = 0.25;
+  spawn.spawnTimer = 0; spawn.difficulty = { ...DEFAULT_DIFFICULTY };
+  spawn.nowSeconds = () => 0; spawn.spawnVillageFolk = () => {};
+  const oldRandom = Math.random, count = cave.chunks.size;
+  try { Math.random = () => 0; spawn.updateMobs(1 / 30); } finally { Math.random = oldRandom; }
+  check('loaded cave generates a listener in Survival without loading extra chunks',
+    spawn.mobs.some((m: Mob) => m.type === 'echolurker') && cave.chunks.size === count);
+  spawn.mobs = []; spawn.spawnTimer = 0; spawn.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  try { Math.random = () => 0; spawn.updateMobs(1 / 30); } finally { Math.random = oldRandom; }
+  check('peaceful difficulty suppresses new cave listeners', !spawn.mobs.some((m: Mob) => m.type === 'echolurker'));
+}
+
+section('3.0 #69: cancellable melee telegraph and combat hit reaction');
+{
+  const world = new World(269, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 3; x <= 14; x++) for (let z = 3; z <= 13; z++)
+    for (let yy = y; yy <= y + 4; yy++) world.setBlock(x, yy, z, B.AIR);
+  for (const type of ['zombie', 'spider', 'enderman', 'slime'] as MobType[]) {
+    const m = new Mob(type, 7.5, y, 7.5);
+    const target = new THREE.Vector3(8.6, y, 7.5);
+    let hits = 0;
+    const tell = (m as unknown as { strikeWarning: THREE.Mesh }).strikeWarning;
+    const tick = () => m.update(1 / 30, world, target, () => { hits++; }, () => {}, false);
+    tick();
+    check(`${type}: orange warning appears before first hit`, tell.visible && hits === 0);
+    check(`${type}: silhouette animates its attack preparation`,
+      type === 'spider' ? m.legs[0].rotation.x < -0.9 : type === 'slime' ? m.group.scale.y < 0.95 : m.arms[0].rotation.x < -2);
+    for (let i = 0; i < 10; i++) tick();
+    check(`${type}: windup lasts long enough to dodge`, tell.visible && hits === 0);
+    target.x = 15;
+    tick();
+    check(`${type}: retreat cancels warning, never deals a phantom hit`, !tell.visible && hits === 0);
+    target.set(m.body.pos.x + 1, y, m.body.pos.z);
+    for (let i = 0; i < 40; i++) tick();
+    check(`${type}: returning close permits a new warned hit after cooldown`, hits >= 1);
+  }
+  for (const type of ['skeleton', 'ghast'] as MobType[]) {
+    const archer = new Mob(type, 7.5, y, 7.5);
+    const target = new THREE.Vector3(12.5, y, 7.5);
+    let shots = 0;
+    const tell = (archer as unknown as { strikeWarning: THREE.Mesh }).strikeWarning;
+    const tick = () => archer.update(1 / 30, world, target, () => {}, () => { shots++; }, false);
+    tick();
+    check(`${type}: ranged windup has a visible orange cue and no instant projectile`, tell.visible && shots === 0);
+    for (let i = 0; i < 10; i++) tick();
+    check(`${type}: projectile is delayed long enough to find cover`, tell.visible && shots === 0);
+    for (let yy = y; yy <= y + 3; yy++) world.setBlock(10, yy, 7, B.STONE);
+    tick();
+    check(`${type}: blocking line of sight interrupts the shot`, !tell.visible && shots === 0);
+    for (let yy = y; yy <= y + 3; yy++) world.setBlock(10, yy, 7, B.AIR);
+    for (let i = 0; i < 55; i++) tick();
+    check(`${type}: after cover clears it can shoot again with a new warning`, shots >= 1);
+    const originalLOS = archer.hasLineOfSight.bind(archer);
+    let probes = 0;
+    archer.hasLineOfSight = (w, x, yy, z) => { probes++; return originalLOS(w, x, yy, z); };
+    tick();
+    eq(`${type}: active cooldown skips costly line-of-sight checks`, probes, 0);
+  }
+  const foe = new Mob('zombie', 7.5, y, 7.5);
+  const player = new THREE.Vector3(8.6, y, 7.5);
+  let hits = 0;
+  const tick = () => foe.update(1 / 30, world, player, () => { hits++; }, () => {}, false);
+  tick();
+  const tell = (foe as unknown as { strikeWarning: THREE.Mesh }).strikeWarning;
+  check('windup model is an actual visible part of the hostile', foe.group.children.includes(tell) && tell.visible);
+  foe.damage(2, player.x, player.z);
+  check('hitting an attacker cancels its windup, recoils and flashes red',
+    !tell.visible && foe.hurtTime > 0 && foe.body.vel.x < 0 &&
+    (foe.meshes[0].material as THREE.MeshLambertMaterial).emissive.getHex() === 0x770000);
+  player.x = 15;
+  for (let i = 0; i < 35; i++) tick();
+  eq('counterattack interrupted the original melee swing', hits, 0);
+  const cave = new Mob('echolurker', 7.5, y, 7.5);
+  player.x = 8.6;
+  const footstep = [{ id: 1, x: 8.6, y, z: 7.5, radius: 7, ttl: 1, source: 'player' as const }];
+  cave.update(1 / 30, world, player, () => { hits++; }, () => {}, false,
+    [], () => {}, 1, [], () => false, 0, false, 0.25, footstep);
+  const earTell = (cave as unknown as { strikeWarning: THREE.Mesh }).strikeWarning;
+  check('the blind listener also visibly announces its strike', earTell.visible && hits === 0);
+  player.x = 15;
+  cave.update(1 / 30, world, player, () => { hits++; }, () => {}, false,
+    [], () => {}, 1, [], () => false, 0, false, 0.25, []);
+  check('silently escaping the heard location cancels the blind strike', !earTell.visible && hits === 0);
+  const calm = new Mob('zombie', 7.5, y, 7.5);
+  for (let i = 0; i < 30; i++) calm.update(1 / 30, world, new THREE.Vector3(8.6, y, 7.5), () => { hits++; }, () => {}, true);
+  check('peaceful monsters never show a threatening warning or hit',
+    !(calm as unknown as { strikeWarning: THREE.Mesh }).strikeWarning.visible && hits === 0);
+}
+
+section('3.0 #99: sparse biome soundscape and shared volume');
+{
+  const cue = (b: Parameters<typeof chooseAmbient>[0], day = 1, rain = false, roll = 0.2) =>
+    chooseAmbient(b, false, rain, day, roll);
+  eq('forest has daytime birds', cue('Las'), 'bird');
+  eq('old birch forest retains forest birds', cue('Brzozowy las'), 'bird');
+  eq('new taiga has bird calls', cue('Tajga'), 'bird');
+  eq('plains and meadows have daylight birds', `${cue('Równiny')}/${cue('Kwiecista łąka')}`, 'bird/bird');
+  eq('swamp has its own frog-and-water ambience', cue('Bagno'), 'marsh');
+  eq('jungle and savanna have insect ambience', `${cue('Dżungla')}/${cue('Sawanna')}`, 'insects/insects');
+  eq('coast and ocean have waves', `${cue('Ocean')}/${cue('Plaża')}`, 'surf/surf');
+  eq('mountains and tundra have cold wind', `${cue('Góry')}/${cue('Tundra')}`, 'snow/snow');
+  eq('desert and wasteland use sand gusts', `${cue('Pustynia')}/${cue('Pustkowie')}`, 'sand/sand');
+  eq('night forest has no daytime birds', cue('Las', 0.2), 'wind');
+  eq('surface does not override underground cave audio', chooseAmbient('Dżungla', true, false, 1, 0), 'cave');
+  eq('Nether does not play surface rain or birds', chooseAmbient('Nether', true, true, 1, 0), 'nether');
+  eq('rain suppresses birds in forests', cue('Las', 1, true), 'wind');
+  eq('snowfall retains distinct cold wind', cue('Tundra', 1, true), 'snow');
+  eq('rain at a coast keeps audible waves', cue('Plaża', 1, true), 'surf');
+  eq('desert rain never creates false water ambience', cue('Pustynia', 1, true), 'sand');
+  eq('non-finite randomness cannot schedule arbitrary ambience', cue('Las', 1, false, NaN), null);
+  // Run the actual weather scheduler: it must sample the player's exact
+  // position sparsely, without generating chunks for audio alone.
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const samples: Array<[number, number]> = [];
+  g.world = { surface: (x: number, z: number) => { samples.push([x, z]); return { biome: x < 16 ? 'Bagno' : 'Ocean' }; } };
+  g.body = { pos: new THREE.Vector3(6.5, FLAT_H + 1, 6.5) };
+  g.ui = 'paused'; g.isInNether = false; g.underground = false;
+  g.weather = 'clear'; g.weatherTimer = 100; g.ambientTimer = 0;
+  g.lightning = 0; g.time = 0.25;
+  g.rain = { visible: false }; g.biomeAt = () => 'Bagno';
+  Sfx.setVolume(0);
+  g.updateWeather(1 / 30);
+  check('real ambience tick samples local swamp biome once', samples.length === 1 && samples[0][0] === 6 && g.ambientTimer > 15);
+  for (let i = 0; i < 30; i++) g.updateWeather(1 / 30);
+  eq('one-second render loop creates no new ambient cues', samples.length, 1);
+  g.body.pos.x = 19.5; g.ambientTimer = 0; g.biomeAt = () => 'Ocean';
+  g.updateWeather(1 / 30);
+  check('moving to coast changes cue at next scheduled tick, not chunk-centre cache', samples.length === 2 && samples[1][0] === 19);
+  g.isInNether = true; g.ambientTimer = 0; g.weatherTimer = 1;
+  g.updateWeather(1 / 30);
+  check('Nether ambient tick never samples overworld biome or starts rain', samples.length === 2 && !g.rain.visible && g.weatherTimer >= 40);
+  Sfx.setVolume(0);
+  eq('all procedural audio uses one mute setting', Sfx.volume, 0);
+  Sfx.playBiomeAmbient('nether'); // must not allocate/resume WebAudio while muted
+  Sfx.setVolume(2);
+  eq('shared sound control clamps to 100%', Sfx.volume, 1);
+  Sfx.setVolume(NaN);
+  eq('invalid direct audio volume cannot poison master gain', Sfx.volume, 0.5);
+}
+
+section('3.0 #70: earned wolf trust, save migration and dimension-safe companions');
+{
+  eq('old 2.7 worlds without companion data start with none', normalizeCompanions(undefined).length, 0);
+  const world = new World(270, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  const wolf = new Mob('wolf', 6.5, y, 6.5);
+  const mark = (wolf as unknown as { trustMark: THREE.Mesh }).trustMark;
+  check('wild wolf starts with no collar and no trust', wolf.trust === 0 && !mark.visible && !wolf.tamed);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.keys = new Set(); g.target = null; g.selected = 0; g.mode = 'survival';
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.RAW_BEEF, count: 3 };
+  g.body = { pos: new THREE.Vector3(6.5, y, 5.5), vel: new THREE.Vector3() };
+  g.mobs = [wolf]; g.findMobTarget = () => ({ mob: wolf, dist: 1.5 });
+  const messages: string[] = [], awarded: string[] = [];
+  g.message = (s: string) => messages.push(s);
+  g.unlock = (s: string) => awarded.push(s);
+  g.emitHud = () => {};
+  g.tryUse();
+  check('actual Survival feeding consumes exactly one meat and starts visible trust',
+    wolf.trust === 1 && !wolf.tamed && mark.visible && g.inventory.countOf(I.RAW_BEEF) === 2 && messages.at(-1)?.includes('1/3'));
+  g.tryUse();
+  check('spam feeding neither consumes meat nor advances loyalty before cooldown',
+    wolf.trust === 1 && g.inventory.countOf(I.RAW_BEEF) === 2 && messages.at(-1)?.includes('chwili'));
+  const far = new THREE.Vector3(20, y, 20);
+  for (let i = 0; i < 95; i++) wolf.update(1 / 30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('a later feeding advances progress, still without instant taming', wolf.trust === 2 && !wolf.tamed && g.inventory.countOf(I.RAW_BEEF) === 1);
+  for (let i = 0; i < 95; i++) wolf.update(1 / 30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('third real feeding tames and unlocks achievement exactly once',
+    wolf.tamed && wolf.trust === 3 && g.inventory.countOf(I.RAW_BEEF) === 0 && awarded.filter((a) => a === 'wolf').length === 1);
+  check('tamed wolf remains marked and earns the companion coat', mark.visible && wolf.health === wolf.maxHealth);
+  const curious = new Mob('wolf', 5.5, y, 5.5);
+  curious.trust = 1;
+  curious.aiTimer = 10; curious.walking = false;
+  curious.update(1 / 30, world, new THREE.Vector3(10.5, y, 5.5), () => {}, () => {}, false);
+  check('partially trusting wolf approaches a nearby player without becoming tame',
+    curious.body.vel.x > 0 && curious.walking && !curious.tamed);
+  check('crosshair reports persistent progress instead of a hidden stat',
+    g.mobHint().includes('3/3'));
+  const cub = new Mob('wolf', 8.5, y, 8.5);
+  g.mobs = [cub]; g.findMobTarget = () => ({ mob: cub, dist: 1.5 });
+  g.mode = 'creative'; g.inventory.slots[0] = { id: I.RAW_CHICKEN, count: 4 };
+  g.tryUse();
+  check('Creative feeding advances trust without consuming inventory', cub.trust === 1 && g.inventory.countOf(I.RAW_CHICKEN) === 4);
+  const tapped = new Mob('wolf', 7.5, y, 7.5);
+  g.mode = 'survival'; g.ui = 'playing'; g.mobs = [tapped];
+  g.inventory.slots[0] = { id: I.RAW_PORK, count: 1 };
+  g.findMobTarget = () => ({ mob: tapped, dist: 2 });
+  g.refreshTarget = () => { g.target = null; };
+  g.attackCooldown = 0; g.touchAim = null;
+  let accidentalHits = 0;
+  g.tryAttack = () => { accidentalHits++; };
+  g.touchTap(0.4, 0.6);
+  check('actual touch tap uses feeding instead of hitting and restores touch aim',
+    tapped.trust === 1 && g.inventory.countOf(I.RAW_PORK) === 0 && accidentalHits === 0 && g.touchAim === null);
+  const crowded = new Mob('wolf', 7.5, y, 7.5);
+  g.mobs = [crowded, ...Array.from({ length: 24 }, (_, i) => {
+    const friend = new Mob('wolf', i + 2.5, y, 8.5);
+    friend.tame(); return friend;
+  })];
+  g.findMobTarget = () => ({ mob: crowded, dist: 2 });
+  g.inventory.slots[0] = { id: I.RAW_PORK, count: 1 };
+  g.tryUse();
+  check('companion cap refuses extra bond without wasting the last meat',
+    crowded.trust === 0 && g.inventory.countOf(I.RAW_PORK) === 1 && messages.at(-1)?.includes('24'));
+  const old = new Mob('wolf', 4.5, y, 4.5);
+  check('existing direct tame API still works for legacy callers', old.tame() && old.trust === 3);
+  const malformed = [null, {type: 'creeper', x: 5, y, z: 5, health: 4, trust: 3, dim: 'home'},
+    {type: 'wolf', x: Number.NaN, y, z: 5, health: 8, trust: 3, dim: 'home'},
+    {type: 'wolf', x: 1e10, y, z: 5, health: 8, trust: 3, dim: 'home'},
+    {type: 'wolf', x: 5.5, y, z: 5.5, health: 40, trust: 500, dim: 'nether'},
+    {type: 'wolf', x: 5.5, y, z: 5.5, health: 40, trust: 500, dim: 'nether'}];
+  const valid = normalizeCompanions(malformed);
+  check('import discards invalid mob types/NaN/out-of-bounds and deduplicates copies', valid.length === 1);
+  check('import clamps impossible health/trust to safe bounds', valid[0].health === 8 && valid[0].trust === 2);
+  check('save clamps array to 24 companions, not unbounded imported mobs', normalizeCompanions(Array.from({length: 100}, (_, i) => ({
+    type: 'wolf', x: i, y, z: 5, health: 8, trust: 1, dim: 'home', tamed: false,
+  }))).length === 24);
+  // Exercise the engine's real restore into both dimensions; the remote
+  // companion must not create any chunks until the player enters that world.
+  const saved = [
+    { type: 'wolf', dim: 'home', x: 8.5, y, z: 6.5, health: 6, trust: 2, tamed: false, cooldown: 2 },
+    { type: 'wolf', dim: 'nether', x: 13.5, y: 48, z: 6.5, health: 5, trust: 3, tamed: true, cooldown: 0 },
+  ];
+  const reload = Object.create(Game.prototype) as unknown as Record<string, any>;
+  reload.mobs = []; reload.isInNether = false; reload.world = world;
+  reload.scene = { add: () => {}, remove: () => {} };
+  reload.dimStash = { home: { mobs: [] }, nether: { mobs: [] } };
+  const loadedChunks = world.chunks.size;
+  reload.restoreCompanions(saved);
+  check('reload restores active partial progress, collar, health and cooldown',
+    reload.mobs.length === 1 && reload.mobs[0].trust === 2 && !reload.mobs[0].tamed &&
+    reload.mobs[0].health === 6 && reload.mobs[0].trustCooldown === 2 &&
+    (reload.mobs[0] as unknown as { trustMark: THREE.Mesh }).trustMark.visible);
+  check('Nether wolf remains in its own dimension and retains trained status',
+    reload.dimStash.nether.mobs.length === 1 && reload.dimStash.nether.mobs[0].tamed && reload.dimStash.nether.mobs[0].health === 5);
+  eq('restoring companions does not generate remote terrain', world.chunks.size, loadedChunks);
+  reload.body = { pos: new THREE.Vector3(4.5, y, 4.5) };
+  reload.mobs[0].body.pos.set(880.5, y, 6.5); // far beyond render distance
+  reload.mode = 'survival'; reload.time = 0.25; reload.spawnTimer = 5;
+  reload.difficulty = { ...DEFAULT_DIFFICULTY };
+  reload.nowSeconds = () => 0;
+  reload.updateMobs(1 / 30);
+  check('remote trusted wolf remains saved and does not simulate unloaded chunks',
+    reload.mobs.length === 1 && world.chunks.size === loadedChunks);
+  const roundtrip = reload.companionSaves();
+  check('roundtrip captures both active and stashed companions without mixing dimensions',
+    roundtrip.length === 2 && roundtrip[0].dim === 'home' && roundtrip[1].dim === 'nether');
+  reload.mobs[0].dead = true;
+  check('dead wolves are not duplicated on next save', reload.companionSaves().length === 1);
+}
+
+section('3.0 #70: fox and rabbit trust, behavior and mixed-species persistence');
+{
+  check('species require different existing survival food', isTrustFood('rabbit', I.WHEAT) &&
+    !isTrustFood('rabbit', I.RAW_CHICKEN) && isTrustFood('fox', I.RAW_CHICKEN) &&
+    !isTrustFood('fox', I.WHEAT) && isTrustFood('wolf', I.RAW_BEEF) &&
+    !isTrustFood('creeper', I.WHEAT));
+  const world = new World(4070, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  const rabbit = new Mob('rabbit', 6.5, y, 6.5);
+  const fox = new Mob('fox', 9.5, y, 8.5);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.ui = 'playing'; g.mode = 'survival'; g.keys = new Set(); g.target = null; g.selected = 0;
+  g.inventory = new Inventory(); g.inventory.slots[0] = { id: I.WHEAT, count: 4 };
+  g.mobs = [rabbit, fox]; g.body = { pos: new THREE.Vector3(6.5, y, 5.5) };
+  g.findMobTarget = () => ({ mob: rabbit, dist: 2 });
+  const messages: string[] = [];
+  g.message = (text: string) => messages.push(text);
+  g.emitHud = () => {};
+  g.unlock = () => {};
+  const rabbitMark = (rabbit as unknown as { trustMark: THREE.Mesh }).trustMark;
+  const foxMark = (fox as unknown as { trustMark: THREE.Mesh }).trustMark;
+  check('foxes and rabbits start wild with hidden trust marks', !rabbitMark.visible && !foxMark.visible);
+  g.tryUse();
+  check('PC feeding rabbit consumes exactly one wheat and reveals progress', rabbit.trust === 1 && rabbitMark.visible &&
+    g.inventory.countOf(I.WHEAT) === 3 && messages.at(-1)?.includes('1/3'));
+  g.tryUse();
+  check('spam feeding rabbit cannot consume food', rabbit.trust === 1 && g.inventory.countOf(I.WHEAT) === 3);
+  const far = new THREE.Vector3(35, y, 35);
+  for (let i = 0; i < 95; i++) rabbit.update(1/30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('rabbit trust increases only after cooldown', rabbit.trust === 2 && g.inventory.countOf(I.WHEAT) === 2);
+  for (let i = 0; i < 95; i++) rabbit.update(1/30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('rabbit eventually follows but does not become a wolf fighter', rabbit.tamed && rabbit.trust === 3 &&
+    g.inventory.countOf(I.WHEAT) === 1 && rabbitMark.visible);
+  rabbit.body.pos.set(6.5, y, 6.5);
+  // Reset momentum left over from random wild wandering; assert trained steering, not a prior frame.
+  rabbit.body.vel.set(0, 0, 0);
+  let rabbitBites = 0;
+  rabbit.update(1 / 30, world, new THREE.Vector3(12.5, y, 6.5), () => {}, () => {}, false,
+    [new Mob('zombie', 7.5, y, 7.5)], () => { rabbitBites++; });
+  check('trained rabbit moves towards player without attacking hostile mobs', rabbit.walking && rabbit.body.vel.x > 0 && rabbitBites === 0);
+  const wildRabbit = new Mob('rabbit', 6.5, y, 6.5);
+  wildRabbit.aiTimer = 100; wildRabbit.walking = false;
+  wildRabbit.update(1 / 30, world, new THREE.Vector3(9.7, y, 6.5), () => {}, () => {}, false);
+  const semiRabbit = new Mob('rabbit', 6.5, y, 6.5);
+  semiRabbit.trust = 2; semiRabbit.aiTimer = 100; semiRabbit.walking = false;
+  semiRabbit.update(1 / 30, world, new THREE.Vector3(9.7, y, 6.5), () => {}, () => {}, false);
+  check('partial trust reduces rabbit fear before taming', wildRabbit.walking && !semiRabbit.walking);
+
+  g.inventory.slots[0] = { id: I.RAW_CHICKEN, count: 3 };
+  g.findMobTarget = () => ({ mob: fox, dist: 2 });
+  g.refreshTarget = () => { g.target = null; };
+  g.attackCooldown = 0; g.touchAim = null;
+  let accidentalHits = 0;
+  g.tryAttack = () => { accidentalHits++; };
+  g.touchTap(0.4, 0.5);
+  check('tap feeds fox without accidental attack', fox.trust === 1 && foxMark.visible &&
+    g.inventory.countOf(I.RAW_CHICKEN) === 2 && accidentalHits === 0 && g.touchAim === null);
+  for (let i = 0; i < 95; i++) fox.update(1/30, world, far, () => {}, () => {}, false);
+  g.mode = 'creative'; g.tryUse();
+  check('Creative feeds fox without using chicken', fox.trust === 2 && g.inventory.countOf(I.RAW_CHICKEN) === 2);
+  for (let i = 0; i < 95; i++) fox.update(1/30, world, far, () => {}, () => {}, false);
+  g.tryUse();
+  check('trained fox retains food, does not steal or hunt and gains visible marker',
+    fox.tamed && fox.trust === 3 && foxMark.visible && g.inventory.countOf(I.RAW_CHICKEN) === 2);
+  fox.body.pos.set(9.5, y, 8.5);
+  fox.update(1 / 30, world, new THREE.Vector3(14.5, y, 8.5), () => {}, () => {}, false,
+    [rabbit], () => { rabbitBites++; });
+  check('trained fox follows instead of hunting other animals', fox.walking && fox.body.vel.x > 0 && rabbitBites === 0);
+  const wildFox = new Mob('fox', 6.5, y, 6.5);
+  wildFox.aiTimer = 100; wildFox.walking = false;
+  wildFox.update(1 / 30, world, new THREE.Vector3(10.2, y, 6.5), () => {}, () => {}, false);
+  const semiFox = new Mob('fox', 6.5, y, 6.5);
+  semiFox.trust = 2; semiFox.aiTimer = 100; semiFox.walking = false;
+  semiFox.update(1 / 30, world, new THREE.Vector3(10.2, y, 6.5), () => {}, () => {}, false);
+  check('partial trust reduces fox fear before taming', wildFox.walking && !semiFox.walking);
+  const hp = rabbit.health;
+  const hungryFox = new Mob('fox', 6.7, y, 6.7);
+  hungryFox.attackCooldown = 0;
+  hungryFox.update(0.1, world, far, () => {}, () => {}, false, [rabbit]);
+  check('wild fox does not hunt a trained rabbit', rabbit.health === hp);
+  const wrong = new Mob('rabbit', 4.5, y, 4.5);
+  g.mode = 'survival'; g.hunger = 20; g.inventory.slots[0] = { id: I.RAW_CHICKEN, count: 2 };
+  g.findMobTarget = () => ({ mob: wrong, dist: 2 });
+  g.tryUse();
+  check('wrong-species food does not consume items or award trust', wrong.trust === 0 && g.inventory.countOf(I.RAW_CHICKEN) === 2);
+  g.mobs = [rabbit, fox, wrong]; g.findMobTarget = () => ({ mob: wrong, dist: 2 });
+  check('crosshair explains rabbit food and recorded progress', g.mobHint().includes('pszenicą') && g.mobHint().includes('0/3'));
+  g.findMobTarget = () => ({ mob: fox, dist: 2 });
+  check('trained fox has distinct progress hint', g.mobHint().includes('3/3'));
+
+  const legacy = { type: 'wolf', dim: 'home', x: 2.5, y, z: 2.5, health: 6, trust: 2, tamed: false, cooldown: 1 };
+  const saved = [legacy, { type: 'rabbit', dim: 'home', x: 6.5, y, z: 6.5, health: 4, trust: 3, tamed: true, cooldown: 0 },
+    { type: 'fox', dim: 'nether', x: 5.5, y: 48, z: 5.5, health: 9, trust: 2, tamed: false, cooldown: 2 }];
+  const valid = normalizeCompanions(saved);
+  check('old wolf saves coexist with two new species', valid.length === 3 && valid.map((s) => s.type).join() === 'wolf,rabbit,fox');
+  const reload = Object.create(Game.prototype) as unknown as Record<string, any>;
+  reload.mobs = []; reload.isInNether = false; reload.world = world;
+  reload.scene = { add: () => {}, remove: () => {} };
+  reload.dimStash = { home: { mobs: [] }, nether: { mobs: [] } };
+  const before = world.chunks.size;
+  reload.restoreCompanions(saved);
+  check('reload restores all species, trust and marker without distant chunk generation',
+    reload.mobs.length === 2 && reload.mobs[0].type === 'wolf' && reload.mobs[0].trust === 2 &&
+    reload.mobs[1].type === 'rabbit' && reload.mobs[1].tamed &&
+    (reload.mobs[1] as { trustMark: THREE.Mesh }).trustMark.visible &&
+    reload.dimStash.nether.mobs[0].type === 'fox' && reload.dimStash.nether.mobs[0].trust === 2 &&
+    world.chunks.size === before);
+  check('save roundtrip keeps separate dimensions and animal types', reload.companionSaves().map((m: any) => `${m.type}:${m.dim}`).join() ===
+    'wolf:home,rabbit:home,fox:nether');
+  const malformed = normalizeCompanions([
+    { type: 'fox', dim: 'home', x: 4, y, z: 3, health: 400, trust: 99, cooldown: 99 },
+    { type: 'rabbit', dim: 'home', x: 6, y, z: 3, health: 999, trust: 1 },
+    { type: 'fox', dim: 'home', x: 4, y, z: 3, health: 400, trust: 99, cooldown: 99 },
+    { type: 'rabbit', dim: 'home', x: Number.NaN, y, z: 3, health: 2, trust: 2 },
+    { type: 'creeper', dim: 'home', x: 8, y, z: 3, health: 2, trust: 2 },
+  ]);
+  check('import clamps and deduplicates mixed animals while refusing hostile/NaN', malformed.length === 2 &&
+    malformed[0].health === 9 && malformed[0].trust === 2 && malformed[0].cooldown === 3 &&
+    malformed[1].health === 4);
+  const crowded = new Mob('rabbit', 9.5, y, 9.5);
+  g.mobs = [crowded, ...Array.from({ length: 24 }, (_, i) => {
+    const friend = new Mob(i % 2 ? 'fox' : 'wolf', i + 1.5, y, 9.5);
+    friend.tame(); return friend;
+  })];
+  g.inventory.slots[0] = { id: I.WHEAT, count: 1 };
+  g.findMobTarget = () => ({ mob: crowded, dist: 2 });
+  g.tryUse();
+  check('global 24 companion cap refuses extra rabbit without charging wheat', crowded.trust === 0 &&
+    g.inventory.countOf(I.WHEAT) === 1 && messages.at(-1)?.includes('24'));
+}
+
+section('3.0 #68: bounded loaded-chunk pathfinding instead of wall pushing');
+{
+  const world = new World(264, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 3; x <= 13; x++) for (let z = 1; z <= 13; z++) for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  for (let z = 4; z <= 9; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(7, yy, z, B.STONE);
+  const chunkCount = world.chunks.size;
+  let cells = 0;
+  const seen = { peekBlock(x: number, yy: number, z: number) { cells++; return world.peekBlock(x, yy, z); },
+    hasChunk(cx: number, cz: number) { return world.hasChunk(cx, cz); } };
+  let pos = { x: 5.5, z: 7.5 };
+  let aroundWall = false;
+  for (let i = 0; i < 24 && Math.hypot(pos.x - 10.5, pos.z - 7.5) > 0.7; i++) {
+    const next = boundedPathStep(seen, pos.x, y, pos.z, 10.5, 7.5);
+    if (!next) break;
+    pos = next;
+    if (pos.z < 4 || pos.z > 10) aroundWall = true;
+  }
+  check('search routes around a two-block-high obstruction rather than through it',
+    aroundWall && Math.hypot(pos.x - 10.5, pos.z - 7.5) < 0.7);
+  check('bounded path never loads new terrain', world.chunks.size === chunkCount);
+  cells = 0;
+  boundedPathStep(seen, 5.5, y, 7.5, 10.5, 7.5);
+  check('one route search has a hard probe budget on low graphics', cells <= 96 * 4 * 3);
+  eq('even an invalid custom budget cannot create an unbounded search', boundedPathStep(world, 5.5, y, 7.5, 10.5, 7.5, Number.NaN)?.x, 6.5);
+  eq('zero-hop route is not invented when already on target', boundedPathStep(world, 5.5, y, 5.5, 5.5, 5.5), null);
+  // Real Mob.update pursuer pathing: AI, physics and route cache are all live.
+  const guard = new Mob('guard', 5.5, y, 7.5);
+  const villager = new Mob('villager', 10.5, y, 6.5);
+  const zombie = new Mob('zombie', 10.5, y, 7.5);
+  const far = new THREE.Vector3(40, y, 40);
+  let minZ = 7.5, maxZ = 7.5;
+  for (let i = 0; i < 240; i++) {
+    guard.update(1 / 30, world, far, () => {}, () => {}, false, [guard, villager, zombie]);
+    minZ = Math.min(minZ, guard.body.pos.z); maxZ = Math.max(maxZ, guard.body.pos.z);
+  }
+  check('actual guard walks around wall and reaches threatened resident',
+    zombie.health < zombie.maxHealth && (minZ < 4 || maxZ > 10));
+  const hunter = new Mob('zombie', 5.5, y, 7.5);
+  let hit = 0;
+  let huntedMin = 7.5, huntedMax = 7.5;
+  const behindPlayer = new THREE.Vector3(10.5, y, 7.5);
+  for (let i = 0; i < 220; i++) {
+    hunter.update(1 / 30, world, behindPlayer, () => { hit++; }, () => {}, false, [hunter]);
+    huntedMin = Math.min(huntedMin, hunter.body.pos.z); huntedMax = Math.max(huntedMax, hunter.body.pos.z);
+  }
+  check('ordinary hostile also uses the detour and cannot attack through masonry',
+    hit > 0 && (huntedMin < 4 || huntedMax > 10));
+  // Navigation must choose safe ground even if the shortest route is a fire.
+  const hazardWorld = new World(264, true);
+  hazardWorld.getChunk(0, 0);
+  for (let x = 4; x <= 11; x++) for (let z = 5; z <= 9; z++) for (let yy = y; yy <= y + 2; yy++) hazardWorld.setBlock(x, yy, z, B.AIR);
+  hazardWorld.setBlock(7, y - 1, 7, B.CAMPFIRE);
+  let h = { x: 5.5, z: 7.5 };
+  let fireTouched = false;
+  for (let i = 0; i < 14 && Math.hypot(h.x - 9.5, h.z - 7.5) > 0.6; i++) {
+    const next = boundedPathStep(hazardWorld, h.x, y, h.z, 9.5, 7.5);
+    if (!next) break;
+    h = next;
+    if (Math.floor(h.x) === 7 && Math.floor(h.z) === 7) fireTouched = true;
+  }
+  check('path avoids a campfire instead of using the shortest hazardous tile',
+    !fireTouched && Math.hypot(h.x - 9.5, h.z - 7.5) < 0.6);
+
+  // Completely sealed wall: guard gives up instead of repeatedly trying
+  // to jump through masonry and consuming a whole mobile tick forever.
+  for (let z = 0; z < 16; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(7, yy, z, B.STONE);
+  const stuck = new Mob('guard', 5.5, y, 7.5);
+  const behind = new Mob('zombie', 10.5, y, 7.5);
+  for (let i = 0; i < 150; i++) stuck.update(1 / 30, world, far, () => {}, () => {}, false, [stuck, behind]);
+  check('sealed wall does not cause endless wall-press or fake hits', stuck.body.pos.x < 7 && behind.health === behind.maxHealth);
+}
+
+section('3.0 #59: regional travelling merchant and pack animal caravan');
+{
+  check('cargo offers really change with the region without changing saved profession ids',
+    merchantProfession('Pustynia') === 5 && merchantProfession('Bagno') === 6 &&
+    merchantProfession('Tajga') === 7 && merchantProfession('Równiny') === 4 &&
+    offersFor(createVillagerState(merchantProfession('Pustynia'), 0))[0].key !==
+    offersFor(createVillagerState(merchantProfession('Bagno'), 0))[0].key);
+  const world = new World(160, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 5; x <= 12; x++) for (let z = 6; z <= 10; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(x, yy, z, B.AIR);
+  for (let x = 5; x <= 12; x++) world.setBlock(x, y - 1, 8, B.PATH);
+  const merchant = new Mob('merchant', 8.5, y, 8.5, merchantProfession('Tajga'));
+  const mule = new Mob('pack_animal', 5.5, y, 8.5);
+  const far = new THREE.Vector3(40, y, 40);
+  check('merchant has trades and the mule has visible carried packs', merchant.trade !== null && mule.meshes.length > 8 && mule.trade === null);
+  const random = Math.random;
+  try {
+    Math.random = () => 0.5;
+    for (let i = 0; i < 70; i++) {
+      merchant.update(1 / 30, world, far, () => {}, () => {}, false, [merchant, mule]);
+      mule.update(1 / 30, world, far, () => {}, () => {}, false, [merchant, mule]);
+    }
+  } finally { Math.random = random; }
+  check('merchant follows loaded road and mule follows merchant', merchant.body.pos.x < 7.5 && mule.body.pos.x > 5.8);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.mobs = []; g.scene = { add: () => {}, remove: () => {} };
+  g.mode = 'survival'; g.ui = 'playing'; g.inventory = new Inventory();
+  g.trades = 0; g.nowSeconds = () => 0;
+  g.setUI = (screen: string) => { g.ui = screen; };
+  g.message = () => {}; g.emitHud = () => {}; g.gainXp = () => {}; g.unlock = () => {};
+  const trader = g.spawnMob('merchant', 8.5, y, 8.5) as Mob;
+  g.openTrade(trader);
+  check('real trade UI opens for caravan NPC with readable region', g.ui === 'trade' && g.tradeTitle().includes('Wędrowny kupiec') && g.tradeTitle().includes('Równiny'));
+  eq('plain caravan offers building cargo', g.tradeRows()[0].offer.key, 'cobble');
+  g.inventory.add(B.COBBLE, 24);
+  check('actual Survival exchange consumes goods and gives regional item', g.tradeWith(0) && g.inventory.countOf(I.EMERALD) === 1 && g.inventory.countOf(B.COBBLE) === 0);
+  g.ui = 'playing';
+  g.refreshTarget = () => {};
+  g.findMobTarget = () => ({ mob: trader, dist: 2 });
+  g.selectedStack = () => null; g.target = null; g.touchAim = null;
+  g.touchTap(0.5, 0.5);
+  check('touching trader opens trade instead of striking him', g.ui === 'trade' && !trader.dead);
+  // A new encounter is produced by Game only if an existing loaded PATH tile
+  // and adjacent dry pack location are available.
+  const road = new World(161, true);
+  road.getChunk(0, 1);
+  for (let yy = y; yy <= y + 2; yy++) for (const xx of [11, 12]) road.setBlock(xx, yy, 19, B.AIR);
+  road.setBlock(11, y - 1, 19, B.PATH);
+  const live = Object.create(Game.prototype) as unknown as Record<string, any>;
+  live.world = road; live.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  live.scene = { add: () => {}, remove: () => {} };
+  live.mobs = []; live.drops = []; live.isInNether = false;
+  live.mode = 'survival'; live.weather = 'clear'; live.time = 0.25;
+  live.spawnTimer = 0; live.difficulty = { ...DEFAULT_DIFFICULTY };
+  live.nowSeconds = () => 0;
+  try { Math.random = () => 0.2; live.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('real encounter creates both caravan members on loaded village-style trail',
+    live.mobs.some((m: Mob) => m.type === 'merchant') && live.mobs.some((m: Mob) => m.type === 'pack_animal'));
+  const prior = live.mobs.length;
+  live.spawnTimer = 0;
+  try { Math.random = () => 0.2; live.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('existing merchant prevents another immediate caravan', live.mobs.length === prior);
+  const capped = new World(162, true);
+  capped.getChunk(0, 0); capped.getChunk(1, 2);
+  const capGame = Object.create(Game.prototype) as unknown as Record<string, any>;
+  capGame.world = capped; capGame.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  capGame.scene = { add: () => {}, remove: () => {} };
+  capGame.mobs = Array.from({ length: 11 }, () => new Mob('cow', 8.5, y, 8.5));
+  capGame.drops = []; capGame.isInNether = false; capGame.mode = 'survival';
+  capGame.weather = 'clear'; capGame.time = 0.25; capGame.spawnTimer = 0;
+  capGame.difficulty = { ...DEFAULT_DIFFICULTY };
+  capGame.spawnMob = (kind: MobType, x: number, yy: number, z: number) => {
+    const m = new Mob(kind, x, yy, z); capGame.mobs.push(m); return m;
+  };
+  try { Math.random = () => 0.2; capGame.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('adding multiple species in one spawn tick still respects mobile passive cap', capGame.mobs.length <= 12);
+
+}
+
+section('3.0 #60: village guard patrols and defends residents');
+{
+  check('guard is a distinct persistent village mob, not a renamed golem',
+    isVillageMob('guard') && !isHostileMob('guard') && MOB_NAMES.guard !== MOB_NAMES.golem);
+  const world = new World(269, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 2; x <= 13; x++) for (let z = 2; z <= 12; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(x, yy, z, B.AIR);
+  const guard = new Mob('guard', 5.5, y, 7.5);
+  const player = new THREE.Vector3(6, y, 7.5);
+  const villager = new Mob('villager', 8.5, y, 7.5);
+  const zombie = new Mob('zombie', 8.5, y, 9.5);
+  let playerHits = 0;
+  const tick = (mob: Mob, allies: Mob[], peaceful = false) =>
+    mob.update(1 / 30, world, player, () => { playerHits++; }, () => {}, peaceful, allies);
+  check('guard has readable armor, shield and sword without trade state', guard.meshes.length > 8 && guard.trade === null && guard.health === 20);
+  guard.walking = false; guard.aiTimer = 100;
+  for (let i = 0; i < 20; i++) tick(guard, [guard, villager]);
+  eq('guard leaves peaceful player and resident alone', playerHits, 0);
+  check('guard stands down before a monster appears', guard.body.pos.x === 5.5);
+  for (let i = 0; i < 105; i++) tick(guard, [guard, villager, zombie]);
+  check('guard identifies monster threatening resident and deals damage', zombie.health < zombie.maxHealth && playerHits === 0);
+  guard.body.pos.set(5.5, y, 7.5); guard.body.vel.set(0, 0, 0);
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.mobs = [guard, villager];
+  eq('player harming villager alerts the nearby guard', g.provokeGolems(8, 7, 24, 10), 1);
+  check('guard has provocation timer', guard.provoked > 0);
+  for (let i = 0; i < 50; i++) tick(guard, [guard, villager]);
+  check('guard defends resident from a provoking player', playerHits > 0);
+  // Guard spawning uses real village roads with loaded chunks.
+  const w = new World(20260926);
+  let village: Village | null = null;
+  for (let gx = -2; gx <= 2 && !village; gx++)
+    for (let gz = -2; gz <= 2 && !village; gz++) village = villageInCell(gx, gz, w.villageContext());
+  if (village) {
+    const game = Object.create(Game.prototype) as unknown as Record<string, any>;
+    game.world = w;
+    game.body = { pos: new THREE.Vector3(village.x, village.y + 1, village.z) };
+    game.mobs = []; game.scene = { add: () => {}, remove: () => {} };
+    game.nowSeconds = () => 0;
+    game.unlock = () => {};
+    game.message = () => {};
+    game.spawnVillageFolk();
+    check('real generated village receives one guard independently of golem', game.mobs.filter((m: Mob) => m.type === 'guard').length === 1);
+    game.spawnVillageFolk();
+    eq('guard does not multiply every village check', game.mobs.filter((m: Mob) => m.type === 'guard').length, 1);
+  }
+}
+
+section('3.0 #56: neutral bear defends cub and food with escapable windup');
+{
+  const world = new World(166, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 3; x <= 13; x++) for (let z = 3; z <= 13; z++) for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  const player = new THREE.Vector3(8, y, 7.5);
+  const bear = new Mob('bear', 5.5, y, 7.5);
+  bear.aiTimer = 100; bear.walking = false;
+  const empty = () => {};
+  let attacks = 0;
+  const tick = (mob: Mob, allies: Mob[], food: {id: number; count: number; age: number; pos: THREE.Vector3}[] = [], calm = false) =>
+    mob.update(1 / 30, world, player, () => { attacks++; }, empty, calm, allies, empty, 1, food);
+  for (let i = 0; i < 12; i++) tick(bear, [bear]);
+  check('adult bear is neutral near player without cub or food', attacks === 0 && bear.walking === false && (bear as unknown as {bearWindup: number}).bearWindup === 0);
+  const cub = new Mob('bear', 5, y, 8.5);
+  cub.makeCub();
+  check('cub has smaller visible model and hitbox', cub.isCub && cub.body.w < bear.body.w && cub.group.scale.x === 0.6);
+  const start = bear.body.pos.x;
+  for (let i = 0; i < 20; i++) tick(bear, [bear, cub]);
+  check('bear protects its cub by approaching trespasser', bear.body.pos.x > start + 0.2);
+  // Drive the bear into attack range to inspect the warning BEFORE damage.
+  player.x = bear.body.pos.x + 1.5;
+  tick(bear, [bear, cub]);
+  check('windup emits a visible warning before contact damage', (bear as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible && attacks === 0);
+  for (let i = 0; i < 32; i++) tick(bear, [bear, cub]);
+  check('warning concludes in one cooldown-limited defensive strike', attacks === 1 && !(bear as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  const threatenedCub = new Mob('bear', 7.5, y, 7.5);
+  threatenedCub.makeCub();
+  const mother = new Mob('bear', 5.5, y, 7.5);
+  player.x = 7.5;
+  tick(mother, [mother, threatenedCub]);
+  check('second family raises the telegraph immediately when the cub is close', (mother as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  const previous = attacks;
+  player.x = 18.5;
+  for (let i = 0; i < 32; i++) tick(mother, [mother, threatenedCub]);
+  check('retreating beyond 12 blocks cancels the bite and warning', attacks === previous && !(mother as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  const foodBear = new Mob('bear', 5.5, y, 7.5);
+  player.x = 7.5;
+  const fish = { id: I.RAW_FISH, count: 1, age: 2, pos: new THREE.Vector3(5.5, y, 7.5) };
+  tick(foodBear, [foodBear], [fish]);
+  check('bear guards nearby abandoned food (no cub required)', (foodBear as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  const peacefulBear = new Mob('bear', 5.5, y, 7.5);
+  tick(peacefulBear, [peacefulBear, threatenedCub], [fish], true);
+  check('peaceful difficulty leaves bears non-attacking', !(peacefulBear as unknown as {bearWarning: THREE.Mesh}).bearWarning.visible);
+  // Actual game spawn cycle in taiga, with a family in loaded safe terrain.
+  const coast = new World(96, true);
+  coast.getChunk(1, 2);
+  coast.surface = (_x: number, _z: number) => ({ h: FLAT_H, biome: 'Tajga', temp: 0, forest: 0 });
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = coast; g.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  g.mobs = []; g.drops = []; g.isInNether = false;
+  g.mode = 'survival'; g.weather = 'clear'; g.time = 0.25;
+  g.spawnTimer = 0; g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.scene = { remove: () => {} };
+  g.spawnMob = (kind: MobType, x: number, yy: number, z: number) => { const m = new Mob(kind, x, yy, z); g.mobs.push(m); return m; };
+  const random = Math.random;
+  try { Math.random = () => 0.2; g.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('real taiga spawning can create an adult and a protected cub', g.mobs.some((m: Mob) => m.type === 'bear' && !m.isCub) && g.mobs.some((m: Mob) => m.type === 'bear' && m.isCub));
+}
+
+section('3.0 #61: village work, meetings, rest and threat priority');
+{
+  eq('work is scheduled during daytime', villagerActivity(0.25), 'work');
+  eq('sunrise is the social hour', villagerActivity(0.1), 'meet');
+  eq('evening is the social hour', villagerActivity(0.55), 'meet');
+  eq('night is restful', villagerActivity(0.8), 'rest');
+  const world = new World(266, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 3; x <= 12; x++) for (let z = 3; z <= 12; z++) for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  world.setBlock(8, y - 1, 8, B.FARMLAND);
+  const near = villagerWorkSpot(world, 4, y, 8, 0);
+  check('farmer recognises real accessible farmland', near !== null && near.x >= 7);
+  world.setBlock(9, y, 8, B.FURNACE);
+  check('blacksmith chooses a furnace instead of a field', villagerWorkSpot(world, 4, y, 8, 1) !== null);
+  for (let z = 3; z <= 12; z++) { world.setBlock(6, y, z, B.STONE); world.setBlock(6, y + 1, z, B.STONE); }
+  eq('villager does not walk through sealed wall to reach work', villagerWorkSpot(world, 4, y, 8, 0), null);
+  check('line route detects the wall too', !villagerWalkable(world, 4.5, y, 8.5, 7.5, 8.5));
+  for (let z = 3; z <= 12; z++) { world.setBlock(6, y, z, B.AIR); world.setBlock(6, y + 1, z, B.AIR); }
+  const farmer = new Mob('villager', 4.5, y, 8.5, 0);
+  const trade = farmer.trade;
+  const far = new THREE.Vector3(40, y, 40);
+  const tick = (mob: Mob, allies: Mob[], phase: number) => mob.update(1 / 30, world, far, () => {}, () => {}, false, allies, () => {}, 1, [], () => false, 1, false, phase);
+  for (let i = 0; i < 65; i++) tick(farmer, [farmer], 0.25);
+  check('during work hour farmer actually walks toward farmland', farmer.body.pos.x > 5.4 && (farmer as unknown as {activityKind: string}).activityKind === 'work');
+  check('routine does not reset trade inventory', farmer.trade === trade);
+  for (let i = 0; i < 90; i++) tick(farmer, [farmer], 0.8);
+  check('at night farmer returns to home and rests', farmer.body.pos.x < 5.5 && farmer.walking === false);
+  const a = new Mob('villager', 4.5, y, 5.5, 0);
+  const b = new Mob('villager', 8.5, y, 5.5, 2);
+  for (let i = 0; i < 42; i++) tick(a, [a, b], 0.1);
+  check('during gathering time villagers actually approach each other', a.body.pos.x > 5.25 && (a as unknown as {activityKind: string}).activityKind === 'meet');
+  const zombie = new Mob('zombie', a.body.pos.x + 1.5, y, a.body.pos.z);
+  const before = a.body.pos.x;
+  for (let i = 0; i < 10; i++) tick(a, [a, b, zombie], 0.25);
+  check('threat overrides social/work schedule with immediate flight', a.body.pos.x < before && a.soundTimer <= 0.2);
+  const live = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const liveFarmer = new Mob('villager', 4.5, y, 8.5, 0);
+  live.world = world; live.body = { pos: far };
+  live.mobs = [liveFarmer]; live.drops = [];
+  live.isInNether = false; live.weather = 'clear'; live.mode = 'survival';
+  live.difficulty = { ...DEFAULT_DIFFICULTY }; live.time = 0.25;
+  live.spawnTimer = 100; live.scene = { remove: () => {} };
+  for (let i = 0; i < 40; i++) live.updateMobs(1 / 30);
+  check('actual game clock controls villager work AI', liveFarmer.body.pos.x > 5 && (liveFarmer as unknown as {activityKind: string}).activityKind === 'work');
+  live.time = 0.8;
+  live.updateMobs(1 / 30);
+  eq('game night changes villager activity without removing trading', (liveFarmer as unknown as {activityKind: string}).activityKind, 'rest');
+
+}
+
+section('3.0 #55: turtle nesting, staged eggs and save/reload');
+{
+  eq('append-only egg ids preserve the old final block', B.TURTLE_EGG0, B.PODZOL + 1);
+  check('only stage-zero egg is available in Creative', CREATIVE_BLOCKS.includes(B.TURTLE_EGG0) &&
+    !CREATIVE_BLOCKS.includes(B.TURTLE_EGG1) && !CREATIVE_BLOCKS.includes(B.TURTLE_EGG2));
+  check('egg stages are non-solid small objects with visible stage textures',
+    [B.TURTLE_EGG0, B.TURTLE_EGG1, B.TURTLE_EGG2].every((id) => !IS_SOLID[id] && BLOCKS[id].drop === B.TURTLE_EGG0 && BLOCKS[id].top === T.turtle_egg0 + id - B.TURTLE_EGG0));
+  const world = new World(107, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  for (let x = 6; x <= 10; x++) for (let z = 6; z <= 10; z++) for (let yy = y; yy <= y + 2; yy++) world.setBlock(x, yy, z, B.AIR);
+  eq('sand without water is not a turtle habitat', turtleSpawnAllowed(world, 8, y, 8), false);
+  world.setBlock(8, y - 1, 8, B.SAND);
+  world.setBlock(9, y - 1, 8, B.WATER);
+  check('sand beside water accepts turtle nesting', turtleSpawnAllowed(world, 8, y, 8) && findTurtleNest(world, 8, y, 8)?.x === 8);
+  world.setBlock(8, y, 8, B.TURTLE_EGG0);
+  eq('existing eggs prevent laying another on the same tile', findTurtleNest(world, 8, y, 8), null);
+  world.setBlock(8, y, 8, B.AIR);
+  const turtle = new Mob('turtle', 8.5, y, 8.5);
+  check('turtle has a recognisable shell, head and four flippers', turtle.meshes.length >= 14 && turtle.body.h < 1);
+  const far = new THREE.Vector3(40, y, 40);
+  turtle.update(1 / 30, world, far, () => {}, () => {}, false);
+  (turtle as unknown as {eggTimer: number}).eggTimer = 0;
+  turtle.update(1 / 30, world, far, () => {}, () => {}, false);
+  eq('live turtle actually lays its own egg on valid shore sand', world.getBlock(8, y, 8), B.TURTLE_EGG0);
+  const eggMeshes = world.buildMesh(world.getChunk(0, 0));
+  const eggPos = eggMeshes[1].getAttribute('position');
+  let tinyEgg = false;
+  for (let i = 0; i < eggPos.count; i++) {
+    if (Math.abs(eggPos.getX(i) - 8.26) < 0.01 && Math.abs(eggPos.getY(i) - y) < 0.01 &&
+      Math.abs(eggPos.getZ(i) - 8.27) < 0.01) { tinyEgg = true; break; }
+  }
+  check('laying generates a small visible egg mesh instead of a full invisible cube', tinyEgg);
+  eggMeshes.forEach((geometry) => geometry.dispose());
+
+  const key = `8,${y},8`;
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  g.world = world; g.body = { pos: new THREE.Vector3(8, y, 8) };
+  g.mobs = []; g.growables = new Map<string, number>(); g.growCursor = 0; g.growAcc = 0;
+  g.isInNether = false;
+  const born: string[] = [];
+  g.spawnMob = (kind: string) => { born.push(kind); };
+  g.growables.set(key, performance.now() - 13_000);
+  g.updateGrowth(0.45);
+  eq('incubation cracks egg to stage one', world.getBlock(8, y, 8), B.TURTLE_EGG1);
+  const restored = new World(107, true);
+  restored.loadMods(world.serializeMods());
+  restored.getChunk(0, 0);
+  eq('first egg stage survives loading world modifications', restored.getBlock(8, y, 8), B.TURTLE_EGG1);
+  g.world = restored;
+  g.growables = new Map();
+  g.growCursor = 0;
+  g.updateGrowth(0.45);
+  eq('reload preserves stage but resets unsaved sub-stage timer', restored.getBlock(8, y, 8), B.TURTLE_EGG1);
+  g.growables.set(key, performance.now() - 13_000);
+  g.growCursor = 0;
+  g.updateGrowth(0.45);
+  eq('incubation proceeds to visible final stage', restored.getBlock(8, y, 8), B.TURTLE_EGG2);
+  const restoredAgain = new World(107, true);
+  restoredAgain.loadMods(restored.serializeMods());
+  restoredAgain.getChunk(0, 0);
+  eq('final cracking stage persists through another reload', restoredAgain.getBlock(8, y, 8), B.TURTLE_EGG2);
+  g.world = restoredAgain;
+  g.growables.set(key, performance.now() - 13_000);
+  g.growCursor = 0;
+  g.updateGrowth(0.45);
+  check('mature egg hatches an actual turtle mob and clears block', born.length === 1 && born[0] === 'turtle' && restoredAgain.getBlock(8, y, 8) === B.AIR);
+  restoredAgain.setBlock(8, y, 8, B.TURTLE_EGG2);
+  restoredAgain.setBlock(8, y - 1, 8, B.DIRT);
+  g.growables.set(key, performance.now() - 13_000);
+  g.growCursor = 0;
+  g.updateGrowth(0.45);
+  eq('unsupported eggs do not hang in midair', restoredAgain.getBlock(8, y, 8), B.AIR);
+  const coast = new World(107, true);
+  coast.getChunk(-2, 0);
+  for (let yy = y; yy <= y + 4; yy++) coast.setBlock(-23, yy, 8, B.AIR);
+  coast.setBlock(-23, y - 1, 8, B.SAND);
+  coast.setBlock(-22, y - 1, 8, B.WATER);
+  const live = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const seen: string[] = [];
+  live.world = coast; live.body = { pos: new THREE.Vector3(8.5, y, 8.5) };
+  live.mobs = []; live.drops = []; live.isInNether = false;
+  live.mode = 'survival'; live.weather = 'clear'; live.time = 0.25;
+  live.spawnTimer = 0; live.difficulty = { ...DEFAULT_DIFFICULTY };
+  live.scene = { remove: () => {} };
+  live.spawnMob = (kind: string) => { seen.push(kind); };
+  const random = Math.random;
+  try { Math.random = () => 0.5; live.updateMobs(1 / 30); } finally { Math.random = random; }
+  check('actual game spawn tick creates turtle at loaded sand coast', seen.includes('turtle'));
+
+}
+
+section('3.0 #63: real campfire and torch avoidance');
+{
+  const world = new World(184, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  const far = new THREE.Vector3(40, y, 40);
+  // The flat preset can still place trees and tallgrass: make a controlled clearing.
+  for (let x = 7; x <= 13; x++) for (let z = 6; z <= 10; z++) for (let yy = y; yy <= y + 3; yy++) world.setBlock(x, yy, z, B.AIR);
+  eq('ordinary terrain has no flame to evade', nearestFire(world, 9, y, 8), null);
+  world.setBlock(8, y, 8, B.CAMPFIRE);
+  eq('campfire is found from adjacent tile', nearestFire(world, 9, y, 8)?.safe, 3.2);
+  const cow = new Mob('cow', 10, y, 8.5);
+  cow.walking = false;
+  cow.aiTimer = 100;
+  for (let i = 0; i < 35; i++) cow.update(1 / 30, world, far, () => {}, () => {}, false);
+  check('livestock moves away from campfire instead of standing in it', cow.body.pos.x > 11 && !cow.dead);
+  world.setBlock(8, y, 8, B.AIR);
+  world.setBlock(8, y, 8, B.TORCH);
+  const rabbit = new Mob('rabbit', 9.5, y, 8.5);
+  rabbit.aiTimer = 100;
+  for (let i = 0; i < 20; i++) rabbit.update(1 / 30, world, far, () => {}, () => {}, false);
+  check('rabbit avoids a torch too', rabbit.body.pos.x > 10.1);
+  world.setBlock(8, y, 8, B.CAMPFIRE);
+  for (const z of [7, 8, 9]) { world.setBlock(11, y, z, B.STONE); world.setBlock(11, y + 1, z, B.STONE); }
+  const sideStep = fireEscapeHeading(world, 10, y, 8.5, 8.5, 8.5);
+  check('light-source route steers around a solid wall', sideStep !== null && Math.abs(Math.sin(sideStep!)) < 0.8);
+  const sheep = new Mob('sheep', 10, y, 8.5);
+  sheep.walking = false;
+  sheep.aiTimer = 100;
+  for (let i = 0; i < 20; i++) sheep.update(1 / 30, world, far, () => {}, () => {}, false);
+  check('sheep takes an available sidestep, not a blocked direct route', Math.abs(sheep.body.pos.z - 8.5) > 0.3 && sheep.body.pos.x < 11);
+  // Fully enclosed: there is no artificial escape through walls or lava.
+  for (const z of [7, 9]) for (const x of [9, 10]) {
+    world.setBlock(x, y, z, B.STONE); world.setBlock(x, y + 1, z, B.STONE);
+  }
+  eq('no false escape when fire is fully surrounded', fireEscapeHeading(world, 10, y, 8.5, 8.5, 8.5), null);
+}
+
+section('3.0 #62: bounded and predictable animal reactions to rain');
+{
+  const world = new World(154, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  eq('open flat land is not falsely considered shelter', findNearbyShelter(world, 5, y, 8), null);
+  const existingChunks = world.chunks.size;
+  findNearbyShelter(world, -1, y, 8);
+  eq('search does not generate new chunks across a border', world.chunks.size, existingChunks);
+  world.setBlock(8, y + 2, 8, B.PLANKS);
+  check('real dry roof provides shelter', findNearbyShelter(world, 5, y, 8)?.x === 8.5);
+  world.setBlock(7, y, 8, B.STONE);
+  world.setBlock(7, y + 1, 8, B.STONE);
+  eq('sealed path to shelter is rejected instead of wall-walking forever', findNearbyShelter(world, 5, y, 8), null);
+  world.setBlock(7, y, 8, B.AIR);
+  world.setBlock(7, y + 1, 8, B.AIR);
+  const cow = new Mob('cow', 5.5, y, 8.5);
+  cow.walking = false;
+  cow.aiTimer = 100;
+  const far = new THREE.Vector3(40, y, 40);
+  for (let i = 0; i < 60; i++) cow.update(1 / 30, world, far, () => {}, () => {}, false, [cow], () => {}, 1, [], () => false, 1, true);
+  check('cow goes under roof when rain begins', cow.body.pos.x > 7.5 && cow.body.pos.x < 9.4);
+  cow.update(1 / 30, world, far, () => {}, () => {}, false, [cow], () => {}, 1, [], () => false, 1, false);
+  eq('cow clears its rain goal as soon as sky clears', (cow as unknown as {shelterGoal: unknown}).shelterGoal, null);
+  const frog = new Mob('frog', 5.5, y, 5.5);
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0.99;
+    frog.update(1 / 30, world, far, () => {}, () => {}, false, [frog], () => {}, 1, [], () => false, 1, false);
+    check('without rain frog can stay resting', frog.walking === false);
+    frog.aiTimer = 0;
+    frog.update(1 / 30, world, far, () => {}, () => {}, false, [frog], () => {}, 1, [], () => false, 1, true);
+    check('rain awakens frog movement and makes croaking more frequent', frog.walking === true && frog.soundTimer <= 3);
+  } finally { Math.random = originalRandom; }
+  // Same live tick shared by PC and touch, not just a pure weather helper.
+  const g = Object.create(Game.prototype) as unknown as Record<string, any>;
+  const liveCow = new Mob('cow', 5.5, y, 8.5);
+  g.mobs = [liveCow];
+  g.drops = [];
+  g.world = world;
+  g.body = { pos: far };
+  g.difficulty = { ...DEFAULT_DIFFICULTY, aggression: 'spokojna' };
+  g.isInNether = false;
+  g.mode = 'survival';
+  g.weather = 'rain';
+  g.time = 0.25;
+  g.spawnTimer = 100;
+  g.scene = { remove: () => {} };
+  for (let i = 0; i < 60; i++) g.updateMobs(1 / 30);
+  check('actual rain state in Game drives the livestock AI', liveCow.body.pos.x > 7.5);
+  g.weather = 'clear';
+  g.updateMobs(1 / 30);
+  eq('clearing rain in the game releases its livestock immediately', (liveCow as unknown as {shelterGoal: unknown}).shelterGoal, null);
 }
 
 // ======================================================================== wolf
@@ -1281,7 +4706,12 @@ section('update 1.5: lapis, sugar cane, table, drops');
   eq('silk touch keeps leaves', silkLeaf[0]?.id, B.LEAVES);
   eq('silk touch keeps tall grass', blockDrops(B.TALLGRASS, 0, { silk: true })[0]?.id, B.TALLGRASS);
   eq('silk touch keeps flowers', blockDrops(B.FLOWER_RED, 0, { silk: true })[0]?.id, B.FLOWER_RED);
-  check('plain leaves still roll nothing or sapling', blockDrops(B.LEAVES, 0).length <= 1);
+  {
+    const random = Math.random;
+    try { Math.random = () => 0.99;
+      check('plain leaves still roll nothing or sapling', blockDrops(B.LEAVES, 0).length <= 1);
+    } finally { Math.random = random; }
+  }
 
   // --- mining speed with Efficiency
   const bare = mineSeconds(B.STONE, I.IRON_PICK);
@@ -1411,23 +4841,77 @@ section('saves: enchantments ride along');
   g.time = 0.3; g.health = 17; g.hunger = 15; g.day = 4;
   g.inventory = new Inventory();
   g.inventory.slots[0] = { id: I.DIAMOND_PICK, count: 1, dur: 300, ench: { efficiency: 4, unbreaking: 2 } };
-  g.spawnPoint = new THREE.Vector3(1, 70, 2);
+  g.spawnPoint = new THREE.Vector3(1.5, 70, 2.5);
+  g.campRespawn = { cot: [1, 69, 2], previous: [2.5, 70, 3.5] };
+  w.setBlock(1, 69, 2, B.CAMP_COT);
   g.furnaces = new Map(); g.chests = new Map();
   g.brewings = new Map();
+  g.travelCauldrons = new Map([['3,70,3', { ...emptyTravelCauldron(3, 70, 3), input: { id: I.RAW_RABBIT, count: 1 }, output: { id: I.COOKED_RABBIT, count: 1 }, progress: 2.5 }]]);
+  w.setBlock(3, 70, 3, B.TRAVEL_POT);
+  g.effects = new Map([['night', 17000], ['fall', 34500], ['sprint', 8000]]);
+  g.difficulty = { ...DEFAULT_DIFFICULTY };
+  g.emitHud = () => {};
   g.potionsDrunk = new Set<number>();
-  g.unlocked = new Set(['wood']);
+  g.unlocked = new Set(['wood', 'biome_swamp']);
+  g.challengeProgress = normalizeChallenges({ challenge_builder: 7 }, g.unlocked);
   g.weather = 'clear';
   g.xp = new Xp(42);
   g.armor = [{ id: I.IRON_BOOTS, count: 1, dur: 100, ench: { featherfalling: 3 } }];
-  g.save();
+  g.talisman = { id: I.WANDER_CHARM, count: 1 };
+  g.fishingBait = I.WORM_BAIT;
+  g.discovery = new DiscoveryMap();
+  g.discovery.survey('overworld', -1, -16, 'Bagno', 63);
+  g.discovery.survey('nether', 0, 0, 'Nether', 40);
+  g.mobs = [new Mob('wolf', 4.5, FLAT_H + 1, 4.5)];
+  g.mobs[0].trust = 2;
+  g.dimStash = { home: { mobs: [] }, nether: { mobs: [new Mob('wolf', 7.5, 48, 7.5)] } };
+  g.dimStash.nether.mobs[0].tame();
+  check('save succeeds with discovery data', g.save() === true);
 
   const raw = loadSaves().find((s) => s.id === 'ench-test');
   check('the world was stored', !!raw);
   const stored = raw as unknown as SaveData;
+  check('real world save and JSON export preserve wolf trust in both dimensions',
+    stored.companions?.length === 2 && stored.companions[0].trust === 2 &&
+    stored.companions[1].dim === 'nether' && stored.companions[1].tamed === true &&
+    JSON.parse(exportSave('ench-test') ?? '{}').saves?.[0]?.companions?.length === 2);
   eq('inventory enchantments persist', stored.inv[0]?.ench?.efficiency, 4);
   eq('second enchantment persists', stored.inv[0]?.ench?.unbreaking, 2);
   eq('armor enchantments persist', stored.armor?.[0]?.ench?.featherfalling, 3);
   eq('durability still persists', stored.inv[0]?.dur, 300);
+  eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 7);
+  eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
+  check('equipped charm persists in world export, while old worlds retain empty slot',
+    stored.talisman?.id === I.WANDER_CHARM && restoreTalisman(JSON.parse(exportSave('ench-test') ?? '{}').saves?.[0]?.talisman)?.id === I.WANDER_CHARM &&
+    restoreTalisman(undefined) === null);
+  check('cauldron input, output and mid-batch progress survive world save and JSON export',
+    stored.travelCauldrons?.[0]?.input?.id === I.RAW_RABBIT &&
+    stored.travelCauldrons?.[0]?.output?.id === I.COOKED_RABBIT &&
+    stored.travelCauldrons?.[0]?.progress === 2.5 && exportSave('ench-test')?.includes('travelCauldrons'));
+  check('camp spawn and prior safe spawn persist through real save and JSON export',
+    stored.spawn?.join() === [1.5, 70, 2.5].join() && stored.campRespawn?.cot.join() === [1, 69, 2].join() &&
+    stored.campRespawn?.previous.join() === [2.5, 70, 3.5].join() && exportSave('ench-test')?.includes('campRespawn'));
+  check('first-visit biome progress persists in a world export', stored.unlocked?.includes('biome_swamp') && exportSave('ench-test')?.includes('biome_swamp'));
+  eq('building challenge counter persists in world save', stored.challengeProgress?.challenge_builder, 7);
+  check('challenge progress survives export without changing inventory', exportSave('ench-test')?.includes('challenge_builder') === true);
+  eq('legacy difficulty defaults are preserved when saved', stored.difficulty?.aggression, 'normalna');
+  check('difficulty on an existing world can be changed and saved instantly', g.setDifficulty({ aggression: 'zaciekla', resources: 'obfite' }) === true);
+  const updated = loadSaves().find((s) => s.id === 'ench-test') as unknown as SaveData;
+  check('per-world axes persist in exported saves', updated.difficulty?.aggression === 'zaciekla' && updated.difficulty.resources === 'obfite' && exportSave('ench-test')?.includes('zaciekla'));
+  eq('changing two axes does not change damage', updated.difficulty?.damage, 'normalne');
+  eq('night vision timer persists on save', stored.effects?.night, 17000);
+  eq('fall resistance timer persists on save', stored.effects?.fall, 34500);
+  eq('sprint timer persists on save', stored.effects?.sprint, 8000);
+  check('imported save restores active buffs', restoreEffects(JSON.parse(exportSave('ench-test') ?? '{}').saves?.[0]?.effects).get('fall') === 34500);
+  check('engine save retains surveyed tiles in both dimensions', DiscoveryMap.fromSave(stored.discovery).get('overworld', -1, -1)?.[2] === 8 && DiscoveryMap.fromSave(stored.discovery).get('nether', 0, 0)?.[2] === 11);
+  check('world JSON export includes discovery', exportSave('ench-test')?.includes('discovery') === true);
+  const beforeFailedWrite = localStorage.getItem('blockcraft-saves-v2');
+  const setItem = localStorage.setItem;
+  localStorage.setItem = () => { throw new Error('quota'); };
+  check('failed autosave reports failure instead of success', g.save() === false);
+  localStorage.setItem = setItem;
+  check('failed autosave leaves previous world intact', localStorage.getItem('blockcraft-saves-v2') === beforeFailedWrite);
+
 
   // reload into a fresh Game-shaped object through the real constructor path
   const loaded = stored.inv[0];
@@ -1701,6 +5185,51 @@ section('update 1.6: villager trading');
   check('title shows the level', villagerTitle(smith).includes('('));
   check('progress bar fills up', villagerProgress(smith) === 1 || villagerProgress(smith) > 0.9);
   check('progress starts at zero', villagerProgress(createVillagerState(0, 0)) === 0);
+}
+
+section('3.0 #91: new village jobs and trade progression');
+{
+  eq('saved original profession indices keep their meanings', PROFESSIONS.slice(0, 5).map((p) => p.id).join(','),
+    'rolnik,kowal,bibliotekarz,pasterz,budowniczy');
+  const jobs = ['kartograf', 'rybak', 'ogrodnik'];
+  eq('new jobs are appended, not inserted', PROFESSIONS.slice(5).map((p) => p.id).join(','), jobs.join(','));
+  for (const [offset, job] of jobs.entries()) {
+    const idx = offset + 5;
+    const villager = new Mob('villager', 0, 64, 0, (idx + 0.5) / PROFESSIONS.length);
+    eq(`${job} is generated as a working villager`, villager.trade?.profession, idx);
+    check(`${job} wears a recognizable trade hat`, villager.meshes.length > new Mob('villager', 0, 64, 0, 0).meshes.length);
+    eq(`${job} has no advanced offers at first`, offersFor(villager.trade!).every((o) => o.level === 1), true);
+    check(`${job} has available merchant offers`, offersFor(villager.trade!).length >= 2);
+    villager.trade!.xp = 40;
+    check(`${job} unlocks advanced offers by trading`, offersFor(villager.trade!).some((o) => o.level >= 3));
+  }
+  const mapState = createVillagerState(5, 0);
+  mapState.xp = 6;
+  const compassTrade = offersFor(mapState).find((o) => o.key === 'map_biome')!;
+  check('cartographer sells the real biome compass after advancement', compassTrade.get.id === I.BIOME_COMPASS && compassTrade.give.length === 2);
+  const mapInv = new Inventory();
+  mapInv.add(I.EMERALD, 6);
+  eq('both payment types required', canTrade(mapState, mapInv, compassTrade), 'items');
+  mapInv.add(I.COMPASS, 1);
+  check('two-item barter succeeds through shared trade rules', applyTrade(mapState, mapInv, compassTrade));
+  eq('cartographer yields an equippable biome compass', mapInv.countOf(I.BIOME_COMPASS), 1);
+  eq('compass is spent on barter', mapInv.countOf(I.COMPASS), 0);
+  eq('stock is reduced', usesLeft(mapState, compassTrade), compassTrade.uses - 1);
+  const fishState = createVillagerState(6, 0);
+  const fishSale = offersFor(fishState).find((o) => o.key === 'fish_cod')!;
+  const fishInv = new Inventory();
+  fishInv.add(I.RAW_FISH, 12);
+  check('fisher buys caught fish for emeralds', applyTrade(fishState, fishInv, fishSale) && fishInv.countOf(I.EMERALD) === 1);
+  fishState.xp = 40;
+  check('fisher sells glow bait at higher rank', offersFor(fishState).some((o) => o.get.id === I.GLOW_BAIT));
+  const gardenState = createVillagerState(7, 0);
+  const sapling = offersFor(gardenState).find((o) => o.key === 'garden_sapling')!;
+  const gardenInv = new Inventory();
+  gardenInv.add(I.EMERALD, 1);
+  check('gardener sells renewable spruce saplings', applyTrade(gardenState, gardenInv, sapling) && gardenInv.countOf(B.SPRUCE_SAPLING) === 2);
+  gardenState.xp = 18;
+  check('gardener also offers decorative meadow blocks', offersFor(gardenState).some((o) => o.get.id === B.MEADOW_GRASS));
+  eq('old smith stays in slot one', createVillagerState(1, 0).profession, 1);
 }
 
 // ============================================ update 1.6 – mieszkańcy i golemy
@@ -2350,6 +5879,14 @@ section('2.0: automatic graphics and settings');
   eq('effective auto keeps quality=auto flag', auto.quality, 'auto');
   const manual = effectiveSettings({ ...DEFAULT_SETTINGS, quality: 'high', renderDistance: 10 }, weakPhone);
   eq('manual quality wins over recommendation', manual.renderDistance, 10);
+  check('actual game chunk budgets follow manual low quality, not the previous high default',
+    chunkGenerationBudget(s, gamingPC).chunkBudgetMs === PRESETS.low.chunkBudgetMs &&
+    chunkGenerationBudget(s, gamingPC).chunksPerFrame === PRESETS.low.chunksPerFrame &&
+    chunkGenerationBudget(s, gamingPC).unloadMargin === PRESETS.low.unloadMargin);
+  check('auto phone budget is low while an explicit high preset keeps its own budget',
+    chunkGenerationBudget(DEFAULT_SETTINGS, weakPhone).chunkBudgetMs === PRESETS.low.chunkBudgetMs &&
+    chunkGenerationBudget({ ...DEFAULT_SETTINGS, quality: 'high' }, weakPhone).chunkBudgetMs === PRESETS.high.chunkBudgetMs);
+
 
   // nowe klucze ustawień mają domyślne wartości (migracja starych zapisów)
   check('defaults contain touch mode tap', DEFAULT_SETTINGS.touchMode === 'tap');
@@ -2372,10 +5909,70 @@ section('2.0: automatic graphics and settings');
   eq('non-boolean toggle uses the default', recovered.minimap, true);
   eq('normalizer preserves supported settings', normalizeSettings({ fov: 90, volume: 0.25, fpsCap: 60 }).fov, 90);
   store.set(SETTINGS_KEY, '{broken');
+  const lowDetail = effectiveDetail(applyPreset(DEFAULT_SETTINGS, 'low'), weakPhone);
+  check('low preset automatically selects low texture and effect detail', lowDetail.textureDetail === 'low' && lowDetail.effectDetail === 'low');
+  const manualDetail = effectiveDetail({ ...applyPreset(DEFAULT_SETTINGS, 'low'), textureDetail: 'full', effectDetail: 'full' }, weakPhone);
+  check('independent detail overrides survive a low preset', manualDetail.textureDetail === 'full' && manualDetail.effectDetail === 'full');
+  check('auto uses device recommendation for texture detail', effectiveDetail(DEFAULT_SETTINGS, gamingPC).textureDetail === 'full' && effectiveDetail(DEFAULT_SETTINGS, weakPhone).textureDetail === 'low');
+  check('corrupted detail values fall back to Auto', normalizeSettings({ textureDetail: 'huge', effectDetail: [] }).textureDetail === 'auto' && normalizeSettings({ effectDetail: [] }).effectDetail === 'auto');
+  saveSettings({ ...DEFAULT_SETTINGS, textureDetail: 'low', effectDetail: 'full' });
+  check('independent detail axes survive settings reload', loadSettings().textureDetail === 'low' && loadSettings().effectDetail === 'full');
   eq('malformed settings JSON recovers to defaults', loadSettings().renderDistance, DEFAULT_SETTINGS.renderDistance);
   store.delete(SETTINGS_KEY);
 }
 
+
+section('3.0 #100: live texture and effect quality budgets');
+{
+  const g = Object.create(Game.prototype) as Game;
+  const full = getAtlas().canvas;
+  const fake = g as unknown as { fullAtlasCanvas: HTMLCanvasElement; textureDetail: 'low' | 'full'; rainGeo: THREE.BufferGeometry };
+  fake.fullAtlasCanvas = full;
+  fake.textureDetail = 'full';
+  fake.rainGeo = new THREE.BufferGeometry();
+  g.atlasTex = new THREE.CanvasTexture(full);
+  g.gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, requestedParticles: 1, effectDetail: 'full', clouds: true };
+  g.emitHud = () => {};
+  g.applyGfx({ textureDetail: 'low', effectDetail: 'low', particles: 0.8 });
+  check('low atlas actually reaches the GPU texture without altering icon source', (g.atlasTex.image as HTMLCanvasElement).width === 128 && getAtlas().canvas.width === 256);
+  eq('low effects cap particle work', g.gfx.particleScale, 0.35);
+  eq('low effects cap rain draw calls', fake.rainGeo.drawRange.count, Math.floor(420 * 0.35));
+  g.applyGfx({ textureDetail: 'full', effectDetail: 'full' });
+  check('returning to full detail restores original atlas and particle budget', g.atlasTex.image === full && g.gfx.particleScale === 0.8);
+  g.atlasTex.dispose();
+}
+
+
+section('3.0: fishing bait, survival economy and loot odds');
+{
+  const seq = (...rolls: number[]) => { let i = 0; return () => rolls[i++ % rolls.length]; };
+  check('worms turn a marginal catch into a fish',
+    !isFishStack(rollCatch(seq(0.80, 0, 0))) && isFishStack(rollCatch(seq(0.80, 0, 0), I.WORM_BAIT)));
+  check('glow bait has a bounded treasure roll without changing old table',
+    rollCatch(seq(0.95, 0, 0)).id !== I.EMERALD && rollCatch(seq(0.95, 0, 0), I.GLOW_BAIT).id === I.EMERALD);
+  check('worm bait shortens wait but preserves bite window',
+    biteDelay(() => 0, I.WORM_BAIT) === 3 && biteDelay(() => 0.999, I.WORM_BAIT) < 8 && BITE_WINDOW === 1.7);
+  const rnd = Math.random;
+  try {
+    Math.random = () => 0;
+    const earth = blockDrops(B.DIRT, I.WOOD_SHOVEL);
+    check('digging dirt provides renewable bait without losing the dirt', earth.some((s) => s.id === B.DIRT) && earth.some((s) => s.id === I.WORM_BAIT));
+  } finally { Math.random = rnd; }
+  check('crafted rare bait uses string, honeycomb and Nether dust', RECIPES.some((r) => r.out.id === I.GLOW_BAIT &&
+    [I.STRING, I.HONEYCOMB, I.GLOWSTONE_DUST].every((id) => r.inputs.some((i) => i.id === id))));
+  const g = Object.create(Game.prototype) as any;
+  g.mode = 'survival'; g.fishingBait = null; g.bobber = null;
+  g.inventory = new Inventory();
+  g.inventory.slots[0] = { id: I.WORM_BAIT, count: 1 };
+  g.inventory.slots[1] = { id: I.FISHING_ROD, count: 1 };
+  g.selected = 0;
+  g.consumeSelected = () => { g.inventory.remove(I.WORM_BAIT, 1); };
+  g.message = () => {};
+  g.emitHud = () => {};
+  check('bait is consumed once on attachment to a real rod', g.attachBait(I.WORM_BAIT) &&
+    g.inventory.countOf(I.WORM_BAIT) === 0 && g.fishingBait === I.WORM_BAIT);
+  check('attaching again cannot duplicate or overwrite prepared bait', !g.attachBait(I.WORM_BAIT) && g.fishingBait === I.WORM_BAIT);
+}
 
 // ============================================ 2.3: wyprawa i ratunek
 section('2.3: fishing tables and timing');
@@ -2592,6 +6189,7 @@ section('2.3: totem of undying');
   plain.inventory = new Inventory();
   plain.unlocked = new Set();
   plain.totemHeal = 0;
+  plain.effects = new Map();
   plain.armor = [null, null, null, null];
   plain.emitHud = () => {};
   plain.body = { pos: new THREE.Vector3(1, 70, 1) };
@@ -2753,6 +6351,41 @@ section('2.4: brewing inside the engine');
   check('the ingredient spilled too', droppedIds.includes(I.NETHER_WART));
 }
 
+section('3.0 #78: brewable fall and sprint potions, effect isolation and save migration');
+{
+  // IDs are appended: existing speed and night vision keep their old recipes.
+  check('both new potions can be selected in Creative', [I.POTION_FALL, I.POTION_SPRINT].every((id) => CREATIVE_ITEMS.includes(id)));
+  eq('fall potion resolves by name', resolveId('napoj_ladowania'), I.POTION_FALL);
+  eq('sprint potion resolves by name', resolveId('napoj_zrywu'), I.POTION_SPRINT);
+  eq('water + sugar remains the older speed brew', brewResult(I.WATER_BOTTLE, I.SUGAR), I.POTION_SPEED);
+  eq('water + glowstone remains night vision', brewResult(I.WATER_BOTTLE, I.GLOWSTONE_DUST), I.POTION_NIGHT);
+  eq('awkward + feather produces fall protection', brewResult(I.POTION_AWKWARD, I.FEATHER), I.POTION_FALL);
+  eq('awkward + sugar produces short sprint', brewResult(I.POTION_AWKWARD, I.SUGAR), I.POTION_SPRINT);
+  eq('water + feather is not a shortcut', brewResult(I.WATER_BOTTLE, I.FEATHER), null);
+  for (const [ingredient, expected] of [[I.FEATHER, I.POTION_FALL], [I.SUGAR, I.POTION_SPRINT]]) {
+    const stand = emptyBrewing(0, 1, 0);
+    stand.bottles[0] = { id: I.POTION_AWKWARD, count: 1 };
+    stand.ingredient = { id: ingredient, count: 1 };
+    stand.fuel = { id: I.BLAZE_ROD, count: 1 };
+    eq('the new brew completes in a fueled stand', tickBrewing(stand, 8).done, true);
+    eq('the stand outputs the matching potion', stand.bottles[0]?.id, expected);
+    check('new potions have timed descriptions', POTIONS[expected].duration > 0 && !!POTIONS[expected].desc);
+  }
+  eq('fall potion absorbs fall damage', fallDamageAfterPotion(12, true), 0);
+  eq('without the effect fall damage remains', fallDamageAfterPotion(12, false), 12);
+  eq('sprint buff speeds sprinting', sprintFactor(true, true), 1.45);
+  eq('sprint buff does not change walking', sprintFactor(true, false), 1);
+  eq('no potion means normal sprint speed', sprintFactor(false, true), 1);
+  eq('2.7 saves without effects load without buffs', restoreEffects(undefined).size, 0);
+  const restored = restoreEffects({ fall: 2000, sprint: 1400, night: 6000, speed: -1, bogus: 9999, regen: Infinity, fire: '3000', strength: 1e10, heal: 5000 });
+  eq('fall timer restored', restored.get('fall'), 2000);
+  eq('sprint timer restored', restored.get('sprint'), 1400);
+  eq('old night timer restored', restored.get('night'), 6000);
+  eq('malformed timers ignored', restored.has('speed') || restored.has('regen') || restored.has('fire') || [...restored.keys()].some((key) => String(key) === 'bogus') || restored.has('heal'), false);
+  eq('oversized imported timer limited', restored.get('strength'), 120000);
+  eq('non-record effects rejected', restoreEffects([1, 2]).size, 0);
+}
+
 section('2.4: potion effects inside the engine');
 {
   const g = Object.create(Game.prototype) as unknown as Record<string, any>;
@@ -2797,12 +6430,26 @@ section('2.4: potion effects inside the engine');
   g.updateEffects(100);
   check('the effect ends and the timer resets', g.hasEffect('regen') === false && g.potionRegenAcc < 2);
 
+  // Both 3.0 brews pass through the real drink path and decay independently.
+  g.inventory.slots[0] = { id: I.POTION_FALL, count: 1 };
+  g.drinkPotion({ id: I.POTION_FALL, count: 1 });
+  eq('drinking fall protection applies 35 s', g.effectLeft('fall'), 35);
+  eq('fall bottle consumed in Survival', g.inventory.slots[0], null);
+  g.inventory.slots[0] = { id: I.POTION_SPRINT, count: 1 };
+  g.drinkPotion({ id: I.POTION_SPRINT, count: 1 });
+  eq('drinking sprint potion applies 12 s', g.effectLeft('sprint'), 12);
+  eq('sprint bottle consumed in Survival', g.inventory.slots[0], null);
+  g.updateEffects(13);
+  check('short sprint expires before fall protection', !g.hasEffect('sprint') && g.hasEffect('fall'));
+  g.updateEffects(23);
+  check('fall protection expires normally', !g.hasEffect('fall'));
+
   // the awkward brew is harmless but still drunk
   g.inventory.slots[0] = { id: I.POTION_AWKWARD, count: 1 };
   g.drinkPotion({ id: I.POTION_AWKWARD, count: 1 });
   eq('awkward tastes like dirt', g.inventory.slots[0], null);
   check('and no effect sticks', g.effects.size === 0);
-  check('it does not count toward mastery', (g.potionsDrunk as Set<number>).size === 1);
+  check('awkward does not count toward mastery', (g.potionsDrunk as Set<number>).size === 3);
 }
 
 section('2.4: bug fixes');
@@ -2961,6 +6608,57 @@ section('2.5: wielka naprawa sterowania');
   }
   check('one-shot keys never repeat', !(Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has('KeyE'));
   check('drop key never repeats', !(Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has('KeyQ'));
+}
+
+section('3.0: spyglass long-range markers');
+{
+  const g = Object.create(Game.prototype) as any;
+  g.ui = 'playing';
+  g.zooming = true;
+  g.selectedStack = () => ({ id: I.SPYGLASS, count: 1 });
+  g.eyePos = () => new THREE.Vector3(0, 70, 0);
+  g.lookDir = () => new THREE.Vector3(1, 0, 0);
+  g.aimDir = null;
+  g.renderDistance = 4;
+  g.waypoints = [];
+  g.activeWaypointId = null;
+  g.body = { pos: new THREE.Vector3(0, 65, 0) };
+  g.currentDimension = () => 'overworld';
+  g.unlocked = new Set();
+  g.unlock = () => {};
+  g.emitHud = () => {};
+  const messages: string[] = [];
+  g.message = (text: string) => { messages.push(text); };
+  let reach = 0;
+  let loaded = false;
+  const hit = { x: 30, y: 66, z: -4, id: B.STONE };
+  g.world = {
+    raycast: (_x: number, _y: number, _z: number, _dx: number, _dy: number, _dz: number, maxDist: number) => { reach = maxDist; return hit; },
+    hasChunk: () => loaded,
+  };
+  check('spyglass cannot tag fake blocks in unloaded chunks', !g.markSpyglass() && g.waypoints.length === 0 && reach === 62);
+  loaded = true;
+  check('spyglass marks visible block and selects the actual waypoint', g.markSpyglass() &&
+    g.waypoints.length === 1 && g.activeWaypointId === g.waypoints[0].id && g.waypoints[0].x === 30);
+  g.zooming = false;
+  check('spyglass marking cannot fire without zoom', !g.markSpyglass() && g.waypoints.length === 1);
+  check('spyglass messages explain unreachable targets', messages.some((m) => m.includes('nie widać celu')));
+}
+
+section('3.0: visited-chunk map and legacy import');
+{
+  const empty = DiscoveryMap.fromSave(undefined);
+  check('2.x saves start with an empty atlas in both dimensions', empty.count('overworld') === 0 && empty.count('nether') === 0);
+  check('negative coordinates round down to the correct chunk', empty.survey('overworld', -0.1, -16, 'Bagno', 63) && empty.get('overworld', -1, -1)?.[2] === 8);
+  check('visiting the same chunk does not duplicate discoveries', !empty.survey('overworld', -16, -0.1, 'Równiny', 70) && empty.count('overworld') === 1);
+  check('dimensions cannot overwrite each other', empty.survey('nether', -16, -16, 'Nether', 44) && empty.get('nether', -1, -1)?.[2] === 11 && empty.get('overworld', -1, -1)?.[2] === 8);
+  const saved = JSON.parse(JSON.stringify(empty.serialize()));
+  check('map survives save, export, import and reload', DiscoveryMap.fromSave(saved).serialize().overworld[0]?.[3] === 63);
+  const corrupt = DiscoveryMap.fromSave({ overworld: [[1, 2, 999, 50], [NaN, 2, 0, 50], [3, 4, 0, 50]], nether: 'bad' });
+  check('broken imported tiles do not poison the map', corrupt.count('overworld') === 1 && corrupt.count('nether') === 0);
+  const capped = new DiscoveryMap();
+  for (let i = 0; i < MAP_LIMIT; i++) capped.survey('overworld', i * CS, 0, 'Równiny', 62);
+  check('fixed survey budget retains older discoveries and rejects extras', !capped.survey('overworld', MAP_LIMIT * CS, 0, 'Równiny', 62) && capped.count('overworld') === MAP_LIMIT && !!capped.get('overworld', 0, 0));
 }
 
 // =================================================================== report

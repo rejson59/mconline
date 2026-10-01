@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.7.0",
-  "description": "BlockCraft 2.7 „Nowe horyzonty” – polska gra sandboxowa w przeglądarce z nowymi biomami, blokami, zapisem lokalnym i sterowaniem dotykowym.",
+  "version": "2.8.0-rc.3",
+  "description": "BlockCraft 2.8 RC3 „Szlaki i nawigacja” – kandydat z biomami, mapą i nawigacją, ze zgodnością starych zapisów.",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -22,6 +22,9 @@
     "test": "node .harness/run.mjs",
     "test:engine": "node .harness/run.mjs smoke",
     "test:ui": "node .harness/run.mjs ui",
+    "test:browser": "node .harness/browser.js",
+    "test:legacy-browser": "node .harness/legacy-browser.js",
+    "test:rc1-browser": "node .harness/rc1-browser.js",
     "deploy:branch": "npm run build && npx --yes gh-pages -d dist"
   },
   "dependencies": {
@@ -40,6 +43,8 @@
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "5.1.1",
     "esbuild": "^0.28.2",
+    "jsdom": "^26.1.0",
+    "playwright-core": "^1.63.0",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
     "vite": "^7.3.6",

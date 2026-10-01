@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { applyPreset, DEFAULT_SETTINGS, type ControlMode, type Settings, type TouchMode } from '../utils/settings';
+import { applyPreset, DEFAULT_SETTINGS, effectiveDetail, type ControlMode, type Settings, type TouchMode } from '../utils/settings';
 import { detectInputKind } from '../utils/input';
 import {
   PRESETS,
@@ -9,6 +9,19 @@ import {
   type DeviceProfile,
   type PresetName,
 } from '../utils/performance';
+
+// Keep the button component identity stable: the HUD refreshes frequently
+// during play, and defining this inside SettingsScreen remounted every option
+// button on each refresh, interrupting touch taps on slower devices.
+const Btn = ({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active?: boolean }) => (
+  <button
+    className={`mc-btn !py-2 !text-[15px] ${active ? 'ring-2 ring-inset ring-yellow-300' : ''}`}
+    onClick={onClick}
+    aria-pressed={active}
+  >
+    {children}
+  </button>
+);
 
 /**
  * BlockCraft 2.0 – wspólny ekran opcji dla menu głównego i pauzy.
@@ -28,11 +41,14 @@ export default function SettingsScreen({
   // Profil urządzenia liczony raz – służy tylko do podglądu i trybu „Auto”.
   const profile: DeviceProfile = useMemo(() => autoPreset().profile, []);
   const auto = recommendPreset(profile);
+  const detail = effectiveDetail(settings, profile);
+  const detailText = { auto: 'Auto', low: 'Oszczędne', full: 'Pełne' };
+  const nextDetail = (v: Settings['textureDetail']): Settings['textureDetail'] => v === 'auto' ? 'low' : v === 'low' ? 'full' : 'auto';
 
   const set = (patch: Partial<Settings>) => onChange({ ...settings, ...patch });
 
   const pickQuality = (name: 'auto' | PresetName) => {
-    if (name === 'auto') onChange(applyPreset(settings, auto, true));
+    if (name === 'auto') onChange(applyPreset({ ...settings, quality: 'auto' }, auto, true));
     else onChange(applyPreset(settings, name));
   };
 
@@ -64,16 +80,6 @@ export default function SettingsScreen({
     desktop: 'Komputer (mysz + klawiatura)',
     touch: 'Dotyk (telefon / tablet)',
   };
-
-  const Btn = ({ children, onClick, active }: { children: React.ReactNode; onClick: () => void; active?: boolean }) => (
-    <button
-      className={`mc-btn !py-2 !text-[15px] ${active ? 'ring-2 ring-inset ring-yellow-300' : ''}`}
-      onClick={onClick}
-      aria-pressed={active}
-    >
-      {children}
-    </button>
-  );
 
   return (
     <div className="flex w-full flex-col gap-3 bg-black/55 p-4">
@@ -143,6 +149,12 @@ export default function SettingsScreen({
           )}
           <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={14} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => set({ renderDistance: v })} />
           <OptionSlider label="Rozdzielczość" value={settings.pixelRatio} min={0.75} max={2} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ pixelRatio: v })} />
+          <Btn onClick={() => set({ textureDetail: nextDetail(settings.textureDetail) })}>
+            Tekstury: {detailText[settings.textureDetail]} ({detail.textureDetail === 'low' ? '8 px/kafelek' : '16 px/kafelek'})
+          </Btn>
+          <Btn onClick={() => set({ effectDetail: nextDetail(settings.effectDetail) })}>
+            Efekty: {detailText[settings.effectDetail]} ({detail.effectDetail === 'low' ? 'mniej cząsteczek i opadów' : 'pełne'})
+          </Btn>
           <OptionSlider label="Cząsteczki i deszcz" value={settings.particles} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ particles: v })} />
           <Btn active={settings.dynamicResolution} onClick={() => set({ dynamicResolution: !settings.dynamicResolution })}>
             Dynamiczna rozdzielczość: {settings.dynamicResolution ? 'włączona' : 'wyłączona'}
@@ -184,7 +196,7 @@ export default function SettingsScreen({
       </div>
 
       <div id="settings-panel-sound" role="tabpanel" aria-labelledby="settings-tab-sound" hidden={tab !== 'sound'} className="flex flex-col gap-3">
-          <OptionSlider label="Głośność" value={settings.volume} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ volume: v })} />
+          <OptionSlider label="Głośność (0% = wyciszenie wszystkich dźwięków)" value={settings.volume} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ volume: v })} />
           <Btn active={settings.minimap} onClick={() => set({ minimap: !settings.minimap })}>
             Minimapa: {settings.minimap ? 'włączona' : 'wyłączona'}
           </Btn>

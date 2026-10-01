@@ -118,7 +118,7 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
       }}
     >
       <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
-        <div className="flex items-baseline justify-between gap-6">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
           <span className="flex items-center gap-2 text-lg font-semibold">
             <span style={{ width: 12, height: 12, background: profession?.color ?? '#4f8a3a', border: '2px solid #333' }} />
             {game.tradeTitle()}

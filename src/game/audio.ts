@@ -1,6 +1,8 @@
 // Procedural sound effects generated with the Web Audio API.
 // Every entry point is fail-safe: if the browser has no (or a blocked)
 // AudioContext the game keeps running silently instead of throwing.
+import type { AmbientCue } from './ambience';
+
 type Kind = 'stone' | 'wood' | 'grass' | 'sand' | 'glass' | 'cloth' | 'slime';
 
 let ctx: AudioContext | null = null;
@@ -41,7 +43,7 @@ function ensure(): AudioContext | null {
 }
 
 export function setVolume(v: number) {
-  volume = Math.max(0, Math.min(1, v));
+  volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.5;
   if (master) {
     try {
       master.gain.value = volume;
@@ -117,7 +119,7 @@ export function playHurt() {
   o.start(t);
   o.stop(t + 0.22);
 }
-export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
+export function playMob(type: 'pig' | 'echolurker' | 'sandstalker' | 'merchant' | 'pack_animal' | 'guard' | 'bear' | 'turtle' | 'lizard' | 'bat' | 'frog' | 'midge' | 'fox' | 'rabbit' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast') {
   const c = ensure();
   if (!c || !master) return;
   const o = c.createOscillator();
@@ -127,6 +129,61 @@ export function playMob(type: 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | '
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(260, t);
     o.frequency.linearRampToValueAtTime(180, t + 0.25);
+  } else if (type === 'merchant' || type === 'pack_animal') {
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(type === 'merchant' ? 210 : 140, t);
+    o.frequency.linearRampToValueAtTime(type === 'merchant' ? 270 : 105, t + 0.24);
+  } else if (type === 'guard') {
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(250, t);
+    o.frequency.linearRampToValueAtTime(320, t + 0.18);
+  } else if (type === 'echolurker') {
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(310, t);
+    o.frequency.linearRampToValueAtTime(560, t + 0.14);
+  } else if (type === 'sandstalker') {
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(165, t);
+    o.frequency.linearRampToValueAtTime(310, t + 0.21);
+  } else if (type === 'bear') {
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(96, t);
+    o.frequency.linearRampToValueAtTime(72, t + 0.28);
+  } else if (type === 'turtle') {
+    o.type = 'sine';
+    o.frequency.setValueAtTime(160, t);
+    o.frequency.linearRampToValueAtTime(120, t + 0.2);
+  } else if (type === 'lizard') {
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(520, t);
+    o.frequency.linearRampToValueAtTime(410, t + 0.18);
+  } else if (type === 'bat') {
+    o.type = 'sine';
+    o.frequency.setValueAtTime(780, t);
+    o.frequency.linearRampToValueAtTime(1070, t + 0.06);
+    o.frequency.setValueAtTime(810, t + 0.12);
+    o.frequency.linearRampToValueAtTime(1160, t + 0.18);
+  } else if (type === 'frog') {
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(115, t);
+    o.frequency.linearRampToValueAtTime(85, t + 0.16);
+    o.frequency.setValueAtTime(132, t + 0.2);
+    o.frequency.linearRampToValueAtTime(92, t + 0.39);
+  } else if (type === 'midge') {
+    o.type = 'sine';
+    o.frequency.setValueAtTime(660, t);
+    o.frequency.linearRampToValueAtTime(690, t + 0.15);
+  } else if (type === 'fox') {
+    // Two short, rising yips instead of a constant hostile drone.
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(360, t);
+    o.frequency.linearRampToValueAtTime(590, t + 0.11);
+    o.frequency.setValueAtTime(390, t + 0.18);
+    o.frequency.linearRampToValueAtTime(620, t + 0.32);
+  } else if (type === 'rabbit') {
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(580, t);
+    o.frequency.linearRampToValueAtTime(750, t + 0.12);
   } else if (type === 'sheep') {
     o.type = 'triangle';
     o.frequency.setValueAtTime(420, t);
@@ -378,6 +435,46 @@ export function playShield() {
   o.connect(og).connect(master);
   o.start(t);
   o.stop(t + 0.1);
+}
+
+/** A single low-cost, short atmospheric sound, shaped by the existing master
+ * gain. Loop the pre-generated buffer rather than allocate minutes of audio. */
+function playAtmosphere(frequency: number, duration: number, gain: number, rate = 0.65) {
+  const c = ensure();
+  if (!c || !master || !noiseBuf) return;
+  const source = c.createBufferSource();
+  source.buffer = noiseBuf;
+  source.loop = true;
+  source.playbackRate.value = rate;
+  const filter = c.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = frequency;
+  filter.Q.value = 0.55;
+  const amp = c.createGain();
+  const t = c.currentTime;
+  amp.gain.setValueAtTime(0.0001, t);
+  amp.gain.exponentialRampToValueAtTime(gain, t + duration * 0.42);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+  source.connect(filter).connect(amp).connect(master);
+  source.start(t);
+  source.stop(t + duration + 0.02);
+}
+
+/** Sparse location signatures, all controlled by the same persisted 0–100%
+ * volume setting as steps and combat. Silence when muted without allocation. */
+export function playBiomeAmbient(cue: AmbientCue) {
+  if (volume <= 0) return;
+  switch (cue) {
+    case 'bird': playBird(); break;
+    case 'wind': playWind(); break;
+    case 'cave': playCave(); break;
+    case 'marsh': playAtmosphere(210, 1.6, 0.055, 0.45); playMob('frog'); break;
+    case 'insects': playAtmosphere(2600, 2.2, 0.025, 1.1); break;
+    case 'surf': playAtmosphere(420, 3.4, 0.08, 0.8); break;
+    case 'snow': playAtmosphere(720, 3.1, 0.052, 0.75); break;
+    case 'sand': playAtmosphere(1550, 2.6, 0.042, 0.7); break;
+    case 'nether': playAtmosphere(110, 3.5, 0.065, 0.35); break;
+  }
 }
 
 /** A short wind gust – filtered noise that slowly opens up. */

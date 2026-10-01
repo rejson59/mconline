@@ -1,3 +1,5 @@
+import type { Biome } from './world';
+
 export interface Achievement {
   id: string;
   title: string;
@@ -73,8 +75,28 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'tonic', title: 'Ziołowy tonik', text: 'Wypij napój leczący.' },
   { id: 'fireproof', title: 'Ognioodporny', text: 'Wypij napój ognioodporności i wejdź do lawy.' },
   { id: 'potioneer', title: 'Mistrz eliksirów', text: 'Wypij sześć różnych napojów.' },
+  // 3.0: awards are for actually visiting a biome, not for searching its seed.
+  { id: 'biome_swamp', title: 'Śladami mokradeł', text: 'Wejdź na Bagno. Nagroda: 3 PD.' },
+  { id: 'biome_savanna', title: 'Ciepły szlak', text: 'Wejdź na Sawannę. Nagroda: 3 PD.' },
+  { id: 'biome_jungle', title: 'Pod zielonym sklepieniem', text: 'Wejdź do Dżungli. Nagroda: 3 PD.' },
+  { id: 'biome_taiga', title: 'Pośród świerków', text: 'Wejdź do Tajgi. Nagroda: 3 PD.' },
+  { id: 'biome_wasteland', title: 'Sucha ziemia', text: 'Wejdź na Pustkowie. Nagroda: 3 PD.' },
+  { id: 'biome_meadow', title: 'Kwiecista wyprawa', text: 'Wejdź na Kwiecistą łąkę. Nagroda: 3 PD.' },
+  { id: 'challenge_builder', title: 'Budowniczy osady', text: 'Postaw 20 bloków. Nagroda: 10 PD.' },
+  { id: 'challenge_hunter', title: 'Obrońca szlaku', text: 'Pokonaj 5 wrogich mobów. Nagroda: 10 PD.' },
+  { id: 'challenge_explorer', title: 'Wędrowiec biomów', text: 'Odwiedź 3 różne biomy. Nagroda: 10 PD.' },
 ];
 
 export function achievementById(id: string): Achievement | undefined {
   return ACHIEVEMENTS.find((a) => a.id === id);
 }
+
+/** Each discovery is paid once per world. Never reward a compass search. */
+export const BIOME_DISCOVERY_GOALS: Partial<Record<Biome, string>> = {
+  Bagno: 'biome_swamp',
+  Sawanna: 'biome_savanna',
+  Dżungla: 'biome_jungle',
+  Tajga: 'biome_taiga',
+  Pustkowie: 'biome_wasteland',
+  'Kwiecista łąka': 'biome_meadow',
+};

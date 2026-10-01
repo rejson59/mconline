@@ -34,6 +34,12 @@ export const JUNK_TABLE: LootEntry[] = [
 
 /** Chance that a waiting hook comes back with a fish rather than with junk. */
 export const FISH_CHANCE = 0.7;
+export type BaitId = typeof I.WORM_BAIT | typeof I.GLOW_BAIT;
+/** Rare rewards only with a crafted glow bait, never from an ordinary hook. */
+export const TREASURE_TABLE: LootEntry[] = [
+  { id: I.EMERALD, weight: 3 }, { id: I.LAPIS, weight: 3, count: [1, 2] },
+  { id: I.IRON, weight: 2 },
+];
 
 /** Seconds between the cast and the bite while the bobber sits in water. */
 export const BITE_MIN = 4;
@@ -63,9 +69,11 @@ function stackFor(entry: LootEntry, roll: number): Stack {
  * Rolls the result of a successful hook. `roll` values must be in [0, 1) and
  * are consumed in a fixed order: fish-or-junk, then which entry, then the size.
  */
-export function rollCatch(rand: () => number = Math.random): Stack {
-  const fish = rand() < FISH_CHANCE;
-  const entry = pick(fish ? FISH_TABLE : JUNK_TABLE, rand());
+export function rollCatch(rand: () => number = Math.random, bait: BaitId | null = null): Stack {
+  const roll = rand();
+  const table = bait === I.GLOW_BAIT && roll >= 0.92 ? TREASURE_TABLE :
+    roll < (bait === I.WORM_BAIT ? 0.86 : FISH_CHANCE) ? FISH_TABLE : JUNK_TABLE;
+  const entry = pick(table, rand());
   return stackFor(entry, rand());
 }
 
@@ -75,8 +83,10 @@ export function isFishStack(stack: Stack): boolean {
 }
 
 /** Seconds of waiting before the fish bites. */
-export function biteDelay(rand: () => number = Math.random): number {
-  return BITE_MIN + rand() * (BITE_MAX - BITE_MIN);
+export function biteDelay(rand: () => number = Math.random, bait: BaitId | null = null): number {
+  const min = bait === I.WORM_BAIT ? 3 : BITE_MIN;
+  const max = bait === I.WORM_BAIT ? 8 : BITE_MAX;
+  return min + rand() * (max - min);
 }
 
 /** Cooked counterpart of a raw fish, or null for anything else. */

@@ -1,4 +1,4 @@
-import { ITEM_LIST, type ItemDef } from './items';
+import { I, ITEM_LIST, type ItemDef } from './items';
 
 /**
  * Pixel-art painter for item icons.
@@ -533,6 +533,67 @@ const ART: Record<number, [Record<string, string>, string[]]> = {
       '....MDDDDD DM...',
       '.....MDDDDM.....',
       '......MMMM......',
+      '................',
+    ]],
+
+  // -- Kompas biomów: zielona igła na mapie, inna sylwetka niż zwykły kompas.
+  352: [
+    { O: '#3d7764', G: '#86c686', D: '#285247', M: '#b6a977', W: '#e9e4b4', B: '#3c8cb6' }, [
+      '................',
+      '..OOOOOOOOOOOO..',
+      '..OGGGGGGGGGDO..',
+      '..OGGWWGGGGBDO..',
+      '..OGWMMWGGGBDO..',
+      '..OGWMMMWWWGDO..',
+      '..OGGWMMMGGGDO..',
+      '..OGGGWMMGGGDO..',
+      '..OGGGGWMGGGDO..',
+      '..OGGGGWWGGGDO..',
+      '..OGBGGGGGGGDO..',
+      '..OGBGGGGGGGDO..',
+      '..ODDDDDDDDDDO..',
+      '..OOOOOOOOOOOO..',
+      '................',
+      '................',
+    ]],
+
+  // -- Przynęty: czerwony robak i świetlisty haczyk.
+  353: [
+    { R: '#aa5265', L: '#e18b9a', D: '#653749', H: '#b2b6b9' }, [
+      '................',
+      '................',
+      '......HH........',
+      '......H.........',
+      '......H.........',
+      '......HH........',
+      '.......H........',
+      '.......H........',
+      '......RRR.......',
+      '.....RLLRR......',
+      '....RRRDDRR.....',
+      '....RLLRRRR.....',
+      '.....RRR.DR.....',
+      '.........RR.....',
+      '................',
+      '................',
+    ]],
+  354: [
+    { G: '#e1c14f', L: '#fff09b', D: '#8b662d', H: '#afb4c4', W: '#ffffff' }, [
+      '................',
+      '......HH........',
+      '......H.........',
+      '......H.........',
+      '......HH........',
+      '.......H........',
+      '.......H........',
+      '......GGG.......',
+      '.....GLLLG......',
+      '.....GLWLG......',
+      '....GLLWLLG.....',
+      '.....GLLLG......',
+      '......DDD.......',
+      '.......D........',
+      '................',
       '................',
     ]],
 
@@ -1270,7 +1331,49 @@ const POTION_ART: Record<number, [Record<string, string>, string[]]> = {
   350: potionArt('#e0a030', '#f8c858', '#9a6414'),
   // regeneracja: różowy korzeń
   351: potionArt('#e06090', '#f898bc', '#9a3058'),
+  // lekki upadek: chłodny błękit, zryw: bursztyn
+  355: potionArt('#81b9ef', '#c9e5ff', '#376b9b'),
+  356: potionArt('#e89d55', '#ffd29a', '#a15a24'),
 };
+// A small rabbit leg silhouette (raw and cooked), distinct from the larger pork icon.
+const RABBIT_LEG = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '......MMMM......',
+  '.....MLLLMM.....',
+  '....MLLLLLMM....',
+  '....MLLLLLDM....',
+  '.....MLLLDDM....',
+  '......MMDDM.....',
+  '.......DDM......',
+  '......FFDD......',
+  '.....FFF........',
+  '......F.........',
+  '................',
+  '................',
+];
+ART[357] = [{ M: '#b77572', L: '#e9b4aa', D: '#7b514a', F: '#eee7d8' }, RABBIT_LEG];
+ART[358] = [{ M: '#91542e', L: '#dca772', D: '#58331c', F: '#e9d9bd' }, RABBIT_LEG];
+// Crafted bowstrings have separate woven-pixel silhouettes, not ingot stand-ins.
+const BOWSTRING_ART = [
+  '................', '...SS......SS...', '..S..S....S..S..', '..S..S....S..S..',
+  '...SS......SS...', '....SS....SS....', '.....SS..SS.....', '......SSSS......',
+  '......SSSS......', '.....SS..SS.....', '....SS....SS....', '...SS......SS...',
+  '..S..S....S..S..', '..S..S....S..S..', '...SS......SS...', '................',
+];
+ART[I.LIGHT_STRING] = [{ S: '#9be5ec' }, BOWSTRING_ART];
+ART[I.STRONG_STRING] = [{ S: '#e5ad6b' }, BOWSTRING_ART];
+ART[I.CAMP_KIT] = [{ C: '#c7966c', D: '#5f544a', L: '#f1dab3', W: '#9ac1a2', R: '#a65c38' }, [
+  '................', '................', '......LL........', '.....LCCL.......',
+  '....LCCCCL......', '...LCCCCCCL.....', '..LCCCCCCCCL....', '.LCCCCCCCCCCL...',
+  '.LCCCWWWWCCCL...', '.LCCCDDDDCCCL...', '.LCCCDDDDCCCL...', '.LCCCDDDDCCCL...',
+  '.DDDDDDDDDDDD...', '..RRRRRRRRRR....', '................', '................',
+]];
+ART[I.GLOW_ARROW] = [{ H: '#f6df54', L: '#fff4af', w: '#8a6a3a', d: '#6a4e28', F: '#fff4af', f: '#eecf38' }, ART[I.ARROW][1]];
+ART[I.SLOW_ARROW] = [{ H: '#6aafda', L: '#b1e7fa', w: '#8a6a3a', d: '#6a4e28', F: '#9cd1ed', f: '#60a6d4' }, ART[I.ARROW][1]];
+ART[I.MARK_ARROW] = [{ H: '#d97064', L: '#f9b9a0', w: '#8a6a3a', d: '#6a4e28', F: '#e59b82', f: '#ae4744' }, ART[I.ARROW][1]];
 Object.assign(ART, POTION_ART);
 
 // ---------------------------------------------------------------------------
@@ -1290,7 +1393,7 @@ function toolPal(it: ItemDef): Record<string, string> {
     w: HANDLE_LIGHT,
     d: HANDLE_DARK,
     v: HANDLE_HI,
-    S: '#e8e8ea', // bow string
+    S: it.id === I.LIGHT_BOW ? '#80e3f2' : it.id === I.STRONG_BOW ? '#f3c262' : '#e8e8ea', // bow string
     f: '#ffd84a', // sparks
     F: '#4a4a52', // flint
     P: '#c44848', // pivot screw
@@ -1359,6 +1462,66 @@ function toolArt(it: ItemDef): string[] {
       '................',
       '................',
       '................',
+    ];
+  }
+  if (k === 'hammer') {
+    return [
+      '................',
+      '..DDDDDDDDDD....',
+      '.DLLHHHHHLLHD...',
+      '.DLHHHHHHHHHD...',
+      '.DLLHHHHHLLHD...',
+      '..DDDDDDDDDD....',
+      '......dv........',
+      '......dv........',
+      '......dv........',
+      '......dv........',
+      '......dv........',
+      '......dv........',
+      '......dv........',
+      '......vv........',
+      '................',
+      '................',
+    ];
+  }
+  if (k === 'dagger') {
+    return [
+      '................',
+      '.........LLH....',
+      '........LHHDD...',
+      '.......LHHDD....',
+      '......LHHDD.....',
+      '.....LHHDD......',
+      '....LLHDD.......',
+      '...LLHDD........',
+      '..DDDD..........',
+      '.DHHDD..........',
+      '..Dvvd..........',
+      '...vvv..........',
+      '....vv..........',
+      '.....d..........',
+      '................',
+      '................',
+    ];
+  }
+  if (k === 'spear') {
+    return [
+      '.............LLH',
+      '............LLHD',
+      '...........LHHDD',
+      '..........LHHDD.',
+      '.........LHHDD..',
+      '........LvvD....',
+      '.......dvv......',
+      '......dvv.......',
+      '.....dvv........',
+      '....dvv.........',
+      '...dvv..........',
+      '..dvv...........',
+      '.dvv............',
+      'dvv.............',
+      'vv..............',
+      'v...............',
     ];
   }
   if (k === 'sword') {
@@ -1501,7 +1664,20 @@ function toolArt(it: ItemDef): string[] {
       '.....DDD........',
     ];
   }
-  // shield
+  // Shields share a recognisable silhouette but have distinct face patterns.
+  if (it.id === I.LEATHER_SHIELD) return [
+    '................', '...DDDDDDDDDD...', '..DHHHHHHHHHHD..', '..DHLHLLHLLHHD..',
+    '..DHHHHHHHHHHD..', '..DHHWWHHWWHD...', '..DHHWWHHWWHD...', '..DHHHHHHHHHHD..',
+    '..DHLHLLHLLHHD..', '..DHHHHHHHHHHD..', '..DHHHWWWWWHHD..', '...DHHWWWHHD....',
+    '....DHHWHHD.....', '.....DHHHD......', '......DD........', '................',
+  ];
+  if (it.id === I.IRON_SHIELD) return [
+    '................', '..DDDDDDDDDDDD..', '.DLLLLLLLLLLLLD.', '.DLHHHHHHHHHHLD.',
+    '.DLHHDDDDDDHHLD.', '.DLHHDBBBBDHHLD.', '.DLHHDBHBBDHHLD.', '.DLHHDBBBBDHHLD.',
+    '.DLHHDDDDDDHHLD.', '..DHHHHHHHHHHD..', '...DHHHHHHHHD...', '....DHHHHHHD....',
+    '.....DHHHHD.....', '......DHHD......', '.......DD.......', '................',
+  ];
+  // original 2.7 shield retains its exact texture
   return [
     '................',
     '...dddddddddd...',

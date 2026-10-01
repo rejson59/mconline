@@ -1,4 +1,4 @@
-import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap } from './blocks';
+import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, paintingBase, chairBase } from './blocks';
 import type { Stack } from './inventory';
 
 /** Item ids sit above block ids so a stack can hold either. */
@@ -105,12 +105,26 @@ export const I = {
   POTION_NIGHT: 349,
   POTION_STRENGTH: 350,
   POTION_REGEN: 351,
+  BIOME_COMPASS: 352,
+  WORM_BAIT: 353,
+  GLOW_BAIT: 354,
+  POTION_FALL: 355, POTION_SPRINT: 356,
+  RAW_RABBIT: 357, COOKED_RABBIT: 358,
+  EMBER_BOOTS: 359, TIDE_BOOTS: 360, SOFT_BOOTS: 361,
+  IRON_SPEAR: 362, IRON_DAGGER: 363, DIAMOND_DAGGER: 364, IRON_HAMMER: 365,
+  LEATHER_SHIELD: 366, IRON_SHIELD: 367,
+  LIGHT_STRING: 368, STRONG_STRING: 369, LIGHT_BOW: 370, STRONG_BOW: 371,
+  GLOW_ARROW: 372, SLOW_ARROW: 373, MARK_ARROW: 374,
+  CAMP_KIT: 375,
+  CARROT: 376, ROASTED_CARROT: 377, PUMPKIN_SLICE: 378, ROASTED_PUMPKIN: 379,
+  WOOD_BOWL: 380, PUMPKIN_SOUP: 381, RABBIT_STEW: 382, HARVEST_PLATE: 383,
+  WANDER_CHARM: 384, TIDE_CHARM: 385,
 } as const;
 
-export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
+export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass' | 'spear' | 'dagger' | 'hammer';
 
 /** 2.4: effect a potion applies when drunk ('none' = base awkward brew). */
-export type PotionEffectId = 'none' | 'heal' | 'fire' | 'speed' | 'night' | 'strength' | 'regen';
+export type PotionEffectId = 'none' | 'heal' | 'fire' | 'speed' | 'night' | 'strength' | 'regen' | 'fall' | 'sprint';
 
 export interface ItemDef {
   id: number;
@@ -195,18 +209,43 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.SHEARS, name: 'Nożyce', keys: ['nozyce', 'nożyce', 'shears'], kind: 'tool', tool: 'shears', durability: 120, color: '#d8d8e0' },
   { id: I.FLINT_STEEL, name: 'Krzesiwo', keys: ['krzesiwo', 'flint_and_steel', 'zapalniczka'], kind: 'tool', tool: 'igniter', durability: 48, color: '#c8c8d0' },
   { id: I.COMPASS, name: 'Kompas', keys: ['kompas', 'compass'], kind: 'material', color: '#c44848' },
+  { id: I.BIOME_COMPASS, name: 'Kompas biomów', keys: ['kompas_biomow', 'biome_compass'], kind: 'material', color: '#64bf85', stack: 1 },
   { id: I.CLOCK, name: 'Zegar', keys: ['zegar', 'clock'], kind: 'material', color: '#e2c14a' },
   { id: I.STRING, name: 'Struna', keys: ['struna', 'string'], kind: 'material', color: '#e8e8ea' },
   { id: I.BONE, name: 'Kość', keys: ['kosc', 'kość', 'bone'], kind: 'material', color: '#efe9d8' },
   { id: I.FEATHER, name: 'Pióro', keys: ['pioro', 'piórko', 'feather'], kind: 'material', color: '#f2f2f0' },
   { id: I.ARROW, name: 'Strzała', keys: ['strzala', 'strzała', 'arrow'], kind: 'material', color: '#c8b08a' },
+  { id: I.GLOW_ARROW, name: 'Świetlna strzała', keys: ['swietlna_strzala', 'glow_arrow'], kind: 'material', color: '#ffec85' },
+  { id: I.SLOW_ARROW, name: 'Spowalniająca strzała', keys: ['spowalniajaca_strzala', 'slow_arrow'], kind: 'material', color: '#83bde9' },
+  { id: I.MARK_ARROW, name: 'Znakująca strzała', keys: ['znakujaca_strzala', 'mark_arrow'], kind: 'material', color: '#ee9381' },
+  { id: I.CAMP_KIT, name: 'Zestaw biwakowy', keys: ['zestaw_biwakowy', 'camp_kit'], kind: 'material', color: '#e2b77e', stack: 16 },
+  { id: I.CARROT, name: 'Marchew', keys: ['marchew', 'carrot'], kind: 'food', hunger: 2, color: '#e68e31' },
+  { id: I.ROASTED_CARROT, name: 'Pieczona marchew', keys: ['pieczona_marchew', 'roasted_carrot'], kind: 'food', hunger: 4, heal: 1, color: '#d76b2d' },
+  { id: I.PUMPKIN_SLICE, name: 'Kawałek dyni', keys: ['kawalek_dyni', 'pumpkin_slice'], kind: 'food', hunger: 2, color: '#e9a337' },
+  { id: I.ROASTED_PUMPKIN, name: 'Pieczona dynia', keys: ['pieczona_dynia', 'roasted_pumpkin'], kind: 'food', hunger: 4, heal: 1, color: '#a85c24' },
+  { id: I.WOOD_BOWL, name: 'Drewniana miska', keys: ['miska', 'bowl'], kind: 'material', color: '#a37751', stack: 16 },
+  { id: I.PUMPKIN_SOUP, name: 'Zupa dyniowa', keys: ['zupa_dyniowa', 'pumpkin_soup'], kind: 'food', hunger: 6, heal: 1, color: '#e6aa4d', stack: 1 },
+  { id: I.RABBIT_STEW, name: 'Gulasz z królika', keys: ['gulasz_z_krolika', 'rabbit_stew'], kind: 'food', hunger: 8, heal: 2, color: '#ad7548', stack: 1 },
+  { id: I.HARVEST_PLATE, name: 'Talerz żniwiarza', keys: ['talerz_zniwiarza', 'harvest_plate'], kind: 'food', hunger: 7, heal: 1, color: '#b7a849', stack: 1 },
+  { id: I.WANDER_CHARM, name: 'Talizman wędrowca', keys: ['talizman_wedrowca', 'wander_charm'], kind: 'material', color: '#d2b979', stack: 1 },
+  { id: I.TIDE_CHARM, name: 'Talizman pływaka', keys: ['talizman_plywaka', 'tide_charm'], kind: 'material', color: '#7abed5', stack: 1 },
   { id: I.BOW, name: 'Łuk', keys: ['luk', 'łuk', 'bow'], kind: 'tool', tool: 'bow', durability: 200, color: '#8a5a2b' },
+  { id: I.LIGHT_STRING, name: 'Lekka cięciwa', keys: ['lekka_cieciwa', 'light_bowstring'], kind: 'material', color: '#9be5ec' },
+  { id: I.STRONG_STRING, name: 'Mocna cięciwa', keys: ['mocna_cieciwa', 'strong_bowstring'], kind: 'material', color: '#e5ad6b' },
+  { id: I.LIGHT_BOW, name: 'Łuk z lekką cięciwą', keys: ['lekki_luk', 'light_bow'], kind: 'tool', tool: 'bow', durability: 180, color: '#829d9c' },
+  { id: I.STRONG_BOW, name: 'Łuk z mocną cięciwą', keys: ['mocny_luk', 'strong_bow'], kind: 'tool', tool: 'bow', durability: 250, color: '#b67745' },
+  { id: I.IRON_SPEAR, name: 'Żelazna włócznia', keys: ['wlocznia', 'zelazna_wlocznia', 'iron_spear'], kind: 'tool', tool: 'spear', durability: 240, color: '#c9d3df' },
+  { id: I.IRON_DAGGER, name: 'Żelazny sztylet', keys: ['sztylet', 'zelazny_sztylet', 'iron_dagger'], kind: 'tool', tool: 'dagger', tier: 2, durability: 200, color: '#c9d3df' },
+  { id: I.DIAMOND_DAGGER, name: 'Diamentowy sztylet', keys: ['diamentowy_sztylet', 'diamond_dagger'], kind: 'tool', tool: 'dagger', tier: 4, durability: 600, color: '#5ce9dc' },
+  { id: I.IRON_HAMMER, name: 'Żelazny młot', keys: ['mlot', 'zelazny_mlot', 'iron_hammer'], kind: 'tool', tool: 'hammer', durability: 300, color: '#afb5bc' },
   { id: I.LAPIS, name: 'Lazuryt', keys: ['lazuryt', 'lapis', 'lapis_lazuli'], kind: 'material', color: '#3a5fd0' },
   { id: I.PAPER, name: 'Papier', keys: ['papier', 'paper'], kind: 'material', color: '#f2f2ee' },
   { id: I.BOOK, name: 'Książka', keys: ['ksiazka', 'książka', 'book'], kind: 'material', color: '#9a4a3a' },
   { id: I.EMERALD, name: 'Szmaragd', keys: ['szmaragd', 'emerald'], kind: 'material', color: '#2ed06a' },
   { id: I.LEATHER, name: 'Skóra', keys: ['skora', 'skóra', 'leather'], kind: 'material', color: '#8a5a3b' },
   { id: I.SHIELD, name: 'Tarcza', keys: ['tarcza', 'shield'], kind: 'tool', tool: 'shield', durability: 300, color: '#8a6a3a' },
+  { id: I.LEATHER_SHIELD, name: 'Skórzana tarcza', keys: ['skorzana_tarcza', 'leather_shield'], kind: 'tool', tool: 'shield', durability: 180, color: '#a86749' },
+  { id: I.IRON_SHIELD, name: 'Żelazna tarcza', keys: ['zelazna_tarcza', 'iron_shield'], kind: 'tool', tool: 'shield', durability: 600, color: '#c8d2d9' },
   { id: I.REDSTONE, name: 'Czerwony proszek', keys: ['redstone', 'czerwony_proszek', 'redstone_dust'], kind: 'material', color: '#c42a2a' },
   { id: I.QUARTZ, name: 'Kwarc', keys: ['kwarc', 'quartz'], kind: 'material', color: '#e8e0d0' },
   { id: I.SLIME_BALL, name: 'Kula szlamu', keys: ['slime', 'kula_szlamu', 'slime_ball'], kind: 'material', color: '#7ac47a' },
@@ -220,6 +259,8 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.GLOWSTONE_DUST, name: 'Jasnogłazowy pył', keys: ['glowstone_dust', 'jasnoglazowy_pyl'], kind: 'material', color: '#e8c85a' },
   // 2.3 „Wyprawa i ratunek”
   { id: I.FISHING_ROD, name: 'Wędka', keys: ['wedka', 'fishing_rod'], kind: 'tool', tool: 'rod', durability: 64, color: '#9a6a34' },
+  { id: I.WORM_BAIT, name: 'Robak na haczyk', keys: ['robak', 'worm_bait'], kind: 'material', color: '#b56f78' },
+  { id: I.GLOW_BAIT, name: 'Świetlista przynęta', keys: ['swietlista_przyneta', 'glow_bait'], kind: 'material', color: '#efcc60' },
   { id: I.RAW_FISH, name: 'Surowa ryba', keys: ['surowa_ryba', 'ryba', 'raw_fish', 'cod'], kind: 'food', hunger: 2, color: '#c9ab84' },
   { id: I.COOKED_FISH, name: 'Pieczona ryba', keys: ['pieczona_ryba', 'cooked_fish'], kind: 'food', hunger: 6, heal: 1, color: '#d29a58' },
   { id: I.RAW_SALMON, name: 'Surowy łosoś', keys: ['surowy_losos', 'losos', 'raw_salmon', 'salmon'], kind: 'food', hunger: 2, color: '#e08a6a' },
@@ -238,6 +279,10 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.POTION_NIGHT, name: 'Napój nocnego widzenia', keys: ['napoj_nocnego_widzenia', 'potion_night', 'night_vision'], kind: 'potion', potion: 'night', stack: 16, color: '#4ad0a8' },
   { id: I.POTION_STRENGTH, name: 'Napój siły', keys: ['napoj_sily', 'potion_strength', 'sila'], kind: 'potion', potion: 'strength', stack: 16, color: '#e0a030' },
   { id: I.POTION_REGEN, name: 'Napój regeneracji', keys: ['napoj_regeneracji', 'potion_regen', 'regeneration'], kind: 'potion', potion: 'regen', stack: 16, color: '#e06090' },
+  { id: I.POTION_FALL, name: 'Napój lekkiego lądowania', keys: ['napoj_ladowania', 'potion_fall'], kind: 'potion', potion: 'fall', stack: 16, color: '#81b9ef' },
+  { id: I.POTION_SPRINT, name: 'Napój zrywu', keys: ['napoj_zrywu', 'potion_sprint'], kind: 'potion', potion: 'sprint', stack: 16, color: '#e89d55' },
+  { id: I.RAW_RABBIT, name: 'Surowe mięso królika', keys: ['surowy_krolik', 'raw_rabbit'], kind: 'food', hunger: 2, color: '#d9a1a0' },
+  { id: I.COOKED_RABBIT, name: 'Pieczony królik', keys: ['pieczony_krolik', 'cooked_rabbit'], kind: 'food', hunger: 5, heal: 1, color: '#aa7856' },
 ];
 
 const ARMOR_TIERS: {
@@ -294,6 +339,17 @@ ARMOR_TIERS.forEach((tier, ti) => {
   });
 });
 ITEM_LIST.push(...armorItems);
+// 3.0: special boots trade one point of physical armor for a situational
+// benefit. New IDs are appended after all 2.7 / previously added items.
+ITEM_LIST.push(
+  { id: I.EMBER_BOOTS, name: 'Buty żaru', keys: ['buty_zaru', 'ember_boots'], kind: 'armor',
+    armor: { slot: 3, points: 1 }, durability: 180, color: '#c86136' },
+  { id: I.TIDE_BOOTS, name: 'Buty przypływu', keys: ['buty_przyplywu', 'tide_boots'], kind: 'armor',
+    armor: { slot: 3, points: 1 }, durability: 180, color: '#358fb5' },
+  { id: I.SOFT_BOOTS, name: 'Buty miękkiego lądowania', keys: ['buty_miekkiego_ladowania', 'soft_boots'], kind: 'armor',
+    armor: { slot: 3, points: 1 }, durability: 180, color: '#b8a378' },
+);
+
 
 export const ITEMS: (ItemDef | undefined)[] = [];
 for (const it of ITEM_LIST) ITEMS[it.id] = it;
@@ -370,10 +426,10 @@ const PICK_BLOCKS = new Set<number>([
 ]);
 const AXE_BLOCKS = new Set<number>([
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED, B.CHEST, B.LOOT_CHEST,
-  B.HAY, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG,
+  B.HAY, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG, B.SPRUCE_LOG,
 ]);
 const SHOVEL_BLOCKS = new Set<number>([
-  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH, B.SOUL_SAND, B.SOUL_SOIL, B.MUD,
+  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH, B.SOUL_SAND, B.SOUL_SOIL, B.MUD, B.DRY_SOIL, B.MEADOW_GRASS, B.PODZOL,
 ]);
 const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE]);
 
@@ -424,6 +480,7 @@ export function requiredPickTier(blockId: number): number {
 }
 
 export function pickHint(blockId: number, toolId: number): string | null {
+  if (ITEMS[toolId]?.tool === 'hammer' && HAMMER_BLOCKS.has(blockId)) return null;
   if (pickTier(toolId) >= requiredPickTier(blockId)) return null;
   const need = requiredPickTier(blockId);
   if (need >= 4) return 'Obsydian kruszy tylko diamentowy kilof.';
@@ -432,6 +489,9 @@ export function pickHint(blockId: number, toolId: number): string | null {
   if (need >= 1) return 'Do tego bloku potrzebny jest kilof.';
   return null;
 }
+
+/** Only these masonry blocks benefit from the hammer; ore still requires a pickaxe. */
+const HAMMER_BLOCKS = new Set<number>([B.STONE, B.COBBLE, B.STONE_BRICKS, B.BLACKSTONE, B.BASALT]);
 
 /** Seconds of holding LMB to break this block with the given tool (0 = hand).
  *  `eff` is the Efficiency level of the held item (update 1.5). */
@@ -445,6 +505,9 @@ export function mineSeconds(blockId: number, toolId: number, eff = 0): number {
   const tier = pickTier(toolId);
   if (blockId === B.OBSIDIAN) return tier >= 4 ? 7.5 : Infinity;
   if (need >= 2 && tier < need) return Infinity;
+  // Masonry only: faster controlled mining of the selected block, never a 3x3 excavation.
+  if (tool?.tool === 'hammer' && HAMMER_BLOCKS.has(blockId))
+    return (def.hardness * 0.5 + 0.06) / (4 * (eff > 0 ? 1 + eff * 0.35 + eff * eff * 0.12 : 1));
   let speed = 1;
   let penalty = 1;
   if (PICK_BLOCKS.has(blockId)) {
@@ -464,6 +527,7 @@ export function mineSeconds(blockId: number, toolId: number, eff = 0): number {
 export function toolHelps(blockId: number, toolId: number): boolean {
   const tool = ITEMS[toolId];
   if (!tool?.tool) return false;
+  if (tool.tool === 'hammer') return HAMMER_BLOCKS.has(blockId);
   if (tool.tool === 'pick') return PICK_BLOCKS.has(blockId);
   if (tool.tool === 'axe') return AXE_BLOCKS.has(blockId) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || blockId === B.FENCE || blockId === B.CHEST || blockId === B.LOOT_CHEST || blockId === B.CAMPFIRE;
   if (tool.tool === 'shovel') return SHOVEL_BLOCKS.has(blockId);
@@ -477,6 +541,9 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
   const tool = ITEMS[toolId];
   let d = 3;
   if (tool?.tool === 'sword') d = [0, 5, 6, 7, 9][tool.tier ?? 1];
+  if (tool?.tool === 'spear') d = 7;
+  if (tool?.tool === 'dagger') d = tool.tier === 4 ? 5 : 4;
+  if (tool?.tool === 'hammer') d = 8;
   if (sharp > 0) d += sharp * 0.5 + 0.5;
   else if (tool?.tool === 'shield') d = 2;
   else if (tool?.tool === 'shears' || tool?.tool === 'igniter' || tool?.tool === 'bow') d = 1;
@@ -484,13 +551,49 @@ export function attackDamage(toolId: number, sprinting: boolean, sharp = 0): num
   else if (tool?.tool === 'rod' || tool?.tool === 'spyglass') d = 1;
   // 2.3: ten `else if` kasował wcześniej obrażenia miecza (trafiał tu każdy
   // miecz), więc diamentowy miecz bił jak drewniany topór – 4 zamiast 9.
-  else if (tool?.tool && tool.tool !== 'sword') d = 4;
+  else if (tool?.tool && tool.tool !== 'sword' && tool.tool !== 'spear' && tool.tool !== 'dagger' && tool.tool !== 'hammer') d = 4;
   if (sprinting) d += 2;
   return d;
 }
 
+/** Fraction of frontal damage after an ordinary shield block (timed parries are total).
+ *  The 2.7 shield retains exactly its old melee and projectile protection. */
+export const ARROW_AMMO = [I.ARROW, I.GLOW_ARROW, I.SLOW_ARROW, I.MARK_ARROW] as const;
+export type ArrowAmmoId = typeof ARROW_AMMO[number];
+export function arrowDuration(id: number): number {
+  return id === I.GLOW_ARROW ? 12 : id === I.SLOW_ARROW ? 6 : id === I.MARK_ARROW ? 18 : 0;
+}
+
+/** Normalised bow draw and damage multiplier. The old bow remains 1s / 1x. */
+export function bowDrawSeconds(id: number): number {
+  return id === I.LIGHT_BOW ? 0.65 : id === I.STRONG_BOW ? 1.4 : 1;
+}
+export function bowStrength(id: number): number {
+  return id === I.LIGHT_BOW ? 0.8 : id === I.STRONG_BOW ? 1.3 : 1;
+}
+
+export function shieldDamageFactor(id: number, projectile: boolean): number {
+  if (id === I.LEATHER_SHIELD) return projectile ? 0.4 : 0.65;
+  if (id === I.IRON_SHIELD) return projectile ? 0.15 : 0.3;
+  return projectile ? 0 : 0.5;
+}
+
+export function shieldWeightFactor(id: number): number { return id === I.IRON_SHIELD ? 0.85 : 1; }
+export function shieldWear(id: number, base: number): number {
+  return id === I.LEATHER_SHIELD ? Math.ceil(base * 1.5) :
+    id === I.IRON_SHIELD ? Math.max(1, Math.floor(base * 0.75)) : base;
+}
+
 export function attackCooldown(toolId: number): number {
+  if (ITEMS[toolId]?.tool === 'spear') return 0.92;
+  if (ITEMS[toolId]?.tool === 'dagger') return 0.28;
+  if (ITEMS[toolId]?.tool === 'hammer') return 1.1;
   return ITEMS[toolId]?.tool === 'sword' ? 0.42 : 0.5;
+}
+
+/** Only the long polearm extends melee targeting, not mining or placement. */
+export function attackReach(toolId: number): number {
+  return ITEMS[toolId]?.tool === 'spear' ? 5 : ITEMS[toolId]?.tool === 'dagger' ? 2.2 : 3.5;
 }
 
 /** What a broken block yields. Empty array = nothing (wrong tool on ore, leaves that rolled nothing).
@@ -501,6 +604,10 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   const tier = pickTier(toolId);
   const shears = ITEMS[toolId]?.tool === 'shears';
   const fortune = Math.max(0, Math.floor(opts.fortune ?? 0));
+  // A caught snare never drops its saved loot or its armed state as an item.
+  if (blockId >= B.SNARE && blockId <= B.SNARE_CHICKEN) return [{ id: B.SNARE, count: 1 }];
+  if (paintingBase(blockId) !== null || chairBase(blockId) !== null)
+    return [{ id: paintingBase(blockId) ?? chairBase(blockId)!, count: 1 }];
   // Jedwabny dotyk: blok wypada taki, jaki stał (kamień, szkło, ruda, liście…)
   if (opts.silk) {
     if (blockId === B.AIR || BLOCKS[blockId]?.hardness < 0) return [];
@@ -510,14 +617,14 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
     }
     if (blockId === B.COAL_ORE || blockId === B.DIAMOND_ORE || blockId === B.IRON_ORE || blockId === B.GOLD_ORE ||
         blockId === B.LAPIS_ORE || blockId === B.EMERALD_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.ICE ||
-        blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
+        blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.SPRUCE_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
         blockId === B.FARMLAND || (blockId >= B.CROP0 && blockId <= B.CROP3)) {
       return [{ id: blockId, count: 1 }];
     }
     if (BLOCKS[blockId]?.drop >= 0) return [{ id: blockId, count: 1 }];
     return [];
   }
-  if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
+  if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.SPRUCE_LEAVES || blockId === B.DEAD_SHRUB || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
   if (blockId === B.GRAVEL) return Math.random() < 0.12 ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
   if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
   if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
@@ -544,11 +651,25 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
     return out;
   }
   if (blockId === B.BIRCH_LEAVES) return Math.random() < 0.1 ? [{ id: B.BIRCH_SAPLING, count: 1 }] : [];
-  if (blockId === B.TALLGRASS) return Math.random() < 0.18 ? [{ id: I.SEEDS, count: 1 }] : [];
-  if (blockId === B.GRASS) {
+  if (blockId === B.SPRUCE_LEAVES) return Math.random() < 0.12 ? [{ id: B.SPRUCE_SAPLING, count: 1 }] : [];
+  if (blockId === B.DEAD_SHRUB) return Math.random() < 0.4 ? [{ id: I.STICK, count: 1 }] : [];
+  if (blockId === B.TALLGRASS) {
+    const roll = Math.random();
+    return roll < 0.04 ? [{ id: I.CARROT, count: 1 }] : roll < 0.22 ? [{ id: I.SEEDS, count: 1 }] : [];
+  }
+  if (blockId === B.DIRT || blockId === B.MUD || blockId === B.PODZOL) {
+    const out: Stack[] = [{ id: blockId, count: 1 }];
+    if (Math.random() < 0.08) out.push({ id: I.WORM_BAIT, count: 1 });
+    return out;
+  }
+  if (blockId === B.GRASS || blockId === B.MEADOW_GRASS) {
     const out: Stack[] = [{ id: B.DIRT, count: 1 }];
     if (Math.random() < 0.12) out.push({ id: I.SEEDS, count: 1 });
     return out;
+  }
+  if (blockId >= B.CARROT_CROP0 && blockId <= B.CARROT_CROP3) {
+    const extra = blockId === B.CARROT_CROP3 ? 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) : 0;
+    return [{ id: I.CARROT, count: 1 + extra }];
   }
   if (blockId === B.CROP0 || blockId === B.CROP1 || blockId === B.CROP2) return [{ id: I.SEEDS, count: 1 }];
   if (blockId === B.CROP3) {
@@ -566,6 +687,8 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
 
 export function smeltResult(id: number): number | null {
   switch (id) {
+    case I.CARROT: return I.ROASTED_CARROT;
+    case I.PUMPKIN_SLICE: return I.ROASTED_PUMPKIN;
     case B.IRON_ORE:
       return I.IRON;
     case B.GOLD_ORE:
@@ -588,6 +711,7 @@ export function smeltResult(id: number): number | null {
       return B.STONE;
     case B.LOG:
     case B.BIRCH_LOG:
+    case B.SPRUCE_LOG:
       return I.COAL;
     case I.RAW_PORK:
       return I.COOKED_PORK;
@@ -595,6 +719,8 @@ export function smeltResult(id: number): number | null {
       return I.COOKED_BEEF;
     case I.RAW_CHICKEN:
       return I.COOKED_CHICKEN;
+    case I.RAW_RABBIT:
+      return I.COOKED_RABBIT;
     case I.RAW_FISH:
       return I.COOKED_FISH;
     case I.RAW_SALMON:
@@ -610,8 +736,8 @@ export function smeltResult(id: number): number | null {
 export function fuelSeconds(id: number): number {
   if (id === I.COAL || id === B.COAL_ORE) return 32;
   if (id === I.BLAZE_ROD) return 60;
-  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || id === B.CHEST || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
-  if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || isLadder(id)) return 2;
+  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.SPRUCE_LOG || id === B.CRAFTING || id === B.BOOKSHELF || id === B.CHEST || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
+  if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING || isLadder(id)) return 2;
   if (id === B.HAY) return 6;
   if (id === B.WOOL_WHITE || id === B.WOOL_RED || id === B.WOOL_BLUE || id === B.WOOL_GREEN || id === B.WOOL_YELLOW || id === B.WOOL_BLACK) return 3;
   const it = ITEMS[id];

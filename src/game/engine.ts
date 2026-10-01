@@ -1,41 +1,52 @@
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, type Biome } from './world';
-import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
+import { DiscoveryMap, type DiscoverySave } from './discoveryMap';
+import { CHALLENGES, normalizeChallenges, type ChallengeId, type ChallengeProgress } from './challenges';
+import { DEFAULT_DIFFICULTY, normalizeDifficulty, hostileCap, hostileSpeed, mobDamage, resourceDropCount, animalMeatYield, type WorldDifficulty } from './difficulty';
+import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, paintingBase, paintingSupport, chairBase, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
-import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
+import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE, type BaitId } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
 import {
   BREW_FUELS, BREWING_INGREDIENTS, HEAL_AMOUNT, SPEED_FACTOR, STRENGTH_DAMAGE, POTIONS,
-  brewingKey, emptyBrewing, tickBrewing,
+  brewingKey, emptyBrewing, tickBrewing, sprintFactor, fallDamageAfterPotion, restoreEffects,
   type BrewingState, type PotionEffectId,
 } from './brewing';
-import { getAtlas, tileUV, AVG_COLOR } from './textures';
+import { getAtlas, compactAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, type MobType } from './mobs';
+import { Mob, isHostileMob, pickPassiveMob, shoreWaterNearby, turtleSpawnAllowed, batSpawnAllowed, merchantProfession, isTrustAnimal, isTrustFood, type TrustAnimal, type FoxFood, type CaveNoise, type MobType } from './mobs';
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
-const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
+const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast', 'sandstalker', 'echolurker']);
 import { Inventory, RECIPES, type Stack } from './inventory';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
-  sharpnessDamage, knockbackFactor, powerFactor, totalProtection, fallDamageFactor,
+  sharpnessDamage, knockbackFactor, powerFactor, totalProtection, sourceProtection, conflicts,
   type EnchOption,
 } from './enchant';
 import * as Sfx from './audio';
+import { chooseAmbient } from './ambience';
+import { dodgeDirection, threatInFront } from './combatMoves';
 import { patchChunkMaterial } from './lighting';
 import { buildItemIcons } from './itemIcons';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
-  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown,
+  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown, attackReach,
   blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
+  shieldDamageFactor, shieldWeightFactor, shieldWear, bowDrawSeconds, bowStrength,
+  ARROW_AMMO, arrowDuration, type ArrowAmmoId,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
+import { mealBonus } from './meals';
+import { breathCharmFactor, isTalisman, restoreTalisman, walkCharmFactor } from './talismans';
+import { emptyTravelCauldron, restoreTravelCauldron, tickTravelCauldron, travelFuel, travelRecipe,
+  TRAVEL_CAULDRON_LIMIT, type TravelCauldronState } from './travelCauldron';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
-import { achievementById } from './achievements';
+import { achievementById, BIOME_DISCOVERY_GOALS } from './achievements';
 import { upsertSave } from './saves';
 import { Xp } from './xp';
-import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT } from './armor';
+import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT, bootHeatReduction, waterSpeedFactor, landingFactor } from './armor';
 import {
   applyTrade,
   canTrade,
@@ -57,7 +68,7 @@ import { villageSpawnSpots } from './village';
 import { isVillageMob } from './mobs';
 
 export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'anvil' | 'brewing';
+export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'biomeCompass' | 'anvil' | 'brewing' | 'travelCauldron';
 
 export interface Waypoint {
   id: string;
@@ -104,12 +115,16 @@ export interface HUDState {
   heldHint: string | null;
   /** -1 when the bow is idle, otherwise the draw charge 0–1. */
   bow: number;
+  ammo?: { id: ArrowAmmoId; count: number } | null;
+  arrowStatus?: { name: string; glow: number; slow: number; marked: number; distance: number; direction: string }[];
+  impactGlow?: { left: number; distance: number } | null;
   /** Experience level (bar above the hotbar). */
   level: number;
   /** 0–1 progress inside the current level. */
   xpFrac: number;
   /** Four equipped armor pieces (head, chest, legs, feet). */
   armor: (Stack | null)[];
+  talisman?: Stack | null;
   /** Sum of armor points of the equipped pieces. */
   armorPoints: number;
   /** 1.6: co jest pod celownikiem (mob) – nazwa i wskazówka. */
@@ -134,8 +149,12 @@ export interface HUDState {
   zoom: boolean;
   /** 2.3: stan wędkarstwa: 'idle' | 'cast' | 'waiting' | 'bite'. */
   fishing: 'idle' | 'cast' | 'waiting' | 'bite';
+  bait?: string | null;
   /** 2.4: aktywne efekty napojów (ikona, nazwa, sekundy pozostałe). */
   effects: { id: string; icon: string; name: string; left: number }[];
+  challenges: ChallengeProgress;
+  combat?: { dodgeCooldown: number; guardCooldown: number; dodgeActive: boolean; guardActive: boolean; shield: boolean; counterReady?: boolean };
+  daggerHit?: { damage: number; counter: boolean } | null;
 }
 
 export interface TradeRow {
@@ -146,6 +165,41 @@ export interface TradeRow {
   left: number;
   max: number;
   blocked: 'ok' | 'uses' | 'items' | 'space';
+}
+
+export interface CompanionSave {
+  type: TrustAnimal;
+  dim: 'home' | 'nether';
+  x: number; y: number; z: number;
+  health: number; trust: number; tamed: boolean;
+  cooldown: number;
+}
+
+/** Imported saves are untrusted. Cap persistent animals and discard invalid
+ * coordinates before constructing meshes or querying terrain. */
+export function normalizeCompanions(raw: unknown): CompanionSave[] {
+  if (!Array.isArray(raw)) return [];
+  const result: CompanionSave[] = [];
+  const seen = new Set<string>();
+  for (const value of raw.slice(0, 128)) {
+    if (!value || typeof value !== 'object') continue;
+    const v = value as Record<string, unknown>;
+    if ((v.type !== 'wolf' && v.type !== 'fox' && v.type !== 'rabbit') || (v.dim !== 'home' && v.dim !== 'nether') ||
+        ![v.x, v.y, v.z, v.health].every((n) => typeof n === 'number' && Number.isFinite(n)) ||
+        Math.abs(v.x as number) > 1e6 || Math.abs(v.z as number) > 1e6 ||
+        (v.y as number) < 1 || (v.y as number) > CH - 3 || (v.health as number) <= 0) continue;
+    const tamed = v.tamed === true;
+    const trust = tamed ? 3 : Math.max(0, Math.min(2, Math.floor(Number(v.trust) || 0)));
+    if (!trust) continue;
+    const key = `${v.dim}:${v.type}:${Math.round((v.x as number) * 10)},${Math.round((v.y as number) * 10)},${Math.round((v.z as number) * 10)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ type: v.type, dim: v.dim, x: v.x as number, y: v.y as number, z: v.z as number,
+      health: Math.min(v.type === 'fox' ? 9 : v.type === 'rabbit' ? 4 : 8, v.health as number), trust, tamed,
+      cooldown: Math.max(0, Math.min(3, Number(v.cooldown) || 0)) });
+    if (result.length >= 24) break;
+  }
+  return result;
 }
 
 export interface SaveData {
@@ -162,15 +216,21 @@ export interface SaveData {
   id?: string;
   name?: string;
   worldType?: 'normal' | 'flat';
+  /** Missing in older saves: keep the original 2.7 generator for them. */
+  terrainVersion?: 2 | 3 | 4 | 5 | 6 | 7;
   updated?: number;
   hunger?: number;
   spawn?: [number, number, number];
+  /** Optional temporary camp spawn; older worlds retain their original spawn semantics. */
+  campRespawn?: { cot: [number, number, number]; previous: [number, number, number] };
   furnaces?: FurnaceState[];
   chests?: ChestState[];
   unlocked?: string[];
   weather?: 'clear' | 'rain';
   xp?: number;
   armor?: (Stack | null)[];
+  /** Optional 3.0 single equipped charm; old saves have an empty slot. */
+  talisman?: Stack | null;
   /** 1.6: licznik wymian (osiągnięcie „Kupiec”). */
   trades?: number;
   /** 1.8: modyfikacje bloków w Netherze – osobny wymiar, osobny zapis. */
@@ -186,10 +246,30 @@ export interface SaveData {
   anvils?: AnvilState[];
   /** 2.3: ile ryb udało się złowić (osiągnięcie „Wędkarz”). */
   fishCaught?: number;
+  /** Prepared bait, already removed from inventory; expires after a bite. */
+  fishingBait?: BaitId | null;
   /** 2.4: zawartość statywów alchemicznych (fiolki, składnik, paliwo). */
   brewings?: BrewingState[];
+  /** 3.0: limited portable field cauldrons, separate for both dimensions. */
+  travelCauldrons?: TravelCauldronState[];
   /** 2.4: wypiłe typy napojów (osiągnięcie „Mistrz eliksirów”). */
   potionsDrunk?: number[];
+  /** Milliseconds remaining per effect; optional in saves predating 3.0. */
+  effects?: Record<string, number>;
+  /** Optional 3.0 per-world rules. Older worlds use the 2.7 normal defaults. */
+  difficulty?: WorldDifficulty;
+  challengeProgress?: ChallengeProgress;
+  /** 3.0: bonded wolves survive save/export and dimension switches. */
+  companions?: CompanionSave[];
+  /** Explored chunk tiles, stored separately for both dimensions. Absent in 2.x saves. */
+  discovery?: DiscoverySave;
+}
+
+/** Missing revision means a 2.7 world. Never upgrade unvisited chunks of a saved world. */
+export function terrainVersionForSave(save?: Pick<SaveData, 'terrainVersion'>): 2 | 3 | 4 | 5 | 6 | 7 {
+  if (!save) return 7;
+  return save.terrainVersion === 7 ? 7 : save.terrainVersion === 6 ? 6 : save.terrainVersion === 5 ? 5 :
+    save.terrainVersion === 4 ? 4 : save.terrainVersion === 3 ? 3 : 2;
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';
@@ -202,11 +282,26 @@ const EFFECT_META: Record<Exclude<PotionEffectId, 'none'>, { icon: string; name:
   night: { icon: '👁', name: 'Nocne widzenie' },
   strength: { icon: '💪', name: 'Siła' },
   regen: { icon: '✚', name: 'Regeneracja' },
+  fall: { icon: '🪶', name: 'Lekkie lądowanie' },
+  sprint: { icon: '⚡', name: 'Zryw' },
 };
 
 /** Polskie nazwy mobów – używane w podpowiedzi pod celownikiem. */
 export const MOB_NAMES: Record<MobType, string> = {
   pig: 'Świnia',
+  rabbit: 'Królik',
+  fox: 'Lis',
+  frog: 'Żaba',
+  turtle: 'Żółw',
+  bear: 'Niedźwiedź',
+  guard: 'Strażnik wioski',
+  merchant: 'Wędrowny kupiec',
+  pack_animal: 'Zwierzę juczne',
+  sandstalker: 'Piaskowy zasadzkarz',
+  echolurker: 'Jaskiniowy nasłuchiwacz',
+  midge: 'Meszka',
+  bat: 'Nietoperz',
+  lizard: 'Jaszczurka',
   sheep: 'Owca',
   cow: 'Krowa',
   chicken: 'Kurczak',
@@ -273,6 +368,8 @@ interface ArrowEntity {
   power: number;
   /** The mob that fired it, or null when the player shot it. */
   from: Mob | null;
+  /** Optional ammo type; old, hostile and imported arrows behave normally. */
+  ammoId?: ArrowAmmoId;
   /** Perła Endu: nie rani, tylko teleportuje gracza w miejsce upadku (1.9). */
   pearl?: boolean;
 }
@@ -287,6 +384,8 @@ interface DropEntity {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
   age: number;
+  thrown?: boolean;
+  landed?: boolean;
 }
 
 /** 2.3: spławik wędkarstwa – lekki, tonie w wodzie i czeka na brań. */
@@ -384,7 +483,7 @@ export class Game {
   /** Twardy limit klatek (0 = bez limitu). Oszczędza baterię na telefonach. */
   fpsCap = 0;
   /** Budżety jakości ustawiane przez applyGfx(). */
-  gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, clouds: true };
+  gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, requestedParticles: 1, effectDetail: 'full' as 'low' | 'full', clouds: true };
   /** Automatyczne wskakiwanie na 1-blokowe schodki (sterowanie mobilne). */
   autoJump = false;
   /** Krótkie wibracje przy kopaniu i obrażeniach. */
@@ -422,6 +521,7 @@ export class Game {
   bobPhase = 0;
   shake = 0;
   spawnPoint = new THREE.Vector3();
+  private campRespawn: SaveData['campRespawn'] = undefined;
 
   // input
   keys = new Set<string>();
@@ -451,6 +551,9 @@ export class Game {
   // rendering
   materials: THREE.Material[];
   atlasTex: THREE.Texture;
+  private fullAtlasCanvas!: HTMLCanvasElement;
+  private lowAtlasCanvas: HTMLCanvasElement | null = null;
+  private textureDetail: 'low' | 'full' = 'full';
   selection: THREE.LineSegments;
   crackMesh: THREE.Mesh;
   crackTex: THREE.Texture[];
@@ -482,8 +585,12 @@ export class Game {
   /** 2.4: statywy alchemiczne – PPM otwiera ekran warzenia napojów. */
   brewings = new Map<string, BrewingState>();
   brewingPos: { x: number; y: number; z: number } | null = null;
-  /** 2.4: aktywne efekty napojów (id → pozostałe ms). Krótkie – nie zapisują się. */
+  travelCauldrons = new Map<string, TravelCauldronState>();
+  travelCauldronPos: { x: number; y: number; z: number } | null = null;
+  /** Aktywne efekty napojów (id → pozostałe ms), zachowywane w zapisie. */
   private effects = new Map<PotionEffectId, number>();
+  difficulty: WorldDifficulty = { ...DEFAULT_DIFFICULTY };
+  challengeProgress: ChallengeProgress = normalizeChallenges(undefined);
   /** 2.4: odliczanie leczenia z napoju regeneracji. */
   private potionRegenAcc = 0;
   /** 2.4: jakie butelki gracz kiedykolwiek wypił (osiągnięcie „Mistrz eliksirów”). */
@@ -494,6 +601,7 @@ export class Game {
   private bobberMat: THREE.MeshBasicMaterial | null = null;
   /** 2.3: licznik złowionych ryb (zapisuje się ze światem). */
   fishCaught = 0;
+  fishingBait: BaitId | null = null;
   /** 2.3: lorneta – prawy przycisk myszy w dłoni. */
   private zooming = false;
   /** 2.5: podgląd lornety dla sterowania dotykowego (spowolnienie gestu). */
@@ -506,16 +614,31 @@ export class Game {
   private arrows: ArrowEntity[] = [];
   private arrowGeo!: THREE.BufferGeometry;
   private arrowMat!: THREE.MeshBasicMaterial;
+  private arrowMats = new Map<number, THREE.MeshBasicMaterial>();
+  private arrowAmmo: ArrowAmmoId = I.ARROW;
+  /** Light sources from glow arrows in blocks are transient, capped and never generate chunks. */
+  private impactGlows: { mesh: THREE.Mesh; time: number; light: THREE.PointLight }[] = [];
   /** Experience – persisted as a total, level derived from the curve. */
   xp = new Xp(0);
   /** Equipped armor: [head, chest, legs, feet]. */
   armor: (Stack | null)[] = new Array(ARMOR_SLOT_COUNT).fill(null);
+  talisman: Stack | null = null;
   /** Floating XP orbs dropped by mobs and ores. */
   private orbs: { mesh: THREE.Mesh; pos: THREE.Vector3; vel: THREE.Vector3; value: number; age: number }[] = [];
   private orbGeo!: THREE.BufferGeometry;
   private orbMat!: THREE.MeshBasicMaterial;
   /** Seconds the bow has been drawn, -1 when idle. */
   private bowDraw = -1;
+  /** Short, timed defensive actions. Timers are transient and reset on reload. */
+  private dodgeTime = 0;
+  private dodgeCooldown = 0;
+  /** One successful dagger counter may follow a dodge, even after invulnerability expires. */
+  private daggerCounter = 0;
+  private daggerHitAt = 0;
+  private daggerHitDamage = 0;
+  private daggerHitCounter = false;
+  private guardTime = 0;
+  private guardCooldown = 0;
   /** Rzuty perłą Endu mają krótki odstęp (1.9). */
   private pearlCd = 0;
   private pearlGeo: THREE.SphereGeometry | null = null;
@@ -540,6 +663,7 @@ export class Game {
   showMinimap = true;
   /** 2.2: maksymalnie 12 znaczników na świat, w tym automatyczny punkt śmierci. */
   waypoints: Waypoint[] = [];
+  discovery = new DiscoveryMap();
   activeWaypointId: string | null = null;
   minimapCanvas!: HTMLCanvasElement;
   private minimapCtx!: CanvasRenderingContext2D;
@@ -548,6 +672,15 @@ export class Game {
   private dropMat!: THREE.MeshBasicMaterial;
   private itemTex = new Map<number, THREE.Texture>();
   private dropGeos = new Map<number, THREE.BufferGeometry>();
+  /** Ephemeral, bounded acoustic cues; never written to world saves. */
+  private noiseEvents: CaveNoise[] = [];
+  private nextNoiseId = 0;
+  private emitCaveNoise(x: number, y: number, z: number, radius: number, source: CaveNoise['source'] = 'player') {
+    this.noiseEvents ??= [];
+    this.nextNoiseId = (this.nextNoiseId || 0) + 1;
+    this.noiseEvents.push({ id: this.nextNoiseId, x, y, z, radius, ttl: 1.3, source });
+    if (this.noiseEvents.length > 32) this.noiseEvents.shift();
+  }
   private falling: FallingBlock[] = [];
   /** Leaves waiting to fall apart after their tree lost its last log. */
   private leafDecay: { x: number; y: number; z: number; t: number }[] = [];
@@ -602,7 +735,7 @@ export class Game {
     const seed = opts.save ? opts.save.seed : opts.seed;
     const worldType = opts.save?.worldType ?? opts.worldType ?? 'normal';
     this.worldType = worldType;
-    this.world = new World(seed, worldType === 'flat');
+    this.world = new World(seed, worldType === 'flat', false, terrainVersionForSave(opts.save));
     this.homeWorld = this.world;
     // Nether istnieje od razu jako osobny wymiar – nigdy nie nadpisuje nadświatu.
     this.netherWorld = new World(seed, false, true);
@@ -624,6 +757,7 @@ export class Game {
     this.scene.fog = new THREE.Fog(0x88bbff, 20, this.renderDistance * CS);
 
     const atlas = getAtlas();
+    this.fullAtlasCanvas = atlas.canvas;
     this.icons = { ...atlas.icons, ...buildItemIcons() };
     const tex = new THREE.CanvasTexture(atlas.canvas);
     tex.magFilter = THREE.NearestFilter;
@@ -759,20 +893,37 @@ export class Game {
         clean.progress = Math.max(0, Math.min(8, b.progress ?? 0));
         this.brewings.set((b.dim ? 'n:' : '') + brewingKey(b.x, b.y, b.z), clean);
       }
+      for (const raw of (Array.isArray(opts.save.travelCauldrons) ? opts.save.travelCauldrons : []).slice(0, TRAVEL_CAULDRON_LIMIT)) {
+        const c = restoreTravelCauldron(raw);
+        if (!c) continue;
+        this.travelCauldrons.set((c.dim ? 'n:' : '') + `${c.x},${c.y},${c.z}`, c);
+      }
+      this.effects = restoreEffects(opts.save.effects);
+      this.difficulty = normalizeDifficulty(opts.save.difficulty);
       this.fishCaught = Math.max(0, Math.floor(opts.save.fishCaught ?? 0));
+      this.fishingBait = opts.save.fishingBait === I.WORM_BAIT || opts.save.fishingBait === I.GLOW_BAIT ? opts.save.fishingBait : null;
       for (const id of Array.isArray(opts.save.potionsDrunk) ? opts.save.potionsDrunk : []) {
         if (typeof id === 'number' && POTIONS[id]) this.potionsDrunk.add(id);
       }
       for (const id of opts.save.unlocked ?? []) this.unlocked.add(id);
+      this.challengeProgress = normalizeChallenges(opts.save.challengeProgress, this.unlocked);
       this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
       this.xp = new Xp(opts.save.xp ?? 0);
+      // Pre-3.0 explorers with three recorded biome visits deserve the new
+      // chapter reward once, even if all six biomes were already visited.
+      if (this.challengeProgress.challenge_explorer >= CHALLENGES.challenge_explorer.target && !this.unlocked.has('challenge_explorer')) {
+        this.unlocked.add('challenge_explorer');
+        this.xp.add(CHALLENGES.challenge_explorer.rewardXp);
+      }
       this.trades = opts.save.trades ?? 0;
+      this.discovery = DiscoveryMap.fromSave(opts.save.discovery);
       this.waypoints = (opts.save.waypoints ?? []).filter((w) =>
         w && typeof w.id === 'string' && typeof w.name === 'string' &&
         Number.isFinite(w.x) && Number.isFinite(w.y) && Number.isFinite(w.z) &&
         (w.dimension === 'overworld' || w.dimension === 'nether')
       ).slice(0, 12).map((w) => ({ ...w, name: w.name.slice(0, 32) }));
       this.activeWaypointId = this.waypoints.some((w) => w.id === opts.save?.activeWaypointId) ? (opts.save.activeWaypointId ?? null) : null;
+      this.talisman = restoreTalisman(opts.save.talisman);
       if (opts.save.armor) {
         for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
           const s = opts.save.armor[i];
@@ -782,6 +933,7 @@ export class Game {
       if ((opts.save.day || 1) >= 2) this.unlocked.add('night');
       this.findSpawn();
       if (opts.save.spawn) this.spawnPoint.set(...opts.save.spawn);
+      this.campRespawn = this.validCampRespawn(opts.save.campRespawn, this.spawnPoint);
       // Zapis w Netherze: aktywuj wymiar PRZED wczytaniem chunków wokół gracza.
       if (opts.save.isInNether) {
         this.world = this.netherWorld;
@@ -800,6 +952,7 @@ export class Game {
     const pcx = Math.floor(this.body.pos.x / CS), pcz = Math.floor(this.body.pos.z / CS);
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) this.buildChunk(pcx + dx, pcz + dz);
 
+    this.restoreCompanions(opts.save?.companions);
     this.bindEvents();
     this.updateHand();
     this.initWeather();
@@ -809,8 +962,8 @@ export class Game {
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
-      ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}”: szukaj receptur po nazwie lub składniku; pełny ekwipunek nie gubi łupu. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.`);
+      ? 'Tryb kreatywny. K – mapa i punkty podróży, J – dziennik; użyj kompasu biomów, aby wyszukać cel.'
+      : `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}”: szukaj receptur po nazwie lub składniku; pełny ekwipunek nie gubi łupu. K – mapa odkrywania i punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.`);
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -891,6 +1044,8 @@ export class Game {
     renderDistance?: number;
     pixelRatio?: number;
     particles?: number;
+    textureDetail?: 'low' | 'full';
+    effectDetail?: 'low' | 'full';
     clouds?: boolean;
     dynamicResolution?: boolean;
     fpsCap?: number;
@@ -907,8 +1062,16 @@ export class Game {
       this.basePixelRatio = Math.max(0.6, Math.min(3, o.pixelRatio));
       this.applyResScale();
     }
-    if (o.particles !== undefined) {
-      this.gfx.particleScale = Math.max(0, Math.min(1, o.particles));
+    if (o.textureDetail !== undefined && o.textureDetail !== this.textureDetail) {
+      this.textureDetail = o.textureDetail;
+      if (o.textureDetail === 'low' && !this.lowAtlasCanvas) this.lowAtlasCanvas = compactAtlas(this.fullAtlasCanvas);
+      this.atlasTex.image = o.textureDetail === 'low' ? this.lowAtlasCanvas! : this.fullAtlasCanvas;
+      this.atlasTex.needsUpdate = true;
+    }
+    if (o.effectDetail !== undefined) this.gfx.effectDetail = o.effectDetail;
+    if (o.particles !== undefined) this.gfx.requestedParticles = Math.max(0, Math.min(1, o.particles));
+    if (o.particles !== undefined || o.effectDetail !== undefined) {
+      this.gfx.particleScale = Math.min(this.gfx.requestedParticles, this.gfx.effectDetail === 'low' ? 0.35 : 1);
       if (this.rainGeo) this.rainGeo.setDrawRange(0, Math.floor(420 * this.gfx.particleScale));
     }
     if (o.clouds !== undefined) this.gfx.clouds = o.clouds;
@@ -965,12 +1128,12 @@ export class Game {
     const prev = this.touchAim;
     this.touchAim = { x: nx, y: ny };
     this.refreshTarget();
-    const { mob, dist } = this.findMobTarget(3.5);
+    const { mob, dist } = this.findMobTarget(this.meleeReach());
     const blockDist = this.target ? this.target.dist : Infinity;
     const held = this.selectedStack();
-    if (mob && dist < blockDist && mob.type === 'villager' && !mob.dead) {
+    if (mob && dist < blockDist && (mob.type === 'villager' || mob.type === 'merchant') && !mob.dead) {
       this.openTrade(mob);
-    } else if (mob && dist < blockDist && mob.type === 'wolf' && !mob.tamed && !mob.dead && (held?.id === I.RAW_PORK || held?.id === I.RAW_BEEF || held?.id === I.RAW_CHICKEN)) {
+    } else if (mob && dist < blockDist && !mob.tamed && !mob.dead && held && isTrustFood(mob.type, held.id)) {
       this.placeCooldown = 0;
       this.tryUse();
     } else if (mob && dist < blockDist && this.attackCooldown <= 0) {
@@ -1061,12 +1224,12 @@ export class Game {
     // dzienniku, suwak w opcjach) – bez tego Esc „nic nie robił”, dopóki
     // gracz nie kliknął poza polem.
     if (e.code === 'Escape') {
-      if (this.ui === 'paused' || this.ui === 'journal' || this.ui === 'waypoints') {
+      if (this.ui === 'paused' || this.ui === 'journal' || this.ui === 'waypoints' || this.ui === 'biomeCompass') {
         e.preventDefault();
         this.setUI('playing');
         return;
       }
-      if (['inventory', 'furnace', 'chest', 'enchant', 'trade', 'anvil', 'brewing'].includes(this.ui)) {
+      if (['inventory', 'furnace', 'chest', 'enchant', 'trade', 'anvil', 'brewing', 'travelCauldron'].includes(this.ui)) {
         e.preventDefault();
         this.closeInventory();
         return;
@@ -1083,14 +1246,14 @@ export class Game {
     // pozostałych klawiszy – inaczej litera „e” zamykałaby ekran w trakcie pisania.
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-    if (this.ui === 'journal' || this.ui === 'waypoints') {
+    if (this.ui === 'journal' || this.ui === 'waypoints' || this.ui === 'biomeCompass') {
       if (e.code === 'Escape' || (this.ui === 'waypoints' && e.code === 'KeyK')) {
         e.preventDefault();
         this.setUI('playing');
       }
       return;
     }
-    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'anvil' || this.ui === 'brewing') {
+    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'anvil' || this.ui === 'brewing' || this.ui === 'travelCauldron') {
       if (e.code === 'KeyE') {
         e.preventDefault();
         this.closeInventory();
@@ -1130,6 +1293,8 @@ export class Game {
     if (e.code === 'KeyM') { this.showMinimap = !this.showMinimap; this.emitHud(); return; }
     if (e.code === 'KeyJ') { e.preventDefault(); this.setUI('journal'); return; }
     if (e.code === 'KeyK') { e.preventDefault(); this.setUI('waypoints'); return; }
+    if (e.code === 'KeyX') { e.preventDefault(); this.cycleArrowAmmo(); return; }
+    if (e.code === 'KeyG' && this.zooming) { e.preventDefault(); this.markSpyglass(); return; }
     if (e.code.startsWith('Digit') || e.code.startsWith('Numpad')) {
       const n = parseInt(e.code.slice(e.code.startsWith('Digit') ? 5 : 6), 10);
       if (n >= 1 && n <= 9) { this.selected = n - 1; this.emitHud(); }
@@ -1138,6 +1303,8 @@ export class Game {
     if (e.code === 'KeyT' || e.code === 'Slash') { e.preventDefault(); this.setUI('chat'); return; }
     // 2.5: Ctrl+Q wyrzuca cały stos (Q – pojedynczy przedmiot, jak w klasyku).
     if (e.code === 'KeyQ') { this.dropItem(e.ctrlKey); }
+    if (e.code === 'KeyV') { e.preventDefault(); this.tryDodge(); return; }
+    if (e.code === 'KeyR') { e.preventDefault(); this.tryTimedGuard(); return; }
     if (e.code === 'KeyF' && this.mode === 'creative') { this.toggleFly(); }
     if (e.code === 'Space') {
       const now = performance.now();
@@ -1212,6 +1379,7 @@ export class Game {
     this.touchAim = null;
     if (s !== 'anvil') this.anvilPos = null;
     if (s !== 'brewing') this.brewingPos = null;
+    if (s !== 'travelCauldron') this.travelCauldronPos = null;
     if (s === 'anvil' && this.anvilPos) this.returnHeldStack();
     this.onUI(s);
   }
@@ -1233,6 +1401,7 @@ export class Game {
   closeInventory() {
     this.returnHeldStack();
     this.furnacePos = null;
+    this.travelCauldronPos = null;
     this.chestPos = null;
     this.enchantPos = null;
     this.setUI('playing');
@@ -1242,7 +1411,7 @@ export class Game {
   // ---------- Handel z mieszkańcami (1.6) ----------
 
   openTrade(mob: Mob) {
-    if (mob.type !== 'villager' || mob.dead) return;
+    if ((mob.type !== 'villager' && mob.type !== 'merchant') || mob.dead) return;
     if (!mob.trade) mob.trade = createVillagerState(mob.profession, this.nowSeconds());
     this.tradeMob = mob;
     this.setUI('trade');
@@ -1262,7 +1431,7 @@ export class Game {
   /** Nazwa rozmówcy razem z jego poziomem („Rolnik (Czeladnik)”). */
   tradeTitle(): string {
     const st = this.tradeMob?.trade;
-    return st ? villagerTitle(st) : 'Mieszkaniec';
+    return st ? (this.tradeMob?.type === 'merchant' ? `Wędrowny kupiec · ${this.tradeMob.merchantRegion} · ${villagerTitle(st)}` : villagerTitle(st)) : 'Mieszkaniec';
   }
 
   tradeLevel(): number {
@@ -1403,8 +1572,10 @@ export class Game {
     const item = this.enchantItem;
     if (!opt || !item || !canAddEnch(item, opt.ench)) return false;
     if (this.mode !== 'creative') {
-      if (!this.xp.spend(opt.cost)) { this.message('Za mało doświadczenia.'); return false; }
+      // Check both costs before spending either: a direct call must not burn
+      // experience just because the last piece of lapis was moved elsewhere.
       if (this.inventory.countOf(I.LAPIS) < opt.lapis) { this.message('Potrzebny jest lazuryt.'); return false; }
+      if (!this.xp.spend(opt.cost)) { this.message('Za mało doświadczenia.'); return false; }
       this.inventory.remove(I.LAPIS, opt.lapis);
     }
     addEnch(item, opt.ench, opt.level);
@@ -1647,6 +1818,99 @@ export class Game {
     }
   }
 
+  private travelKey(x: number, y: number, z: number) {
+    return (this.isInNether ? 'n:' : '') + `${x},${y},${z}`;
+  }
+
+  openTravelCauldron(x: number, y: number, z: number) {
+    const key = this.travelKey(x, y, z);
+    if (!this.travelCauldrons.has(key)) {
+      if (this.travelCauldrons.size >= TRAVEL_CAULDRON_LIMIT) {
+        this.message('Zbyt wiele kotłów w jednym świecie. Zbierz nieużywane, aby otworzyć nowy.');
+        return;
+      }
+      const c = emptyTravelCauldron(x, y, z);
+      c.dim = this.isInNether ? 1 : 0;
+      this.travelCauldrons.set(key, c);
+    }
+    this.travelCauldronPos = { x, y, z };
+    this.setUI('travelCauldron');
+    this.emitHud();
+  }
+
+  currentTravelCauldron(): TravelCauldronState | null {
+    const p = this.travelCauldronPos;
+    return p ? this.travelCauldrons.get(this.travelKey(p.x, p.y, p.z)) ?? null : null;
+  }
+
+  clickTravelCauldron(slot: 'input' | 'ingredient' | 'fuel' | 'output', right: boolean) {
+    const c = this.currentTravelCauldron();
+    if (!c) return;
+    const cur = this.inventory.cursor;
+    if (slot === 'output') {
+      if (!c.output) return;
+      // Do not accept cursor items in the output; share the furnace's stack limits.
+      if (!cur) {
+        if (right && c.output.count > 1) {
+          const half = Math.ceil(c.output.count / 2);
+          this.inventory.cursor = { id: c.output.id, count: half };
+          c.output.count -= half;
+        } else { this.inventory.cursor = c.output; c.output = null; }
+      } else if (cur.id === c.output.id && cur.count < stackLimit(cur.id)) {
+        const n = Math.min(stackLimit(cur.id) - cur.count, c.output.count);
+        cur.count += n; c.output.count -= n;
+        if (c.output.count <= 0) c.output = null;
+      }
+      if (this.inventory.cursor) this.notePickup(this.inventory.cursor.id);
+      this.emitHud();
+      return;
+    }
+    if (cur && slot === 'input' && cur.id !== I.WATER_BOTTLE && !travelRecipe(cur.id, null)) {
+      this.message('W podróży kocioł gotuje mięso, marchew i dynię albo warzy fiolkę wody.'); return;
+    }
+    if (cur && slot === 'ingredient' && cur.id !== I.GHAST_TEAR && cur.id !== I.SUGAR) {
+      this.message('Kocioł używa łzy ghasta lub cukru do warzenia.'); return;
+    }
+    if (cur && slot === 'fuel' && !travelFuel(cur.id)) {
+      this.message('Kocioł spala jedną sztukę węgla albo patyka na porcję.'); return;
+    }
+    const get = () => c[slot];
+    const set = (value: Stack | null) => { c[slot] = value; };
+    const before = c[slot]?.id;
+    this.transfer(get, set, right);
+    if (c[slot]?.id !== before && slot !== 'fuel') c.progress = 0;
+    this.emitHud();
+  }
+
+  private spillTravelCauldron(x: number, y: number, z: number) {
+    const key = this.travelKey(x, y, z);
+    const c = this.travelCauldrons.get(key);
+    if (!c) return;
+    this.travelCauldrons.delete(key); // consume state before spawning any drops
+    for (const stack of [c.input, c.ingredient, c.fuel, c.output]) {
+      if (stack) this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.6, z + 0.5);
+    }
+  }
+
+  private updateTravelCauldrons(dt: number) {
+    const dim = this.isInNether ? 1 : 0;
+    for (const c of this.travelCauldrons.values()) {
+      if ((c.dim ?? 0) !== dim || !this.world.hasChunk(Math.floor(c.x / CS), Math.floor(c.z / CS))) continue;
+      if (this.world.peekBlock(c.x, c.y, c.z) !== B.TRAVEL_POT) {
+        if (this.travelCauldronPos && this.travelCauldronPos.x === c.x && this.travelCauldronPos.y === c.y && this.travelCauldronPos.z === c.z) this.closeInventory();
+        this.spillTravelCauldron(c.x, c.y, c.z);
+        continue;
+      }
+      const result = tickTravelCauldron(c, dt);
+      if (result !== null) {
+        this.message(`Kocioł: gotowe ${displayName(result)}.`);
+        if (result === I.COOKED_FISH || result === I.COOKED_SALMON) this.unlock('chef');
+        if (result === I.POTION_HEAL || result === I.POTION_SPEED) this.unlock('alchemist');
+        Sfx.playPlace('stone');
+      }
+    }
+  }
+
   /** 2.4: applies (or refreshes) a potion buff. Durations never stack. */
   applyEffect(id: PotionEffectId, seconds: number) {
     if (id === 'none') return;
@@ -1819,8 +2083,48 @@ export class Game {
     this.emitHud();
   }
 
+  /** Bounded counters and once-per-world rewards, shared by building, combat and exploration. */
+  private advanceChallenge(id: ChallengeId) {
+    // Older prototype-only tests and imported saves can omit this optional field.
+    this.challengeProgress ??= normalizeChallenges(undefined, this.unlocked);
+    const rule = CHALLENGES[id];
+    const next = Math.min(rule.target, this.challengeProgress[id] + 1);
+    if (next === this.challengeProgress[id]) return;
+    this.challengeProgress[id] = next;
+    if (next === rule.target && !this.unlocked.has(id)) {
+      this.unlock(id);
+      if (this.mode === 'survival') {
+        this.gainXp(rule.rewardXp);
+        this.message(`Ukończono wyzwanie: ${rule.label}. +${rule.rewardXp} PD.`);
+      }
+    }
+  }
+
+  /** Only entering a biome earns its journal goal; the unlocked set is saved. */
+  private lastBiomeVisitKey = '';
+
+  private discoverBiome(biome: Biome) {
+    const id = BIOME_DISCOVERY_GOALS[biome];
+    if (!id || this.unlocked.has(id)) return;
+    this.unlock(id);
+    this.advanceChallenge('challenge_explorer');
+    if (this.mode === 'survival') {
+      this.gainXp(3);
+      this.message('Odkrycie biomu: +3 PD.');
+    }
+  }
+
+  /** Called on HUD ticks, but terrain noise runs only after entering a new block. */
+  private observeBiomeAtPlayer() {
+    const bx = Math.floor(this.body.pos.x), bz = Math.floor(this.body.pos.z);
+    const visitKey = `${this.currentDimension()}:${bx},${bz}`;
+    if (visitKey === this.lastBiomeVisitKey) return;
+    this.lastBiomeVisitKey = visitKey;
+    this.discoverBiome(this.world.surface(bx, bz).biome);
+  }
+
   private notePickup(id: number) {
-    if (id === B.LOG || id === B.BIRCH_LOG) this.unlock('wood');
+    if (id === B.LOG || id === B.BIRCH_LOG || id === B.SPRUCE_LOG) this.unlock('wood');
     if (id === I.COAL) this.unlock('coal');
     if (id === I.DIAMOND) this.unlock('diamond');
     if (id === I.IRON) this.unlock('iron');
@@ -1907,7 +2211,7 @@ export class Game {
 
   /** Mobs drop XP worth their type: hostiles 3–7, passives 1–3, wolves 2–5. */
   private mobXp(m: Mob, x: number, y: number, z: number) {
-    if (m.type === 'villager') return; // wieśniak nie daje doświadczenia
+    if (m.type === 'villager' || m.type === 'merchant' || m.type === 'midge' || m.type === 'bat') return; // meszki i nietoperze nie dają PD
     const total = m.type === 'golem'
       ? 5 + Math.floor(Math.random() * 4)
       : m.type === 'wolf'
@@ -1970,6 +2274,19 @@ export class Game {
     this.emitHud();
   }
 
+  /** One charm slot: equipping a new one swaps instead of stacking effects. */
+  clickTalismanSlot() {
+    const cur = this.inventory.cursor;
+    if (cur && (!isTalisman(cur.id) || cur.count !== 1)) {
+      this.message('Tu pasuje tylko jeden talizman ze skrzyni jaskiniowej.');
+      return;
+    }
+    if (!cur && !this.talisman) return;
+    this.inventory.cursor = this.talisman;
+    this.talisman = cur ? { id: cur.id, count: 1 } : null;
+    this.emitHud();
+  }
+
   /** Every equipped piece takes a quarter of the hit; broken pieces fall off. */
   private wearArmor(dealt: number) {
     if (this.mode !== 'survival') return;
@@ -2000,13 +2317,49 @@ export class Game {
     if (lvl > 0 && Math.random() > wearChance(lvl)) return;
     const max = ITEMS[s.id]?.durability ?? 1;
     if (s.dur === undefined) s.dur = max;
-    s.dur -= n;
+    s.dur -= shieldWear(s.id, n);
     if (s.dur <= 0) {
       this.inventory.slots[this.selected] = null;
       Sfx.playBreak('wood');
       this.message('Tarcza się zniszczyła.');
     }
     this.emitHud();
+  }
+
+  /** Quick movement uses the ordinary collision solver, not teleportation. */
+  tryDodge(): boolean {
+    if (this.ui !== 'playing' || this.flying || !this.body.onGround || this.dodgeCooldown > 0 ||
+        (this.mode === 'survival' && this.hunger < 1)) return false;
+    const dir = dodgeDirection(this.yaw, this.keys);
+    this.body.vel.x = dir.x * 8;
+    this.body.vel.z = dir.z * 8;
+    this.dodgeTime = 0.29;
+    this.dodgeCooldown = 2.7;
+    this.daggerCounter = 0.65;
+    if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 1);
+    this.message('Unik! Krótkie okno bezpieczeństwa.');
+    this.emitHud();
+    return true;
+  }
+
+  tryTimedGuard(): boolean {
+    if (this.ui !== 'playing' || !this.holdingShield() || this.guardCooldown > 0) return false;
+    this.guardTime = 0.42;
+    this.guardCooldown = 1.7;
+    this.message('Tarcza w górze — paruj cios z przodu!');
+    this.emitHud();
+    return true;
+  }
+
+  private parryFrom(threat: THREE.Vector3): boolean {
+    if (this.guardTime <= 0 || !this.holdingShield() ||
+        !threatInFront(this.yaw, this.body.pos.x, this.body.pos.z, threat.x, threat.z)) return false;
+    this.guardTime = 0; // one successful parry per press
+    Sfx.playShield();
+    this.wearShield(4);
+    this.unlock('guardian');
+    this.message('Parowanie!');
+    return true;
   }
 
   private holdingShield(): boolean {
@@ -2028,7 +2381,15 @@ export class Game {
     this.swingT = 0;
     Sfx.playEat();
     this.unlock('food');
+    const bonus = mealBonus(s.id);
     this.consumeSelected();
+    if (bonus) {
+      this.applyEffect(bonus.effect, bonus.seconds); // refresh, never add durations
+      this.message(`${food.name}: ${EFFECT_META[bonus.effect as Exclude<PotionEffectId, 'none'>].name} (${bonus.seconds} s).`);
+      // Empty bowls are only returned after Survival actually consumes a meal.
+      if (bonus.bowl && this.mode === 'survival') this.giveOrDrop({ id: I.WOOD_BOWL, count: 1 });
+    }
+    this.emitHud();
   }
 
   private tryTill(t: NonNullable<ReturnType<World['raycast']>>): boolean {
@@ -2054,11 +2415,10 @@ export class Game {
     }
     if (this.world.getBlock(x, y - 1, z) !== B.FARMLAND) return false;
     if (this.world.getBlock(x, y, z) !== B.AIR) return false;
-    this.world.setBlock(x, y, z, B.CROP0);
+    this.world.setBlock(x, y, z, s.id === I.CARROT ? B.CARROT_CROP0 : B.CROP0);
     this.growables.set(`${x},${y},${z}`, performance.now());
     Sfx.playPlace('grass');
     this.swingT = 0;
-    void s;
     this.consumeSelected();
     return true;
   }
@@ -2226,6 +2586,33 @@ export class Game {
     this.emitHud();
   }
 
+  /** Restore into the correct dimension without loading remote chunks. */
+  private restoreCompanions(raw: unknown) {
+    for (const saved of normalizeCompanions(raw)) {
+      const active = saved.dim === (this.isInNether ? 'nether' : 'home');
+      const mob = active ? this.spawnMob(saved.type, saved.x, saved.y, saved.z) : new Mob(saved.type, saved.x, saved.y, saved.z);
+      mob.trust = saved.trust;
+      mob.trustCooldown = saved.cooldown;
+      if (saved.tamed) mob.tame();
+      mob.health = Math.min(mob.maxHealth, saved.health);
+      if (!saved.tamed) mob.showTrustMark();
+      if (!active) this.dimStash[saved.dim].mobs.push(mob);
+    }
+  }
+
+  private companionSaves(): CompanionSave[] {
+    const active: CompanionSave['dim'] = this.isInNether ? 'nether' : 'home';
+    const collect = (mobs: Mob[], dim: CompanionSave['dim']): CompanionSave[] =>
+      mobs.filter((m) => isTrustAnimal(m.type) && !m.dead && m.trust > 0).map((m) => ({
+        type: m.type as TrustAnimal, dim, x: m.body.pos.x, y: m.body.pos.y, z: m.body.pos.z,
+        trust: m.trust, tamed: m.tamed, health: m.health, cooldown: m.trustCooldown,
+      }));
+    return normalizeCompanions([
+      ...collect(this.mobs ?? [], active),
+      ...collect(this.dimStash?.[active === 'home' ? 'nether' : 'home']?.mobs ?? [], active === 'home' ? 'nether' : 'home'),
+    ]);
+  }
+
   /**
    * Zamienia aktywny wymiar. Chunki wymiaru, z którego wychodzimy, zostają
    * w pamięci (raz z siatkami) – powrót jest natychmiastowy, bez regeneracji.
@@ -2235,6 +2622,8 @@ export class Game {
   private switchDimension(next: World) {
     const prev = this.world;
     if (prev === next) return;
+    // Sounds are transient and must never lure creatures in another dimension.
+    this.noiseEvents = [];
 
     // 1. odepnij siatki wymiaru, z którego wychodzimy (geometria zostaje)
     for (const c of prev.chunks.values()) for (const m of c.meshes) this.scene.remove(m);
@@ -2267,6 +2656,8 @@ export class Game {
   }
 
   private stashLiveEntities() {
+    for (const glow of this.impactGlows ?? []) this.removeImpactGlow(glow);
+    this.impactGlows = [];
     const s = this.dimStash[this.isInNether ? 'nether' : 'home'];
     for (const m of this.mobs) this.scene.remove(m.group);
     for (const d of this.drops) this.scene.remove(d.mesh);
@@ -2367,13 +2758,13 @@ export class Game {
 
   private cookOnCampfire(s: Stack): boolean {
     // mięso i ryby piecze się tu jak w piecu – cookedOf() łączy reguły 2.3
-    const meats: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN };
+    const meats: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN, [I.RAW_RABBIT]: I.COOKED_RABBIT, [I.CARROT]: I.ROASTED_CARROT, [I.PUMPKIN_SLICE]: I.ROASTED_PUMPKIN };
     const out = meats[s.id] ?? cookedOf(s.id);
     if (!out) return false;
     this.consumeSelected();
     if (!this.inventory.add(out, 1)) {
       this.spawnDrop(out, 1, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z);
-      this.message('Brak miejsca – mięso upadło na ziemię.');
+      this.message('Brak miejsca – posiłek upadł na ziemię.');
     } else this.message(`Upieczono: ${displayName(out)}.`);
     Sfx.playEat();
     this.unlock('food');
@@ -2382,13 +2773,44 @@ export class Game {
     return true;
   }
 
+  /** Validate optional import metadata without changing legacy 2.7 spawn coordinates. */
+  private validCampRespawn(value: SaveData['campRespawn'], spawn: THREE.Vector3): SaveData['campRespawn'] {
+    if (!value || !Array.isArray(value.cot) || !Array.isArray(value.previous) ||
+        value.cot.length !== 3 || value.previous.length !== 3) return undefined;
+    const [x, y, z] = value.cot, [px, py, pz] = value.previous;
+    if (![x, y, z, px, py, pz].every((n) => Number.isFinite(n) && Math.abs(n) < 1e7) ||
+        ![x, y, z].every(Number.isInteger) || y < 1 || y > CH - 3 || py < 1 || py >= CH - 2 ||
+        spawn.x !== x + 0.5 || spawn.y !== y + 1 || spawn.z !== z + 0.5) return undefined;
+    return { cot: [x, y, z], previous: [px, py, pz] };
+  }
+
+  /** Dismantling or an explosion invalidates only the currently active cot. */
+  private invalidateCampRespawn(x: number, y: number, z: number) {
+    const camp = this.campRespawn;
+    if (this.isInNether || !camp || camp.cot[0] !== x || camp.cot[1] !== y || camp.cot[2] !== z) return;
+    this.campRespawn = undefined;
+    const [px, py, pz] = camp.previous;
+    const bx = Math.floor(px), by = Math.floor(py), bz = Math.floor(pz);
+    if (IS_SOLID[this.homeWorld.getBlock(bx, by - 1, bz)] &&
+        !IS_SOLID[this.homeWorld.getBlock(bx, by, bz)] &&
+        !IS_SOLID[this.homeWorld.getBlock(bx, by + 1, bz)]) this.spawnPoint.set(px, py, pz);
+    else this.findSpawn();
+    this.message('Posłanie usunięte: punkt odrodzenia przywrócony.');
+  }
+
   private trySleep(x: number, y: number, z: number) {
     if (this.isInNether) {
       this.message('W Netheru nie da się spać – wróć przez portal.');
       return;
     }
+    const portable = this.world.getBlock(x, y, z) === B.CAMP_COT;
+    if (portable) {
+      const previous = this.campRespawn?.previous ??
+        [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z] as [number, number, number];
+      this.campRespawn = { cot: [x, y, z], previous };
+    } else this.campRespawn = undefined;
     this.spawnPoint.set(x + 0.5, y + 1, z + 0.5);
-    this.message('Punkt odrodzenia ustawiony.');
+    this.message(portable ? 'Podróżny punkt odrodzenia ustawiony (do rozbicia posłania).' : 'Punkt odrodzenia ustawiony.');
     if (this.daylight() > 0.55) {
       this.message('Możesz spać tylko w nocy.');
       return;
@@ -2487,6 +2909,7 @@ export class Game {
         if (!held) { this.message('Trzymaj przedmiot w ręce.'); break; }
         if (!canEnchant(held.id, ench)) { this.message(`${displayName(held.id)} nie przyjmuje tego zaklęcia.`); break; }
         const lvl = Math.max(1, Math.min(10, parseInt(args[1] || '1', 10) || 1));
+        if (Object.keys(held.ench ?? {}).some((id) => conflicts(id, ench))) { this.message('Konflikt zaklęć: wybierz tylko jeden typ ochrony.'); break; }
         addEnch(held, ench, lvl);
         this.message(`${displayName(held.id)}: ${enchName(ench, lvl)}.`);
         this.unlock('enchant');
@@ -2578,7 +3001,7 @@ export class Game {
       case 'summon': {
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
+          pig: 'pig', swinia: 'pig', świnia: 'pig', rabbit: 'rabbit', krolik: 'rabbit', królik: 'rabbit', frog: 'frog', żaba: 'frog', zaba: 'frog', midge: 'midge', meszka: 'midge', bat: 'bat', nietoperz: 'bat', lizard: 'lizard', jaszczurka: 'lizard', turtle: 'turtle', żółw: 'turtle', zolw: 'turtle', bear: 'bear', niedźwiedź: 'bear', niedzwiedz: 'bear', guard: 'guard', strażnik: 'guard', straznik: 'guard', merchant: 'merchant', kupiec: 'merchant', pack_animal: 'pack_animal', juczne: 'pack_animal', sandstalker: 'sandstalker', zasadzkarz: 'sandstalker', echolurker: 'echolurker', nasluchiwacz: 'echolurker', fox: 'fox', lis: 'fox', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
           cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
           spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
           wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
@@ -2590,7 +3013,7 @@ export class Game {
         };
         const t = map[raw];
         if (!t) {
-          this.message('Moby: pig, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
+          this.message('Moby: pig, rabbit, fox, frog, midge, bat, lizard, turtle, bear, guard, merchant, pack_animal, sandstalker, echolurker, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
           break;
         }
         const d = this.lookDir();
@@ -2671,6 +3094,24 @@ export class Game {
     return waypoint;
   }
 
+  /** Marks the actual block under the spyglass reticle, never a generated-on-
+   * demand point or the fake STONE sentinel at an unloaded chunk boundary. */
+  markSpyglass(): boolean {
+    if (this.ui !== 'playing' || !this.zooming || this.selectedStack()?.id !== I.SPYGLASS) return false;
+    const eye = this.eyePos();
+    const dir = this.aimDir ?? this.lookDir();
+    const reach = Math.min(96, this.renderDistance * CS - 2);
+    const hit = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, reach);
+    if (!hit || !this.world.hasChunk(Math.floor(hit.x / CS), Math.floor(hit.z / CS))) {
+      this.message('Lorneta: nie widać celu w zasięgu załadowanego świata.');
+      return false;
+    }
+    const point = this.addWaypoint(`Namierzono: ${BLOCKS[hit.id]?.name ?? 'miejsce'}`, 'custom', hit);
+    if (!point) { this.message('Lorneta: usuń stary znacznik (K), aby dodać nowy.'); return false; }
+    this.message(`Lorneta: śledzisz cel ${point.x}, ${point.y}, ${point.z}.`);
+    return true;
+  }
+
   activateWaypoint(id: string | null) {
     this.activeWaypointId = id && this.waypoints.some((w) => w.id === id) ? id : null;
     this.emitHud();
@@ -2699,6 +3140,14 @@ export class Game {
   }
 
   // ---------- Save ----------
+  /** Change one rule on this world only. Does not mutate global visual settings. */
+  setDifficulty(patch: Partial<WorldDifficulty>): boolean {
+    this.difficulty = normalizeDifficulty({ ...this.difficulty, ...patch });
+    const saved = this.save();
+    this.emitHud();
+    return saved;
+  }
+
   save() {
     try {
       // homeWorld zawsze istnieje w pełnej grze; defensywny fallback
@@ -2708,6 +3157,7 @@ export class Game {
         id: this.worldId,
         name: this.worldName,
         worldType: this.worldType,
+        terrainVersion: home.terrainVersion,
         seed: home.seed,
         mode: this.mode,
         mods: home.serializeMods(),
@@ -2725,24 +3175,38 @@ export class Game {
         hunger: this.hunger,
         day: this.day,
         spawn: [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z],
+        campRespawn: this.campRespawn ? { cot: [...this.campRespawn.cot], previous: [...this.campRespawn.previous] } : undefined,
         furnaces: [...this.furnaces.values()],
         chests: [...this.chests.values()],
         anvils: this.anvils ? [...this.anvils.values()] : [],
         brewings: this.brewings ? [...this.brewings.values()] : [],
+        travelCauldrons: [...(this.travelCauldrons?.values() ?? [])],
         potionsDrunk: this.potionsDrunk ? [...this.potionsDrunk] : [],
+        effects: Object.fromEntries(this.effects ?? []),
+        difficulty: normalizeDifficulty(this.difficulty),
+        challengeProgress: { ...this.challengeProgress },
+        companions: this.companionSaves(),
         unlocked: [...this.unlocked],
         weather: this.weather,
         xp: this.xp.total,
         trades: this.trades,
         waypoints: (this.waypoints ?? []).map((w) => ({ ...w })),
         activeWaypointId: this.activeWaypointId ?? null,
+        discovery: (this.discovery ?? new DiscoveryMap()).serialize(),
         armor: this.armor.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
+        talisman: this.talisman ? { ...this.talisman } : null,
         fishCaught: this.fishCaught,
+        fishingBait: this.fishingBait,
         updated: Date.now(),
       };
       upsertSave({ ...data, id: this.worldId });
+      return true;
     } catch (e) {
       console.warn('Save failed', e);
+      // A failed quota write leaves the previous localStorage value intact.
+      // Never tell the player it was saved; offer export/space recovery instead.
+      if (this.messages && typeof this.onHud === 'function') this.message('Nie zapisano świata: pamięć przeglądarki jest pełna lub niedostępna. Zwolnij miejsce i spróbuj ponownie.');
+      return false;
     }
   }
 
@@ -2929,10 +3393,40 @@ export class Game {
     return { mob: best, dist: bd };
   }
 
+  private meleeReach(): number { return attackReach(this.selectedStack()?.id ?? 0); }
+
+  /** Hammer cleaves only live mobs in front of the player, after a real main hit.
+   *  A separate ray to each secondary target keeps blocks and walls untouched. */
+  private hammerSweep(primary: Mob): number {
+    const eye = this.eyePos();
+    const facing = this.lookDir();
+    let count = 0;
+    for (const mob of this.mobs) {
+      if (mob === primary || mob.dead || count >= 2) continue;
+      const dx = mob.body.pos.x - this.body.pos.x;
+      const dz = mob.body.pos.z - this.body.pos.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance < 0.05 || distance > 3.5 ||
+          (dx * facing.x + dz * facing.z) / distance < 0.55 ||
+          mob.body.pos.distanceTo(primary.body.pos) > 2.4) continue;
+      const aim = mob.body.pos.clone().add(new THREE.Vector3(0, Math.min(1.2, mob.body.h * 0.65), 0)).sub(eye);
+      const length = aim.length();
+      const dir = aim.normalize();
+      const wall = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, length);
+      if (wall && wall.dist < length - 0.15) continue;
+      if (!mob.damage(5, this.body.pos.x, this.body.pos.z)) continue;
+      count++;
+      if (mob.type === 'guard') mob.provoked = Math.max(mob.provoked, 8);
+      if (mob.type === 'villager') this.provokeGolems(mob.body.pos.x, mob.body.pos.z, 26, 20);
+      if (mob.dead && isHostileMob(mob.type)) this.advanceChallenge('challenge_hunter');
+    }
+    return count;
+  }
+
   tryAttack() {
     this.swingT = 0;
     const blockDist = this.target ? this.target.dist : 99;
-    const { mob, dist } = this.findMobTarget(3.5);
+    const { mob, dist } = this.findMobTarget(this.meleeReach());
     if (mob && dist < blockDist && this.attackCooldown <= 0) {
       const toolId = this.selectedStack()?.id ?? 0;
       if (ITEMS[toolId]?.tool === 'shears' && mob.type === 'sheep') {
@@ -2953,17 +3447,35 @@ export class Game {
       this.attackCooldown = attackCooldown(toolId);
       const held = this.selectedStack();
       let dmg = attackDamage(toolId, this.sprinting, sharpnessDamage(enchLevel(held, 'sharpness')));
+      const counter = ITEMS[toolId]?.tool === 'dagger' && this.daggerCounter > 0;
+      if (counter) dmg += 3;
       // 2.4: napój siły dorzuca obrażenia do każdego trafienia
       if (this.hasEffect('strength')) dmg += STRENGTH_DAMAGE;
       const kb = knockbackFactor(enchLevel(held, 'knockback'));
       if (mob.damage(dmg, this.body.pos.x, this.body.pos.z)) {
+        if (counter) { this.daggerCounter = 0; this.message('Kontra sztyletem! +3 obrażenia'); }
+        if (ITEMS[toolId]?.tool === 'dagger') {
+          // Quick, legible hit confirmation beside the crosshair, also for non-counter hits.
+          this.daggerHitAt = performance.now();
+          this.daggerHitDamage = dmg;
+          this.daggerHitCounter = counter;
+          this.emitHud();
+          // A dagger's recovery must actually permit the next hit on this same mob.
+          mob.hurtTime = Math.min(mob.hurtTime, 0.28);
+        }
         if (kb > 1) {
           mob.body.vel.x *= kb;
           mob.body.vel.z *= kb;
           mob.body.vel.y = Math.max(mob.body.vel.y, 6 * kb);
         }
+        if (mob.type === 'guard') mob.provoked = Math.max(mob.provoked, 8);
+        if (mob.dead && isHostileMob(mob.type)) this.advanceChallenge('challenge_hunter');
         Sfx.playHurt();
         Sfx.playMob(mob.type);
+        if (ITEMS[toolId]?.tool === 'hammer') {
+          const swept = this.hammerSweep(mob);
+          this.message(swept ? `Młot: trafiono dodatkowo ${swept} cel${swept === 1 ? '' : 'e'}!` : 'Młot: trafienie!');
+        }
         this.wearTool();
         if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
         // Grabież: remember the level so mobLoot() can roll extras once
@@ -2971,7 +3483,7 @@ export class Game {
         // 1.6: krzywda mieszkańca budzi okoliczne golemy
         if (mob.type === 'villager') {
           const n = this.provokeGolems(mob.body.pos.x, mob.body.pos.z, 26, 20);
-          if (n > 0) this.message(n === 1 ? 'Golem w okolicy to zauważył!' : 'Golemy w okolicy to zauważyły!');
+          if (n > 0) this.message('Straż wioski zauważyła atak!');
         }
       }
       // 2.5: NIE zwalniamy LPM – trzymany przycisk bije dalej z cooldownem
@@ -2992,6 +3504,24 @@ export class Game {
     }
   }
 
+  /** Choose arrow type with X or the touch button, never creating ammo. */
+  cycleArrowAmmo(): ArrowAmmoId {
+    if (this.ui !== 'playing' || ITEMS[this.selectedStack()?.id ?? 0]?.tool !== 'bow') return this.arrowAmmo;
+    const available = ARROW_AMMO.filter((id) => this.mode === 'creative' || this.inventory.countOf(id) > 0);
+    if (!available.length) { this.message('Nie masz żadnych strzał.'); return this.arrowAmmo; }
+    const index = available.indexOf(this.arrowAmmo);
+    this.arrowAmmo = available[(index + 1) % available.length];
+    this.message(`Amunicja: ${displayName(this.arrowAmmo)} (${this.mode === 'creative' ? '∞' : this.inventory.countOf(this.arrowAmmo)})`);
+    return this.arrowAmmo;
+  }
+
+  /** Fallback to available arrows if the selected stack runs out; no phantom ammo. */
+  private selectedArrowAmmo(): ArrowAmmoId {
+    if (this.mode === 'creative' || this.inventory.countOf(this.arrowAmmo) > 0) return this.arrowAmmo;
+    this.arrowAmmo = ARROW_AMMO.find((id) => this.inventory.countOf(id) > 0) ?? I.ARROW;
+    return this.arrowAmmo;
+  }
+
   /** Fires an arrow when the player lets go of RMB while holding a bow. */
   private releaseBow() {
     const charge = Math.max(0.12, Math.min(1, this.bowDraw));
@@ -2999,17 +3529,21 @@ export class Game {
     const bow = this.selectedStack();
     const power = powerFactor(enchLevel(bow, 'power'));
     const infinite = enchLevel(bow, 'infinity') > 0;
-    if (this.mode === 'survival' && this.inventory.countOf(I.ARROW) <= 0) {
+    const ammo = this.selectedArrowAmmo();
+    if (this.mode === 'survival' && this.inventory.countOf(ammo) <= 0) {
       this.message('Brak strzał. Wytwórz je z krzemienia, patyka i pióra.');
       return;
     }
+    // Do not spend finite special ammo if the projectile budget cannot spawn a shot.
+    if (this.arrows?.length > 48) { this.message('Za dużo strzał w locie.'); return; }
     // Nieskończoność: jedna strzała w ekwipunku wystarczy na wiele wystrzałów
-    if (this.mode === 'survival' && !infinite) this.inventory.remove(I.ARROW, 1);
+    // Infinity stays compatible with the ordinary bow, but cannot duplicate special reagents.
+    if (this.mode === 'survival' && (!infinite || ammo !== I.ARROW)) this.inventory.remove(ammo, 1);
     const eye = this.eyePos();
     // 2.5: na dotyku strzała leci tam, gdzie celuje palec (touchAim),
     // a nie w środek ekranu – wcześniej naciąganie łuku celowało „obok”.
     const d = this.aimDir ?? this.lookDir();
-    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, (4 + charge * 5) * power);
+    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, (4 + charge * 5) * power * bowStrength(bow?.id ?? I.BOW), ammo);
     Sfx.playBow();
     this.swingT = 0;
     this.wearTool();
@@ -3034,6 +3568,19 @@ export class Game {
   }
 
   // ---------- 2.3: wędkarstwo ----------
+
+  /** One bait is removed when prepared, never at pickup. It persists through
+   * save/load and is lost on a completed or missed bite or player death. */
+  attachBait(id: BaitId): boolean {
+    if (this.fishingBait) { this.message('Na haczyku jest już przynęta. Zużyj ją przed zmianą.'); return false; }
+    if (this.bobber) { this.message('Zwiń wędkę, zanim założysz przynętę.'); return false; }
+    if (this.inventory.countOf(I.FISHING_ROD) < 1) { this.message('Potrzebujesz wędki w ekwipunku.'); return false; }
+    if (this.mode === 'survival') this.consumeSelected();
+    this.fishingBait = id;
+    this.message(`Założono: ${displayName(id)}. Przełącz na wędkę i zarzuć.`);
+    this.emitHud();
+    return true;
+  }
 
   /** PPM z wędką: rzuca przynętę albo zwina haczyk. */
   useRod() {
@@ -3082,7 +3629,8 @@ export class Game {
 
   /** Wynik zakończonego haczenia. */
   private landFish() {
-    const haul = rollCatch();
+    const haul = rollCatch(Math.random, this.fishingBait);
+    this.fishingBait = null;
     if (this.mode === 'survival') this.giveOrDrop({ ...haul });
     Sfx.playPop();
     this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, isFishStack(haul) ? I.RAW_FISH : I.STRING, 8, 0.4);
@@ -3145,6 +3693,7 @@ export class Game {
       const block = this.world.peekBlock(x, y, z);
       if (block === B.LAVA) {
         this.message('Przynęta spaliła się w lawie.');
+        this.fishingBait = null;
         this.removeBobber();
         return;
       }
@@ -3153,7 +3702,7 @@ export class Game {
         b.pos.y = y + 0.9;
         b.vel.set(0, 0, 0);
         b.wait = 0;
-        b.biteAt = biteDelay();
+        b.biteAt = biteDelay(Math.random, this.fishingBait);
         this.message('Przynęta w wodzie. Czekaj na brań…');
         return;
       }
@@ -3172,6 +3721,7 @@ export class Game {
       b.mesh.position.set(b.pos.x, b.pos.y + Math.abs(Math.sin(b.window * 9)) * -0.35 + 0.1, b.pos.z);
       if (b.window <= 0) {
         this.message('Ryba uciekła z przynęty.');
+        this.fishingBait = null;
         this.removeBobber();
       }
       return;
@@ -3180,7 +3730,7 @@ export class Game {
       b.state = 'water';
       b.pos.y = y + 0.9;
       b.wait = 0;
-      b.biteAt = biteDelay();
+      b.biteAt = biteDelay(Math.random, this.fishingBait);
       this.message('Przynęta w wodzie. Czekaj na brań…');
       return;
     }
@@ -3205,6 +3755,7 @@ export class Game {
       this.message('Brań! PPM, aby zaciągnąć.');
     } else if (b.wait > PATIENCE) {
       this.message('Woda zmyła przynętę.');
+      this.fishingBait = null;
       this.removeBobber();
     }
   }
@@ -3228,15 +3779,47 @@ export class Game {
   }
 
   /** Spawns a flying arrow. `from` is the mob that shot it (null = player). */
-  spawnArrow(origin: THREE.Vector3, dir: THREE.Vector3, speed: number, from: Mob | null, power: number) {
+  spawnArrow(origin: THREE.Vector3, dir: THREE.Vector3, speed: number, from: Mob | null, power: number, ammoId: ArrowAmmoId = I.ARROW) {
     if (this.arrows.length > 48) return;
-    const mesh = new THREE.Mesh(this.arrowGeo, this.arrowMat);
+    let material = this.arrowMat;
+    this.arrowMats ??= new Map();
+    if (!from && ammoId !== I.ARROW) {
+      material = this.arrowMats.get(ammoId) ?? new THREE.MeshBasicMaterial({ color:
+        ammoId === I.GLOW_ARROW ? 0xffee79 : ammoId === I.SLOW_ARROW ? 0x72c2ed : 0xee8477 });
+      this.arrowMats.set(ammoId, material);
+    }
+    const mesh = new THREE.Mesh(this.arrowGeo, material);
     mesh.position.copy(origin);
     this.scene.add(mesh);
-    this.arrows.push({ mesh, pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), life: 0, power, from });
+    this.arrows.push({ mesh, pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), life: 0, power, from, ammoId: from ? I.ARROW : ammoId });
+  }
+
+  private addImpactGlow(pos: THREE.Vector3) {
+    if (this.impactGlows.length >= 8) this.removeImpactGlow(this.impactGlows.shift()!);
+    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffe668, depthWrite: false }));
+    mesh.position.copy(pos);
+    const light = new THREE.PointLight(0xffe077, 1, 5, 2);
+    light.visible = this.gfx?.effectDetail === 'full' && this.impactGlows.length < 3;
+    mesh.add(light);
+    this.scene.add(mesh);
+    this.impactGlows.push({ mesh, light, time: arrowDuration(I.GLOW_ARROW) });
+  }
+
+  private removeImpactGlow(g: { mesh: THREE.Mesh }) {
+    this.scene.remove(g.mesh);
+    g.mesh.geometry.dispose();
+    (g.mesh.material as THREE.Material).dispose();
   }
 
   private updateArrows(dt: number) {
+    this.impactGlows ??= [];
+    this.impactGlows = this.impactGlows.filter((g, index) => {
+      g.time -= dt;
+      if (g.time <= 0) { this.removeImpactGlow(g); return false; }
+      g.light.visible = this.gfx?.effectDetail === 'full' && index < 3;
+      return true;
+    });
     const keep: ArrowEntity[] = [];
     for (const a of this.arrows) {
       a.life += dt;
@@ -3252,7 +3835,10 @@ export class Game {
         prev = a.pos.clone();
         a.pos.addScaledVector(dir, stepLen);
         const block = this.world.peekBlock(Math.floor(a.pos.x), Math.floor(a.pos.y), Math.floor(a.pos.z));
-        if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) { spent = true; break; }
+        if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) {
+          if (a.ammoId === I.GLOW_ARROW && !a.from) this.addImpactGlow(prev ?? a.pos);
+          spent = true; break;
+        }
         if (a.from) {
           // hostile arrow vs player – a shield in hand parries it
           const p = this.body.pos;
@@ -3261,12 +3847,21 @@ export class Game {
             a.pos.y > p.y - 0.1 && a.pos.y < p.y + this.body.h + 0.1 &&
             a.pos.z > p.z - 0.45 && a.pos.z < p.z + 0.45
           ) {
-            if (this.holdingShield()) {
+            // Use the incoming trajectory, not the shooter's possibly changed position.
+            const incoming = new THREE.Vector3(p.x - dir.x, p.y, p.z - dir.z);
+            const front = threatInFront(this.yaw, p.x, p.z, incoming.x, incoming.z);
+            if (this.dodgeTime > 0) {
+              this.message('Strzała minęła cię podczas uniku!');
+            } else if (this.parryFrom(incoming)) {
+              // A well-timed frontal parry absorbs a single arrow completely.
+            } else if (this.holdingShield() && front) {
               Sfx.playShield();
+              const factor = shieldDamageFactor(this.selectedStack()?.id ?? 0, true);
               this.wearShield(12);
               this.unlock('guardian');
+              if (factor > 0) this.damage(Math.ceil(mobDamage(a.power, this.difficulty.damage) * factor), false, 'projectile');
             } else {
-              this.damage(a.power);
+              this.damage(mobDamage(a.power, this.difficulty.damage), false, 'projectile');
               this.body.vel.x += dir.x * 2.5;
               this.body.vel.z += dir.z * 2.5;
             }
@@ -3286,6 +3881,9 @@ export class Game {
             ) {
               if (a.pearl) { spent = true; break; }
               if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2)) {
+                if (a.ammoId && a.ammoId !== I.ARROW && m.applyArrowEffect(a.ammoId))
+                  this.message(`${displayName(a.ammoId)}: ${arrowDuration(a.ammoId)} s na ${MOB_NAMES[m.type] ?? m.type}`);
+                if (m.dead && isHostileMob(m.type)) this.advanceChallenge('challenge_hunter');
                 mb.vel.x += dir.x * 4;
                 mb.vel.z += dir.z * 4;
                 mb.vel.y = Math.max(mb.vel.y, 2.5);
@@ -3312,13 +3910,91 @@ export class Game {
     this.arrows = keep;
   }
 
+  /** Hunting snares have no hidden loot state: the block ID is the saved state.
+   * One string arms one catch. Harvest consumes the catch before spawning loot. */
+  private useSnare(x: number, y: number, z: number) {
+    const id = this.world.getBlock(x, y, z);
+    if (id === B.SNARE) {
+      if (this.mode === 'survival' && this.inventory.countOf(I.STRING) < 1) {
+        this.message('Sidła: potrzebujesz 1 struny, aby je uzbroić.'); return;
+      }
+      if (this.mode === 'survival') this.inventory.remove(I.STRING, 1);
+      this.world.setBlock(x, y, z, B.SNARE_ARMED);
+      this.message('Sidła uzbrojone. Zostaw je na ścieżce dzikich królików lub kurczaków.');
+    } else if (id === B.SNARE_ARMED) {
+      this.world.setBlock(x, y, z, B.SNARE);
+      this.message('Sidła rozbrojone.');
+    } else if (id === B.SNARE_RABBIT || id === B.SNARE_CHICKEN) {
+      this.world.setBlock(x, y, z, B.SNARE); // consume first: no duplicate on second tap / reload
+      if (this.mode === 'survival') this.spawnDrop(id === B.SNARE_RABBIT ? I.RAW_RABBIT : I.RAW_CHICKEN,
+        1, x + 0.5, y + 0.2, z + 0.5);
+      this.message('Zebrano zdobycz z sideł. Do kolejnego łowu potrzebna jest nowa struna.');
+    }
+    this.emitHud();
+  }
+
+  /** Only a wild, living animal on an armed, already loaded ground tile can be caught.
+   * Prevent normal death loot, so a single animal never pays twice. */
+  private trySnareMob(m: Mob) {
+    if (m.dead || m.trust > 0 || (m.type !== 'rabbit' && m.type !== 'chicken')) return false;
+    const p = m.body.pos;
+    const x = Math.floor(p.x), z = Math.floor(p.z), y = Math.floor(p.y);
+    if (Math.abs(p.x - x - 0.5) > 0.57 || Math.abs(p.z - z - 0.5) > 0.57) return false;
+    for (const ty of [y, y - 1]) {
+      if (p.y - ty > 1.25 || this.world.peekBlock(x, ty, z) !== B.SNARE_ARMED) continue;
+      this.world.setBlock(x, ty, z, m.type === 'rabbit' ? B.SNARE_RABBIT : B.SNARE_CHICKEN);
+      m.health = 0; m.dead = true; m.deathTime = 0; m.looted = true;
+      if (p.distanceTo(this.body.pos) < 16) this.message(`Sidła złapały ${m.type === 'rabbit' ? 'królika' : 'kurczaka'}!`);
+      return true;
+    }
+    return false;
+  }
+
+  /** One kit becomes exactly three independent, recoverable components.
+   * Validate ALL spots before writing any blocks or spending the item. */
+  private deployCamp(target: ReturnType<World['raycast']>) {
+    if (!target || target.ny !== 1) { this.message('Biwak rozstawia się na ziemi.'); return; }
+    const dir = this.lookDir();
+    const fx = Math.abs(dir.x) > Math.abs(dir.z) ? Math.sign(dir.x) : 0;
+    const fz = fx === 0 ? Math.sign(dir.z) || 1 : 0;
+    const x = target.x, y = target.y + 1, z = target.z;
+    const cells = [
+      { x, y, z, id: B.CAMP_TENT },
+      { x: x + fz, y, z: z - fx, id: B.CAMP_COT },
+      { x: x + fx, y, z: z + fz, id: B.CAMPFIRE },
+    ];
+    const b = this.body;
+    for (const c of cells) {
+      const below = this.world.getBlock(c.x, c.y - 1, c.z);
+      if (c.y < 1 || c.y >= CH - 2 || this.world.getBlock(c.x, c.y, c.z) !== B.AIR ||
+          this.world.getBlock(c.x, c.y + 1, c.z) !== B.AIR || !IS_SOLID[below] ||
+          below === B.MAGMA || below === B.CAMPFIRE || below === B.LEAVES ||
+          below === B.BIRCH_LEAVES || below === B.ACACIA_LEAVES || below === B.JUNGLE_LEAVES || below === B.SPRUCE_LEAVES ||
+          aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, c.x, c.y, c.z) ||
+          this.mobs.some((m) => !m.dead && aabbIntersectsBlock(m.body.pos.x, m.body.pos.y, m.body.pos.z, m.body.w, m.body.h, c.x, c.y, c.z))) {
+        this.message('Biwak wymaga trzech wolnych pól na suchym, równym podłożu (w tym miejsca z dala od gracza).');
+        return;
+      }
+    }
+    for (const c of cells) {
+      this.world.setBlock(c.x, c.y, c.z, c.id);
+      this.settle(c.x, c.y, c.z);
+      this.onBlockChanged(c.x, c.y, c.z);
+      this.advanceChallenge('challenge_builder');
+    }
+    this.consumeSelected();
+    Sfx.playPlace('cloth');
+    this.message('Rozstawiono namiot, posłanie i ognisko. PPM / tap na posłanie ustawia odrodzenie.');
+    this.swingT = 0;
+  }
+
   tryUse() {
     const t = this.target;
     this.placeCooldown = 0.22;
     const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     // Mieszkaniec ma pierwszeństwo – PPM otwiera okno handlu.
     const vt = this.findMobTarget(4.5);
-    if (vt.mob && vt.mob.type === 'villager' && !vt.mob.dead) {
+    if (vt.mob && (vt.mob.type === 'villager' || vt.mob.type === 'merchant') && !vt.mob.dead) {
       this.openTrade(vt.mob);
       return;
     }
@@ -3326,11 +4002,12 @@ export class Game {
       if (t.id === B.BELL) { this.ringBell(t.x, t.y, t.z); return; }
       if (isDoor(t.id)) { this.toggleDoor(t.x, t.y, t.z); return; }
       if (isTrap(t.id)) { this.toggleTrap(t.x, t.y, t.z, t.nx, t.nz); return; }
+      if (t.id >= B.SNARE && t.id <= B.SNARE_CHICKEN) { this.useSnare(t.x, t.y, t.z); return; }
       if (t.id === B.CHEST || t.id === B.LOOT_CHEST) { this.openChest(t.x, t.y, t.z); return; }
       if (t.id === B.CRAFTING) { this.openInventory(true); return; }
       if (t.id === B.FURNACE || t.id === B.FURNACE_ON) { this.openFurnace(t.x, t.y, t.z); return; }
       if (t.id === B.ENCHANT) { this.openEnchant(t.x, t.y, t.z); return; }
-      if (t.id === B.BED) { this.trySleep(t.x, t.y, t.z); return; }
+      if (t.id === B.BED || t.id === B.CAMP_COT) { this.trySleep(t.x, t.y, t.z); return; }
       if (t.id === B.LEVER || t.id === B.LEVER_ON) { this.toggleLever(t.x, t.y, t.z); return; }
       if (t.id === B.BUTTON || t.id === B.BUTTON_ON) { this.pressButton(t.x, t.y, t.z); return; }
       if (t.id === B.NOTE_BLOCK) { this.playNoteBlock(t.x, t.y, t.z); return; }
@@ -3339,9 +4016,11 @@ export class Game {
       if (t.id === B.ANVIL) { this.openAnvil(t.x, t.y, t.z); return; }
       // 2.4: statyw alchemiczny – PPM otwiera kocioł, a woda leci do fiolki.
       if (t.id === B.BREWING) { this.openBrewing(t.x, t.y, t.z); return; }
+      if (t.id === B.TRAVEL_POT) { this.openTravelCauldron(t.x, t.y, t.z); return; }
     }
     const s = this.selectedStack();
     if (!s) return;
+    if (s.id === I.CAMP_KIT) { this.deployCamp(t); return; }
     // 2.4: fiolka nad wodą staje się fiolką z wodą (źródło wody zostaje).
     if (s.id === I.BOTTLE && t && t.id === B.WATER) {
       s.id = I.WATER_BOTTLE;
@@ -3372,21 +4051,31 @@ export class Game {
       }
     }
     if (t && t.id === B.CAMPFIRE && this.cookOnCampfire(s)) return;
-    // Taming: right-click a wild wolf while holding raw meat.
-    if (s.id === I.RAW_PORK || s.id === I.RAW_BEEF || s.id === I.RAW_CHICKEN) {
-      const wt = this.findMobTarget(4.5);
-      if (wt.mob && wt.mob.type === 'wolf' && !wt.mob.tamed) {
-        if (this.mode === 'survival') this.consumeSelected();
-        wt.mob.tame();
-        Sfx.playEat();
-        Sfx.playPop();
-        this.message('Wilk przyjął mięso i od tej pory jest posłuszny.');
-        this.unlock('wolf');
-        this.swingT = 0;
+    // Earned trust is species-specific; only a successful, cooldown-free
+    // feeding consumes food. The world-wide 24-animal cap covers both dimensions.
+    const companionTarget = vt.mob;
+    if (companionTarget && !companionTarget.tamed && !companionTarget.dead && isTrustFood(companionTarget.type, s.id)) {
+      const tracked = [...(this.mobs ?? []), ...(this.dimStash?.home.mobs ?? []), ...(this.dimStash?.nether.mobs ?? [])]
+        .filter((m) => isTrustAnimal(m.type) && !m.dead && m.trust > 0).length;
+      if (!companionTarget.trust && tracked >= 24) {
+        this.message('Masz już 24 zaprzyjaźnione zwierzęta w tym świecie.');
         return;
       }
+      const name = MOB_NAMES[companionTarget.type].toLowerCase();
+      const result = companionTarget.feedTrust();
+      if (result === 'wait') { this.message(`${name} potrzebuje chwili przed kolejnym karmieniem.`); return; }
+      if (result === 'invalid') return;
+      if (this.mode === 'survival') this.consumeSelected();
+      Sfx.playEat();
+      Sfx.playPop();
+      if (result === 'tamed') {
+        this.message(`Zaufanie 3/3: ${name} będzie za tobą podążać${companionTarget.type === 'wolf' ? ' i cię bronić' : ''}!`);
+        if (companionTarget.type === 'wolf') this.unlock('wolf');
+      } else this.message(`Zaufanie — ${name}: ${companionTarget.trust}/3. Poczekaj 3 sekundy i nakarm ponownie.`);
+      this.swingT = 0;
+      return;
     }
-    if (s.id === I.BOW) {
+    if (ITEMS[s.id]?.tool === 'bow') {
       // holding RMB keeps drawing; only a fresh press starts a new draw
       if (this.bowDraw < 0) this.bowDraw = 0.0001;
       this.swingT = 0;
@@ -3394,12 +4083,19 @@ export class Game {
     }
     // 2.3: wędka rzuca lub zwina przynętę, lorneta przybliża (trzymana w PPM).
     if (s.id === I.FISHING_ROD) { this.useRod(); return; }
+    if (s.id === I.WORM_BAIT || s.id === I.GLOW_BAIT) { this.attachBait(s.id); return; }
     // 2.3: bez przytrzymania (telefon) lorneta działa jak przełącznik.
     if (s.id === I.SPYGLASS) { this.zooming = this.touchInput ? !this.zooming : true; return; }
+    if (s.id === I.BIOME_COMPASS) {
+      if (this.isInNether) this.message('Kompas biomów działa tylko w Nadświecie.');
+      else this.setUI('biomeCompass');
+      return;
+    }
     if (s.id === I.ENDER_PEARL) {
       this.throwPearl();
       return;
     }
+    if (s.id === I.CARROT && t && this.tryPlant(t, s)) return;
     if (isFood(s.id)) { this.tryEat(s); return; }
     // 2.4: fiolki pije się dokładnie tak jak jedzenie – PPM w powietrzu.
     if (isPotion(s.id)) { this.drinkPotion(s); return; }
@@ -3425,15 +4121,21 @@ export class Game {
       if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, px, py, pz)) return;
       for (const m of this.mobs) if (!m.dead && aabbIntersectsBlock(m.body.pos.x, m.body.pos.y, m.body.pos.z, m.body.w, m.body.h, px, py, pz)) return;
     }
+    if (paintingBase(id) !== null) {
+      if (t.ny !== 0 || !IS_SOLID[t.id] || !BLOCKS[t.id]?.opaque) {
+        this.message('Obraz wymaga solidnej ściany.'); return;
+      }
+      placeId = paintingBase(id)! + facingFromNormal(-t.nx, -t.nz);
+    }
     if (id === B.WATER || id === B.LAVA) {
       const below = this.world.getBlock(px, py - 1, pz);
       const around = [this.world.getBlock(px + 1, py, pz), this.world.getBlock(px - 1, py, pz), this.world.getBlock(px, py, pz + 1), this.world.getBlock(px, py, pz - 1)];
       if (!IS_SOLID[below] && !around.some((n) => IS_SOLID[n])) return;
     }
     const below = this.world.getBlock(px, py - 1, pz);
-    if (id === B.SAPLING || id === B.BIRCH_SAPLING) {
-      if (below !== B.GRASS && below !== B.DIRT && below !== B.FARMLAND) return;
-    } else if (id === B.CROP0 || id === B.CROP1 || id === B.CROP2 || id === B.CROP3) {
+    if (id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING) {
+      if (below !== B.GRASS && below !== B.DIRT && below !== B.FARMLAND && below !== B.PODZOL && below !== B.MEADOW_GRASS) return;
+    } else if ((id >= B.CROP0 && id <= B.CROP3) || (id >= B.CARROT_CROP0 && id <= B.CARROT_CROP3)) {
       if (below !== B.FARMLAND) return;
     } else if (id === B.TORCH || id === B.REDSTONE_TORCH) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
@@ -3441,6 +4143,21 @@ export class Game {
     } else if (id === B.LEVER || id === B.BUTTON || id === B.REDSTONE_TORCH || id === B.REDSTONE_TORCH_OFF) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
       if (!IS_SOLID[attached]) { this.message('Dźwignia/przycisk musi być na solidnej ścianie.'); return; }
+    } else if (id === B.BANNER_RED || id === B.BANNER_BLUE || id === B.VASE ||
+               chairBase(id) !== null || id === B.TABLE) {
+      if (!IS_SOLID[below] || below === B.MAGMA || below === B.CAMPFIRE) {
+        this.message('Dekoracja wymaga stabilnej podłogi.'); return;
+      }
+      if (chairBase(id) !== null) {
+        const dir = this.lookDir();
+        placeId = B.CHAIR_N + facingFromNormal(-dir.x, -dir.z);
+      }
+    } else if (id === B.TRAVEL_POT) {
+      if (!IS_SOLID[below] || below === B.MAGMA) { this.message('Kocioł wymaga suchego, solidnego podłoża.'); return; }
+    } else if (id === B.CAMP_TENT || id === B.CAMP_COT) {
+      if (!IS_SOLID[below] || below === B.MAGMA) { this.message('Namiot i posłanie wymagają solidnego podłoża.'); return; }
+    } else if (id === B.SNARE) {
+      if (!IS_SOLID[below] || below === B.CAMPFIRE) { this.message('Sidła stawia się na suchym, solidnym podłożu.'); return; }
     } else if (id === B.RAIL || id === B.POWERED_RAIL || id === B.DETECTOR_RAIL) {
       if (!IS_SOLID[below]) { this.message('Tory kładzie się na solidnym podłożu.'); return; }
     } else if (isStairs(id)) {
@@ -3478,6 +4195,7 @@ export class Game {
       this.swingT = 0;
       this.consumeSelected();
       this.unlock('home');
+      this.advanceChallenge('challenge_builder');
       return;
     } else if (isLadder(id)) {
       if (t.ny !== 0) { this.message('Drabina musi wisieć na ścianie.'); return; }
@@ -3486,6 +4204,7 @@ export class Game {
       Sfx.playPlace('wood');
       this.swingT = 0;
       this.consumeSelected();
+      this.advanceChallenge('challenge_builder');
       return;
     } else if (isTrap(id)) {
       if (t.ny === 1) this.world.setBlock(px, py, pz, B.TRAP);
@@ -3494,18 +4213,22 @@ export class Game {
       Sfx.playPlace('wood');
       this.swingT = 0;
       this.consumeSelected();
+      this.advanceChallenge('challenge_builder');
       return;
     } else if (id === B.CHEST) {
       this.unlock('stash');
+    } else if (id === B.TURTLE_EGG0) {
+      if (below !== B.SAND || !shoreWaterNearby(this.world, px, py, pz)) { this.message('Jaja żółwia wymagają piasku przy wodzie.'); return; }
     } else if (RENDER[id] === 1) {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && below !== B.FARMLAND) return;
     }
     const finalId = placeId ?? id;
     this.world.setBlock(px, py, pz, finalId);
+    this.advanceChallenge('challenge_builder');
     this.settle(px, py, pz);
     // redstone update
     this.onBlockChanged(px, py, pz);
-    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
+    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SPRUCE_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2) || (finalId >= B.CARROT_CROP0 && finalId <= B.CARROT_CROP2) || finalId === B.TURTLE_EGG0) this.growables.set(`${px},${py},${pz}`, performance.now());
     if (finalId === B.TORCH || finalId === B.REDSTONE_TORCH) this.unlock('torch');
     if (finalId === B.NETHER_BRICKS || finalId === B.QUARTZ_BLOCK) this.unlock('nether');
     Sfx.playPlace(BLOCKS[finalId].sound);
@@ -3515,7 +4238,9 @@ export class Game {
 
   pickBlock() {
     if (!this.target) return;
-    const id = this.target.id;
+    // Never pick an armed/filled trap state into an inventory stack.
+    const id = this.target.id >= B.SNARE_ARMED && this.target.id <= B.SNARE_CHICKEN
+      ? B.SNARE : paintingBase(this.target.id) ?? chairBase(this.target.id) ?? this.target.id;
     const hot = this.inventory.slots.findIndex((s, i) => i < 9 && s && s.id === id);
     if (hot >= 0) { this.selected = hot; this.emitHud(); return; }
     // 2.3: ŚPM działa też dla przedmiotu leżącego poza paskiem – przenosimy
@@ -3552,6 +4277,8 @@ export class Game {
       this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
       this.inventory.slots[this.selected] = null;
     }
+    const thrown = this.drops?.[this.drops.length - 1];
+    if (thrown) thrown.thrown = true;
     this.emitHud();
   }
 
@@ -3647,8 +4374,8 @@ export class Game {
           if (seen.has(k)) continue;
           seen.add(k);
           const id = this.world.peekBlock(nx, ny, nz);
-          if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) next.push([nx, ny, nz]);
-          else if (id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.ACACIA_LEAVES || id === B.JUNGLE_LEAVES) {
+          if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG || id === B.SPRUCE_LOG) next.push([nx, ny, nz]);
+          else if (id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.ACACIA_LEAVES || id === B.JUNGLE_LEAVES || id === B.SPRUCE_LEAVES) {
             next.push([nx, ny, nz]);
             this.leafDecay.push({ x: nx, y: ny, z: nz, t: 0.25 + Math.random() * 0.9 });
           }
@@ -3665,7 +4392,7 @@ export class Game {
       l.t -= dt;
       if (l.t > 0) { keep.push(l); continue; }
       const id = this.world.peekBlock(l.x, l.y, l.z);
-      if (id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
+      if (id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES && id !== B.SPRUCE_LEAVES) continue;
       this.world.setBlock(l.x, l.y, l.z, B.AIR);
       this.spawnParticles(l.x + 0.5, l.y + 0.5, l.z + 0.5, id, 6, 0.2);
       if (this.mode === 'survival') {
@@ -3673,6 +4400,27 @@ export class Game {
       }
     }
     this.leafDecay = keep;
+  }
+
+  /** Remove wall/floor decor when its anchor is mined or blown up. Uses block IDs
+   * as persisted state, never spawns inventory-only representations or duplicates. */
+  private detachDecorations(x: number, y: number, z: number, drop: boolean) {
+    const floor = this.world.peekBlock(x, y + 1, z);
+    const floorDecor = floor === B.BANNER_RED || floor === B.BANNER_BLUE || floor === B.VASE ||
+      chairBase(floor) !== null || floor === B.TABLE;
+    if (floorDecor && !IS_SOLID[this.world.peekBlock(x, y, z)]) {
+      this.world.setBlock(x, y + 1, z, B.AIR);
+      if (drop && this.mode === 'survival') this.spawnDrop(chairBase(floor) ?? floor, 1, x + 0.5, y + 1.2, z + 0.5);
+    }
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const px = x + dx, pz = z + dz;
+      const id = this.world.peekBlock(px, y, pz);
+      const support = paintingSupport(id, px, y, pz);
+      if (!support || support[0] !== x || support[1] !== y || support[2] !== z ||
+          IS_SOLID[this.world.peekBlock(x, y, z)]) continue;
+      this.world.setBlock(px, y, pz, B.AIR);
+      if (drop && this.mode === 'survival') this.spawnDrop(paintingBase(id)!, 1, px + 0.5, y + 0.5, pz + 0.5);
+    }
   }
 
   breakBlock(x: number, y: number, z: number, silent = false) {
@@ -3691,7 +4439,12 @@ export class Game {
     if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
     if (id === B.ANVIL) this.spillAnvil(x, y, z);
     if (id === B.BREWING) this.spillBrewing(x, y, z);
+    if (id === B.TRAVEL_POT) this.spillTravelCauldron(x, y, z);
+    if (id === B.CAMP_COT) this.invalidateCampRespawn(x, y, z);
     this.world.setBlock(x, y, z, fill);
+    this.detachDecorations(x, y, z, !silent);
+    if (!silent && this.body?.pos && Math.hypot(x + 0.5 - this.body.pos.x, z + 0.5 - this.body.pos.z) < 7)
+      this.emitCaveNoise(x + 0.5, y, z + 0.5, 13);
     if (isDoor(id)) {
       const face = doorFacing(id);
       const oy = isDoorTop(id) ? y - 1 : y + 1;
@@ -3705,7 +4458,7 @@ export class Game {
       if (ladderFacing(nid) === f || (isTrapOpen(nid) && nid - B.TRAP_N === f)) this.breakBlock(lx, y, lz, silent);
     }
     this.growables.delete(`${x},${y},${z}`);
-    if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) this.decayLeaves(x, y, z);
+    if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG || id === B.SPRUCE_LOG) this.decayLeaves(x, y, z);
     if (!silent) {
       this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 14, 0.35);
       Sfx.playBreak(def.sound);
@@ -3720,15 +4473,22 @@ export class Game {
         fortune: enchLevel(this.selectedStack(), 'fortune'),
         silk: enchLevel(this.selectedStack(), 'silktouch') > 0,
       });
-      for (const drop of drops) this.spawnDrop(drop.id, drop.count, x + 0.5, y + 0.45, z + 0.5);
+      let yielded = false;
+      for (const drop of drops) {
+        const count = resourceDropCount(id, drop.id, drop.count, this.difficulty.resources, enchLevel(this.selectedStack(), 'silktouch') > 0);
+        if (count > 0) {
+          yielded = true;
+          this.spawnDrop(drop.id, count, x + 0.5, y + 0.45, z + 0.5);
+        }
+      }
       if (isDoorTop(id)) this.spawnDrop(B.DOOR_N, 1, x + 0.5, y + 0.2, z + 0.5);
       // ores that actually yielded something also drop XP
       const xp = oreXp(id);
-      if (drops.length > 0 && xp > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, xp);
+      if (yielded && xp > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, xp);
     }
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
-    if (RENDER[above] === 1 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
+    if (RENDER[above] === 1 || above === B.CAMP_COT || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
     this.fallGravity(x, y + 1, z);
   }
 
@@ -3745,7 +4505,7 @@ export class Game {
     Sfx.playFuse();
   }
 
-  explode(cx: number, cy: number, cz: number, power: number) {
+  explode(cx: number, cy: number, cz: number, power: number, fromMob = false) {
     Sfx.playExplosion();
     this.shake = 0.6;
     const r = Math.ceil(power);
@@ -3762,7 +4522,10 @@ export class Game {
           if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
           if (id === B.ANVIL) this.spillAnvil(x, y, z);
           if (id === B.BREWING) this.spillBrewing(x, y, z);
+          if (id === B.TRAVEL_POT) this.spillTravelCauldron(x, y, z);
+          if (id === B.CAMP_COT) this.invalidateCampRespawn(x, y, z);
           this.world.setBlock(x, y, z, B.AIR);
+          this.detachDecorations(x, y, z, false);
           if (Math.random() < 0.05) this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 3, 0.4);
         }
     this.spawnSmoke(cx, cy, cz, 40, power * 1.5);
@@ -3778,7 +4541,7 @@ export class Game {
     affect(this.body.pos, this.body.h, (dmg, kb) => {
       this.body.vel.add(kb);
       this.fallStart = this.body.pos.y;
-      this.damage(dmg);
+      this.damage(fromMob ? mobDamage(dmg, this.difficulty.damage) : dmg);
     });
     for (const m of this.mobs) affect(m.body.pos, m.body.h, (dmg, kb) => {
       m.hurtTime = 0;
@@ -3787,14 +4550,19 @@ export class Game {
     });
   }
 
-  damage(amount: number, force = false) {
+  damage(amount: number, force = false, source: 'generic' | 'fire' | 'projectile' = 'generic') {
     if (amount <= 0) return;
     if (this.mode === 'creative' && !force) return;
     if (this.ui === 'dead') return;
     // Armor soaks damage; force kills (void, /kill) ignore it and don't break the gear.
     // Zaklęcie Ochrona dodaje 3% redukcji za każdy poziom (do 90% łącznie).
-    const reduction = Math.min(0.9, damageReduction(armorPoints(this.armor)) + totalProtection(this.armor) * 0.03);
-    const dealt = force ? amount : Math.max(0, Math.round(amount * (1 - reduction)));
+    const specialized = source === 'generic' ? 0 : sourceProtection(this.armor, source) +
+      (source === 'fire' ? bootHeatReduction(this.armor[3]) : 0);
+    const reduction = Math.min(0.9, damageReduction(armorPoints(this.armor)) + totalProtection(this.armor) * 0.03 + specialized);
+    // Heat protection must also matter for one-point magma/campfire ticks.
+    // Keep the old integer damage rule for unenchanted worlds and other sources.
+    const raw = amount * (1 - reduction);
+    const dealt = force ? amount : Math.max(0, source === 'fire' && specialized > 0 ? raw : Math.round(raw));
     if (dealt > 0) {
       if (!force) this.wearArmor(dealt);
       this.health -= dealt;
@@ -3827,8 +4595,10 @@ export class Game {
         }
         this.armor.fill(null);
       }
+      this.effects.clear();
       this.inventory.slots.fill(null);
       this.inventory.cursor = null;
+      this.fishingBait = null;
       this.setUI('dead');
     }
     this.emitHud();
@@ -3872,8 +4642,15 @@ export class Game {
     this.health = 20;
     this.hunger = 20;
     this.air = this.maxAir;
+    if (this.campRespawn) {
+      const [x, y, z] = this.campRespawn.cot;
+      if (this.homeWorld.getBlock(x, y, z) !== B.CAMP_COT ||
+          IS_SOLID[this.homeWorld.getBlock(x, y + 1, z)] || IS_SOLID[this.homeWorld.getBlock(x, y + 2, z)]) this.invalidateCampRespawn(x, y, z);
+    }
     this.body.pos.copy(this.spawnPoint);
     this.body.vel.set(0, 0, 0);
+    this.dodgeTime = this.dodgeCooldown = this.daggerCounter = this.guardTime = this.guardCooldown = 0;
+    this.daggerHitAt = 0;
     this.fallStart = this.body.pos.y;
     if (this.mode === 'creative') this.giveStarterItems();
     this.setUI('playing');
@@ -3881,7 +4658,12 @@ export class Game {
   }
 
   spawnMob(type: MobType, x: number, y: number, z: number, profession = 0) {
-    const m = new Mob(type, x, y, z, profession);
+    const region = type === 'merchant' ? this.world.surface(Math.floor(x), Math.floor(z)).biome : null;
+    const m = new Mob(type, x, y, z, region ? merchantProfession(region) : profession);
+    if (region) {
+      m.merchantRegion = region;
+      m.trade = createVillagerState(m.profession, this.nowSeconds());
+    }
     this.mobs.push(m);
     this.scene.add(m.group);
     return m;
@@ -3935,7 +4717,7 @@ export class Game {
       }
     }
 
-    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
+    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'travelCauldron' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);
@@ -3951,6 +4733,7 @@ export class Game {
       this.updateFurnaces(dt);
       this.updateAnvils(dt);
       this.updateBrewings(dt);
+      this.updateTravelCauldrons(dt);
       this.updateEffects(dt);
       this.updateFishing(dt);
       this.updateRedstone(dt);
@@ -3996,6 +4779,11 @@ export class Game {
   }
 
   private updatePlayer(dt: number) {
+    this.dodgeTime = Math.max(0, (this.dodgeTime || 0) - dt);
+    this.daggerCounter = Math.max(0, (this.daggerCounter || 0) - dt);
+    this.dodgeCooldown = Math.max(0, (this.dodgeCooldown || 0) - dt);
+    this.guardTime = Math.max(0, (this.guardTime || 0) - dt);
+    this.guardCooldown = Math.max(0, (this.guardCooldown || 0) - dt);
     const b = this.body;
     const k = this.keys;
     const playing = this.ui === 'playing';
@@ -4025,10 +4813,13 @@ export class Game {
 
     if (this.mode === 'survival' && this.hunger <= 6) this.sprinting = false;
     let speed = this.flying ? (this.sprinting ? 22 : 11) : sneaking ? 1.3 : this.sprinting ? 5.6 : 4.3;
-    if (inWater && !this.flying) speed *= 0.55;
+    if (inWater && !this.flying) speed *= 0.55 * waterSpeedFactor(this.armor[3]);
     if (inLava && !this.flying) speed *= 0.35;
     // 2.4: napój szybkości przyspiesza bieg (nie wpływa na latanie w trybie kreatywnym)
     if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
+    if (!this.flying) speed *= sprintFactor(this.hasEffect('sprint'), this.sprinting);
+    if (!this.flying) speed *= walkCharmFactor(this.talisman);
+    if (!this.flying && this.holdingShield()) speed *= shieldWeightFactor(this.selectedStack()?.id ?? 0);
 
     const len = Math.hypot(fx, fz) || 1;
     fx /= len; fz /= len;
@@ -4041,7 +4832,7 @@ export class Game {
     const onIce = feetBelow === B.ICE;
     let accel = this.flying ? 8 : b.onGround ? 14 : inWater ? 6 : 2.5;
     if (onIce && !this.flying) accel = hasInput ? 1.4 : 0.45;
-    const a = Math.min(1, accel * dt * (hasInput || b.onGround || this.flying ? 1 : 0.3));
+    const a = Math.min(1, (this.dodgeTime > 0 ? 2 : accel) * dt * (hasInput || b.onGround || this.flying ? 1 : 0.3));
     b.vel.x += (tx - b.vel.x) * a;
     b.vel.z += (tz - b.vel.z) * a;
 
@@ -4094,7 +4885,7 @@ export class Game {
       if (fall > 3.4 && this.mode === 'survival' && !inWater) {
         // Lekki krok na butach tłumi upadek
         const raw = Math.floor(fall - 3);
-        this.damage(Math.max(raw > 0 ? 1 : 0, Math.round(raw * fallDamageFactor(this.armor[3]))));
+        this.damage(fallDamageAfterPotion(Math.max(raw > 0 ? 1 : 0, Math.round(raw * landingFactor(this.armor[3]))), this.hasEffect('fall')));
       }
       if (fall > 1) {
         const below = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));
@@ -4112,7 +4903,7 @@ export class Game {
 
     // drowning
     if (eyeInWater && this.mode === 'survival') {
-      this.air -= dt;
+      this.air -= dt * breathCharmFactor(this.talisman);
       if (this.air <= 0) {
         this.air = 0;
         this.drownAcc += dt;
@@ -4144,11 +4935,11 @@ export class Game {
     const fireImmune = this.hasEffect('fire');
     if (!fireImmune && under === B.MAGMA && b.onGround && this.mode === 'survival' && !this.flying) {
       this.campfireHurt += dt;
-      if (this.campfireHurt > 0.6) { this.campfireHurt = 0; this.damage(1); this.message('Blok magmy parzy!'); }
+      if (this.campfireHurt > 0.6) { this.campfireHurt = 0; this.damage(1, false, 'fire'); this.message('Blok magmy parzy!'); }
     }
     if (!fireImmune && under === B.CAMPFIRE && b.onGround && this.mode === 'survival' && !this.flying) {
       this.campfireHurt += dt;
-      if (this.campfireHurt > 0.45) { this.campfireHurt = 0; this.damage(1); }
+      if (this.campfireHurt > 0.45) { this.campfireHurt = 0; this.damage(1, false, 'fire'); }
     }
     // lava
     if (fireImmune && inLava && this.mode === 'survival') {
@@ -4156,7 +4947,7 @@ export class Game {
       this.unlock('fireproof');
     } else if (inLava && this.mode === 'survival') {
       this.lavaAcc += dt;
-      if (this.lavaAcc > 0.5) { this.lavaAcc = 0; this.damage(4); }
+      if (this.lavaAcc > 0.5) { this.lavaAcc = 0; this.damage(4, false, 'fire'); }
     }
     // cactus
     if (this.mode === 'survival') {
@@ -4204,7 +4995,10 @@ export class Game {
       if (this.stepDist > (this.sprinting ? 2.4 : 1.9)) {
         this.stepDist = 0;
         const below = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));
-        if (below && !sneaking) Sfx.playStep(BLOCKS[below].sound);
+        if (below && !sneaking) {
+          Sfx.playStep(BLOCKS[below].sound);
+          this.emitCaveNoise(b.pos.x, b.pos.y, b.pos.z, this.sprinting ? 12 : 7);
+        }
       }
     } else {
       this.bobPhase *= 0.9;
@@ -4219,7 +5013,9 @@ export class Game {
     this.attackCooldown -= dt;
     this.pearlCd = Math.max(0, this.pearlCd - dt);
     this.eatCooldown = Math.max(0, this.eatCooldown - dt);
-    if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * 4);
+    if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * (this.selectedStack()?.id === I.IRON_SPEAR ? 1.65 :
+      ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'hammer' ? 1.5 :
+      ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'dagger' ? 7.2 : 4));
 
     const e = this.eyePos();
     // 2.0: na dotyku celownik podąża za palcem (touchAim w NDC).
@@ -4253,7 +5049,7 @@ export class Game {
       // na celowniku i bije go z cooldownem. Wcześniej tryAttack zerował
       // mouseLeft po każdym trafieniu, więc walka wymagała furkoczącego
       // klikania, a mob wchodzący w celownik przerywał kopanie bloku.
-      const { mob, dist } = this.findMobTarget(3.5);
+      const { mob, dist } = this.findMobTarget(this.meleeReach());
       const blockDist = t ? t.dist : Infinity;
       if (mob && dist < blockDist) {
         this.breakProgress = 0;
@@ -4318,9 +5114,9 @@ export class Game {
     // 2.3: lorneta działa, dopóki prawy przycisk jest wciśnięty.
     if (!this.mouseRight && !this.touchInput) this.zooming = false;
     if (this.bowDraw >= 0) {
-      if (this.selectedStack()?.id === I.BOW && this.ui === 'playing') {
+      if (ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'bow' && this.ui === 'playing') {
         if (this.mouseRight) {
-          this.bowDraw = Math.min(1, this.bowDraw + dt);
+          this.bowDraw = Math.min(1, this.bowDraw + dt / bowDrawSeconds(this.selectedStack()?.id ?? I.BOW));
           if (this.swingT >= 1) this.swingT = 0.55;
         } else {
           this.releaseBow();
@@ -4337,20 +5133,28 @@ export class Game {
   }
 
   private updateMobs(dt: number) {
+    this.noiseEvents ??= [];
+    this.noiseEvents = this.noiseEvents.filter((sound) => (sound.ttl -= dt) > 0);
     const p = this.body.pos;
     const dl = this.daylight();
     const peaceful = this.mode === 'creative';
+    let arrowLights = 0;
     for (const m of this.mobs) {
+      if (isTrustAnimal(m.type) && m.trust > 0 && !m.dead && m.body.pos.distanceTo(p) > 90) continue;
       m.update(dt, this.world, p, (dmg, mob) => {
         if (this.ui === 'dead') return;
+        if (this.dodgeTime > 0) { this.message('Cios chybiony — unik!'); return; }
+        if (this.parryFrom(mob.body.pos)) return;
         // A raised shield halves the hit and absorbs most of the knockback.
-        const shielded = this.holdingShield();
+        const shielded = this.holdingShield() && threatInFront(this.yaw, p.x, p.z, mob.body.pos.x, mob.body.pos.z);
+        const shieldFactor = shielded ? shieldDamageFactor(this.selectedStack()?.id ?? 0, false) : 1;
         if (shielded) {
           Sfx.playShield();
           this.wearShield(8);
           this.unlock('guardian');
         }
-        this.damage(shielded ? Math.ceil(dmg / 2) : dmg);
+        this.damage(shielded ? Math.ceil(mobDamage(dmg, this.difficulty.damage) * shieldFactor) :
+          mobDamage(dmg, this.difficulty.damage));
         if (this.mode === 'survival') {
           const dx = p.x - mob.body.pos.x, dz = p.z - mob.body.pos.z;
           const l = Math.hypot(dx, dz) || 1;
@@ -4364,14 +5168,35 @@ export class Game {
         const to = new THREE.Vector3(p.x, p.y + 1.0, p.z);
         const dir = to.sub(from).normalize();
         this.spawnArrow(from.addScaledVector(dir, 0.6), dir, 24, mob, 4);
-      }, peaceful, this.mobs, (target) => {
+      }, peaceful || this.difficulty.aggression === 'spokojna', this.mobs, (target) => {
         // tamed wolf's bite
         target.damage(4, m.body.pos.x, m.body.pos.z);
         Sfx.playHurt();
-      });
+      }, hostileSpeed(this.difficulty.aggression), this.drops, (food: FoxFood) => {
+        // Consume ONE from the actual world entity: no shadow inventory, no
+        // saved held item, no duplication when the player picks up the rest.
+        const i = this.drops.indexOf(food as DropEntity);
+        if (i < 0 || food.count <= 0 || food.age < 0.75 || !isFood(food.id)) return false;
+        const drop = this.drops[i];
+        drop.count--;
+        if (drop.count === 0) {
+          this.drops.splice(i, 1);
+          this.scene.remove(drop.mesh);
+          const mesh = drop.mesh as THREE.Mesh;
+          mesh.geometry?.dispose();
+          if (mesh.material && !Array.isArray(mesh.material)) mesh.material.dispose();
+        }
+        if (m.body.pos.distanceTo(p) < 16) this.message('Lis porwał leżące jedzenie!');
+        return true;
+      }, dl, this.weather === 'rain' && !this.isInNether &&
+        this.world.surface(Math.floor(m.body.pos.x), Math.floor(m.body.pos.z)).biome !== 'Pustynia', this.time, this.noiseEvents);
+      this.trySnareMob(m);
+      const lit = this.gfx?.effectDetail === 'full' && m.arrowGlow > 0 && !m.dead && arrowLights < 3;
+      m.setArrowGlowLight?.(lit);
+      if (lit) arrowLights++;
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
-        if (m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
+        if (m.type !== 'midge' && (m.type !== 'bat' || dl < 0.5) && m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
       }
       // zombies burn in daylight (but never under the Nether roof)
       if (m.type === 'zombie' && dl > 0.7 && !m.dead && !this.isInNether) {
@@ -4387,7 +5212,7 @@ export class Game {
     for (const m of this.mobs) {
       if (m.exploded && !m.looted) {
         m.looted = true;
-        this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2);
+        this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2, true);
       } else if (m.dead && !m.looted) {
         m.looted = true;
         this.mobLoot(m);
@@ -4395,7 +5220,7 @@ export class Game {
     }
     this.mobs = this.mobs.filter((m) => {
       // Mieszkańcy i golemy trzymają się osady – nie znikają tuż za jej granicą.
-      const far = m.body.pos.distanceTo(p) > (isVillageMob(m.type) ? 240 : 90);
+      const far = m.body.pos.distanceTo(p) > (isVillageMob(m.type) ? 240 : 90) && !(isTrustAnimal(m.type) && m.trust > 0 && !m.dead);
       const gone = (m.dead && m.deathTime > 0.9) || far || m.body.pos.y < -10;
       if (gone) {
         if (m.dead && !far) this.spawnSmoke(m.body.pos.x, m.body.pos.y + 0.5, m.body.pos.z, 10, 1);
@@ -4410,8 +5235,11 @@ export class Game {
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 1.5;
       const alive = this.mobs.filter((m) => !m.dead);
-      const hostile = alive.filter((m) => HOSTILE_MOBS.has(m.type)).length;
-      const passive = alive.length - hostile;
+      const passive = alive.filter((m) => !HOSTILE_MOBS.has(m.type) && !(isTrustAnimal(m.type) && m.trust > 0)).length;
+      // Recount after each spawn branch: a single 1.5 s tick can otherwise
+      // add several families and exceed the mobile-friendly passive cap.
+      const passiveCount = () => this.mobs.filter((m) => !m.dead && !HOSTILE_MOBS.has(m.type) && !(isTrustAnimal(m.type) && m.trust > 0)).length;
+      const hostileCount = () => this.mobs.filter((m) => !m.dead && HOSTILE_MOBS.has(m.type)).length;
       const tryPos = (minD: number, maxD: number) => {
         const ang = Math.random() * Math.PI * 2;
         const dist = minD + Math.random() * (maxD - minD);
@@ -4425,16 +5253,113 @@ export class Game {
       };
       if (!this.isInNether && passive < 12 && dl > 0.5) {
         const pos = tryPos(20, 48);
-        if (pos && pos.top === B.GRASS) {
-          const roll = Math.random();
-          const type: MobType = roll < 0.1 ? 'wolf' : roll < 0.4 ? 'cow' : roll < 0.65 ? 'chicken' : roll < 0.88 ? 'pig' : 'sheep';
-          const n = type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-          for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
+        if (pos) {
+          const biome = this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome;
+          const shore = ['Bagno', 'Plaża', 'Równiny', 'Las', 'Kwiecista łąka'].includes(biome) &&
+            (pos.top === B.MUD || pos.top === B.SAND || pos.top === B.GRASS || pos.top === B.MEADOW_GRASS) &&
+            (this.world.peekBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z)) === B.AIR ||
+              RENDER[this.world.peekBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z))] === 1) &&
+            shoreWaterNearby(this.world, Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
+          const frogs = alive.filter((m) => m.type === 'frog').length;
+          const midges = alive.filter((m) => m.type === 'midge').length;
+          if (shore && frogs < 3 && Math.random() < (biome === 'Bagno' ? 0.7 : 0.38)) {
+            this.spawnMob('frog', pos.x, pos.y + 0.1, pos.z);
+            if (passiveCount() < 12 && midges < 4) this.spawnMob('midge', pos.x + 1, pos.y + 1.1, pos.z);
+          } else if (shore && frogs > 0 && midges < 4 && Math.random() < 0.45) {
+            this.spawnMob('midge', pos.x, pos.y + 1.1, pos.z);
+          } else if (pos.top === B.GRASS || pos.top === B.MEADOW_GRASS || pos.top === B.PODZOL) {
+            const roll = Math.random();
+            const type = pickPassiveMob(roll, biome);
+            const n = type === 'fox' ? 1 : type === 'rabbit' || type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
+            const spawnN = Math.min(n, 12 - passiveCount());
+            for (let i = 0; i < spawnN; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
+          }
         }
+      }
+      // Slow coastal turtles lay persistent eggs on real, loaded sand near water.
+      if (!this.isInNether && passiveCount() < 12 && alive.filter((m) => m.type === 'turtle').length < 3 && dl > 0.5) {
+        const coast = tryPos(20, 42);
+        if (coast && turtleSpawnAllowed(this.world, Math.floor(coast.x), Math.floor(coast.y), Math.floor(coast.z)) &&
+          Math.random() < 0.65) this.spawnMob('turtle', coast.x, coast.y + 0.1, coast.z);
+      }
+      // Swamp lizards need actual ground to camouflage against, not just a
+      // swamp biome name. The existing passive cap also bounds their AI.
+      if (!this.isInNether && passiveCount() < 12 && alive.filter((m) => m.type === 'lizard').length < 3 && dl > 0.5) {
+        const lizPos = tryPos(20, 36);
+        if (lizPos && (lizPos.top === B.MUD || lizPos.top === B.GRASS) &&
+          (this.world.peekBlock(Math.floor(lizPos.x), Math.floor(lizPos.y), Math.floor(lizPos.z)) === B.AIR ||
+            RENDER[this.world.peekBlock(Math.floor(lizPos.x), Math.floor(lizPos.y), Math.floor(lizPos.z))] === 1) &&
+          this.world.surface(Math.floor(lizPos.x), Math.floor(lizPos.z)).biome === 'Bagno' && Math.random() < 0.35) {
+          this.spawnMob('lizard', lizPos.x, lizPos.y + 0.1, lizPos.z);
+        }
+      }
+      // Nighttime forest bats use the same loaded surface candidate and
+      // passive cap; they rest by day rather than generating endlessly.
+      if (!this.isInNether && passiveCount() < 12 && alive.filter((m) => m.type === 'bat').length < 3 && dl < 0.45) {
+        const batPos = tryPos(18, 38);
+        if (batPos && batSpawnAllowed(batPos.top, this.world.surface(Math.floor(batPos.x), Math.floor(batPos.z)).biome, dl)) {
+          this.spawnMob('bat', batPos.x, batPos.y + 2.2, batPos.z);
+        }
+      }
+      // Neutral adults keep cubs by their side on taiga and tundra trails.
+      if (!this.isInNether && passiveCount() < 12 && alive.filter((m) => m.type === 'bear' && !m.isCub).length < 2 && dl > 0.5) {
+        const pos = tryPos(22, 42);
+        if (pos && (pos.top === B.GRASS || pos.top === B.PODZOL || pos.top === B.SNOW) &&
+          (this.world.peekBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z)) === B.AIR ||
+            RENDER[this.world.peekBlock(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z))] === 1) &&
+          (this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome === 'Tajga' ||
+            this.world.surface(Math.floor(pos.x), Math.floor(pos.z)).biome === 'Tundra') && Math.random() < 0.28) {
+          this.spawnMob('bear', pos.x, pos.y + 0.1, pos.z);
+          if (passiveCount() < 12 && Math.random() < 0.55) {
+            for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nx = Math.floor(pos.x) + ox, nz = Math.floor(pos.z) + oz, ny = Math.floor(pos.y);
+              const floor = this.world.peekBlock(nx, ny - 1, nz);
+              if (!this.world.hasChunk(Math.floor(nx / CS), Math.floor(nz / CS)) ||
+                !IS_SOLID[floor] || floor === B.MAGMA || floor === B.CAMPFIRE ||
+                this.world.peekBlock(nx, ny, nz) !== B.AIR ||
+                this.world.peekBlock(nx, ny + 1, nz) !== B.AIR) continue;
+              const cub = this.spawnMob('bear', nx + 0.5, pos.y + 0.1, nz + 0.5);
+              cub.makeCub();
+              break;
+            }
+          }
+        }
+      }
+      // Rare daytime caravan on an EXISTING village trail; do not invent a
+      // path at a random coordinate or force distant chunks to generate.
+      if (!this.isInNether && dl > 0.5 && passiveCount() <= 10 &&
+        alive.filter((m) => m.type === 'merchant').length === 0) {
+        const road = tryPos(8, 24);
+        if (road?.top === B.PATH && Math.random() < 0.35 &&
+          this.world.peekBlock(Math.floor(road.x), Math.floor(road.y), Math.floor(road.z)) === B.AIR) {
+          let packSpot: { x: number; z: number } | null = null;
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const x = Math.floor(road.x) + dx, z = Math.floor(road.z) + dz, y = Math.floor(road.y);
+            if (!this.world.hasChunk(Math.floor(x / CS), Math.floor(z / CS)) ||
+              !IS_SOLID[this.world.peekBlock(x, y - 1, z)] || this.world.peekBlock(x, y, z) !== B.AIR ||
+              this.world.peekBlock(x, y + 1, z) !== B.AIR) continue;
+            packSpot = { x: x + 0.5, z: z + 0.5 }; break;
+          }
+          if (packSpot) {
+            this.spawnMob('merchant', road.x, road.y + 0.1, road.z);
+            this.spawnMob('pack_animal', packSpot.x, road.y + 0.1, packSpot.z);
+          }
+        }
+      }
+      // Sand ambushers give a long mound/crest warning before leaping, even
+      // during the day. They only arise from loaded desert sand, never in calm.
+      if (!this.isInNether && this.difficulty.aggression !== 'spokojna' &&
+        hostileCount() < hostileCap(this.difficulty.aggression)) {
+        const desert = tryPos(16, 34);
+        if (desert?.top === B.SAND &&
+          this.world.peekBlock(Math.floor(desert.x), Math.floor(desert.y), Math.floor(desert.z)) === B.AIR &&
+          (this.world.surface(Math.floor(desert.x), Math.floor(desert.z)).biome === 'Pustynia' ||
+            this.world.surface(Math.floor(desert.x), Math.floor(desert.z)).biome === 'Pustkowie') &&
+          Math.random() < 0.25) this.spawnMob('sandstalker', desert.x, desert.y + 0.1, desert.z);
       }
       if (this.isInNether) {
         // Nether: piwniczne bestie zawsze, a Ghasty tylko w otwartej przestrzeni.
-        if (hostile < 8) {
+        if (hostileCount() < hostileCap(this.difficulty.aggression)) {
           const pos = tryPos(16, 40);
           if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES && pos.top !== B.LAVA) {
             const roll = Math.random();
@@ -4446,7 +5371,7 @@ export class Game {
             }
           }
         }
-      } else if (hostile < 8 && dl < 0.4) {
+      } else if (hostileCount() < hostileCap(this.difficulty.aggression) && dl < 0.4) {
         const pos = tryPos(18, 40);
         if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES) {
           const roll = Math.random();
@@ -4455,7 +5380,7 @@ export class Game {
         }
       }
       this.spawnVillageFolk();
-      if (hostile < 6) {
+      if (hostileCount() < Math.max(0, hostileCap(this.difficulty.aggression) - 2)) {
         const ang = Math.random() * Math.PI * 2;
         const dist = 14 + Math.random() * 22;
         const x = Math.floor(p.x + Math.cos(ang) * dist);
@@ -4467,7 +5392,7 @@ export class Game {
             const below = this.world.peekBlock(x, y - 1, z);
             if (here === B.AIR && this.world.peekBlock(x, y + 1, z) === B.AIR && IS_SOLID[below] && below !== B.LEAVES && y < ceiling) {
               const roll = Math.random();
-              const type: MobType = roll < 0.3 ? 'creeper' : roll < 0.65 ? 'zombie' : 'spider';
+              const type: MobType = roll < 0.25 ? 'echolurker' : roll < 0.45 ? 'creeper' : roll < 0.72 ? 'zombie' : 'spider';
               this.spawnMob(type, x + 0.5, y, z + 0.5);
               break;
             }
@@ -4543,8 +5468,22 @@ export class Game {
 
     // hand
     const sw = Math.sin(this.swingT * Math.PI);
-    this.hand.position.set(bobX - sw * 0.25, -Math.abs(bob) * 0.6 + sw * 0.12, -sw * 0.15);
-    this.hand.rotation.set(-sw * 0.9, sw * 0.4, 0);
+    if (ITEMS[this.handId]?.tool === 'hammer') {
+      // Heavy overhead arc, with a deliberate recovery after the impact.
+      this.hand.position.set(bobX - sw * 0.12, -Math.abs(bob) * 0.6 + sw * 0.28, -sw * 0.25);
+      this.hand.rotation.set(-sw * 1.4, 0, -sw * 0.5);
+    } else if (ITEMS[this.handId]?.tool === 'dagger') {
+      // Short horizontal flick, visibly faster and shallower than the long spear thrust.
+      this.hand.position.set(bobX + sw * 0.12, -Math.abs(bob) * 0.6 + sw * 0.08, -sw * 0.25);
+      this.hand.rotation.set(-sw * 0.25, sw * 1.15, sw * 0.48);
+    } else if (this.handId === I.IRON_SPEAR) {
+      // Long forward thrust and slower recovery instead of the sword's slash.
+      this.hand.position.set(bobX, -Math.abs(bob) * 0.6 + sw * 0.04, -sw * 0.55);
+      this.hand.rotation.set(-sw * 0.4, 0, -sw * 0.08);
+    } else {
+      this.hand.position.set(bobX - sw * 0.25, -Math.abs(bob) * 0.6 + sw * 0.12, -sw * 0.15);
+      this.hand.rotation.set(-sw * 0.9, sw * 0.4, 0);
+    }
   }
 
   private updateSky() {
@@ -4623,6 +5562,17 @@ export class Game {
     const p = this.body.pos;
     const f = ((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4;
     const now = performance.now();
+    // Only the chunk the player actually entered is surveyed. This is O(1)
+    // on every HUD tick and doesn't generate distant chunks behind the fog.
+    if (this.discovery && this.world && Number.isFinite(p.x) && Number.isFinite(p.z)) {
+      const cx = Math.floor(p.x / CS), cz = Math.floor(p.z / CS);
+      if (!this.discovery.get(this.currentDimension(), cx, cz)) {
+        const s = this.world.surface(cx * CS + CS / 2, cz * CS + CS / 2);
+        this.discovery.survey(this.currentDimension(), p.x, p.z, s.biome, s.h);
+      }
+    }
+    // Use actual player coordinates; a biome border can cross the cached HUD chunk.
+    if (this.ui === 'playing') this.observeBiomeAtPlayer();
     this.refreshMinimap();
     this.onHud({
       hotbar: this.inventory.slots.slice(0, 9).map((s) => (s ? { ...s } : null)),
@@ -4653,14 +5603,35 @@ export class Game {
       weather: this.weather,
       toast: this.toast && now - this.toast.at < 4600 ? { title: this.toast.title, text: this.toast.text } : null,
       sprinting: this.sprinting,
+      daggerHit: this.daggerHitAt > 0 && now - this.daggerHitAt < 450
+        ? { damage: this.daggerHitDamage, counter: this.daggerHitCounter } : null,
+      combat: { dodgeCooldown: this.dodgeCooldown, guardCooldown: this.guardCooldown,
+        dodgeActive: this.dodgeTime > 0, guardActive: this.guardTime > 0, shield: this.holdingShield(),
+        counterReady: this.daggerCounter > 0 && ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'dagger' },
       worldName: this.worldName,
       worldType: this.worldType,
       minimap: this.showMinimap,
       heldHint: this.heldHint(),
       bow: this.bowDraw,
+      ammo: ITEMS[this.selectedStack()?.id ?? 0]?.tool === 'bow' ? {
+        id: this.selectedArrowAmmo(), count: this.mode === 'creative' ? -1 : this.inventory.countOf(this.arrowAmmo),
+      } : null,
+      arrowStatus: this.mobs.filter((m) => !m.dead && (m.arrowGlow > 0 || m.arrowSlow > 0 || m.arrowMark > 0))
+        .map((m) => {
+          const dx = m.body.pos.x - p.x, dz = m.body.pos.z - p.z;
+          const angle = Math.atan2(-dx, -dz) - this.yaw;
+          const turn = Math.atan2(Math.sin(angle), Math.cos(angle));
+          return { name: MOB_NAMES[m.type] ?? m.type, glow: m.arrowGlow, slow: m.arrowSlow,
+            marked: m.arrowMark, distance: Math.round(Math.hypot(dx, dz)),
+            direction: Math.abs(turn) < Math.PI / 4 ? '↑' : Math.abs(turn) > 3 * Math.PI / 4 ? '↓' : turn > 0 ? '→' : '←' };
+        }).filter((m) => m.distance <= (m.marked > 0 ? 96 : 24))
+        .sort((a, b) => (b.marked > 0 ? 1 : 0) - (a.marked > 0 ? 1 : 0) || a.distance - b.distance).slice(0, 3),
+      impactGlow: this.impactGlows.map((g) => ({ left: g.time, distance: Math.round(g.mesh.position.distanceTo(p)) }))
+        .filter((g) => g.distance < 24).sort((a, b) => a.distance - b.distance)[0] ?? null,
       level: this.xp.info().level,
       xpFrac: (() => { const i = this.xp.info(); return i.need > 0 ? i.inLevel / i.need : 0; })(),
       armor: this.armor.map((s) => (s ? { ...s } : null)),
+      talisman: this.talisman ? { ...this.talisman } : null,
       armorPoints: armorPoints(this.armor),
       mobHint: this.mobHint(),
       village: this.villageName,
@@ -4675,6 +5646,8 @@ export class Game {
       // Pointer Lock, więc podpowiedź tłumaczy, czemu klik „nic nie robi”.
       lockCooldown: !this.locked && !this.touchInput && this.lastLockExit > 0 && performance.now() - this.lastLockExit < 1600,
       fishing: this.fishingState(),
+      bait: this.fishingBait ? displayName(this.fishingBait) : null,
+      challenges: { ...this.challengeProgress },
       // 2.4: aktywne wzmocnienia napojów (ikona + nazwa + sekundy)
       effects: [...this.effects.entries()]
         .filter(([id]) => id !== 'none')
@@ -4697,12 +5670,30 @@ export class Game {
   }
 
   private heldHint(): string | null {
+    if (this.target?.id === B.TRAVEL_POT) return 'Kocioł podróżny: PPM / tap · mięso lub fiolka + składnik; paliwo: 1 węgiel/patyk na porcję';
+    if (this.target?.id === B.CAMP_COT) return 'Posłanie: PPM / tap ustawia odrodzenie; rozbij, by przywrócić poprzedni punkt';
+    if (this.target?.id === B.SNARE) return 'Sidła: PPM / tap, aby uzbroić za 1 strunę';
+    if (this.target?.id === B.SNARE_ARMED) return 'Sidła uzbrojone: PPM / tap, aby rozbroić';
+    if (this.target?.id === B.SNARE_RABBIT || this.target?.id === B.SNARE_CHICKEN) return 'Sidła ze zdobyczą: PPM / tap, aby zebrać mięso';
     const sel = this.selectedStack();
     const id = sel?.id;
     const ench = sel?.ench ? enchList(sel) : null;
     // 2.4: fiolki i napoje mają krótką podpowiedź pod celownikiem
     if (id === I.BOTTLE) return 'Fiolka: PPM nad wodą, aby napełnić';
     if (id !== undefined && isPotion(id)) return 'Napój: PPM, aby wypić';
+    if (id === I.WORM_BAIT || id === I.GLOW_BAIT) return 'Przynęta: PPM / tap, aby założyć na wędkę w ekwipunku';
+    if (id === I.BIOME_COMPASS) return 'Kompas biomów: PPM / tap, aby wybrać biom i śledzić cel';
+    if (id === I.CAMP_KIT) return 'Zestaw biwakowy: PPM / tap na suchym, równym podłożu; potrzebne 3 wolne pola';
+    if (id === I.IRON_SPEAR) return 'Włócznia: 5 bloków zasięgu · cios co 0,92 s · LPM / tap / ⛏';
+    if (id === I.IRON_HAMMER) return 'Młot: 8 obrażeń · rozmach do 2 celów · cios co 1,1 s · LPM / tap / ⛏';
+    if (ITEMS[id ?? 0]?.tool === 'bow') {
+      const label = id === I.LIGHT_BOW ? 'Lekki łuk: 0,65 s / 80%' :
+        id === I.STRONG_BOW ? 'Mocny łuk: 1,4 s / 130%' : 'Łuk: 1 s / 100%';
+      return `${label} · X / ➟ wybierz strzałę · przytrzymaj i puść PPM / palec`;
+    }
+    if (id === I.LEATHER_SHIELD) return 'Skórzana tarcza: lekka · 35% cios / 60% strzała · R / 🛡 paruj';
+    if (id === I.IRON_SHIELD) return 'Żelazna tarcza: ciężka · 70% cios / 85% strzała · R / 🛡 paruj';
+    if (id === I.IRON_DAGGER || id === I.DIAMOND_DAGGER) return 'Sztylet: 2,2 bloku · cios co 0,28 s · V / ↝ i LPM / tap / ⛏ = kontra +3';
     if (id === I.COMPASS) {
       const dx = this.spawnPoint.x - this.body.pos.x;
       const dz = this.spawnPoint.z - this.body.pos.z;
@@ -4717,14 +5708,14 @@ export class Game {
       return `Kompas: odrodzenie ${names[idx]} · ${Math.round(dist)} m`;
     }
     if (id === I.SPYGLASS) {
-      return this.zooming ? 'Lorneta: przybliżenie – puść PPM, aby wrócić' : 'Lorneta: przytrzymaj PPM, aby przyjrzeć się okolicy';
+      return this.zooming ? 'Lorneta: G / Zaznacz cel, aby śledzić widoczny blok' : 'Lorneta: przytrzymaj PPM, aby przyjrzeć się okolicy';
     }
     if (id === I.FISHING_ROD) {
       const f = this.fishingState();
       if (f === 'bite') return 'Wędka: brań! Kliknij, aby zaciągnąć';
       if (f === 'waiting') return 'Wędka: przynęta czeka w wodzie…';
       if (f === 'cast') return 'Wędka: przynęta leci…';
-      return 'Wędka: PPM, aby zarzucić';
+      return this.fishingBait ? `Wędka: ${displayName(this.fishingBait)} na haczyku · PPM, aby zarzucić` : 'Wędka: PPM, aby zarzucić';
     }
     if (id === I.CLOCK) {
       const hour = (this.time * 24 + 6) % 24;
@@ -4739,14 +5730,24 @@ export class Game {
 
   /** Nazwa i wskazówka dla istoty pod celownikiem (1.6). */
   private mobHint(): string | null {
-    const { mob } = this.findMobTarget(4.5);
+    const { mob } = this.findMobTarget(Math.max(4.5, this.meleeReach()));
     if (!mob || mob.dead) return null;
     if (mob.type === 'villager') {
       const st = mob.trade ?? null;
       return st ? `${villagerTitle(st)} – PPM, aby handlować` : 'Mieszkaniec – PPM, aby handlować';
     }
     if (mob.type === 'golem') return mob.provoked > 0 ? 'Żelazny golem (rozgniewany!)' : 'Żelazny golem – stróż osady';
-    return `${MOB_NAMES[mob.type] ?? mob.type} · ${Math.max(0, Math.round(mob.health))}/${mob.maxHealth} HP`;
+    if (mob.type === 'guard') return mob.provoked > 0 ? 'Strażnik wioski (rozgniewany!)' : 'Strażnik wioski – patrol';
+    if (mob.type === 'merchant') return `Wędrowny kupiec · ${mob.merchantRegion}`;
+    if (isTrustAnimal(mob.type)) {
+      const food = mob.type === 'rabbit' ? 'pszenicą' : mob.type === 'fox' ? 'surowym kurczakiem' : 'surowym mięsem';
+      const name = MOB_NAMES[mob.type];
+      return mob.tamed ? `${name} oswojony · zaufanie 3/3` : `${name} · zaufanie ${mob.trust}/3 · karm ${food}`;
+    }
+    const statuses = [mob.arrowGlow > 0 ? `światło ${Math.ceil(mob.arrowGlow)}s` : '',
+      mob.arrowSlow > 0 ? `spowolnienie ${Math.ceil(mob.arrowSlow)}s` : '',
+      mob.arrowMark > 0 ? `znak ${Math.ceil(mob.arrowMark)}s` : ''].filter(Boolean).join(' · ');
+    return `${MOB_NAMES[mob.type] ?? mob.type} · ${Math.max(0, Math.round(mob.health))}/${mob.maxHealth} HP${statuses ? ' · ' + statuses : ''}`;
   }
 
   /** Rozgląda się, czy gracz stoi w wiosce; pierwsze wejście to osiągnięcie. */
@@ -4798,11 +5799,11 @@ export class Game {
     return true;
   }
 
-  /** Golemy w promieniu wpadają w gniew na podany czas. Zwraca ich liczbę. */
+  /** Golemy i strażnicy w promieniu bronią uderzonego mieszkańca. */
   private provokeGolems(x: number, z: number, radius: number, seconds: number): number {
     let n = 0;
     for (const m of this.mobs) {
-      if (m.type !== 'golem' || m.dead) continue;
+      if ((m.type !== 'golem' && m.type !== 'guard') || m.dead) continue;
       if (Math.hypot(m.body.pos.x - x, m.body.pos.z - z) > radius) continue;
       m.provoked = Math.max(m.provoked, seconds);
       n++;
@@ -4821,6 +5822,7 @@ export class Game {
     const near = this.mobs.filter((m) => !m.dead && isVillageMob(m.type) && Math.hypot(m.body.pos.x - v.x, m.body.pos.z - v.z) < 64);
     const villagers = near.filter((m) => m.type === 'villager').length;
     const golems = near.filter((m) => m.type === 'golem').length;
+    const guards = near.filter((m) => m.type === 'guard').length;
     const spots = villageSpawnSpots(v);
     const free = (x: number, y: number, z: number) => {
       if (this.world.peekBlock(Math.floor(x), Math.floor(y), Math.floor(z)) !== B.AIR) return false;
@@ -4838,6 +5840,15 @@ export class Game {
         if (!free(x, y, z)) continue;
         const mob = this.spawnMob('villager', x, y, z, Math.random());
         mob.trade = createVillagerState(mob.profession, this.nowSeconds());
+        break;
+      }
+    }
+    if (guards < 1) {
+      for (const spot of spots) {
+        const x = spot.x + 0.5, z = spot.z + 0.5;
+        const y = this.world.heightAt(Math.floor(x), Math.floor(z)) + 1;
+        if (!free(x, y, z)) continue;
+        this.spawnMob('guard', x, y, z);
         break;
       }
     }
@@ -4860,14 +5871,38 @@ export class Game {
 
   private mobLoot(m: Mob) {
     const x = m.body.pos.x, y = m.body.pos.y + 0.4, z = m.body.pos.z;
-    if (m.type === 'pig') this.spawnDrop(I.RAW_PORK, 1, x, y, z);
+    const meat = m.type === 'pig' || m.type === 'cow' || m.type === 'rabbit' || m.type === 'chicken'
+      ? animalMeatYield(this.difficulty?.resources ?? 'normalne') : 1;
+    if (m.type === 'pig') { if (meat) this.spawnDrop(I.RAW_PORK, meat, x, y, z); }
     else if (m.type === 'cow') {
-      this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
+      if (meat) this.spawnDrop(I.RAW_BEEF, meat, x, y, z);
       const hide = Math.floor(Math.random() * 3);
       for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
     }
+    else if (m.type === 'echolurker') {
+      this.spawnDrop(I.BONE, 1, x, y, z);
+    } else if (m.type === 'sandstalker') {
+      this.spawnDrop(B.SAND, 1, x, y, z);
+      if (Math.random() < 0.3) this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
+    }
+    else if (m.type === 'pack_animal') {
+      this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
+    else if (m.type === 'bear') {
+      if (!m.isCub && Math.random() < 0.7) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
+    else if (m.type === 'frog') {
+      if (Math.random() < 0.2) this.spawnDrop(I.SLIME_BALL, 1, x, y, z);
+    }
+    else if (m.type === 'fox') {
+      if (Math.random() < 0.3) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
+    else if (m.type === 'rabbit') {
+      if (meat) this.spawnDrop(I.RAW_RABBIT, meat, x, y, z);
+      if (Math.random() < 0.25) this.spawnDrop(I.LEATHER, 1, x, y, z);
+    }
     else if (m.type === 'chicken') {
-      this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
+      if (meat) this.spawnDrop(I.RAW_CHICKEN, meat, x, y, z);
       if (Math.random() < 0.4) this.spawnDrop(I.FEATHER, 1, x, y, z);
     } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
     else if (m.type === 'creeper') this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
@@ -4904,7 +5939,8 @@ export class Game {
         else if (m.type === 'cow') {
           this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
           if (Math.random() < 0.6) this.spawnDrop(I.LEATHER, 1, x, y, z);
-        } else if (m.type === 'chicken') {
+        } else if (m.type === 'rabbit') this.spawnDrop(I.RAW_RABBIT, 1, x, y, z);
+        else if (m.type === 'chicken') {
           this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
           if (Math.random() < 0.6) this.spawnDrop(I.FEATHER, 1, x, y, z);
         } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
@@ -4937,6 +5973,10 @@ export class Game {
       d.pos.addScaledVector(d.vel, dt);
       const bx = Math.floor(d.pos.x), by = Math.floor(d.pos.y), bz = Math.floor(d.pos.z);
       if (this.world.isSolid(bx, by, bz)) {
+        if (d.thrown && !d.landed) {
+          d.landed = true;
+          this.emitCaveNoise(d.pos.x, by + 1, d.pos.z, 13, 'decoy');
+        }
         d.pos.y = by + 1.02;
         d.vel.y = Math.max(0, -d.vel.y * 0.25);
         d.vel.x *= 0.82;
@@ -4985,7 +6025,7 @@ export class Game {
     const ox = c.cx * CS, oz = c.cz * CS;
     for (let i = 0; i < c.data.length; i++) {
       const id = c.data[i];
-      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2)) continue;
+      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SPRUCE_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2) && (id < B.CARROT_CROP0 || id > B.CARROT_CROP3) && (id < B.TURTLE_EGG0 || id > B.TURTLE_EGG2)) continue;
       const y = (i / (CS * CS)) | 0;
       const rem = i % (CS * CS);
       const z = (rem / CS) | 0;
@@ -4993,11 +6033,37 @@ export class Game {
       const key = `${ox + x},${y},${oz + z}`;
       if (!this.growables.has(key)) this.growables.set(key, performance.now());
       const elapsed = (performance.now() - (this.growables.get(key) ?? 0)) / 1000;
-      if (id === B.SAPLING || id === B.BIRCH_SAPLING) {
+      if (id >= B.CARROT_CROP0 && id <= B.CARROT_CROP3 &&
+          this.world.peekBlock(ox + x, y - 1, oz + z) !== B.FARMLAND) {
+        this.world.setBlock(ox + x, y, oz + z, B.AIR);
+        this.spawnDrop(I.CARROT, 1, ox + x + 0.5, y + 0.2, oz + z + 0.5);
+        this.growables.delete(key);
+        continue;
+      }
+      if (id === B.CARROT_CROP3) continue; // ripe, harvest with normal break action
+      if (id >= B.TURTLE_EGG0 && id <= B.TURTLE_EGG2) {
+        if (this.world.peekBlock(ox + x, y - 1, oz + z) !== B.SAND) {
+          this.world.setBlock(ox + x, y, oz + z, B.AIR); // unsupported eggs cannot float
+          this.growables.delete(key);
+        } else if (elapsed > 12 && shoreWaterNearby(this.world, ox + x, y, oz + z)) {
+          if (id < B.TURTLE_EGG2) {
+            this.world.setBlock(ox + x, y, oz + z, id + 1);
+            this.growables.set(key, performance.now());
+          } else if (this.mobs.filter((m) => !m.dead && !isHostileMob(m.type)).length < 12 &&
+            this.world.peekBlock(ox + x, y + 1, oz + z) === B.AIR) {
+            this.world.setBlock(ox + x, y, oz + z, B.AIR);
+            this.growables.delete(key);
+            this.spawnMob('turtle', ox + x + 0.5, y + 0.1, oz + z + 0.5);
+            Sfx.playPlace('sand');
+          }
+        }
+        continue;
+      }
+      if (id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING) {
         if (elapsed < 28 + ((x * 5 + z) % 12)) continue;
         const px = this.body.pos.x, pz = this.body.pos.z, py = this.body.pos.y;
         if (Math.abs(px - (ox + x)) < 1.4 && Math.abs(pz - (oz + z)) < 1.4 && py > y - 1 && py < y + 6) continue;
-        if (plantTree(this.world, ox + x, y, oz + z, id === B.BIRCH_SAPLING)) {
+        if (plantTree(this.world, ox + x, y, oz + z, id === B.BIRCH_SAPLING, id === B.SPRUCE_SAPLING)) {
           this.growables.delete(key);
           this.unlock('tree');
           Sfx.playPlace('grass');
@@ -5022,7 +6088,7 @@ export class Game {
         Sfx.playPlace('grass');
       } else if (elapsed > (this.cropWatered(ox + x, y, oz + z) ? 9 : 18)) {
         this.world.setBlock(ox + x, y, oz + z, id + 1);
-        if (id + 1 >= B.CROP3) this.growables.delete(key);
+        if (id + 1 === B.CROP3 || id + 1 === B.CARROT_CROP3) this.growables.delete(key);
         else this.growables.set(key, performance.now());
       }
     }
@@ -5150,19 +6216,17 @@ export class Game {
       this.ambientTimer -= dt;
       if (this.ambientTimer <= 0) {
         this.ambientTimer = 16 + Math.random() * 26;
-        Sfx.playCave();
+        Sfx.playBiomeAmbient('nether');
       }
       return;
     }
-    // Ambient sound: wind and birds on the surface, drones in a cave.
+    // One sparse, biome-specific cue at a time; no per-frame audio allocation.
     this.ambientTimer -= dt;
     if (this.ambientTimer <= 0) {
       this.ambientTimer = this.underground ? 18 + Math.random() * 26 : 16 + Math.random() * 30;
-      const roll = Math.random();
-      if (this.underground) Sfx.playCave();
-      else if (this.weather === 'rain') { if (roll < 0.6) Sfx.playWind(); }
-      else if (this.daylight() > 0.55) { if (roll < 0.45) Sfx.playBird(); else if (roll < 0.8) Sfx.playWind(); }
-      else if (roll < 0.5) Sfx.playWind();
+      const biome = this.world.surface(Math.floor(this.body.pos.x), Math.floor(this.body.pos.z)).biome;
+      const cue = chooseAmbient(biome, this.underground, this.weather === 'rain', this.daylight(), Math.random());
+      if (cue) Sfx.playBiomeAmbient(cue);
     }
     this.weatherTimer -= dt;
     if (this.weatherTimer <= 0) this.setWeather(this.weather === 'clear' ? 'rain' : 'clear');
@@ -5331,6 +6395,10 @@ export class Game {
     this.handMat.dispose();
     this.dropMat.dispose();
     this.arrowMat.dispose();
+    for (const mat of this.arrowMats.values()) mat.dispose();
+    this.arrowMats.clear();
+    for (const glow of this.impactGlows ?? []) this.removeImpactGlow(glow);
+    this.impactGlows = [];
     this.arrowGeo.dispose();
     this.tntGeo.dispose();
     this.selection.geometry.dispose();

@@ -1,5 +1,5 @@
 import { B } from './blocks';
-import { I, stackLimit } from './items';
+import { I, stackLimit, durabilityMax } from './items';
 
 export interface Stack {
   id: number;
@@ -103,6 +103,9 @@ function trimPattern(rows: string[]): { rows: string[]; w: number; h: number } {
 export const RECIPES: Recipe[] = [
   { out: { id: B.PLANKS, count: 4 }, inputs: [{ id: B.LOG, count: 1 }], table: false },
   { out: { id: B.PLANKS, count: 4 }, inputs: [{ id: B.BIRCH_LOG, count: 1 }], table: false },
+  { out: { id: B.PLANKS, count: 4 }, inputs: [{ id: B.SPRUCE_LOG, count: 1 }], table: false },
+  { out: { id: I.BIOME_COMPASS, count: 1 }, inputs: [{ id: I.COMPASS, count: 1 }, { id: I.PAPER, count: 2 }, { id: I.LAPIS, count: 1 }], table: true },
+  { out: { id: I.GLOW_BAIT, count: 4 }, inputs: [{ id: I.STRING, count: 1 }, { id: I.HONEYCOMB, count: 1 }, { id: I.GLOWSTONE_DUST, count: 1 }], table: true },
   { out: { id: B.CRAFTING, count: 1 }, inputs: [{ id: B.PLANKS, count: 4 }], table: false, pattern: ['PP', 'PP'], key: { P: B.PLANKS } },
   { out: { id: B.FURNACE, count: 1 }, inputs: [{ id: B.COBBLE, count: 8 }], table: true, pattern: ['CCC', 'C C', 'CCC'], key: { C: B.COBBLE } },
   { out: { id: B.GLASS, count: 1 }, inputs: [{ id: B.SAND, count: 1 }, { id: I.COAL, count: 1 }], table: true },
@@ -137,6 +140,12 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.STICK, count: 4 }, inputs: [{ id: B.PLANKS, count: 2 }], table: false, pattern: ['P', 'P'], key: { P: B.PLANKS } },
   { out: { id: B.TORCH, count: 4 }, inputs: [{ id: I.COAL, count: 1 }, { id: I.STICK, count: 1 }], table: false, pattern: ['C', 'S'], key: { C: I.COAL, S: I.STICK } },
   { out: { id: I.BREAD, count: 1 }, inputs: [{ id: I.WHEAT, count: 3 }], table: false },
+  { out: { id: I.PUMPKIN_SLICE, count: 4 }, inputs: [{ id: B.PUMPKIN, count: 1 }], table: false },
+  { out: { id: I.WOOD_BOWL, count: 4 }, inputs: [{ id: B.PLANKS, count: 3 }], table: true,
+    pattern: ['P P', ' P '], key: { P: B.PLANKS } },
+  { out: { id: I.PUMPKIN_SOUP, count: 1 }, inputs: [{ id: I.PUMPKIN_SLICE, count: 2 }, { id: I.WHEAT, count: 1 }, { id: I.WOOD_BOWL, count: 1 }], table: true },
+  { out: { id: I.RABBIT_STEW, count: 1 }, inputs: [{ id: I.COOKED_RABBIT, count: 1 }, { id: I.ROASTED_CARROT, count: 1 }, { id: I.WOOD_BOWL, count: 1 }], table: true },
+  { out: { id: I.HARVEST_PLATE, count: 1 }, inputs: [{ id: I.ROASTED_CARROT, count: 1 }, { id: I.ROASTED_PUMPKIN, count: 1 }, { id: I.BREAD, count: 1 }], table: true },
   { out: { id: I.BUCKET, count: 1 }, inputs: [{ id: I.IRON, count: 3 }], table: true },
   { out: { id: B.BED, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 3 }, { id: B.PLANKS, count: 3 }], table: true, pattern: ['WWW', 'PPP'], key: { W: B.WOOL_WHITE, P: B.PLANKS } },
   { out: { id: B.CHEST, count: 1 }, inputs: [{ id: B.PLANKS, count: 8 }], table: true, pattern: ['PPP', 'P P', 'PPP'], key: { P: B.PLANKS } },
@@ -156,8 +165,44 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.GOLD, count: 9 }, inputs: [{ id: B.GOLD_BLOCK, count: 1 }], table: false },
   { out: { id: I.DIAMOND, count: 9 }, inputs: [{ id: B.DIAMOND_BLOCK, count: 1 }], table: false },
   { out: { id: I.BOW, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 3 }], table: true, pattern: [' #S', '# S', ' #S'], key: { '#': I.STICK, S: I.STRING } },
+  { out: { id: I.LIGHT_STRING, count: 1 }, inputs: [{ id: I.STRING, count: 2 }, { id: I.FEATHER, count: 1 }], table: false },
+  { out: { id: I.STRONG_STRING, count: 1 }, inputs: [{ id: I.STRING, count: 2 }, { id: I.IRON, count: 1 }], table: false },
+  { out: { id: I.LIGHT_BOW, count: 1 }, inputs: [{ id: I.BOW, count: 1 }, { id: I.LIGHT_STRING, count: 1 }], table: false },
+  { out: { id: I.STRONG_BOW, count: 1 }, inputs: [{ id: I.BOW, count: 1 }, { id: I.STRONG_STRING, count: 1 }], table: false },
+  { out: { id: I.IRON_SPEAR, count: 1 }, inputs: [{ id: I.IRON, count: 2 }, { id: I.STICK, count: 2 }], table: true, pattern: ['  I', ' IS', 'S  '], key: { I: I.IRON, S: I.STICK } },
+  { out: { id: I.IRON_DAGGER, count: 1 }, inputs: [{ id: I.IRON, count: 1 }, { id: I.STICK, count: 1 }], table: false, pattern: ['I', 'S'], key: { I: I.IRON, S: I.STICK } },
+  { out: { id: I.DIAMOND_DAGGER, count: 1 }, inputs: [{ id: I.DIAMOND, count: 2 }, { id: I.STICK, count: 1 }], table: true, pattern: ['DD', 'S '], key: { D: I.DIAMOND, S: I.STICK } },
+  { out: { id: I.IRON_HAMMER, count: 1 }, inputs: [{ id: I.IRON, count: 5 }, { id: I.STICK, count: 2 }], table: true, pattern: ['III', 'ISI', ' S '], key: { I: I.IRON, S: I.STICK } },
   { out: { id: I.ARROW, count: 4 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.STICK, count: 1 }, { id: I.FEATHER, count: 1 }], table: false },
+  { out: { id: B.CAMP_TENT, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 3 }, { id: I.STICK, count: 3 }], table: true,
+    pattern: ['WWW', ' S ', 'S S'], key: { W: B.WOOL_WHITE, S: I.STICK } },
+  { out: { id: B.CAMP_COT, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 2 }, { id: B.PLANKS, count: 2 }], table: false,
+    pattern: ['WW', 'PP'], key: { W: B.WOOL_WHITE, P: B.PLANKS } },
+  { out: { id: B.TRAVEL_POT, count: 1 }, inputs: [{ id: I.IRON, count: 5 }, { id: B.CAMPFIRE, count: 1 }], table: true,
+    pattern: ['I I', 'ICI', ' I '], key: { I: I.IRON, C: B.CAMPFIRE } },
+  { out: { id: B.PAINTING_LAND_N, count: 1 }, inputs: [{ id: I.STICK, count: 4 }, { id: B.WOOL_BLUE, count: 1 }], table: true,
+    pattern: [' S ', 'SWS', ' S '], key: { S: I.STICK, W: B.WOOL_BLUE } },
+  { out: { id: B.PAINTING_SUN_N, count: 1 }, inputs: [{ id: I.STICK, count: 4 }, { id: B.WOOL_RED, count: 1 }], table: true,
+    pattern: [' S ', 'SWS', ' S '], key: { S: I.STICK, W: B.WOOL_RED } },
+  { out: { id: B.WOOL_BLUE, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 1 }, { id: B.FLOWER_BLUE, count: 1 }], table: false },
+  { out: { id: B.BANNER_RED, count: 1 }, inputs: [{ id: B.WOOL_RED, count: 2 }, { id: I.STICK, count: 1 }], table: true,
+    pattern: ['W', 'W', 'S'], key: { W: B.WOOL_RED, S: I.STICK } },
+  { out: { id: B.BANNER_BLUE, count: 1 }, inputs: [{ id: B.WOOL_BLUE, count: 2 }, { id: I.STICK, count: 1 }], table: true,
+    pattern: ['W', 'W', 'S'], key: { W: B.WOOL_BLUE, S: I.STICK } },
+  { out: { id: B.VASE, count: 1 }, inputs: [{ id: B.CLAY, count: 3 }, { id: B.FLOWER_RED, count: 1 }], table: true,
+    pattern: ['C C', ' C ', ' F '], key: { C: B.CLAY, F: B.FLOWER_RED } },
+  { out: { id: B.CHAIR_N, count: 1 }, inputs: [{ id: B.PLANKS, count: 4 }, { id: I.STICK, count: 2 }], table: true,
+    pattern: ['P  ', 'PPP', 'S S'], key: { P: B.PLANKS, S: I.STICK } },
+  { out: { id: B.TABLE, count: 1 }, inputs: [{ id: B.PLANKS, count: 3 }, { id: I.STICK, count: 4 }], table: true,
+    pattern: ['PPP', 'S S', 'S S'], key: { P: B.PLANKS, S: I.STICK } },
+  { out: { id: I.CAMP_KIT, count: 1 }, inputs: [{ id: B.CAMP_TENT, count: 1 }, { id: B.CAMP_COT, count: 1 }, { id: B.CAMPFIRE, count: 1 }], table: false },
+  { out: { id: B.SNARE, count: 1 }, inputs: [{ id: I.STRING, count: 2 }, { id: I.STICK, count: 2 }], table: false, pattern: ['SS', 'TT'], key: { S: I.STRING, T: I.STICK } },
+  { out: { id: I.GLOW_ARROW, count: 4 }, inputs: [{ id: I.ARROW, count: 4 }, { id: I.GLOWSTONE_DUST, count: 1 }], table: true },
+  { out: { id: I.SLOW_ARROW, count: 4 }, inputs: [{ id: I.ARROW, count: 4 }, { id: I.SLIME_BALL, count: 1 }], table: true },
+  { out: { id: I.MARK_ARROW, count: 4 }, inputs: [{ id: I.ARROW, count: 4 }, { id: I.REDSTONE, count: 1 }], table: true },
   { out: { id: I.SHIELD, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.IRON, count: 1 }], table: true, pattern: ['PIP', 'PPP', 'PPP'], key: { P: B.PLANKS, I: I.IRON } },
+  { out: { id: I.LEATHER_SHIELD, count: 1 }, inputs: [{ id: I.LEATHER, count: 4 }, { id: B.PLANKS, count: 2 }, { id: I.STICK, count: 1 }], table: true, pattern: ['LPL', 'LPL', ' S '], key: { L: I.LEATHER, P: B.PLANKS, S: I.STICK } },
+  { out: { id: I.IRON_SHIELD, count: 1 }, inputs: [{ id: I.IRON, count: 5 }, { id: B.PLANKS, count: 2 }], table: true, pattern: ['III', 'IPI', ' P '], key: { I: I.IRON, P: B.PLANKS } },
   // 1.7 „Nether & Redstone”
   { out: { id: B.REDSTONE_BLOCK, count: 1 }, inputs: [{ id: I.REDSTONE, count: 9 }], table: true, pattern: ['RRR', 'RRR', 'RRR'], key: { R: I.REDSTONE } },
   { out: { id: I.REDSTONE, count: 9 }, inputs: [{ id: B.REDSTONE_BLOCK, count: 1 }], table: false },
@@ -232,6 +277,17 @@ addArmor(I.LEATHER, [I.LEATHER_HELMET, I.LEATHER_CHEST, I.LEATHER_LEGS, I.LEATHE
 addArmor(I.IRON, [I.IRON_HELMET, I.IRON_CHEST, I.IRON_LEGS, I.IRON_BOOTS]);
 addArmor(I.GOLD, [I.GOLD_HELMET, I.GOLD_CHEST, I.GOLD_LEGS, I.GOLD_BOOTS]);
 addArmor(I.DIAMOND, [I.DIAMOND_HELMET, I.DIAMOND_CHEST, I.DIAMOND_LEGS, I.DIAMOND_BOOTS]);
+// Each variant costs the same four iron ingots as ordinary boots plus two
+// thematic resources. Craftable at a table in Survival, listed in Creative.
+RECIPES.push(
+  { out: { id: I.EMBER_BOOTS, count: 1 }, inputs: [{ id: I.IRON, count: 4 }, { id: I.MAGMA_CREAM, count: 2 }],
+    table: true, pattern: ['IMI', 'IMI'], key: { I: I.IRON, M: I.MAGMA_CREAM } },
+  { out: { id: I.TIDE_BOOTS, count: 1 }, inputs: [{ id: I.IRON, count: 4 }, { id: I.RAW_FISH, count: 1 }, { id: I.LAPIS, count: 1 }],
+    table: true, pattern: ['IFI', 'ILI'], key: { I: I.IRON, F: I.RAW_FISH, L: I.LAPIS } },
+  { out: { id: I.SOFT_BOOTS, count: 1 }, inputs: [{ id: I.IRON, count: 4 }, { id: I.FEATHER, count: 1 }, { id: I.GLOWSTONE_DUST, count: 1 }],
+    table: true, pattern: ['IFI', 'IGI'], key: { I: I.IRON, F: I.FEATHER, G: I.GLOWSTONE_DUST } },
+);
+
 
 function addTools(mat: number, pick: number, axe: number, shovel: number, sword: number, hoe: number) {
   // 'M' is the material (planks / cobble / ingot / gem), 'S' a stick
@@ -411,11 +467,23 @@ export class Inventory {
     }
   }
 
+  /** Upgrading a bowstring does not secretly repair or disenchant the old bow. */
+  private bowUpgrade(r: Recipe, bow: Stack | null | undefined): Stack {
+    const result = { ...r.out };
+    if ((result.id === I.LIGHT_BOW || result.id === I.STRONG_BOW) && bow?.id === I.BOW) {
+      if (bow.dur !== undefined) result.dur = Math.max(1, Math.min(durabilityMax(result.id),
+        Math.round(bow.dur * durabilityMax(result.id) / durabilityMax(I.BOW))));
+      if (bow.ench) result.ench = { ...bow.ench };
+      if (bow.name) result.name = bow.name;
+    }
+    return result;
+  }
+
   /** Takes the current grid result, consuming one of every ingredient. */
   craftGrid(table: boolean): Stack | null {
     const r = this.gridMatch(table);
     if (!r) return null;
-    const out: Stack = { ...r.out };
+    const out: Stack = this.bowUpgrade(r, this.grid.find((cell) => cell?.id === I.BOW));
     for (let i = 0; i < 9; i++) {
       const cell = this.grid[i];
       if (!cell) continue;
@@ -454,8 +522,9 @@ export class Inventory {
   craft(r: Recipe): boolean {
     if (!this.canCraftToInventory(r)) return false;
     const previous = this.slots.map((slot) => slot ? copyStack(slot) : null);
+    const out = this.bowUpgrade(r, this.slots.find((slot) => slot?.id === I.BOW));
     for (const inp of r.inputs) this.remove(inp.id, inp.count);
-    if (!this.add(r.out.id, r.out.count, r.out.dur, r.out.ench, r.out.name)) {
+    if (!this.add(out.id, out.count, out.dur, out.ench, out.name)) {
       // Defensive rollback: output insertion is normally guaranteed by the
       // preflight above, but never consume a recipe if that assumption changes.
       this.slots = previous;

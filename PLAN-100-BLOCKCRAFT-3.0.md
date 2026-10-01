@@ -1,6 +1,6 @@
-# BlockCraft 3.0 — specyfikacja 100 pomysłów
+# BlockCraft — specyfikacja 100 pomysłów (etapy 2.8–5.0)
 
-> **Cel:** kompletny brief dla agenta wdrażającego pełne wydanie 3.0. To dokument projektowy, nie lista funkcji już obecnych w grze. Wszystkie 100 punktów ma zostać zaprojektowanych, zaimplementowanych, przetestowanych i opisanych przed uznaniem 3.0 za gotowe. Nie oznaczaj wydania jako ukończonego, jeśli którykolwiek punkt pozostaje tylko opisem, atrapą, nieosiągalną zawartością albo nieprzetestowanym kodem.
+> **Cel:** kompletne, niezmienione kryteria 100 pomysłów. To dokument projektowy, nie lista funkcji już obecnych w grze. Zgodnie z nowym podziałem [2.8–5.0](ROADMAP-2.8-5.0.md) poszczególne punkty przechodzą pierwszy odbiór w małych wydaniach; wszystkie 100 musi być grywalne, przetestowane i opisane przed uznaniem 5.0 za kompletne. Historyczna nazwa pliku została zachowana dla istniejących odsyłaczy. Wydanie 3.0 jest etapem pośrednim. Nie oznaczaj wydania jako ukończonego, jeśli którykolwiek punkt pozostaje tylko opisem, atrapą, nieosiągalną zawartością albo nieprzetestowanym kodem.
 
 ## Zasady wdrożenia
 
@@ -133,12 +133,12 @@
 99. [ ] **Dźwięki środowiska i walki:** dodać dźwięki biomów, kroków po podłożu, kopania i trafień; zapewnić sterowanie głośnością i wyłączenie dźwięku.
 100. [ ] **Ustawienia jakości tekstur i efektów:** dać wybór jakości tekstur/efektów dla słabszych urządzeń bez utraty czytelności; poprawnie zapamiętać ustawienia i sprawdzić tryb automatyczny.
 
-## Kryteria odbioru wydania 3.0
+## Kryteria odbioru pełnego wydania 5.0
 
-- [ ] Każda z 100 pozycji jest wdrożona, grywalna i ręcznie sprawdzona; niewdrożone punkty nie mogą być reklamowane jako funkcje 3.0.
+- [ ] Każda z 100 pozycji jest wdrożona, grywalna i ręcznie sprawdzona; niewdrożone punkty nie mogą być reklamowane jako funkcje ukończonego planu.
 - [ ] Nowa zawartość jest osiągalna w Survival i Creative zgodnie z przeznaczeniem.
 - [ ] Stare zapisy przechodzą migrację/odczyt bez utraty świata, ekwipunku, wymiarów i ustawień.
 - [ ] Testy silnika i UI, testy nowych mechanik, `npm run typecheck` oraz `npm run build` przechodzą.
 - [ ] Sprawdzone są desktop, dotyk, mały ekran, niski preset grafiki, world import/export i ponowne uruchomienie świata.
 - [ ] README, pomoc w grze, changelog i numer wersji opisują wyłącznie realnie dostarczone możliwości.
-- [ ] Dopiero po spełnieniu powyższych kryteriów oznacz PR jako gotowy i przygotuj wydanie 3.0.
+- [ ] Dopiero po spełnieniu powyższych kryteriów oznacz PR jako gotowy i przygotuj pełne wydanie 5.0.

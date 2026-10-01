@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
+import { B, T, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
 import { tileUV } from './textures';
 import { CH, CS, FLAT_H, SEA } from './constants';
+import { carveCaveNetwork, clearCaveExitVegetation } from './caves';
 import {
   applyVillages,
   nearestVillage,
@@ -16,9 +17,14 @@ import {
 // ale stare importy z world.ts nadal działają.
 export { CH, CS, FLAT_H, SEA };
 
-export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Nether';
+export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Tajga' | 'Pustkowie' | 'Kwiecista łąka' | 'Ośnieżone szczyty' | 'Płaskowyż' | 'Wąwóz' | 'Głęboka dolina' | 'Rzeka' | 'Jezioro' | 'Nether';
 
 const idx = (x: number, y: number, z: number) => (y * CS + z) * CS + x;
+
+function smoothTerrain(a: number, b: number, n: number): number {
+  const t = Math.max(0, Math.min(1, (n - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
 
 function hash(x: number, y: number, z: number, s: number): number {
   let h = (x * 374761393 + y * 668265263 + z * 2147483647 + s * 144665) | 0;
@@ -130,6 +136,15 @@ function addBox(
 
 /** Local bounds of a thin panel. null = draw a normal cube. */
 function panelBounds(id: number): [number, number, number, number, number, number] | null {
+  if (id >= B.PAINTING_LAND_N && id <= B.PAINTING_SUN_W) {
+    // Wall paintings are thin panels, not floating full cubes or crossed plants.
+    const facing = (id - B.PAINTING_LAND_N) % 4;
+    if (facing === 0) return [0.08, 0.08, 0, 0.92, 0.92, 0.0625];
+    if (facing === 1) return [0.9375, 0.08, 0.08, 1, 0.92, 0.92];
+    if (facing === 2) return [0.08, 0.08, 0.9375, 0.92, 0.92, 1];
+    return [0, 0.08, 0.08, 0.0625, 0.92, 0.92];
+  }
+  if (id >= B.TURTLE_EGG0 && id <= B.TURTLE_EGG2) return [0.26, 0, 0.27, 0.74, 0.36, 0.73];
   const t = 0.1875;
   const face = ladderFacing(id);
   if (face === 0 || id === B.TRAP_N) return [0, 0, 0, 1, 1, t];
@@ -156,6 +171,8 @@ export class World {
    * so the two maps can never bleed into each other.
    */
   readonly isNether: boolean;
+  /** Generator v2 reproduces pre-3.0 seeds for worlds created before the upgrade. */
+  readonly terrainVersion: 2 | 3 | 4 | 5 | 6 | 7;
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
@@ -167,7 +184,8 @@ export class World {
   private nTemp: SimplexNoise;
   private vctx: VillageContext | null = null;
 
-  constructor(seed: number, flat = false, nether = false) {
+  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 | 4 | 5 | 6 | 7 = 7) {
+    this.terrainVersion = terrainVersion;
     this.seed = seed;
     this.flat = flat && !nether;
     this.isNether = nether;
@@ -202,6 +220,9 @@ export class World {
     else if (h > 92) biome = 'Góry';
     else if (temp > 0.3) biome = 'Pustynia';
     else if (temp < -0.32) biome = 'Tundra';
+    else if (this.terrainVersion >= 3 && temp < -0.12 && forest > 0.06) biome = 'Tajga';
+    else if (this.terrainVersion >= 3 && temp > 0.12 && forest < -0.23) biome = 'Pustkowie';
+    else if (this.terrainVersion >= 3 && temp > -0.11 && temp < 0.16 && forest < -0.13) biome = 'Kwiecista łąka';
     // Climate bands add three distinct warm/wet regions without changing
     // existing seed terrain or the save format. The low-frequency fields make
     // biome borders broad enough to read during exploration.
@@ -210,6 +231,56 @@ export class World {
     else if (temp > -0.08 && temp < 0.12 && forest > 0.18 && forest < 0.42) biome = 'Bagno';
     else if (forest > 0.15) biome = forest > 0.35 ? 'Brzozowy las' : 'Las';
     else biome = 'Równiny';
+    if (this.terrainVersion >= 4) {
+      // v4 only: old v2/v3 seeds and already saved chunks remain untouched.
+      // The added profiles use GLOBAL coordinates, not per-chunk randomness,
+      // so generation order and chunk boundaries cannot add a new seam.
+      const region = this.n1.fbm2D(x / 580 + 101, z / 580 - 37, 2);
+      const plateau = smoothTerrain(0.11, 0.34, region) * smoothTerrain(SEA + 7, SEA + 18, h) *
+        (1 - smoothTerrain(105, 115, h));
+      if (plateau > 0) {
+        const cap = 88 + this.n2.noise2D(x / 75 + 87, z / 75) * 2;
+        h += (cap - h) * plateau * 0.82;
+        if (plateau > 0.65) biome = 'Płaskowyż';
+      }
+      const valleyRegion = this.n3.fbm2D(x / 500 - 111, z / 500 + 63, 2);
+      const valley = smoothTerrain(0.10, 0.34, -valleyRegion) * smoothTerrain(SEA + 8, SEA + 23, h);
+      if (valley > 0) {
+        const floor = SEA + 3 + this.n2.noise2D(x / 92, z / 92 + 131) * 2;
+        h += (floor - h) * valley * 0.82;
+        if (valley > 0.65) biome = 'Głęboka dolina';
+      }
+      const ravineRegion = this.n2.fbm2D(x / 510 + 197, z / 510 - 63, 2);
+      const ravineLine = Math.abs(this.nCave.noise2D(x / 135 + 111, z / 135 - 317));
+      const ravine = smoothTerrain(0.14, 0.35, ravineRegion) * (1 - smoothTerrain(0.018, 0.095, ravineLine)) *
+        smoothTerrain(SEA + 14, SEA + 28, h);
+      if (ravine > 0) {
+        h = Math.max(SEA + 2, h - ravine * 29);
+        if (ravine > 0.56) biome = 'Wąwóz';
+      }
+      h = Math.floor(Math.max(7, Math.min(CH - 12, h)));
+      if (h >= 105 && (biome === 'Góry' || biome === 'Tundra')) biome = 'Ośnieżone szczyty';
+    }
+    if (this.terrainVersion >= 5) {
+      // The zero contours of a smooth, seeded field form long continuous
+      // meandering waterways. The second field widens occasional reaches into
+      // source lakes; the central source blocks remain connected to the river.
+      // Only global coordinates are used, including across negative chunks.
+      const line = Math.abs(this.nCave2.noise2D(x / 195 + 271, z / 195 - 149));
+      const lakeField = this.n1.fbm2D(x / 260 - 93, z / 260 + 157, 2);
+      const lake = smoothTerrain(0.08, 0.33, lakeField);
+      const width = 0.055 + lake * 0.105;
+      const bank = 1 - smoothTerrain(width, width + 0.17, line);
+      const water = 1 - smoothTerrain(width * 0.42, width, line);
+      // Never build a dam on a pre-existing ocean floor: only excavate.
+      h += (Math.min(h, SEA + 2) - h) * bank;
+      h += (Math.min(h, SEA - 4 - lake * 2) - h) * water;
+      h = Math.floor(Math.max(7, h));
+      // A snowy summit excavated into a river bank is exposed stone, not
+      // a snow layer mysteriously surviving below sea level.
+      if (biome === 'Ośnieżone szczyty' && h < 95) biome = 'Góry';
+      if (water > 0.62 && h < SEA - 1) biome = lake > 0.63 ? 'Jezioro' : 'Rzeka';
+    }
     // Marshes sit close to sea level, so shallow pools naturally appear in
     // their low spots and the existing water table creates a wetland feel.
     if (biome === 'Bagno') h = Math.min(h, SEA + 2);
@@ -256,21 +327,29 @@ export class World {
             id = B.STONE;
             if (biome === 'Pustynia' && y > h - 8) id = B.SANDSTONE;
           } else if (y < h) {
-            id = sandy ? (biome === 'Ocean' && y < SEA - 6 ? B.GRAVEL : B.SAND) : biome === 'Bagno' && y >= h - 3 ? B.MUD : B.DIRT;
-            if (biome === 'Góry' && h > 100) id = B.STONE;
+            id = sandy ? (biome === 'Ocean' && y < SEA - 6 ? B.GRAVEL : B.SAND) : biome === 'Bagno' && y >= h - 3 ? B.MUD : biome === 'Pustkowie' && y >= h - 3 ? B.DRY_SOIL : B.DIRT;
+            if ((biome === 'Góry' && h > 100) ||
+                (this.terrainVersion >= 4 && (biome === 'Ośnieżone szczyty' || biome === 'Wąwóz') && h > 92)) id = B.STONE;
           } else if (y === h) {
             if (biome === 'Ocean') id = hash(wx, 7, wz, s) < 0.2 ? B.CLAY : h < SEA - 8 ? B.GRAVEL : B.SAND;
             else if (sandy) id = B.SAND;
-            else if (biome === 'Tundra') id = B.SNOW;
+            else if (biome === 'Tundra' || biome === 'Ośnieżone szczyty') id = B.SNOW;
+            else if (biome === 'Wąwóz') id = h < SEA + 6 ? B.GRAVEL : B.STONE;
+            else if (biome === 'Rzeka' || biome === 'Jezioro') id = biome === 'Jezioro' ? B.CLAY : B.GRAVEL;
+            else if (biome === 'Płaskowyż') id = h > 94 ? B.STONE : B.GRASS;
+            else if (biome === 'Głęboka dolina') id = h < SEA + 4 ? B.DIRT : B.GRASS;
             else if (biome === 'Bagno') id = B.MUD;
+            else if (biome === 'Pustkowie') id = hash(wx, 23, wz, s) < 0.14 ? B.GRAVEL : B.DRY_SOIL;
+            else if (biome === 'Tajga') id = h > 87 ? B.SNOW : B.PODZOL;
+            else if (biome === 'Kwiecista łąka') id = B.MEADOW_GRASS;
             else if (biome === 'Góry') id = h > 108 ? B.SNOW : h > 98 ? B.STONE : B.GRASS;
             else id = h < SEA ? B.DIRT : B.GRASS;
           } else if (y <= SEA) {
             id = biome === 'Tundra' && y === SEA ? B.ICE : B.WATER;
           }
 
-          // Caves
-          if (id !== B.AIR && id !== B.WATER && id !== B.BEDROCK && id !== B.ICE && y > 4) {
+          // Preserve the old cave topology bit-for-bit for saved v2-v5 worlds.
+          if (this.terrainVersion < 6 && id !== B.AIR && id !== B.WATER && id !== B.BEDROCK && id !== B.ICE && y > 4) {
             const underWater = h < SEA + 2 && y > h - 4;
             if (!underWater && y < h + 1) {
               const a = this.nCave.noise3D(wx / 45, y / 28, wz / 45);
@@ -290,7 +369,7 @@ export class World {
             const cl3 = hash(wx >> 1, y >> 1, wz >> 1, s + 41);
             const cl4 = hash(wx >> 1, y >> 1, wz >> 1, s + 59);
             if (y < 16 && cl < 0.012 && r < 0.6) id = B.DIAMOND_ORE;
-            else if (y > 6 && y < 40 && cl3 > (biome === 'Góry' ? 0.986 : 0.9965) && r < 0.6) id = B.EMERALD_ORE;
+            else if (y > 6 && y < 40 && cl3 > (biome === 'Góry' ? (this.terrainVersion >= 6 ? 0.987 : 0.986) : (this.terrainVersion >= 6 ? 0.9967 : 0.9965)) && r < 0.6) id = B.EMERALD_ORE;
             else if (y < 16 && cl4 > 0.04 && cl4 < 0.07 && r < 0.55) id = B.REDSTONE_ORE;
             else if (y < 32 && cl > 0.985 && r < 0.6) id = B.GOLD_ORE;
             else if (y < 64 && cl > 0.02 && cl < 0.045 && r < 0.6) id = B.IRON_ORE;
@@ -303,10 +382,30 @@ export class World {
 
       }
 
+    if (this.terrainVersion >= 6) {
+      carveCaveNetwork(d, c.cx, c.cz, s,
+        (x, z) => this.surface(x, z).h,
+        (x, z) => villageAt(x, z, this.villageContext()) !== null,
+        this.terrainVersion === 6 ? 6 : 7);
+    }
+
     // Wioski: wyrównują teren i stawiają budynki, zanim pojawią się dekoracje.
     const village = applyVillages(d, c.cx, c.cz, this.villageContext());
     const vmask = village.mask;
     if (village.top > maxY) maxY = village.top;
+    if (this.terrainVersion >= 5 && village.top) {
+      // Village foundations are above the water table. Leave their walkable
+      // deck intact, but make a two-block-high culvert below it where a river
+      // crosses; otherwise applying the village would dam the source water.
+      for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
+        const ground = village.ground[z * CS + x];
+        const info = surf[z * CS + x];
+        if (ground <= SEA + 2 || (info.biome !== 'Rzeka' && info.biome !== 'Jezioro')) continue;
+        d[idx(x, info.h, z)] = info.biome === 'Jezioro' ? B.CLAY : B.GRAVEL;
+        for (let y = info.h + 1; y <= SEA; y++) d[idx(x, y, z)] = B.WATER;
+        for (let y = SEA + 1; y < ground && y <= SEA + 2; y++) d[idx(x, y, z)] = B.AIR;
+      }
+    }
 
     // Surface decoration (pomija kolumny zajęte przez wioskę)
     for (let z = 0; z < CS; z++)
@@ -319,6 +418,19 @@ export class World {
         const top = d[idx(x, h, z)];
         if (biome === 'Bagno' && h < SEA && SEA + 1 < CH && d[idx(x, SEA, z)] === B.WATER && hash(wx, 2, wz, s + 154) < 0.12) {
           d[idx(x, SEA + 1, z)] = B.LILY_PAD;
+        }
+        if (biome === 'Pustkowie' && top === B.DRY_SOIL && h + 1 < CH && hash(wx, 31, wz, s + 72) < 0.035) {
+          d[idx(x, h + 1, z)] = B.DEAD_SHRUB;
+        }
+        if (biome === 'Tajga' && top === B.PODZOL && h + 1 < CH && hash(wx, 30, wz, s + 74) < 0.06) {
+          d[idx(x, h + 1, z)] = B.TALLGRASS;
+        }
+        if (top === B.MEADOW_GRASS && h + 1 < CH) {
+          const r = hash(wx, 31, wz, s + 73);
+          if (r < 0.18) d[idx(x, h + 1, z)] = B.TALLGRASS;
+          else if (r < 0.36) d[idx(x, h + 1, z)] = B.FLOWER_BLUE;
+          else if (r < 0.49) d[idx(x, h + 1, z)] = B.FLOWER_RED;
+          else if (r < 0.62) d[idx(x, h + 1, z)] = B.FLOWER_YELLOW;
         }
         if (top === B.GRASS && h + 1 < CH) {
           const r = hash(wx, 3, wz, s + 9);
@@ -365,16 +477,22 @@ export class World {
         else if (info.biome === 'Dżungla') chance = 0.045;
         else if (info.biome === 'Bagno') chance = 0.025;
         else if (info.biome === 'Sawanna') chance = 0.008;
+        else if (info.biome === 'Tajga') chance = 0.038;
+        else if (info.biome === 'Kwiecista łąka') chance = 0.001;
         else if (info.biome === 'Równiny') chance = 0.003;
         else if (info.biome === 'Tundra') chance = 0.006;
         else if (info.biome === 'Góry' && info.h < 98) chance = 0.008;
         if (r > chance) continue;
         if (info.h <= SEA) continue;
         const birch = info.biome === 'Brzozowy las' ? hash(tx, 2, tz, s) < 0.8 : hash(tx, 2, tz, s) < 0.15;
-        const kind = info.biome === 'Dżungla' ? 'jungle' : info.biome === 'Sawanna' ? 'acacia' : undefined;
+        const kind = info.biome === 'Dżungla' ? 'jungle' : info.biome === 'Sawanna' ? 'acacia' : info.biome === 'Tajga' ? 'spruce' : undefined;
         const top = this.growTree(c, tx, tz, info.h + 1, birch, vmask, kind);
         if (top > maxY) maxY = top;
       }
+
+    if (this.terrainVersion >= 7) clearCaveExitVegetation(d, c.cx, c.cz, s,
+      (x, z) => this.surface(x, z).h,
+      (x, z) => villageAt(x, z, this.villageContext()) !== null);
 
     // Buried chests in caves. Does not change terrain height, only fills an existing air pocket.
     for (let n = 0; n < 3; n++) {
@@ -412,13 +530,13 @@ export class World {
    * Places an oak or birch trunk with its canopy, clipping to this chunk only.
    * Returns the highest y the tree reaches (for maxY bookkeeping).
    */
-  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean, skip?: Uint8Array, kind?: 'jungle' | 'acacia'): number {
+  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean, skip?: Uint8Array, kind?: 'jungle' | 'acacia' | 'spruce'): number {
     const d = c.data;
     const ox = c.cx * CS, oz = c.cz * CS;
     const s = this.seed;
-    const logId = kind === 'acacia' ? B.ACACIA_LOG : birch ? B.BIRCH_LOG : B.LOG;
-    const leafId = kind === 'jungle' ? B.JUNGLE_LEAVES : kind === 'acacia' ? B.ACACIA_LEAVES : birch ? B.BIRCH_LEAVES : B.LEAVES;
-    const th = kind === 'acacia' ? 5 + Math.floor(hash(tx, 6, tz, s) * 2) : kind === 'jungle' ? 7 + Math.floor(hash(tx, 6, tz, s) * 4) : 4 + Math.floor(hash(tx, 6, tz, s) * 3);
+    const logId = kind === 'spruce' ? B.SPRUCE_LOG : kind === 'acacia' ? B.ACACIA_LOG : birch ? B.BIRCH_LOG : B.LOG;
+    const leafId = kind === 'spruce' ? B.SPRUCE_LEAVES : kind === 'jungle' ? B.JUNGLE_LEAVES : kind === 'acacia' ? B.ACACIA_LEAVES : birch ? B.BIRCH_LEAVES : B.LEAVES;
+    const th = kind === 'spruce' ? 7 + Math.floor(hash(tx, 6, tz, s) * 3) : kind === 'acacia' ? 5 + Math.floor(hash(tx, 6, tz, s) * 2) : kind === 'jungle' ? 7 + Math.floor(hash(tx, 6, tz, s) * 4) : 4 + Math.floor(hash(tx, 6, tz, s) * 3);
     const topY = base + th;
     if (topY + 1 >= CH) return base;
     const put = (x: number, y: number, z: number, id: number, force: boolean) => {
@@ -429,8 +547,8 @@ export class World {
       const cur = d[i];
       if (force || cur === B.AIR || cur === B.TALLGRASS || cur === B.FLOWER_RED || cur === B.FLOWER_YELLOW) d[i] = id;
     };
-    for (let ly = topY - (kind === 'jungle' ? 4 : 3); ly <= topY; ly++) {
-      const rad = kind === 'acacia' ? (ly >= topY - 1 ? 3 : ly >= topY - 3 ? 2 : 1) : kind === 'jungle' ? (ly >= topY - 2 ? 2 : 3) : ly >= topY - 1 ? 1 : 2;
+    for (let ly = topY - (kind === 'spruce' ? 6 : kind === 'jungle' ? 4 : 3); ly <= topY; ly++) {
+      const rad = kind === 'spruce' ? Math.max(0, Math.min(2, Math.floor((topY - ly + 1) / 2))) : kind === 'acacia' ? (ly >= topY - 1 ? 3 : ly >= topY - 3 ? 2 : 1) : kind === 'jungle' ? (ly >= topY - 2 ? 2 : 3) : ly >= topY - 1 ? 1 : 2;
       for (let dx = -rad; dx <= rad; dx++)
         for (let dz = -rad; dz <= rad; dz++) {
           if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || hash(tx + dx, ly, tz + dz, s) < 0.5)) continue;
@@ -448,7 +566,7 @@ export class World {
       for (let n = 1; n <= 2; n++) put(tx + side * n, topY - 2 + n, tz, logId, true);
       for (let n = 1; n <= 2; n++) put(tx - side * n, topY - 1, tz, logId, true);
     }
-    put(tx, base - 1, tz, B.DIRT, true);
+    if (kind !== 'spruce') put(tx, base - 1, tz, B.DIRT, true);
     return topY + 3;
   }
 
@@ -539,7 +657,7 @@ export class World {
   /** Deterministyczny kontekst generatora wsi (ten sam dla całego świata). */
   villageContext(): VillageContext {
     if (!this.vctx) {
-      this.vctx = { seed: this.seed, flat: this.flat, sea: SEA, surface: (x, z) => this.surface(x, z) };
+      this.vctx = { seed: this.seed, terrainVersion: this.terrainVersion, flat: this.flat, sea: SEA, surface: (x, z) => this.surface(x, z) };
     }
     return this.vctx;
   }
@@ -832,6 +950,29 @@ export class World {
         for (let x = 0; x < CS; x++) {
           const id = c.data[idx(x, y, z)];
           if (id === 0) continue;
+          // Six small boxes instead of full cubes: table legs, chair legs and
+          // chair back stay visibly readable even in the lowest atlas preset.
+          if ((id >= B.CHAIR_N && id <= B.CHAIR_W) || id === B.TABLE) {
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const buf = bufs[LAYER[id]];
+            const wx = ox + x, wz = oz + z;
+            const seat = id !== B.TABLE;
+            addBox(buf, wx, y, wz, 0.12, seat ? 0.42 : 0.69, 0.12, 0.88,
+              seat ? 0.55 : 0.79, 0.88, seat ? T.chair_seat : T.table_top, sky, blk);
+            for (const xx of [0.14, 0.73]) for (const zz of [0.14, 0.73])
+              addBox(buf, wx, y, wz, xx, 0, zz, xx + 0.13,
+                seat ? 0.42 : 0.69, zz + 0.13, seat ? T.chair_back : T.table_leg, sky, blk);
+            if (seat) {
+              const facing = id - B.CHAIR_N;
+              const bounds: [number, number, number, number] = facing === 0 ? [0.12, 0.12, 0.88, 0.25] :
+                facing === 1 ? [0.75, 0.12, 0.88, 0.88] :
+                facing === 2 ? [0.12, 0.75, 0.88, 0.88] : [0.12, 0.12, 0.25, 0.88];
+              addBox(buf, wx, y, wz, bounds[0], 0.55, bounds[1],
+                bounds[2], 0.97, bounds[3], T.chair_back, sky, blk);
+            }
+            continue;
+          }
           const panel = panelBounds(id);
           if (panel) {
             const sky = skyLight(x, y, z);
@@ -924,7 +1065,7 @@ export class World {
             const nx = x + F.dir[0], ny = y + F.dir[1], nz = z + F.dir[2];
             const nb = get(nx, ny, nz);
             if (IS_OPAQUE[nb]) continue;
-            if (nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
+            if (nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES && id !== B.SPRUCE_LEAVES) continue;
             if (isLiquid && (RENDER[nb] === 2)) continue;
             const t = tileFor(id, f);
             const sky = skyLight(nx, ny, nz);
@@ -1008,19 +1149,19 @@ export class World {
   }
 }
 
-/** Grows an oak or birch where a sapling stands. Returns false if the space is blocked. */
-export function plantTree(world: World, x: number, y: number, z: number, birch: boolean): boolean {
-  const logId = birch ? B.BIRCH_LOG : B.LOG;
-  const leafId = birch ? B.BIRCH_LEAVES : B.LEAVES;
+/** Grows an oak, birch or spruce where a sapling stands. Checks the whole canopy first. */
+export function plantTree(world: World, x: number, y: number, z: number, birch: boolean, spruce = false): boolean {
+  const logId = spruce ? B.SPRUCE_LOG : birch ? B.BIRCH_LOG : B.LOG;
+  const leafId = spruce ? B.SPRUCE_LEAVES : birch ? B.BIRCH_LEAVES : B.LEAVES;
   const ground = world.getBlock(x, y - 1, z);
-  if (ground !== B.DIRT && ground !== B.GRASS && ground !== B.FARMLAND) return false;
-  const th = 4 + Math.floor(Math.random() * 3);
+  if (ground !== B.DIRT && ground !== B.GRASS && ground !== B.FARMLAND && ground !== B.PODZOL && ground !== B.MEADOW_GRASS) return false;
+  const th = (spruce ? 7 : 4) + Math.floor(Math.random() * 3);
   const topY = y + th - 1;
   if (topY + 1 >= CH) return false;
   const clearish = (id: number) =>
-    id === B.AIR || id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.LEAVES || id === B.BIRCH_LEAVES || RENDER[id] === 1;
+    id === B.AIR || id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.SPRUCE_SAPLING || id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.SPRUCE_LEAVES || RENDER[id] === 1;
   for (let ly = y; ly < topY; ly++) if (!clearish(world.getBlock(x, ly, z))) return false;
-  for (let ly = topY - 2; ly <= topY + 1; ly++) {
+  for (let ly = topY - (spruce ? 5 : 2); ly <= topY + 1; ly++) {
     for (let dx = -2; dx <= 2; dx++)
       for (let dz = -2; dz <= 2; dz++) {
         if (dx === 0 && dz === 0) continue;
@@ -1032,8 +1173,8 @@ export function plantTree(world: World, x: number, y: number, z: number, birch: 
     const cur = world.getBlock(px, py, pz);
     if (force || clearish(cur)) world.setBlock(px, py, pz, id);
   };
-  for (let ly = topY - 3; ly <= topY; ly++) {
-    const rad = ly >= topY - 1 ? 1 : 2;
+  for (let ly = topY - (spruce ? 5 : 3); ly <= topY; ly++) {
+    const rad = spruce ? Math.max(0, Math.min(2, Math.floor((topY - ly + 1) / 2))) : ly >= topY - 1 ? 1 : 2;
     for (let dx = -rad; dx <= rad; dx++)
       for (let dz = -rad; dz <= rad; dz++) {
         if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || Math.random() < 0.5)) continue;
@@ -1045,6 +1186,6 @@ export function plantTree(world: World, x: number, y: number, z: number, birch: 
     if (Math.random() < 0.65) put(x + dx, topY + 1, z + dz, leafId, false);
   }
   for (let ly = y; ly < topY; ly++) put(x, ly, z, logId, true);
-  if (ground !== B.DIRT) put(x, y - 1, z, B.DIRT, true);
+  if (ground !== B.DIRT && ground !== B.PODZOL && ground !== B.MEADOW_GRASS) put(x, y - 1, z, B.DIRT, true);
   return true;
 }

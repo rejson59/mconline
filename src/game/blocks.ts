@@ -34,6 +34,14 @@ export const T = {
   basalt_top: 140, basalt_side: 141, blackstone: 142, soul_soil: 143, crying_obsidian: 144,
   target_top: 145, target_side: 146, honey_block: 147, honeycomb_block: 148,
   mud: 149, acacia_side: 150, acacia_top: 151, jungle_leaves: 152, lily_pad: 153,
+  spruce_side: 154, spruce_top: 155, spruce_leaves: 156, spruce_sapling: 157,
+  dry_soil: 158, dead_shrub: 159, flower_blue: 160, meadow_top: 161, meadow_side: 162, podzol: 163, turtle_egg0: 164, turtle_egg1: 165, turtle_egg2: 166,
+  snare_empty: 167, snare_armed: 168, snare_rabbit: 169, snare_chicken: 170,
+  camp_tent: 171, camp_cot_top: 172, camp_cot_side: 173,
+  travel_pot_top: 174, travel_pot_side: 175,
+  carrot0: 176, carrot1: 177, carrot2: 178, carrot3: 179,
+  painting_land: 180, painting_sun: 181, banner_red: 182, banner_blue: 183,
+  vase: 184, chair_seat: 185, chair_back: 186, table_top: 187, table_leg: 188,
 } as const;
 
 export const B = {
@@ -92,6 +100,15 @@ export const B = {
   SOUL_SOIL: 336, CRYING_OBSIDIAN: 337, TARGET: 338, HONEY_BLOCK: 339, HONEYCOMB_BLOCK: 340,
   // 3.0 biomes: append-only ids preserve existing worlds.
   MUD: 400, ACACIA_LOG: 401, ACACIA_LEAVES: 402, JUNGLE_LEAVES: 403, LILY_PAD: 404,
+  SPRUCE_LOG: 405, SPRUCE_LEAVES: 406, SPRUCE_SAPLING: 407, DRY_SOIL: 408,
+  DEAD_SHRUB: 409, FLOWER_BLUE: 410, MEADOW_GRASS: 411, PODZOL: 412, TURTLE_EGG0: 413, TURTLE_EGG1: 414, TURTLE_EGG2: 415,
+  SNARE: 416, SNARE_ARMED: 417, SNARE_RABBIT: 418, SNARE_CHICKEN: 419,
+  CAMP_TENT: 420, CAMP_COT: 421, TRAVEL_POT: 422,
+  CARROT_CROP0: 423, CARROT_CROP1: 424, CARROT_CROP2: 425, CARROT_CROP3: 426,
+  PAINTING_LAND_N: 427, PAINTING_LAND_E: 428, PAINTING_LAND_S: 429, PAINTING_LAND_W: 430,
+  PAINTING_SUN_N: 431, PAINTING_SUN_E: 432, PAINTING_SUN_S: 433, PAINTING_SUN_W: 434,
+  BANNER_RED: 435, BANNER_BLUE: 436, VASE: 437,
+  CHAIR_N: 438, CHAIR_E: 439, CHAIR_S: 440, CHAIR_W: 441, TABLE: 442,
 } as const;
 
 export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail';
@@ -304,6 +321,68 @@ def(B.ACACIA_LOG, 'Pień akacji', [T.acacia_top, T.acacia_top, T.acacia_side], {
 def(B.ACACIA_LEAVES, 'Liście akacji', T.jungle_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.JUNGLE_LEAVES, 'Gęste liście tropikalne', T.jungle_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.LILY_PAD, 'Lilia wodna', T.lily_pad, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0.1, sound: 'grass' });
+// New terrain and vegetation belong to generator v3; ids remain stable in older saves.
+def(B.SPRUCE_LOG, 'Pień świerku', [T.spruce_top, T.spruce_top, T.spruce_side], { hardness: 2, sound: 'wood' });
+def(B.SPRUCE_LEAVES, 'Igły świerku', T.spruce_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
+def(B.SPRUCE_SAPLING, 'Sadzonka świerku', T.spruce_sapling, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
+def(B.DRY_SOIL, 'Spękana ziemia', T.dry_soil, { hardness: 0.6, sound: 'sand' });
+def(B.DEAD_SHRUB, 'Suchy krzew', T.dead_shrub, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass', drop: -1 });
+def(B.FLOWER_BLUE, 'Błękitny kwiat', T.flower_blue, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
+def(B.MEADOW_GRASS, 'Łąkowa trawa', [T.meadow_top, T.dirt, T.meadow_side], { hardness: 0.6, sound: 'grass', drop: B.DIRT });
+def(B.PODZOL, 'Bielica', T.podzol, { hardness: 0.6, sound: 'grass' });
+for (const [id, tile] of [[B.TURTLE_EGG0, T.turtle_egg0], [B.TURTLE_EGG1, T.turtle_egg1], [B.TURTLE_EGG2, T.turtle_egg2]])
+  def(id, 'Jajo żółwia', tile, { solid: false, opaque: false, layer: 1, hardness: 0.2, drop: B.TURTLE_EGG0, sound: 'sand' });
+
+// Each snare state is an append-only block ID in saved world mods: no hidden
+// cooldown or loot inventory that could be reset by a reload or dimension swap.
+for (const [id, tile, name] of [
+  [B.SNARE, T.snare_empty, 'Sidła (rozbrojone)'],
+  [B.SNARE_ARMED, T.snare_armed, 'Sidła (uzbrojone)'],
+  [B.SNARE_RABBIT, T.snare_rabbit, 'Sidła: królik'],
+  [B.SNARE_CHICKEN, T.snare_chicken, 'Sidła: kurczak'],
+] as const) def(id, name, tile, { solid: false, opaque: false, layer: 1, render: 'cross',
+  hardness: 0.4, sound: 'wood', drop: B.SNARE });
+
+// Packed-camp components are regular breakable blocks, not hidden block entities.
+// The existing campfire (73) is reused, preserving old worlds and recipes.
+def(B.CAMP_TENT, 'Namiot biwakowy', T.camp_tent, { solid: false, opaque: false, layer: 1,
+  render: 'cross', hardness: 0.7, sound: 'cloth' });
+def(B.CAMP_COT, 'Posłanie podróżne', [T.camp_cot_top, T.planks, T.camp_cot_side], {
+  opaque: false, layer: 1, hardness: 0.8, sound: 'cloth',
+});
+
+def(B.TRAVEL_POT, 'Kocioł podróżny', [T.travel_pot_top, T.iron_block, T.travel_pot_side], {
+  hardness: 2, sound: 'stone', opaque: false, layer: 1,
+});
+
+// Carrots share the old farmland/growth rules but have their own harvest and texture.
+for (let stage = 0; stage < 4; stage++) {
+  def(B.CARROT_CROP0 + stage, ['Pędy marchwi', 'Młoda marchew', 'Marchew', 'Dojrzała marchew'][stage],
+    T.carrot0 + stage, { solid: false, opaque: false, layer: 1, render: 'cross',
+      hardness: 0, drop: -1, sound: 'grass' });
+}
+
+// 3.0 #50: oriented wall paintings, hanging textiles, pottery and proper
+// multi-part furniture meshes. Facing variants always recover the base item.
+for (let facing = 0; facing < 4; facing++) {
+  def(B.PAINTING_LAND_N + facing, facing ? `Obraz: krajobraz (${facing})` : 'Obraz: krajobraz',
+    T.painting_land, { solid: false, opaque: false, layer: 1, hardness: 0.3,
+      drop: B.PAINTING_LAND_N, sound: 'wood' });
+  def(B.PAINTING_SUN_N + facing, facing ? `Obraz: zachód słońca (${facing})` : 'Obraz: zachód słońca',
+    T.painting_sun, { solid: false, opaque: false, layer: 1, hardness: 0.3,
+      drop: B.PAINTING_SUN_N, sound: 'wood' });
+  def(B.CHAIR_N + facing, facing ? `Krzesło (${facing})` : 'Krzesło',
+    [T.chair_seat, T.planks, T.chair_back], { opaque: false, layer: 1,
+      hardness: 1.5, drop: B.CHAIR_N, sound: 'wood' });
+}
+def(B.BANNER_RED, 'Chorągiew czerwona', T.banner_red, {
+  solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0.4, sound: 'cloth' });
+def(B.BANNER_BLUE, 'Chorągiew niebieska', T.banner_blue, {
+  solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0.4, sound: 'cloth' });
+def(B.VASE, 'Malowany wazon', T.vase, {
+  solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0.5, sound: 'stone' });
+def(B.TABLE, 'Drewniany stolik', [T.table_top, T.planks, T.table_leg], {
+  opaque: false, layer: 1, hardness: 1.5, sound: 'wood' });
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;
@@ -354,11 +433,30 @@ export function tileFor(id: number, face: number): number {
   return d.side;
 }
 
+export function paintingBase(id: number): number | null {
+  if (id >= B.PAINTING_LAND_N && id <= B.PAINTING_LAND_W) return B.PAINTING_LAND_N;
+  if (id >= B.PAINTING_SUN_N && id <= B.PAINTING_SUN_W) return B.PAINTING_SUN_N;
+  return null;
+}
+export function chairBase(id: number): number | null {
+  return id >= B.CHAIR_N && id <= B.CHAIR_W ? B.CHAIR_N : null;
+}
+export function paintingSupport(id: number, x: number, y: number, z: number): [number, number, number] | null {
+  const base = paintingBase(id);
+  if (base === null) return null;
+  const face = id - base;
+  return face === 0 ? [x, y, z - 1] : face === 1 ? [x + 1, y, z] :
+    face === 2 ? [x, y, z + 1] : [x - 1, y, z];
+}
+
 // Blocks available in creative inventory
 function creativeVisible(id: number): boolean {
+  if (paintingBase(id) !== null && id !== paintingBase(id)) return false;
+  if (chairBase(id) !== null && id !== B.CHAIR_N) return false;
+  if (id === B.TURTLE_EGG1 || id === B.TURTLE_EGG2) return false;
   if (id === B.AIR || id === B.WATER || id === B.LAVA || id === B.FURNACE_ON || id === B.CROP1 || id === B.CROP2 || id === B.LOOT_CHEST) return false;
   if (id === B.REDSTONE_LAMP_ON || id === B.REDSTONE_TORCH_OFF || id === B.LEVER_ON || id === B.BUTTON_ON) return false;
-  if (id === B.PISTON_HEAD) return false;
+  if (id === B.PISTON_HEAD || (id >= B.SNARE_ARMED && id <= B.SNARE_CHICKEN)) return false;
   if (id === B.OAK_SLAB_TOP || id === B.STONE_SLAB_TOP || id === B.COBBLE_SLAB_TOP || id === B.BRICK_SLAB_TOP || id === B.SANDSTONE_SLAB_TOP || id === B.NETHER_BRICK_SLAB_TOP || id === B.QUARTZ_SLAB_TOP) return false;
   if (id >= B.DOOR_E && id <= B.DOOR_OW) return false;
   if (id >= B.DOOR_UN && id <= B.DOOR_UOW) return false;

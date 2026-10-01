@@ -765,8 +765,6 @@ export function buildAtlas(): AtlasResult {
     for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x++) setPx(T.honeycomb_block, x, y, 200, 160, 50);
   }
 
-  ctx.putImageData(img, 0, 0);
-
   // 3.0 biome atlas additions: textured wet mud, striped acacia bark,
   // layered tropical foliage and a readable water-lily silhouette.
   {
@@ -797,6 +795,182 @@ export function buildAtlas(): AtlasResult {
       setPx(T.lily_pad, x, y, c[0], c[1], c[2], edge ? 0 : 255);
     }
   }
+
+  // Conifer, meadow and arid ground: all tiles use the same 16px atlas budget.
+  {
+    const r = R(154);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const seam = x % 5 === 0 || x % 5 === 1;
+      const c = shade(seam ? [52, 47, 41] : [94, 76, 56], 0.85 + r() * 0.26);
+      setPx(T.spruce_side, x, y, ...c);
+    }
+    logTop(T.spruce_top, [154, 123, 85], [113, 85, 60], [53, 47, 41], R(155));
+  }
+  leaves(T.spruce_leaves, [37, 83, 64], R(156));
+  clear(T.spruce_sapling);
+  for (let y = 8; y < 15; y++) setPx(T.spruce_sapling, 8, y, 94, 75, 52);
+  for (let y = 2; y < 11; y++) {
+    const rad = Math.min(4, Math.floor((y + 1) / 2));
+    for (let x = 8 - rad; x <= 8 + rad; x++) if (Math.abs(x - 8) <= rad - (y % 3 === 0 ? 1 : 0)) {
+      setPx(T.spruce_sapling, x, y, 34 + (x % 3) * 9, 91 + (y % 4) * 6, 67);
+    }
+  }
+  {
+    const r = R(158);
+    noiseFill(T.dry_soil, [153, 132, 100], 0.22, r);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      if ((x * 7 + y * 11) % 29 === 0 || (y % 7 === 0 && (x + y) % 9 < 2)) setPx(T.dry_soil, x, y, 95, 79, 64);
+    }
+  }
+  clear(T.dead_shrub);
+  for (let y = 5; y < 15; y++) setPx(T.dead_shrub, 8, y, 117, 89, 57);
+  for (const [x, y] of [[5, 5], [6, 6], [7, 7], [10, 5], [9, 6], [7, 9], [6, 8], [10, 9], [9, 10]]) setPx(T.dead_shrub, x, y, 142, 109, 65);
+  clear(T.flower_blue);
+  for (let y = 7; y < 15; y++) setPx(T.flower_blue, 8, y, 53, 124, 49);
+  for (const [x, y] of [[7, 2], [8, 2], [6, 3], [7, 3], [8, 3], [9, 3], [7, 4], [8, 4], [6, 5], [9, 5]]) setPx(T.flower_blue, x, y, 94, 138, 221);
+  setPx(T.flower_blue, 8, 4, 235, 209, 87);
+  noiseFill(T.meadow_top, [108, 175, 71], 0.25, R(161));
+  copyTile(T.grass_side, T.meadow_side);
+  const meadowSideRnd = R(162);
+  for (let x = 0; x < 16; x++) for (let y = 0; y < 5; y++) {
+    const r = meadowSideRnd();
+    setPx(T.meadow_side, x, y, 88 + r * 26, 149 + r * 32, 61 + r * 16);
+  }
+  noiseFill(T.podzol, [91, 81, 60], 0.3, R(163));
+  for (let x = 0; x < 16; x += 3) for (let y = (x % 5); y < 16; y += 5) setPx(T.podzol, x, y, 42, 90, 62);
+  for (let stage = 0; stage < 3; stage++) {
+    const tile = T.turtle_egg0 + stage;
+    noiseFill(tile, [236 - stage * 9, 232 - stage * 7, 202 - stage * 5], 0.07, R(164 + stage));
+    const r = R(180 + stage);
+    for (let i = 0; i < 23; i++) {
+      const x = Math.floor(r() * 16), y = Math.floor(r() * 16);
+      setPx(tile, x, y, 67, 129, 93);
+      if (i % 4 === 0) setPx(tile, Math.min(15, x + 1), y, 91, 147, 103);
+    }
+    for (let i = 0; i < stage * 4; i++) {
+      const x = 2 + ((i * 7 + 3) % 12), y = 2 + ((i * 5 + 4) % 12);
+      setPx(tile, x, y, 104, 97, 74);
+      setPx(tile, x + 1, y + (i % 2 ? 1 : -1), 104, 97, 74);
+    }
+  }
+
+  // Simple cutout silhouette on ground: brown pegs/rope, bright armed loop,
+  // red/buff caught contents. The same 16px tile is downsampled in low preset.
+  for (const [tile, armed, catchColor] of [
+    [T.snare_empty, false, null], [T.snare_armed, true, null],
+    [T.snare_rabbit, false, [213, 139, 126]], [T.snare_chicken, false, [238, 210, 145]],
+  ] as const) {
+    clear(tile);
+    for (let y = 6; y < 16; y++) {
+      setPx(tile, 4, y, 90, 56, 34); setPx(tile, 11, y, 90, 56, 34);
+    }
+    for (let x = 4; x <= 11; x++) {
+      setPx(tile, x, 7, armed ? 240 : 179, armed ? 199 : 148, armed ? 77 : 106);
+      setPx(tile, x, 12, 179, 148, 106);
+    }
+    if (catchColor) for (let y = 8; y < 12; y++) for (let x = 6; x <= 9; x++)
+      setPx(tile, x, y, catchColor[0], catchColor[1], catchColor[2]);
+    if (armed) for (let y = 8; y < 12; y++) {
+      setPx(tile, 5, y, 240, 199, 77); setPx(tile, 10, y, 240, 199, 77);
+    }
+  }
+
+  // Camp: cut-out triangular canvas with dark entrance; bedroll on wood legs.
+  clear(T.camp_tent);
+  for (let y = 2; y < 16; y++) {
+    const half = Math.round((y - 1) * 0.46);
+    for (let x = Math.max(0, 8 - half); x <= Math.min(15, 8 + half); x++) {
+      const entrance = y > 9 && x >= 6 && x <= 10;
+      setPx(T.camp_tent, x, y, entrance ? 48 : (x === 8 - half || x === 8 + half ? 128 : 190),
+        entrance ? 47 : 151, entrance ? 51 : 102);
+    }
+  }
+  for (let x = 2; x < 15; x++) {
+    setPx(T.camp_tent, x, 15, 88, 62, 43);
+  }
+  noiseFill(T.camp_cot_top, [112, 145, 123], 0.09, R(172));
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 3; x++) setPx(T.camp_cot_top, x, y, 212, 207, 179);
+  for (let y = 13; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.camp_cot_top, x, y, 102, 69, 48);
+  noiseFill(T.camp_cot_side, [96, 71, 54], 0.12, R(173));
+  for (let x = 1; x < 15; x++) for (let y = 1; y < 5; y++) setPx(T.camp_cot_side, x, y, 99, 139, 110);
+
+  noiseFill(T.travel_pot_top, [81, 90, 96], 0.1, R(174));
+  for (let y = 2; y < 14; y++) for (let x = 2; x < 14; x++) {
+    const edge = x < 4 || x > 11 || y < 4 || y > 11;
+    setPx(T.travel_pot_top, x, y, edge ? 176 : 49, edge ? 178 : 76, edge ? 179 : 86);
+  }
+  for (let x = 3; x < 13; x++) for (let y = 3; y < 13; y++)
+    if (x === 3 || x === 12 || y === 3 || y === 12) setPx(T.travel_pot_top, x, y, 207, 209, 205);
+  noiseFill(T.travel_pot_side, [82, 89, 92], 0.14, R(175));
+  for (let x = 2; x < 14; x++) for (let y = 2; y < 5; y++) setPx(T.travel_pot_side, x, y, 158, 169, 171);
+  for (let x of [3, 12]) for (let y = 5; y < 11; y++) setPx(T.travel_pot_side, x, y, 202, 210, 207);
+  for (let x = 5; x < 11; x++) for (let y = 12; y < 15; y++) setPx(T.travel_pot_side, x, y, 176, 77, 38);
+
+  // Young carrot leaves are slim green stalks; mature roots peek out below.
+  for (let stage = 0; stage < 4; stage++) {
+    const tile = T.carrot0 + stage;
+    copyTile(T.wheat0 + stage, tile);
+    for (let y = 1; y < 15; y++) for (let x = 0; x < 16; x++) {
+      const [red, green, , alpha] = getPx(tile, x, y);
+      if (alpha && green > red * 0.72) setPx(tile, x, y, 67 + stage * 5, 115 + stage * 12, 49);
+    }
+    if (stage >= 2) for (let y = 10; y < 15; y++) for (let x = 6; x < 10; x++) {
+      if ((x + y) % 3) setPx(tile, x, y, 230 - (y - 10) * 12, 104 - (y - 10) * 6, 34);
+    }
+  }
+
+  // #50: readable even in the 8px low-quality atlas. Every tile has its own
+  // silhouette/color; no externally loaded image or per-frame render cost.
+  for (const [tile, sunset] of [[T.painting_land, false], [T.painting_sun, true]] as const) {
+    noiseFill(tile, [85, 55, 34], 0.14, R(tile));
+    for (let y = 2; y < 14; y++) for (let x = 2; x < 14; x++) {
+      if (x === 2 || x === 13 || y === 2 || y === 13) {
+        setPx(tile, x, y, 215, 166, 91); continue;
+      }
+      const hill = y > 8 + Math.sin(x * 0.65) * 1.2;
+      if (sunset) {
+        const sun = (x - 10) ** 2 + (y - 6) ** 2 < 6;
+        setPx(tile, x, y, hill ? 62 : sun ? 255 : 212,
+          hill ? 48 : sun ? 229 : 92, hill ? 62 : sun ? 141 : 91);
+      } else {
+        setPx(tile, x, y, hill ? 60 : 105, hill ? 146 : 175, hill ? 75 : 195);
+      }
+    }
+  }
+  for (const [tile, blue] of [[T.banner_red, false], [T.banner_blue, true]] as const) {
+    clear(tile);
+    for (let y = 1; y < 16; y++) for (let x = 1; x < 3; x++) setPx(tile, x, y, 119, 84, 49);
+    for (let y = 3; y <= 13; y++) for (let x = 3; x <= 12; x++) {
+      if (y >= 12 && Math.abs(x - 8) < 2) continue; // fishtail
+      const border = x === 3 || x === 12 || y === 3;
+      setPx(tile, x, y, border ? 225 : blue ? 49 : 158,
+        border ? 187 : blue ? 93 : 51, border ? 94 : blue ? 175 : 57);
+      if ((x === 7 || x === 8) && y >= 6 && y <= 10) setPx(tile, x, y, 245, 212, 123);
+      if (y === 8 && x >= 5 && x <= 10) setPx(tile, x, y, 245, 212, 123);
+    }
+  }
+  clear(T.vase);
+  for (let y = 1; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const stem = (x === 7 || x === 8) && y >= 3 && y <= 9;
+    const flower = (x - 8) ** 2 + (y - 2) ** 2 <= 3;
+    const pot = y >= 9 && y <= 14 && Math.abs(x - 7.5) <= (y < 12 ? 3 : 4 - (y - 12));
+    if (stem) setPx(T.vase, x, y, 58, 138, 76);
+    if (flower) setPx(T.vase, x, y, 207, 77, 77);
+    if (pot) setPx(T.vase, x, y, x % 3 ? 183 : 87, 118, x % 3 ? 89 : 122);
+  }
+  noiseFill(T.chair_seat, [139, 91, 53], 0.16, R(185));
+  noiseFill(T.chair_back, [102, 65, 41], 0.16, R(186));
+  for (let y = 2; y < 14; y++) for (let x = 4; x < 12; x++)
+    if (x === 4 || x === 11 || (y >= 10 && y <= 12)) setPx(T.chair_back, x, y, 186, 130, 73);
+  noiseFill(T.table_top, [146, 103, 63], 0.17, R(187));
+  for (let y = 2; y < 14; y++) for (let x = 2; x < 14; x++)
+    if (x === 2 || x === 13 || y === 2 || y === 13) setPx(T.table_top, x, y, 214, 158, 85);
+  noiseFill(T.table_leg, [95, 67, 44], 0.13, R(188));
+
+  // Commit every appended tile to the GPU atlas BEFORE generating block icons.
+  // Previously the 2.7 tiles were painted into ImageData only after the sole
+  // putImageData call, so their inventory icons and rendered faces were blank.
+  ctx.putImageData(img, 0, 0);
 
   // average colors
   for (const d of BLOCKS) {
@@ -891,4 +1065,19 @@ export function tileUV(tile: number, u: number, v: number): [number, number] {
   const U = (col + u) / ATLAS_TILES + (u === 0 ? e : -e);
   const V = 1 - (row + 1 - v) / ATLAS_TILES + (v === 0 ? e : -e);
   return [U, V];
+}
+
+/** Half-size GPU atlas, with each 16px tile downsampled separately so adjacent
+ * tiles cannot bleed into one another. Inventory icons keep the full atlas. */
+export function compactAtlas(source: HTMLCanvasElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = ATLAS_SIZE / 2;
+  canvas.height = ATLAS_SIZE / 2;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+  for (let tile = 0; tile < ATLAS_TILES * ATLAS_TILES; tile++) {
+    const x = tile % ATLAS_TILES, y = Math.floor(tile / ATLAS_TILES);
+    ctx.drawImage(source, x * TILE, y * TILE, TILE, TILE, x * TILE / 2, y * TILE / 2, TILE / 2, TILE / 2);
+  }
+  return canvas;
 }

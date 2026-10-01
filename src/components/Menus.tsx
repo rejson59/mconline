@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameMode } from '../game/engine';
+import type { WorldDifficulty } from '../game/difficulty';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { exportSave, exportSaves, importSaves, MAX_SAVES } from '../game/saves';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
@@ -15,8 +16,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  'BlockCraft 2.7: odkryj Bagna, Sawannę i Dżunglę!',
-  '2.7: nowe drzewa, błoto i lilie wodne!',
+  '2.8: wędruj przez sześć biomów i nowe doliny!',
+  '2.8: rzeki, jeziora i połączone podziemia!',
+  'Na kwiecistych łąkach mieszkają płochliwe króliki!',
   'Dżungla kryje gęste zarośla, Sawanna – akacje!',
   'Ekwipunek nie gubi ani nie duplikuje przedmiotów!',
   'Szukaj receptur po nazwie albo składniku!',
@@ -86,7 +88,25 @@ export function Controls() {
     ['Spacja x2 / F', 'Latanie (tryb kreatywny)'],
     ['Shift', 'Skradanie / lot w dół (lewy lub prawy)'],
     ['W x2 lub Ctrl', 'Sprint'],
+    ['V / ↝ na dotyku', 'Unik w kierunku ruchu (bez kierunku: w tył); krótkie okno ochrony, koszt 1 głodu, odnowienie 2,7 s'],
+    ['R / 🛡 na dotyku', 'Parowanie z tarczą w ręku: 0,42 s na cios lub strzałę z przodu, odnowienie 1,7 s'],
+    ['Specjalne buty', 'Na stole rzemieślniczym: 4 żelaza + 2 magmowe kremy (żar), ryba + lazuryt (pływanie) lub pióro + pył jasnogłazu (upadek). Każda para ma 1 punkt pancerza zamiast 2 jak żelazne buty.'],
     ['LPM (przytrzymaj)', 'Kopanie · atak bije dalej z cooldownem'],
+    ['Żelazna włócznia', 'Stół rzemieślniczy: 2 sztabki żelaza + 2 patyki po przekątnej. Celuj LPM lub tap/⛏ na dotyku: zasięg 5 bloków, 7 obrażeń, atak co 0,92 s. Ściany zatrzymują cios; nie wydłuża zasięgu kopania.'],
+    ['Sztylety', 'Żelazny: żelazo + patyk w plecaku; diamentowy: 2 diamenty + patyk na stole. Krótki zasięg 2,2 bloku i szybki cios co 0,28 s. Po uniku (V/↝) masz 0,65 s na jedną kontrę: +3 obrażenia, komunikat trafienia. LPM lub tap/⛏.'],
+    ['Żelazny młot', 'Stół rzemieślniczy: 5 sztabek żelaza + 2 patyki. 8 obrażeń, 1,1 s przerwy; trafienie rozmachowe rani do 2 pobliskich mobów przed tobą, nie przez ścianę. Szybciej kruszy wybrane kamienne bloki po przytrzymaniu LPM/⛏, bez niszczenia sąsiednich bloków. Nie wydobywa rud bez kilofa.'],
+    ['Warianty tarczy', 'Skórzana: 4 skóry, 2 deski, patyk; 35% ochrony przed ciosami i 60% przed strzałami, bez spowolnienia. Żelazna: 5 żelaza i 2 deski; 70% przed ciosami, 85% przed strzałami, 15% wolniejszy ruch z tarczą w ręku. Stara tarcza bez zmian, parowanie R/🛡 chroni w pełni przy dobrym timingu.'],
+    ['Cięciwy do łuku', 'W plecaku: 2 struny + pióro = lekka cięciwa; 2 struny + żelazo = mocna cięciwa. Połącz zwykły łuk z cięciwą. Lekki łuk: naciąg 0,65 s i 80% obrażeń; mocny łuk: 1,4 s i 130% obrażeń. Stary łuk bez zmian: 1 s, 100%. PPM przytrzymaj/puść lub dotknij i przytrzymaj/puść.'],
+    ['Rzeki i jeziora', 'W nowych światach generator v5 wycina długie, połączone rzeki ze żwirowym dnem; poszerzone odcinki tworzą jeziora z glinianym dnem i wodą źródłową. Rzeka prowadzi przez granice chunków: płyń środkiem, a na suchy brzeg wyjdź tam, gdzie teren łagodnie opada; strome zbocze omiń wzdłuż wody. Na mapie i kompasie są osobnymi biomami. Zapisane światy v2, v3 i v4 zachowują dawne tereny; stwórz nowy świat, aby zobaczyć sieć wodną.'],
+    ['Komory i podziemne jeziora', 'Nowy świat v7 ma połączone korytarzami komory na różnych głębokościach i łagodniejsze wyjścia na powierzchnię. W niektórych jest płytkie jezioro na glinianym dnie. Suchy, szeroki otwór w zboczu prowadzi ukośnym przejściem na powierzchnię: jeśli trafisz do komory, idź korytarzem, aż dojdziesz do wyjścia. Zabierz pochodnie. Światy zapisane wcześniej (v2–v6) zachowują swój dawny układ jaskiń.'],
+    ['Nowe krainy wysokościowe', 'W nowych światach generator v4 tworzy ośnieżone szczyty, płaskowyże, wąwozy oraz głębokie doliny. Ośnieżone szczyty mają śnieżną powierzchnię, wąwozy kamienne zbocza i żwirowe dna powyżej poziomu morza. Mapa odkryć zapisuje je jako oddzielne biomy; kompas biomów umożliwia ich wyszukanie. W światach zapisanych wcześniej generator v2/v3 zostaje niezmieniony: nowe tereny można zobaczyć po stworzeniu nowego świata.'],
+    ['Dekorowanie wnętrz', 'Na stole: 4 patyki wokół niebieskiej lub czerwonej wełny = dwa różne obrazy; 2 wełny + patyk = chorągiew (niebieską wełnę można farbować błękitnym kwiatem); 3 gliny + czerwony kwiat = wazon; 4 deski + 2 patyki = krzesło; 3 deski + 4 patyki = stolik. Obraz wiesza się PPM/tap wyłącznie na pełnej ścianie, pozostałe dekoracje na stałej, niepalącej podłodze. Krzesło obraca się w stronę gracza. Oderwanie podłoża lub ściany usuwa dekorację i zwraca jeden bazowy przedmiot podczas kopania w Survival. Kierunek obrazu i krzesła zapisuje się jako zwykły blok, bez nowego formatu świata.'],
+    ['Talizmany', 'W jaskiniowych skrzyniach bardzo rzadko (łącznie około 5%) leży jeden z dwóch talizmanów: wędrowca (+5% ruchu pieszo) albo pływaka (powietrze zużywa się o 20% wolniej). W ekwipunku przełóż go do jedynego miejsca na talizman. Przedmiot w plecaku lub dłoni nie daje premii; wymiana usuwa stary efekt. Talisman jest osobny od mikstur, działa w obu wymiarach i zapisuje się ze światem. W Creative oba przedmioty są na karcie Przedmioty.'],
+    ['Posiłki i uprawy', 'Z wysokiej trawy można zdobyć marchew: PPM/tap na roli sadzi ją zamiast jeść, dojrzały plon daje co najmniej dwie marchewki. Dynię rozkrój w siatce na 4 kawałki. Marchew i dynię upiecz w piecu lub kotle z paliwem. Miska: trzy deski w kształcie V na stole, 4 sztuki. Zupa dyniowa: 2 kawałki dyni + pszenica + miska; daje Szybkość 8 s. Gulasz: pieczony królik + pieczona marchew + miska; Regeneracja 6 s. Talerz: pieczona marchew + pieczona dynia + chleb; Zryw 7 s. Premie są widoczne nad paskiem, nie sumują czasu z miksturami; zupa i gulasz zwracają miskę po zjedzeniu.'],
+    ['Kocioł podróżny', 'Na stole: 5 sztabek żelaza wokół ogniska. Postaw kocioł na suchym podłożu i otwórz PPM/tap: włóż surowe mięso/rybę, marchew lub kawałek dyni albo fiolkę wody z łzą ghasta (leczenie) lub cukrem (szybkość). Jeden węgiel albo patyk = jedna porcja; 5 s gotowania lub 9 s warzenia. Kocioł nie przetapia rud i nie warzy wszystkich eliksirów. Postęp, składniki, paliwo i wynik są zapisane w świecie i wymiarze; po rozbiciu zawartość wypada.'],
+    ['Zestaw biwakowy', 'Ułóż 3 wełny i 3 patyki na stole, aby zrobić namiot; 2 wełny i 2 deski = posłanie. Połącz namiot, posłanie i zwykłe ognisko (3 patyki + węgiel) w zestaw. PPM/tap w ziemię rozstawia trzy osobne bloki na trzech suchych, wolnych polach. PPM/tap na posłanie ustawia tymczasowy punkt odrodzenia i nocą pozwala spać jak w łóżku (nie działa w Netherze). Rozbij osobno każdy blok, odzyskaj części i złóż zestaw ponownie. Rozbicie posłania lub wybuch przywraca poprzedni bezpieczny punkt odrodzenia.'],
+    ['Sidła łowieckie', 'Ułóż 2 struny nad 2 patykami (siatka 2×2), postaw sidła na suchym podłożu. PPM/tap na sidła zużywa jedną strunę i uzbraja je; dziki królik lub kurczak może w nie wejść. PPM/tap ponownie zbiera jedno surowe mięso i rozbraja sidła. Każdy kolejny łów wymaga nowej struny, a rozbicie sideł nie zwraca zdobyczy.'],
+    ['Strzały specjalne', 'Na stole: 4 zwykłe strzały + pył jasnogłazu (świetlne: 12 s), kula szlamu (spowolnienie ruchu o 45%: 6 s) albo czerwony proszek (oznaczenie celu/kierunek na HUD: 18 s). Przełączaj X na PC lub ➟ na dotyku z łukiem w ręku. Nieskończoność nie powiela specjalnych strzał; efekt działa tylko po trafieniu.'],
     ['PPM', 'Stawianie bloku / użycie stołu'],
     ['ŚPM', 'Wybierz blok'],
     ['1-9 (także numeryczne) / kółko', 'Wybór slotu'],
@@ -97,16 +117,37 @@ export function Controls() {
     ['PPM na piecu', 'Przetapianie'],
     ['PPM na łóżku', 'Sen i punkt odrodzenia'],
     ['PPM na drzwiach / włazie', 'Otwórz lub zamknij (Shift+PPM stawia blok)'],
+    ['PPM / tap na mieszkańcu', 'Handel: kartograf, rybak, ogrodnik, kowal i inni. Oferty rosną wraz z doświadczeniem'],
     ['PPM na skrzyni', 'Schowek'],
     ['Drabina + W / spacja', 'Wspinaczka'],
+    ['Karawana kupca', 'Za dnia na wiejskich drogach można spotkać wędrownego kupca ze zwierzęciem jucznym. PPM lub dotknij kupca, by handlować — oferty zależą od biomu.'],
+    ['Strażnik wioski', 'Uzbrojony strażnik patroluje osadę, atakuje potwory przy mieszkańcach i reaguje na skrzywdzenie mieszkańca przez gracza.'],
+    ['Niedźwiedzie z młodymi', 'Dorosłe niedźwiedzie są spokojne, dopóki nie zagrozisz młodemu, jedzeniu lub nie zaatakujesz. Przed ciosem ryczą i pokazują pomarańczowy sygnał — odsuń się!'],
+    ['Dzień mieszkańców', 'Rano i wieczorem mieszkańcy spotykają się, w dzień pracują przy stanowiskach zawodu, nocą odpoczywają. Zagrożenie zawsze przerywa rutynę.'],
+    ['Żółwie i jaja', 'Żółwie przy wodzie znoszą jaja na piasku. Jaja rosną w trzech etapach i wylęgają się; etapy zapisują się w świecie.'],
+    ['Sygnały walki', 'Zombie, pająk, enderman, slime i nasłuchiwacz ostrzegają pomarańczowym znakiem oraz głosem przed ciosem. Szkielet i ghast ostrzegają przed strzałem. Odskocz, schowaj się za blokiem albo traf potwora, by przerwać zamach.'],
+    ['Dźwięki biomów', 'Las, dżungla, bagno, pustynia, tundra i wybrzeże mają odmienne, rzadkie odgłosy; jaskinie i Nether własne tło. Kroki, kopanie i ciosy zależą od otoczenia. Suwak głośności w ustawieniach (0% wycisza) obejmuje wszystkie dźwięki.'],
+    ['Jaskiniowy nasłuchiwacz', 'W głębokich jaskiniach słyszy kroki, sprint i kopanie, lecz nie widzi gracza. Przytrzymaj Shift lub ⇣, by przemknąć bezszelestnie; wyrzuć przedmiot (Q lub ↗), a pobiegnie do miejsca jego upadku.'],
+    ['Zasadzkarz pustynny', 'Spod piasku wystaje kopiec. Pomarańczowy grzebień i syk ostrzegają przez ponad sekundę przed wyskokiem — oddal się, aby przerwać zasadzkę.'],
+    ['Omijanie przeszkód', 'Moby ścigające cel szukają krótkiej, bezpiecznej drogi wokół murów. Nie wchodzą w lawę ani ognisko i nie próbują przechodzić przez zamkniętą ścianę.'],
+    ['Ognisko i pochodnie', 'Wybrane zwierzęta obchodzą źródła ognia, nie biegną przez lawę ani zamknięte ściany'],
+    ['Deszcz i zwierzęta', 'Krowy, świnie, owce i kurczaki szukają pobliskiego zadaszenia; żaby ożywiają się w deszczu'],
+    ['Jaszczurki na Bagnach', 'Na błocie mają brązowe ciało, na trawie zielone; jasny grzbiet i oczy zawsze widać'],
+    ['Nietoperze w lesie nocą', 'Latają i piszczą po zmierzchu, za dnia odpoczywają przy ziemi; nie atakują'],
+    ['Żaby przy wodzie', 'Skaczą, rechoczą i polują na meszki nad brzegiem; meszki nie zostawiają łupu ani PD'],
+    ['Lisy w tajdze i lasach', 'Uciekają przed graczem i wilkami; polują na króliki/kurczaki, kradną porzucone jedzenie'],
+    ['Zaufanie wilka', 'PPM albo tap z surowym mięsem na dzikim wilku: nakarm go trzy razy, odczekując 3 sekundy między posiłkami. Celownik pokazuje 0–3/3, a złota obroża postęp. Wilk 3/3 podąża za tobą i broni cię; postęp i towarzysz zapisują się ze światem. Limit: 24 zwierzęta łącznie.'],
+    ['Zaufanie lisów i królików', 'PPM lub tap: lis przyjmuje surowego kurczaka, królik pszenicę. Trzy udane karmienia w odstępach 3 s zmniejszają płochliwość; 3/3 zwierzę podąża za graczem bez atakowania. Celownik pokazuje postęp, żółty znacznik wyróżnia zaprzyjaźnione zwierzę. Postęp jest zapisywany osobno w każdym wymiarze.'],
     ['Nożyce + LPM na owcy', 'Wełna bez zabijania'],
     ['Krzesiwo + PPM', 'Podpal TNT'],
     ['Łuk: przytrzymaj PPM, puść', 'Wystrzał ze strzałą'],
     ['Wędka: PPM', 'Zarzuć przynętę i zaciągnij brań'],
-    ['Lorneta: przytrzymaj PPM', 'Przybliżenie'],
+    ['Robak / świetlista przynęta: PPM / tap', 'Załóż na wędkę w ekwipunku (jedna na branie)'],
+    ['Lorneta: PPM + G / ⌖', 'Przybliż i oznacz widoczny punkt (na dotyku przycisk ⌖)'],
     ['PPM na kowadle', 'Scal dwa narzędzia i nadaj nazwę'],
     ['PPM na statywie alchemicznym', 'Warzy napoje'],
     ['PPM na fiolce przy wodzie', 'Napełnij fiolkę'],
+    ['Statyw: zaczarowany napój + pióro / cukier', 'Lekkie lądowanie / zryw (czas na HUD-zie)'],
     ['Kompas / zegar', 'Kierunek odrodzenia i pora dnia'],
     ['Motyka + PPM', 'Grządka'],
     ['PPM na wilku z surowym mięsem', 'Zatamej wilka (strzeże gracza)'],
@@ -116,7 +157,8 @@ export function Controls() {
     ['Sloty pancerza (w E)', 'Załóż pancerz (4 elementy)'],
     ['M', 'Minimapa'],
     ['J', 'Dziennik przygód i postęp celów'],
-    ['K', 'Punkty podróży: baza, kopalnia i znacznik śmierci'],
+    ['K', 'Mapa odkrywania, znaczniki celu i punkt śmierci'],
+    ['PPM / tap z kompasem biomów', 'Wybierz biom, wyszukaj w zasięgu i śledź punkt'],
     ['F3', 'Informacje debugowania'],
     ['Esc', 'Pauza · Esc w pauzie wraca do gry'],
     ['Enter / R (ekran śmierci)', 'Odrodzenie'],
@@ -129,6 +171,7 @@ export function Controls() {
     ['Tapnij w moba', 'Atak (mieszkaniec: handel!)'],
     ['⬆', 'Skok · 2× w kreatywnym = latanie'],
     ['⇣', 'Skradanie / lot w dół'],
+    ['↗', 'Rzuć jeden przedmiot jako przynętę'],
     ['✈ (kreatywny)', 'Włącz / wyłącz latanie'],
     ['Pasek na dole', 'Tapnij slot, aby go wybrać'],
     ['Sloty w oknach (E)', 'Tapnij: weź / połóż · przytrzymaj: połowa / jeden'],
@@ -574,6 +617,8 @@ export function PauseMenu({
   worldName,
   unlocked,
   onSettings,
+  difficulty,
+  onDifficulty,
   onResume,
   onJournal,
   onWaypoints,
@@ -585,14 +630,17 @@ export function PauseMenu({
   worldName?: string;
   unlocked?: string[];
   onSettings: (s: Settings) => void;
+  difficulty?: WorldDifficulty;
+  onDifficulty?: (patch: Partial<WorldDifficulty>) => boolean;
   onResume: () => void;
   onJournal: () => void;
   onWaypoints?: () => void;
   onQuit: () => void;
-  onSave: () => void;
+  onSave: () => boolean;
 }) {
-  const [view, setView] = useState<'main' | 'options' | 'controls' | 'achievements'>('main');
+  const [view, setView] = useState<'main' | 'options' | 'controls' | 'achievements' | 'difficulty'>('main');
   const [saved, setSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const copyLink = async () => {
     try {
@@ -609,8 +657,8 @@ export function PauseMenu({
     setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)' }}>
-      <div className="flex max-h-[92vh] w-full max-w-[420px] flex-col items-center gap-3 overflow-y-auto px-4">
+    <div className="absolute inset-0 z-50 flex items-start justify-center overflow-y-auto p-3" style={{ background: 'rgba(0,0,0,0.75)' }}>
+      <div className="my-auto flex w-full max-w-[420px] flex-col items-center gap-3 px-4 py-2">
         {view === 'main' && (
           <>
             <div className="mb-1 text-2xl mc-text">Menu gry</div>
@@ -618,9 +666,26 @@ export function PauseMenu({
             <button className="mc-btn" onClick={onResume}>
               Wróć do gry
             </button>
+            <button
+              className="mc-btn"
+              onClick={() => {
+                const ok = onSave();
+                setSaved(ok);
+                setSaveFailed(!ok);
+                setTimeout(() => { setSaved(false); setSaveFailed(false); }, 3000);
+              }}
+            >
+              {saveFailed ? 'Błąd zapisu — sprawdź pamięć przeglądarki' : saved ? 'Zapisano ✓' : 'Zapisz świat'}
+            </button>
+            <button className="mc-btn" onClick={onQuit}>
+              Zapisz i wyjdź do menu
+            </button>
             <button className="mc-btn" onClick={() => setView('options')}>
               Opcje...
             </button>
+            {difficulty && onDifficulty && <button className="mc-btn" onClick={() => setView('difficulty')}>
+              Trudność świata...
+            </button>}
             <button className="mc-btn" onClick={() => setView('controls')}>
               Sterowanie
             </button>
@@ -629,7 +694,7 @@ export function PauseMenu({
             </button>
             {onWaypoints && (
               <button className="mc-btn" onClick={onWaypoints}>
-                Punkty podróży · K
+                Mapa i punkty podróży · K
               </button>
             )}
             <button className="mc-btn" onClick={() => setView('achievements')}>
@@ -641,23 +706,32 @@ export function PauseMenu({
             <button className="mc-btn" onClick={toggleFullscreen}>
               Pełny ekran
             </button>
-            <button
-              className="mc-btn"
-              onClick={() => {
-                onSave();
-                setSaved(true);
-                setTimeout(() => setSaved(false), 1500);
-              }}
-            >
-              {saved ? 'Zapisano ✓' : 'Zapisz świat'}
-            </button>
-            <button className="mc-btn" onClick={onQuit}>
-              Zapisz i wyjdź do menu
-            </button>
           </>
         )}
         {view === 'options' && (
           <SettingsScreen settings={settings} onChange={onSettings} onClose={() => setView('main')} />
+        )}
+        {view === 'difficulty' && difficulty && onDifficulty && (
+          <div className="flex w-full flex-col gap-3 bg-black/60 p-4 text-sm text-white">
+            <div className="text-xl mc-text">Trudność tego świata</div>
+            <p>Zmiany działają od razu i zapisują się tylko w tym świecie. Tryb kreatywny nie otrzymuje obrażeń.</p>
+            {([
+              ['aggression', 'Agresja mobów', [['spokojna', 'Spokojna: bez ataków i nowych potworów'], ['normalna', 'Normalna'], ['zaciekla', 'Zacięta: szybsze i liczniejsze potwory']]],
+              ['damage', 'Obrażenia od potworów', [['lagodne', 'Łagodne: ×0,7'], ['normalne', 'Normalne'], ['surowe', 'Surowe: ×1,4']]],
+              ['resources', 'Zasoby (rudy, plony, mięso)', [['skape', 'Skąpe: 25% szans na utratę jednej sztuki'], ['normalne', 'Normalne'], ['obfite', 'Obfite: dodatkowa sztuka rudy, pszenicy lub mięsa (bez duplikacji bloków)']]],
+            ] as const).map(([key, title, options]) => (
+              <div key={key} className="flex flex-col gap-1">
+                <strong>{title}</strong>
+                {options.map(([value, label]) => <button key={value} type="button" className="mc-btn !py-1 !text-sm" aria-pressed={difficulty[key] === value}
+                  onClick={() => {
+                    const ok = onDifficulty({ [key]: value });
+                    setSaveFailed(!ok);
+                  }}>{difficulty[key] === value ? '✓ ' : ''}{label}</button>)}
+              </div>
+            ))}
+            {saveFailed && <p role="alert">Nie udało się zapisać trudności. Zwolnij miejsce i zapisz świat ponownie.</p>}
+            <button className="mc-btn" onClick={() => setView('main')}>Gotowe</button>
+          </div>
         )}
         {view === 'controls' && (
           <div className="flex w-full flex-col gap-4 bg-black/60 p-5">

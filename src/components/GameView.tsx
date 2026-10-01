@@ -9,12 +9,16 @@ import EnchantScreen from './EnchantScreen';
 import TradeScreen from './TradeScreen';
 import AnvilScreen from './AnvilScreen';
 import BrewingScreen from './BrewingScreen';
+import TravelCauldronScreen from './TravelCauldronScreen';
 import JournalScreen from './JournalScreen';
 import WaypointsScreen from './WaypointsScreen';
+import BiomeCompassScreen from './BiomeCompassScreen';
 import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
 import TouchControls from './TouchControls';
 import {
   effectiveSettings,
+  effectiveDetail,
+  chunkGenerationBudget,
   loadSettings,
   saveSettings,
   type Settings,
@@ -120,6 +124,8 @@ export default function GameView({
     }
     g.setRenderDistance(effective.renderDistance);
     g.applyGfx({
+      ...effectiveDetail(effective, profile),
+      ...chunkGenerationBudget(effective, profile),
       renderDistance: effective.renderDistance,
       pixelRatio: effective.pixelRatio,
       particles: effective.particles,
@@ -250,9 +256,9 @@ export default function GameView({
         />
       )}
       {touch && portraitHint && ui === 'playing' && (
-        <div className="absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-2 px-3 py-1.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.6)', border: '2px solid #3a3a3a' }}>
+        <div className="pointer-events-none absolute left-1/2 top-16 z-40 flex -translate-x-1/2 items-center gap-2 px-3 py-1.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.6)', border: '2px solid #3a3a3a' }}>
           <span>Obróć telefon poziomo – będzie wygodniej</span>
-          <button className="px-1 text-base opacity-80" onClick={() => setPortraitHint(false)}>
+          <button className="pointer-events-auto px-1 text-base opacity-80" onClick={() => setPortraitHint(false)}>
             ✕
           </button>
         </div>
@@ -263,9 +269,11 @@ export default function GameView({
       {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'anvil' && <AnvilScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'brewing' && <BrewingScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'travelCauldron' && <TravelCauldronScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && hud && ui === 'journal' && <JournalScreen hud={hud} unlocked={game.achievementIds()} onClose={() => game.setUI('playing')} />}
       {game && ui === 'waypoints' && <WaypointsScreen game={game} onClose={() => game.setUI('playing')} />}
+      {game && ui === 'biomeCompass' && <BiomeCompassScreen game={game} onClose={() => game.setUI('playing')} />}
       {game && ui === 'chat' && (
         <ChatInput
           onSubmit={(t) => game.command(t)}
@@ -305,6 +313,8 @@ export default function GameView({
       {game && ui === 'paused' && started && (
         <PauseMenu
           settings={settings}
+          difficulty={game.difficulty}
+          onDifficulty={(patch) => { const ok = game.setDifficulty(patch); force((n) => n + 1); return ok; }}
           shareUrl={worldShareUrl(game.world.seed, game.mode)}
           worldName={game.worldName}
           unlocked={game.achievementIds()}
@@ -314,8 +324,8 @@ export default function GameView({
           onWaypoints={() => game.setUI('waypoints')}
           onSave={() => game.save()}
           onQuit={() => {
-            game.save();
-            onQuit();
+            if (game.save()) onQuit();
+            else window.alert('Nie udało się zapisać świata. Pozostań w grze, zwolnij miejsce w przeglądarce i spróbuj ponownie.');
           }}
         />
       )}

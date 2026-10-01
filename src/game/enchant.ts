@@ -21,7 +21,10 @@ export type EnchId =
   | 'knockback'
   | 'looting'
   | 'protection'
-  | 'featherfalling';
+  | 'featherfalling'
+  | 'fireward'
+  | 'arrowguard'
+  | 'tidewalker';
 
 export interface EnchDef {
   id: EnchId;
@@ -58,6 +61,12 @@ export const ENCHANTS: EnchDef[] = [
     desc: (l) => `Redukuje obrażenia o ${l * 4}% (łącznie z pancerzem).` },
   { id: 'featherfalling', name: 'Lekki krok', max: 4, keys: ['lekki_krok', 'feather_falling', 'featherfalling'],
     desc: (l) => `Obrażenia od upadku o ${l * 12}% mniejsze.` },
+  { id: 'fireward', name: 'Osłona żaru', max: 4, keys: ['oslona_zaru', 'fireward'],
+    desc: (l) => `O ${l * 8}% mniej obrażeń od lawy, magmy i ognia (nie daje pełnej odporności). Konflikt: Ochrona, Osłona strzał.` },
+  { id: 'arrowguard', name: 'Osłona strzał', max: 4, keys: ['oslona_strzal', 'arrowguard'],
+    desc: (l) => `O ${l * 8}% mniej obrażeń od pocisków. Konflikt: Ochrona, Osłona żaru.` },
+  { id: 'tidewalker', name: 'Krok pływaka', max: 3, keys: ['krok_plywaka', 'tidewalker'],
+    desc: (l) => `Ruch w wodzie o ${l * 15}% szybszy; nie zwiększa prędkości na lądzie.` },
 ];
 
 const BY_ID = new Map<string, EnchDef>(ENCHANTS.map((e) => [e.id, e]));
@@ -87,7 +96,7 @@ export function enchName(id: string, lvl: number): string {
 }
 
 // ---------------------------------------------------------------- applicability
-type Target = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'bow' | 'shield' | 'armor';
+type Target = 'pick' | 'axe' | 'shovel' | 'sword' | 'spear' | 'dagger' | 'hammer' | 'hoe' | 'shears' | 'bow' | 'shield' | 'armor';
 
 function targetsOf(itemId: number): Target[] {
   const it = ITEMS[itemId];
@@ -95,7 +104,7 @@ function targetsOf(itemId: number): Target[] {
     if (it.tool === 'shears') return ['shears'];
     if (it.tool === 'bow') return ['bow'];
     if (it.tool === 'shield') return ['shield'];
-    if (it.tool === 'sword') return ['sword'];
+    if (it.tool === 'sword' || it.tool === 'spear' || it.tool === 'dagger' || it.tool === 'hammer') return [it.tool];
     if (it.tool === 'pick' || it.tool === 'axe' || it.tool === 'shovel' || it.tool === 'hoe') return [it.tool];
     // 2.3: wędka i lorneta to narzędzia obserwacyjne – nie poddają się
     // zaklęciom, a wcześniejsze `as Target` przemycało je jako cel.
@@ -111,22 +120,24 @@ export function canEnchant(itemId: number, ench: EnchId | string): boolean {
   const t = targetsOf(itemId);
   if (!t.length) return false;
   switch (ench) {
-    case 'efficiency': return t.some((x) => x === 'pick' || x === 'axe' || x === 'shovel' || x === 'hoe' || x === 'shears');
+    case 'efficiency': return t.includes('hammer') || t.some((x) => x === 'pick' || x === 'axe' || x === 'shovel' || x === 'hoe' || x === 'shears');
     case 'fortune': return t.some((x) => x === 'pick' || x === 'shovel' || x === 'hoe');
     case 'silktouch': return t.some((x) => x === 'pick' || x === 'axe' || x === 'shovel' || x === 'hoe');
     case 'unbreaking': return t.length > 0;
-    case 'sharpness': return t.includes('sword');
+    case 'sharpness': return t.includes('sword') || t.includes('spear') || t.includes('dagger') || t.includes('hammer');
     case 'power': case 'infinity': return t.includes('bow');
-    case 'knockback': case 'looting': return t.includes('sword');
+    case 'knockback': case 'looting': return t.includes('sword') || t.includes('dagger');
     case 'protection': return t.includes('armor');
-    case 'featherfalling': return t.includes('armor') && ITEMS[itemId]?.armor?.slot === 3;
+    case 'featherfalling': case 'tidewalker': return t.includes('armor') && ITEMS[itemId]?.armor?.slot === 3;
+    case 'fireward': case 'arrowguard': return t.includes('armor');
     default: return false;
   }
 }
 
 /** Pairs that can never sit on the same item. */
 export function conflicts(a: EnchId | string, b: EnchId | string): boolean {
-  return (a === 'silktouch' && b === 'fortune') || (a === 'fortune' && b === 'silktouch');
+  if ((a === 'silktouch' && b === 'fortune') || (a === 'fortune' && b === 'silktouch')) return true;
+  return a !== b && ['protection', 'fireward', 'arrowguard'].includes(a) && ['protection', 'fireward', 'arrowguard'].includes(b);
 }
 
 /** Max enchantments one stack may carry at the table. */
@@ -155,7 +166,7 @@ export function canAddEnch(s: Stack | null | undefined, ench: EnchId): boolean {
 /** Mutates the stack: adds or upgrades the enchantment. */
 export function addEnch(s: Stack, ench: EnchId, lvl: number): void {
   const d = enchDef(ench);
-  if (!d) return;
+  if (!d || Object.keys(s.ench ?? {}).some((id) => conflicts(id, ench))) return;
   s.ench = { ...(s.ench ?? {}), [ench]: Math.max(1, Math.min(d.max, lvl)) };
 }
 
@@ -268,4 +279,17 @@ export function fallDamageFactor(boots: Stack | null | undefined): number {
   const lvl = enchLevel(boots, 'featherfalling');
   if (lvl <= 0) return 1;
   return Math.max(0.52, 1 - lvl * 0.12);
+}
+
+/** 3.0: source-specific armor enchantments stack across four pieces, up to 40%.
+ * Old Protection retains its existing general reduction; mutually exclusive
+ * protection families cannot be combined on a single piece. */
+export function sourceProtection(equipped: (Stack | null)[], source: 'fire' | 'projectile'): number {
+  const id = source === 'fire' ? 'fireward' : 'arrowguard';
+  return Math.min(0.4, equipped.reduce((sum, piece) => sum + Math.min(4, Math.max(0, enchLevel(piece, id))) * 0.08, 0));
+}
+
+/** Speed bonus applies only when actually submerged, never to land movement. */
+export function swimSpeedFactor(boots: Stack | null | undefined): number {
+  return 1 + Math.min(3, Math.max(0, enchLevel(boots, 'tidewalker'))) * 0.15;
 }

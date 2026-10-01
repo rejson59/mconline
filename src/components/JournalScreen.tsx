@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { HUDState } from '../game/engine';
 import { ACHIEVEMENTS } from '../game/achievements';
+import { CHALLENGES, type ChallengeId } from '../game/challenges';
 
 type JournalTab = 'journey' | 'achievements';
 type JournalFilter = 'all' | 'todo' | 'done';
@@ -15,6 +16,8 @@ export const JOURNAL_CHAPTERS = [
   { title: 'Dalsze horyzonty', text: 'Staw czoła Endermanowi i wykorzystaj moc jego perły.', goals: ['enderman', 'pearl'] },
   { title: 'Wyprawa i ratunek', text: 'Złów rybę, przyjrzyj się okolicy i zadbaj o narzędzia.', goals: ['fisher', 'surveyor', 'smith', 'undying'] },
   { title: 'Godzina alchemika', text: 'Napełnij fiolki, rozpal statyw i warzy swoje pierwsze eliksiry.', goals: ['alchemist', 'tonic', 'fireproof', 'potioneer'] },
+  { title: 'Szlak sześciu biomów', text: 'Odwiedź osobiście sześć różnych krain. Za pierwsze wejście do każdej otrzymasz 3 PD w Survival.', goals: ['biome_swamp', 'biome_savanna', 'biome_jungle', 'biome_taiga', 'biome_wasteland', 'biome_meadow'] },
+  { title: 'Wyzwania świata', text: 'Buduj, walcz i odkrywaj. Postęp zapisuje się w świecie, a ukończenie daje jednorazową nagrodę.', goals: ['challenge_builder', 'challenge_hunter', 'challenge_explorer'] },
 ] as const;
 
 export function journalProgress(unlocked: string[]) {
@@ -103,7 +106,8 @@ export default function JournalScreen({ hud, unlocked, onClose }: { hud: HUDStat
                 {chapter.goals.map((id) => {
                   const achievement = ACHIEVEMENTS.find((item) => item.id === id);
                   const done = have.has(id);
-                  return <li key={id} className={`text-sm ${done ? 'text-[#28602a]' : 'text-[#454545]'}`}>{done ? '✓' : '□'} {achievement?.title ?? id}</li>;
+                  const task = CHALLENGES[id as ChallengeId];
+                  return <li key={id} className={`text-sm ${done ? 'text-[#28602a]' : 'text-[#454545]'}`}>{done ? '✓' : '□'} {achievement?.title ?? id}{task && !done ? ` (${hud.challenges?.[id as ChallengeId] ?? 0}/${task.target})` : ''}</li>;
                 })}
               </ul>
             </article>

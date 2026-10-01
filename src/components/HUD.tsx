@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { HUDState } from '../game/engine';
-import { displayName, durabilityMax } from '../game/items';
+import { I, displayName, durabilityMax } from '../game/items';
 import { enchList } from '../game/enchant';
 import { GAME_VERSION } from '../utils/version';
 
@@ -37,9 +37,10 @@ function Bubble({ pop }: { pop: boolean }) {
   );
 }
 
-function ArmorPiece({ icon, frac, enchanted }: { icon: string; frac: number; enchanted?: boolean }) {
+function ArmorPiece({ icon, frac, enchanted, label }: { icon: string; frac: number; enchanted?: boolean; label: string }) {
   return (
-    <div className="relative flex items-center justify-center" style={{ width: 22, height: 22, background: 'rgba(40,40,40,0.5)', border: '1px solid #1a1a1a' }}>
+    <div className="relative flex items-center justify-center" role="img" aria-label={label} title={label}
+      style={{ width: 22, height: 22, background: 'rgba(40,40,40,0.5)', border: '1px solid #1a1a1a' }}>
       <img src={icon} className="pixelated" width={18} height={18} draggable={false} />
       {enchanted && <span className="ench-glint" />}
       {frac < 1 && <span className="dur-bar"><i style={{ width: `${frac * 100}%`, background: frac < 0.25 ? '#e04040' : '#3dba3d' }} /></span>}
@@ -165,12 +166,35 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         </div>
       )}
 
+      {/* Dagger hit confirmation lasts less than half a second; it does not flood chat. */}
+      {hud.daggerHit && (
+        <div className={`absolute left-1/2 top-[46%] -translate-x-1/2 whitespace-nowrap px-2 py-0.5 text-sm mc-text ${hud.daggerHit.counter ? 'text-yellow-300' : 'text-white'}`}
+          style={{ background: 'rgba(0,0,0,0.55)' }} role="status">
+          {hud.daggerHit.counter ? '⚔ Kontra!' : '✦ Trafienie'} {hud.daggerHit.damage} obrażeń
+        </div>
+      )}
+
       {/* 2.3: stan wędkarstwa nad celownikiem (2.5: treść wg wersji sterowania) */}
       {hud.fishing !== 'idle' && (
         <div className="absolute left-1/2 top-[58%] -translate-x-1/2 px-2 py-0.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
-          {hud.fishing === 'bite' ? (touchControls ? '🎣 Brań! Dotknij, aby zaciągnąć' : '🎣 Brań! Kliknij, aby zaciągnąć') : hud.fishing === 'waiting' ? '🎣 Przynęta czeka…' : '🎣 Przynęta leci…'}
+          {hud.fishing === 'bite' ? (touchControls ? '🎣 Brań! Dotknij, aby zaciągnąć' : '🎣 Brań! Kliknij, aby zaciągnąć') : hud.fishing === 'waiting' ? `🎣 ${hud.bait ?? 'Przynęta'} czeka…` : '🎣 Przynęta leci…'}
         </div>
       )}
+
+      {/* Lightweight indicators remain readable without particles and on low graphics. */}
+      {(hud.arrowStatus?.length || hud.impactGlow) ? (
+        <div className="pointer-events-none absolute left-2 top-[32%] max-w-[min(46vw,230px)] space-y-1 text-xs mc-text sm:left-auto sm:right-2 sm:top-[28%]" role="status">
+          {hud.arrowStatus?.map((m, i) => (
+            <div key={`${m.name}-${i}`} className="bg-black/70 px-1.5 py-1">
+              <span className="text-yellow-200">{m.marked > 0 ? `⌖ ${m.direction} ${m.distance} m · ` : ''}{m.name}</span>
+              {m.glow > 0 && <span className="block text-yellow-200">✦ Światło {Math.ceil(m.glow)} s</span>}
+              {m.slow > 0 && <span className="block text-blue-200">❄ Spowolnienie {Math.ceil(m.slow)} s</span>}
+              {m.marked > 0 && <span className="block text-red-200">⌖ Znak {Math.ceil(m.marked)} s</span>}
+            </div>
+          ))}
+          {hud.impactGlow && <div className="bg-black/70 px-1.5 py-1 text-yellow-200">✦ Światło na ścianie {Math.ceil(hud.impactGlow.left)} s · {hud.impactGlow.distance} m</div>}
+        </div>
+      ) : null}
 
       {/* 2.2: aktywny punkt podróży — strzałka obraca się względem kierunku patrzenia. */}
       {hud.waypoint && !hud.debug && (
@@ -214,13 +238,11 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
           ))}
         </div>
       ) : hud.showFps ? (
-        <div className="absolute left-2 top-2 px-1.5 py-0.5 text-[13px] leading-tight mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
+        <div className="absolute left-2 px-1.5 py-0.5 text-[13px] leading-tight mc-text" style={{ top: touchControls ? (typeof window !== 'undefined' && window.innerHeight < 530 ? 72 : 142) : 8, background: 'rgba(0,0,0,0.45)' }}>
           <div>{hud.fps} FPS{hud.resScale < 1 ? ` · skala ${Math.round(hud.resScale * 100)}%` : ''}</div>
           <div className="opacity-70">chunki: {hud.chunks} · kresl.: {hud.drawCalls}</div>
         </div>
-      ) : (
-        <div className="absolute left-2 top-2 text-sm opacity-70 mc-text">{hud.fps} FPS</div>
-      )}
+      ) : null}
 
       {hud.toast && (
         <div className="absolute left-1/2 top-16 w-[min(420px,90vw)] -translate-x-1/2 px-4 py-2 text-center" style={{ background: 'rgba(0,0,0,0.72)', border: '2px solid #3a3a3a' }}>
@@ -236,7 +258,9 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
           width={96}
           height={96}
           className="pixelated absolute right-3 top-3 hidden sm:block"
-          style={{ width: 112, height: 112, border: '2px solid #111', boxShadow: '0 0 0 2px rgba(255,255,255,0.25)', background: '#111' }}
+          style={{ width: 112, height: 112, border: '2px solid #111', boxShadow: '0 0 0 2px rgba(255,255,255,0.25)', background: '#111',
+            // On short landscape touch screens the dodge/parry row occupies this corner.
+            display: touchControls && typeof window !== 'undefined' && window.innerHeight < 530 ? 'none' : undefined }}
         />
       )}
 
@@ -256,6 +280,13 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
             {label.text}
           </div>
         )}
+        {hud.combat && (hud.combat.dodgeCooldown > 0 || hud.combat.guardCooldown > 0 || hud.combat.shield) && (
+          <div className="mb-1 flex gap-2 bg-black/60 px-2 py-0.5 text-[11px] mc-text" role="status">
+            <span className={hud.combat.dodgeActive ? 'text-green-300' : ''}>↝ {hud.combat.dodgeActive ? 'unik!' : hud.combat.dodgeCooldown > 0 ? `${hud.combat.dodgeCooldown.toFixed(1)}s` : 'gotów'}</span>
+            {hud.combat.counterReady && <span className="text-yellow-300">⚔ kontra gotowa!</span>}
+            {hud.combat.shield && <span className={hud.combat.guardActive ? 'text-green-300' : ''}>🛡 {hud.combat.guardActive ? 'paruj!' : hud.combat.guardCooldown > 0 ? `${hud.combat.guardCooldown.toFixed(1)}s` : 'gotowa'}</span>}
+          </div>
+        )}
         {/* 2.4: aktywne wzmocnienia napojów */}
         {hud.effects.length > 0 && (
           <div className="mb-0.5 flex flex-wrap justify-center gap-1">
@@ -272,13 +303,19 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
             ))}
           </div>
         )}
+        {hud.talisman && (
+          <div className="mb-0.5 flex items-center gap-1 rounded bg-black/60 px-2 py-0.5 text-[11px] mc-text" role="status">
+            <img src={icons[hud.talisman.id]} width={18} height={18} className="pixelated" alt="" />
+            <span>{displayName(hud.talisman.id)} · {hud.talisman.id === I.WANDER_CHARM ? 'ruch +5%' : 'powietrze +25%'}</span>
+          </div>
+        )}
         {hud.armor.some((s) => s) && (
           <div className="mb-0.5 flex justify-center gap-[2px]">
             {hud.armor.map((s, i) => {
               if (!s) return <div key={i} style={{ width: 22, height: 22, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,0,0,0.45)' }} />;
               const max = durabilityMax(s.id);
               const frac = s.dur !== undefined && max > 0 ? Math.max(0, s.dur / max) : 1;
-              return <ArmorPiece key={i} icon={icons[s.id]} frac={frac} enchanted={!!s.ench} />;
+              return <ArmorPiece key={i} icon={icons[s.id]} frac={frac} enchanted={!!s.ench} label={displayName(s.id)} />;
             })}
           </div>
         )}
@@ -291,7 +328,11 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
             <div className="flex gap-[2px]">{drums}</div>
           </div>
         )}
-        {hud.heldHint && <div className="mb-1 text-sm text-yellow-200 mc-text">{hud.heldHint}</div>}
+        {hud.heldHint && <div className="mb-1 max-w-[min(95vw,580px)] text-center text-sm text-yellow-200 mc-text">{hud.heldHint}</div>}
+        {hud.ammo && <div className="mb-1 flex items-center gap-1 bg-black/70 px-2 py-0.5 text-xs mc-text" role="status">
+          <img src={icons[hud.ammo.id]} alt="" width={16} height={16} className="pixelated" />
+          {displayName(hud.ammo.id)} · {hud.ammo.count < 0 ? '∞' : hud.ammo.count} · {touchControls ? '➟' : 'X'} zmień
+        </div>}
         {hud.bow >= 0 && (
           <div className="mb-1 flex items-center gap-2">
             <span className="text-sm mc-text">Naciąg</span>
