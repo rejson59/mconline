@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Browser integration test using an actual 2.8 RC1 export, never a synthetic
  * v6 save. Outside this checkout: `git archive e6be017 | tar -x -C /path/to/rc1`;
- * install dependencies and run its Vite on port 5174. Run RC2 Vite on 5173.
+ * install dependencies and run its Vite on port 5174. Run current Vite on 5173.
  * Use the Chromium environment variables described in browser.js.
  */
 import assert from 'node:assert/strict';
@@ -17,7 +17,7 @@ const args = packaged ? [...packaged.args, '--enable-webgl', '--use-gl=angle', '
   ['--no-sandbox', '--disable-dev-shm-usage', '--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 const launch = () => chromium.launch({ executablePath, args, headless: true, timeout: 30000 });
 const rc1Url = process.env.RC1_URL || 'http://localhost:5174/';
-const rc2Url = process.env.BROWSER_URL || 'http://localhost:5173/';
+const currentUrl = process.env.BROWSER_URL || 'http://localhost:5173/';
 let checks = 0;
 const check = (ok, message) => { assert.ok(ok, message); checks++; };
 const open = async (page) => {
@@ -72,7 +72,7 @@ try {
   const archived = await download(old);
   check(archived.blockcraft === 1 && archived.saves?.length === 1 &&
     archived.saves[0].terrainVersion === 6 && archived.saves[0].mods,
-    'RC1 actually exports a v6 save (not a modified RC2 fixture)');
+    'RC1 actually exports a v6 save (not a modified RC3 fixture)');
   check(oldErrors.length === 0, `RC1 browser errors: ${oldErrors.join('; ')}`);
   await oldContext.close();
   await browser.close(); // serverless Chromium uses --single-process
@@ -86,26 +86,26 @@ try {
     if (!dialog.message().includes('Zaimportowano światów: 1')) errors.push(dialog.message());
     await dialog.accept();
   });
-  await page.goto(rc2Url);
-  check(await page.getByText('WERSJA 2.8 RC2', { exact: true }).isVisible(), 'new menu is RC2');
+  await page.goto(currentUrl);
+  check(await page.getByText('WERSJA 2.8 RC3', { exact: true }).isVisible(), 'new menu is RC3');
   await page.locator('input[type=file]').setInputFiles({ name: 'rc1.json', mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(archived)) });
   await page.getByText('Eksport RC1').first().waitFor();
   check(await page.evaluate(() => JSON.parse(localStorage.getItem('blockcraft-saves-v2'))[0].terrainVersion === 6),
-    'RC2 imports real RC1 export without upgrading its generator');
+    'RC3 imports real RC1 export without upgrading its generator');
   await page.locator('button').filter({ hasText: 'Eksport RC1' }).first().click();
   await open(page);
   const migrated = await page.evaluate(digest);
   check(migrated.version === 6 && migrated.block === 10 && migrated.hash === original.hash,
-    `RC2 keeps RC1 block edit and unvisited terrain: ${JSON.stringify(migrated)}`);
+    `RC3 keeps RC1 block edit and unvisited terrain: ${JSON.stringify(migrated)}`);
   await quit(page);
   const exported = await download(page);
   check(exported.saves[0].terrainVersion === 6 &&
     JSON.stringify(exported.saves[0].mods) === JSON.stringify(archived.saves[0].mods),
-    'RC2 export round-trip retains RC1 generator and modifications');
-  check(errors.length === 0, `RC2 browser errors: ${errors.join('; ')}`);
+    'RC3 export round-trip retains RC1 generator and modifications');
+  check(errors.length === 0, `RC3 browser errors: ${errors.join('; ')}`);
   await currentContext.close();
-  console.log(`Rzeczywisty eksport RC1 → import/eksport RC2: ${checks} sprawdzeń, 0 błędów.`);
+  console.log(`Rzeczywisty eksport RC1 → import/eksport RC3: ${checks} sprawdzeń, 0 błędów.`);
 } finally {
   await browser.close();
 }

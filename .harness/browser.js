@@ -8,6 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
 
@@ -34,13 +35,16 @@ const check = (condition, message) => { assert.ok(condition, message); checks++;
 const attachErrors = (page) => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('dialog', async (d) => { errors.push(`Dialog: ${d.message()}`); await d.accept(); });
+  page.on('dialog', async (d) => {
+    if (!d.message().includes('Zaimportowano światów: 1')) errors.push(`Dialog: ${d.message()}`);
+    await d.accept();
+  });
   return errors;
 };
 const createWorld = async (page, name, seed, creative = false, touch = false) => {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.getByText('WERSJA 2.8 RC2', { exact: true }).waitFor();
-  check((await page.title()).startsWith('BlockCraft 2.8 RC2'), '2.8: tytuł i oznaczenie kandydata są spójne w grze');
+  await page.getByText('WERSJA 2.8 RC3', { exact: true }).waitFor();
+  check((await page.title()).startsWith('BlockCraft 2.8 RC3'), '2.8: tytuł i oznaczenie kandydata są spójne w grze');
   await page.getByRole('button', { name: 'Nowy świat', exact: true }).click();
   await page.getByPlaceholder('np. Wyspa').fill(name);
   await page.getByPlaceholder('np. 12345 lub dowolny tekst').fill(String(seed));
@@ -163,6 +167,20 @@ try {
     return { node, mouth };
   });
   check(!!ascent, 'PC: sucha komora ma istniejące wyjście na powierzchnię');
+  // A player needs to steer around the block-stepped diagonal route. Keep
+  // the real W + Space keys held and adjust only the camera heading toward
+  // the tunnel centre, like a mouse correction, instead of drifting off it.
+  await page.evaluate(({ node, mouth }) => {
+    const dx = mouth.x - node.x, dz = mouth.z - node.z;
+    window.__caveSteering = setInterval(() => {
+      const g = window.blockcraft.game, p = g.body.pos;
+      const t = Math.max(0, ((p.x - node.x) * dx + (p.z - node.z) * dz) / (dx * dx + dz * dz));
+      const ahead = Math.min(1, t + 0.08);
+      const tx = node.x + dx * ahead + 0.5 - p.x;
+      const tz = node.z + dz * ahead + 0.5 - p.z;
+      g.yaw = -Math.atan2(tx, -tz);
+    }, 120);
+  }, ascent);
   await page.keyboard.down('w');
   await page.keyboard.down('Space');
   try {
@@ -180,6 +198,8 @@ try {
         ui: g.ui, flying: g.flying, onGround: g.body.onGround, hitWall: g.body.hitWall, frames: g.renderer.info.render.frame };
     }, ascent);
     throw new Error(`PC: pełne wejście po pochylni nie powiodło się: ${JSON.stringify(position)}`, { cause: error });
+  } finally {
+    await page.evaluate(() => clearInterval(window.__caveSteering));
   }
   await page.keyboard.up('Space');
   await page.keyboard.up('w');
@@ -274,6 +294,37 @@ try {
   check(await page.evaluate(() => window.blockcraft.game.waypoints.some((w) =>
     w.name.startsWith('Namierzono:') && w.id === window.blockcraft.game.activeWaypointId)),
     'PC: cel lornety i jego aktywna nawigacja przeżywają wczytanie świata');
+  await page.getByRole('button', { name: 'Kliknij, aby grać' }).click();
+  await exitToMenu(page);
+  // Back up the actual visited map and compass/spyglass route via the menu,
+  // clear this private browser's storage, then import the downloaded file.
+  const [navigationFile] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Eksport zapisów' }).click(),
+  ]);
+  const navigationExport = JSON.parse(await readFile(await navigationFile.path(), 'utf8'));
+  const navigationSave = navigationExport.saves?.find((s) => s.name === 'WebGL-v7');
+  check(navigationSave?.terrainVersion === 7 && navigationSave.discovery?.overworld.length >= 5 &&
+    navigationSave.waypoints?.some((w) => w.name === 'Biom: Jezioro') &&
+    navigationSave.waypoints?.some((w) => w.name.startsWith('Namierzono:')),
+    'PC: rzeczywisty eksport zawiera odkryte biomy i cele kompasu/lornety');
+  await page.evaluate(() => localStorage.removeItem('blockcraft-saves-v2'));
+  await page.reload();
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'navigation-2.8.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(navigationExport)),
+  });
+  await page.locator('button').filter({ hasText: 'WebGL-v7' }).first().click();
+  await page.waitForFunction(() => window.blockcraft?.game?.renderer?.info?.render?.frame > 0,
+    undefined, { timeout: 60000 });
+  check(await page.evaluate(({ discovered, activeId }) => {
+    const g = window.blockcraft.game;
+    return g.homeWorld.terrainVersion === 7 &&
+      g.discovery.count('overworld') >= discovered &&
+      g.activeWaypointId === activeId &&
+      g.waypoints.some((w) => w.name.startsWith('Namierzono:') && w.id === activeId);
+  }, { discovered: navigationSave.discovery.overworld.length, activeId: navigationSave.activeWaypointId }),
+  'PC: import z menu odzyskuje mapę i aktywny cel lornety, bez zmiany generatora');
   await page.getByRole('button', { name: 'Kliknij, aby grać' }).click();
   await exitToMenu(page);
   // RC1 saves keep v6 chunk geometry, including unexplored chunks. Only new

@@ -126,27 +126,27 @@ const playerAt = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
 
 section('2.8 candidate: milestone coverage and consistent release label');
 {
-  const roadmap = readFileSync('ROADMAP-2.8-3.0.md', 'utf8');
-  const rows = [...roadmap.matchAll(/^\| \*\*(2\.\d+)[^|]*\| \*\*([\d, –]+)\*\*/gm)];
+  const roadmap = readFileSync('ROADMAP-2.8-5.0.md', 'utf8');
+  const rows = [...roadmap.matchAll(/^\| \*\*([234]\.\d+)[^|]*\| \*\*([\d, –]+)\*\*/gm)];
   const assigned = rows.flatMap(([, , ids]) => ids.split(',').flatMap((part) => {
     const bounds = [...part.matchAll(/\d+/g)].map(([n]) => Number(n));
     return Array.from({ length: bounds[bounds.length - 1] - bounds[0] + 1 }, (_, i) => bounds[0] + i);
   }));
-  check('the six milestone rows assign every original requirement exactly once',
-    rows.length === 6 && assigned.length === 100 && new Set(assigned).size === 100 &&
+  check('the nineteen smaller releases assign every original requirement exactly once',
+    rows.length === 19 && assigned.length === 100 && new Set(assigned).size === 100 &&
     assigned.every((id) => id >= 1 && id <= 100));
   const spec = readFileSync('PLAN-100-BLOCKCRAFT-3.0.md', 'utf8');
   const original = new Map([...spec.matchAll(/^(\d{1,3})\. \[ \] \*\*(.*?):\*\*/gm)]
     .map(([, id, title]) => [Number(id), title]));
-  const lists = [...roadmap.matchAll(/^### (2\.\d+) — (?:teraz|później):[^\n]+\n\n((?:- \*\*#\d+ — [^\n]+\*\*\n)+)/gm)];
+  const lists = [...roadmap.matchAll(/^### ([234]\.\d+) — (?:teraz|później):[^\n]+\n\n((?:- \*\*#\d+ — [^\n]+\*\*\n)+)/gm)];
   const listed = lists.flatMap(([, version, lines]) =>
     [...lines.matchAll(/^- \*\*#(\d+) — ([^\n]+)\*\*$/gm)]
       .map(([, id, title]) => ({ version, id: Number(id), title })));
   check('the named future-update list contains exactly the 100 original titles',
-    original.size === 100 && lists.length === 6 && listed.length === 100 &&
+    original.size === 100 && lists.length === 19 && listed.length === 100 &&
     listed.every(({ id, title }) => original.get(id) === title) &&
     new Set(listed.map(({ id }) => id)).size === 100);
-  check('the named update list agrees with the six milestone rows',
+  check('the named update list agrees with the nineteen milestone rows',
     lists.every(([, version], i) => rows[i]?.[1] === version &&
       listed.filter((entry) => entry.version === version).map((entry) => entry.id).join(',') ===
       rows[i][2].split(',').flatMap((part) => {
@@ -154,9 +154,11 @@ section('2.8 candidate: milestone coverage and consistent release label');
         return Array.from({ length: bounds.at(-1)! - bounds[0] + 1 }, (_, offset) => bounds[0] + offset);
       }).join(',')));
   check('2.8 milestone is focused on exploration rather than claiming all 100 complete',
-    rows[0]?.[1] === '2.8' && rows[0][2] === '1–4, 15, 33–34, 100' &&
-    GAME_VERSION === '2.8 RC2' && GAME_RELEASE_NAME === 'Szlaki i podziemia' &&
-    roadmap.includes('kandydatem, nie gotowym wydaniem'));
+    rows[0]?.[1] === '2.8' && rows[0][2] === '1, 15, 33–34' && rows[1]?.[2] === '2–3, 100' &&
+    rows[2]?.[2] === '4, 31–32' &&
+    GAME_VERSION === '2.8 RC3' && GAME_RELEASE_NAME === 'Szlaki i nawigacja' &&
+    roadmap.includes('2.8 pozostaje kandydatem') &&
+    roadmap.includes('5.0 — odbiór całości'));
 }
 
 // =========================================================== world / terrain

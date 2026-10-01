@@ -433,7 +433,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu clearly labels the 2.8 release candidate', menu.includes('WERSJA 2.8 RC2'));
+  check('main menu clearly labels the 2.8 release candidate', menu.includes('WERSJA 2.8 RC3'));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -732,9 +732,9 @@ section('2.3/2.4: journal chapter and menus');
   check('controls document touch long-press in windows', controls.includes('przytrzymaj: połowa / jeden'));
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces 2.8 as a candidate and names the exploration milestone',
-    menu.includes('WERSJA 2.8 RC2') && menu.includes('Szlaki i podziemia'));
+    menu.includes('WERSJA 2.8 RC3') && menu.includes('Szlaki i nawigacja'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the 2.8 release candidate', menu.includes('WERSJA 2.8 RC2'));
+  check('the menu names the 2.8 release candidate', menu.includes('WERSJA 2.8 RC3'));
 }
 
 section('2.4: brewing rules');
