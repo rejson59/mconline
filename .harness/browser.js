@@ -39,8 +39,8 @@ const attachErrors = (page) => {
 };
 const createWorld = async (page, name, seed, creative = false, touch = false) => {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.getByText('WERSJA 2.8 RC1', { exact: true }).waitFor();
-  check((await page.title()).startsWith('BlockCraft 2.8 RC1'), '2.8: tytuł i oznaczenie kandydata są spójne w grze');
+  await page.getByText('WERSJA 2.8 RC2', { exact: true }).waitFor();
+  check((await page.title()).startsWith('BlockCraft 2.8 RC2'), '2.8: tytuł i oznaczenie kandydata są spójne w grze');
   await page.getByRole('button', { name: 'Nowy świat', exact: true }).click();
   await page.getByPlaceholder('np. Wyspa').fill(name);
   await page.getByPlaceholder('np. 12345 lub dowolny tekst').fill(String(seed));
@@ -67,9 +67,9 @@ try {
   const pc = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
   const page = await pc.newPage();
   const desktopErrors = attachErrors(page);
-  await createWorld(page, 'WebGL-v6', 12345, true);
+  await createWorld(page, 'WebGL-v7', 12345, true);
   const info = await gameInfo(page);
-  check(info.version === 6 && info.mode === 'creative' && info.webgl.startsWith('WebGL 2'), 'PC: WebGL2, nowy świat v6 i Creative');
+  check(info.version === 7 && info.mode === 'creative' && info.webgl.startsWith('WebGL 2'), 'PC: WebGL2, nowy świat v7 i Creative');
   for (const [name, x, z] of [
     ['Ośnieżone szczyty', -108, -152], ['Płaskowyż', -408, -960],
     ['Głęboka dolina', -576, -960], ['Wąwóz', 912, -240],
@@ -133,7 +133,7 @@ try {
       height: w.surface(x, z).h, torch: w.getBlock(x + 2, y - 2, z) };
   });
   check(cave.room === 0 && cave.roof === 0 && cave.height > 50 && cave.torch === 44,
-    `PC: wygenerowana komora v6 z pochodnią: ${JSON.stringify(cave)}`);
+    `PC: wygenerowana komora v7 z pochodnią: ${JSON.stringify(cave)}`);
   await page.waitForTimeout(500);
   await page.evaluate(() => { const g = window.blockcraft.game; g.yaw = -Math.PI / 2; g.pitch = 0; g.camera.rotation.set(0, g.yaw, 0); });
   await screenshot(page, 'desktop-cave');
@@ -145,6 +145,51 @@ try {
     y: window.blockcraft.game.body.pos.y, ui: window.blockcraft.game.ui }));
   check(walked.x > -38 && walked.y > 20 && walked.ui === 'playing',
     `PC: prawdziwe W porusza się w komorze: ${JSON.stringify(walked)}`);
+  // Full ascent with the actual game loop and real held W + Space. Start in a
+  // deterministic dry chamber; the route crosses multiple chunk boundaries.
+  const ascent = await page.evaluate(async () => {
+    const { caveNode, caveEntrance } = await import('/src/game/caves.ts');
+    const g = window.blockcraft.game, w = g.world;
+    const node = caveNode(w.seed, -3, 0);
+    const mouth = caveEntrance(w.seed, -3, 0, (x, z) => w.surface(x, z).h,
+      (x, z) => w.villageAt(x, z) !== null);
+    if (!mouth) return null;
+    g.setRenderDistance(2);
+    g.flying = false;
+    g.body.pos.set(node.x + 0.5, node.y - 2 + 0.001, node.z + 0.5);
+    g.body.vel.set(0, 0, 0);
+    g.yaw = -Math.atan2(mouth.x - node.x, node.z - mouth.z);
+    g.pitch = 0; g.fallStart = g.body.pos.y;
+    return { node, mouth };
+  });
+  check(!!ascent, 'PC: sucha komora ma istniejące wyjście na powierzchnię');
+  await page.keyboard.down('w');
+  await page.keyboard.down('Space');
+  try {
+    await page.waitForFunction(({ node, mouth }) => {
+      const p = window.blockcraft.game.body.pos;
+      const dx = mouth.x - node.x, dz = mouth.z - node.z;
+      return ((p.x - node.x) * dx + (p.z - node.z) * dz) / (dx * dx + dz * dz) >= 0.97;
+    }, ascent, { timeout: 180000, polling: 500 });
+  } catch (error) {
+    const position = await page.evaluate(({ node, mouth }) => {
+      const g = window.blockcraft.game, p = g.body.pos;
+      const dx = mouth.x - node.x, dz = mouth.z - node.z;
+      return { x: p.x, y: p.y, z: p.z, progress: ((p.x - node.x) * dx + (p.z - node.z) * dz) / (dx * dx + dz * dz),
+        lateral: ((p.z - node.z) * dx - (p.x - node.x) * dz) / Math.hypot(dx, dz),
+        ui: g.ui, flying: g.flying, onGround: g.body.onGround, hitWall: g.body.hitWall, frames: g.renderer.info.render.frame };
+    }, ascent);
+    throw new Error(`PC: pełne wejście po pochylni nie powiodło się: ${JSON.stringify(position)}`, { cause: error });
+  }
+  await page.keyboard.up('Space');
+  await page.keyboard.up('w');
+  const climbed = await page.evaluate(({ mouth }) => {
+    const p = window.blockcraft.game.body.pos;
+    return { x: p.x, y: p.y, z: p.z, surface: mouth.y - 3 };
+  }, ascent);
+  check(climbed.y >= climbed.surface - 3 && walked.ui === 'playing',
+    `PC: W + spacja wychodzą prawdziwą pochylnią v7 do światła: ${JSON.stringify(climbed)}`);
+  await screenshot(page, 'desktop-cave-exit');
   await page.evaluate(() => window.blockcraft.game.openInventory(false));
   check((await page.locator('body').innerText()).includes('Bloki'), 'Creative: otwarto rzeczywisty ekwipunek');
   await screenshot(page, 'desktop-inventory');
@@ -197,6 +242,16 @@ try {
   await page.mouse.click(640, 360, { button: 'right' }); // reacquire pointer lock if needed
   await page.mouse.down({ button: 'right' });
   await page.waitForFunction(() => window.blockcraft.game.isZooming(), undefined, { timeout: 5000 });
+  // Pointer-lock events can arrive after mouse.down and change the camera.
+  // Wait for them, then re-aim at the wall before invoking the real G shortcut.
+  await page.waitForTimeout(450);
+  const spyglassTarget = await page.evaluate(() => {
+    const g = window.blockcraft.game;
+    g.yaw = -Math.PI / 2; g.pitch = 0;
+    g.camera.rotation.set(0, g.yaw, 0); g.refreshTarget();
+    return g.target && { x: g.target.x, y: g.target.y, z: g.target.z };
+  });
+  check(spyglassTarget?.x === 2, `PC: lorneta celuje w ścianę: ${JSON.stringify(spyglassTarget)}`);
   await page.keyboard.press('g');
   const spyglassMark = await page.evaluate(() => {
     const g = window.blockcraft.game;
@@ -209,16 +264,35 @@ try {
   await page.mouse.up({ button: 'right' });
   await page.waitForFunction(() => !window.blockcraft.game.isZooming(), undefined, { timeout: 5000 });
   check(await page.evaluate(() => !window.blockcraft.game.isZooming()), 'PC: puszczenie PPM kończy przybliżenie');
-  check(await page.evaluate(() => window.blockcraft.game.save()), 'PC: zapis świata v6');
+  check(await page.evaluate(() => window.blockcraft.game.save()), 'PC: zapis świata v7');
   await exitToMenu(page);
-  await page.locator('button').filter({ hasText: 'WebGL-v6' }).first().click();
+  await page.locator('button').filter({ hasText: 'WebGL-v7' }).first().click();
   await page.waitForFunction(() => window.blockcraft?.game?.renderer?.info?.render?.frame > 0, undefined, { timeout: 60000 });
-  check((await gameInfo(page)).version === 6, 'PC: ponowne otwarcie świata v6');
+  check((await gameInfo(page)).version === 7, 'PC: ponowne otwarcie świata v7');
   check(await page.evaluate(() => { const b = window.blockcraft.game.world.getBlock(2, 112, 0); return b >= 427 && b <= 430; }),
     'PC: postawiony obraz nadal istnieje po zapisie i odczycie');
   check(await page.evaluate(() => window.blockcraft.game.waypoints.some((w) =>
     w.name.startsWith('Namierzono:') && w.id === window.blockcraft.game.activeWaypointId)),
     'PC: cel lornety i jego aktywna nawigacja przeżywają wczytanie świata');
+  await page.getByRole('button', { name: 'Kliknij, aby grać' }).click();
+  await exitToMenu(page);
+  // RC1 saves keep v6 chunk geometry, including unexplored chunks. Only new
+  // worlds use v7. This mutation stays in this disposable browser context.
+  await page.evaluate(() => {
+    const key = 'blockcraft-saves-v2', saves = JSON.parse(localStorage.getItem(key));
+    saves[0].terrainVersion = 6; saves[0].pos = [0.5, 65, 0.5]; saves[0].mods = {};
+    localStorage.setItem(key, JSON.stringify(saves));
+  });
+  await page.reload();
+  await page.locator('button').filter({ hasText: 'WebGL-v7' }).first().click();
+  await page.waitForFunction(() => window.blockcraft?.game?.renderer?.info?.render?.frame > 0,
+    undefined, { timeout: 60000 });
+  check(await page.evaluate(() => {
+    const w = window.blockcraft.game.homeWorld;
+    let hash = 2166136261;
+    for (const block of w.getChunk(-28, 2).data) hash = Math.imul(hash ^ block, 16777619) >>> 0;
+    return w.terrainVersion === 6 && hash === 1367259331;
+  }), 'PC: zapis RC1 v6 odtwarza identyczny, wcześniej niezbadany chunk');
   await page.getByRole('button', { name: 'Kliknij, aby grać' }).click();
   await exitToMenu(page);
   // Simulate a save from before #4 and make sure it uses its original v5
@@ -230,7 +304,7 @@ try {
     localStorage.setItem(key, JSON.stringify(saves));
   });
   await page.reload();
-  await page.locator('button').filter({ hasText: 'WebGL-v6' }).first().click();
+  await page.locator('button').filter({ hasText: 'WebGL-v7' }).first().click();
   await page.waitForFunction(() => window.blockcraft?.game?.renderer?.info?.render?.frame > 0, undefined, { timeout: 60000 });
   check(await page.evaluate(() => window.blockcraft.game.homeWorld.terrainVersion === 5 &&
     window.blockcraft.game.homeWorld.surface(-544, -1200).biome === 'Jezioro'),
@@ -245,14 +319,14 @@ try {
     localStorage.setItem(key, JSON.stringify(saves));
   });
   await page.reload();
-  await page.locator('button').filter({ hasText: 'WebGL-v6' }).first().click();
+  await page.locator('button').filter({ hasText: 'WebGL-v7' }).first().click();
   await page.waitForFunction(() => window.blockcraft?.game?.renderer?.info?.render?.frame > 0, undefined, { timeout: 60000 });
   check(await page.evaluate(() => window.blockcraft.game.homeWorld.terrainVersion === 4 &&
     window.blockcraft.game.homeWorld.surface(-544, -1200).biome === 'Płaskowyż'),
     'PC: dawny świat v4 nie zmienia niezbadanej doliny w jezioro');
   check(desktopErrors.length === 0, `PC: błędy JS/dialogi: ${desktopErrors.join('; ')}`);
   await pc.close();
-  console.log('PC: renderowanie i zgodność zapisów v6/v5/v4 OK');
+  console.log('PC: renderowanie i zgodność zapisów v7/v6/v5/v4 OK');
   await browser.close();
   browser = await launchBrowser();
 
@@ -267,7 +341,7 @@ try {
   })));
   await createWorld(mobile, 'WebGL-mobile', 12345, false, true);
   const mobileInfo = await gameInfo(mobile);
-  check(mobileInfo.mode === 'survival' && mobileInfo.touch && mobileInfo.version === 6 &&
+  check(mobileInfo.mode === 'survival' && mobileInfo.touch && mobileInfo.version === 7 &&
     mobileInfo.webgl.startsWith('WebGL 2'), 'Telefon emulowany: WebGL2, dotyk i Survival');
   check(await mobile.evaluate(() => {
     const b = window.blockcraft.game.gfx;
@@ -286,7 +360,7 @@ try {
     return { block: g.world.getBlock(-40, 35, -45), version: g.world.terrainVersion,
       ms: g.gfx.chunkBudgetMs, limit: g.gfx.chunksPerFrame };
   });
-  check(phoneCave.block === 0 && phoneCave.version === 6 && phoneCave.ms === 6 && phoneCave.limit === 2,
+  check(phoneCave.block === 0 && phoneCave.version === 7 && phoneCave.ms === 6 && phoneCave.limit === 2,
     `Telefon: podziemna komora na niskim presecie ${JSON.stringify(phoneCave)}`);
   await mobile.waitForTimeout(500);
   await screenshot(mobile, 'mobile-cave');

@@ -1,8 +1,8 @@
-# BlockCraft 2.8 RC1 — Szlaki i podziemia 🟩
+# BlockCraft 2.8 RC2 — Szlaki i podziemia 🟩
 
 Gra sandboxowa działająca lokalnie w przeglądarce na PC i urządzeniach dotykowych. **To kandydat 2.8, a nie opublikowane wydanie stabilne ani ukończone 3.0.** Pełny plan 100 punktów pozostaje w [`PLAN-100-BLOCKCRAFT-3.0.md`](PLAN-100-BLOCKCRAFT-3.0.md); przypisanie każdego punktu do etapu odbioru znajduje się w [`ROADMAP-2.8-3.0.md`](ROADMAP-2.8-3.0.md).
 
-**Cel odbioru 2.8:** sześć biomów, wysokości, połączone rzeki i podziemia (generator nowych światów v6), mapa odkrywania, kompas biomów, namierzanie lornetką i presety jakości (#1–4, #15, #33–34, #100). Starsze zapisy nadal używają własnej wersji generatora v2–v5. Istnieją też częściowo wdrożone mechaniki zaplanowane do późniejszych etapów; ich obecność w kodzie nie oznacza zaliczenia całego punktu. Szczegóły i otwarte próby: [`3.0-STATUS.md`](3.0-STATUS.md). Testy i przegląd w grze wykonuje autor zmian, nie gracz.
+**Cel odbioru 2.8:** sześć biomów, wysokości, połączone rzeki i podziemia (generator nowych światów v7), mapa odkrywania, kompas biomów, namierzanie lornetką i presety jakości (#1–4, #15, #33–34, #100). Starsze zapisy nadal używają własnej wersji generatora v2–v6. Istnieją też częściowo wdrożone mechaniki zaplanowane do późniejszych etapów; ich obecność w kodzie nie oznacza zaliczenia całego punktu. Szczegóły i otwarte próby: [`3.0-STATUS.md`](3.0-STATUS.md). Testy i przegląd w grze wykonuje autor zmian, nie gracz.
 
 ## Poprzednia wersja 2.7
 
@@ -19,9 +19,9 @@ Pełny plan przyszłego wydania 3.0 znajduje się w [`PLAN-100-BLOCKCRAFT-3.0.md
 
 **Przynęty do wędki:** robak wypada czasem przy kopaniu ziemi, błota lub bielicy (8%), a świetlistą przynętę tworzy się ze struny, plastra miodu i pyłu jasnogłazu przy stole. Mając wędkę w ekwipunku, `PPM`/tap trzymaną przynętą zakłada ją na haczyk. Robak skraca oczekiwanie i zwiększa udział ryb z 70% do 86%; świetlista przynęta daje 8% szans na rzadki łup (szmaragd/lazuryt/żelazo), bez zmiany 1,7-sekundowego okna zacięcia. Jedna przynęta jest zużywana przy udanym lub przegapionym braniu, znika po śmierci; założona przynęta jest zapisywana ze światem. Nie wykonano próby ręcznej WebGL.
 
-**Namierzanie lornetką:** istniejące przybliżenie pozwala teraz dodać widoczny blok jako cel: przytrzymaj PPM i naciśnij `G`, a na dotyku włącz przybliżenie i wybierz `⌖ Zaznacz cel`. Lorneta nie zaznacza niezaładowanych chunków (maks. 96 bloków, odpowiednio do zasięgu widzenia). Punkt pojawia się w nawigacji HUD i na mapie. Nadal wymaga próby ręcznej na WebGL.
+**Namierzanie lornetką:** istniejące przybliżenie pozwala teraz dodać widoczny blok jako cel: przytrzymaj PPM i naciśnij `G`, a na dotyku włącz przybliżenie i wybierz `⌖ Zaznacz cel`. Lorneta nie zaznacza niezaładowanych chunków (maks. 96 bloków, odpowiednio do zasięgu widzenia). Punkt pojawia się w nawigacji HUD i na mapie. PPM/G i przycisk dotykowy sprawdzono w Chromium/WebGL2; próba na fizycznym telefonie pozostaje do wykonania.
 
-**W gałęzi roboczej (nie wydanie 3.0):** ekran punktów podróży (`K` na PC, 📍 na dotyku) zawiera mapę odkrywania. Każdy odwiedzony chunk odsłania pole mapy o kolorze biomu; oddzielne mapy Nadświata i Netheru są zapisywane z danym światem oraz przenoszone przez eksport/import. Strzałkami przesuwasz mapę, przyciskami `+` / `−` zmieniasz skalę; kliknięcie odkrytego pola lub „Zaznacz środek mapy” dodaje cel do istniejących punktów podróży. Znaczniki wskazują cel, gracza i miejsce śmierci. Pamięć mapy jest ograniczona do 16 384 pól na wymiar; po osiągnięciu limitu zachowuje wcześniej odkryte pola. Nie wykonano jeszcze ręcznego testu na urządzeniu z WebGL.
+**W gałęzi roboczej (nie wydanie 3.0):** ekran punktów podróży (`K` na PC, 📍 na dotyku) zawiera mapę odkrywania. Każdy odwiedzony chunk odsłania pole mapy o kolorze biomu; oddzielne mapy Nadświata i Netheru są zapisywane z danym światem oraz przenoszone przez eksport/import. Strzałkami przesuwasz mapę, przyciskami `+` / `−` zmieniasz skalę; kliknięcie odkrytego pola lub „Zaznacz środek mapy” dodaje cel do istniejących punktów podróży. Znaczniki wskazują cel, gracza i miejsce śmierci. Pamięć mapy jest ograniczona do 16 384 pól na wymiar; po osiągnięciu limitu zachowuje wcześniej odkryte pola. Mapę i wyznaczenie punktu przetestowano w Chromium/WebGL2 na PC i emulowanym ekranie dotykowym; nie przetestowano fizycznego telefonu.
 
 **Wersja 2.6 „Warsztat bez wpadek”**:
 
@@ -389,6 +389,8 @@ a w drugim `CHROME_BIN=/ścieżka/do/chromium npm run test:browser`.
 Opcjonalne `BROWSER_SCREENSHOTS=/katalog/poza-repo` zapisuje obrazy z PC i
 emulowanego telefonu do obejrzenia. Test otwiera światy Creative/Survival,
 weryfikuje WebGL2, obraz wybrany z katalogu Creative i zapis/odczyt
-wersji generatora v6/v5/v4, komorę jaskini oraz sterowanie
+wersji generatora v7/v6/v5/v4, komorę i wejście całą pochylnią z klawiszami W + spacja oraz sterowanie
 dotykowe na niskim presecie. Wymaga osobno zainstalowanego Chromium z WebGL2;
 programowy SwiftShader w headless nie zastępuje fizycznego telefonu i GPU.
+Test rzeczywistego eksportu RC1 v6 i importu/eksportu w RC2: `.harness/rc1-browser.js`
+(instrukcja uruchomienia obu wersji w nagłówku skryptu).

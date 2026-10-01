@@ -155,7 +155,7 @@ section('2.8 candidate: milestone coverage and consistent release label');
       }).join(',')));
   check('2.8 milestone is focused on exploration rather than claiming all 100 complete',
     rows[0]?.[1] === '2.8' && rows[0][2] === '1–4, 15, 33–34, 100' &&
-    GAME_VERSION === '2.8 RC1' && GAME_RELEASE_NAME === 'Szlaki i podziemia' &&
+    GAME_VERSION === '2.8 RC2' && GAME_RELEASE_NAME === 'Szlaki i podziemia' &&
     roadmap.includes('kandydatem, nie gotowym wydaniem'));
 }
 
@@ -251,13 +251,14 @@ section('world: determinism and terrain');
 
 section('3.0 #2: height biomes with append-only v4 terrain and seam-safe samples');
 {
-  check('save migration preserves v2/v3/v4/v5 and starts new worlds with v6',
-    terrainVersionForSave() === 6 && terrainVersionForSave({}) === 2 &&
+  check('save migration preserves v2–v6 and starts new worlds with v7',
+    terrainVersionForSave() === 7 && terrainVersionForSave({}) === 2 &&
     terrainVersionForSave({ terrainVersion: 2 }) === 2 &&
     terrainVersionForSave({ terrainVersion: 3 }) === 3 &&
     terrainVersionForSave({ terrainVersion: 4 }) === 4 &&
     terrainVersionForSave({ terrainVersion: 5 }) === 5 &&
-    terrainVersionForSave({ terrainVersion: 6 }) === 6);
+    terrainVersionForSave({ terrainVersion: 6 }) === 6 &&
+    terrainVersionForSave({ terrainVersion: 7 }) === 7);
   const previous = new World(12345, false, false, 3);
   let v3 = 2166136261;
   for (const block of previous.getChunk(0, 0).data) v3 = Math.imul(v3 ^ block, 16777619) >>> 0;
@@ -266,8 +267,8 @@ section('3.0 #2: height biomes with append-only v4 terrain and seam-safe samples
     ['Ośnieżone szczyty', 'Płaskowyż', 'Wąwóz', 'Głęboka dolina'].every((label) =>
       previous.surface(912, -240).biome !== label) && previous.terrainVersion === 3);
   const v4 = new World(12345, false, false, 4);
-  check('v4 saves keep their generator while new Overworlds use v6',
-    v4.terrainVersion === 4 && new World(12345).terrainVersion === 6 && new World(12345, false, false, 2).terrainVersion === 2 &&
+  check('v4 saves keep their generator while new Overworlds use v7',
+    v4.terrainVersion === 4 && new World(12345).terrainVersion === 7 && new World(12345, false, false, 2).terrainVersion === 2 &&
     new World(12345, false, true).surface(0, 0).biome === 'Nether');
   const samples = [
     { x: -576, z: -960, biome: 'Głęboka dolina', base: B.GRASS },
@@ -315,9 +316,17 @@ section('3.0 #4: versioned walkable cave lattice with connected rooms, pools and
   let v5Digest = 2166136261;
   for (const block of old.getChunk(-34, -75).data) v5Digest = Math.imul(v5Digest ^ block, 16777619) >>> 0;
   // Captured from the pre-v6 generator at this source-lake chunk.
-  eq('v5 worlds retain their original chunk after switching to v6', v5Digest, 983727665);
-  check('only newly created normal worlds receive the v6 underground, not existing v5/flat/Nether worlds',
-    world.terrainVersion === 6 && old.terrainVersion === 5 &&
+  eq('v5 worlds retain their original chunk after switching to v7', v5Digest, 983727665);
+  const rc1 = new World(seed, false, false, 6);
+  const digest = (cx: number, cz: number) => {
+    let h = 2166136261;
+    for (const id of rc1.getChunk(cx, cz).data) h = Math.imul(h ^ id, 16777619) >>> 0;
+    return h;
+  };
+  check('previously saved RC1 v6 caves, mouth and surrounding chunks retain exact geometry',
+    digest(-28, 2) === 1367259331 && digest(-25, 3) === 596249321 && digest(-20, 4) === 3293505039);
+  check('only newly created normal worlds receive the v7 underground, not existing v5/flat/Nether worlds',
+    world.terrainVersion === 7 && old.terrainVersion === 5 &&
     world.surface(40, 40).h === old.surface(40, 40).h &&
     new World(seed, true).getBlock(40, 30, 40) !== B.WATER);
   const a = caveNode(seed, -1, -1), east = caveNode(seed, 0, -1), south = caveNode(seed, -1, 0);
@@ -346,11 +355,15 @@ section('3.0 #4: versioned walkable cave lattice with connected rooms, pools and
   check('underground lake has water, an unblocked room over it and a clay bed',
     !!pool && world.getBlock(pool.x, pool.y - 3, pool.z) === B.WATER &&
     passable(pool.x, pool.y, pool.z) && world.getBlock(pool.x, pool.y - 6, pool.z) === B.CLAY);
+  const synthetic = caveNode(seed, 0, 0);
+  check('surface ramp cannot cut through an occupied village between chamber and mouth',
+    caveEntrance(seed, 0, 0, () => SEA + 12,
+      (x, z) => x === synthetic.x + 60 && z === synthetic.z + 18) === null);
   let entrance: { gx: number; gz: number; x: number; y: number; z: number } | null = null;
   for (let gx = -5; gx <= 5 && !entrance; gx++) for (let gz = -5; gz <= 5; gz++) {
     const mouth = caveEntrance(seed, gx, gz, (x, z) => world.surface(x, z).h,
       (x, z) => world.villageAt(x, z) !== null);
-    if (mouth) { entrance = { gx, gz, ...mouth }; break; }
+    if (mouth && !caveNode(seed, gx, gz).lake) { entrance = { gx, gz, ...mouth }; break; }
   }
   check('a dry, non-village cave entrance is reachable from the surface', !!entrance &&
     passable(entrance.x, entrance.y, entrance.z));
@@ -360,19 +373,51 @@ section('3.0 #4: versioned walkable cave lattice with connected rooms, pools and
     for (let i = 0; i <= 96; i++) {
       const t = i / 96;
       const x = Math.round(node.x + (entrance.x - node.x) * t),
-        y = Math.round(node.y + (entrance.y - node.y) * t),
+        y = Math.round(node.y + (entrance.y - node.y) * Math.max(0,
+          (t * Math.hypot(entrance.x - node.x, entrance.z - node.z) - 12) /
+          (Math.hypot(entrance.x - node.x, entrance.z - node.z) - 12))),
         z = Math.round(node.z + (entrance.z - node.z) * t);
       if (!passable(x, y, z)) { ramp = false; break; }
     }
     check('the entire walkable exit ramp remains open between the chamber and daylight',
       ramp && Math.abs(entrance.y - node.y) < Math.hypot(entrance.x - node.x, entrance.z - node.z));
+    // Move a real player-sized AABB through the generated ramp with the same
+    // collision and gravity as the game, jumping on one-block steps. Sampling
+    // air blocks alone cannot detect a lip that strands a walking player.
+    const body: Body = {
+      pos: new THREE.Vector3(node.x + 0.5, node.y - 2 + 0.001, node.z + 0.5),
+      vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: false, hitWall: false,
+    };
+    const dx = entrance.x - node.x, dz = entrance.z - node.z;
+    const len = Math.hypot(dx, dz);
+    let best = 0;
+    for (let tick = 0; tick < 2400; tick++) {
+      const dt = 1 / 60;
+      const t = ((body.pos.x - node.x) * dx + (body.pos.z - node.z) * dz) / (len * len);
+      best = Math.max(best, t);
+      if (t >= 0.97) break;
+      // Aim just ahead along the same segment; lateral correction keeps the
+      // body inside the 4-block-wide corridor at chunk boundaries.
+      const ahead = Math.min(1, t + 0.08);
+      const tx = node.x + dx * ahead + 0.5 - body.pos.x;
+      const tz = node.z + dz * ahead + 0.5 - body.pos.z;
+      const mag = Math.hypot(tx, tz) || 1;
+      body.vel.x += (tx / mag * 4.3 - body.vel.x) * Math.min(1, 14 * dt);
+      body.vel.z += (tz / mag * 4.3 - body.vel.z) * Math.min(1, 14 * dt);
+      body.vel.y = Math.max(-78, body.vel.y - 32 * dt);
+      if (body.onGround && body.hitWall) body.vel.y = 9.1;
+      stepBody(world, body, dt);
+    }
+    check('a player-sized body can climb from a dry cave chamber to the surface',
+      best >= 0.97 && body.pos.y > entrance.y - 6,
+      `node=${JSON.stringify(node)}, exit=${JSON.stringify(entrance)}, progress=${best.toFixed(2)}, pos=${body.pos.toArray().map((n) => n.toFixed(2))}, vel=${body.vel.toArray().map((n) => n.toFixed(2))}, ground=${body.onGround}, hitWall=${body.hitWall}`);
   }
   const reverse = new World(seed);
   for (const [cx, cz] of [[-1, -4], [0, -4], [-4, -1], [-4, 0]]) reverse.getChunk(cx, cz);
   check('reordering negative/positive chunk generation does not shift corridor cuts or lake shores',
     [[-4, 0], [-4, -1], [0, -4], [-1, -4]].every(([cx, cz]) =>
       world.getChunk(cx, cz).data.every((b, i) => b === reverse.getChunk(cx, cz).data[i])));
-  check('old v5 terrain still uses its original cave geometry at a v6 node',
+  check('old v5 terrain still uses its original cave geometry at a v7 node',
     old.getBlock(a.x, a.y, a.z) !== B.WATER && old.terrainVersion === 5);
 }
 
@@ -4832,7 +4877,7 @@ section('saves: enchantments ride along');
   eq('second enchantment persists', stored.inv[0]?.ench?.unbreaking, 2);
   eq('armor enchantments persist', stored.armor?.[0]?.ench?.featherfalling, 3);
   eq('durability still persists', stored.inv[0]?.dur, 300);
-  eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 6);
+  eq('engine records terrain generator revision for future reloads', stored.terrainVersion, 7);
   eq('prepared bait persists on save', stored.fishingBait, I.WORM_BAIT);
   check('equipped charm persists in world export, while old worlds retain empty slot',
     stored.talisman?.id === I.WANDER_CHARM && restoreTalisman(JSON.parse(exportSave('ench-test') ?? '{}').saves?.[0]?.talisman)?.id === I.WANDER_CHARM &&

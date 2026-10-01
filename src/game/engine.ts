@@ -217,7 +217,7 @@ export interface SaveData {
   name?: string;
   worldType?: 'normal' | 'flat';
   /** Missing in older saves: keep the original 2.7 generator for them. */
-  terrainVersion?: 2 | 3 | 4 | 5 | 6;
+  terrainVersion?: 2 | 3 | 4 | 5 | 6 | 7;
   updated?: number;
   hunger?: number;
   spawn?: [number, number, number];
@@ -266,9 +266,10 @@ export interface SaveData {
 }
 
 /** Missing revision means a 2.7 world. Never upgrade unvisited chunks of a saved world. */
-export function terrainVersionForSave(save?: Pick<SaveData, 'terrainVersion'>): 2 | 3 | 4 | 5 | 6 {
-  if (!save) return 6;
-  return save.terrainVersion === 6 ? 6 : save.terrainVersion === 5 ? 5 : save.terrainVersion === 4 ? 4 : save.terrainVersion === 3 ? 3 : 2;
+export function terrainVersionForSave(save?: Pick<SaveData, 'terrainVersion'>): 2 | 3 | 4 | 5 | 6 | 7 {
+  if (!save) return 7;
+  return save.terrainVersion === 7 ? 7 : save.terrainVersion === 6 ? 6 : save.terrainVersion === 5 ? 5 :
+    save.terrainVersion === 4 ? 4 : save.terrainVersion === 3 ? 3 : 2;
 }
 
 export const SAVE_KEY = 'blockcraft-save-v1';

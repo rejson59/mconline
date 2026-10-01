@@ -3,7 +3,7 @@ import { SimplexNoise } from './noise';
 import { B, T, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
 import { tileUV } from './textures';
 import { CH, CS, FLAT_H, SEA } from './constants';
-import { carveCaveNetwork } from './caves';
+import { carveCaveNetwork, clearCaveExitVegetation } from './caves';
 import {
   applyVillages,
   nearestVillage,
@@ -172,7 +172,7 @@ export class World {
    */
   readonly isNether: boolean;
   /** Generator v2 reproduces pre-3.0 seeds for worlds created before the upgrade. */
-  readonly terrainVersion: 2 | 3 | 4 | 5 | 6;
+  readonly terrainVersion: 2 | 3 | 4 | 5 | 6 | 7;
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
@@ -184,7 +184,7 @@ export class World {
   private nTemp: SimplexNoise;
   private vctx: VillageContext | null = null;
 
-  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 | 4 | 5 | 6 = 6) {
+  constructor(seed: number, flat = false, nether = false, terrainVersion: 2 | 3 | 4 | 5 | 6 | 7 = 7) {
     this.terrainVersion = terrainVersion;
     this.seed = seed;
     this.flat = flat && !nether;
@@ -385,7 +385,8 @@ export class World {
     if (this.terrainVersion >= 6) {
       carveCaveNetwork(d, c.cx, c.cz, s,
         (x, z) => this.surface(x, z).h,
-        (x, z) => villageAt(x, z, this.villageContext()) !== null);
+        (x, z) => villageAt(x, z, this.villageContext()) !== null,
+        this.terrainVersion === 6 ? 6 : 7);
     }
 
     // Wioski: wyrównują teren i stawiają budynki, zanim pojawią się dekoracje.
@@ -488,6 +489,10 @@ export class World {
         const top = this.growTree(c, tx, tz, info.h + 1, birch, vmask, kind);
         if (top > maxY) maxY = top;
       }
+
+    if (this.terrainVersion >= 7) clearCaveExitVegetation(d, c.cx, c.cz, s,
+      (x, z) => this.surface(x, z).h,
+      (x, z) => villageAt(x, z, this.villageContext()) !== null);
 
     // Buried chests in caves. Does not change terrain height, only fills an existing air pocket.
     for (let n = 0; n < 3; n++) {
