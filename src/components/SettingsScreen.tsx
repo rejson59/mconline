@@ -208,9 +208,17 @@ export default function SettingsScreen({
             fmt={(v) => (v < 0.93 ? 'małe' : v > 1.07 ? 'duże' : 'średnie')}
             onChange={(v) => set({ touchScale: v })}
           />
+          <div className="mt-1 text-xs text-green-300 mc-text">Ułatwienia – także na komputerze</div>
           <Btn active={settings.autoJump} onClick={() => set({ autoJump: !settings.autoJump })}>
             Auto-skok na schodki: {settings.autoJump ? 'włączony' : 'wyłączony'}
           </Btn>
+          <Btn active={settings.autoAttack} onClick={() => set({ autoAttack: !settings.autoAttack })}>
+            Auto-bicie potworów: {settings.autoAttack ? 'włączone' : 'wyłączone'}
+          </Btn>
+          <div className="text-xs leading-snug text-white/50">
+            Auto-skok sam wskakuje na schodki i wyciąga z wody, a auto-bicie uderza wrogie moby w zasięgu ręki
+            (zombie, creepery, szkielety…). Zwierzęta i mieszkańcy zostają bezpieczni.
+          </div>
           <Btn active={settings.haptics} onClick={() => set({ haptics: !settings.haptics })}>
             Wibracje: {settings.haptics ? 'włączone' : 'wyłączone'}
           </Btn>

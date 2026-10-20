@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, type Biome, type Chunk } from './world';
-import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
+import { B, BLOCKS, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -17,6 +17,8 @@ const GREY: readonly number[] = [90, 90, 90];
 
 /** 2.8.2: prędkość wiatru dla chmur w jednostkach świata na sekundę. */
 const CLOUD_SPEED = 6.5;
+/** 2.14: zasięg auto-bicia – tyle samo, ile ręczny cios (3,5 klocka + promień moba). */
+const AUTO_ATTACK_RANGE = 3.5;
 
 /** 2.8.1: przedmioty, które świecą także wtedy, gdy trzyma je gracz. */
 const HELD_LIGHT_ITEMS: ReadonlySet<number> = new Set<number>([
@@ -527,6 +529,8 @@ export class Game {
   gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, clouds: true };
   /** Automatyczne wskakiwanie na 1-blokowe schodki (sterowanie mobilne). */
   autoJump = false;
+  /** 2.14: automatyczne bicie wrogich mobów w zasięgu ręki. */
+  autoAttack = false;
   /** Krótkie wibracje przy kopaniu i obrażeniach. */
   haptics = false;
   viewBobbing = true;
@@ -1550,6 +1554,7 @@ export class Game {
     chunksPerFrame?: number;
     unloadMargin?: number;
     autoJump?: boolean;
+    autoAttack?: boolean;
     haptics?: boolean;
     viewBobbing?: boolean;
     showFps?: boolean;
@@ -1576,6 +1581,7 @@ export class Game {
     if (o.chunksPerFrame !== undefined) this.gfx.chunksPerFrame = Math.max(1, Math.min(6, o.chunksPerFrame));
     if (o.unloadMargin !== undefined) this.gfx.unloadMargin = Math.max(1, Math.min(4, o.unloadMargin));
     if (o.autoJump !== undefined) this.autoJump = o.autoJump;
+    if (o.autoAttack !== undefined) this.autoAttack = o.autoAttack;
     if (o.haptics !== undefined) this.haptics = o.haptics;
     if (o.viewBobbing !== undefined) this.viewBobbing = o.viewBobbing;
     if (o.showFps !== undefined) this.showFps = o.showFps;
@@ -3704,46 +3710,7 @@ export class Game {
     const blockDist = this.target ? this.target.dist : 99;
     const { mob, dist } = this.findMobTarget(3.5);
     if (mob && dist < blockDist && this.attackCooldown <= 0) {
-      const toolId = this.selectedStack()?.id ?? 0;
-      if (ITEMS[toolId]?.tool === 'shears' && mob.type === 'sheep') {
-        this.attackCooldown = 0.35;
-        if (mob.shear()) {
-          const n = 1 + (Math.random() < 0.4 ? 1 : 0);
-          this.spawnDrop(B.WOOL_WHITE, n, mob.body.pos.x, mob.body.pos.y + 0.6, mob.body.pos.z, undefined, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2);
-          this.wearTool();
-          this.unlock('shear');
-          this.gainXp(1);
-          Sfx.playPlace('cloth');
-          this.message(n > 1 ? 'Ostrzyżono owcę. Dwie wełny.' : 'Ostrzyżono owcę.');
-          return;
-        }
-        // 2.5: już ostrzyżona owca dostaje zwykły cios – wcześniej
-        // przytrzymany LPM spamował komunikatem „już ostrzyżona”.
-      }
-      this.attackCooldown = attackCooldown(toolId);
-      const held = this.selectedStack();
-      let dmg = attackDamage(toolId, this.sprinting, sharpnessDamage(enchLevel(held, 'sharpness')));
-      // 2.4: napój siły dorzuca obrażenia do każdego trafienia
-      if (this.hasEffect('strength')) dmg += STRENGTH_DAMAGE;
-      const kb = knockbackFactor(enchLevel(held, 'knockback'));
-      if (mob.damage(dmg, this.body.pos.x, this.body.pos.z)) {
-        if (kb > 1) {
-          mob.body.vel.x *= kb;
-          mob.body.vel.z *= kb;
-          mob.body.vel.y = Math.max(mob.body.vel.y, 6 * kb);
-        }
-        Sfx.playHurt();
-        Sfx.playMob(mob.type);
-        this.wearTool();
-        if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
-        // Grabież: remember the level so mobLoot() can roll extras once
-        mob.bonusLoot = Math.max(mob.bonusLoot, enchLevel(held, 'looting'));
-        // 1.6: krzywda mieszkańca budzi okoliczne golemy
-        if (mob.type === 'villager') {
-          const n = this.provokeGolems(mob.body.pos.x, mob.body.pos.z, 26, 20);
-          if (n > 0) this.message(n === 1 ? 'Golem w okolicy to zauważył!' : 'Golemy w okolicy to zauważyły!');
-        }
-      }
+      this.attackMob(mob);
       // 2.5: NIE zwalniamy LPM – trzymany przycisk bije dalej z cooldownem
       // (updateInteraction). Wcześniej każde trafienie „zjadało” wciśnięcie,
       // więc walka wymagała ręcznego klikania, a kopanie zamierało, gdy mob
@@ -3760,6 +3727,124 @@ export class Game {
       this.breakBlock(this.target.x, this.target.y, this.target.z);
       this.breakCooldown = 0.25;
     }
+  }
+
+  /**
+   * 2.14: jeden cios w moba – wspólny dla ręcznego ataku i auto-bicia.
+   * Wydzielone z tryAttack, żeby oba warianty zadawały dokładnie takie same
+   * obrażenia, zużywały narzędzie i respektowały cooldown.
+   */
+  private attackMob(mob: Mob) {
+    this.swingT = 0;
+    const toolId = this.selectedStack()?.id ?? 0;
+    if (ITEMS[toolId]?.tool === 'shears' && mob.type === 'sheep') {
+      this.attackCooldown = 0.35;
+      if (mob.shear()) {
+        const n = 1 + (Math.random() < 0.4 ? 1 : 0);
+        this.spawnDrop(B.WOOL_WHITE, n, mob.body.pos.x, mob.body.pos.y + 0.6, mob.body.pos.z, undefined, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2);
+        this.wearTool();
+        this.unlock('shear');
+        this.gainXp(1);
+        Sfx.playPlace('cloth');
+        this.message(n > 1 ? 'Ostrzyżono owcę. Dwie wełny.' : 'Ostrzyżono owcę.');
+        return;
+      }
+      // 2.5: już ostrzyżona owca dostaje zwykły cios – wcześniej
+      // przytrzymany LPM spamował komunikatem „już ostrzyżona”.
+    }
+    this.attackCooldown = attackCooldown(toolId);
+    const held = this.selectedStack();
+    let dmg = attackDamage(toolId, this.sprinting, sharpnessDamage(enchLevel(held, 'sharpness')));
+    // 2.4: napój siły dorzuca obrażenia do każdego trafienia
+    if (this.hasEffect('strength')) dmg += STRENGTH_DAMAGE;
+    const kb = knockbackFactor(enchLevel(held, 'knockback'));
+    if (mob.damage(dmg, this.body.pos.x, this.body.pos.z)) {
+      if (kb > 1) {
+        mob.body.vel.x *= kb;
+        mob.body.vel.z *= kb;
+        mob.body.vel.y = Math.max(mob.body.vel.y, 6 * kb);
+      }
+      Sfx.playHurt();
+      Sfx.playMob(mob.type);
+      this.wearTool();
+      if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
+      // Grabież: remember the level so mobLoot() can roll extras once
+      mob.bonusLoot = Math.max(mob.bonusLoot, enchLevel(held, 'looting'));
+      // 1.6: krzywda mieszkańca budzi okoliczne golemy
+      if (mob.type === 'villager') {
+        const n = this.provokeGolems(mob.body.pos.x, mob.body.pos.z, 26, 20);
+        if (n > 0) this.message(n === 1 ? 'Golem w okolicy to zauważył!' : 'Golemy w okolicy to zauważyły!');
+      }
+    }
+  }
+
+  /**
+   * 2.14: najbliższy wrogi mob w zasięgu ręki, którego nie zasłania blok.
+   * Bierzemy pełną odległość do środka ciała (mob ma szerokość), a wzrok
+   * sprawdzamy promieniem od oczu – dzięki temu nie bijemy przez ścianę.
+   */
+  findAutoAttackTarget(maxDist: number): Mob | null {
+    const p = this.body.pos;
+    const eye = this.eyePos();
+    const max = maxDist + 0.6;
+    let best: Mob | null = null;
+    let bd = max;
+    for (const m of this.mobs) {
+      if (m.dead || !isHostileMob(m.type)) continue;
+      const tx = m.body.pos.x - eye.x;
+      const ty = m.body.pos.y + m.body.h * 0.5 - eye.y;
+      const tz = m.body.pos.z - eye.z;
+      const len = Math.hypot(tx, ty, tz);
+      if (len > max || len < 0.001) continue;
+      // Inna kondygnacja (mob na dachu albo pod podłogą) – nie bijemy.
+      if (Math.abs(m.body.pos.y - p.y) > 2.6) continue;
+      // Blok po drodze = brak ciosu. Szyba, liście i rośliny nie zasłaniają.
+      if (!this.clearShot(eye.x, eye.y, eye.z, tx / len, ty / len, tz / len, Math.max(0.4, len - 0.45))) continue;
+      const d = Math.hypot(m.body.pos.x - p.x, m.body.pos.z - p.z);
+      if (d < bd) { bd = d; best = m; }
+    }
+    return best;
+  }
+
+  /**
+   * 2.14: czy od oczu do celu nic nie zasłania. Chodzimy po odcinku co 0,2
+   * klocka i sprawdzamy tylko bloki, które naprawdę kryją widok – dzięki temu
+   * auto-bicie działa przez szybę i wysoką trawę, a nie przez ścianę.
+   */
+  private clearShot(ex: number, ey: number, ez: number, dx: number, dy: number, dz: number, len: number): boolean {
+    const steps = Math.max(2, Math.ceil(len / 0.2));
+    for (let i = 1; i < steps; i++) {
+      const f = (i / steps) * len;
+      const id = this.world.peekBlock(Math.floor(ex + dx * f), Math.floor(ey + dy * f), Math.floor(ez + dz * f));
+      if (OCCLUDES[id] !== 0) return false;
+    }
+    return true;
+  }
+
+  /** 2.14: delikatne obracanie na dotyku w stronę celu auto-bicia. */
+  private faceMobAuto(mob: Mob, dt: number) {
+    const dx = mob.body.pos.x - this.body.pos.x;
+    const dz = mob.body.pos.z - this.body.pos.z;
+    if (Math.hypot(dx, dz) < 0.001) return;
+    const want = Math.atan2(-dx, -dz);
+    let diff = want - this.yaw;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    this.yaw += diff * Math.min(1, dt * 5);
+  }
+
+  /**
+   * 2.14: auto-bicie wrogich mobów. Działa w tle podczas gry: wybiera
+   * najbliższego potwora w zasięgu ręki i uderza go z normalnym cooldownem
+   * (te same obrażenia, zużycie narzędzia i dźwięki co ręczny atak).
+   */
+  autoAttackTick(dt: number) {
+    if (!this.autoAttack || this.ui !== 'playing') return;
+    const target = this.findAutoAttackTarget(AUTO_ATTACK_RANGE);
+    if (!target) return;
+    if (this.touchInput) this.faceMobAuto(target, dt);
+    if (this.attackCooldown > 0) return;
+    this.attackMob(target);
   }
 
   /** Fires an arrow when the player lets go of RMB while holding a bow. */
@@ -4711,6 +4796,8 @@ export class Game {
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);
       this.updateInteraction(dt);
       this.updateMobs(dt);
+      // 2.14: po ruchu mobów – auto-bicie zawsze celuje w aktualną pozycję.
+      this.autoAttackTick(dt);
       this.updateEntities(dt);
       this.updateFalling(dt);
       this.updateLeafDecay(dt);
@@ -4772,6 +4859,7 @@ export class Game {
     const b = this.body;
     const k = this.keys;
     const playing = this.ui === 'playing';
+    if (this.autoJumpCd > 0) this.autoJumpCd -= dt;
     const feet = this.blockAt(b.pos, 0.1);
     const mid = this.blockAt(b.pos, 0.8);
     const inWater = feet === B.WATER || mid === B.WATER;
@@ -4834,6 +4922,11 @@ export class Game {
       if (jump) b.vel.y = Math.min(b.vel.y + 40 * dt, 3.8);
       // jump out of water at edges
       if (jump && b.hitWall) b.vel.y = 6;
+      // 2.14: auto-skok z wody – na telefonie wyjście na brzeg było loterią.
+      if (this.autoJump && playing && hasInput && inWater && !inLava && b.hitWall && this.autoJumpCd <= 0) {
+        b.vel.y = 6;
+        this.autoJumpCd = 0.6;
+      }
     } else {
       b.vel.y -= 32 * dt;
       if (b.vel.y < -78) b.vel.y = -78;
@@ -4849,11 +4942,14 @@ export class Game {
       this.flying = false;
     }
 
-    // 2.0: automatyczne wskakiwanie na 1-blokowe schodki – obowiązkowe na dotyku.
-    if (this.autoJump && playing && b.onGround && b.hitWall && !this.flying && !inWater && !inLava && !onLadder && !sneaking) {
-      this.autoJumpCd -= dt;
-      const mvx = Math.sign(b.vel.x), mvz = Math.sign(b.vel.z);
-      if ((mvx !== 0 || mvz !== 0) && this.autoJumpCd <= 0 && this.canAutoStep(b.pos, mvx, mvz)) {
+    // 2.0/2.14: automatyczne wskakiwanie na 1-blokowe schodki. Kierunek bierzemy
+    // z wciśniętych klawiszy, a nie z prędkości – stepBody zeruje prędkość
+    // dokładnie przy zderzeniu, przez co stara wersja (hitWall + znak prędkości)
+    // praktycznie nigdy nie skakała. Teraz postać sprawdza klocek PRZED sobą
+    // i wskakuje jeszcze przed dotknięciem przeszkody. Działa też na dotyku.
+    if (this.autoJump && playing && hasInput && b.onGround && !this.flying && !inWater && !inLava && !onLadder && !sneaking) {
+      const mvx = Math.sign(wx), mvz = Math.sign(wz);
+      if (this.autoJumpCd <= 0 && this.canAutoStep(b.pos, mvx, mvz)) {
         b.vel.y = 8.6;
         this.autoJumpCd = 0.35;
       }

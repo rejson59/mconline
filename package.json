@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.13.0",
-  "description": "BlockCraft 2.13 „Jak w Minecrafcie” – polska gra sandboxowa w przeglądarce: publiczny serwer, ekwipunek i crafting jak w Minecrafcie, skórki, wymuszony tryb poziomy na telefonie i nowoczesne tekstury.",
+  "version": "2.14.0",
+  "description": "BlockCraft 2.14 „Auto-bicie” – polska gra sandboxowa w przeglądarce: automatyczne bicie wrogich mobów i auto-skok, publiczny serwer, ekwipunek i crafting jak w Minecrafcie, skórki i tryb poziomy na telefonie.",
   "type": "module",
   "license": "MIT",
   "keywords": [

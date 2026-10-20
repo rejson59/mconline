@@ -234,7 +234,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.13') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.14') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -278,6 +278,8 @@ section('menus: static render');
   check('pause menu opens the adventure journal', pause.includes('Dziennik przygód'));
   check('pause menu counts achievements', pause.includes(`/${ACHIEVEMENTS.length}`));
   check('pause menu announces the new release', pause.includes(`Nowości w ${GAME_VERSION}`) && pause.includes(GAME_RELEASE_NAME));
+  check('2.14 pause menu has quick auto-jump toggle', pause.includes('Auto-skok: wł.') && pause.includes('Auto-bicie: wł.'));
+  check('2.14 quick toggles expose aria-pressed', (pause.match(/aria-pressed="true"/g) ?? []).length >= 2);
 
   const pauseMp = renderToStaticMarkup(
     <PauseMenu
@@ -331,6 +333,15 @@ section('menus: static render');
   check('2.12 settings have a character tab', settingsHtml.includes('Postać'));
   check('2.12 settings show the skin picker', settingsHtml.includes('Skórka') && settingsHtml.includes('aria-pressed'));
   check('2.12 settings offer a touch button size', settingsHtml.includes('Rozmiar przycisków dotykowych'));
+  // 2.14: automatyczny skok i auto-bicie wrogich mobów.
+  check('2.14 settings switch auto-attack on', settingsHtml.includes('Auto-bicie potworów: włączone'));
+  check('2.14 settings explain auto-attack', settingsHtml.includes('wrogie moby w zasięgu ręki') || settingsHtml.includes('w zasięgu ręki'));
+  check('2.14 settings keep the auto-jump switch', settingsHtml.includes('Auto-skok na schodki: włączony'));
+  check('2.14 settings group both aids on every device', settingsHtml.includes('Ułatwienia – także na komputerze'));
+  const noAuto = renderToStaticMarkup(
+    <SettingsScreen settings={{ ...DEFAULT_SETTINGS, autoAttack: false }} onChange={noop} onClose={noop} />
+  );
+  check('2.14 auto-attack can be switched off', noAuto.includes('Auto-bicie potworów: wyłączone'));
 
   const picker = renderToStaticMarkup(<SkinPicker value={DEFAULT_SKIN_ID} onChange={noop} />);
   check('2.12 skin picker lists every skin', SKINS.every((s) => picker.includes(`Skórka ${s.name}`)));
@@ -517,7 +528,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces the public server', menu.includes('Serwer publiczny'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.13'));
+  check('the menu names the current release', menu.includes('WERSJA 2.14'));
 }
 
 section('2.4: brewing rules');
