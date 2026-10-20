@@ -169,18 +169,25 @@ section('world list: search and sorting');
   check('pinned worlds stay above the selected sort', filterAndSortWorlds([{ ...worlds[0], favorite: true }, worlds[1], worlds[2]], '', 'day').map((w) => w.id).join() === 'z,a,b');
 }
 
-section('2.10: ekran „Gra razem”');
+section('2.11: ekran „Gra razem” – serwer publiczny');
 {
   const mp = renderToStaticMarkup(<MultiplayerScreen onStart={noop} onClose={noop} />);
   check('ekran multiplayera ma tytuł', mp.includes('Gra razem'));
-  check('ekran tłumaczy brak serwera', /bez serwera|nie ma serwera/i.test(mp));
-  check('są dwa transporty', mp.includes('Ta sama przeglądarka') && mp.includes('Przez internet'));
-  check('można utworzyć sesję i dołączyć', mp.includes('Utwórz sesję') && mp.includes('Dołącz'));
-  check('kod pokoju jest widoczny', mp.includes('Kod pokoju'));
+  check('główny przycisk to gra online', mp.includes('Graj online'));
+  check('ekran tłumaczy wspólny świat', /wspólnego świata|wspólny świat/i.test(mp));
+  check('widać zakładkę serwera publicznego', mp.includes('Serwer publiczny'));
+  check('zostały dodatkowe tryby', mp.includes('Ta przeglądarka') && mp.includes('Przez internet'));
   check('jest pole nazwy gracza', mp.includes('Twoja nazwa'));
-  check('gospodarz ustawia świat', mp.includes('Ziarno świata') && mp.includes('Tryb / teren'));
-  check('gospodarz ma przycisk otwarcia pokoju', mp.includes('Otwórz pokój'));
-  check('jest losowanie kodu pokoju', mp.includes('Losuj'));
+  check('serwer publiczny opisuje zapis w chmurze', /zapis|chmur/i.test(mp));
+  check('ekran mówi o porze dnia i pogodzie', /pora dnia|pogoda/i.test(mp));
+
+  // Dodatkowe tryby nadal mają swoje ustawienia.
+  const local = renderToStaticMarkup(<MultiplayerScreen onStart={noop} onClose={noop} defaultMode="local" />);
+  check('tryb lokalny ma kod pokoju', local.includes('Kod pokoju'));
+  check('tryb lokalny pozwala utworzyć sesję', local.includes('Utwórz sesję') && local.includes('Dołącz'));
+  check('gospodarz ustawia świat', local.includes('Ziarno świata') && local.includes('Tryb / teren'));
+  check('gospodarz ma przycisk otwarcia pokoju', local.includes('Otwórz pokój'));
+  check('jest losowanie kodu pokoju', local.includes('Losuj'));
 
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} onMultiplayer={noop} />);
   check('menu główne prowadzi do multiplayera', menu.includes('Gra razem · multiplayer'));
@@ -194,7 +201,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.10') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.11') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -461,9 +468,9 @@ section('2.3/2.4: journal chapter and menus');
   check('controls document respawn key', controls.includes('Enter / R (ekran śmierci)'));
   check('controls document touch long-press in windows', controls.includes('przytrzymaj: połowa / jeden'));
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
-  check('the menu announces release 2.8', menu.includes('2.8'));
+  check('the menu announces the public server', menu.includes('Serwer publiczny'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.10'));
+  check('the menu names the current release', menu.includes('WERSJA 2.11'));
 }
 
 section('2.4: brewing rules');
@@ -591,8 +598,13 @@ async function mountWithJsdom(): Promise<boolean> {
   await React.act(async () => {
     byText('Gra razem · multiplayer')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
   });
-  check('multiplayer screen opens from the menu', text().includes('Gra razem') && text().includes('Kod pokoju'));
-  check('multiplayer screen offers both transports', text().includes('Ta sama przeglądarka') && text().includes('Przez internet'));
+  check('multiplayer screen opens from the menu', text().includes('Gra razem') && text().includes('Graj online'));
+  check('multiplayer screen offers both transports', text().includes('Ta przeglądarka') && text().includes('Przez internet'));
+
+  await React.act(async () => {
+    byText('Ta przeglądarka')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('local mode shows the room code', text().includes('Kod pokoju'));
 
   await React.act(async () => {
     byText('Dołącz')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));

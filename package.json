@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.10.0",
-  "description": "BlockCraft 2.10 „Gra razem” – polska gra sandboxowa w przeglądarce: multiplayer bez serwera (dwie karty lub WebRTC), wspólny świat, czat i nowoczesne tekstury.",
+  "version": "2.11.0",
+  "description": "BlockCraft 2.11 „Wspólny świat” – polska gra sandboxowa w przeglądarce: publiczny serwer, jeden wspólny świat zapisywany w chmurze, czat, awatary graczy i nowoczesne tekstury.",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",
+    "@supabase/supabase-js": "^2.118.0",
     "clsx": "2.1.1",
     "react": "19.2.6",
     "react-dom": "19.2.6",

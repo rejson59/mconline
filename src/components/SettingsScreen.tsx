@@ -150,10 +150,11 @@ export default function SettingsScreen({
             </button>
           )}
           <div className="border border-white/10 bg-black/30 p-2 text-[11px] leading-snug text-white/60">
-            <b className="text-green-300">2.10 „Gra razem”:</b> multiplayer bez serwera – pokój w tej samej przeglądarce
-            (dwie karty) albo gra przez internet na kodach zaproszeń (WebRTC). Wspólny świat, czat, pora dnia i pogoda,
-            awatary graczy z nazwami oraz lista osób z pingiem w HUD. Z 2.9 zostają nowe tekstury, zamykanie okien dotykiem
-            i pełna lista komend; z 2.8.2 – pełne korony drzew, kierunkowe słońce i pochodnia w dłoni.
+            <b className="text-green-300">2.11 „Wspólny świat”:</b> jeden publiczny serwer i jeden wspólny świat – bez kodów
+            i bez gospodarza. Budowle zapisują się w chmurze i zostają po odświeżeniu strony, pora dnia i pogoda są wspólne,
+            a lista graczy pokazuje, kto jest online. Kody zaproszeń (ta sama przeglądarka, WebRTC) zostały jako dodatki.
+            Z 2.9–2.10 zostają nowe tekstury, zamykanie ekwipunku dotykiem, lista komend i awatary graczy, a z 2.8.2 –
+            kierunkowe słońce, pełne korony drzew i pochodnia świecąca w dłoni.
           </div>
           <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={14} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => set({ renderDistance: v })} />
           <OptionSlider label="Rozdzielczość" value={settings.pixelRatio} min={0.75} max={2} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ pixelRatio: v })} />

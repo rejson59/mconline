@@ -3,7 +3,7 @@ import GameView from './components/GameView';
 import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
 import { type GameMode, type SaveData } from './game/engine';
 import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
-import type { NetSession } from './game/net';
+import type { NetLike } from './game/net';
 import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
 
 interface Session {
@@ -15,7 +15,7 @@ interface Session {
   worldName: string;
   worldType: WorldType;
   /** 2.10: sesja sieciowa (null/brak = gra jednoosobowa). */
-  net?: NetSession;
+  net?: NetLike;
 }
 
 function asSave(raw: ReturnType<typeof loadSaves>[number]): SaveData {

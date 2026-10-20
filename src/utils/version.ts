@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.10.0';
-export const GAME_RELEASE_NAME = 'Gra razem';
+export const GAME_VERSION = '2.11.0';
+export const GAME_RELEASE_NAME = 'Wspólny świat';
 
 /**
  * 2.10: krótka lista zmian pokazywana w menu pauzy.
@@ -9,23 +9,23 @@ export const GAME_RELEASE_NAME = 'Gra razem';
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
   {
-    title: 'Gra razem – bez serwera',
-    text: 'Nowy ekran „Gra razem” w menu głównym. Otwórz pokój, podaj kod znajomym i grajcie we wspólnym świecie – BlockCraft nie potrzebuje własnego serwera.',
+    title: 'Serwer publiczny – jeden świat dla wszystkich',
+    text: 'W menu „Gra razem” jest teraz jeden przycisk „Graj online”. Nie ma kodów, gospodarza ani zapraszania: każdy wchodzi do tego samego świata i widzi pozostałych graczy.',
   },
   {
-    title: 'Dwie karty na jednym komputerze',
-    text: 'Tryb „Ta sama przeglądarka” działa od razu: otwórz grę w drugiej karcie, wpisz ten sam kod pokoju i jesteście w jednym świecie. Działa też offline.',
+    title: 'Budowle zostają w chmurze',
+    text: 'Zmiany bloków zapisują się na serwerze (Supabase) i wracają po odświeżeniu strony oraz po wejściu z innego urządzenia. Nic nie ginie po zamknięciu karty.',
   },
   {
-    title: 'Przez internet na kodach',
-    text: 'Tryb „Przez internet” łączy bezpośrednio (WebRTC). Gospodarz wysyła kod zaproszenia, gość odsyła kod odpowiedzi – oba kopiują się jednym przyciskiem, także na telefonie.',
+    title: 'Wspólna pora dnia i pogoda',
+    text: 'Dzień, noc i deszcz wynikają z zegara serwera, więc wszyscy widzą to samo niebo bez wysyłania stanu. Wieczorem zapada zmierzch, w dzień świeci słońce.',
   },
   {
-    title: 'Wspólny świat i gracze',
-    text: 'Wszyscy widzą te same bloki, czat, porę dnia i pogodę. Nad innymi graczami unoszą się kolorowe awatary z nazwami, a w HUD jest lista osób z pingiem.',
+    title: 'Naprawione kody zaproszeń',
+    text: 'Błąd „Called in wrong state: stable” już się nie pojawia – drugie użycie tego samego kodu daje czytelną podpowiedź po polsku. Tryby „Ta przeglądarka” i „Przez internet” zostały jako dodatki.',
   },
   {
     title: 'Nadal: tekstury, dotyk i komendy',
-    text: 'Wszystko z 2.9 zostaje: nowoczesne tekstury, zamykanie ekwipunku dotykiem, lista komend w czacie oraz drzewa, światło i pochodnia z 2.8.2.',
+    text: 'Wszystko z 2.9–2.10 zostaje: nowoczesne tekstury, zamykanie ekwipunku dotykiem, lista komend, awatary graczy z nazwami, czat, drzewa i pochodnia w dłoni z 2.8.2.',
   },
 ];
