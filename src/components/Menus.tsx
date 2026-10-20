@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { GameMode } from '../game/engine';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { exportSave, exportSaves, importSaves, MAX_SAVES } from '../game/saves';
@@ -15,6 +15,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.9: tekstury jak w nowym Minecrafcie!',
+  'Ekwipunek zamyka się na dotyku!',
+  'Wpisz „/”, aby zobaczyć komendy!',
   'BlockCraft 2.8: płynniej, szybciej, piękniej!',
   '2.8: woda faluje, niebo ma gradient!',
   'Mniej zacięć – więcej budowania!',
@@ -514,15 +517,14 @@ export function MainMenu({
                 <div className="mc-card-title">Witaj w BlockCraft</div>
                 <p className="text-sm leading-relaxed text-white/85">
                   Zbuduj pierwszy świat: zetnij drzewo, wytwórz kilof i zejdź do jaskiń po diamenty.
-                  Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> sadzi drzewa od nowa:
-                  pełne korony bez dziur i czarnych pni, kierunkowe światło słońca, pochodnia naprawdę świecąca w dłoni
-                  oraz spokojne chmury zgodne z pogodą.
+                  Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> odmienia wygląd gry:
+                  nowe tekstury bloków, wygodne okna zamykane na dotyku i czat z pełną listą komend.
                 </p>
                 <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-white/75 sm:grid-cols-2">
-                  <div className="border border-white/10 bg-black/30 p-2">☀️ Realistyczne światło i cień koron</div>
-                  <div className="border border-white/10 bg-black/30 p-2">🔦 Pochodnia w dłoni oświetla okolicę</div>
-                  <div className="border border-white/10 bg-black/30 p-2">🌿 Gęste liście bez dziur</div>
-                  <div className="border border-white/10 bg-black/30 p-2">🌧️ Chmury zgodne z pogodą</div>
+                  <div className="border border-white/10 bg-black/30 p-2">🎨 Tekstury jak w nowym Minecrafcie</div>
+                  <div className="border border-white/10 bg-black/30 p-2">📱 Koniec z zablokowanym ekwipunkiem</div>
+                  <div className="border border-white/10 bg-black/30 p-2">⌨️ Lista komend w czacie</div>
+                  <div className="border border-white/10 bg-black/30 p-2">☀️ Światło i drzewa z 2.8.2</div>
                 </div>
                 <p className="mt-3 text-[11px] leading-snug text-white/50">
                   Zapisane światy (do 8) trzymamy w tej przeglądarce. Możesz je eksportować i importować jako pliki JSON.
@@ -640,6 +642,7 @@ export function PauseMenu({
   onResume,
   onJournal,
   onWaypoints,
+  onCommands,
   onQuit,
   onSave,
 }: {
@@ -651,6 +654,8 @@ export function PauseMenu({
   onResume: () => void;
   onJournal: () => void;
   onWaypoints?: () => void;
+  /** 2.9: otwiera czat z pełną listą komend. */
+  onCommands?: () => void;
   onQuit: () => void;
   onSave: () => void;
 }) {
@@ -698,6 +703,11 @@ export function PauseMenu({
               {onWaypoints && (
                 <button className="mc-btn col-span-2 !py-2 !text-[15px]" onClick={onWaypoints}>
                   Punkty podróży · K
+                </button>
+              )}
+              {onCommands && (
+                <button className="mc-btn col-span-2 !py-2 !text-[15px]" onClick={onCommands}>
+                  Komendy i czat · T
                 </button>
               )}
               <button className="mc-btn col-span-2 !py-2 !text-[15px]" onClick={() => setView('achievements')}>
@@ -785,47 +795,6 @@ export function DeathScreen({ onRespawn, onQuit }: { onRespawn: () => void; onQu
         </button>
       </div>
       <div className="text-sm opacity-80 mc-text">Enter – odrodzenie</div>
-    </div>
-  );
-}
-
-export function ChatInput({ onSubmit, onClose }: { onSubmit: (t: string) => void; onClose: () => void }) {
-  const [text, setText] = useState('');
-  const ref = useRef<HTMLInputElement>(null);
-  const history = useRef<string[]>([]);
-  const hIdx = useRef(-1);
-  useEffect(() => {
-    const t = setTimeout(() => ref.current?.focus(), 30);
-    return () => clearTimeout(t);
-  }, []);
-  return (
-    <div className="absolute bottom-24 left-2 right-2 sm:right-auto sm:w-[640px]">
-      <input
-        ref={ref}
-        className="w-full px-2 py-1 text-[16px] text-white outline-none"
-        style={{ background: 'rgba(0,0,0,0.6)', fontFamily: 'inherit' }}
-        value={text}
-        placeholder="Wpisz wiadomość lub /help"
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          e.stopPropagation();
-          if (e.key === 'Enter') {
-            if (text.trim()) {
-              history.current.unshift(text);
-              onSubmit(text);
-            }
-            onClose();
-          } else if (e.key === 'Escape') onClose();
-          else if (e.key === 'ArrowUp') {
-            hIdx.current = Math.min(history.current.length - 1, hIdx.current + 1);
-            if (history.current[hIdx.current]) setText(history.current[hIdx.current]);
-          } else if (e.key === 'ArrowDown') {
-            // 2.5: strzałka w dół wraca po historii komend.
-            hIdx.current = Math.max(-1, hIdx.current - 1);
-            setText(hIdx.current >= 0 ? history.current[hIdx.current] ?? '' : '');
-          }
-        }}
-      />
     </div>
   );
 }

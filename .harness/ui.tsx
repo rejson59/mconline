@@ -21,6 +21,8 @@ import WaypointsScreen from '../src/components/WaypointsScreen';
 import AnvilScreen from '../src/components/AnvilScreen';
 import BrewingScreen from '../src/components/BrewingScreen';
 import InventoryScreen from '../src/components/InventoryScreen';
+import ChatScreen from '../src/components/ChatScreen';
+import { COMMANDS, COMMAND_CATEGORIES, commandByName, applyCommandSuggestion } from '../src/game/commands';
 import { anvilResult } from '../src/game/anvil';
 import { Inventory, RECIPES } from '../src/game/inventory';
 import { I, isFood, isPotion, stackLimit } from '../src/game/items';
@@ -102,6 +104,34 @@ section('inventory screen: recipe finder');
   const html = renderToStaticMarkup(<InventoryScreen game={fake as unknown as Game} icons={{}} onChange={noop} />);
   check('crafting screen includes recipe search', html.includes('Szukaj receptur po nazwie lub składniku'));
   check('crafting screen can filter craftable recipes', html.includes('aria-pressed="false"') && html.includes('Możliwe'));
+  // 2.9: na telefonie nie ma klawisza E/Esc – okno musi mieć własne wyjście.
+  check('inventory has a visible close button', html.includes('aria-label="Zamknij"'));
+  check('inventory has a big bottom close button', html.includes('Gotowe – zamknij ekwipunek'));
+}
+
+// =============================================== 2.9: czat z listą komend
+section('2.9: czat i komendy');
+{
+  const html = renderToStaticMarkup(<ChatScreen onSubmit={noop} onClose={noop} />);
+  const full = renderToStaticMarkup(<ChatScreen onSubmit={noop} onClose={noop} showListInitially />);
+  check('chat has a send button', html.includes('aria-label="Wyślij"'));
+  check('chat has a close button for touch screens', html.includes('aria-label="Zamknij czat"'));
+  check('chat exposes the command list button', html.includes('Komendy'));
+  check('chat input has a send keyboard hint', /enterkeyhint="send"/i.test(html));
+  check('chat shows quick command chips', html.includes('/help') && html.includes('/give'));
+  // Katalog komend jest ten sam, którego używa silnik (/help).
+  const unescape = (t: string) => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
+  const plain = unescape(full);
+  const missingUsage = COMMANDS.filter((c) => !plain.includes('/' + c.usage)).map((c) => c.name);
+  check('every command is listed with its usage', missingUsage.length === 0, missingUsage.join(','));
+  // Przykład pojawia się po rozwinięciu komendy, więc sprawdzamy katalog:
+  // każda komenda ma gotowy do wysłania przykład i zaczyna się od jej nazwy.
+  const badExample = COMMANDS.filter((c) => !c.example.startsWith('/' + c.name)).map((c) => c.name);
+  check('every command has a ready example', badExample.length === 0, badExample.join(','));
+  check('the chat shows an example without expanding', plain.includes('np. /time set night'));
+  check('tapping a command inserts it', applyCommandSuggestion('/', commandByName('time')!) === '/time ');
+  check('commands are grouped into categories', COMMAND_CATEGORIES.length >= 4);
+  check('the help command is described', (commandByName('help')?.description ?? '').length > 10);
 }
 
 section('adventure journal: quests and progress');
@@ -144,7 +174,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the 2.8 line', menu.includes('WERSJA 2.8') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.9') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -153,7 +183,7 @@ section('menus: static render');
   check('menu background is a relative url', !menu.includes('url("/menu-bg.jpg'));
   check('2.8 menu keeps the primary action', menu.includes('mc-btn-primary') && menu.includes('Nowy świat'));
   check('2.8 menu shows the release highlight card', menu.includes('Witaj w BlockCraft') && menu.includes(GAME_RELEASE_NAME));
-  check('2.8.1 welcome card mentions the new lighting', menu.includes('Pochodnia w dłoni') && menu.includes('Gęste liście'));
+  check('the welcome card mentions the new look', menu.includes('Tekstury jak w nowym Minecrafcie') && menu.includes('Lista komend'));
 
   const withSaves = renderToStaticMarkup(
     <MainMenu
@@ -187,7 +217,7 @@ section('menus: static render');
   check('pause menu offers resume and save', pause.includes('Wróć do gry') && pause.includes('Zapisz świat'));
   check('pause menu opens the adventure journal', pause.includes('Dziennik przygód'));
   check('pause menu counts achievements', pause.includes(`/${ACHIEVEMENTS.length}`));
-  check('2.8 pause menu announces the new release', pause.includes('Nowości w 2.8') && pause.includes(GAME_RELEASE_NAME));
+  check('pause menu announces the new release', pause.includes('Nowości w 2.9') && pause.includes(GAME_RELEASE_NAME));
 
   // 2.0: ekran opcji (zakładki, presety jakości, sterowanie dotykowe)
   const settingsHtml = renderToStaticMarkup(
@@ -392,7 +422,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces release 2.8', menu.includes('2.8'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the 2.8 release', menu.includes('WERSJA 2.8'));
+  check('the menu names the current release', menu.includes('WERSJA 2.9'));
 }
 
 section('2.4: brewing rules');

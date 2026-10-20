@@ -129,6 +129,55 @@ body {
   color: #3f3f3f;
 }
 
+/* 2.9: duży, zawsze widoczny przycisk zamykania okien (dotyk + mysz). */
+.mc-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  background: linear-gradient(#b7483c, #7c2a23);
+  border: 2px solid #1a0b09;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.35),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.35),
+    2px 2px 0 rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-family: inherit;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.mc-close-btn:hover {
+  filter: brightness(1.12);
+}
+.mc-close-btn:active {
+  transform: translateY(1px);
+}
+.mc-close-btn-compact {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+}
+
+/* 2.9: dolny pasek akcji w oknach – kciuk ma zawsze coś do trafienia. */
+.mc-panel-actions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+}
+.mc-panel-actions > * {
+  pointer-events: auto;
+}
+
 /* 2.8: szklane karty menu – czytelne nad zdjęciem tła, bez utraty klimatu. */
 .mc-card {
   position: relative;
@@ -495,4 +544,61 @@ textarea {
   color: #fff4a8;
   background: linear-gradient(180deg, rgba(142, 152, 214, 0.55), rgba(108, 117, 184, 0.25));
   border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* ------------------------------------------------------------------ 2.9
+ * Telefony w poziomie: o wygodzie decyduje WYSOKOŚĆ, nie szerokość.
+ * Wcześniej sloty malały tylko poniżej 460 px szerokości, więc telefon
+ * obrócony poziomo (np. 844 × 390) dostawał pełne 44-pikselowe sloty,
+ * a okno ekwipunku nie mieściło się na ekranie. */
+@media (max-height: 560px) {
+  .mc-slot {
+    width: 36px;
+    height: 36px;
+  }
+  .mc-slot > img {
+    max-width: 28px;
+    max-height: 28px;
+  }
+  .hotbar-slot {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
+  .hotbar-slot > img {
+    max-width: 28px;
+    max-height: 28px;
+  }
+  .mc-count {
+    right: 1px;
+    bottom: -2px;
+    font-size: 12px;
+  }
+}
+
+@media (max-height: 450px) {
+  .mc-slot {
+    width: 30px;
+    height: 30px;
+  }
+  .mc-slot > img {
+    max-width: 23px;
+    max-height: 23px;
+  }
+  .hotbar-slot {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+  }
+  .hotbar-slot > img {
+    max-width: 23px;
+    max-height: 23px;
+  }
+  .mc-count {
+    font-size: 10px;
+  }
+  .mc-close-btn {
+    min-width: 38px;
+    min-height: 38px;
+  }
 }

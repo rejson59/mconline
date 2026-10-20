@@ -26,16 +26,118 @@ function getPx(tile: number, x: number, y: number): [number, number, number, num
   return [img.data[i], img.data[i + 1], img.data[i + 2], img.data[i + 3]];
 }
 
+/* --------------------------------------------------------------- 2.9
+ * Nowy warsztat malarski.
+ *
+ * Do 2.8 każdy kafelek powstawał z „białego szumu”: losowa jasność na każdym
+ * pikselu. Taki obrazek wygląda jak najstarsze tekstury Minecrafta – płasko
+ * i ziarnisto zarazem. Teraz bazą jest **wygładzony szum z zawijaniem**
+ * (kafelek łączy się sam ze sobą), do tego drobne, świadome detale: kamyki,
+ * sęki, włókna, rozbłyski. Paleta jest krótka, a światło pada z lewego górnego
+ * rogu – dzięki temu blok czyta się jak bryła, a nie jak tapeta.
+ */
+
+const clamp255 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+
+/** Deterministyczny hash 2D – tanie źródło szumu bez alokacji. */
+function hash2(x: number, y: number, seed: number): number {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed | 0, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Wygładzony szum wartościowy; `period` dzieli kafelek, więc nie ma szwów. */
+function vnoise(x: number, y: number, period: number, seed: number): number {
+  const xf = Math.floor(x), yf = Math.floor(y);
+  const tx = x - xf, ty = y - yf;
+  const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+  const wrap = (n: number) => ((n % period) + period) % period;
+  const x0 = wrap(xf), x1 = wrap(xf + 1), y0 = wrap(yf), y1 = wrap(yf + 1);
+  const a = hash2(x0, y0, seed), b = hash2(x1, y0, seed);
+  const c = hash2(x0, y1, seed), d = hash2(x1, y1, seed);
+  const top = a + (b - a) * sx, bot = c + (d - c) * sx;
+  return top + (bot - top) * sy;
+}
+
+/** Trzy oktawy szumu: miękkie łaty zamiast ziarna na każdym pikselu. */
+function fbm(x: number, y: number, seed: number, octaves = 3, scale = 1): number {
+  let v = 0, amp = 0.55, total = 0;
+  for (let o = 0; o < octaves; o++) {
+    const period = 4 << o;
+    v += vnoise((x / TILE) * period * scale, (y / TILE) * period * scale, period, seed + o * 131) * amp;
+    total += amp;
+    amp *= 0.5;
+  }
+  return v / total;
+}
+
+/** Mieszanie dwóch kolorów; `t = 0` daje `a`, `t = 1` daje `b`. */
+function mixRGB(a: RGB, b: RGB, t: number): RGB {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+/** Rysuje kolor z jasnością `f` (1 = bez zmian), pilnując zakresu 0–255. */
+function px(tile: number, x: number, y: number, c: RGB, f = 1, alpha = 255) {
+  setPx(tile, x, y, clamp255(c[0] * f), clamp255(c[1] * f), clamp255(c[2] * f), alpha);
+}
+
+/** Ciemniejsza obwódka kafla – blok czyta się jako bryła, nie jako tapeta. */
+function bevel(tile: number, strength = 0.1) {
+  for (let i = 0; i < TILE; i++) {
+    for (const [x, y, f] of [
+      [i, 0, 1 + strength * 0.5],
+      [i, TILE - 1, 1 - strength * 0.6],
+      [0, i, 1 + strength * 0.35],
+      [TILE - 1, i, 1 - strength * 0.45],
+    ] as [number, number, number][]) {
+      const p = getPx(tile, x, y);
+      if (p[3] < 128) continue;
+      setPx(tile, x, y, clamp255(p[0] * f), clamp255(p[1] * f), clamp255(p[2] * f), p[3]);
+    }
+  }
+}
+
 function shade(c: RGB, f: number): RGB {
   return [c[0] * f, c[1] * f, c[2] * f];
 }
 
+/**
+ * Wypełnia kafelek kolorem bazowym z miękkimi łatami szumu i drobnym
+ * „pyłem” zamiast losowego ziarna na każdym pikselu.
+ */
 function noiseFill(tile: number, base: RGB, variance: number, rand: () => number, alpha = 255) {
+  const seed = 1 + Math.floor(rand() * 9999);
   for (let y = 0; y < TILE; y++)
     for (let x = 0; x < TILE; x++) {
-      const f = 1 + (rand() - 0.5) * variance;
-      const c = shade(base, f);
-      setPx(tile, x, y, c[0], c[1], c[2], alpha);
+      const n = fbm(x, y, seed, 3);
+      const grit = hash2(x, y, seed + 77) - 0.5;
+      const f = 1 + (n - 0.5) * variance * 1.4 + grit * variance * 0.16;
+      px(tile, x, y, base, f, alpha);
+    }
+}
+
+/** Miękkie plamy (np. kamień) – dwie skale szumu, bez ziarna. */
+function mottle(tile: number, base: RGB, amount: number, seed: number) {
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const big = fbm(x, y, seed, 2, 0.6);
+      const small = fbm(x, y, seed + 31, 3);
+      const f = 1 + (big - 0.5) * amount + (small - 0.5) * amount * 0.55;
+      px(tile, x, y, base, f);
+    }
+}
+
+/** Kamyk/grudka: jaśniejsza od góry, ciemniejsza od dołu. */
+function pebble(tile: number, cx: number, cy: number, r: number, c: RGB, rand: () => number) {
+  for (let y = Math.floor(cy - r - 1); y <= Math.ceil(cy + r + 1); y++)
+    for (let x = Math.floor(cx - r - 1); x <= Math.ceil(cx + r + 1); x++) {
+      if (x < 0 || y < 0 || x >= TILE || y >= TILE) continue;
+      const dx = (x + 0.5 - cx) / (r * 1.15);
+      const dy = (y + 0.5 - cy) / r;
+      const d = dx * dx + dy * dy;
+      if (d > 1) continue;
+      const light = 1 + (1 - d) * 0.12 - (y > cy ? 0.1 : 0);
+      px(tile, x, y, c, light * (0.97 + rand() * 0.06));
     }
 }
 
@@ -52,67 +154,143 @@ function voronoi(tile: number, rand: () => number, n: number, colorFn: (cell: nu
   for (let i = 0; i < n; i++) pts.push([rand() * 16, rand() * 16]);
   for (let y = 0; y < TILE; y++)
     for (let x = 0; x < TILE; x++) {
-      let d1 = 1e9, d2 = 1e9, c = 0;
-      for (let i = 0; i < n; i++) {
+      let d1 = 1e9, d2 = 1e9, cell = 0, cx = 0, cy = 0;
+      for (let i = 0; i < n; i++)
         for (let ox = -16; ox <= 16; ox += 16)
           for (let oy = -16; oy <= 16; oy += 16) {
-            const dx = x + 0.5 - (pts[i][0] + ox);
-            const dy = y + 0.5 - (pts[i][1] + oy);
+            const sx = pts[i][0] + ox, sy = pts[i][1] + oy;
+            const dx = x + 0.5 - sx, dy = y + 0.5 - sy;
             const d = Math.sqrt(dx * dx + dy * dy);
-            if (d < d1) { d2 = d1; d1 = d; c = i; }
+            if (d < d1) { d2 = d1; d1 = d; cell = i; cx = sx; cy = sy; }
             else if (d < d2) d2 = d;
           }
-      }
-      const col = colorFn(c, d2 - d1 < 1.1);
-      setPx(tile, x, y, col[0], col[1], col[2]);
+      const edge = d2 - d1;
+      const col = colorFn(cell, edge < 1.0);
+      // Oświetlenie kamienia: ku górze i lewej jaśniej, ku dołowi ciemniej.
+      const nx = (x + 0.5 - cx) / 9, ny = (y + 0.5 - cy) / 9;
+      const light = edge < 1.0 ? 0.84 : 1 + (-nx - ny) * 0.26;
+      px(tile, x, y, col, Math.max(0.55, light));
     }
 }
 
 function ore(tile: number, color: RGB, rand: () => number) {
   copyTile(T.stone, tile);
-  const clusters = 4 + Math.floor(rand() * 2);
+  const clusters = 3 + Math.floor(rand() * 2);
   for (let c = 0; c < clusters; c++) {
-    const cx = 2 + Math.floor(rand() * 12);
-    const cy = 2 + Math.floor(rand() * 12);
-    const n = 3 + Math.floor(rand() * 4);
-    for (let i = 0; i < n; i++) {
-      const x = cx + Math.floor(rand() * 3) - 1;
-      const y = cy + Math.floor(rand() * 3) - 1;
-      const f = 0.8 + rand() * 0.4;
-      setPx(tile, x, y, color[0] * f, color[1] * f, color[2] * f);
-    }
+    const cx = 2.5 + rand() * 10, cy = 2.5 + rand() * 10;
+    const radius = 1.15 + rand() * 0.95;
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) {
+        const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > radius) continue;
+        // Grudka rudy: jasny błysk u góry, ciemna krawędź – widać ją na kamieniu.
+        const edge = d > radius - 0.95;
+        const shine = dx + dy < -0.4 ? 1.16 : dx + dy > 0.9 ? 0.82 : 1;
+        const f = (edge ? 0.74 : 1) * shine * (0.95 + hash2(x, y, c * 31 + 7) * 0.12);
+        px(tile, x, y, color, f);
+      }
   }
 }
 
 function logTop(tile: number, light: RGB, dark: RGB, bark: RGB, rand: () => number) {
+  const seed = 1 + Math.floor(rand() * 9999);
+  const cx = 7.5 + (rand() - 0.5) * 1.3, cy = 7.5 + (rand() - 0.5) * 1.3;
   for (let y = 0; y < TILE; y++)
     for (let x = 0; x < TILE; x++) {
-      const dx = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
-      let c: RGB;
-      if (dx > 6.5) c = bark;
-      else c = Math.floor(dx) % 2 === 0 ? light : dark;
-      c = shade(c, 0.92 + rand() * 0.16);
-      setPx(tile, x, y, c[0], c[1], c[2]);
+      const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+      const wobble = (fbm(x, y, seed, 2) - 0.5) * 0.9;
+      const d = Math.sqrt(dx * dx + dy * dy) + wobble;
+      if (d > 7.2) {
+        // kora na obwodzie – pionowe słojowanie
+        px(tile, x, y, bark, 0.88 + hash2(x, y, seed + 5) * 0.2);
+      } else if (d > 6.35) {
+        px(tile, x, y, bark, 1.16); // jasny pierścień tuż pod korą
+      } else {
+        const ring = Math.sin(d * 2.05 + wobble * 1.4) * 0.5 + 0.5;
+        const c = mixRGB(dark, light, ring * 0.9);
+        px(tile, x, y, c, 1.05 - d * 0.014);
+      }
     }
+  // Rdzeń: kilka ciemnych promieni, żeby pierścienie nie były „ceglane”.
+  for (let i = 0; i < 4; i++) {
+    const a = rand() * Math.PI * 2;
+    for (let d = 0.6; d < 3.2; d += 1) {
+      const x = Math.round(cx + Math.cos(a) * d), y = Math.round(cy + Math.sin(a) * d);
+      if (x >= 0 && y >= 0 && x < TILE && y < TILE) px(tile, x, y, dark, 0.9);
+    }
+  }
 }
 
 function wool(tile: number, base: RGB, rand: () => number) {
+  const seed = 1 + Math.floor(rand() * 9999);
   for (let y = 0; y < TILE; y++)
     for (let x = 0; x < TILE; x++) {
-      const pattern = ((x + y) % 4 === 0 ? 0.93 : 1) * (0.94 + rand() * 0.12);
-      const c = shade(base, pattern);
-      setPx(tile, x, y, c[0], c[1], c[2]);
+      // Drobny splot: dwie sinusoidy + miękkie łaty i pojedyncze włókna.
+      // Splot „na ukos”: jasne i ciemne nitki przeplatają się co 2 piksele.
+      const weave = Math.sin((x + y * 0.62) * 1.15) * 0.05 + Math.sin((x * 0.55 - y) * 1.6) * 0.032;
+      const thread = (x + y) % 3 === 0 ? 0.035 : (x - y + 48) % 3 === 0 ? -0.03 : 0;
+      const f = 1 + weave + thread + (fbm(x, y, seed, 2) - 0.5) * 0.09 + (hash2(x, y, seed + 3) - 0.5) * 0.05;
+      px(tile, x, y, base, f);
     }
 }
 
 function leaves(tile: number, base: RGB, rand: () => number) {
+  const seed = 1 + Math.floor(rand() * 9999);
+  const dark: RGB = [base[0] * 0.62, base[1] * 0.66, base[2] * 0.58];
+  const mid: RGB = base;
+  const light: RGB = [base[0] * 1.28, base[1] * 1.2, base[2] * 1.06];
+
+  // Tło: ciemne szczeliny między liśćmi (nie czarne – korona ma być zielona).
   for (let y = 0; y < TILE; y++)
     for (let x = 0; x < TILE; x++) {
-      const r = rand();
-      if (r < 0.18) { setPx(tile, x, y, 0, 0, 0, 0); continue; }
-      const c = shade(base, 0.7 + rand() * 0.55);
-      setPx(tile, x, y, c[0], c[1], c[2]);
+      const n = fbm(x, y, seed, 2, 1.2);
+      px(tile, x, y, mixRGB(dark, mid, 0.18 + n * 0.3));
     }
+
+  /**
+   * Liście to nakładające się „stemple” 3×2 / 2×3 pikseli, rozrzucone
+   * nieregularnie (deterministycznie z ziarna). Wcześniejsza regularna
+   * kratka 4×4 wyglądała jak tapeta – teraz kiście zachodzą na siebie,
+   * mają jasną górną krawędź i ciemny spód, więc korona ma głębię.
+   */
+  const stamp = (cx: number, cy: number, w: number, h: number, tone: number) => {
+    for (let dy = 0; dy < h; dy++)
+      for (let dx = 0; dx < w; dx++) {
+        // Zaokrąglone narożniki – liść nie jest prostokątem.
+        if ((dx === 0 || dx === w - 1) && (dy === 0 || dy === h - 1)) continue;
+        const x = (cx + dx + TILE) % TILE;
+        const y = (cy + dy + TILE) % TILE;
+        const edgeTop = dy === 0;
+        const edgeBottom = dy === h - 1;
+        const c = edgeTop ? mixRGB(light, mid, 0.25) : edgeBottom ? mixRGB(dark, mid, 0.35) : mixRGB(dark, light, tone);
+        const f = edgeTop ? 1.08 : edgeBottom ? 0.94 : 1 + (hash2(x, y, seed + 31) - 0.5) * 0.06;
+        px(tile, x, y, c, f);
+      }
+  };
+
+  for (let i = 0; i < 16; i++) {
+    const cx = Math.floor(hash2(i, 1, seed) * TILE);
+    const cy = Math.floor(hash2(i, 2, seed) * TILE);
+    const wide = hash2(i, 3, seed) > 0.5;
+    const w = wide ? 3 : 2, h = wide ? 2 : 3;
+    stamp(cx, cy, w, h, 0.35 + hash2(i, 4, seed) * 0.55);
+  }
+  // Kilka pojedynczych listków w szczelinach – gęstość bez płaskości.
+  for (let i = 0; i < 10; i++) {
+    const x = Math.floor(hash2(i, 11, seed) * TILE);
+    const y = Math.floor(hash2(i, 12, seed) * TILE);
+    px(tile, x, y, mixRGB(mid, light, 0.4));
+  }
+  // Górna część kafla łapie więcej światła (korona nie jest płaska).
+  for (let y = 0; y < TILE; y++) {
+    const f = 1 + Math.max(0, 1 - y / 9) * 0.06;
+    if (f === 1) continue;
+    for (let x = 0; x < TILE; x++) {
+      const p = getPx(tile, x, y);
+      setPx(tile, x, y, p[0] * f, p[1] * f, p[2] * f, p[3]);
+    }
+  }
 }
 
 function plant(tile: number, rand: () => number, flower?: RGB) {
@@ -141,31 +319,186 @@ function plant(tile: number, rand: () => number, flower?: RGB) {
 }
 
 function bricksPattern(tile: number, brick: RGB, mortar: RGB, bw: number, bh: number, rand: () => number) {
+  const seed = 1 + Math.floor(rand() * 9999);
   for (let y = 0; y < TILE; y++)
     for (let x = 0; x < TILE; x++) {
       const row = Math.floor(y / bh);
       const off = row % 2 === 0 ? 0 : bw / 2;
-      const isMortar = y % bh === bh - 1 || (x + off) % bw === bw - 1;
-      const c = shade(isMortar ? mortar : brick, 0.88 + rand() * 0.24);
-      setPx(tile, x, y, c[0], c[1], c[2]);
+      const col = Math.floor((x + off) / bw);
+      const inMortar = y % bh === bh - 1 || (x + off) % bw === bw - 1;
+      if (inMortar) {
+        px(tile, x, y, mortar, 0.86 + fbm(x, y, seed + 9, 2) * 0.22);
+        continue;
+      }
+      // Każda cegła ma własny, stabilny odcień – ściana nie wygląda jak tapeta.
+      const tone = 0.9 + hash2(col, row, seed) * 0.2;
+      const top = y % bh === 0, left = (x + off) % bw === 0;
+      const bottom = y % bh === bh - 2, right = (x + off) % bw === bw - 2;
+      let f = tone;
+      if (top || left) f *= 1.08;
+      if (bottom || right) f *= 0.88;
+      f *= 1 + (hash2(x, y, seed + 4) - 0.5) * 0.06;
+      px(tile, x, y, brick, f);
     }
 }
 
-/** Storage block: a framed panel of ingots/gems. */
 function storageBlock(tile: number, base: RGB, rand: () => number) {
-  for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
-    const border = x === 0 || y === 0 || x === 15 || y === 15;
-    const inner = x >= 3 && x <= 12 && y >= 3 && y <= 12;
-    let c: RGB;
-    if (border) c = shade(base, 0.55);
-    else if (!inner) c = shade(base, 0.8);
-    else {
-      const gx = Math.floor((x - 3) / 3.4), gy = Math.floor((y - 3) / 3.4);
-      const cell = (gx + gy) % 2 === 0 ? 1 : 0.86;
-      const shine = (x + y) % 5 === 0 ? 1.12 : 1;
-      c = shade(base, cell * shine * (0.95 + rand() * 0.1));
+  const seed = 1 + Math.floor(rand() * 9999);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const frame = x === 0 || y === 0 || x === TILE - 1 || y === TILE - 1;
+      if (frame) {
+        px(tile, x, y, base, 0.58 + hash2(x, y, seed) * 0.1);
+        continue;
+      }
+      // 3×3 sztabek/szlifów z 1-pikselową fugą.
+      const gx = Math.floor((x - 1) / 4.7), gy = Math.floor((y - 1) / 4.7);
+      const ix = (x - 1) % 5, iy = (y - 1) % 5;
+      if (ix === 4 || iy === 4) {
+        px(tile, x, y, base, 0.7 + hash2(x, y, seed + 2) * 0.08);
+        continue;
+      }
+      // Bevel wewnątrz oczka + błysk w lewym górnym rogu.
+      let f = 0.98 + hash2(gx, gy, seed + 7) * 0.08;
+      if (ix === 0 || iy === 0) f *= 1.16;
+      if (ix === 3 || iy === 3) f *= 0.84;
+      if ((ix === 1 && iy === 1) || (ix === 2 && iy === 1)) f *= 1.2;
+      px(tile, x, y, base, f);
     }
-    setPx(tile, x, y, c[0], c[1], c[2]);
+}
+
+/**
+ * Skała: wspólna baza dla netherracku, end stone, kwarcu, purpuru, bazaltu…
+ * `grain` dodaje drobne ziarno, `veins` – ciemniejsze żyłki (0 = brak).
+ */
+function rockTile(tile: number, base: RGB, rand: () => number, grain = 0.16, veins = 0.35, seedOffset = 0) {
+  const seed = 1 + Math.floor(rand() * 9999) + seedOffset;
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const big = fbm(x, y, seed, 2, 0.65);
+      const fine = fbm(x, y, seed + 17, 3);
+      const vein = Math.abs(Math.sin((x * 0.6 + y * 1.3) + big * 5)) < veins * 0.5 ? 0.86 : 1;
+      const f = 1 + (big - 0.5) * grain + (fine - 0.5) * grain * 0.5;
+      px(tile, x, y, base, f * vein * (0.98 + hash2(x, y, seed + 3) * 0.05));
+    }
+}
+
+/** Beton: gładka powierzchnia z drobnym kruszywem, bez wzoru tkaniny. */
+function concrete(tile: number, base: RGB, rand: () => number) {
+  const seed = 1 + Math.floor(rand() * 9999);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const f = 0.985 + (fbm(x, y, seed, 2) - 0.5) * 0.05 + (hash2(x, y, seed + 9) - 0.5) * 0.03;
+      px(tile, x, y, base, f);
+    }
+}
+
+/** Lawa: jasne komórki na ciemnym spodzie, jak stygnąca skała. */
+function lavaTile(tile: number, rand: () => number) {
+  const seed = 1 + Math.floor(rand() * 9999);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const n = fbm(x, y, seed, 3, 1.3);
+      const hot = Math.max(0, Math.min(1, (n - 0.34) * 2.1));
+      const c = mixRGB([120, 24, 8], [255, 182, 46], hot);
+      const f = 0.94 + (hash2(x, y, seed + 5) - 0.5) * 0.1;
+      px(tile, x, y, c, f);
+      if (hot > 0.86) px(tile, x, y, [255, 232, 150]);
+    }
+}
+
+/** Obsydian: prawie czarny z fioletowymi refleksami i szklistymi rysami. */
+function obsidianTile(tile: number, rand: () => number) {
+  const seed = 1 + Math.floor(rand() * 9999);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const n = fbm(x, y, seed, 3, 1.6);
+      const c = mixRGB([18, 14, 30], [64, 38, 92], Math.max(0, (n - 0.45) * 1.9));
+      const sheen = Math.sin((x * 1.1 + y * 0.55) + n * 4) > 0.94 ? 1.5 : 1;
+      px(tile, x, y, c, sheen);
+    }
+}
+
+/** Lód: błękitna tafla z rysami i rozbłyskami. */
+function iceTile(tile: number, rand: () => number) {
+  const seed = 1 + Math.floor(rand() * 9999);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const n = fbm(x, y, seed, 2, 0.9);
+      const c = mixRGB([128, 176, 236], [206, 234, 255], n);
+      px(tile, x, y, c, 1, 210);
+    }
+  for (let i = 0; i < 4; i++) {
+    const x0 = Math.floor(rand() * 16), y0 = Math.floor(rand() * 16);
+    const len = 3 + Math.floor(rand() * 5);
+    for (let k = 0; k < len; k++) {
+      const x = (x0 + k) % 16, y = (y0 + Math.floor(k * 0.4)) % 16;
+      px(T.ice, x, y, [226, 244, 255], 1, 220);
+    }
+  }
+  for (let i = 0; i < 4; i++) px(T.ice, Math.floor(rand() * 16), Math.floor(rand() * 16), [246, 252, 255], 1, 235);
+}
+
+/** Deski: cztery klepki, słoje i sęki – wspólne dla wszystkich rodzajów drewna. */
+function planksTile(tile: number, base: RGB, rand: () => number) {
+  const seed = 1 + Math.floor(rand() * 9999);
+  // Cztery klepki, każda trochę inna i z własnym miejscem łączenia.
+  const joints = [0, 1, 2, 3].map(() => 2 + Math.floor(rand() * 12));
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const board = Math.floor(y / 4);
+      const row = y % 4;
+      const joint = joints[board];
+      const tone = 0.88 + hash2(board, 1, seed) * 0.2;
+      const grain = Math.sin((x * 0.8 + board * 2.1) + fbm(x, y, seed + board * 7, 2) * 2.2) * 0.04;
+      let f = tone + grain + (hash2(x, y, seed + 11) - 0.5) * 0.05;
+      if (row === 0) f *= 1.08;            // górna krawędź klepki
+      if (row === 3) f *= 0.7;             // cień szczeliny
+      if (x === joint && row < 3) f *= 0.78; // pionowe łączenie
+      if (x === (joint + 1) % 16 && row < 3) f *= 0.92;
+      px(tile, x, y, base, f);
+    }
+  // Sęki – dwa, w różnych klepkach.
+  for (let k = 0; k < 2; k++) {
+    const kx = 2 + Math.floor(rand() * 12), ky = 4 * Math.floor(rand() * 4) + 1;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = (kx + dx + 16) % 16, y = ky + dy;
+        if (y < 0 || y >= TILE) continue;
+        if (dx === 0 && dy === 0) px(tile, x, y, base, 0.5);
+        else if (Math.abs(dx) + Math.abs(dy) === 1) px(tile, x, y, base, 0.86);
+        else px(tile, x, y, base, 1.1);
+      }
+  }
+}
+
+/** Kora: pionowe bruzdy i wypukłości – pień odróżnia się od desek. */
+function barkSide(tile: number, base: RGB, rand: () => number, contrast = 1) {
+  const seed = 1 + Math.floor(rand() * 9999);
+  const colTone: number[] = [];
+  for (let x = 0; x < TILE; x++) {
+    // Ostre bruzdy co ~3 piksele: ciemna szczelina i jasny grzbiet kory.
+    const phase = (x + hash2(x, 0, seed) * 1.6) % 3;
+    const groove = phase < 1 ? 0.66 : phase < 2 ? 1.22 : 1.0;
+    colTone[x] = groove * (0.97 + hash2(x, 1, seed) * 0.06);
+  }
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const wobble = (fbm(x, y, seed, 2, 1.2) - 0.5) * 0.16;
+      let f = colTone[x] + wobble;
+      if (hash2(x, y, seed + 23) > 0.95) f *= 0.8;
+      px(tile, x, y, base, 1 + (f - 1) * contrast);
+    }
+  // Sęki: ciemna dziurka z jasnym rantem.
+  for (let i = 0; i < 2; i++) {
+    const kx = 2 + Math.floor(rand() * 12), ky = 2 + Math.floor(rand() * 12);
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = kx + dx, y = ky + dy;
+        if (x < 0 || y < 0 || x >= TILE || y >= TILE) continue;
+        if (dx === 0 && dy === 0) px(tile, x, y, base, 0.5);
+        else px(tile, x, y, base, 1.18);
+      }
   }
 }
 
@@ -186,65 +519,218 @@ export function buildAtlas(): AtlasResult {
   img = ctx.createImageData(ATLAS_SIZE, ATLAS_SIZE);
   const R = (s: number) => mulberry32(s * 7919 + 13);
 
-  // Dirt
-  { const r = R(2); noiseFill(T.dirt, [134, 96, 67], 0.3, r);
-    for (let i = 0; i < 14; i++) { const x = Math.floor(r() * 16), y = Math.floor(r() * 16); setPx(T.dirt, x, y, 100, 70, 48); }
-    for (let i = 0; i < 6; i++) { const x = Math.floor(r() * 16), y = Math.floor(r() * 16); setPx(T.dirt, x, y, 160, 125, 95); } }
-  // Grass top
-  { const r = R(1); noiseFill(T.grass_top, [96, 160, 56], 0.35, r); }
-  // Grass side
-  { const r = R(3); copyTile(T.dirt, T.grass_side);
-    for (let x = 0; x < 16; x++) { const h = 3 + Math.floor(r() * 3) - (r() < 0.2 ? 1 : 0) + (r() < 0.25 ? 2 : 0);
-      for (let y = 0; y < h; y++) { const c = shade([96, 160, 56], 0.8 + r() * 0.35); setPx(T.grass_side, x, y, c[0], c[1], c[2]); } } }
-  // Stone
-  { const r = R(4); noiseFill(T.stone, [127, 127, 127], 0.18, r);
-    for (let i = 0; i < 10; i++) { const x = Math.floor(r() * 15), y = Math.floor(r() * 16); setPx(T.stone, x, y, 105, 105, 105); setPx(T.stone, x + 1, y, 110, 110, 110); }
-    for (let i = 0; i < 8; i++) { const x = Math.floor(r() * 16), y = Math.floor(r() * 16); setPx(T.stone, x, y, 145, 145, 145); } }
-  // Cobble
-  { const r = R(5); const shades = Array.from({ length: 12 }, () => 95 + r() * 60);
-    voronoi(T.cobble, r, 9, (c, e) => { const s = e ? 60 : shades[c] * (0.92 + r() * 0.16); return [s, s, s]; }); }
-  // Log side
-  { const r = R(6); const cols = Array.from({ length: 16 }, () => 0.8 + r() * 0.3);
-    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([104, 82, 50], cols[x] * (0.92 + r() * 0.14) * (x % 4 === 0 ? 0.8 : 1)); setPx(T.log_side, x, y, c[0], c[1], c[2]); } }
-  logTop(T.log_top, [182, 146, 92], [150, 118, 72], [104, 82, 50], R(7));
-  leaves(T.leaves, [60, 128, 30], R(8));
-  // Planks
-  { const r = R(9); for (let y = 0; y < 16; y++) { const board = Math.floor(y / 4); const seam = (board * 7 + 3) % 16;
-      for (let x = 0; x < 16; x++) { let f = 0.9 + r() * 0.15; if (y % 4 === 3) f = 0.68; if (x === seam && y % 4 !== 3) f *= 0.75;
-        const c = shade([164, 132, 80], f); setPx(T.planks, x, y, c[0], c[1], c[2]); } } }
-  { const r = R(10); noiseFill(T.sand, [219, 206, 160], 0.12, r); }
-  // Water
-  { const r = R(11); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const w = Math.sin((x + y * 0.5) * 0.8) * 0.08 + (r() - 0.5) * 0.1;
-      const c = shade([48, 92, 215], 1 + w); setPx(T.water, x, y, c[0], c[1], c[2], 175); } }
-  // Glass
-  { const r = R(12); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-      const border = x === 0 || y === 0 || x === 15 || y === 15;
-      if (border) setPx(T.glass, x, y, 200 + r() * 30, 225 + r() * 20, 235, 255);
-      else if ((x - y === 3 || x - y === 4) && x < 9) setPx(T.glass, x, y, 255, 255, 255, 180);
-      else setPx(T.glass, x, y, 0, 0, 0, 0); } }
-  { const r = R(13); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const s = 30 + r() * 90; setPx(T.bedrock, x, y, s, s, s); } }
-  { const r = R(14); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const t = r(); const s = 90 + r() * 70;
-      if (t < 0.3) setPx(T.gravel, x, y, s * 0.9, s * 0.8, s * 0.75); else setPx(T.gravel, x, y, s, s * 0.97, s * 0.95); } }
-  ore(T.coal_ore, [30, 30, 30], R(15));
-  ore(T.iron_ore, [216, 175, 147], R(16));
-  ore(T.gold_ore, [252, 238, 75], R(17));
-  ore(T.diamond_ore, [93, 236, 245], R(18));
-  bricksPattern(T.brick, [150, 72, 56], [175, 170, 160], 8, 4, R(19));
-  { const r = R(20); noiseFill(T.snow, [240, 250, 252], 0.06, r); }
-  { const r = R(21); copyTile(T.dirt, T.snow_side);
-    for (let x = 0; x < 16; x++) { const h = 3 + Math.floor(r() * 3); for (let y = 0; y < h; y++) { const c = shade([240, 250, 252], 0.94 + r() * 0.06); setPx(T.snow_side, x, y, c[0], c[1], c[2]); } } }
-  // Cactus
-  { const r = R(22); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-      let c: RGB = shade([20, 120, 35], 0.85 + r() * 0.25); if (x === 0 || x === 15) c = [10, 70, 20]; if (x % 4 === 2) c = shade(c, 0.8);
-      setPx(T.cactus_side, x, y, c[0], c[1], c[2]); }
-    for (let i = 0; i < 10; i++) setPx(T.cactus_side, 1 + Math.floor(r() * 14), Math.floor(r() * 16), 230, 230, 200); }
-  { const r = R(23); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const d = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5));
-      const c: RGB = shade(d > 6.5 ? [10, 70, 20] : d > 4 ? [30, 140, 45] : [60, 160, 70], 0.9 + r() * 0.2); setPx(T.cactus_top, x, y, c[0], c[1], c[2]); } }
-  // Birch
-  { const r = R(24); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c = shade([216, 215, 205], 0.92 + r() * 0.1); setPx(T.birch_side, x, y, c[0], c[1], c[2]); }
-    for (let i = 0; i < 7; i++) { const y = Math.floor(r() * 16), x = Math.floor(r() * 12), l = 2 + Math.floor(r() * 4); for (let j = 0; j < l; j++) setPx(T.birch_side, x + j, y, 40, 40, 35); } }
-  logTop(T.birch_top, [210, 190, 140], [185, 165, 115], [216, 215, 205], R(25));
-  leaves(T.birch_leaves, [110, 150, 65], R(26));
+  // ------------------------------------------------------------ 2.9: ziemia
+  {
+    const r = R(2);
+    mottle(T.dirt, [128, 92, 62], 0.26, 21);
+    // grudki i kamyki: kilka jaśniejszych, kilka ciemniejszych
+    for (let i = 0; i < 7; i++) pebble(T.dirt, 1 + r() * 14, 1 + r() * 14, 0.9 + r() * 1.3, [151, 114, 78], r);
+    for (let i = 0; i < 5; i++) px(T.dirt, Math.floor(r() * 16), Math.floor(r() * 16), [96, 66, 43]);
+    for (let i = 0; i < 3; i++) px(T.dirt, Math.floor(r() * 16), Math.floor(r() * 16), [170, 136, 104]);
+    bevel(T.dirt, 0.09);
+  }
+  // Trawa – góra: miękkie łaty zieleni, drobne ciemne źdźbła i jaśniejsze końcówki.
+  {
+    const r = R(1);
+    const base: RGB = [104, 168, 66];
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const n = fbm(x, y, 77, 3, 1.2);
+        let f = 0.94 + n * 0.16;
+        if (hash2(x, y, 5) > 0.9) f *= 0.9;
+        px(T.grass_top, x, y, base, f);
+      }
+    for (let i = 0; i < 16; i++) {
+      const x = Math.floor(r() * 16), y = Math.floor(r() * 16);
+      px(T.grass_top, x, y, [78, 138, 48]);
+      if (r() < 0.5) px(T.grass_top, x, (y + 1) % 16, [126, 192, 82]);
+    }
+  }
+  // Trawa – bok: nierówna krawędź (3–5 px), ciemniejsza linia styku z ziemią.
+  {
+    const r = R(3);
+    copyTile(T.dirt, T.grass_side);
+    const heights: number[] = [];
+    for (let x = 0; x < 16; x++) heights[x] = 3 + Math.round(fbm(x * 2.2, 0, 19, 2) * 2.4);
+    for (let x = 0; x < 16; x++) {
+      const h = heights[x];
+      for (let y = 0; y < h; y++) {
+        const f = 0.94 + fbm(x, y, 31, 2) * 0.16 + (y === h - 1 ? -0.14 : 0);
+        px(T.grass_side, x, y, [100, 162, 62], f);
+      }
+      // pojedyncze źdźbła wystające w dół
+      if (r() < 0.35) px(T.grass_side, x, h, [86, 142, 52], 0.95);
+      else px(T.grass_side, x, h, [112, 84, 56], 0.9);
+      // cień pod warstwą trawy na ziemi
+      if (h < 15) px(T.grass_side, x, h + 1, [104, 76, 50], 0.95);
+    }
+  }
+  // Kamień: duże, miękkie łaty + kilka ciemnych pęknięć i jasnych odprysków.
+  {
+    const r = R(4);
+    mottle(T.stone, [126, 126, 128], 0.2, 41);
+    for (let i = 0; i < 5; i++) {
+      let x = Math.floor(r() * 15) + 1, y = Math.floor(r() * 15) + 1;
+      const len = 2 + Math.floor(r() * 3);
+      const dx = r() < 0.5 ? 1 : 0, dy = dx === 1 ? 0 : 1;
+      for (let k = 0; k < len; k++) { px(T.stone, x, y, [96, 96, 99], 1); x = (x + dx) % 16; y = (y + dy) % 16; }
+    }
+    for (let i = 0; i < 7; i++) px(T.stone, Math.floor(r() * 16), Math.floor(r() * 16), [150, 150, 152]);
+    bevel(T.stone, 0.06);
+  }
+  // Bruk: zaokrąglone kamienie z fugą i światłem od góry.
+  {
+    const r = R(5);
+    const tones = Array.from({ length: 12 }, () => 0.84 + r() * 0.24);
+    voronoi(T.cobble, r, 10, (c, e) => {
+      if (e) return [96, 96, 99];
+      const s = 146 * tones[c];
+      return [s, s, s + 3];
+    });
+    bevel(T.cobble, 0.1);
+  }
+  // Pień dębu: kora z bruzdami.
+  { const r = R(6); barkSide(T.log_side, [108, 82, 50], r, 1.15); }
+  logTop(T.log_top, [188, 152, 96], [156, 122, 74], [104, 80, 48], R(7));
+  leaves(T.leaves, [62, 130, 34], R(8));
+  // Deski dębowe.
+  { planksTile(T.planks, [168, 134, 82], R(9)); }
+  // Piasek: drobne ziarno + muszelki.
+  {
+    const r = R(10);
+    mottle(T.sand, [219, 206, 160], 0.1, 63);
+    for (let i = 0; i < 26; i++) {
+      const x = Math.floor(r() * 16), y = Math.floor(r() * 16);
+      const light = r() < 0.55;
+      px(T.sand, x, y, light ? [236, 226, 186] : [196, 182, 138]);
+    }
+    for (let i = 0; i < 3; i++) {
+      const x = 2 + Math.floor(r() * 12), y = 2 + Math.floor(r() * 12);
+      px(T.sand, x, y, [246, 238, 208]);
+      px(T.sand, x + 1, y, [246, 238, 208]);
+    }
+  }
+  // Woda: spokojne, szerokie fale (bez ziarna) i półprzezroczystość.
+  {
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const wave = Math.sin((x * 0.55 + y * 0.9) * 1.1) * 0.045 + Math.sin(x * 0.3 - y * 0.7) * 0.035;
+        const depth = 0.92 + (1 - y / 22) * 0.1;
+        px(T.water, x, y, [46, 106, 208], depth * (1 + wave), 188);
+      }
+    for (let i = 0; i < 6; i++) {
+      const y = 2 + i * 2;
+      const x = (i * 5 + 3) % 16;
+      px(T.water, x, y, [150, 200, 245], 1, 170);
+      px(T.water, (x + 1) % 16, y, [120, 180, 235], 1, 165);
+    }
+  }
+  // Szkło: jasna ramka z odblaskiem, środek naprawdę przezroczysty.
+  {
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const border = x === 0 || y === 0 || x === 15 || y === 15;
+        if (border) {
+          const f = 1 - (y * 0.006 + x * 0.006);
+          px(T.glass, x, y, [198, 226, 234], f * (0.95 + hash2(x, y, 9) * 0.08));
+        } else if ((x - y === 4 || x - y === 5) && x > 3 && x < 11) {
+          px(T.glass, x, y, [235, 250, 255], 1, 150);
+        } else if (x === 1 || y === 1) {
+          px(T.glass, x, y, [220, 240, 246], 1, 90);
+        } else setPx(T.glass, x, y, 0, 0, 0, 0);
+      }
+  }
+  // Skała macierzysta: ciemne bloki z jaśniejszymi plamami.
+  {
+    const r = R(13);
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const n = fbm(x, y, 88, 3, 1.4);
+        const s = 42 + n * 76;
+        px(T.bedrock, x, y, [s, s, s * 1.02]);
+        if (r() < 0.06) px(T.bedrock, x, y, [s * 0.6, s * 0.6, s * 0.62]);
+      }
+  }
+  // Żwir: obtoczone kamyki różnej wielkości.
+  {
+    const r = R(14);
+    mottle(T.gravel, [104, 99, 92], 0.16, 71);
+    const tones: RGB[] = [[168, 160, 148], [132, 124, 114], [150, 140, 126], [118, 112, 104], [180, 172, 160]];
+    // Najpierw większe kamienie, potem mniejsze wlazą w szczeliny.
+    for (let i = 0; i < 7; i++) pebble(T.gravel, r() * 16, r() * 16, 1.5 + r() * 1.1, tones[Math.floor(r() * tones.length)], r);
+    for (let i = 0; i < 10; i++) pebble(T.gravel, r() * 16, r() * 16, 0.8 + r() * 0.7, tones[Math.floor(r() * tones.length)], r);
+    bevel(T.gravel, 0.08);
+  }
+  ore(T.coal_ore, [38, 38, 42], R(15));
+  ore(T.iron_ore, [206, 168, 142], R(16));
+  ore(T.gold_ore, [250, 220, 74], R(17));
+  ore(T.diamond_ore, [98, 226, 236], R(18));
+  bricksPattern(T.brick, [156, 76, 60], [170, 166, 156], 8, 4, R(19));
+  // Śnieg: prawie biały, z zimnym cieniem i skrzeniem.
+  {
+    const r = R(20);
+    mottle(T.snow, [244, 250, 252], 0.05, 91);
+    for (let i = 0; i < 10; i++) px(T.snow, Math.floor(r() * 16), Math.floor(r() * 16), [214, 230, 244]);
+    for (let i = 0; i < 8; i++) px(T.snow, Math.floor(r() * 16), Math.floor(r() * 16), [255, 255, 255]);
+  }
+  // Śnieg – bok: ziemia z czapą śniegu i sinym cieniem pod nią.
+  {
+    const r = R(21);
+    copyTile(T.dirt, T.snow_side);
+    const heights: number[] = [];
+    for (let x = 0; x < 16; x++) heights[x] = 3 + Math.round(fbm(x * 2.1, 3, 23, 2) * 2.2);
+    for (let x = 0; x < 16; x++) {
+      const h = heights[x];
+      for (let y = 0; y < h; y++) px(T.snow_side, x, y, [246, 251, 253], 0.96 + fbm(x, y, 33, 2) * 0.05);
+      px(T.snow_side, x, h, [206, 224, 240], 1);
+      px(T.snow_side, x, h + 1, [120, 94, 68], 1);
+      if (r() < 0.25) px(T.snow_side, x, h + 2, [104, 80, 58], 1);
+    }
+  }
+  // Kaktus – bok: żebra i kolce.
+  {
+    const r = R(22);
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        // Szerokie żebra: ciemna bruzda, jasna krawędź żebra, płaski środek.
+        const rib = x % 5;
+        let f = rib === 0 ? 0.6 : rib === 1 ? 1.16 : rib === 4 ? 0.86 : 1;
+        f *= 0.97 + fbm(x, y, 37, 2) * 0.07;
+        px(T.cactus_side, x, y, [64, 148, 66], f);
+      }
+    for (let y = 1; y < 16; y += 4)
+      for (let x = 1; x < 16; x += 4) {
+        px(T.cactus_side, x, y, [226, 232, 196]);
+        if (r() < 0.4) px(T.cactus_side, x + 1, y, [200, 210, 170]);
+      }
+  }
+  // Kaktus – góra: pierścienie żeber.
+  {
+    const r = R(23);
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const d = Math.hypot(x - 7.5, y - 7.5);
+        const ring = Math.sin(d * 2.4) * 0.5 + 0.5;
+        const f = (d > 6.9 ? 0.66 : 0.92 + ring * 0.18) * (0.96 + r() * 0.05);
+        px(T.cactus_top, x, y, [64, 152, 68], f);
+      }
+  }
+  // Brzoza: jasna kora z poziomymi przetchlinkami.
+  {
+    const r = R(24);
+    barkSide(T.birch_side, [226, 224, 213], r, 0.35);
+    // Kora brzozy: kilka krótkich, poziomych przetchlinek (nie „gazeta”).
+    for (let i = 0; i < 5; i++) {
+      const y = 2 + Math.floor(r() * 12);
+      const x = 1 + Math.floor(r() * 9);
+      const len = 2 + Math.floor(r() * 2);
+      for (let k = 0; k < len; k++) px(T.birch_side, x + k, y, [74, 70, 62], 0.92);
+      for (let k = 0; k < len; k++) px(T.birch_side, x + k, y + 1, [176, 172, 160], 1);
+    }
+    for (let i = 0; i < 4; i++) px(T.birch_side, Math.floor(r() * 16), Math.floor(r() * 16), [196, 192, 180]);
+  }
+  logTop(T.birch_top, [224, 200, 150], [196, 170, 120], [218, 216, 204], R(25));
+  leaves(T.birch_leaves, [116, 158, 70], R(26));
   // TNT
   { const r = R(27); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       let c: RGB = shade([205, 55, 35], (x % 4 === 0 ? 0.8 : 1) * (0.9 + r() * 0.15));
@@ -289,17 +775,15 @@ export function buildAtlas(): AtlasResult {
     for (let y = 8; y < 14; y++) for (let x = 4; x < 12; x++) setPx(T.furnace_front, x, y, 30, 25, 25);
     for (let x = 4; x < 12; x++) setPx(T.furnace_front, x, 13, 200, 90, 30);
     for (let x = 3; x < 13; x++) setPx(T.furnace_front, x, 4, 70, 70, 70); }
-  { const r = R(37); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const t = r();
-      const c: RGB = t < 0.15 ? [60, 40, 90] : shade([20, 16, 32], 0.7 + r() * 0.6); setPx(T.obsidian, x, y, c[0], c[1], c[2]); } }
+  // 2.9: obsydian ma własny generator (szklisty, z fioletowym refleksem).
+  { obsidianTile(T.obsidian, R(37)); }
   bricksPattern(T.stone_bricks, [125, 125, 125], [80, 80, 80], 16, 8, R(38));
-  { const r = R(39); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-      const streak = (x + y) % 7 === 0 ? 1.15 : 1; const c = shade([150, 185, 250], streak * (0.95 + r() * 0.1)); setPx(T.ice, x, y, c[0], c[1], c[2], 200); } }
+  { iceTile(T.ice, R(39)); }
   plant(T.tallgrass, R(40));
   plant(T.flower_red, R(41), [220, 30, 30]);
   plant(T.flower_yellow, R(42), [250, 225, 40]);
   // Lava
-  { const r = R(47); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-      const w = Math.sin(x * 0.9 + Math.cos(y * 0.7) * 2) * 0.5 + 0.5; const c: RGB = [230 + w * 25, 90 + w * 110 + r() * 20, 10 + w * 30]; setPx(T.lava, x, y, c[0], c[1], c[2], 255); } }
+  { lavaTile(T.lava, R(47)); }
   // Sandstone
   { const r = R(48); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
       let f = 0.95 + r() * 0.08; if (y < 3) f *= 1.05; if (y === 3 || y === 11) f *= 0.85; const c = shade([216, 202, 150], f); setPx(T.sandstone_side, x, y, c[0], c[1], c[2]); } }
@@ -627,13 +1111,19 @@ export function buildAtlas(): AtlasResult {
   }
   {
     const r = R(111);
-    noiseFill(T.netherrack, [110, 30, 30], 0.25, r);
-    for (let i = 0; i < 12; i++) setPx(T.netherrack, Math.floor(r() * 16), Math.floor(r() * 16), 90, 20, 20);
+    rockTile(T.netherrack, [116, 34, 34], r, 0.3, 1.1);
+    for (let i = 0; i < 10; i++) pebble(T.netherrack, r() * 16, r() * 16, 1.1 + r(), [86, 20, 22], r);
   }
   {
     const r = R(112);
-    noiseFill(T.soul_sand, [80, 60, 50], 0.2, r);
-    for (let i = 0; i < 20; i++) { const x = Math.floor(r() * 16), y = Math.floor(r() * 16); setPx(T.soul_sand, x, y, 60, 45, 35); }
+    rockTile(T.soul_sand, [82, 64, 54], r, 0.2, 0.6);
+    // „dusze”: ciemne oczodoły w rozmytych twarzach
+    for (let i = 0; i < 3; i++) {
+      const cx = 3 + Math.floor(r() * 10), cy = 3 + Math.floor(r() * 10);
+      for (const [dx, dy] of [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2], [1, 3]] as [number, number][]) {
+        px(T.soul_sand, (cx + dx) % 16, (cy + dy) % 16, [54, 42, 34]);
+      }
+    }
   }
   {
     const r = R(113);
@@ -651,13 +1141,18 @@ export function buildAtlas(): AtlasResult {
     for (let x = 4; x < 12; x++) { setPx(T.quartz_chiseled, x, 4, 200, 190, 180); setPx(T.quartz_chiseled, x, 11, 200, 190, 180); }
   }
   {
-    const r = R(118);
-    noiseFill(T.magma, [180, 60, 20], 0.3, r);
-    for (let i = 0; i < 16; i++) { const x = Math.floor(r() * 16), y = Math.floor(r() * 16); setPx(T.magma, x, y, 255, 120, 30); }
+    // Magma: ciemna skorupa z pajęczyną rozżarzonych szczelin.
+    for (let y = 0; y < 16; y++)
+      for (let x = 0; x < 16; x++) {
+        const n = fbm(x, y, 401, 3, 1.5);
+        const crack = Math.abs(Math.sin((x * 0.9 + y * 1.7) + n * 6)) < 0.16;
+        const base: RGB = crack ? [255, 138, 34] : mixRGB([92, 30, 16], [52, 18, 12], n);
+        px(T.magma, x, y, base, crack ? 1 : 0.94 + n * 0.12);
+      }
   }
   {
     const r = R(119);
-    noiseFill(T.end_stone, [230, 230, 180], 0.12, r);
+    rockTile(T.end_stone, [226, 228, 178], r, 0.1, 0.2);
   }
   {
     const r = R(120);
@@ -665,7 +1160,7 @@ export function buildAtlas(): AtlasResult {
   }
   {
     const r = R(121);
-    noiseFill(T.purpur_block, [170, 120, 170], 0.15, r);
+    rockTile(T.purpur_block, [168, 118, 168], r, 0.12, 0.25);
   }
   {
     const r = R(122);
@@ -681,15 +1176,15 @@ export function buildAtlas(): AtlasResult {
     noiseFill(T.oak_stairs, [164, 132, 80], 0.1, r);
   }
   // Concrete – flat colors with slight noise
-  wool(T.concrete_white, [220, 220, 220], R(126));
-  wool(T.concrete_red, [180, 40, 40], R(127));
-  wool(T.concrete_blue, [40, 80, 180], R(128));
-  wool(T.concrete_green, [60, 140, 60], R(129));
-  wool(T.concrete_yellow, [220, 200, 40], R(130));
-  wool(T.concrete_black, [20, 20, 25], R(131));
+  concrete(T.concrete_white, [222, 222, 224], R(126));
+  concrete(T.concrete_red, [176, 44, 44], R(127));
+  concrete(T.concrete_blue, [44, 82, 178], R(128));
+  concrete(T.concrete_green, [62, 138, 62], R(129));
+  concrete(T.concrete_yellow, [222, 202, 48], R(130));
+  concrete(T.concrete_black, [26, 26, 30], R(131));
   {
     const r = R(132);
-    noiseFill(T.terracotta, [180, 100, 70], 0.12, r);
+    rockTile(T.terracotta, [178, 100, 72], r, 0.1, 0.18);
   }
   {
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) setPx(T.rail, x, y, 0, 0, 0, 0);
@@ -964,7 +1459,9 @@ function polishTiles() {
         [TILE - 1, k, 0, k],
       ] as [number, number, number, number][]) {
         const i = at(x, y), j = at(ox, oy);
-        setPx(tile, x, y, mix(buf[i], buf[j], 0.4), mix(buf[i + 1], buf[j + 1], 0.4), mix(buf[i + 2], buf[j + 2], 0.4));
+        // 2.9: mieszamy tylko 28% – wcześniejsze 40% zjadało drobny rysunek
+        // (sęki, listki, żebra), przez co wszystkie bloki wyglądały podobnie.
+        setPx(tile, x, y, mix(buf[i], buf[j], 0.28), mix(buf[i + 1], buf[j + 1], 0.28), mix(buf[i + 2], buf[j + 2], 0.28));
       }
     }
     // Skos: górna krawędź jaśniejsza, dolna ciemniejsza, prawa lekko ciemna.

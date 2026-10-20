@@ -26,6 +26,7 @@ const HELD_LIGHT_ITEMS: ReadonlySet<number> = new Set<number>([
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
 import { Inventory, RECIPES, type Stack } from './inventory';
+import { COMMANDS, commandByName, searchCommands } from './commands';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
@@ -2651,16 +2652,20 @@ export class Game {
     if (!txt.startsWith('/')) { this.message('<Gracz> ' + txt); return; }
     const [cmd, ...args] = txt.slice(1).split(/\s+/);
     switch (cmd.toLowerCase()) {
-      case 'help':
-        this.message(
-          'Komendy: /gamemode, /time set <day|night>, /weather <clear|rain>, /tp x y z, ' +
-            '/give <nazwa|id> [ilość], /summon <mob> [zawód], /village (najbliższa wioska), ' +
-            '2.4: statyw alchemiczny (PPM), fiolka nad wodą, napoje, ' +
-            '2.3: wędka (PPM), lorneta (przytrzymaj PPM), kowadło (PPM), ' +
-            '/waypoint <add|list|select|remove> [nazwa], /xp <ilość>, /enchant <nazwa> [poziom], ' +
-            '/heal, /kill, /seed, /spawn, /clear, /blocks'
-        );
+      case 'help': {
+        // 2.9: pomoc pochodzi z tego samego katalogu, co lista w czacie.
+        const wanted = commandByName(args[0] || '');
+        if (wanted) {
+          this.message(`/${wanted.usage} – ${wanted.description} Np. ${wanted.example}`);
+        } else {
+          this.message('Komendy: ' + COMMANDS.map((c) => `/${c.name}`).join(', '));
+          this.message(
+            'Pełna lista z opisami jest w czacie: przycisk „Komendy” (na telefonie 💬 → Komendy). ' +
+              'Szczegóły jednej komendy: /help give.'
+          );
+        }
         break;
+      }
       case 'enchant': {
         const ench = resolveEnch(args[0] || '');
         const held = this.selectedStack();
@@ -2818,8 +2823,16 @@ export class Game {
         this.inventory.slots.fill(null);
         this.message('Wyczyszczono ekwipunek.');
         break;
-      default:
-        this.message('Nieznana komenda. Wpisz /help');
+      default: {
+        // 2.9: zamiast samego „nie znam” – najbliższe komendy do tapnięcia.
+        const near = searchCommands(cmd, 3).map((c) => `/${c.name}`);
+        this.message(
+          near.length
+            ? `Nie znam komendy /${cmd}. Może: ${near.join(', ')}? Pełna lista: /help`
+            : `Nie znam komendy /${cmd}. Wpisz /help`
+        );
+        break;
+      }
     }
     this.emitHud();
   }

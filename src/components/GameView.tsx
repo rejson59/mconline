@@ -11,7 +11,8 @@ import AnvilScreen from './AnvilScreen';
 import BrewingScreen from './BrewingScreen';
 import JournalScreen from './JournalScreen';
 import WaypointsScreen from './WaypointsScreen';
-import { ChatInput, DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
+import { DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
+import { ChatInput } from './ChatScreen';
 import TouchControls from './TouchControls';
 import {
   effectiveSettings,
@@ -51,6 +52,8 @@ export default function GameView({
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [, force] = useState(0);
   const [started, setStarted] = useState(false);
+  // 2.9: czat otwierany z pauzy pokazuje od razu listę komend.
+  const [chatList, setChatList] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [portraitHint, setPortraitHint] = useState(false);
   // 2.5: wersja PC i dotykowa są wyraźnie rozdzielone – decyduje tryb
@@ -250,7 +253,10 @@ export default function GameView({
           settings={effective}
           onInventory={() => game.openInventory(false)}
           onPause={() => game.setUI('paused')}
-          onChat={() => game.setUI('chat')}
+          onChat={() => {
+            setChatList(false);
+            game.setUI('chat');
+          }}
           onWaypoints={() => game.setUI('waypoints')}
         />
       )}
@@ -275,6 +281,7 @@ export default function GameView({
         <ChatInput
           onSubmit={(t) => game.command(t)}
           onClose={() => game.setUI('playing')}
+          showListInitially={chatList}
         />
       )}
       {game && ui === 'dead' && (
@@ -317,6 +324,10 @@ export default function GameView({
           onResume={resume}
           onJournal={() => game.setUI('journal')}
           onWaypoints={() => game.setUI('waypoints')}
+          onCommands={() => {
+            setChatList(true);
+            game.setUI('chat');
+          }}
           onSave={() => game.save()}
           onQuit={() => {
             game.save();

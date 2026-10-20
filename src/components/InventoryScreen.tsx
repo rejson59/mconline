@@ -7,6 +7,7 @@ import { CREATIVE_ITEMS, displayName, stackLimit } from '../game/items';
 import { TooltipBody } from '../utils/tooltip';
 import { ARMOR, armorPoints, ARMOR_SLOT_NAMES } from '../game/armor';
 import Slot from './Slot';
+import CloseButton from './CloseButton';
 
 export default function InventoryScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
   const [, setTick] = useState(0);
@@ -26,8 +27,15 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
 
   useEffect(() => {
     const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
+    // 2.9: na dotyku nie ma „mousemove” – ikona trzymanego przedmiotu
+    // zostawała w lewym górnym rogu. Tapnięcie też ustawia jej pozycję.
+    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
     window.addEventListener('mousemove', mm);
-    return () => window.removeEventListener('mousemove', mm);
+    window.addEventListener('pointerdown', pt, true);
+    return () => {
+      window.removeEventListener('mousemove', mm);
+      window.removeEventListener('pointerdown', pt, true);
+    };
   }, []);
 
   const clickSlot = (i: number, right: boolean) => {
@@ -55,15 +63,16 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
       className="absolute inset-0 flex items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.55)' }}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseDown={(e) => {
-        // clicking outside panel with cursor in creative -> delete
-        if (e.target === e.currentTarget && inv.cursor && creative) {
-          inv.cursor = null;
-          refresh();
-        }
+      onPointerDown={(e) => {
+        // 2.9: na dotyku nie było żadnego wyjścia – tapnięcie poza panelem
+        // zamyka ekwipunek. Trzymany przedmiot wraca do plecaka w
+        // `closeInventory()`, więc nic nie ginie (inaczej niż przy starym
+        // „klik poza = usuń” w trybie kreatywnym).
+        if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
-      <div className="flex max-h-[94dvh] max-w-[100vw] flex-wrap items-start justify-center gap-4 overflow-x-hidden overflow-y-auto p-3">
+      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
+      <div className="flex max-h-[94dvh] max-w-[100vw] flex-wrap items-start justify-center gap-3 overflow-x-hidden overflow-y-auto p-3 pb-20 sm:gap-4">
         <div className="mc-panel inventory-main-panel w-fit max-w-[calc(100vw-24px)] p-4">
           {creative ? (
             <>
@@ -213,7 +222,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                 {onlyReady ? 'Wszystkie' : 'Możliwe'}
               </button>
             </div>
-            <div className="max-h-[380px] space-y-1 overflow-y-auto pr-1">
+            <div className="max-h-[min(380px,46dvh)] space-y-1 overflow-y-auto pr-1">
               {recipeRows.length === 0 && (
                 <div className="px-2 py-5 text-center text-sm text-[#444]" role="status">
                   {recipeQuery.trim() ? 'Nie znaleziono takiej receptury.' : 'Brak receptur możliwych do wykonania. Zdobądź potrzebne składniki.'}
@@ -271,7 +280,19 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
           {!creative && inv.cursor.count > 1 && <span className="mc-count">{inv.cursor.count}</span>}
         </div>
       )}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm mc-text opacity-80">E / Esc – zamknij</div>
+      {/* 2.9: przycisk na dole jest w zasięgu kciuka; skrót klawiszowy
+          zostaje jako podpowiedź na komputerze. */}
+      <div className="mc-panel-actions">
+        <button
+          type="button"
+          className="mc-btn !w-auto !px-5 !py-2 !text-base"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => game.closeInventory()}
+        >
+          Gotowe – zamknij ekwipunek
+        </button>
+        <span className="hidden self-center text-xs mc-text text-white/60 sm:inline">E / Esc – zamknij</span>
+      </div>
     </div>
   );
 }

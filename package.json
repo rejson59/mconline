@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.8.2",
-  "description": "BlockCraft 2.8.2 „Zdrowe drzewa” – polska gra sandboxowa w przeglądarce: nowy generator drzew, gęste liście, kierunkowe światło, pochodnia w dłoni i spokojne chmury.",
+  "version": "2.9.0",
+  "description": "BlockCraft 2.9 „Nowy wygląd” – polska gra sandboxowa w przeglądarce: nowe tekstury w stylu współczesnego Minecrafta, wygodny ekwipunek na telefonie i czat z listą komend.",
   "type": "module",
   "license": "MIT",
   "keywords": [

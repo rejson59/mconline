@@ -5,6 +5,7 @@ import type { Stack } from '../game/inventory';
 import { enchDef, enchName, type EnchOption } from '../game/enchant';
 import { TooltipBody } from '../utils/tooltip';
 import Slot from './Slot';
+import CloseButton from './CloseButton';
 
 function LabeledSlot({
   stack,
@@ -74,8 +75,15 @@ export default function EnchantScreen({ game, icons, onChange }: { game: Game; i
 
   useEffect(() => {
     const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
+    // 2.9: na dotyku nie ma „mousemove” – ikona trzymanego przedmiotu
+    // zostawała w lewym górnym rogu. Tapnięcie też ustawia jej pozycję.
+    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
     window.addEventListener('mousemove', mm);
-    return () => window.removeEventListener('mousemove', mm);
+    window.addEventListener('pointerdown', pt, true);
+    return () => {
+      window.removeEventListener('mousemove', mm);
+      window.removeEventListener('pointerdown', pt, true);
+    };
   }, []);
 
   const refresh = () => {
@@ -111,6 +119,7 @@ export default function EnchantScreen({ game, icons, onChange }: { game: Game; i
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
+      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
       <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-baseline justify-between gap-6">
           <span className="text-lg font-semibold">Stół zaklęć</span>

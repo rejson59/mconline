@@ -4,6 +4,7 @@ import { stackTooltip, TooltipBody } from '../utils/tooltip';
 import type { Stack } from '../game/inventory';
 import { displayName } from '../game/items';
 import Slot from './Slot';
+import CloseButton from './CloseButton';
 
 /**
  * 2.3 „Wyprawa i ratunek” – kowadło.
@@ -45,8 +46,15 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
 
   useEffect(() => {
     const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
+    // 2.9: na dotyku nie ma „mousemove” – ikona trzymanego przedmiotu
+    // zostawała w lewym górnym rogu. Tapnięcie też ustawia jej pozycję.
+    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
     window.addEventListener('mousemove', mm);
-    return () => window.removeEventListener('mousemove', mm);
+    window.addEventListener('pointerdown', pt, true);
+    return () => {
+      window.removeEventListener('mousemove', mm);
+      window.removeEventListener('pointerdown', pt, true);
+    };
   }, []);
 
   const refresh = () => {
@@ -64,6 +72,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
+      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
       <div className="mc-panel flex max-h-[94dvh] w-[min(430px,96vw)] flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-center justify-between">
           <div className="text-lg font-semibold">Kowadło</div>
