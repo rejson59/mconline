@@ -11,6 +11,8 @@ import {
   type NetStatus,
 } from '../game/net';
 import { PublicServer, PUBLIC_NAME, PUBLIC_SEED } from '../game/online';
+import { loadSkinId, saveSkinId, skinById } from '../game/skins';
+import { SkinPicker, SkinAvatar, SkinHead } from './SkinPicker';
 import type { GameMode } from '../game/engine';
 import type { WorldType } from './Menus';
 import CloseButton from './CloseButton';
@@ -54,7 +56,8 @@ async function copyText(text: string): Promise<boolean> {
 
 const btn = 'mc-btn !w-auto !px-4 !py-2 !text-[15px]';
 const btnPrimary = 'mc-btn mc-btn-primary !w-auto !px-5 !py-2 !text-[15px]';
-const inputCls = 'mc-input !py-2 !text-[15px]';
+// 16 px zapobiega automatycznemu przybliżaniu strony na iPhonie po dotknięciu pola.
+const inputCls = 'mc-input !py-2 !text-[16px]';
 const tabCls = (on: boolean) => `${on ? 'mc-tab' : 'mc-tab opacity-60'} min-w-0 flex-1 !px-2 !text-[12px] leading-tight sm:!px-3 sm:!text-[14px]`;
 
 export default function MultiplayerScreen({
@@ -68,6 +71,7 @@ export default function MultiplayerScreen({
   defaultMode?: Mode;
 }) {
   const [name, setName] = useState(() => loadNick() || 'Gracz');
+  const [skin, setSkin] = useState(loadSkinId);
   const [mode, setMode] = useState<Mode>(defaultMode);
   const [role, setRole] = useState<'host' | 'guest'>('host');
   const [room, setRoom] = useState('las-123');
@@ -137,6 +141,7 @@ export default function MultiplayerScreen({
   };
 
   const wire = (s: NetSession) => {
+    s.skin = skin;
     session.current = s;
     s.onStatus = (st, err) => {
       setStatus(st);
@@ -161,6 +166,7 @@ export default function MultiplayerScreen({
     setStatus('connecting');
     setMessage('Łączę z serwerem publicznym…');
     const s = new PublicServer({ name: name.trim() || 'Gracz' });
+    s.skin = skin;
     session.current = s;
     s.onProgress = (text) => setMessage(text);
     s.onPeers = (list) => setPlayers(list);
@@ -318,10 +324,10 @@ export default function MultiplayerScreen({
 
   return (
     <div
-      className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto p-3 sm:items-center"
+      className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto px-2 pb-[max(12px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))] sm:items-center sm:p-3"
       style={{ background: 'rgba(4,6,9,0.82)' }}
     >
-      <CloseButton onClose={onClose} label="Wróć" className="absolute right-3 top-3 z-10" />
+      <CloseButton onClose={onClose} label="Wróć" className="mc-close-safe absolute z-10" />
       <div className="mc-window w-[min(720px,100%)] p-4 text-white sm:p-6">
         <div className="mb-1 text-2xl mc-text">Gra razem</div>
         <p className="mb-4 text-sm leading-snug text-white/70">
@@ -331,7 +337,7 @@ export default function MultiplayerScreen({
 
         <label className="mb-1 block text-xs uppercase tracking-widest text-white/50">Twoja nazwa</label>
         <input
-          className={`${inputCls} mb-4`}
+          className={`${inputCls} mb-3`}
           value={name}
           maxLength={20}
           onChange={(e) => setName(e.target.value)}
@@ -339,7 +345,25 @@ export default function MultiplayerScreen({
           placeholder="np. Ania"
         />
 
-        <div className="mb-3 flex gap-1">
+        <div className="mb-4 flex items-center gap-3 rounded border border-white/10 bg-black/30 p-2">
+          <SkinAvatar skin={skin} size={40} />
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-baseline justify-between gap-2">
+              <span className="text-xs uppercase tracking-widest text-white/50">Skórka</span>
+              <span className="truncate text-[12px] text-yellow-200">{skinById(skin).name}</span>
+            </div>
+            <SkinPicker
+              value={skin}
+              compact
+              onChange={(id) => {
+                const clean = saveSkinId(id);
+                setSkin(clean);
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="mb-3 grid grid-cols-3 gap-1">
           <button type="button" className={tabCls(mode === 'public')} aria-selected={mode === 'public'} onClick={() => { reset(); setMode('public'); }}>
             🌍 Serwer publiczny
           </button>
@@ -365,7 +389,7 @@ export default function MultiplayerScreen({
                 Pora dnia i pogoda są wspólne dla wszystkich, a lista graczy pokazuje, kto jest online.
               </p>
             </div>
-            <button type="button" className="mc-btn w-full !py-3 !text-lg" onClick={joinPublic} disabled={busy}>
+            <button type="button" className="mc-btn w-full !py-4 !text-lg" onClick={joinPublic} disabled={busy}>
               {busy ? 'Łączę…' : '▶ Graj online'}
             </button>
             <p className="text-[11px] leading-snug text-white/45">
@@ -543,7 +567,7 @@ export default function MultiplayerScreen({
             <div className="flex flex-wrap gap-2">
               {players.map((p) => (
                 <span key={p.id} className="flex items-center gap-2 border border-white/15 bg-black/30 px-2 py-1 text-sm">
-                  <span style={{ width: 10, height: 10, background: `hsl(${p.hue} 60% 55%)`, border: '1px solid #000' }} />
+                  <SkinHead skin={p.skin || `hsl(${p.hue} 60% 55%)`} size={14} />
                   {p.name}
                   {p.self && <span className="text-xs text-yellow-200">(ty)</span>}
                 </span>

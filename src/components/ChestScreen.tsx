@@ -39,7 +39,7 @@ export default function ChestScreen({ game, icons, onChange }: { game: Game; ico
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
-      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
+      <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
       <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
         <div className="text-lg font-semibold">Skrzynia</div>
         <div className="grid grid-cols-9">

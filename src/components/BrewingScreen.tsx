@@ -90,7 +90,7 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
-      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
+      <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
       <div className="mc-panel flex max-h-[94dvh] w-[min(440px,96vw)] flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-center justify-between">
           <div className="text-lg font-semibold">Statyw alchemiczny</div>

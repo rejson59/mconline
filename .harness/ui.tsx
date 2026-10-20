@@ -23,6 +23,8 @@ import BrewingScreen from '../src/components/BrewingScreen';
 import InventoryScreen from '../src/components/InventoryScreen';
 import ChatScreen from '../src/components/ChatScreen';
 import MultiplayerScreen from '../src/components/MultiplayerScreen';
+import { SkinPicker, SkinAvatar, SkinHead } from '../src/components/SkinPicker';
+import { SKINS, DEFAULT_SKIN_ID } from '../src/game/skins';
 import { COMMANDS, COMMAND_CATEGORIES, commandByName, applyCommandSuggestion } from '../src/game/commands';
 import { anvilResult } from '../src/game/anvil';
 import { Inventory, RECIPES } from '../src/game/inventory';
@@ -183,6 +185,8 @@ section('2.11: ekran „Gra razem” – serwer publiczny');
 
   // Dodatkowe tryby nadal mają swoje ustawienia.
   const local = renderToStaticMarkup(<MultiplayerScreen onStart={noop} onClose={noop} defaultMode="local" />);
+  check('2.12 poczekalnia pozwala wybrać skórkę', mp.includes('Skórka') && SKINS.some((s) => mp.includes(s.name)));
+  check('2.12 poczekalnia pokazuje podgląd postaci', mp.includes('Podgląd skórki'));
   check('tryb lokalny ma kod pokoju', local.includes('Kod pokoju'));
   check('tryb lokalny pozwala utworzyć sesję', local.includes('Utwórz sesję') && local.includes('Dołącz'));
   check('gospodarz ustawia świat', local.includes('Ziarno świata') && local.includes('Tryb / teren'));
@@ -201,7 +205,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.11') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.12') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -294,6 +298,20 @@ section('menus: static render');
   check('2.8 settings offer a one-click performance mode', settingsHtml.includes('Tryb wydajności'));
   check('2.8 settings explain the new optimisations', settingsHtml.includes('2.8.2') && settingsHtml.includes('kierunkowe'));
   check('2.8.1 settings mention the held-torch light', settingsHtml.includes('pochodni'));
+  // 2.12: zakładka „Postać” i rozmiar przycisków dotykowych
+  check('2.12 settings have a character tab', settingsHtml.includes('Postać'));
+  check('2.12 settings show the skin picker', settingsHtml.includes('Skórka') && settingsHtml.includes('aria-pressed'));
+  check('2.12 settings offer a touch button size', settingsHtml.includes('Rozmiar przycisków dotykowych'));
+
+  const picker = renderToStaticMarkup(<SkinPicker value={DEFAULT_SKIN_ID} onChange={noop} />);
+  check('2.12 skin picker lists every skin', SKINS.every((s) => picker.includes(`Skórka ${s.name}`)));
+  check('2.12 skin picker marks the current skin', picker.includes('aria-pressed="true"'));
+  const compact = renderToStaticMarkup(<SkinPicker value="ninja" onChange={noop} compact />);
+  check('2.12 compact skin picker also works', compact.includes('Skórka Ninja') && compact.includes('aria-pressed="true"'));
+  const head = renderToStaticMarkup(<SkinHead skin="creeper" size={16} />);
+  check('2.12 skin head renders a face', head.includes('#'));
+  const avatar = renderToStaticMarkup(<SkinAvatar skin={DEFAULT_SKIN_ID} size={40} />);
+  check('2.12 skin avatar renders a full body', avatar.includes('Podgląd skórki'));
 
   const ach = renderToStaticMarkup(<AchievementsPanel unlocked={['wood', 'diamond']} />);
   check('unlocked achievements are revealed', ach.includes('Pierwsze drewno') && ach.includes('Diamenty!'));
@@ -470,7 +488,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces the public server', menu.includes('Serwer publiczny'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.11'));
+  check('the menu names the current release', menu.includes('WERSJA 2.12'));
 }
 
 section('2.4: brewing rules');

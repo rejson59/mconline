@@ -64,7 +64,10 @@ import {
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
   displayName,
 } from '../src/game/items';
-import { Inventory, RECIPES, MAX_STACK, type Stack } from '../src/game/inventory';
+import { Inventory, RECIPES, LOG_IDS, MAX_STACK, type Stack } from '../src/game/inventory';
+import {
+  SKINS, DEFAULT_SKIN_ID, SKIN_KEY, skinById, loadSkinId, saveSkinId, nextSkinId, fallbackSkin,
+} from '../src/game/skins';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
@@ -3094,9 +3097,9 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 
 section('2.8/2.8.1: wersja wydania');
 {
-  // 2.11: wydanie dodaje publiczny serwer – etykieta musi być aktualna.
-  check('release label is the current line', GAME_VERSION.startsWith('2.11'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Wspólny świat');
+  // 2.12: wydanie dodaje skórki, crafting i dopracowany dotyk.
+  check('release label is the current line', GAME_VERSION.startsWith('2.12'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Skórki i dotyk');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3105,6 +3108,61 @@ section('2.8/2.8.1: wersja wydania');
   check('2.11 highlights mention the public server', RELEASE_HIGHLIGHTS.some((h) => /serwer publiczny|publiczny/i.test(h.title)));
   check('2.11 highlights explain cloud saving', RELEASE_HIGHLIGHTS.some((h) => /zapis|chmur/i.test(h.title + h.text)));
   check('2.11 highlights mention the fixed invite codes', RELEASE_HIGHLIGHTS.some((h) => /wrong state|kod/i.test(h.title + h.text)));
+  check('2.12 highlights mention every log making planks', RELEASE_HIGHLIGHTS.some((h) => /pień|desk/i.test(h.title + h.text)));
+  check('2.12 highlights mention skins', RELEASE_HIGHLIGHTS.some((h) => /skórk|postać/i.test(h.title + h.text)));
+  check('2.12 highlights mention the phone controls', RELEASE_HIGHLIGHTS.some((h) => /telefon|dotyk/i.test(h.title + h.text)));
+}
+
+// ================================================ 2.12 „Skórki i dotyk”
+section('2.12: deski z każdego pnia i stół rzemieślniczy');
+{
+  const wood = [B.LOG, B.BIRCH_LOG, B.ACACIA_LOG];
+  check('lista pni obejmuje wszystkie rodzaje drewna', wood.every((id) => LOG_IDS.includes(id)), LOG_IDS.join());
+  for (const id of wood) {
+    const recipe = RECIPES.find((r) => r.out.id === B.PLANKS && !r.table && r.inputs.some((i) => i.id === id));
+    check(`pień ${id} daje 4 deski bez stołu`, !!recipe && recipe.out.count === 4);
+    const inv = new Inventory();
+    inv.grid[0] = { id, count: 1 };
+    eq(`siatka 2×2: pień ${id} → deski`, inv.craftGrid(false)?.id, B.PLANKS);
+  }
+  const inv = new Inventory();
+  for (const i of [0, 1, 3, 4]) inv.grid[i] = { id: B.PLANKS, count: 1 };
+  eq('4 deski w 2×2 → stół rzemieślniczy', inv.craftGrid(false)?.id, B.CRAFTING);
+  check('stół rzemieślniczy nie wymaga stołu', RECIPES.find((r) => r.out.id === B.CRAFTING)?.table === false);
+}
+
+section('2.12: skórki graczy');
+{
+  check('jest osiem skórek', SKINS.length === 8, String(SKINS.length));
+  check('identyfikatory skórek są unikalne', new Set(SKINS.map((s) => s.id)).size === SKINS.length);
+  check('każda skórka ma polską nazwę i opis', SKINS.every((s) => s.name.length > 2 && s.desc.length > 4));
+  check('domyślna skórka istnieje', skinById(DEFAULT_SKIN_ID).id === DEFAULT_SKIN_ID);
+  eq('nieznana skórka wraca do domyślnej', skinById('nie-ma-takiej').id, DEFAULT_SKIN_ID);
+  eq('zapis skórki zwraca jej id', saveSkinId('ninja'), 'ninja');
+  eq('skórka wczytuje się z localStorage', loadSkinId(), 'ninja');
+  eq('klucz localStorage jest zgodny z 2.12', localStorage.getItem(SKIN_KEY), 'ninja');
+  check('nextSkinId przechodzi na inną skórkę', nextSkinId('ninja') !== 'ninja');
+  const fb = fallbackSkin(140);
+  check('fallback dla starych klientów ma kolory', fb.skin > 0 && fb.hair > 0 && fb.shirt > 0);
+  localStorage.removeItem(SKIN_KEY);
+  eq('po wyczyszczeniu wraca domyślna', loadSkinId(), DEFAULT_SKIN_ID);
+}
+
+section('2.12: sterowanie dotykowe i małe ekrany');
+{
+  eq('domyślny rozmiar przycisków', DEFAULT_SETTINGS.touchScale, 1);
+  eq('za mały rozmiar jest ograniczany', normalizeSettings({ touchScale: 0.2 }).touchScale, 0.8);
+  eq('za duży rozmiar jest ograniczany', normalizeSettings({ touchScale: 9 }).touchScale, 1.25);
+  eq('wybrany rozmiar zostaje', normalizeSettings({ touchScale: 1.15 }).touchScale, 1.15);
+  const touch = readSource('src/components/TouchControls.tsx');
+  check('przyciski korzystają z ustawienia rozmiaru', touch.includes('settings.touchScale'));
+  check('niski ekran zmniejsza sterowanie', touch.includes('shortScreen'));
+  check('pasek górny respektuje safe-area', touch.includes('safe-area-inset-left'));
+  const css = readSource('src/index.css');
+  check('czat nie wchodzi na hotbar', css.includes('.hud-chat'));
+  check('dotyk ma 44+ px', css.includes('@media (pointer: coarse)'));
+  const hud = readSource('src/components/HUD.tsx');
+  check('lista graczy pokazuje głowę skórki', hud.includes('SkinHead'));
 }
 
 
@@ -3652,6 +3710,19 @@ section('2.10: protokół sieciowy (bez serwera)');
   eq('własny wpis jest zawsze pierwszy', roster[0].id, 'me');
   eq('sortPlayers oznacza własny wpis', roster[0].self, true);
   check('nextHue nie daje koloru sąsiada', nextHue([{ id: 'x', name: 'X', hue: 0, ping: 0 }]) !== 0);
+
+  // --- 2.12: skórka w hello i w obsadzie
+  guest.skin = 'ninja';
+  guest.updatePresence();
+  await Promise.resolve();
+  await Promise.resolve();
+  eq('gospodarz zna skórkę gościa z hello', host.players.find((p) => p.id === 'guest-1')?.skin, 'ninja');
+  host.skin = 'gold';
+  host.updatePresence();
+  await Promise.resolve();
+  await Promise.resolve();
+  eq('gość dostaje skórkę gospodarza z obsady', guest.players.find((p) => p.id === 'host-1')?.skin, 'gold');
+  check('nieznana skórka nie psuje obsady', (() => { guest.skin = 'nie-ma-takiej'; guest.updatePresence(); return true; })());
 
   // --- transport lokalny na prawdziwym BroadcastChannel (Node 22 ma go w tle).
   const rawA: string[] = [];

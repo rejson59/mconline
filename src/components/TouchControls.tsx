@@ -131,8 +131,17 @@ export default function TouchControls({
   const lastJumpTap = useRef(0);
   // Wysokość viewportu dla stałej podkładki drążka (zanim gracz dotknie ekranu).
   const [vh, setVh] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
+  // 2.12: telefon poziomo ma mało wysokości – przyciski muszą się wtedy zmniejszyć,
+  // inaczej zasłaniają pół ekranu i nie da się celować.
+  const [shortScreen, setShortScreen] = useState(
+    () => typeof window !== 'undefined' && window.innerHeight <= 460,
+  );
   useEffect(() => {
-    const onResize = () => setVh(window.innerHeight);
+    const onResize = () => {
+      setVh(window.innerHeight);
+      setShortScreen(window.innerHeight <= 460);
+    };
+    onResize();
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', onResize);
     return () => {
@@ -140,6 +149,10 @@ export default function TouchControls({
       window.removeEventListener('orientationchange', onResize);
     };
   }, []);
+  // 2.12: gracz wybiera rozmiar w opcjach; na niskich ekranach dodatkowo 0,86×.
+  const touchScale = Math.min(1.25, Math.max(0.8, settings.touchScale || 1));
+  const uiScale = touchScale * (shortScreen ? 0.86 : 1);
+  const R = Math.round(STICK_RADIUS * touchScale * (shortScreen ? 0.9 : 1));
   const fixedBase = { x: JOINT_BASE.x + 10, y: vh + JOINT_BASE.y - 24 };
 
   // Odświeżaj stan latania / trybu gry (silnik zmienia je bez wiedzy Reacta).
@@ -258,7 +271,7 @@ export default function TouchControls({
     // trzeba było trafić w mały okrąg, co na telefonie wyglądało jak całkiem
     // zepsuty ruch (szczególnie przy pasku adresu zmieniającym wysokość ekranu).
     const moveZone = settings.joystickFixed
-      ? (x < Math.min(rect.width * 0.46, base.x + STICK_RADIUS * 2.25) && y > rect.height * 0.42)
+      ? (x < Math.min(rect.width * 0.46, base.x + R * 2.25) && y > rect.height * 0.42)
       : x < rect.width * 0.46 && y > rect.height * 0.32;
     // 2.5: drugi palec w strefie drążka (np. otarta dłoń) NIE zrywa ruchu –
     // drążek jest tylko jeden, dodatkowy dotyk w strefie to rozglądanie.
@@ -306,17 +319,17 @@ export default function TouchControls({
       let dx = x - info.originX;
       let dy = y - info.originY;
       const len = Math.hypot(dx, dy);
-      if (len > STICK_RADIUS) {
-        dx = (dx / len) * STICK_RADIUS;
-        dy = (dy / len) * STICK_RADIUS;
+      if (len > R) {
+        dx = (dx / len) * R;
+        dy = (dy / len) * R;
       }
       // Drugie szybkie pchnięcie do przodu = zablokowany sprint.
-      if (dy < -STICK_RADIUS * 0.9) {
+      if (dy < -R * 0.9) {
         const now = performance.now();
         if (now - lastForwardTap.current < 320) game.sprinting = true;
         lastForwardTap.current = now;
       }
-      setMoveKeys(dx / STICK_RADIUS, dy / STICK_RADIUS);
+      setMoveKeys(dx / R, dy / R);
       setStick({ x: info.originX, y: info.originY, dx, dy });
     } else if (info.kind === 'look') {
       // 2.5: lorneta spowalnia też rozglądanie palcem (jak mysz na PC).
@@ -442,10 +455,10 @@ export default function TouchControls({
         <div
           className="pointer-events-none absolute flex items-center justify-center"
           style={{
-            left: fixedBase.x - STICK_RADIUS,
-            top: fixedBase.y - STICK_RADIUS,
-            width: STICK_RADIUS * 2,
-            height: STICK_RADIUS * 2,
+            left: fixedBase.x - R,
+            top: fixedBase.y - R,
+            width: R * 2,
+            height: R * 2,
             borderRadius: '50%',
             border: '2px solid rgba(255,255,255,0.30)',
             background: 'rgba(0,0,0,0.22)',
@@ -460,10 +473,10 @@ export default function TouchControls({
         <div
           className="pointer-events-none absolute"
           style={{
-            left: stick.x - STICK_RADIUS,
-            top: stick.y - STICK_RADIUS,
-            width: STICK_RADIUS * 2,
-            height: STICK_RADIUS * 2,
+            left: stick.x - R,
+            top: stick.y - R,
+            width: R * 2,
+            height: R * 2,
             borderRadius: '50%',
             border: '2px solid rgba(255,255,255,0.4)',
             background: 'rgba(0,0,0,0.25)',
@@ -472,10 +485,10 @@ export default function TouchControls({
           <div
             style={{
               position: 'absolute',
-              left: STICK_RADIUS + stick.dx - 24,
-              top: STICK_RADIUS + stick.dy - 24,
-              width: 48,
-              height: 48,
+              left: R + stick.dx - Math.round(24 * touchScale),
+              top: R + stick.dy - Math.round(24 * touchScale),
+              width: Math.round(48 * touchScale),
+              height: Math.round(48 * touchScale),
               borderRadius: '50%',
               background: sprintPush ? 'rgba(255,230,120,0.75)' : 'rgba(255,255,255,0.55)',
               display: 'flex',
@@ -509,8 +522,15 @@ export default function TouchControls({
 
       {/* przyciski akcji – diament pod prawym kciukiem */}
       <div
-        className="pointer-events-none absolute"
-        style={{ right: 12, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 126px)', width: 160, height: settings.touchMode === 'buttons' ? 216 : 148 }}
+        className="pointer-events-none absolute touch-actions"
+        style={{
+          right: 'calc(env(safe-area-inset-right, 0px) + 12px)',
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 126px)',
+          width: 160,
+          height: settings.touchMode === 'buttons' ? 216 : 148,
+          transform: `scale(${uiScale.toFixed(3)})`,
+          transformOrigin: 'right bottom',
+        }}
       >
         <div className="absolute" style={{ right: 0, bottom: 0 }}>
           <ActionButton label={flying ? '⤒' : '⬆'} size={72} fontSize={26} opacity={jumping ? 1 : 0.7} onDown={() => pressJump(true)} onUp={() => pressJump(false)} haptics={settings.haptics} />
@@ -545,7 +565,15 @@ export default function TouchControls({
       </div>
 
       {/* pasek górny: pauza, ekwipunek, czat, pełny ekran */}
-      <div className="pointer-events-none absolute left-3 flex gap-2" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
+      <div
+        className="pointer-events-none absolute flex gap-2 touch-topbar"
+        style={{
+          left: 'calc(env(safe-area-inset-left, 0px) + 12px)',
+          top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          transform: `scale(${Math.min(uiScale, 1.05).toFixed(3)})`,
+          transformOrigin: 'left top',
+        }}
+      >
         <button
           className={btn}
           style={{ ...btnStyle, width: 50, height: 50, fontSize: 20, opacity: 0.75 }}
@@ -605,7 +633,7 @@ export default function TouchControls({
 
       {/* krótka ściągka trybu tap – pod paskiem górnym, żeby nie zasłaniać HUD-u */}
       {settings.touchMode === 'tap' && (
-        <div className="pointer-events-none absolute left-3 max-w-[240px] text-[12px] leading-tight opacity-55 mc-text" style={{ top: 92 }}>
+        <div className="pointer-events-none absolute left-3 max-w-[240px] text-[12px] leading-tight opacity-55 mc-text touch-hint" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 74px)' }}>
           tapnij = postaw / użyj<br />przytrzymaj = kop<br />przeciągnij = rozglądaj się
         </div>
       )}

@@ -5,6 +5,7 @@ import { exportSave, exportSaves, importSaves, MAX_SAVES } from '../game/saves';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
 import { GAME_RELEASE_NAME, GAME_VERSION, RELEASE_HIGHLIGHTS } from '../utils/version';
 import SettingsScreen from './SettingsScreen';
+import { SkinHead } from './SkinPicker';
 
 export type WorldType = 'normal' | 'flat';
 
@@ -15,6 +16,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.12: nowe skórki – wybierz swoją postać!',
+  '2.12: pień → deski → stół rzemieślniczy!',
+  '2.12: przyciski dotykowe w Twoim rozmiarze!',
   '2.11: serwer publiczny – jeden świat dla wszystkich!',
   'Buduj razem z całą Polską!',
   'Twoja budowla zostaje w chmurze!',
@@ -362,7 +366,7 @@ export function MainMenu({
       />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 menu-terrain" />
 
-      <div className="relative z-10 flex h-full w-full flex-col items-center overflow-y-auto px-3 py-3 sm:px-5 sm:py-5">
+      <div className="relative z-10 flex h-full w-full flex-col items-center overflow-y-auto px-[max(12px,env(safe-area-inset-left))] pb-[max(12px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))] sm:px-5 sm:py-5">
         <div className="flex w-full max-w-[1040px] flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
           {/* ————— lewa kolumna: tytuł i główne akcje ————— */}
           <div className="flex w-full flex-col items-center gap-4 lg:sticky lg:top-2 lg:w-[430px]">
@@ -662,12 +666,16 @@ export function PauseMenu({
   onQuit,
   onSave,
   session,
+  onSkin,
 }: {
   settings: Settings;
   shareUrl: string;
   worldName?: string;
   /** 2.10: gra w sesji – chowamy zapis i pokazujemy obsadę. */
-  session?: { role: 'host' | 'guest'; players: { id: string; name: string; hue: number; ping: number; self?: boolean }[] } | null;
+  session?: {
+    role: 'host' | 'guest';
+    players: { id: string; name: string; hue: number; ping: number; self?: boolean; skin?: string }[];
+  } | null;
   unlocked?: string[];
   onSettings: (s: Settings) => void;
   onResume: () => void;
@@ -677,6 +685,8 @@ export function PauseMenu({
   onCommands?: () => void;
   onQuit: () => void;
   onSave: () => void;
+  /** 2.12: skórka zmieniana w pauzie działa od razu w świecie. */
+  onSkin?: (id: string) => void;
 }) {
   const [view, setView] = useState<'main' | 'options' | 'controls' | 'achievements'>('main');
   const [saved, setSaved] = useState(false);
@@ -697,7 +707,10 @@ export function PauseMenu({
   };
   const [showNews, setShowNews] = useState(false);
   return (
-    <div className="absolute inset-0 flex items-start justify-center overflow-y-auto sm:items-center" style={{ background: 'rgba(0,0,0,0.62)' }}>
+    <div
+      className="absolute inset-0 flex items-start justify-center overflow-y-auto px-[max(8px,env(safe-area-inset-left))] pb-[max(12px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))] sm:items-center"
+      style={{ background: 'rgba(0,0,0,0.62)' }}
+    >
       <div className="flex max-h-[96vh] w-full max-w-[460px] flex-col items-stretch gap-2.5 px-4 py-5">
         {view === 'main' && (
           <>
@@ -715,7 +728,7 @@ export function PauseMenu({
                 <div className="space-y-0.5">
                   {session.players.map((p) => (
                     <div key={p.id} className="flex items-center gap-1.5">
-                      <span style={{ width: 8, height: 8, background: `hsl(${p.hue} 60% 55%)`, border: '1px solid #000' }} />
+                      <SkinHead skin={p.skin || `hsl(${p.hue} 60% 55%)`} size={16} />
                       <span className={p.self ? 'text-yellow-200' : ''}>{p.name}{p.self ? ' (ty)' : ''}</span>
                       <span className="ml-auto text-white/40">{p.ping >= 0 ? `${p.ping} ms` : '…'}</span>
                     </div>
@@ -801,7 +814,7 @@ export function PauseMenu({
           </>
         )}
         {view === 'options' && (
-          <SettingsScreen settings={settings} onChange={onSettings} onClose={() => setView('main')} />
+          <SettingsScreen settings={settings} onChange={onSettings} onClose={() => setView('main')} onSkin={onSkin} />
         )}
         {view === 'controls' && (
           <div className="flex w-full flex-col gap-4 bg-black/60 p-5">

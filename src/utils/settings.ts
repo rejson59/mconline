@@ -40,6 +40,8 @@ export interface Settings {
   haptics: boolean;
   /** Automatyczne wskakiwanie na 1-blokowe przeszkody podczas marszu. */
   autoJump: boolean;
+  /** 2.12: rozmiar przycisków dotykowych (0.85 = małe, 1 = średnie, 1.15 = duże). */
+  touchScale: number;
 }
 
 export const SETTINGS_KEY = 'blockcraft-settings';
@@ -66,6 +68,7 @@ export const DEFAULT_SETTINGS: Settings = {
   joystickFixed: true,
   haptics: true,
   autoJump: true,
+  touchScale: 1,
 };
 
 /**
@@ -141,6 +144,7 @@ export function normalizeSettings(value: unknown): Settings {
     joystickFixed: bool('joystickFixed'),
     haptics: bool('haptics'),
     autoJump: bool('autoJump'),
+    touchScale: boundedNumber(stored.touchScale, DEFAULT_SETTINGS.touchScale, 0.8, 1.25),
   };
 }
 

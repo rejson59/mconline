@@ -333,6 +333,7 @@ export default function GameView({
             game.setUI('chat');
           }}
           onSave={() => game.save()}
+          onSkin={(id) => gameRef.current?.setSkin(id)}
           session={hud?.players?.length ? { role: hud.netRole ?? 'host', players: hud.players } : null}
           onQuit={() => {
             game.save();

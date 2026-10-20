@@ -41,6 +41,8 @@ export interface NetPlayer {
   ping: number;
   /** Czy to ja (wygodne dla HUD). */
   self?: boolean;
+  /** 2.12: identyfikator skórki (patrz `skins.ts`). */
+  skin?: string;
 }
 
 /** Zmiana jednego bloku. Wersja `o` = nadświat, `n` = Nether. */
@@ -74,7 +76,7 @@ export interface WorldHandshake {
 type Envelope = { from: string; to?: string; /** Gospodarz przekazuje dalej. */ relay?: boolean };
 
 export type NetMessage =
-  | ({ t: 'hello'; name: string; hue: number } & Envelope)
+  | ({ t: 'hello'; name: string; hue: number; skin?: string } & Envelope)
   | ({ t: 'welcome'; world: WorldHandshake; players: NetPlayer[] } & Envelope)
   | ({ t: 'peers'; players: NetPlayer[] } & Envelope)
   | ({ t: 'edits'; list: NetEdit[] } & Envelope)
@@ -90,6 +92,8 @@ export type NetMessage =
       held?: number;
       name: string;
       hue: number;
+      /** 2.12: skórka gracza – widzą ją pozostali. */
+      skin?: string;
     } & Envelope)
   | ({ t: 'chat'; name: string; text: string } & Envelope)
   | ({ t: 'state'; time: number; day: number; weather: NetWeather } & Envelope)
@@ -193,6 +197,8 @@ export interface NetPos {
   held?: number;
   name: string;
   hue: number;
+  /** 2.12: skórka gracza. */
+  skin?: string;
 }
 
 /**
@@ -207,6 +213,10 @@ export interface NetLike {
   /** Czy to publiczny serwer (inna obsługa czasu, pogody i zapisu). */
   readonly public: boolean;
   name: string;
+  /** 2.12: skórka wysyłana pozostałym graczom (pusta = domyślna). */
+  skin?: string;
+  /** 2.12: odświeża wpis gracza (np. po zmianie skórki w trakcie gry). */
+  updatePresence?: () => void;
   world: WorldHandshake | null;
   players: NetPlayer[];
   status: NetStatus;
@@ -282,6 +292,8 @@ export class NetSession implements NetLike {
   /** Pokój lokalny/P2P nigdy nie jest publicznym serwerem. */
   readonly public = false;
   name: string;
+  /** 2.12: skórka gracza (ustawia silnik przy starcie sesji). */
+  skin = '';
   world: WorldHandshake | null = null;
   players: NetPlayer[] = [];
   status: NetStatus = 'connecting';
@@ -299,7 +311,7 @@ export class NetSession implements NetLike {
 
   private link: NetLink | null = null;
   /** Gospodarz: id → ostatnio widziany czas (ms) i kanał. */
-  private peers = new Map<string, { name: string; hue: number; seen: number; ping: number }>();
+  private peers = new Map<string, { name: string; hue: number; seen: number; ping: number; skin: string }>();
   private welcomed = new Map<string, number>();
   /** Gość: id gospodarza (z `welcome`) – po jego `bye` kończymy grę. */
   private hostId: string | null = null;
@@ -330,7 +342,7 @@ export class NetSession implements NetLike {
     this.link = link;
     this.startedAt = Date.now();
     if (this.role === 'host') {
-      this.peers.set(this.id, { name: this.name, hue: 0, seen: Date.now(), ping: 0 });
+      this.peers.set(this.id, { name: this.name, hue: 0, seen: Date.now(), ping: 0, skin: this.skin });
       this.refreshRoster();
       this.setStatus('connected');
     } else {
@@ -406,7 +418,14 @@ export class NetSession implements NetLike {
     const now = Date.now();
     if (!force && now - this.lastHello < 700) return;
     this.lastHello = now;
-    this.raw({ t: 'hello', from: this.id, name: this.name, hue: this.myHue(), to: 'host' });
+    this.raw({ t: 'hello', from: this.id, name: this.name, hue: this.myHue(), skin: this.skin, to: 'host' });
+  }
+
+  /** 2.12: zmiana skórki w trakcie sesji – rozgłaszamy nowy wygląd. */
+  updatePresence() {
+    if (this.closed) return;
+    if (this.role === 'host') this.refreshRoster();
+    else this.sendHello(true);
   }
 
   private myHue(): number {
@@ -448,7 +467,13 @@ export class NetSession implements NetLike {
         const known = this.peers.get(m.from);
         const hue = known?.hue ?? m.hue ?? nextHue(this.roster());
         const now = Date.now();
-        this.peers.set(m.from, { name: (m.name || 'Gracz').slice(0, 20), hue, seen: now, ping: known?.ping ?? -1 });
+        this.peers.set(m.from, {
+          name: (m.name || 'Gracz').slice(0, 20),
+          hue,
+          skin: typeof m.skin === 'string' ? m.skin.slice(0, 24) : known?.skin ?? '',
+          seen: now,
+          ping: known?.ping ?? -1,
+        });
         // Gość ponawia `hello`, dopóki nie dostanie odpowiedzi – migawkę
         // wysyłamy najwyżej raz na 1,5 s na gracza, żeby nie spamować.
         const last = this.welcomed.get(m.from) ?? 0;
@@ -624,13 +649,16 @@ export class NetSession implements NetLike {
   roster(): NetPlayer[] {
     const list: NetPlayer[] = [...this.peers.entries()].map(([id, p]) => ({
       id,
-      name: p.name,
+      name: id === this.id ? this.name : p.name,
       hue: p.hue,
       ping: p.ping,
       self: id === this.id,
+      // 2.12: własny wpis w `peers` powstaje przy `attach`, więc skórka
+      // zmieniona później musi być brana z bieżącego pola, nie z kopii.
+      skin: id === this.id ? this.skin : p.skin,
     }));
     if (!list.some((p) => p.id === this.id)) {
-      list.push({ id: this.id, name: this.name, hue: this.myHue(), ping: this.ping, self: true });
+      list.push({ id: this.id, name: this.name, hue: this.myHue(), ping: this.ping, self: true, skin: this.skin });
     }
     return sortPlayers(list, this.id);
   }

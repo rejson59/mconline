@@ -119,7 +119,7 @@ export default function EnchantScreen({ game, icons, onChange }: { game: Game; i
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
-      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
+      <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
       <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-baseline justify-between gap-6">
           <span className="text-lg font-semibold">Stół zaklęć</span>

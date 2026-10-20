@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.11.0",
-  "description": "BlockCraft 2.11 „Wspólny świat” – polska gra sandboxowa w przeglądarce: publiczny serwer, jeden wspólny świat zapisywany w chmurze, czat, awatary graczy i nowoczesne tekstury.",
+  "version": "2.12.0",
+  "description": "BlockCraft 2.12 „Skórki i dotyk” – polska gra sandboxowa w przeglądarce: publiczny serwer, wybór skórek, crafting jak w Minecrafcie, wygodne sterowanie dotykowe i nowoczesne tekstury.",
   "type": "module",
   "license": "MIT",
   "keywords": [
