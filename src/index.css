@@ -666,3 +666,280 @@ button,
   right: max(8px, env(safe-area-inset-right, 0px));
   top: max(8px, env(safe-area-inset-top, 0px));
 }
+
+/* ---------------------------------------------------------------- 2.13
+ * Telefon w pionie: wyraźna prośba o obrót (plus animowana ikonka) i
+ * pasek w menu, który nie blokuje ekranu startowego. */
+.mc-orient-banner {
+  flex: 0 0 auto;
+  align-self: center;
+  width: calc(100% - 16px);
+  margin: max(6px, env(safe-area-inset-top, 0px)) auto 0;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.mc-orient-guard {
+  padding-top: max(16px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+}
+
+.rotate-phone {
+  display: inline-block;
+  transform-origin: 50% 50%;
+  animation: rotate-phone 2.4s ease-in-out infinite;
+}
+
+@keyframes rotate-phone {
+  0%, 20% { transform: rotate(0deg); }
+  55%, 80% { transform: rotate(90deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate-phone {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- 2.13
+ * Ekwipunek w układzie z Minecrafta: zbroja i postać po lewej, siatka
+ * rzemieślnicza na górze, 27 slotów + hotbar, a książka przepisów obok.
+ * Panel jest jasnoszary jak w grze, więc sloty mają wyraźne ciemne ramki. */
+.mc-inv {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: fit-content;
+  max-width: calc(100vw - 8px);
+  padding: 10px 10px 8px;
+}
+.mc-inv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+.mc-inv-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #2f2f2f;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.45);
+}
+.mc-inv-mode {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+.mc-inv-book-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 2px 8px;
+  border: 2px solid #4a4a4a;
+  background: linear-gradient(180deg, #d7d7d7, #b9b9b9);
+  color: #242424;
+  font-size: 13px;
+  font-weight: 700;
+}
+.mc-inv-book-btn[aria-pressed='true'] {
+  background: linear-gradient(180deg, #f3d98a, #d9b94f);
+  border-color: #3a2f0a;
+}
+.mc-inv-book-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #2f6b25;
+  color: #eaf7e2;
+  font-size: 11px;
+}
+.mc-inv-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.mc-inv-side {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 6px;
+}
+.mc-inv-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 6px;
+  border: 2px solid #8a8a8a;
+  background: radial-gradient(circle at 50% 35%, #a9c7d8, #7e99a8);
+}
+.mc-inv-armor {
+  display: flex;
+  flex-direction: column;
+}
+.mc-inv-armor-pts {
+  font-size: 11px;
+  color: #333;
+}
+.mc-inv-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.mc-craft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin-bottom: 6px;
+  padding: 4px;
+  border: 2px solid #9b9b9b;
+  background: rgba(255, 255, 255, 0.22);
+}
+.mc-craft.is-ready {
+  border-color: #3f7f33;
+  box-shadow: inset 0 0 0 2px rgba(110, 190, 90, 0.35);
+}
+.mc-craft-grid {
+  display: grid;
+}
+.mc-craft-grid.is-2 {
+  grid-template-columns: repeat(2, auto);
+}
+.mc-craft-grid.is-3 {
+  grid-template-columns: repeat(3, auto);
+}
+.mc-craft-arrow {
+  padding: 0 1px;
+  color: #4a4a4a;
+  font-size: 26px;
+  line-height: 1;
+}
+.mc-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+  max-width: 430px;
+}
+.mc-quick-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 2px 7px;
+  border: 2px solid #4c7a3f;
+  background: #cfe9c2;
+  color: #22331c;
+  font-size: 12px;
+  font-weight: 700;
+}
+.mc-quick-btn:hover {
+  background: #dff4d2;
+}
+.mc-inv-storage {
+  display: grid;
+  grid-template-columns: repeat(9, auto);
+}
+.mc-inv-hotbar {
+  display: flex;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 2px solid rgba(0, 0, 0, 0.16);
+}
+.mc-inv-hint {
+  max-width: 430px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #333;
+}
+.mc-inv-creative {
+  display: grid;
+  grid-template-columns: repeat(9, auto);
+  width: fit-content;
+  max-height: min(320px, 40dvh);
+  overflow-y: auto;
+}
+.mc-inv-search {
+  width: 150px;
+  padding: 2px 6px !important;
+  font-size: 14px !important;
+}
+.mc-recipe-book {
+  display: flex;
+  flex-direction: column;
+  width: min(330px, calc(100vw - 12px));
+  padding: 10px;
+}
+.mc-recipe-count {
+  font-size: 11px;
+  color: #444;
+}
+.mc-recipe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(430px, 52dvh);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.mc-recipe-row {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid #555;
+  padding: 2px 6px;
+  text-align: left;
+}
+
+/* Telefon w pionie: podgląd postaci i zbroja lądują nad siatką, żeby
+ * dziewięć slotów zmieściło się bez poziomego przewijania. */
+@media (max-width: 560px) {
+  .mc-inv-body {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .mc-inv-side {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .mc-inv-armor {
+    flex-direction: row;
+  }
+  .mc-inv-preview {
+    flex-direction: row;
+    gap: 6px;
+  }
+  .mc-inv-preview {
+    padding: 2px 4px;
+  }
+}
+
+@media (max-height: 460px) {
+  .mc-inv-hint {
+    display: none;
+  }
+  .mc-inv-preview {
+    display: none;
+  }
+  .mc-inv {
+    gap: 5px;
+    padding: 6px 8px;
+  }
+  .mc-inv-hotbar {
+    margin-top: 4px;
+    padding-top: 4px;
+  }
+  .mc-recipe-list {
+    max-height: 46dvh;
+  }
+}

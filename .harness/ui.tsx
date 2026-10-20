@@ -105,11 +105,40 @@ section('inventory screen: recipe finder');
     message: noop,
   };
   const html = renderToStaticMarkup(<InventoryScreen game={fake as unknown as Game} icons={{}} onChange={noop} />);
-  check('crafting screen includes recipe search', html.includes('Szukaj receptur po nazwie lub składniku'));
-  check('crafting screen can filter craftable recipes', html.includes('aria-pressed="false"') && html.includes('Możliwe'));
   // 2.9: na telefonie nie ma klawisza E/Esc – okno musi mieć własne wyjście.
   check('inventory has a visible close button', html.includes('aria-label="Zamknij"'));
   check('inventory has a big bottom close button', html.includes('Gotowe – zamknij ekwipunek'));
+  // 2.13: układ jak w Minecrafcie – siatka 2×2 w plecaku i książka przepisów.
+  check('2.13 backpack shows the 2x2 crafting grid', html.includes('mc-craft-grid is-2'));
+  check('2.13 backpack has no 3x3 without a table', !html.includes('mc-craft-grid is-3'));
+  check('2.13 inventory shows the player preview', html.includes('Podgląd skórki'));
+  check('2.13 recipe book is one tap away', html.includes('📖 Receptury'));
+
+  const withBook = renderToStaticMarkup(<InventoryScreen game={fake as unknown as Game} icons={{}} onChange={noop} initialBookOpen />);
+  check('crafting screen includes recipe search', withBook.includes('Szukaj receptur po nazwie lub składniku'));
+  check('crafting screen can filter craftable recipes', withBook.includes('aria-pressed="false"') && withBook.includes('Możliwe'));
+  check('2.13 recipe book explains one-tap crafting', /Tapnij recepturę/i.test(withBook));
+
+  // Przy stole zamiast 2×2 jest pełna siatka 3×3 i nie ma podglądu postaci.
+  const tableInv = new Inventory();
+  tableInv.add(B.PLANKS, 4);
+  const tableGame = { ...fake, inventory: tableInv, craftingTable: true };
+  const tableHtml = renderToStaticMarkup(<InventoryScreen game={tableGame as unknown as Game} icons={{}} onChange={noop} initialBookOpen />);
+  check('2.13 crafting table shows the 3x3 grid', tableHtml.includes('mc-craft-grid is-3'));
+  check('2.13 crafting table has its own title', tableHtml.includes('Stół rzemieślniczy'));
+  check('2.13 table view hides the armour/preview column', !tableHtml.includes('mc-inv-preview'));
+
+  // 2.13: szybkie przepisy – dokładnie ten przypadek, który zgłosił gracz.
+  const logInv = new Inventory();
+  logInv.add(B.LOG, 1);
+  const logGame = { ...fake, inventory: logInv };
+  const logHtml = renderToStaticMarkup(<InventoryScreen game={logGame as unknown as Game} icons={{}} onChange={noop} />);
+  check('2.13 a log offers a one-tap planks shortcut', /Deski \(dąb\)/.test(logHtml) && logHtml.includes('1 pień → 4 deski'));
+  const planksInv = new Inventory();
+  planksInv.add(B.PLANKS, 4);
+  const planksGame = { ...fake, inventory: planksInv };
+  const planksHtml = renderToStaticMarkup(<InventoryScreen game={planksGame as unknown as Game} icons={{}} onChange={noop} />);
+  check('2.13 four planks offer a one-tap table shortcut', planksHtml.includes('Stół rzemieślniczy') && planksHtml.includes('4 deski → stół'));
 }
 
 // =============================================== 2.9: czat z listą komend
@@ -205,7 +234,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.12') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.13') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -488,7 +517,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces the public server', menu.includes('Serwer publiczny'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.12'));
+  check('the menu names the current release', menu.includes('WERSJA 2.13'));
 }
 
 section('2.4: brewing rules');

@@ -106,6 +106,10 @@ import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
 import { GAME_VERSION, GAME_RELEASE_NAME, RELEASE_HIGHLIGHTS } from '../src/utils/version';
+import {
+  isPortraitSize, isPhoneScreen, isTouchScreen, canLockOrientation, inFullscreen,
+  toggleFullscreenLandscape, PORTRAIT_DISMISS_KEY, watchLandscape,
+} from '../src/utils/screen';
 import { lightFactor, heldFalloff, patchChunkMaterial, HELD_POWER, HELD_RANGE, AMBIENT } from '../src/game/lighting';
 import { cloudLook, rainFogMix } from '../src/game/sky';
 import { treeShape, trunkHeight, treeKindForBiome, type TreeKind } from '../src/game/trees';
@@ -3097,9 +3101,9 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 
 section('2.8/2.8.1: wersja wydania');
 {
-  // 2.12: wydanie dodaje skórki, crafting i dopracowany dotyk.
-  check('release label is the current line', GAME_VERSION.startsWith('2.12'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Skórki i dotyk');
+  // 2.13: wydanie dodaje ekwipunek z Minecrafta i tryb poziomy na telefonie.
+  check('release label is the current line', GAME_VERSION.startsWith('2.13'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Jak w Minecrafcie');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3111,6 +3115,78 @@ section('2.8/2.8.1: wersja wydania');
   check('2.12 highlights mention every log making planks', RELEASE_HIGHLIGHTS.some((h) => /pień|desk/i.test(h.title + h.text)));
   check('2.12 highlights mention skins', RELEASE_HIGHLIGHTS.some((h) => /skórk|postać/i.test(h.title + h.text)));
   check('2.12 highlights mention the phone controls', RELEASE_HIGHLIGHTS.some((h) => /telefon|dotyk/i.test(h.title + h.text)));
+  check('2.13 highlights mention the Minecraft inventory', RELEASE_HIGHLIGHTS.some((h) => /ekwipun/i.test(h.title)));
+  check('2.13 highlights explain the one-tap crafting fix', RELEASE_HIGHLIGHTS.some((h) => /tapnięcie kładzie/i.test(h.text)));
+  check('2.13 highlights mention forced landscape', RELEASE_HIGHLIGHTS.some((h) => /poziom/i.test(h.title) && /fullscreen|pełny ekran/i.test(h.text)));
+}
+
+// ============================================ 2.13 „Jak w Minecrafcie”
+section('2.13: ekwipunek i crafting jak w Minecrafcie');
+{
+  // Dokładnie scenariusz gracza: 4 deski i chęć zrobienia stołu.
+  const inv = new Inventory();
+  inv.add(B.PLANKS, 4);
+  inv.clickSlot(0, false); // weź stos
+  for (const i of [0, 1, 3, 4]) inv.clickGrid(i, true); // tapnięcie = 1 sztuka
+  eq('tapnięcie kładzie jedną deskę, nie cały stos', inv.grid[0]?.count, 1);
+  eq('cztery tapnięcia dają kwadrat 2×2', inv.gridMatch(false)?.out.id, B.CRAFTING);
+  eq('wynik można odebrać', inv.craftGrid(false)?.id, B.CRAFTING);
+  eq('składniki zniknęły z siatki', inv.grid.filter(Boolean).length, 0);
+
+  // Przytrzymanie (PPM) nadal odkłada cały stos – jak w Minecrafcie.
+  const stack = new Inventory();
+  stack.add(B.LOG, 3);
+  stack.clickSlot(0, false);
+  stack.clickGrid(0, false);
+  eq('przytrzymanie odkłada cały stos', stack.grid[0]?.count, 3);
+  eq('stos w jednym polu wystarcza na deski', stack.gridMatch(false)?.out.id, B.PLANKS);
+
+  // 2×2 bez stołu i 3×3 przy stole – ta sama siatka, różne rozmiary.
+  const table = new Inventory();
+  for (const i of [0, 1, 3, 4]) table.grid[i] = { id: B.PLANKS, count: 1 };
+  eq('2×2 czyta tylko cztery pola', table.gridMatch(false)?.out.id, B.CRAFTING);
+  table.grid[8] = { id: B.PLANKS, count: 1 };
+  eq('piąte pole poza 2×2 jest ignorowane', table.gridMatch(false)?.out.id, B.CRAFTING);
+
+  const screen = readSource('src/components/InventoryScreen.tsx');
+  check('plecak ma siatkę 2×2 i 3×3', screen.includes('mc-craft-grid') && screen.includes('is-3') && screen.includes('is-2'));
+  check('tapnięcie w siatce odwraca akcję prawego przycisku', /inv\.clickGrid\(i, inv\.cursor \? !right : right\)/.test(screen));
+  check('są skróty „Deski” i „Stół rzemieślniczy”', screen.includes('Deski (') && screen.includes("label: 'Stół rzemieślniczy'"));
+  check('książka przepisów jest domyślna na dużym ekranie', screen.includes('initialBookOpen'));
+  check('plecak pokazuje podgląd postaci', screen.includes('SkinAvatar') && screen.includes('getSkinId'));
+  check('okno przy stole ma własny tytuł', screen.includes("atTable ? 'Stół rzemieślniczy' : 'Ekwipunek'"));
+}
+
+section('2.13: telefon gra się w poziomie');
+{
+  check('pion poznajemy po wysokości większej od szerokości', isPortraitSize(360, 640));
+  check('poziom to szerokość większa od wysokości', !isPortraitSize(844, 390));
+  check('kwadratowy ekran nie jest pionem', !isPortraitSize(600, 600));
+  eq('klucz „graj w pionie” jest stały', PORTRAIT_DISMISS_KEY, 'blockcraft-portrait-ok');
+  // W Node nie ma `screen` ani pełnego DOM-u – funkcje muszą to przetrwać.
+  check('poza przeglądarką nie ma dotyku', !isTouchScreen());
+  check('poza przeglądarką nie ma telefonu', !isPhoneScreen());
+  check('poza przeglądarką nie ma blokady orientacji', !canLockOrientation());
+  check('poza przeglądarką nie ma pełnego ekranu', !inFullscreen());
+  const result = await toggleFullscreenLandscape();
+  check('przełącznik pełnego ekranu nie rzuca wyjątku', result.fullscreen === false && result.locked === false);
+  const unwatch = watchLandscape();
+  unwatch();
+
+  const screenSrc = readSource('src/utils/screen.ts');
+  check('blokujemy poziom przez Screen Orientation API', screenSrc.includes("lock!('landscape')"));
+  check('pełny ekran jest wymagany przed blokadą', /enterLandscapeMode[\s\S]{0,240}requestFullscreen[\s\S]{0,120}lockLandscape/.test(screenSrc));
+  const guard = readSource('src/components/OrientationGuard.tsx');
+  check('nakładka każe obrócić telefon', guard.includes('Obróć telefon poziomo'));
+  check('jest przycisk pełnego ekranu i poziomu', guard.includes('Pełny ekran i poziomo'));
+  check('jest wyjście awaryjne w pionie', guard.includes('Graj w pionie mimo to'));
+  const gameView = readSource('src/components/GameView.tsx');
+  check('gra pokazuje nakładkę w trakcie grania', /wantsLandscape && <OrientationGuard/.test(gameView));
+  check('start gry prosi o pełny ekran i poziom', /const resume[\s\S]{0,400}enterLandscapeMode\(\)/.test(gameView));
+  const touch = readSource('src/components/TouchControls.tsx');
+  check('przycisk ⛶ włącza też poziom', touch.includes('toggleFullscreenLandscape'));
+  const menus = readSource('src/components/Menus.tsx');
+  check('przycisk pełnego ekranu w pauzie też blokuje poziom', menus.includes('toggleFullscreenLandscape'));
 }
 
 // ================================================ 2.12 „Skórki i dotyk”

@@ -1,6 +1,15 @@
-# BlockCraft 2.12 🎨
+# BlockCraft 2.13 🧱
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+**Wersja 2.13 „Jak w Minecrafcie”** – ekwipunek, crafting i poziom na telefonie:
+
+* **Ekwipunek w układzie z Minecrafta.** Plecak ma teraz po lewej zbroję i podgląd własnej postaci, na górze siatkę rzemieślniczą **2×2** (przy stole **3×3**), pod spodem 27 slotów i pasek szybkiego dostępu. Okno jest jasnoszare, ze slotami w ciemnych ramkach – jak w grze, a nie jak w formularzu. Przy stole panel pokazuje pełną siatkę 3×3 i chowa zbroję, dokładnie jak w Minecrafcie.
+* **Deski i stół jednym tapnięciem.** Wcześniej tapnięcie odkładało do siatki cały stos, więc 4 deski lądowały w jednym polu i przepis na stół nigdy nie pasował. Teraz tapnięcie kładzie **jedną sztukę** (przytrzymanie – cały stos), a na górze pojawiają się skróty **„Deski (dąb/brzoza/akacja)”** i **„Stół rzemieślniczy”**, gdy tylko masz składniki. Jedno dotknięcie i przedmiot jest w plecaku.
+* **Książka przepisów.** Przycisk **📖 Receptury** otwiera listę wszystkich przepisów z wyszukiwarką i filtrem „Możliwe”. Tapnięcie pozycji wytwarza przedmiot od razu, bez układania składników. Na komputerze książka jest otwarta domyślnie, na telefonie schowana, żeby plecak zmieścił się na ekranie.
+* **Telefon gra się w poziomie.** W grze w pionie pojawia się duża prośba o obrót, a przycisk **„Pełny ekran i poziomo”** wchodzi w fullscreen i blokuje orientację przez Screen Orientation API. To samo robi przycisk ⛶ w HUD i „Pełny ekran” w pauzie – a drugie kliknięcie wraca do okna. Telefony z blokadą rotacji dostają czytelny komunikat i mogą grać w pionie (nikt nie utknie).
+* **Lepszy dotyk.** Przycisk zamykania okien omija notch i pasek gestów (`safe-area`), panel plecaka mieści się w poziomie bez przewijania, a przy niskich ekranach znikają podpisy i podgląd postaci, żeby zostało miejsce na sloty.
+* **Testy.** `npm test` to **1418 kontroli silnika + 207 testów UI** – m.in. cztery deski w kwadracie, tapnięcie po jednej sztuce, skróty „Deski/Stół”, układ 2×2 i 3×3, blokada orientacji oraz ekran „Obróć telefon”. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą; wersja **2.13.0** jest na GitHub Pages.
 
 **Wersja 2.12 „Skórki i dotyk”** – crafting, postać i telefon:
 

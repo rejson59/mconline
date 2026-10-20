@@ -1428,6 +1428,12 @@ export class Game {
     this.remotes.set(id, fresh);
   }
 
+  /** 2.13: aktualna skórka gracza – także poza sesją sieciową (podgląd w plecaku). */
+  getSkinId(): string {
+    if (!this.netSkin) this.netSkin = loadSkinId();
+    return this.netSkin;
+  }
+
   /** Zmiana własnej skórki (z ekranu opcji/poczekalni) – bez restartu świata. */
   setSkin(id: string) {
     const prev = this.netSkin;
