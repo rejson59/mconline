@@ -17,6 +17,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.16: moby i gracze mają pikselowe tekstury!',
+  '2.16: 155 przepisów – schody, płyty, latarnie!',
+  '2.16: krowa w łaty, owca w runo, creeper w mech!',
   '2.15: pełny ekran naprawiony – wszystko w kadrze!',
   '2.15: kamera nie przybliża się po fullscreenie!',
   '2.14: auto-bicie – postać sama walczy!',

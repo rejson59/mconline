@@ -71,6 +71,7 @@ import {
 } from '../src/game/skins';
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
+import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial, type MobTexKind } from '../src/game/mobTextures';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -3103,8 +3104,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.15'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Stabilny ekran');
+  check('release label is the current line', GAME_VERSION.startsWith('2.16'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Pikselowe tekstury');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3123,6 +3124,10 @@ section('2.8/2.8.1: wersja wydania');
   check('2.15 highlights announce the fullscreen fix', RELEASE_HIGHLIGHTS.some((h) => /pełn/i.test(h.title) && /kamer|zoom/i.test(h.text)));
   check('2.15 highlights mention touch buttons stay visible', RELEASE_HIGHLIGHTS.some((h) => /drążek|przycisk/i.test(h.text)));
   check('2.15 highlights mention scrolling panels', RELEASE_HIGHLIGHTS.some((h) => /scroll|przewij/i.test(h.text)));
+  check('2.16 highlights announce the mob textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title) && /mob|zwierz|moby/i.test(h.title + h.text)));
+  check('2.16 highlights say the mobs are multicoloured', RELEASE_HIGHLIGHTS.some((h) => /łaty|runo|plamy|pancerz/i.test(h.text)));
+  check('2.16 highlights mention player textures', RELEASE_HIGHLIGHTS.some((h) => /gracz|postać/i.test(h.title) && /tkanin|jeans|skór/i.test(h.text)));
+  check('2.16 highlights list the new recipes', RELEASE_HIGHLIGHTS.some((h) => /schod/i.test(h.text) && /płat|płyt/i.test(h.text)));
 }
 
 // ============================================ 2.13 „Jak w Minecrafcie”
@@ -4299,6 +4304,178 @@ section('2.10: multiplayer wpięty w grę');
   check('czat w sesji widać też lokalnie', netg.messages.some((m: string) => m === '<Bob> Cześć wszystkim'), netg.messages.join('|'));
 }
 
+
+// ============================================== 2.16: tekstury i przepisy
+section('2.16: pikselowe tekstury mobów i graczy');
+{
+  /** Ile różnych kolorów RGB jest w teksturze (jednokolorowa = 1). */
+  const uniqueColors = (px: Uint8Array) => {
+    const set = new Set<number>();
+    for (let i = 0; i < px.length; i += 4) set.add((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]);
+    return set.size;
+  };
+
+  const samples: [MobTexKind, number][] = [
+    ['cow-hide', 0x6b4423], ['pig-hide', 0xf0a0a0], ['wool', 0xeeeeee], ['sheep-face', 0xd8c8b0],
+    ['feather', 0xf4f4f4], ['creeper', 0x3aaa32], ['zombie-skin', 0x5d8a44], ['cloth', 0x2aa3a3],
+    ['denim', 0x3b3f8f], ['chitin', 0x2e1f16], ['bone', 0xe6e2d4], ['wolf-fur', 0x7a8089],
+    ['villager-skin', 0xa8785a], ['robe', 0x4f8a3a], ['iron', 0xc9c9cd], ['enderman', 0x111111],
+    ['slime', 0x5ad65a], ['ghast', 0xf0f0f0], ['vine', 0x4a7a3a], ['skin', 0xc68642], ['hair', 0x3b2a1a],
+    ['leather', 0x2b2b2b],
+  ];
+  let flat = 0;
+  const thin: string[] = [];
+  for (const [kind, color] of samples) {
+    const colors = uniqueColors(texturePixels(kind, color));
+    if (colors < 4) { flat++; thin.push(`${kind}:${colors}`); }
+  }
+  eq('każda tekstura jest wielobarwna (>= 4 kolory)', flat, 0);
+  check('tekstury mają sensowną liczbę kolorów', thin.length === 0, thin.join(', '));
+
+  // Krowa musi mieć jasne łaty, a nie sam brąz.
+  const cow = texturePixels('cow-hide', 0x6b4423);
+  let creamPixels = 0;
+  for (let i = 0; i < cow.length; i += 4) {
+    if (cow[i] > 180 && cow[i + 1] > 170 && cow[i + 2] > 150) creamPixels++;
+  }
+  check('krowa ma kremowe łaty na futrze', creamPixels >= 12, `${creamPixels} px`);
+
+  // Cache: ten sam kind + kolor = ta sama tekstura (setki mobów, kilka tekstur).
+  check('tekstury są współdzielone', partTexture('creeper', 0x3aaa32) === partTexture('creeper', 0x3aaa32));
+  check('cache tekstur rośnie dla różnych kolorów', textureCount() >= 20, `${textureCount()} tekstur`);
+
+  // Dobór tekstury po kolorze części.
+  eq('brąz krowy → cow-hide', kindForColor(0x6b4423), 'cow-hide');
+  eq('czerń endermana → enderman', kindForColor(0x111111), 'enderman');
+  eq('nieznany kolor → grain', kindForColor(0x123456), 'grain');
+
+  // Każdy mob ma teksturowane co najmniej ciało i głowę.
+  const w = new World(4242);
+  w.getChunk(0, 0);
+  const h = w.heightAt(6, 6);
+  const allTypes: MobType[] = ['pig', 'zombie', 'sheep', 'cow', 'chicken', 'creeper', 'spider', 'skeleton', 'wolf', 'villager', 'golem', 'enderman', 'slime', 'ghast'];
+  const noTex: string[] = [];
+  for (const type of allTypes) {
+    const m = new Mob(type, 6.5, h + 1, 6.5);
+    let textured = 0;
+    m.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mat = mesh.material as THREE.MeshLambertMaterial;
+      if (mat.map) textured++;
+    });
+    // Slime to jedna bryła, więc wystarczy jedna teksturowana część; reszta
+    // mobów ma ich znacznie więcej (ciało, głowa, kończyny).
+    if (textured < 1) noTex.push(`${type}:${textured}`);
+    m.dispose();
+  }
+  eq('każdy mob ma teksturowane części ciała', noTex.length, 0);
+  check('wszystkie 14 mobów przeszło kontrolę', allTypes.length === 14, `${allTypes.length}`);
+
+  // Slime jest półprzezroczysty (jak w Minecrafcie), oczy pozostają ostre.
+  const slime = new Mob('slime', 6.5, h + 1, 6.5);
+  let translucent = 0;
+  slime.group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mat = mesh.material as THREE.MeshLambertMaterial;
+    if (mat.transparent && mat.opacity < 1) translucent++;
+  });
+  check('slime jest półprzezroczysty', translucent >= 1, `${translucent}`);
+
+  // Owca po strzyżeniu też ma teksturę (goła skóra, nie płaski kolor).
+  const sheep = new Mob('sheep', 6.5, h + 1, 6.5);
+  sheep.shear();
+  let shearedMapped = 0;
+  sheep.group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if ((mesh.material as THREE.MeshLambertMaterial).map) shearedMapped++;
+  });
+  check('ostrzyżona owca nadal ma teksturę', shearedMapped >= 2, `${shearedMapped}`);
+
+  // Oswojony wilk zmienia kolor sierści mimo białej bazy materiału.
+  const wolf = new Mob('wolf', 6.5, h + 1, 6.5);
+  const coatColors = () => {
+    const seen = new Set<number>();
+    wolf.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && mesh.userData.mobKind === 'wolf-fur') seen.add(mesh.userData.mobColor as number);
+    });
+    return seen;
+  };
+  check('wilk ma teksturę futra', coatColors().has(0x7a8089));
+  wolf.tame();
+  check('oswojony wilk zmienia sierść na rdzawą', coatColors().has(0xa05a48) && !coatColors().has(0x7a8089), [...coatColors()].join(','));
+
+  // Gracze: awatary dostają te same pikselowe tekstury (tkanina, jeans, skóra).
+  const shirt = avatarMaterial('cloth', 0x00a8a8);
+  check('koszulka awatara ma teksturę', shirt.map != null);
+  check('spodnie awatara mają teksturę', avatarMaterial('denim', 0x3b4bb8).map != null);
+  check('skóra awatara ma teksturę', avatarMaterial('skin', 0xc68642).map != null);
+  const eng = readSource('src/game/engine.ts');
+  check('silnik buduje awatary z teksturami', /avatarMaterial\(AVATAR_KINDS\[kind\]/.test(eng));
+  const mobsSrc = readSource('src/game/mobs.ts');
+  check('moby biorą materiał z modułu tekstur', /mobMaterial\(texKind, color\)/.test(mobsSrc) && /kindForColor/.test(mobsSrc));
+}
+
+section('2.16: nowe przepisy rzemieślnicze');
+{
+  const out = (id: number) => RECIPES.find((r) => r.out.id === id);
+  const wanted: [number, string][] = [
+    [B.BRICK_STAIRS_N, 'ceglane schody'], [B.STONE_BRICK_STAIRS_N, 'schody z cegieł kamiennych'],
+    [B.SANDSTONE_STAIRS_N, 'piaskowcowe schody'], [B.NETHER_BRICK_STAIRS_N, 'netherowe schody'],
+    [B.QUARTZ_STAIRS_N, 'kwarcowe schody'],
+    [B.COBBLE_SLAB, 'płyta brukowa'], [B.BRICK_SLAB, 'ceglana płyta'],
+    [B.SANDSTONE_SLAB, 'piaskowcowa płyta'], [B.NETHER_BRICK_SLAB, 'netherowa płyta'],
+    [B.HAY, 'snop siana'], [B.LANTERN, 'latarnia'], [B.BELL, 'dzwon'],
+    [B.EMERALD_BLOCK, 'blok szmaragdu'], [B.HONEY_BLOCK, 'blok miodu'],
+    [B.TERRACOTTA, 'terakota'], [B.CONCRETE_BLUE, 'niebieski beton'],
+    [B.CONCRETE_GREEN, 'zielony beton'], [B.CONCRETE_YELLOW, 'żółty beton'],
+    [B.CONCRETE_BLACK, 'czarny beton'], [B.MUD, 'błoto'],
+  ];
+  const missing = wanted.filter(([id]) => !out(id)).map(([, name]) => name);
+  eq('wszystkie nowe przepisy istnieją', missing.length, 0);
+  check('liczba przepisów wzrosła powyżej 150', RECIPES.length >= 150, `${RECIPES.length}`);
+
+  // Ilości jak w Minecrafcie.
+  eq('6 bloków → 4 schody', out(B.BRICK_STAIRS_N)?.out.count, 4);
+  eq('3 bloki → 6 płyt', out(B.COBBLE_SLAB)?.out.count, 6);
+  eq('9 pszenicy → snop', out(B.HAY)?.inputs.find((i) => i.id === I.WHEAT)?.count, 9);
+  eq('4 nici → wełna', RECIPES.find((r) => r.out.id === B.WOOL_WHITE && r.inputs.some((i) => i.id === I.STRING))?.inputs[0].count, 4);
+  eq('4 butelki miodu → blok miodu', out(B.HONEY_BLOCK)?.out.count, 1);
+  check('latarnia jest bezpostaciowa', out(B.LANTERN)?.pattern == null);
+  check('dzwon wymaga stołu', out(B.BELL)?.table === true);
+
+  // Przepis naprawdę działa w siatce 3×3.
+  const craft = (recipe: (typeof RECIPES)[number]) => {
+    const inv = new Inventory();
+    recipe.pattern?.forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) {
+        const ch = row[x];
+        if (ch === ' ' || ch === '.') continue;
+        inv.grid[y * 3 + x] = { id: recipe.key![ch], count: 1 };
+      }
+    });
+    return inv.gridMatch(true)?.out.id;
+  };
+  eq('ceglane schody da się ułożyć w siatce', craft(out(B.BRICK_STAIRS_N)!), B.BRICK_STAIRS_N);
+  eq('netherowe schody da się ułożyć w siatce', craft(out(B.NETHER_BRICK_STAIRS_N)!), B.NETHER_BRICK_STAIRS_N);
+  eq('płyta brukowa da się ułożyć w siatce', craft(out(B.COBBLE_SLAB)!), B.COBBLE_SLAB);
+  eq('blok szmaragdu da się ułożyć w siatce', craft(out(B.EMERALD_BLOCK)!), B.EMERALD_BLOCK);
+
+  // Rozbiórka: snop → 9 pszenicy, blok szmaragdu → 9 szmaragdów.
+  const hayBack = new Inventory();
+  hayBack.grid[0] = { id: B.HAY, count: 1 };
+  eq('snop wraca na 9 pszenicy', hayBack.gridMatch(true)?.out.id, I.WHEAT);
+  const emeraldBack = new Inventory();
+  emeraldBack.grid[0] = { id: B.EMERALD_BLOCK, count: 1 };
+  eq('blok szmaragdu wraca na 9 sztuk', emeraldBack.gridMatch(true)?.out.count, 9);
+
+  // Naprawiony błąd: blackstone nie „wypala się” w siebie.
+  eq('blackstone nie jest paliwem ani wynikiem wypalania', smeltResult(B.BLACKSTONE), null);
+  eq('soul sand nadal daje soul soil', smeltResult(B.SOUL_SAND), B.SOUL_SOIL);
+}
 
 // =================================================================== report
 console.log(`\n${'='.repeat(56)}`);

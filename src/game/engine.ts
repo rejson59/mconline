@@ -41,6 +41,7 @@ import {
 } from './net';
 import { PUBLIC_POS_HZ } from './online';
 import { fallbackSkin, loadSkinId, skinById } from './skins';
+import { AVATAR_KINDS, avatarMaterial } from './mobTextures';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
@@ -1363,34 +1364,36 @@ export class Game {
   private makeAvatar(name: string, hue: number, skinId?: string): RemoteAvatar {
     const skin = skinId ? skinById(skinId) : fallbackSkin(hue);
     const group = new THREE.Group();
-    const mat = (color: number) => new THREE.MeshBasicMaterial({ color });
+    // 2.16: pikselowe tekstury skórki (tkanina, jeans, skóra, włosy) zamiast
+    // jednego płaskiego koloru na każdą część ciała.
+    const mat = (color: number, kind: keyof typeof AVATAR_KINDS) => avatarMaterial(AVATAR_KINDS[kind], color);
 
     // Grupa stoi na ziemi (stopy w y = 0), więc da się ją podstawić pod
     // `body.pos` bez korekty. Proporcje jak w Minecrafcie: ~1,8 bloku wzrostu.
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.28), mat(skin.shirt));
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.28), mat(skin.shirt, 'shirt'));
     body.position.y = 0.9;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), mat(skin.skin));
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), mat(skin.skin, 'head'));
     head.position.y = 1.42;
     // Włosy to cienka „czapka” na głowie – bez nich awatar wygląda jak lalka.
-    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.42), mat(skin.hair));
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.42), mat(skin.hair, 'hair'));
     hair.position.y = 1.66;
-    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.08), mat(skin.hair));
+    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.08), mat(skin.hair, 'hair'));
     hairBack.position.set(0, 1.5, 0.19);
     // Oczy na przedniej ścianie (przód awatara to -Z, tak jak trzymany blok).
-    const eyeMat = mat(skin.eye ?? 0x2b2b2b);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: skin.eye ?? 0x2b2b2b });
     const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.02), eyeMat);
     eyeL.position.set(-0.09, 1.46, -0.205);
     const eyeR = eyeL.clone();
     eyeR.position.x = 0.09;
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.18), mat(skin.sleeve));
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.18), mat(skin.sleeve, 'sleeve'));
     armL.position.set(-0.33, 0.9, 0);
     const armR = armL.clone();
     armR.position.x = 0.33;
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.22), mat(skin.pants));
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.22), mat(skin.pants, 'pants'));
     legL.position.set(-0.13, 0.3, 0);
     const legR = legL.clone();
     legR.position.x = 0.13;
-    const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.24), mat(skin.shoes));
+    const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.24), mat(skin.shoes, 'shoes'));
     shoeL.position.set(-0.13, 0.07, -0.01);
     const shoeR = shoeL.clone();
     shoeR.position.x = 0.13;

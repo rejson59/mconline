@@ -215,6 +215,46 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.SUGAR, count: 1 }, inputs: [{ id: B.SUGARCANE, count: 1 }], table: false },
   { out: { id: I.BOTTLE, count: 3 }, inputs: [{ id: B.GLASS, count: 3 }], table: false, pattern: ['G G', ' G '], key: { G: B.GLASS } },
   { out: { id: I.HONEY_BOTTLE, count: 1 }, inputs: [{ id: I.BOTTLE, count: 1 }, { id: I.HONEYCOMB, count: 1 }], table: false },
+
+  // ==========================================================================
+  // 2.16 „Pikselowe tekstury”: brakujące przepisy z nowszych wersji Minecrafta
+  // ==========================================================================
+  // Schody z każdego materiału budowlanego – wcześniej istniały tylko drewniane
+  // i brukowe, więc kamienne cegły, cegła, piaskowiec, nether i kwarc nie miały
+  // schodów. Jak w Minecrafcie: 6 bloków daje 4 stopnie.
+  { out: { id: B.BRICK_STAIRS_N, count: 4 }, inputs: [{ id: B.BRICK, count: 6 }], table: true, pattern: ['B  ', 'BB ', 'BBB'], key: { B: B.BRICK } },
+  { out: { id: B.STONE_BRICK_STAIRS_N, count: 4 }, inputs: [{ id: B.STONE_BRICKS, count: 6 }], table: true, pattern: ['S  ', 'SS ', 'SSS'], key: { S: B.STONE_BRICKS } },
+  { out: { id: B.SANDSTONE_STAIRS_N, count: 4 }, inputs: [{ id: B.SANDSTONE, count: 6 }], table: true, pattern: ['A  ', 'AA ', 'AAA'], key: { A: B.SANDSTONE } },
+  { out: { id: B.NETHER_BRICK_STAIRS_N, count: 4 }, inputs: [{ id: B.NETHER_BRICKS, count: 6 }], table: true, pattern: ['N  ', 'NN ', 'NNN'], key: { N: B.NETHER_BRICKS } },
+  { out: { id: B.QUARTZ_STAIRS_N, count: 4 }, inputs: [{ id: B.QUARTZ_BLOCK, count: 6 }], table: true, pattern: ['Q  ', 'QQ ', 'QQQ'], key: { Q: B.QUARTZ_BLOCK } },
+  // Płyty: 3 bloki → 6 płyt (tak samo liczy Minecraft).
+  { out: { id: B.COBBLE_SLAB, count: 6 }, inputs: [{ id: B.COBBLE, count: 3 }], table: true, pattern: ['CCC'], key: { C: B.COBBLE } },
+  { out: { id: B.BRICK_SLAB, count: 6 }, inputs: [{ id: B.BRICK, count: 3 }], table: true, pattern: ['BBB'], key: { B: B.BRICK } },
+  { out: { id: B.SANDSTONE_SLAB, count: 6 }, inputs: [{ id: B.SANDSTONE, count: 3 }], table: true, pattern: ['AAA'], key: { A: B.SANDSTONE } },
+  { out: { id: B.NETHER_BRICK_SLAB, count: 6 }, inputs: [{ id: B.NETHER_BRICKS, count: 3 }], table: true, pattern: ['NNN'], key: { N: B.NETHER_BRICKS } },
+  // Wełna z nici – klasyczny przepis z Minecrafta, ratunek, gdy nie ma owiec.
+  { out: { id: B.WOOL_WHITE, count: 1 }, inputs: [{ id: I.STRING, count: 4 }], table: false },
+  // Snop siana i z powrotem (9 pszenicy ↔ 9 pszenicy w snopie).
+  { out: { id: B.HAY, count: 1 }, inputs: [{ id: I.WHEAT, count: 9 }], table: false, pattern: ['WWW', 'WWW', 'WWW'], key: { W: I.WHEAT } },
+  { out: { id: I.WHEAT, count: 9 }, inputs: [{ id: B.HAY, count: 1 }], table: false },
+  // Latarnia: pochodnia + sztabka żelaza (odpowiednik 8 grudek żelaza).
+  { out: { id: B.LANTERN, count: 1 }, inputs: [{ id: B.TORCH, count: 1 }, { id: I.IRON, count: 1 }], table: false },
+  // Dzwon: 4 sztabki złota na stole rzemieślniczym.
+  { out: { id: B.BELL, count: 1 }, inputs: [{ id: I.GOLD, count: 4 }], table: true, pattern: ['GG', 'GG'], key: { G: I.GOLD } },
+  // Blok szmaragdu i rozbiórka (9 ↔ 1), jak pozostałe bloki minerałów.
+  { out: { id: B.EMERALD_BLOCK, count: 1 }, inputs: [{ id: I.EMERALD, count: 9 }], table: true, pattern: ['EEE', 'EEE', 'EEE'], key: { E: I.EMERALD } },
+  { out: { id: I.EMERALD, count: 9 }, inputs: [{ id: B.EMERALD_BLOCK, count: 1 }], table: false },
+  // Blok miodu z 4 butelek miodu (2×2), zgodnie z nowszymi wersjami.
+  { out: { id: B.HONEY_BLOCK, count: 1 }, inputs: [{ id: I.HONEY_BOTTLE, count: 4 }], table: true, pattern: ['HH', 'HH'], key: { H: I.HONEY_BOTTLE } },
+  // Terakota: wypalona glina (u nas glina + węgiel, jak przy cegle).
+  { out: { id: B.TERRACOTTA, count: 4 }, inputs: [{ id: B.CLAY, count: 4 }, { id: I.COAL, count: 1 }], table: true },
+  // Beton w pozostałych czterech kolorach – ten sam przepis co biały i czerwony.
+  { out: { id: B.CONCRETE_BLUE, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: I.LAPIS, count: 1 }], table: true },
+  { out: { id: B.CONCRETE_GREEN, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: B.CACTUS, count: 1 }], table: true },
+  { out: { id: B.CONCRETE_YELLOW, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: B.FLOWER_YELLOW, count: 1 }], table: true },
+  { out: { id: B.CONCRETE_BLACK, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: I.COAL, count: 1 }], table: true },
+  // Błoto: ziemia + butelka wody (w Minecrafcie używa się butelki na bloku).
+  { out: { id: B.MUD, count: 1 }, inputs: [{ id: B.DIRT, count: 1 }, { id: I.BOTTLE, count: 1 }], table: false },
 ];
 
 /**
