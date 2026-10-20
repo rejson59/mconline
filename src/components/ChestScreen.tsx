@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
 import { TooltipBody } from '../utils/tooltip';
 import Slot from './Slot';
+import CloseButton from './CloseButton';
 
 export default function ChestScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
   const [, setTick] = useState(0);
@@ -12,8 +13,15 @@ export default function ChestScreen({ game, icons, onChange }: { game: Game; ico
 
   useEffect(() => {
     const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
+    // 2.9: na dotyku nie ma „mousemove” – ikona trzymanego przedmiotu
+    // zostawała w lewym górnym rogu. Tapnięcie też ustawia jej pozycję.
+    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
     window.addEventListener('mousemove', mm);
-    return () => window.removeEventListener('mousemove', mm);
+    window.addEventListener('pointerdown', pt, true);
+    return () => {
+      window.removeEventListener('mousemove', mm);
+      window.removeEventListener('pointerdown', pt, true);
+    };
   }, []);
 
   const refresh = () => {
@@ -31,6 +39,7 @@ export default function ChestScreen({ game, icons, onChange }: { game: Game; ico
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
+      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
       <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
         <div className="text-lg font-semibold">Skrzynia</div>
         <div className="grid grid-cols-9">

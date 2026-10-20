@@ -5,6 +5,7 @@ import { PROFESSIONS, VILLAGER_LEVEL_NAMES } from '../game/trading';
 import type { Stack } from '../game/inventory';
 import { TooltipBody } from '../utils/tooltip';
 import Slot from './Slot';
+import CloseButton from './CloseButton';
 
 function ItemChip({ stack, icons, have, ok }: { stack: Stack; icons: Record<number, string>; have?: number; ok?: boolean }) {
   return (
@@ -94,8 +95,15 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
 
   useEffect(() => {
     const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
+    // 2.9: na dotyku nie ma „mousemove” – ikona trzymanego przedmiotu
+    // zostawała w lewym górnym rogu. Tapnięcie też ustawia jej pozycję.
+    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
     window.addEventListener('mousemove', mm);
-    return () => window.removeEventListener('mousemove', mm);
+    window.addEventListener('pointerdown', pt, true);
+    return () => {
+      window.removeEventListener('mousemove', mm);
+      window.removeEventListener('pointerdown', pt, true);
+    };
   }, []);
 
   const refresh = () => {
@@ -117,6 +125,7 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
         if (e.target === e.currentTarget) game.closeTrade();
       }}
     >
+      <CloseButton onClose={() => game.closeTrade()} className="absolute right-2 top-2 z-50" />
       <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-baseline justify-between gap-6">
           <span className="flex items-center gap-2 text-lg font-semibold">

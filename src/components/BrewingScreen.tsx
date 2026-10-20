@@ -5,6 +5,7 @@ import { TooltipBody } from '../utils/tooltip';
 import { I } from '../game/items';
 import { BREW_TIME, POTIONS, brewResult, type BrewingState } from '../game/brewing';
 import Slot from './Slot';
+import CloseButton from './CloseButton';
 
 /**
  * 2.4 „Godzina alchemika” – statyw alchemiczny.
@@ -58,9 +59,13 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
   useEffect(() => {
     const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
     const id = window.setInterval(() => setTick((t) => t + 1), 120);
+    // 2.9: dotyk nie wysyła „mousemove” – pozycję ikony ustawia tapnięcie.
+    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
     window.addEventListener('mousemove', mm);
+    window.addEventListener('pointerdown', pt, true);
     return () => {
       window.removeEventListener('mousemove', mm);
+      window.removeEventListener('pointerdown', pt, true);
       window.clearInterval(id);
     };
   }, []);
@@ -85,6 +90,7 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
+      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
       <div className="mc-panel flex max-h-[94dvh] w-[min(440px,96vw)] flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-center justify-between">
           <div className="text-lg font-semibold">Statyw alchemiczny</div>

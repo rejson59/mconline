@@ -150,10 +150,10 @@ export default function SettingsScreen({
             </button>
           )}
           <div className="border border-white/10 bg-black/30 p-2 text-[11px] leading-snug text-white/60">
-            <b className="text-green-300">2.8.2 „Zdrowe drzewa”:</b> drzewa z nowego generatora (pełne korony bez dziur),
-            naprawiony atlas liści, <b>kierunkowe światło słońca</b> z miękkim cieniem i księżycówką w nocy oraz pochodnia w dłoni
-            oświetlająca 14 bloków wokół. Chmury płyną spokojnie, z miękkiego szumu i znikają za horyzontem.
-            Klawisz <b>F3</b> pokaże FPS i liczbę kresleń.
+            <b className="text-green-300">2.9 „Nowy wygląd”:</b> nowy warsztat malarski – miękkie łaty szumu zamiast ziarna,
+            krótka paleta i światło z lewej góry; kora z bruzdami, deski z sękami, kiście liści, kamyki w żwirze. Okna gry mają
+            <b> duży przycisk zamknięcia</b> (działa na dotyku), a czat – <b>pełną listę komend</b> z podpowiedziami i przykładem.
+            Z 2.8.2 zostają: pełne korony drzew, kierunkowe słońce, księżycówka i pochodnia świecąca w dłoni na 14 bloków.
           </div>
           <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={14} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => set({ renderDistance: v })} />
           <OptionSlider label="Rozdzielczość" value={settings.pixelRatio} min={0.75} max={2} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ pixelRatio: v })} />

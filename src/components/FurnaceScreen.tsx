@@ -4,6 +4,7 @@ import { TooltipBody } from '../utils/tooltip';
 import { stackTooltip } from '../utils/tooltip';
 import type { Stack } from '../game/inventory';
 import Slot from './Slot';
+import CloseButton from './CloseButton';
 
 /** Slot pieca z podpisem (Surowiec / Paliwo / Wynik). */
 function LabeledSlot({
@@ -36,9 +37,13 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
   useEffect(() => {
     const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
     const id = window.setInterval(() => setTick((t) => t + 1), 200);
+    // 2.9: dotyk nie wysyła „mousemove” – pozycję ikony ustawia tapnięcie.
+    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
     window.addEventListener('mousemove', mm);
+    window.addEventListener('pointerdown', pt, true);
     return () => {
       window.removeEventListener('mousemove', mm);
+      window.removeEventListener('pointerdown', pt, true);
       window.clearInterval(id);
     };
   }, []);
@@ -60,6 +65,7 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
+      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
       <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
         <div className="text-lg font-semibold">Piec</div>
         <div className="flex items-end justify-center gap-4">
