@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { loadSkinId, saveSkinId } from '../game/skins';
+import { SkinPicker } from './SkinPicker';
 import { applyPreset, DEFAULT_SETTINGS, type ControlMode, type Settings, type TouchMode } from '../utils/settings';
 import { detectInputKind } from '../utils/input';
 import {
@@ -19,12 +21,21 @@ export default function SettingsScreen({
   settings,
   onChange,
   onClose,
+  onSkin,
 }: {
   settings: Settings;
   onChange: (s: Settings) => void;
   onClose: () => void;
+  /** 2.12: zmiana skórki – silnik stosuje ją od razu w bieżącej sesji. */
+  onSkin?: (id: string) => void;
 }) {
-  const [tab, setTab] = useState<'gfx' | 'controls' | 'sound'>('gfx');
+  const [tab, setTab] = useState<'gfx' | 'controls' | 'sound' | 'skin'>('gfx');
+  const [skin, setSkin] = useState(loadSkinId);
+  const pickSkin = (id: string) => {
+    const clean = saveSkinId(id);
+    setSkin(clean);
+    onSkin?.(clean);
+  };
   // Profil urządzenia liczony raz – służy tylko do podglądu i trybu „Auto”.
   const profile: DeviceProfile = useMemo(() => autoPreset().profile, []);
   const auto = recommendPreset(profile);
@@ -93,12 +104,13 @@ export default function SettingsScreen({
         </div>
       </div>
 
-      <div className="flex gap-2" role="tablist" aria-label="Zakładki opcji">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Zakładki opcji">
         {(
           [
             ['gfx', 'Grafika'],
             ['controls', 'Sterowanie'],
             ['sound', 'Dźwięk i HUD'],
+            ['skin', 'Postać'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -107,7 +119,7 @@ export default function SettingsScreen({
             role="tab"
             aria-selected={tab === id}
             aria-controls={`settings-panel-${id}`}
-            className="mc-tab flex-1"
+            className="mc-tab min-w-[104px] flex-1 !px-2 !text-[13px] sm:!text-[14px]"
             onClick={() => setTab(id)}
           >
             {label}
@@ -187,6 +199,15 @@ export default function SettingsScreen({
           <Btn active={settings.joystickFixed} onClick={() => set({ joystickFixed: !settings.joystickFixed })}>
             Drążek: {settings.joystickFixed ? 'stały w rogu' : 'pojawia się pod palcem'}
           </Btn>
+          <OptionSlider
+            label="Rozmiar przycisków dotykowych"
+            value={settings.touchScale}
+            min={0.8}
+            max={1.25}
+            step={0.05}
+            fmt={(v) => (v < 0.93 ? 'małe' : v > 1.07 ? 'duże' : 'średnie')}
+            onChange={(v) => set({ touchScale: v })}
+          />
           <Btn active={settings.autoJump} onClick={() => set({ autoJump: !settings.autoJump })}>
             Auto-skok na schodki: {settings.autoJump ? 'włączony' : 'wyłączony'}
           </Btn>
@@ -196,6 +217,13 @@ export default function SettingsScreen({
           <Btn active={settings.viewBobbing} onClick={() => set({ viewBobbing: !settings.viewBobbing })}>
               Kołysanie kamery: {settings.viewBobbing ? 'włączone' : 'wyłączone'}
           </Btn>
+      </div>
+
+      <div id="settings-panel-skin" role="tabpanel" aria-labelledby="settings-tab-skin" hidden={tab !== 'skin'} className="flex flex-col gap-3">
+          <div className="text-xs leading-snug text-white/60">
+            Skórka to Twój wygląd w grze razem: głowa, ubranie i buty awatara. Zmiana działa od razu – bez restartu świata.
+          </div>
+          <SkinPicker value={skin} onChange={pickSkin} />
       </div>
 
       <div id="settings-panel-sound" role="tabpanel" aria-labelledby="settings-tab-sound" hidden={tab !== 'sound'} className="flex flex-col gap-3">

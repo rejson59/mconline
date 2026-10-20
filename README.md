@@ -1,6 +1,14 @@
-# BlockCraft 2.11 🌍
+# BlockCraft 2.12 🎨
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+**Wersja 2.12 „Skórki i dotyk”** – crafting, postać i telefon:
+
+* **Stół rzemieślniczy wreszcie działa z każdego drewna.** Przepis na deski był tylko dla dębu i brzozy, więc **akacja nie dawała desek** – w sawannie nie dało się zrobić nawet stołu. Teraz lista `LOG_IDS` (`LOG`, `BIRCH_LOG`, `ACACIA_LOG`) generuje przepisy dla wszystkich pni: **1 pień → 4 deski**, a **4 deski ułożone w kwadrat 2×2 → stół rzemieślniczy**, dokładnie jak w Minecrafcie. Nowy pień wystarczy dopisać do jednej listy, żeby nie zgubił przepisu.
+* **Wybór skórki.** Nowy moduł `src/game/skins.ts` ma 8 wyglądów postaci: Steve, Alex, creeper, enderman, rycerz, ninja, złoty i podróżnik. Wybierasz je w **Opcje → Postać** oraz w pasku skórek w poczekalni multiplayera. Awatar w podglądzie jest rysowany z prostokątów, więc działa też na telefonie bez WebGL. Skórka zapisuje się w `localStorage` (`blockcraft-skin`), a w grze trafia do `hello`/`pos` w P2P i do Presence na serwerze publicznym – inni widzą Twój wygląd, a lista graczy pokazuje miniaturkę głowy. Zmiana w pauzie działa od razu, bez restartu świata.
+* **Telefon na pierwszym miejscu.** W opcjach jest **rozmiar przycisków dotykowych** (małe / średnie / duże). Telefon obrócony poziomo sam zmniejsza przyciski, drążek i hotbar, żeby nie zasłaniały celu. Pasek górny, czat i menu uwzględniają `safe-area-inset` (notch, pasek gestów), więc nic nie chowa się pod systemem. Pola tekstowe mają 16 px – iOS nie przybliża przy tym strony – a każde dotknięcie trafia w element o wysokości co najmniej 44 px.
+* **Czytelniejszy ekwipunek.** Siatka rzemieślnicza nie rozjeżdża się już na małych ekranach (nie ma sztywnej szerokości 3×44 px), a opis pod siatką przypomina, że 4 deski dają stół i odblokowują 3×3.
+* **Testy i wydanie.** `npm test` to **1383 kontrole silnika + 197 testów UI** – m.in. deski z każdego pnia, stół z 4 desek, osiem skórek i ich zapis, skórka w `hello`/obsadzie oraz rozmiar przycisków dotykowych. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą; wersja **2.12.0** jest na GitHub Pages.
 
 **Wersja 2.11 „Wspólny świat”** – publiczny serwer:
 

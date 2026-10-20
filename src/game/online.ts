@@ -131,6 +131,8 @@ export class PublicServer implements NetLike {
   readonly transport: NetTransport = 'online';
   readonly public = true;
   name: string;
+  /** 2.12: skórka gracza wysyłana w Presence i w pozycjach. */
+  skin = '';
   world: WorldHandshake;
   players: NetPlayer[] = [];
   status: NetStatus = 'connecting';
@@ -244,7 +246,7 @@ export class PublicServer implements NetLike {
         if (this.closed) return;
         if (status === 'SUBSCRIBED') {
           this.everConnected = true;
-          void channel.track({ id: this.id, name: this.name, hue: this.hue });
+          void channel.track({ id: this.id, name: this.name, hue: this.hue, skin: this.skin });
           // Pierwsza obsada od razu – na pełne `presence sync` nie ma co czekać.
           this.syncRoster();
           this.lastSyncIso = new Date().toISOString();
@@ -333,6 +335,12 @@ export class PublicServer implements NetLike {
 
   sendPos(p: NetPos) {
     this.send({ t: 'pos', from: this.id, to: '*', ...p });
+  }
+
+  /** 2.12: po zmianie skórki odświeżamy presence, żeby inni widzieli nowy wygląd. */
+  updatePresence() {
+    void this.channel?.track({ id: this.id, name: this.name, hue: this.hue, skin: this.skin });
+    this.syncRoster();
   }
 
   say(text: string) {
@@ -439,16 +447,23 @@ export class PublicServer implements NetLike {
         if (!id || seen.has(id)) continue;
         const name = typeof meta.name === 'string' && meta.name ? meta.name.slice(0, 20) : 'Gracz';
         const hue = Number.isFinite(meta.hue as number) ? Number(meta.hue) : hueFor(id);
-        seen.set(id, { id, name, hue, ping: -1, self: id === this.id });
+        const skin = typeof meta.skin === 'string' ? meta.skin.slice(0, 24) : '';
+        seen.set(id, { id, name, hue, ping: -1, self: id === this.id, skin });
       }
     }
     if (!seen.has(this.id)) {
-      seen.set(this.id, { id: this.id, name: this.name, hue: this.hue, ping: -1, self: true });
+      seen.set(this.id, { id: this.id, name: this.name, hue: this.hue, ping: -1, self: true, skin: this.skin });
     }
     const list = sortPlayers([...seen.values()], this.id);
     const changed =
       list.length !== this.players.length ||
-      list.some((p, i) => p.id !== this.players[i]?.id || p.name !== this.players[i]?.name || p.hue !== this.players[i]?.hue);
+      list.some(
+        (p, i) =>
+          p.id !== this.players[i]?.id ||
+          p.name !== this.players[i]?.name ||
+          p.hue !== this.players[i]?.hue ||
+          (p.skin ?? '') !== (this.players[i]?.skin ?? ''),
+      );
     if (!changed) return;
     this.players = list;
     this.onPeers?.(list);

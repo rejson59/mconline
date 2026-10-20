@@ -100,9 +100,18 @@ function trimPattern(rows: string[]): { rows: string[]; w: number; h: number } {
   return { rows: out, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
+/** 2.12: wszystkie rodzaje pni – każdy daje deski, jak w Minecrafcie. */
+export const LOG_IDS = [B.LOG, B.BIRCH_LOG, B.ACACIA_LOG];
+
 export const RECIPES: Recipe[] = [
-  { out: { id: B.PLANKS, count: 4 }, inputs: [{ id: B.LOG, count: 1 }], table: false },
-  { out: { id: B.PLANKS, count: 4 }, inputs: [{ id: B.BIRCH_LOG, count: 1 }], table: false },
+  // Pnie → deski. Wcześniej brakowało pnia akacji, więc w sawannie nie dało
+  // się zrobić nawet stołu rzemieślniczego; lista jest generowana z `LOG_IDS`,
+  // żeby nowy pień nie zgubił przepisu.
+  ...LOG_IDS.map((id) => ({
+    out: { id: B.PLANKS, count: 4 },
+    inputs: [{ id, count: 1 }],
+    table: false,
+  })),
   { out: { id: B.CRAFTING, count: 1 }, inputs: [{ id: B.PLANKS, count: 4 }], table: false, pattern: ['PP', 'PP'], key: { P: B.PLANKS } },
   { out: { id: B.FURNACE, count: 1 }, inputs: [{ id: B.COBBLE, count: 8 }], table: true, pattern: ['CCC', 'C C', 'CCC'], key: { C: B.COBBLE } },
   { out: { id: B.GLASS, count: 1 }, inputs: [{ id: B.SAND, count: 1 }, { id: I.COAL, count: 1 }], table: true },

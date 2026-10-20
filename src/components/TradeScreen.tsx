@@ -125,7 +125,7 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
         if (e.target === e.currentTarget) game.closeTrade();
       }}
     >
-      <CloseButton onClose={() => game.closeTrade()} className="absolute right-2 top-2 z-50" />
+      <CloseButton onClose={() => game.closeTrade()} className="mc-close-safe absolute z-50" />
       <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-baseline justify-between gap-6">
           <span className="flex items-center gap-2 text-lg font-semibold">

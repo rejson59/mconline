@@ -602,3 +602,67 @@ textarea {
     min-height: 38px;
   }
 }
+
+/* ---------------------------------------------------------------- 2.12
+ * Telefon w dłoni. Każde dotknięcie ma trafiać w element >= 44 px, pola
+ * tekstowe mają 16 px (inaczej iOS sam przybliża stronę), a czat i paski
+ * nie wchodzą pod hotbar ani pod pasek gestów systemu. */
+button,
+.mc-btn,
+.mc-tab {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+
+@media (pointer: coarse) {
+  .mc-btn {
+    min-height: 48px;
+  }
+  .mc-tab {
+    min-height: 42px;
+  }
+  .mc-input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+
+/* Czat tuż nad hotbarem – wcześniej na telefonie wchodził na serca.
+ * Szerokość zostawia miejsce na przyciski akcji pod prawym kciukiem. */
+.hud-chat {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
+  left: max(8px, env(safe-area-inset-left, 0px));
+  max-width: min(640px, 72vw);
+}
+
+@media (max-height: 560px) {
+  .hud-chat {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 126px);
+    max-width: min(520px, 62vw);
+  }
+  .touch-hint {
+    display: none;
+  }
+}
+
+@media (max-height: 450px) {
+  .hud-chat {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 110px);
+    font-size: 12px;
+  }
+  .hud-chat > div {
+    padding: 1px 6px;
+  }
+}
+
+@media (max-width: 380px) {
+  .touch-topbar {
+    gap: 4px !important;
+  }
+}
+
+/* 2.12: przycisk zamykania nie chowa się pod notchem ani pod paskiem gestów. */
+.mc-close-safe {
+  right: max(8px, env(safe-area-inset-right, 0px));
+  top: max(8px, env(safe-area-inset-top, 0px));
+}

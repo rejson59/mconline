@@ -71,7 +71,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
-      <CloseButton onClose={() => game.closeInventory()} className="absolute right-2 top-2 z-50" />
+      <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
       <div className="flex max-h-[94dvh] max-w-[100vw] flex-wrap items-start justify-center gap-3 overflow-x-hidden overflow-y-auto p-3 pb-20 sm:gap-4">
         <div className="mc-panel inventory-main-panel w-fit max-w-[calc(100vw-24px)] p-4">
           {creative ? (
@@ -154,7 +154,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
 
             {/* crafting grid: 2x2 by hand, 3x3 at the table */}
             <div className="mb-3 flex items-center gap-3">
-              <div className="grid grid-cols-3 gap-0" style={{ width: 3 * 44 }}>
+              <div className="grid w-fit grid-cols-3 gap-0">
                 {inv.grid.map((cell, i) => {
                   const row = Math.floor(i / 3), col = i % 3;
                   const enabled = game.craftingTable || (row < 2 && col < 2);

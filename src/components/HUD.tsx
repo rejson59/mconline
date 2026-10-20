@@ -3,6 +3,7 @@ import type { HUDState } from '../game/engine';
 import { displayName, durabilityMax } from '../game/items';
 import { enchList } from '../game/enchant';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
+import { SkinHead } from './SkinPicker';
 
 const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
 const BUBBLE = ['.XXX.', 'X..XX', 'X.XXX', 'XXXXX', '.XXX.'];
@@ -256,10 +257,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
                 style={{ background: 'rgba(0,0,0,0.45)' }}
                 title={p.ping >= 0 ? `${p.ping} ms` : 'ping…'}
               >
-                <span
-                  className="inline-block"
-                  style={{ width: 8, height: 8, background: `hsl(${p.hue} 60% 55%)`, border: '1px solid #000' }}
-                />
+                <SkinHead skin={p.skin || `hsl(${p.hue} 60% 55%)`} size={14} />
                 <span className={p.self ? 'text-yellow-200' : ''}>{p.name}{p.self ? ' (ty)' : ''}</span>
                 <span className="text-white/45">{p.ping >= 0 ? `${p.ping} ms` : '…'}</span>
               </div>
@@ -292,7 +290,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
       )}
 
       {/* chat messages */}
-      <div className="absolute bottom-40 left-2 max-w-[640px] space-y-0.5">
+      <div className="hud-chat absolute left-2 max-w-[640px] space-y-0.5">
         {hud.messages.map((m, i) => (
           <div key={i + '-' + m.t} className="px-2 py-0.5 text-[15px] mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
             {m.text}

@@ -38,6 +38,7 @@ import {
   type NetPlayer,
 } from './net';
 import { PUBLIC_POS_HZ } from './online';
+import { fallbackSkin, loadSkinId, skinById } from './skins';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
@@ -108,6 +109,8 @@ interface RemoteAvatar {
   name: string;
   walk: number;
   seen: number;
+  /** 2.12: aktualna skórka (żeby nie odtwarzać awatara bez potrzeby). */
+  skinId: string;
 }
 
 export interface HUDState {
@@ -621,6 +624,8 @@ export class Game {
   private remoteGroup: THREE.Group | null = null;
   private netName = 'Gracz';
   private netHue = 0;
+  /** 2.12: skórka gracza wysyłana w pozycjach (i widoczna u innych). */
+  private netSkin = '';
   /** 2.8.2: kierunkowe słońce – shader liczy nim `dot(ściana, słońce)`. */
   private sunState: SunState = { dir: new THREE.Vector3(0.35, 1, 0.2).normalize(), power: 0.8 };
   ambient: THREE.HemisphereLight;
@@ -1052,10 +1057,12 @@ export class Game {
   private bindNet(net: NetLike) {
     this.net = net;
     this.netName = net.name;
+    this.netSkin = loadSkinId();
     net.name = this.netName;
+    net.skin = this.netSkin;
     const me = net.players.find((p) => p.id === net.id);
     this.netHue = me?.hue ?? 0;
-    this.netPlayers = net.players.length ? net.players : [{ id: net.id, name: net.name, hue: this.netHue, ping: -1, self: true }];
+    this.netPlayers = net.players.length ? net.players : [{ id: net.id, name: net.name, hue: this.netHue, ping: -1, self: true, skin: this.netSkin }];
 
     // --- wspólne dla wszystkich transportów: obsługa zdarzeń sesji
     net.onMessage = (m) => this.onNetMessage(m);
@@ -1170,6 +1177,7 @@ export class Game {
         avatar.pitch = m.pitch;
         avatar.held = m.held ?? 0;
         avatar.seen = performance.now();
+        if (m.skin && m.skin !== avatar.skinId) this.setRemoteSkin(m.from, m.skin);
         break;
       }
       case 'state':
@@ -1252,6 +1260,7 @@ export class Game {
           held: this.selectedStack()?.id ?? 0,
           name: net.name,
           hue: this.netHue,
+          skin: this.netSkin,
         });
       }
     }
@@ -1290,8 +1299,15 @@ export class Game {
 
   private ensureRemote(p: NetPlayer): RemoteAvatar {
     const existing = this.remotes.get(p.id);
-    if (existing) return existing;
-    const avatar = this.makeAvatar(p.name, p.hue);
+    if (existing) {
+      // 2.12: skórka mogła się zmienić w trakcie sesji (presence/hello).
+      if (p.skin && p.skin !== existing.skinId) {
+        this.setRemoteSkin(p.id, p.skin);
+        return this.remotes.get(p.id) ?? existing;
+      }
+      return existing;
+    }
+    const avatar = this.makeAvatar(p.name, p.hue, p.skin);
     avatar.target.copy(this.spawnPoint);
     avatar.group.position.copy(avatar.target);
     // Do pierwszej wiadomości `pos` nie wiemy, gdzie gracz jest – lepiej go
@@ -1323,31 +1339,44 @@ export class Game {
    * Prostoliniowy awatar z bloków: tułów, głowa, ręce i nogi. Nazwa gracza
    * jest sprite'em z kanwy, więc widać ją z daleka i nie trzeba czcionek 3D.
    */
-  private makeAvatar(name: string, hue: number): RemoteAvatar {
+  private makeAvatar(name: string, hue: number, skinId?: string): RemoteAvatar {
+    const skin = skinId ? skinById(skinId) : fallbackSkin(hue);
     const group = new THREE.Group();
-    const shade = (l: number) => new THREE.Color().setHSL((hue % 360) / 360, 0.55, l);
-    const bodyMat = new THREE.MeshBasicMaterial({ color: shade(0.42) });
-    const skinMat = new THREE.MeshBasicMaterial({ color: 0xd9a066 });
-    const limbMat = new THREE.MeshBasicMaterial({ color: shade(0.3) });
+    const mat = (color: number) => new THREE.MeshBasicMaterial({ color });
 
     // Grupa stoi na ziemi (stopy w y = 0), więc da się ją podstawić pod
     // `body.pos` bez korekty. Proporcje jak w Minecrafcie: ~1,8 bloku wzrostu.
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.28), bodyMat);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.28), mat(skin.shirt));
     body.position.y = 0.9;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), skinMat);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), mat(skin.skin));
     head.position.y = 1.42;
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.18), bodyMat);
+    // Włosy to cienka „czapka” na głowie – bez nich awatar wygląda jak lalka.
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.42), mat(skin.hair));
+    hair.position.y = 1.66;
+    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.08), mat(skin.hair));
+    hairBack.position.set(0, 1.5, 0.19);
+    // Oczy na przedniej ścianie (przód awatara to -Z, tak jak trzymany blok).
+    const eyeMat = mat(skin.eye ?? 0x2b2b2b);
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.02), eyeMat);
+    eyeL.position.set(-0.09, 1.46, -0.205);
+    const eyeR = eyeL.clone();
+    eyeR.position.x = 0.09;
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.18), mat(skin.sleeve));
     armL.position.set(-0.33, 0.9, 0);
     const armR = armL.clone();
     armR.position.x = 0.33;
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.22), limbMat);
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.22), mat(skin.pants));
     legL.position.set(-0.13, 0.3, 0);
     const legR = legL.clone();
     legR.position.x = 0.13;
+    const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.24), mat(skin.shoes));
+    shoeL.position.set(-0.13, 0.07, -0.01);
+    const shoeR = shoeL.clone();
+    shoeR.position.x = 0.13;
     const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), new THREE.MeshBasicMaterial({ color: 0xc9a227 }));
     hand.position.set(0.36, 0.62, -0.24);
     hand.visible = false;
-    group.add(body, head, armL, armR, legL, legR, hand);
+    group.add(body, head, hair, hairBack, eyeL, eyeR, armL, armR, legL, legR, shoeL, shoeR, hand);
 
     // Etykieta z nazwą.
     const canvas = document.createElement('canvas');
@@ -1373,8 +1402,45 @@ export class Game {
       group, head, armL, legL, legR, hand,
       target: new THREE.Vector3(),
       yaw: 0, pitch: 0, held: 0, heldId: -1,
-      name, walk: 0, seen: performance.now(),
+      name, walk: 0, seen: performance.now(), skinId: skin.id,
     };
+  }
+
+  /**
+   * 2.12: zmiana skórki zdalnego gracza w locie. Awatar jest mały, więc
+   * najprościej i najbezpieczniej jest odtworzyć go od zera – zmiana zdarza
+   * się raz na sesję, a nie w każdej klatce.
+   */
+  private setRemoteSkin(id: string, skinId: string) {
+    const old = this.remotes.get(id);
+    if (!old) return;
+    const player = this.netPlayers.find((p) => p.id === id);
+    const fresh = this.makeAvatar(old.name, player?.hue ?? 0, skinId);
+    fresh.group.position.copy(old.group.position);
+    fresh.target.copy(old.target);
+    fresh.yaw = old.yaw;
+    fresh.pitch = old.pitch;
+    fresh.held = old.held;
+    fresh.seen = old.seen;
+    fresh.group.visible = old.group.visible;
+    this.remoteGroup?.add(fresh.group);
+    this.dropRemote(id);
+    this.remotes.set(id, fresh);
+  }
+
+  /** Zmiana własnej skórki (z ekranu opcji/poczekalni) – bez restartu świata. */
+  setSkin(id: string) {
+    const prev = this.netSkin;
+    this.netSkin = skinById(id).id;
+    // Własna głowa w HUD zmienia się natychmiast, bez czekania na obsadę.
+    this.netPlayers = this.netPlayers.map((p) => (p.self ? { ...p, skin: this.netSkin } : p));
+    if (this.net) {
+      this.net.skin = this.netSkin;
+      // 2.12: inni widzą nową skórkę od razu – odświeżamy wpis w presence.
+      if (prev !== this.netSkin) this.net.updatePresence?.();
+    }
+    this.message(`Skórka zmieniona na „${skinById(id).name}”.`);
+    this.emitHud();
   }
 
   /** Czy gra jest w sesji sieciowej (UI ukrywa wtedy ekran pauzy „pauzujący świat”). */
