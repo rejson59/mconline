@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.8.1",
-  "description": "BlockCraft 2.8.1 „Światło i chmury” – polska gra sandboxowa w przeglądarce: realistyczne światło z cieniem koron, pochodnia oświetlająca okolicę, gęste liście i chmury zgodne z pogodą.",
+  "version": "2.8.2",
+  "description": "BlockCraft 2.8.2 „Zdrowe drzewa” – polska gra sandboxowa w przeglądarce: nowy generator drzew, gęste liście, kierunkowe światło, pochodnia w dłoni i spokojne chmury.",
   "type": "module",
   "license": "MIT",
   "keywords": [

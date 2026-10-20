@@ -765,7 +765,12 @@ export function buildAtlas(): AtlasResult {
     for (let y = 0; y < 16; y += 4) for (let x = 0; x < 16; x++) setPx(T.honeycomb_block, x, y, 200, 160, 50);
   }
 
-  ctx.putImageData(img, 0, 0);
+  // 2.8.2: NIE zrzucamy tu obrazu do canvasu! Kafelki błota, akacji, liści
+  // tropikalnych i lilii wodnej powstają dopiero poniżej, a `densifyTiles`
+  // i `polishTiles` poprawiają obraz w `img`. Wcześniejszy `putImageData`
+  // zostawiał w atlasie puste (w pełni przezroczyste) liście akacji i dżungli
+  // oraz gubił całe wygładzanie krawędzi – stąd „czarne drzewa z
+  // przezroczystymi liśćmi”. Zrzut obrazu jest teraz na samym końcu malowania.
 
   // 3.0 biome atlas additions: textured wet mud, striped acacia bark,
   // layered tropical foliage and a readable water-lily silhouette.
@@ -787,6 +792,8 @@ export function buildAtlas(): AtlasResult {
     logTop(T.acacia_top, [194, 151, 99], [160, 116, 67], [94, 72, 48], R(151));
   }
   leaves(T.jungle_leaves, [42, 112, 44], R(152));
+  // 2.8.2: oliwkowa, jaśniejsza korona akacji – sawanna od razu inaczej wygląda.
+  leaves(T.acacia_leaves, [126, 146, 66], R(154));
   {
     const r = R(153);
     for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
@@ -803,7 +810,7 @@ export function buildAtlas(): AtlasResult {
   // muszą zniknąć – inaczej w miejscu „przezroczystych” pikseli pojawiłaby
   // się czerń. Każdy pusty piksel dostaje kolor sąsiada przyciemniony o 18%,
   // dzięki czemu korona wygląda gęsto, ale wciąż ma rysunek liści.
-  densifyTiles([T.leaves, T.birch_leaves, T.jungle_leaves]);
+  densifyTiles([T.leaves, T.birch_leaves, T.jungle_leaves, T.acacia_leaves]);
 
   // --------------------------------------------------------------- 2.8 „Płynny świat”
   // Mikro-odetnienia: każdy nieprzezroczysty kafelek dostaje miękkie,
@@ -811,6 +818,10 @@ export function buildAtlas(): AtlasResult {
   // subtelny skos — górna krawędź jaśniejsza, dolna ciemniejsza. Bloki
   // przestają zlewać się w jedną plamę, a atlas pozostaje w 100% pikselowy.
   polishTiles();
+
+  // 2.8.2: dopiero teraz cały obraz trafia do atlasu – wszystkie kafelki są
+  // narysowane, dziury w liściach wypełnione, a krawędzie wygładzone.
+  ctx.putImageData(img, 0, 0);
 
   // average colors
   for (const d of BLOCKS) {
@@ -863,43 +874,55 @@ export function buildAtlas(): AtlasResult {
  * najbliższego nieprzezroczystego sąsiada (przyciemniony), więc pełny blok
  * liści nie ma czarnych plam, a sylwetka liścia pozostaje widoczna.
  */
-function densifyTiles(tiles: number[]) {
-  const read = (tile: number, x: number, y: number): [number, number, number, number] => getPx(tile, x, y);
-  for (const tile of tiles) {
-    const src = new Uint8ClampedArray(TILE * TILE * 4);
-    for (let y = 0; y < TILE; y++)
-      for (let x = 0; x < TILE; x++) {
-        const p = read(tile, x, y);
-        const o = (y * TILE + x) * 4;
-        src[o] = p[0]; src[o + 1] = p[1]; src[o + 2] = p[2]; src[o + 3] = p[3];
-      }
-    // Dwa przebiegi: pierwszy domyka większość dziur, drugi – resztę.
-    for (let pass = 0; pass < 2; pass++) {
-      for (let y = 0; y < TILE; y++)
-        for (let x = 0; x < TILE; x++) {
-          const i = (y * TILE + x) * 4;
-          if (src[i + 3] >= 128) continue;
-          let r = 0, g = 0, b = 0, n = 0;
-          for (let dy = -1; dy <= 1; dy++)
-            for (let dx = -1; dx <= 1; dx++) {
-              const nx = x + dx, ny = y + dy;
-              if (nx < 0 || ny < 0 || nx >= TILE || ny >= TILE) continue;
-              const j = (ny * TILE + nx) * 4;
-              if (src[j + 3] < 128) continue;
-              r += src[j]; g += src[j + 1]; b += src[j + 2]; n++;
-            }
-          const shade = 0.82;
-          const rr = n ? r / n : 60, gg = n ? g / n : 96, bb = n ? b / n : 40;
-          src[i] = rr * shade; src[i + 1] = gg * shade; src[i + 2] = bb * shade; src[i + 3] = 255;
-        }
+/**
+ * 2.8.2: wypełnia dziury w JEDNYM kaflu atlasu, pracując na surowym buforze
+ * pikseli. Wydzielone z `densifyTiles`, żeby dało się to przetestować bez
+ * prawdziwego canvasu (testy w Node nie mają 2D contextu).
+ *
+ * Piksele bez pokrycia dostają kolor średniej z nieprzezroczystych sąsiadów
+ * (przyciemniony), więc pełny blok liści nie ma czarnych plam, a rysunek
+ * liścia pozostaje widoczny.
+ */
+export function densifyTileData(data: Uint8ClampedArray, tile: number) {
+  const baseX = (tile % ATLAS_TILES) * TILE;
+  const baseY = Math.floor(tile / ATLAS_TILES) * TILE;
+  const at = (x: number, y: number) => ((baseY + y) * ATLAS_SIZE + baseX + x) * 4;
+  const src = new Uint8ClampedArray(TILE * TILE * 4);
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const i = at(x, y), o = (y * TILE + x) * 4;
+      src[o] = data[i]; src[o + 1] = data[i + 1]; src[o + 2] = data[i + 2]; src[o + 3] = data[i + 3];
     }
+  // Dwa przebiegi: pierwszy domyka większość dziur, drugi – resztę.
+  for (let pass = 0; pass < 2; pass++) {
     for (let y = 0; y < TILE; y++)
       for (let x = 0; x < TILE; x++) {
-        const i = (y * TILE + x) * 4;
-        if (src[i + 3] < 128) continue;
-        setPx(tile, x, y, src[i], src[i + 1], src[i + 2], src[i + 3]);
+        const o = (y * TILE + x) * 4;
+        if (src[o + 3] >= 128) continue;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= TILE || ny >= TILE) continue;
+            const j = (ny * TILE + nx) * 4;
+            if (src[j + 3] < 128) continue;
+            r += src[j]; g += src[j + 1]; b += src[j + 2]; n++;
+          }
+        const shade = 0.82;
+        const rr = n ? r / n : 60, gg = n ? g / n : 96, bb = n ? b / n : 40;
+        src[o] = rr * shade; src[o + 1] = gg * shade; src[o + 2] = bb * shade; src[o + 3] = 255;
       }
   }
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const i = at(x, y), o = (y * TILE + x) * 4;
+      if (src[o + 3] < 128) continue;
+      data[i] = src[o]; data[i + 1] = src[o + 1]; data[i + 2] = src[o + 2]; data[i + 3] = 255;
+    }
+}
+
+function densifyTiles(tiles: number[]) {
+  for (const tile of tiles) densifyTileData(img.data, tile);
 }
 
 /** Czy kafelek jest w pełni nieprzezroczysty (bez dziur i półprzezroczystości). */

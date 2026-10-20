@@ -150,10 +150,10 @@ export default function SettingsScreen({
             </button>
           )}
           <div className="border border-white/10 bg-black/30 p-2 text-[11px] leading-snug text-white/60">
-            <b className="text-green-300">2.8.1 „Światło i chmury”:</b> światło nieba liczone kolumnowo – miękki cień koron,
-            ciemne jaskinie, ciepły blask pochodni i <b>pochodnia w dłoni oświetlająca okolicę</b>; gęste liście oraz chmury i mgła
-            zgodne z pogodą. Z 2.8 zostały: indeks świateł (indeks świateł w chunku) zamiast skanowania, cząstki w jednym obiekcie
-            i budżet czasu na przebudowę terenu. Klawisz <b>F3</b> pokaże FPS i liczbę kresleń.
+            <b className="text-green-300">2.8.2 „Zdrowe drzewa”:</b> drzewa z nowego generatora (pełne korony bez dziur),
+            naprawiony atlas liści, <b>kierunkowe światło słońca</b> z miękkim cieniem i księżycówką w nocy oraz pochodnia w dłoni
+            oświetlająca 14 bloków wokół. Chmury płyną spokojnie, z miękkiego szumu i znikają za horyzontem.
+            Klawisz <b>F3</b> pokaże FPS i liczbę kresleń.
           </div>
           <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={14} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => set({ renderDistance: v })} />
           <OptionSlider label="Rozdzielczość" value={settings.pixelRatio} min={0.75} max={2} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ pixelRatio: v })} />

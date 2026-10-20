@@ -15,6 +15,9 @@ import { Mob, isHostileMob, type MobType } from './mobs';
 
 const GREY: readonly number[] = [90, 90, 90];
 
+/** 2.8.2: prędkość wiatru dla chmur w jednostkach świata na sekundę. */
+const CLOUD_SPEED = 6.5;
+
 /** 2.8.1: przedmioty, które świecą także wtedy, gdy trzyma je gracz. */
 const HELD_LIGHT_ITEMS: ReadonlySet<number> = new Set<number>([
   B.TORCH, B.LANTERN, B.GLOWSTONE, B.CAMPFIRE, B.SHROOMLIGHT, B.REDSTONE_LAMP_ON, B.REDSTONE_TORCH, B.MAGMA,
@@ -30,7 +33,7 @@ import {
   type EnchOption,
 } from './enchant';
 import * as Sfx from './audio';
-import { patchChunkMaterial, HELD_POWER, type HeldLightState } from './lighting';
+import { patchChunkMaterial, HELD_POWER, type HeldLightState, type SunState } from './lighting';
 import { cloudLook, rainFogMix } from './sky';
 import { buildItemIcons } from './itemIcons';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
@@ -356,6 +359,82 @@ function blockGeometry(id: number): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * 2.8.2: bezszwowa tekstura chmur z szumu wartości (fBm).
+ *
+ * Wcześniejsze „chmury” były losowymi prostokątami w siatce 128×128 – z bliska
+ * wyglądały jak piksele, a przy powtarzaniu atlasu zdradzały kafel. Szum
+ * wartości z zawijaniem na krawędziach daje miękkie, organiczne kłęby, które
+ * łączą się w nieskończoną warstwę.
+ */
+function makeCloudTexture(size: number, seed: number, coverage: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const image = ctx.createImageData(size, size);
+  let st = seed >>> 0;
+  const rnd = () => {
+    st = (Math.imul(st, 1664525) + 1013904223) >>> 0;
+    return st / 4294967296;
+  };
+  const octaves = [4, 8, 16, 32];
+  const weights = [0.5, 0.28, 0.15, 0.07];
+  const grids = octaves.map((n) => {
+    const a = new Float32Array(n * n);
+    for (let i = 0; i < a.length; i++) a[i] = rnd();
+    return a;
+  });
+  const smooth = (t: number) => t * t * (3 - 2 * t);
+  const at = (grid: Float32Array, n: number, x: number, y: number) =>
+    grid[(((y % n) + n) % n) * n + (((x % n) + n) % n)];
+  const sample = (grid: Float32Array, n: number, x: number, y: number) => {
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    const fx = smooth(x - x0), fy = smooth(y - y0);
+    const a = at(grid, n, x0, y0), b = at(grid, n, x0 + 1, y0);
+    const c = at(grid, n, x0, y0 + 1), d = at(grid, n, x0 + 1, y0 + 1);
+    return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+  };
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      let v = 0;
+      for (let o = 0; o < octaves.length; o++) {
+        v += weights[o] * sample(grids[o], octaves[o], (x / size) * octaves[o], (y / size) * octaves[o]);
+      }
+      const t = Math.max(0, Math.min(1, (v - coverage) / Math.max(0.001, 1 - coverage)));
+      const a = Math.min(1, smooth(t) * 1.25);
+      const i = (y * size + x) * 4;
+      image.data[i] = 255;
+      image.data[i + 1] = 255;
+      image.data[i + 2] = 255;
+      image.data[i + 3] = Math.round(255 * a);
+    }
+  ctx.putImageData(image, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Miękkie wygaszenie chmur przy horyzoncie – brak widocznej krawędzi planu. */
+function makeCloudFade(size = 128) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, size * 0.12, size / 2, size / 2, size * 0.5);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.55, '#d8d8d8');
+  g.addColorStop(0.82, '#5a5a5a');
+  g.addColorStop(1, '#000000');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.colorSpace = THREE.NoColorSpace;
+  return tex;
+}
+
 function makeCanvasTex(size: number, draw: (ctx: CanvasRenderingContext2D) => void) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -487,10 +566,14 @@ export class Game {
   /** 2.8.1: gęsta warstwa chmur widoczna tylko podczas deszczu. */
   stormClouds!: THREE.Mesh;
   stormTex!: THREE.Texture;
+  /** 2.8.2: wspólne wygaszenie chmur przy horyzoncie. */
+  cloudFadeTex!: THREE.Texture;
   /** Płynne przejście pogody (0 = jasno, 1 = pełny deszcz). */
   private stormBlend = 0;
   /** 2.8.1: światło trzymanego przedmiotu (pochodnia, latarnia…). */
   private heldLight: HeldLightState = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
+  /** 2.8.2: kierunkowe słońce – shader liczy nim `dot(ściana, słońce)`. */
+  private sunState: SunState = { dir: new THREE.Vector3(0.35, 1, 0.2).normalize(), power: 0.8 };
   ambient: THREE.HemisphereLight;
   dirLight: THREE.DirectionalLight;
   particleGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -678,7 +761,7 @@ export class Game {
     ];
     // 2.8: warstwa przezroczysta (woda, szkło, portal) dostaje delikatną falę.
     this.materials.forEach((m, i) =>
-      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime, held: this.heldLight })
+      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime, held: this.heldLight, sun: this.sunState })
     );
     this.dropMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.4, side: THREE.DoubleSide });
     this.crackTex = atlas.cracks.map((c) => {
@@ -756,44 +839,44 @@ export class Game {
     this.skyDome.frustumCulled = false;
     this.scene.add(this.skyDome);
 
-    this.cloudTex = makeCanvasTex(128, (c) => {
-      c.clearRect(0, 0, 128, 128);
-      c.fillStyle = '#ffffff';
-      for (let i = 0; i < 90; i++) {
-        const x = Math.floor(Math.random() * 128), y = Math.floor(Math.random() * 128);
-        const w = 2 + Math.floor(Math.random() * 7), h = 2 + Math.floor(Math.random() * 5);
-        c.fillRect(x, y, w, h);
-        c.fillRect((x + 64) % 128, y, 1, 1);
-      }
-    });
-    this.cloudTex.wrapS = this.cloudTex.wrapT = THREE.RepeatWrapping;
-    this.cloudTex.repeat.set(2, 2);
+    // 2.8.2: chmury z prawdziwego szumu, wolniejsze i dwuwarstwowe.
+    // Warstwa podstawowa: rzadkie, jasne kłęby. Warstwa burzowa: gęsta,
+    // niska i ciemniejsza – pojawia się płynnie wraz z deszczem.
+    this.cloudTex = makeCloudTexture(256, 0x5eed1, 0.54);
+    this.cloudTex.repeat.set(3, 3);
+    this.stormTex = makeCloudTexture(256, 0xb017, 0.42);
+    this.stormTex.repeat.set(2.2, 2.2);
+    this.cloudFadeTex = makeCloudFade(128);
     this.clouds = new THREE.Mesh(
-      new THREE.PlaneGeometry(2400, 2400),
-      new THREE.MeshBasicMaterial({ map: this.cloudTex, transparent: true, opacity: 0.8, fog: false, depthWrite: false, side: THREE.DoubleSide })
+      new THREE.PlaneGeometry(3200, 3200),
+      new THREE.MeshBasicMaterial({
+        map: this.cloudTex,
+        alphaMap: this.cloudFadeTex,
+        transparent: true,
+        opacity: 0.8,
+        fog: false,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
     );
     this.clouds.rotation.x = -Math.PI / 2;
+    this.clouds.renderOrder = -5;
     this.scene.add(this.clouds);
 
-    // 2.8.1: druga, gęstsza warstwa – pojawia się tylko podczas deszczu,
-    // dlatego chmury naprawdę „pasują” do pogody (ciemne, niskie, szybkie).
-    this.stormTex = makeCanvasTex(128, (c) => {
-      c.clearRect(0, 0, 128, 128);
-      c.fillStyle = '#ffffff';
-      for (let i = 0; i < 240; i++) {
-        const x = Math.floor(Math.random() * 128), y = Math.floor(Math.random() * 128);
-        const w = 3 + Math.floor(Math.random() * 9), h = 2 + Math.floor(Math.random() * 6);
-        c.fillRect(x, y, w, h);
-        c.fillRect((x + 64) % 128, (y + 32) % 128, Math.max(1, w >> 1), 1);
-      }
-    });
-    this.stormTex.wrapS = this.stormTex.wrapT = THREE.RepeatWrapping;
-    this.stormTex.repeat.set(2.5, 2.5);
     this.stormClouds = new THREE.Mesh(
-      new THREE.PlaneGeometry(2600, 2600),
-      new THREE.MeshBasicMaterial({ map: this.stormTex, transparent: true, opacity: 0, fog: false, depthWrite: false, side: THREE.DoubleSide })
+      new THREE.PlaneGeometry(3400, 3400),
+      new THREE.MeshBasicMaterial({
+        map: this.stormTex,
+        alphaMap: this.cloudFadeTex,
+        transparent: true,
+        opacity: 0,
+        fog: false,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
     );
     this.stormClouds.rotation.x = -Math.PI / 2;
+    this.stormClouds.renderOrder = -4;
     this.stormClouds.visible = false;
     this.scene.add(this.stormClouds);
 
@@ -4833,6 +4916,10 @@ export class Game {
       domeMat.color.copy(sky).multiplyScalar(1.06);
     }
     const sunDir = this.skySunDir.set(Math.cos(ang), Math.sin(ang), 0.25).normalize();
+    // 2.8.2: ta sama godzina, ale liczona w shaderze per ściana – dzięki temu
+    // światło naprawdę „chodzi” po świecie, zamiast być płaską plamą.
+    this.sunState.dir.copy(sunDir);
+    this.sunState.power = nether ? 0 : Math.max(0, sunY) * (0.35 + 0.65 * dl);
     this.sun.position.copy(cp).addScaledVector(sunDir, 400);
     this.sun.lookAt(cp);
     this.moon.position.copy(cp).addScaledVector(sunDir, -400);
@@ -4851,14 +4938,23 @@ export class Game {
     this.clouds.visible = cloudVisible;
     this.stormClouds.visible = cloudVisible && look.stormOpacity > 0.01;
     if (cloudVisible) {
-      const drift = performance.now() / 1000 * 1.2 * look.drift;
+      // 2.8.2: wiatr w jednostkach ŚWIATA, nie „klatek tekstury”. Do 2.8.1
+      // licznik gnał chmury z prędkością ~31 j/s (a w burzy ~105 j/s), więc
+      // niebo wyglądało jak przewijana tapeta. Teraz to spokojne 3,4 j/s,
+      // a deszcz przyspiesza je tylko o kilkanaście procent.
+      const drift = performance.now() / 1000 * CLOUD_SPEED * look.drift;
+      // Każda warstwa ma własny rozmiar tekstury w świecie (plan / repeat).
+      const baseTile = 3200 / 3;
+      const stormTile = 3400 / 2.2;
       this.clouds.position.set(cp.x, look.altitude, cp.z);
-      this.cloudTex.offset.set((cp.x + drift * 26) / 1200, -cp.z / 1200);
+      this.cloudTex.offset.set((cp.x + drift) / baseTile, (-cp.z + drift * 0.35) / baseTile);
       cloudMat.color.setRGB(look.color[0], look.color[1], look.color[2]);
       cloudMat.opacity = look.opacity;
       if (this.stormClouds.visible) {
         this.stormClouds.position.set(cp.x, look.stormAltitude, cp.z);
-        this.stormTex.offset.set((cp.x + drift * 44) / 860, -cp.z / 860);
+        // Warstwa burzowa płynie odrobinę wolniej – silny wiatr „pcha” ją
+        // całą, ale nie zamienia w smugi.
+        this.stormTex.offset.set((cp.x + drift * 0.85) / stormTile, (-cp.z + drift * 0.3) / stormTile);
         stormMat.color.setRGB(look.stormColor[0], look.stormColor[1], look.stormColor[2]);
         stormMat.opacity = look.stormOpacity;
       }
@@ -5580,6 +5676,8 @@ export class Game {
       (this.stormClouds.material as THREE.Material).dispose();
     }
     this.stormTex?.dispose();
+    this.cloudTex?.dispose();
+    this.cloudFadeTex?.dispose();
     this.skyDomeTex?.dispose();
     this.skyDome?.geometry.dispose();
     if (this.skyDome) (this.skyDome.material as THREE.Material).dispose();

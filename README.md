@@ -1,6 +1,16 @@
-# BlockCraft 2.8.1 🟩
+# BlockCraft 2.8.2 🌳
 
-Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.8.1 „Światło i chmury”** poprawia to, co zgłosili gracze po 2.8: czarne drzewa, prześwitujące liście, płaskie światło i chmury niezgodne z pogodą. Gra działa na komputerach i urządzeniach dotykowych.
+Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.8.2 „Zdrowe drzewa”** robi to, o co prosili gracze po 2.8.1: drzewa powstały **od zera**, liście są wreszcie pełne, światło pada kierunkowo, pochodnia w dłoni naprawdę oświetla okolicę, a chmury płyną spokojnie i pasują do pogody. Gra działa na komputerach i urządzeniach dotykowych.
+
+**Wersja 2.8.2 „Zdrowe drzewa”** – drzewa i światło:
+
+* **Drzewa napisane od nowa.** Nowy moduł `trees.ts` liczy kształt drzewa deterministycznie z ziarna i pozycji: osobne sylwetki dębu, brzozy, dżungli i akacji (parasol na sawannie), grubszy pień bez dziur, korona bez samotnie odstających liści. Sadzonka wyrasta w **dokładnie ten sam kształt**, więc ścięte drzewo odrasta identycznie, a sąsiednie drzewa nie zlewają się w jedną plamę.
+* **Koniec czarnych pni i prześwitujących liści.** Tekstury były flushowane do atlasu **przed** zagęszczaniem, więc liście dżungli i akacji zostawały puste (α = 0) – stąd czarne ścianki w koronie. Teraz atlas jest zapisywany raz, po wszystkich przejściach, liście akacji mają własny oliwkowy kafel (154), a `densifyTileData()` wypełnia każdą dziurę kolorem sąsiada. Test sprawdza, że w kaflach liści nie ma ani jednego przezroczystego piksela.
+* **Kierunkowe światło słońca.** Każda ściana niesie numer (`aFace`), a shader liczy `dot(ściana, kierunek słońca)`: ściany od słońca jaśnieją i dostają złocisty odcień, przeciwne gasną. Słońce działa tylko tam, gdzie blok widzi niebo (jaskinia nie łapie dnia), a światło nieba ma bazę 0,75 i wzmocnienie słońca 0,45.
+* **Noc bez smoły.** Dodana „księżycówka”: powierzchnie odsłonięte na niebo dostają łagodne światło księżyca, ale jaskinie i wnętrza koron pozostają ciemne. Podłoga otoczenia wzrosła do 0,13, więc noc jest czytelna, a nie czarna.
+* **Pochodnia w dłoni naprawdę świeci.** Zasięg wzrósł z 9 do **14 bloków**, blask nie jest już mnożony przez światło nieba (wcześniej w jaskini gasł), ma ciepły pomarańczowy odcień i łagodny spadek `(1 - d/14)^1.6`. Silnik aktualizuje uniform `uHeldStrength` co klatkę z lekkim migotaniem, a w testach sprawdzane są zasięg, spadek i aktualizacja materiału.
+* **Chmury, które płyną, a nie pędzą.** Tekstury chmur powstały z szumu fBm (zawijalnego) z dwiema warstwami i miękkim wygaszaniem przy horyzoncie (`alphaMap`). Prędkość spadła do 6,5 jednostki na sekundę, a przesunięcie liczone jest w jednostkach świata (z uwzględnieniem skali kafla), więc chmury nie „mrugają” i nie rozjeżdżają się z wiatrem. W burzy dryf jest 0,85× spokojniejszy, a warstwa burzowa wisi nisko (126 + 4·dzień).
+* **Testy.** `npm test` to teraz **1131 kontroli + 140 testów UI**: kształt drzew, gęstość atlasu liści, kierunkowe światło (południe, noc, cień korony, jaskinia), pochodnia w dłoni, dryf chmur oraz to, że każdy typ liści ma pełny kafel.
 
 **Wersja 2.8.1 „Światło i chmury”** – poprawki i realistyczne światło:
 
