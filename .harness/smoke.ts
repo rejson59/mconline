@@ -46,7 +46,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H } from '../src/game/world';
-import { B, BLOCKS, EMIT, IS_SOLID, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
+import { B, BLOCKS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
@@ -91,6 +91,8 @@ import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
 import { GAME_VERSION, GAME_RELEASE_NAME, RELEASE_HIGHLIGHTS } from '../src/utils/version';
+import { lightFactor, heldFalloff, patchChunkMaterial, HELD_POWER, HELD_RANGE, AMBIENT } from '../src/game/lighting';
+import { cloudLook, rainFogMix } from '../src/game/sky';
 import { filterRecipes } from '../src/utils/recipeSearch';
 
 // ------------------------------------------------------------------- runner
@@ -262,7 +264,9 @@ section('blocks: definitions and helpers');
   check('ladder detection', isLadder(B.LADDER_N));
   check('trapdoor detection', isTrap(B.TRAP_N));
   eq('bedrock is unbreakable', BLOCKS[B.BEDROCK].hardness, -1);
-  check('leaves are solid but not opaque', IS_SOLID[B.LEAVES] === 1 && BLOCKS[B.LEAVES].opaque === false);
+  // 2.8.1: liście są pełnymi blokami (korona nie prześwituje, brak czarnych ścianek).
+  check('leaves stay solid but are now dense', IS_SOLID[B.LEAVES] === 1 && BLOCKS[B.LEAVES].opaque === true);
+  check('every leaf type is dense', [B.LEAVES, B.BIRCH_LEAVES, B.ACACIA_LEAVES, B.JUNGLE_LEAVES].every((id) => BLOCKS[id].opaque === true));
 }
 
 // =================================================================== items
@@ -3040,11 +3044,168 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
   eq('the pool is reused on the next burst', g.particlePools.size, 1);
 }
 
-section('2.8: wersja wydania');
+section('2.8/2.8.1: wersja wydania');
 {
-  check('release label is 2.8', GAME_VERSION === '2.8');
-  check('release name is set', GAME_RELEASE_NAME === 'Płynny świat');
+  check('release label is the 2.8 line', GAME_VERSION.startsWith('2.8'));
+  check('release name is set', GAME_RELEASE_NAME === 'Światło i chmury' || GAME_RELEASE_NAME === 'Płynny świat');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
+  check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
+  check('2.8.1 highlights mention clouds and weather', RELEASE_HIGHLIGHTS.some((h) => /chmur/i.test(h.title) && /pogod/i.test(h.title + h.text)));
+}
+
+
+// ====================================== 2.8.1 „Światło i chmury” – poprawki
+section('2.8.1: model światła');
+{
+  const noon = lightFactor(1, 0, 1);
+  check('noon keeps full brightness', noon > 0.95 && noon < 1.2, noon.toFixed(3));
+  const night = lightFactor(1, 0, 0.16);
+  check('night is dim but never black', night > 0.12 && night < 0.4, night.toFixed(3));
+  // korona drzew rzuca cień: atrybut ~0.09 (sky ≈ 0.3) nie może dać czerni
+  const canopy = lightFactor(0.09, 0, 1);
+  check('shadow under a canopy stays readable', canopy > 0.25, canopy.toFixed(3));
+  const cave = lightFactor(0.001, 0, 0.16);
+  check('caves only fall back to ambient light', Math.abs(cave - AMBIENT) < 0.01, cave.toFixed(3));
+  const torchNear = lightFactor(0.001, 1, 0.16);
+  check('a torch in a cave lights it up', torchNear > 0.9, torchNear.toFixed(3));
+  check('the held light brightens dark corners',
+    lightFactor(0.09, 0, 0.16, heldFalloff(2, HELD_POWER)) > lightFactor(0.09, 0, 0.16) + 0.4);
+}
+
+section('2.8.1: shader światła');
+{
+  type Shader = { uniforms: Record<string, { value: unknown }>; vertexShader: string; fragmentShader: string };
+  const compile = (water: boolean) => {
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: water });
+    const day = { value: 1 };
+    const time = { value: 0 };
+    patchChunkMaterial(mat, day, { water, time });
+    const shader: Shader = {
+      uniforms: {},
+      vertexShader: THREE.ShaderLib.basic.vertexShader,
+      fragmentShader: THREE.ShaderLib.basic.fragmentShader,
+    };
+    (mat.onBeforeCompile as unknown as (s: Shader, r: unknown) => void)(shader, undefined);
+    return { shader, day, mat };
+  };
+  const plain = compile(false);
+  check('the shader gets the day uniform', plain.shader.uniforms.uDay?.value === 1);
+  check('the shader gets the held-light uniforms',
+    'uHeldPos' in plain.shader.uniforms && 'uHeldStrength' in plain.shader.uniforms && 'uHeldRange' in plain.shader.uniforms);
+  check('the vertex shader passes the world position', plain.shader.vertexShader.includes('vWorldPos = (modelMatrix'));
+  // Najważniejsze: kolor wierzchołka to zacienienie, a nie „kolor do pomnożenia”.
+  // Podwójne mnożenie przez vColor robiło z lasu czarną plamę.
+  check('vertex colour is not multiplied in twice', !plain.shader.fragmentShader.includes('#include <color_fragment>'));
+  check('the new light block is present', plain.shader.fragmentShader.includes('vec3 lightColor'));
+  check('block light keeps a warm tint', plain.shader.fragmentShader.includes('vec3 tint'));
+  const water = compile(true);
+  check('water keeps the wave animation', water.shader.vertexShader.includes('aWave') && water.shader.vertexShader.includes('uTime'));
+  check('water and solid chunks use separate programs',
+    plain.mat.customProgramCacheKey() !== water.mat.customProgramCacheKey());
+}
+
+section('2.8.1: światło w ręce');
+{
+  eq('held light reaches exactly the declared range', heldFalloff(HELD_RANGE, HELD_POWER), 0);
+  check('held light is strongest at the hand', heldFalloff(0, HELD_POWER) >= HELD_POWER - 1e-6);
+  check('held light fades with distance',
+    heldFalloff(2, HELD_POWER) > heldFalloff(5, HELD_POWER) && heldFalloff(5, HELD_POWER) > heldFalloff(8, HELD_POWER));
+  eq('no source means no light', heldFalloff(1, 0), 0);
+
+  type G = Record<string, any>;
+  const g = Object.create(Game.prototype) as G;
+  const uniform = { value: 0 };
+  g.materials = [{ userData: { uHeldStrength: uniform } }];
+  g.camera = { position: new THREE.Vector3(4, 70, -3) };
+  g.heldLight = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
+  let held: any = { id: B.TORCH };
+  g.selectedStack = () => held;
+  g.updateHeldLight();
+  check('holding a torch switches the light on', g.heldLight.strength > 1, String(g.heldLight.strength));
+  check('the uniform follows the eyes', g.heldLight.pos.x === 4 && g.heldLight.pos.z === -3);
+  check('the material uniform is updated', uniform.value > 1, String(uniform.value));
+  held = { id: B.STONE };
+  g.updateHeldLight();
+  eq('a stone in hand turns the light off', uniform.value, 0);
+}
+
+section('2.8.1: chmury i pogoda');
+{
+  const clear = cloudLook('clear', 1, 0);
+  const rain = cloudLook('rain', 1, 1);
+  const night = cloudLook('clear', 0.16, 0);
+  eq('clear sky has no storm layer', clear.stormOpacity, 0);
+  check('rain brings a thick storm layer', rain.stormOpacity > 0.5, String(rain.stormOpacity));
+  check('rain clouds are darker than clear ones',
+    rain.color[0] < clear.color[0] - 0.2 && rain.stormColor[0] < rain.color[0]);
+  check('night clouds are darker than day clouds',
+    night.color[0] < clear.color[0] - 0.3 && night.color[2] >= night.color[0]);
+  check('wind pushes storm clouds faster', rain.drift > clear.drift * 1.5);
+  check('storm layer floats below the fair-weather layer', rain.stormAltitude < rain.altitude);
+  const partial = cloudLook('rain', 1, 0.4);
+  check('the weather transition is gradual', partial.stormOpacity > 0 && partial.stormOpacity < rain.stormOpacity);
+  check('rain fog thickens in the dark', rainFogMix(0.16, 1) > rainFogMix(1, 1) && rainFogMix(1, 0) === 0);
+}
+
+section('2.8.1: liście bez dziur');
+{
+  for (const id of [B.LEAVES, B.BIRCH_LEAVES, B.ACACIA_LEAVES, B.JUNGLE_LEAVES]) {
+    check(`leaf ${id} is opaque for culling`, IS_OPAQUE[id] === 1);
+    check(`leaf ${id} lets light through`, IS_LEAFY[id] === 1 && OCCLUDES[id] === 0);
+  }
+  check('stone is a full light blocker', IS_LEAFY[B.STONE] === 0 && OCCLUDES[B.STONE] === 1);
+  check('leaves still cast soft AO', IS_LEAFY[B.LEAVES] === 1);
+}
+
+// Jasność górnej ściany bloku gruntu w danym miejscu – to, co widzi shader,
+// czyli pierwiastek z zapisanego w siatce zacienienia (0 = smoła, 1 = pełne słońce).
+function topShade(world: World, x: number, z: number, ground = world.heightAt(x, z)): number {
+  const c = world.getChunk(Math.floor(x / CS), Math.floor(z / CS));
+  const geos = world.buildMesh(c);
+  const gy = ground;
+  let best = -1;
+  for (const g of geos) {
+    const pos = g.getAttribute('position');
+    const col = g.getAttribute('color');
+    if (!pos || !col) continue;
+    for (let i = 0; i + 3 < pos.count; i += 4) {
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, top = true, shade = 0;
+      for (let k = 0; k < 4; k++) {
+        const px = pos.getX(i + k), py = pos.getY(i + k), pz = pos.getZ(i + k);
+        minX = Math.min(minX, px); maxX = Math.max(maxX, px);
+        minZ = Math.min(minZ, pz); maxZ = Math.max(maxZ, pz);
+        if (Math.abs(py - (gy + 1)) > 1e-6) top = false;
+        shade = Math.max(shade, col.getX(i + k));
+      }
+      if (!top) continue;
+      if (minX !== x || maxX !== x + 1 || minZ !== z || maxZ !== z + 1) continue;
+      best = Math.max(best, shade);
+    }
+  }
+  return best < 0 ? -1 : Math.sqrt(best);
+}
+
+section('2.8.1: światło nieba pod koroną');
+{
+  const w = new World(4242, true);
+  const gy = w.heightAt(4, 4);
+  const open = topShade(w, 4, 4);
+  check('open ground sees the full sky', open > 0.97, open.toFixed(3));
+
+  // 5×5 korona liści cztery bloki nad trawą
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) w.setBlock(4 + dx, gy + 4, 4 + dz, B.LEAVES);
+  const under = topShade(w, 4, 4);
+  check('a crown softens the light instead of blacking it out', under > 0.2 && under < 0.92, under.toFixed(3));
+  const beside = topShade(w, 12, 4);
+  check('the shade ends outside the crown', beside > 0.97, beside.toFixed(3));
+  eq('the crown is not the ground', w.heightAt(4, 4), gy);
+
+  // pełny strop kamienia w tym samym miejscu = ciemna jaskinia
+  for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) w.setBlock(4 + dx, gy + 4, 4 + dz, B.STONE);
+  const cave = topShade(w, 4, 4, gy);
+  check('a solid roof leaves the cave dark', cave < 0.05, cave.toFixed(3));
+  check('a cave is darker than a forest floor', cave < under * 0.2);
+  check('a hard roof becomes the new surface height', w.heightAt(4, 4) === gy + 4);
 }
 
 

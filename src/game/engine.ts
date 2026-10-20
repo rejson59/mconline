@@ -15,6 +15,11 @@ import { Mob, isHostileMob, type MobType } from './mobs';
 
 const GREY: readonly number[] = [90, 90, 90];
 
+/** 2.8.1: przedmioty, które świecą także wtedy, gdy trzyma je gracz. */
+const HELD_LIGHT_ITEMS: ReadonlySet<number> = new Set<number>([
+  B.TORCH, B.LANTERN, B.GLOWSTONE, B.CAMPFIRE, B.SHROOMLIGHT, B.REDSTONE_LAMP_ON, B.REDSTONE_TORCH, B.MAGMA,
+]);
+
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
 import { Inventory, RECIPES, type Stack } from './inventory';
@@ -25,7 +30,8 @@ import {
   type EnchOption,
 } from './enchant';
 import * as Sfx from './audio';
-import { patchChunkMaterial } from './lighting';
+import { patchChunkMaterial, HELD_POWER, type HeldLightState } from './lighting';
+import { cloudLook, rainFogMix } from './sky';
 import { buildItemIcons } from './itemIcons';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
@@ -478,6 +484,13 @@ export class Game {
   stars: THREE.Points;
   clouds: THREE.Mesh;
   cloudTex: THREE.Texture;
+  /** 2.8.1: gęsta warstwa chmur widoczna tylko podczas deszczu. */
+  stormClouds!: THREE.Mesh;
+  stormTex!: THREE.Texture;
+  /** Płynne przejście pogody (0 = jasno, 1 = pełny deszcz). */
+  private stormBlend = 0;
+  /** 2.8.1: światło trzymanego przedmiotu (pochodnia, latarnia…). */
+  private heldLight: HeldLightState = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
   ambient: THREE.HemisphereLight;
   dirLight: THREE.DirectionalLight;
   particleGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -664,7 +677,9 @@ export class Game {
       new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
     ];
     // 2.8: warstwa przezroczysta (woda, szkło, portal) dostaje delikatną falę.
-    this.materials.forEach((m, i) => patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime }));
+    this.materials.forEach((m, i) =>
+      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime, held: this.heldLight })
+    );
     this.dropMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.4, side: THREE.DoubleSide });
     this.crackTex = atlas.cracks.map((c) => {
       const t = new THREE.CanvasTexture(c);
@@ -759,6 +774,28 @@ export class Game {
     );
     this.clouds.rotation.x = -Math.PI / 2;
     this.scene.add(this.clouds);
+
+    // 2.8.1: druga, gęstsza warstwa – pojawia się tylko podczas deszczu,
+    // dlatego chmury naprawdę „pasują” do pogody (ciemne, niskie, szybkie).
+    this.stormTex = makeCanvasTex(128, (c) => {
+      c.clearRect(0, 0, 128, 128);
+      c.fillStyle = '#ffffff';
+      for (let i = 0; i < 240; i++) {
+        const x = Math.floor(Math.random() * 128), y = Math.floor(Math.random() * 128);
+        const w = 3 + Math.floor(Math.random() * 9), h = 2 + Math.floor(Math.random() * 6);
+        c.fillRect(x, y, w, h);
+        c.fillRect((x + 64) % 128, (y + 32) % 128, Math.max(1, w >> 1), 1);
+      }
+    });
+    this.stormTex.wrapS = this.stormTex.wrapT = THREE.RepeatWrapping;
+    this.stormTex.repeat.set(2.5, 2.5);
+    this.stormClouds = new THREE.Mesh(
+      new THREE.PlaneGeometry(2600, 2600),
+      new THREE.MeshBasicMaterial({ map: this.stormTex, transparent: true, opacity: 0, fog: false, depthWrite: false, side: THREE.DoubleSide })
+    );
+    this.stormClouds.rotation.x = -Math.PI / 2;
+    this.stormClouds.visible = false;
+    this.scene.add(this.stormClouds);
 
     // hand
     this.handMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, depthTest: false, alphaTest: 0.3, side: THREE.FrontSide });
@@ -908,9 +945,20 @@ export class Game {
         const x = Math.floor(Math.cos(ang) * r), z = Math.floor(Math.sin(ang) * r);
         const s = this.world.surface(x, z);
         if (s.h > SEA + 1 && s.biome !== 'Ocean' && s.biome !== 'Góry') {
-          let y = this.world.heightAt(x, z) + 1;
-          while (y < CH - 2 && (IS_SOLID[this.world.getBlock(x, y, z)] || IS_SOLID[this.world.getBlock(x, y + 1, z)] || this.world.getBlock(x, y - 1, z) === B.LEAVES)) y++;
-          this.spawnPoint.set(x + 0.5, y, z + 0.5);
+          // 2.8.1: liście są pełnymi blokami, więc `heightAt` może wskazać
+          // koronę drzewa. Zejdź do prawdziwego gruntu, żeby gracz nie
+          // zaczynał na czubku dębu.
+          let y = this.world.heightAt(x, z);
+          let guard = 0;
+          while (y > 1 && guard++ < 96) {
+            const id = this.world.getBlock(x, y, z);
+            if (id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.ACACIA_LEAVES || id === B.JUNGLE_LEAVES || id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) y--;
+            else break;
+          }
+          while (y > 1 && !IS_SOLID[this.world.getBlock(x, y, z)]) y--;
+          // Nie startuj w wodzie ani pod nią.
+          if (this.world.getBlock(x, y, z) === B.WATER) continue;
+          this.spawnPoint.set(x + 0.5, y + 1, z + 0.5);
           return;
         }
       }
@@ -4112,6 +4160,7 @@ export class Game {
     this.uTime.value += dt;
     this.updateCamera(dt);
     this.updateSky();
+    this.updateHeldLight();
 
     this.hudTimer += dt;
     if (this.hudTimer > 0.1) { this.hudTimer = 0; this.emitHud(); }
@@ -4687,6 +4736,31 @@ export class Game {
   private skyColor = new THREE.Color();
   private skySunDir = new THREE.Vector3();
 
+  /**
+   * 2.8.1: światło trzymanego przedmiotu. Pochodnia (albo latarnia,
+   * jasnogłaz, ognisko, grzyboświatło, zapalona lampa czerwonego kamienia)
+   * naprawdę oświetla najbliższe bloki – także w jaskini i w Netherze.
+   */
+  private updateHeldLight() {
+    const stack = this.selectedStack();
+    const power = stack && HELD_LIGHT_ITEMS.has(stack.id) ? HELD_POWER : 0;
+    if (power > 0) {
+      const t = performance.now();
+      const flicker = 0.93 + Math.sin(t * 0.006) * 0.045 + Math.sin(t * 0.017) * 0.025;
+      this.heldLight.strength = power * flicker;
+    } else {
+      this.heldLight.strength = 0;
+    }
+    // Pozycja: oczy gracza, lekko przed nim – blask pada na to, na co patrzy.
+    const cp = this.camera.position;
+    this.heldLight.pos.set(cp.x, cp.y, cp.z);
+    const unset = this.heldLight.strength === 0;
+    for (const m of this.materials) {
+      const u = m.userData.uHeldStrength as { value: number } | undefined;
+      if (u) u.value = unset ? 0 : this.heldLight.strength;
+    }
+  }
+
   private updateSky() {
     const nether = this.isInNether;
     const ang = this.time * Math.PI * 2;
@@ -4720,13 +4794,23 @@ export class Game {
       this.scene.background = fog.color;
     } else {
       fog.color.copy(sky);
+      // 2.8.1: w deszczu mgła ciemnieje i lekko sinieje, więc chmury i mgła
+      // opowiadają tę samą pogodę.
+      const fogMix = raining ? rainFogMix(dl, this.stormBlend) : 0;
+      if (fogMix > 0) {
+        fog.color.r *= 1 - 0.22 * fogMix;
+        fog.color.g *= 1 - 0.18 * fogMix;
+        fog.color.b *= 1 - 0.06 * fogMix;
+      }
       fog.near = this.renderDistance * CS * (raining ? 0.28 : 0.45);
       fog.far = this.renderDistance * CS * (raining ? 0.7 : 0.95);
       this.scene.background = sky;
     }
 
     // W Netherze oświetlenie jest stałe – bez dnia i nocy.
-    const lin = nether ? 0.72 : Math.pow(dl, 2.2);
+    // 2.8.1: łagodniejsza krzywa – wieczorem światło spada razem z niebem,
+    // zamiast zniknąć w jednej klatce i zostawić czarne drzewa.
+    const lin = nether ? 0.78 : 0.16 + 0.84 * Math.pow(dl, 2.4);
     // 2.4: nocne widzenie podnosi podłogę światła, więc jaskinie nie są już czarne.
     const night = this.hasEffect('night');
     const light = night ? Math.max(lin, 0.55) : lin;
@@ -4758,11 +4842,27 @@ export class Game {
     this.stars.position.copy(cp);
     this.stars.rotation.z = ang;
     (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - dl * 1.5);
-    this.clouds.position.set(cp.x, 132, cp.z);
-    const drift = performance.now() / 1000 * 1.2;
-    this.cloudTex.offset.set((cp.x + drift) / 1200, -cp.z / 1200);
-    (this.clouds.material as THREE.MeshBasicMaterial).color.setScalar(Math.max(0.15, dl) * (raining ? 0.55 : 1));
-    (this.clouds.material as THREE.MeshBasicMaterial).opacity = raining ? 0.95 : 0.8;
+
+    // 2.8.1: chmury zależne od pogody i pory dnia (patrz `sky.ts`).
+    const look = cloudLook(this.weather, dl, this.stormBlend);
+    const cloudMat = this.clouds.material as THREE.MeshBasicMaterial;
+    const stormMat = this.stormClouds.material as THREE.MeshBasicMaterial;
+    const cloudVisible = !nether && this.gfx.clouds;
+    this.clouds.visible = cloudVisible;
+    this.stormClouds.visible = cloudVisible && look.stormOpacity > 0.01;
+    if (cloudVisible) {
+      const drift = performance.now() / 1000 * 1.2 * look.drift;
+      this.clouds.position.set(cp.x, look.altitude, cp.z);
+      this.cloudTex.offset.set((cp.x + drift * 26) / 1200, -cp.z / 1200);
+      cloudMat.color.setRGB(look.color[0], look.color[1], look.color[2]);
+      cloudMat.opacity = look.opacity;
+      if (this.stormClouds.visible) {
+        this.stormClouds.position.set(cp.x, look.stormAltitude, cp.z);
+        this.stormTex.offset.set((cp.x + drift * 44) / 860, -cp.z / 860);
+        stormMat.color.setRGB(look.stormColor[0], look.stormColor[1], look.stormColor[2]);
+        stormMat.opacity = look.stormOpacity;
+      }
+    }
   }
 
   emitHud() {
@@ -5273,6 +5373,10 @@ export class Game {
   }
 
   private updateWeather(dt: number) {
+    // 2.8.1: pogoda przechodzi płynnie – chmury gęstnieją, zamiast „przeskoczyć”.
+    const target = this.weather === 'rain' && !this.isInNether ? 1 : 0;
+    this.stormBlend += (target - this.stormBlend) * Math.min(1, dt * 0.6);
+    if (this.stormBlend < 0.001) this.stormBlend = 0;
     // Sparse ambient music – never during combat-ish menus, never on the title screen.
     if (this.ui === 'playing' || this.ui === 'chat') {
       this.musicTimer -= dt;
@@ -5470,6 +5574,12 @@ export class Game {
     this.dropIconGeo.dispose();
     for (const mat of this.dropIconMats.values()) mat.dispose();
     this.dropIconMats.clear();
+    if (this.stormClouds) {
+      this.scene.remove(this.stormClouds);
+      this.stormClouds.geometry.dispose();
+      (this.stormClouds.material as THREE.Material).dispose();
+    }
+    this.stormTex?.dispose();
     this.skyDomeTex?.dispose();
     this.skyDome?.geometry.dispose();
     if (this.skyDome) (this.skyDome.material as THREE.Material).dispose();

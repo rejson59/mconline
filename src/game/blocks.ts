@@ -145,7 +145,9 @@ def(B.DIRT, 'Ziemia', T.dirt, { hardness: 0.5, sound: 'grass' });
 def(B.STONE, 'Kamień', T.stone, { hardness: 1.5, drop: B.COBBLE });
 def(B.COBBLE, 'Bruk', T.cobble, { hardness: 2 });
 def(B.LOG, 'Pień dębu', [T.log_top, T.log_top, T.log_side], { hardness: 2, sound: 'wood' });
-def(B.LEAVES, 'Liście dębu', T.leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
+// 2.8.1: liście są pełne (bez dziur) – korona nie prześwituje i nie ma
+// wewnętrznych, czarnych ścianek. Tekstura jest zagęszczana w `textures.ts`.
+def(B.LEAVES, 'Liście dębu', T.leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.PLANKS, 'Deski dębowe', T.planks, { hardness: 2, sound: 'wood' });
 def(B.SAND, 'Piasek', T.sand, { hardness: 0.5, sound: 'sand' });
 def(B.WATER, 'Woda', T.water, { solid: false, opaque: false, layer: 2, render: 'liquid', hardness: -1, drop: -1 });
@@ -160,7 +162,7 @@ def(B.BRICK, 'Cegły', T.brick, { hardness: 2 });
 def(B.SNOW, 'Blok śniegu', [T.snow, T.dirt, T.snow_side], { hardness: 0.5, drop: B.DIRT, sound: 'cloth' });
 def(B.CACTUS, 'Kaktus', [T.cactus_top, T.cactus_top, T.cactus_side], { opaque: false, layer: 1, hardness: 0.4, sound: 'cloth' });
 def(B.BIRCH_LOG, 'Pień brzozy', [T.birch_top, T.birch_top, T.birch_side], { hardness: 2, sound: 'wood' });
-def(B.BIRCH_LEAVES, 'Liście brzozy', T.birch_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
+def(B.BIRCH_LEAVES, 'Liście brzozy', T.birch_leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.TNT, 'TNT', [T.tnt_top, T.tnt_bottom, T.tnt_side], { hardness: 0, sound: 'grass' });
 def(B.GLOWSTONE, 'Jasnogłaz', T.glowstone, { hardness: 0.3, sound: 'glass' });
 def(B.BOOKSHELF, 'Biblioteczka', [T.planks, T.planks, T.bookshelf], { hardness: 1.5, sound: 'wood' });
@@ -301,8 +303,8 @@ def(B.HONEYCOMB_BLOCK, 'Blok plastra miodu', T.honeycomb_block, { hardness: 0.6,
 // 3.0: materials and plants found in the new warm and wet biomes.
 def(B.MUD, 'Błoto', T.mud, { hardness: 0.45, sound: 'sand' });
 def(B.ACACIA_LOG, 'Pień akacji', [T.acacia_top, T.acacia_top, T.acacia_side], { hardness: 2, sound: 'wood' });
-def(B.ACACIA_LEAVES, 'Liście akacji', T.jungle_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
-def(B.JUNGLE_LEAVES, 'Gęste liście tropikalne', T.jungle_leaves, { opaque: false, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
+def(B.ACACIA_LEAVES, 'Liście akacji', T.jungle_leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
+def(B.JUNGLE_LEAVES, 'Gęste liście tropikalne', T.jungle_leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.LILY_PAD, 'Lilia wodna', T.lily_pad, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0.1, sound: 'grass' });
 
 export const BLOCKS = defs;
@@ -311,12 +313,19 @@ export const BLOCK_COUNT = defs.length;
 // Fast lookup tables – expanded to 512 for 1.7 blocks
 export const IS_SOLID = new Uint8Array(512);
 export const IS_OPAQUE = new Uint8Array(512);
+// 2.8.1: liście są nieprzezroczyste dla siatki (żadnych wewnętrznych ścianek),
+// ale dla światła tylko tłumią je stopniowo – inaczej pień pod koroną był czarny.
+export const IS_LEAFY = new Uint8Array(512);
+// Pełny okluder dla AO: liście cieniują, ale nie odcinają światła do zera.
+export const OCCLUDES = new Uint8Array(512);
 export const LAYER = new Uint8Array(512);
 export const RENDER = new Uint8Array(512); // 0 cube, 1 cross, 2 liquid, 3 slab, 4 stairs, 5 portal, 6 rail
 for (const d of defs) {
   if (!d) continue;
   IS_SOLID[d.id] = d.solid ? 1 : 0;
   IS_OPAQUE[d.id] = d.opaque ? 1 : 0;
+  IS_LEAFY[d.id] = d.id === B.LEAVES || d.id === B.BIRCH_LEAVES || d.id === B.ACACIA_LEAVES || d.id === B.JUNGLE_LEAVES ? 1 : 0;
+  OCCLUDES[d.id] = d.opaque && IS_LEAFY[d.id] === 0 ? 1 : 0;
   LAYER[d.id] = d.layer;
   if (d.render === 'cube') RENDER[d.id] = 0;
   else if (d.render === 'cross') RENDER[d.id] = 1;
