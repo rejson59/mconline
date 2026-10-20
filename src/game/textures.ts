@@ -798,6 +798,13 @@ export function buildAtlas(): AtlasResult {
     }
   }
 
+  // --------------------------------------------------------------- 2.8 „Płynny świat”
+  // Mikro-odetnienia: każdy nieprzezroczysty kafelek dostaje miękkie,
+  // spójne krawędzie (przeciwległe piksele delikatnie się mieszają) oraz
+  // subtelny skos — górna krawędź jaśniejsza, dolna ciemniejsza. Bloki
+  // przestają zlewać się w jedną plamę, a atlas pozostaje w 100% pikselowy.
+  polishTiles();
+
   // average colors
   for (const d of BLOCKS) {
     if (!d) continue;
@@ -842,6 +849,63 @@ export function buildAtlas(): AtlasResult {
   }
 
   return { canvas, icons, cracks };
+}
+
+/** Czy kafelek jest w pełni nieprzezroczysty (bez dziur i półprzezroczystości). */
+function isOpaqueTile(tile: number): boolean {
+  for (let y = 0; y < TILE; y++)
+    for (let x = 0; x < TILE; x++) {
+      const tx = (tile % ATLAS_TILES) * TILE + x;
+      const ty = Math.floor(tile / ATLAS_TILES) * TILE + y;
+      if (img.data[(ty * ATLAS_SIZE + tx) * 4 + 3] < 250) return false;
+    }
+  return true;
+}
+
+/**
+ * 2.8: spójne krawędzie + skos. Kafelki przezroczyste (rośliny, szkło, woda)
+ * są pomijane, żeby nie zamalować ich delikatnych kształtów.
+ */
+function polishTiles() {
+  const buf = new Uint8ClampedArray(TILE * TILE * 4);
+  for (const tile of Object.values(T)) {
+    if (!isOpaqueTile(tile)) continue;
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) {
+        const tx = (tile % ATLAS_TILES) * TILE + x;
+        const ty = Math.floor(tile / ATLAS_TILES) * TILE + y;
+        const i = (ty * ATLAS_SIZE + tx) * 4;
+        const o = (y * TILE + x) * 4;
+        buf[o] = img.data[i]; buf[o + 1] = img.data[i + 1]; buf[o + 2] = img.data[i + 2]; buf[o + 3] = img.data[i + 3];
+      }
+    const at = (x: number, y: number) => (y * TILE + x) * 4;
+    const mix = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
+    // Przeciwległe krawędzie zbliżają się do siebie o 40% – szew między
+    // dwoma blokami tego samego typu przestaje być widoczny.
+    for (let k = 0; k < TILE; k++) {
+      for (const [x, y, ox, oy] of [
+        [k, 0, k, TILE - 1],
+        [k, TILE - 1, k, 0],
+        [0, k, TILE - 1, k],
+        [TILE - 1, k, 0, k],
+      ] as [number, number, number, number][]) {
+        const i = at(x, y), j = at(ox, oy);
+        setPx(tile, x, y, mix(buf[i], buf[j], 0.4), mix(buf[i + 1], buf[j + 1], 0.4), mix(buf[i + 2], buf[j + 2], 0.4));
+      }
+    }
+    // Skos: górna krawędź jaśniejsza, dolna ciemniejsza, prawa lekko ciemna.
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) {
+        let f = 1;
+        if (y === 0) f *= 1.035;
+        if (y === TILE - 1) f *= 0.93;
+        if (x === 0) f *= 1.015;
+        if (x === TILE - 1) f *= 0.965;
+        if (f === 1) continue;
+        const p = getPx(tile, x, y);
+        setPx(tile, x, y, p[0] * f, p[1] * f, p[2] * f, p[3]);
+      }
+  }
 }
 
 function makeIcon(atlas: HTMLCanvasElement, id: number): string {

@@ -18,6 +18,13 @@ export { CH, CS, FLAT_H, SEA };
 
 export type Biome = 'Równiny' | 'Las' | 'Pustynia' | 'Tundra' | 'Góry' | 'Plaża' | 'Ocean' | 'Brzozowy las' | 'Bagno' | 'Sawanna' | 'Dżungla' | 'Nether';
 
+export interface SurfaceInfo {
+  h: number;
+  biome: Biome;
+  temp: number;
+  forest: number;
+}
+
 const idx = (x: number, y: number, z: number) => (y * CS + z) * CS + x;
 
 function hash(x: number, y: number, z: number, s: number): number {
@@ -37,9 +44,24 @@ export class Chunk {
   maxY = 0;
   /** Nether chunks measure height as the walkable FLOOR, never the roof. */
   nether = false;
+  /**
+   * 2.8 „Płynny świat”: indeks bloków emitujących światło (pochodnie, lawa,
+   * jasnogłaz…). Meshing wcześniej skanował 9 × 32 768 bloków sąsiadów przy
+   * KAŻDYM chunku; teraz czyta tylko faktyczne źródła światła.
+   */
+  emitters: number[] = [];
+  /** Zmienia się przy każdej modyfikacji terenu (cache minimapy). */
+  revision = 0;
   constructor(cx: number, cz: number) {
     this.cx = cx;
     this.cz = cz;
+  }
+  /** Przebudowuje indeks świateł po wygenerowaniu albo zmianie bloku. */
+  refreshEmitters() {
+    const out: number[] = [];
+    const d = this.data;
+    for (let i = 0; i < d.length; i++) if (EMIT[d[i]]) out.push(i);
+    this.emitters = out;
   }
   recomputeHeight(x: number, z: number) {
     if (this.nether) {
@@ -83,13 +105,100 @@ const qx: number[] = [];
 const qy: number[] = [];
 const qz: number[] = [];
 
+/**
+ * 2.8: typowane bufory zamiast tablic `number[]`. Każdy `push` na zwykłej
+ * tablicy alokował pamięć i produkował śmieci; przy tysiącach ścian na chunk
+ * miało to bezpośredni wpływ na płynność. Bufory rosną geometrycznie, a do
+ * geometrii trafia dokładny wycinek.
+ */
 class MeshBuffer {
-  pos: number[] = [];
-  uv: number[] = [];
-  col: number[] = [];
-  block: number[] = [];
-  ind: number[] = [];
+  pos: Float32Array;
+  uv: Float32Array;
+  col: Float32Array;
+  block: Float32Array;
+  wave: Float32Array;
+  ind: Uint32Array;
   count = 0;
+  icount = 0;
+
+  constructor(capacity = 2048) {
+    this.pos = new Float32Array(capacity * 3);
+    this.uv = new Float32Array(capacity * 2);
+    this.col = new Float32Array(capacity * 3);
+    this.block = new Float32Array(capacity);
+    this.wave = new Float32Array(capacity);
+    this.ind = new Uint32Array(capacity * 1.5);
+  }
+
+  private growVertices(need: number) {
+    let cap = this.pos.length / 3;
+    if (cap >= need) return;
+    while (cap < need) cap *= 2;
+    const copy = <T extends Float32Array>(src: T, itemSize: number): T => {
+      const next = new Float32Array(cap * itemSize) as T;
+      next.set(src);
+      return next;
+    };
+    this.pos = copy(this.pos, 3);
+    this.uv = copy(this.uv, 2);
+    this.col = copy(this.col, 3);
+    this.block = copy(this.block, 1);
+    this.wave = copy(this.wave, 1);
+  }
+
+  private growIndices(need: number) {
+    let cap = this.ind.length;
+    if (cap >= need) return;
+    while (cap < need) cap *= 2;
+    const next = new Uint32Array(cap);
+    next.set(this.ind);
+    this.ind = next;
+  }
+
+  vertex(px: number, py: number, pz: number, u: number, v: number, r: number, g: number, b: number, blk: number, wave = 0) {
+    this.growVertices(this.count + 1);
+    const i = this.count++;
+    const i3 = i * 3;
+    const i2 = i * 2;
+    this.pos[i3] = px; this.pos[i3 + 1] = py; this.pos[i3 + 2] = pz;
+    this.uv[i2] = u; this.uv[i2 + 1] = v;
+    this.col[i3] = r; this.col[i3 + 1] = g; this.col[i3 + 2] = b;
+    this.block[i] = blk;
+    this.wave[i] = wave;
+  }
+
+  /** Zapisuje indeksy czworokąta (kolejność zależna od kierunku AO). */
+  quad(base: number, flipped = false) {
+    const need = this.icount + 6;
+    this.growIndices(need);
+    const ind = this.ind;
+    let o = this.icount;
+    if (flipped) {
+      ind[o++] = base; ind[o++] = base + 1; ind[o++] = base + 3;
+      ind[o++] = base; ind[o++] = base + 3; ind[o++] = base + 2;
+    } else {
+      ind[o++] = base; ind[o++] = base + 1; ind[o++] = base + 2;
+      ind[o++] = base + 2; ind[o++] = base + 1; ind[o++] = base + 3;
+    }
+    this.icount = o;
+  }
+
+  geometry(): THREE.BufferGeometry {
+    const g = new THREE.BufferGeometry();
+    if (this.count === 0) return g;
+    const vertices = this.count;
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos.slice(0, vertices * 3), 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(this.uv.slice(0, vertices * 2), 2));
+    g.setAttribute('color', new THREE.BufferAttribute(this.col.slice(0, vertices * 3), 3));
+    g.setAttribute('aBlock', new THREE.BufferAttribute(this.block.slice(0, vertices), 1));
+    g.setAttribute('aWave', new THREE.BufferAttribute(this.wave.slice(0, vertices), 1));
+    const indices = this.ind.subarray(0, this.icount);
+    g.setIndex(vertices > 65535
+      ? new THREE.BufferAttribute(indices.slice(), 1)
+      : new THREE.BufferAttribute(Uint16Array.from(indices), 1));
+    g.computeBoundingSphere();
+    return g;
+  }
 }
 
 /** Axis-aligned box in local 0–1 space, translated to world. Used for doors, ladders and hatches. */
@@ -112,19 +221,16 @@ function addBox(
   for (let f = 0; f < 6; f++) {
     const F = FACES[f];
     const base = buf.count;
+    const skyB = F.shade * sky;
+    const br = skyB * skyB;
+    const bb = F.shade * blk;
+    const bl = bb * bb;
     for (let k = 0; k < 4; k++) {
       const cr = F.c[k];
-      buf.pos.push(ox + map(cr[0], x0, x1), oy + map(cr[1], y0, y1), oz + map(cr[2], z0, z1));
       const uv = tileUV(tile, cr[3], cr[4]);
-      buf.uv.push(uv[0], uv[1]);
-      const skyB = F.shade * sky;
-      const br = skyB * skyB;
-      buf.col.push(br, br, br);
-      const bb = F.shade * blk;
-      buf.block.push(bb * bb);
+      buf.vertex(ox + map(cr[0], x0, x1), oy + map(cr[1], y0, y1), oz + map(cr[2], z0, z1), uv[0], uv[1], br, br, br, bl);
     }
-    buf.ind.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
-    buf.count += 4;
+    buf.quad(base);
   }
 }
 
@@ -184,7 +290,28 @@ export class World {
   }
 
   // ---------- Terrain ----------
-  surface(x: number, z: number): { h: number; biome: Biome; temp: number; forest: number } {
+  /**
+   * 2.8: współrzędne próbek wysokości w obrębie jednego chunku są liczone
+   * wielokrotnie (trzcina, drzewa, wioski). Cache na czas generowania oszczędza
+   * dziesiątki tysięcy wywołań szumu, nie zmieniając ani jednego bloku.
+   */
+  private genSurface: Map<number, SurfaceInfo> | null = null;
+
+  surface(x: number, z: number): SurfaceInfo {
+    const cache = this.genSurface;
+    if (cache) {
+      // Klucz numeryczny obejmuje cały typowy zasięg świata (±32 768 kratek).
+      const key = (x + 32768) * 65536 + (z + 32768);
+      const hit = cache.get(key);
+      if (hit) return hit;
+      const info = this.computeSurface(x, z);
+      cache.set(key, info);
+      return info;
+    }
+    return this.computeSurface(x, z);
+  }
+
+  private computeSurface(x: number, z: number): SurfaceInfo {
     if (this.isNether) return { h: this.netherFloorH(x, z), biome: 'Nether', temp: 0, forest: 0 };
     if (this.flat) return { h: FLAT_H, biome: 'Równiny', temp: 0, forest: 0 };
     const cont = this.n1.fbm2D(x / 700, z / 700, 4);
@@ -216,6 +343,40 @@ export class World {
     return { h, biome, temp, forest };
   }
 
+  /**
+   * 2.8: jednowpisowy cache ostatnio użytego chunku. `peekBlock` jest wołany
+   * tysiące razy na sekundę (fizyka, AI mobów, cząstki) i za każdym razem
+   * składał nowy klucz tekstowy „cx,cz”. Teraz najczęstszy przypadek – ten sam
+   * chunk co przed chwilą – to jedno porównanie liczb.
+   */
+  private lastCx = 0x7fffffff;
+  private lastCz = 0x7fffffff;
+  private lastChunk: Chunk | null = null;
+
+  private chunkFast(cx: number, cz: number): Chunk | null {
+    if (cx === this.lastCx && cz === this.lastCz) return this.lastChunk;
+    const c = this.chunks.get(World.key(cx, cz)) ?? null;
+    if (c) {
+      this.lastCx = cx;
+      this.lastCz = cz;
+      this.lastChunk = c;
+    }
+    return c;
+  }
+
+  /** Usuwa chunk z pamięci (także z cache) – używane przy zwalnianiu zasięgu. */
+  releaseChunk(cx: number, cz: number): Chunk | null {
+    const c = this.chunks.get(World.key(cx, cz)) ?? null;
+    if (!c) return null;
+    this.chunks.delete(World.key(cx, cz));
+    if (this.lastChunk === c) {
+      this.lastChunk = null;
+      this.lastCx = 0x7fffffff;
+      this.lastCz = 0x7fffffff;
+    }
+    return c;
+  }
+
   getChunk(cx: number, cz: number): Chunk {
     const k = World.key(cx, cz);
     let c = this.chunks.get(k);
@@ -224,6 +385,19 @@ export class World {
       c.nether = this.isNether;
       this.generate(c);
       this.chunks.set(k, c);
+      this.lastCx = cx;
+      this.lastCz = cz;
+      this.lastChunk = c;
+      // 2.8: nowy chunk zmienia widoczne krawędzie sąsiadów. Bez oznaczenia
+      // ich jako brudne po powrocie w odwiedzony rejon zostawały dziury w
+      // ścianach (siatka sąsiada była liczona, gdy ten chunk nie istniał).
+      for (let dx = -1; dx <= 1; dx++)
+        for (let dz = -1; dz <= 1; dz++) {
+          if (dx === 0 && dz === 0) continue;
+          const key = World.key(cx + dx, cz + dz);
+          const neighbor = this.chunks.get(key);
+          if (neighbor && neighbor.built) this.dirty.add(key);
+        }
     }
     return c;
   }
@@ -233,6 +407,19 @@ export class World {
   }
 
   private generate(c: Chunk) {
+    // 2.8: cache powierzchni żyje tylko podczas generowania jednego chunku.
+    const previous = this.genSurface;
+    this.genSurface = new Map();
+    try {
+      this.generateInner(c);
+    } finally {
+      this.genSurface = previous;
+    }
+    c.refreshEmitters();
+    c.revision++;
+  }
+
+  private generateInner(c: Chunk) {
     if (this.isNether) { this.generateNether(c); return; }
     if (this.flat) { this.generateFlat(c); return; }
     const d = c.data;
@@ -679,14 +866,14 @@ export class World {
     if (y < 0) return B.BEDROCK;
     if (y >= CH) return B.AIR;
     const cx = Math.floor(x / CS), cz = Math.floor(z / CS);
-    const c = this.chunks.get(World.key(cx, cz));
+    const c = this.chunkFast(cx, cz);
     if (!c) return B.STONE;
     return c.data[idx(x - cx * CS, y, z - cz * CS)];
   }
 
   heightAt(x: number, z: number): number {
     const cx = Math.floor(x / CS), cz = Math.floor(z / CS);
-    const c = this.getChunk(cx, cz);
+    const c = this.chunkFast(cx, cz) ?? this.getChunk(cx, cz);
     return c.heightMap[(z - cz * CS) * CS + (x - cx * CS)];
   }
 
@@ -696,10 +883,15 @@ export class World {
     const c = this.getChunk(cx, cz);
     const lx = x - cx * CS, lz = z - cz * CS;
     const i = idx(lx, y, lz);
-    if (c.data[i] === id) return;
+    const previous = c.data[i];
+    if (previous === id) return;
     c.data[i] = id;
     if (y + 2 > c.maxY) c.maxY = Math.min(CH - 1, y + 2);
     c.recomputeHeight(lx, lz);
+    // 2.8: utrzymuje indeks świateł w zgodzie z terenem (bez pełnego skanu
+    // przy stawianiu zwykłego bloku).
+    if (EMIT[previous] || EMIT[id]) c.refreshEmitters();
+    c.revision++;
     const k = World.key(cx, cz);
     let m = this.mods.get(k);
     if (!m) { m = new Map(); this.mods.set(k, m); }
@@ -781,23 +973,24 @@ export class World {
       Lmap[i] = lv;
       qx.push(x); qy.push(y); qz.push(z);
     };
+    // 2.8: tylko faktyczne źródła światła (indeks emitters), a nie 295 tys.
+    // bloków sąsiadów skanowanych przy każdym przebudowaniu siatki.
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
         const chunk = neigh[(dz + 1) * 3 + (dx + 1)];
         const ox = dx * CS;
         const oz = dz * CS;
-        const xMin = Math.max(0, -PAD - ox);
-        const xMax = Math.min(CS, CS + PAD - ox);
-        const zMin = Math.max(0, -PAD - oz);
-        const zMax = Math.min(CS, CS + PAD - oz);
-        const data = chunk.data;
-        for (let z = zMin; z < zMax; z++) {
-          for (let x = xMin; x < xMax; x++) {
-            for (let y = 0; y < CH; y++) {
-              const e = EMIT[data[idx(x, y, z)]];
-              if (e) seed(ox + x, y, oz + z, e);
-            }
-          }
+        const sources = chunk.emitters;
+        for (let s = 0; s < sources.length; s++) {
+          const li = sources[s];
+          const y = Math.floor(li / (CS * CS));
+          const rem = li - y * CS * CS;
+          const z = Math.floor(rem / CS);
+          const x = rem - z * CS;
+          const wx = ox + x, wz = oz + z;
+          if (wx < -PAD || wx >= CS + PAD || wz < -PAD || wz >= CS + PAD) continue;
+          const e = EMIT[chunk.data[li]];
+          if (e) seed(wx, y, wz, e);
         }
       }
     }
@@ -854,18 +1047,14 @@ export class World {
               [[0.15, 0, 0.15], [0.85, 0, 0.85], [0.15, 1, 0.15], [0.85, 1, 0.85]],
               [[0.15, 0, 0.85], [0.85, 0, 0.15], [0.15, 1, 0.85], [0.85, 1, 0.15]],
             ];
+            const uvs = [[0, 0], [1, 0], [0, 1], [1, 1]];
             for (const q of quads) {
-              const uvs = [[0, 0], [1, 0], [0, 1], [1, 1]];
-              for (let k = 0; k < 4; k++) {
-                buf.pos.push(wx + q[k][0], y + q[k][1] * 0.95, wz + q[k][2]);
-                const uv = tileUV(t, uvs[k][0], uvs[k][1]);
-                buf.uv.push(uv[0], uv[1]);
-                buf.col.push(skyB, skyB, skyB);
-                buf.block.push(blkB);
-              }
               const n = buf.count;
-              buf.ind.push(n, n + 1, n + 2, n + 2, n + 1, n + 3);
-              buf.count += 4;
+              for (let k = 0; k < 4; k++) {
+                const uv = tileUV(t, uvs[k][0], uvs[k][1]);
+                buf.vertex(wx + q[k][0], y + q[k][1] * 0.95, wz + q[k][2], uv[0], uv[1], skyB, skyB, skyB, blkB);
+              }
+              buf.quad(n);
             }
             continue;
           }
@@ -929,8 +1118,10 @@ export class World {
             const t = tileFor(id, f);
             const sky = skyLight(nx, ny, nz);
             const blk = Math.max(blockLight(nx, ny, nz), EMIT[id] / 15);
-            const aos: number[] = [];
+            // 2.8: fala wody – tylko górna tafla porusza się w shaderze.
+            const wave = isLiquid && F.dir[1] === 1 ? 1 : 0;
             const base = buf.count;
+            let ao0 = 3, ao1 = 3, ao2 = 3, ao3 = 3;
             for (let k = 0; k < 4; k++) {
               const cr = F.c[k];
               let px = cr[0], py = cr[1], pz = cr[2];
@@ -947,40 +1138,25 @@ export class World {
                 const cc = IS_OPAQUE[get(nx + s1x + s2x, ny + s1y + s2y, nz + s1z + s2z)];
                 ao = a && b ? 0 : 3 - (a + b + cc);
               }
-              aos.push(ao);
+              if (k === 0) ao0 = ao; else if (k === 1) ao1 = ao; else if (k === 2) ao2 = ao; else ao3 = ao;
               let vy = y + py;
               if (liquidTopLow && py === 1) vy -= 0.12;
               if (id === B.CACTUS) {
                 if (f === 0) px = 0.0625; else if (f === 1) px = 0.9375;
                 if (f === 4) pz = 0.0625; else if (f === 5) pz = 0.9375;
               }
-              buf.pos.push(ox + x + px, vy, oz + z + pz);
               const uv = tileUV(t, cr[3], cr[4]);
-              buf.uv.push(uv[0], uv[1]);
               const shadeAo = F.shade * AO_CURVE[ao];
               const skyB = shadeAo * sky;
               const br = skyB * skyB;
-              buf.col.push(br, br, br);
               const bb = shadeAo * blk;
-              buf.block.push(bb * bb);
+              buf.vertex(ox + x + px, vy, oz + z + pz, uv[0], uv[1], br, br, br, bb * bb, wave);
             }
-            if (aos[0] + aos[3] > aos[1] + aos[2]) buf.ind.push(base, base + 1, base + 3, base, base + 3, base + 2);
-            else buf.ind.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
-            buf.count += 4;
+            buf.quad(base, ao0 + ao3 > ao1 + ao2);
           }
         }
 
-    return bufs.map((b) => {
-      const g = new THREE.BufferGeometry();
-      if (b.count === 0) return g;
-      g.setAttribute('position', new THREE.Float32BufferAttribute(b.pos, 3));
-      g.setAttribute('uv', new THREE.Float32BufferAttribute(b.uv, 2));
-      g.setAttribute('color', new THREE.Float32BufferAttribute(b.col, 3));
-      g.setAttribute('aBlock', new THREE.Float32BufferAttribute(b.block, 1));
-      g.setIndex(b.count > 65000 ? new THREE.Uint32BufferAttribute(b.ind, 1) : new THREE.Uint16BufferAttribute(b.ind, 1));
-      g.computeBoundingSphere();
-      return g;
-    });
+    return bufs.map((b) => b.geometry());
   }
 
   isSolid(x: number, y: number, z: number) {

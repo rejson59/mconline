@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { World, CS, CH, SEA, plantTree, type Biome } from './world';
+import { World, CS, CH, SEA, plantTree, type Biome, type Chunk } from './world';
 import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
@@ -12,6 +12,8 @@ import {
 import { getAtlas, tileUV, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { Mob, isHostileMob, type MobType } from './mobs';
+
+const GREY: readonly number[] = [90, 90, 90];
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
@@ -250,13 +252,26 @@ function emptyStash(): DimStash {
   return { mobs: [], drops: [], arrows: [], tnts: [], orbs: [], falling: [], buttons: [], redstone: [] };
 }
 
+/**
+ * 2.8: cząstka to lekki rekord (bez własnej siatki). Wszystkie cząstki jednego
+ * koloru rysuje JEDEN InstancedMesh, więc eksplozja z 80 cząstek to nadal
+ * jedno wywołanie rysowania zamiast osiemdziesięciu osobnych obiektów.
+ */
 interface Particle {
-  mesh: THREE.Mesh;
-  vel: THREE.Vector3;
+  p: THREE.Vector3;
+  v: THREE.Vector3;
+  size: number;
   life: number;
   max: number;
   gravity: number;
-  grow?: number;
+  grow: number;
+}
+
+interface ParticlePool {
+  mesh: THREE.InstancedMesh;
+  mat: THREE.MeshBasicMaterial;
+  list: Particle[];
+  cap: number;
 }
 
 interface TNTEntity {
@@ -466,8 +481,17 @@ export class Game {
   ambient: THREE.HemisphereLight;
   dirLight: THREE.DirectionalLight;
   particleGeo = new THREE.BoxGeometry(1, 1, 1);
-  particleMats = new Map<number, THREE.MeshBasicMaterial>();
-  particles: Particle[] = [];
+  /** 2.8: pule instancjonowanych cząstek (klucz = kolor/blok albo „smoke”). */
+  private particlePools = new Map<string, ParticlePool>();
+  private particleDummy = new THREE.Object3D();
+  /** 2.8: czas dla shadera (fala wody). */
+  private uTime = { value: 0 };
+  /** 2.8: gradientowe niebo zamiast jednego płaskiego koloru. */
+  private skyDome: THREE.Mesh | null = null;
+  private skyDomeTex: THREE.CanvasTexture | null = null;
+  /** 2.8: współdzielone materiały ikon na ziemi (koniec alokacji na upadek). */
+  private dropIconGeo = new THREE.PlaneGeometry(0.32, 0.32);
+  private dropIconMats = new Map<number, THREE.MeshBasicMaterial>();
   tnts: TNTEntity[] = [];
   mobs: Mob[] = [];
   tntGeo: THREE.BufferGeometry;
@@ -544,6 +568,9 @@ export class Game {
   minimapCanvas!: HTMLCanvasElement;
   private minimapCtx!: CanvasRenderingContext2D;
   private minimapImg: ImageData | null = null;
+  /** 2.8: numeryczny indeks chunków + odcisk stanu – minimapa nie liczy się bez potrzeby. */
+  private miniChunks = new Map<number, Chunk>();
+  private miniSig = '';
   private uDay = { value: 1 };
   private dropMat!: THREE.MeshBasicMaterial;
   private itemTex = new Map<number, THREE.Texture>();
@@ -636,7 +663,8 @@ export class Game {
       new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
       new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
     ];
-    for (const m of this.materials) patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay);
+    // 2.8: warstwa przezroczysta (woda, szkło, portal) dostaje delikatną falę.
+    this.materials.forEach((m, i) => patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime }));
     this.dropMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.4, side: THREE.DoubleSide });
     this.crackTex = atlas.cracks.map((c) => {
       const t = new THREE.CanvasTexture(c);
@@ -691,8 +719,27 @@ export class Game {
     }
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-    this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, fog: false, depthWrite: false }));
+    this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, fog: false, depthWrite: false }));
     this.scene.add(this.stars);
+
+    // 2.8: niebo z gradientem (zenit → jasny horyzont) zamiast jednego koloru.
+    // Zwykła tekstura + MeshBasicMaterial – zero własnych shaderów do awarii.
+    this.skyDomeTex = makeCanvasTex(64, (c) => {
+      const grad = c.createLinearGradient(0, 0, 0, 64);
+      grad.addColorStop(0, '#9fb8e8');
+      grad.addColorStop(0.55, '#cfe0ff');
+      grad.addColorStop(0.82, '#f4f1ee');
+      grad.addColorStop(1, '#fff6e8');
+      c.fillStyle = grad;
+      c.fillRect(0, 0, 64, 64);
+    });
+    this.skyDome = new THREE.Mesh(
+      new THREE.SphereGeometry(620, 24, 14),
+      new THREE.MeshBasicMaterial({ map: this.skyDomeTex, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false, toneMapped: false })
+    );
+    this.skyDome.renderOrder = -20;
+    this.skyDome.frustumCulled = false;
+    this.scene.add(this.skyDome);
 
     this.cloudTex = makeCanvasTex(128, (c) => {
       c.clearRect(0, 0, 128, 128);
@@ -2291,9 +2338,9 @@ export class Game {
     this.buttonTimers.clear();
     this.redstoneDirty.clear();
     this.tradeMob = null;
-    // cząstki są ulotne – znikają razem z wymiarem
-    for (const p of this.particles) this.scene.remove(p.mesh);
-    this.particles = [];
+    // cząstki są ulotne – znikają razem z wymiarem (pule zostają w scenie,
+    // ale bez instancji nie kosztują ani jednego wywołania rysowania)
+    this.clearParticles();
   }
 
   private restoreStashedEntities() {
@@ -2436,9 +2483,8 @@ export class Game {
     while (this.drops.length >= 120) {
       const victim = this.drops.shift();
       if (!victim) break;
+      // 2.8: materiały i geometrie są współdzielone – usuwamy tylko obiekt.
       this.scene.remove(victim.mesh);
-      const mat = (victim.mesh as THREE.Mesh).material;
-      if (mat && !Array.isArray(mat)) mat.dispose();
     }
     let mesh: THREE.Object3D;
     if (BLOCKS[id]) {
@@ -2447,10 +2493,14 @@ export class Game {
       mesh = new THREE.Mesh(geo, this.dropMat);
       mesh.scale.setScalar(RENDER[id] === 1 ? 0.4 : 0.28);
     } else {
-      mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.32, 0.32),
-        new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, alphaTest: 0.2, side: THREE.DoubleSide })
-      );
+      // 2.8: geometria i materiał są współdzielone – upadek przedmiotu nie
+      // alokuje już nowej tekstury, geometrii ani materiału.
+      let mat = this.dropIconMats.get(id);
+      if (!mat) {
+        mat = new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, alphaTest: 0.2, side: THREE.DoubleSide });
+        this.dropIconMats.set(id, mat);
+      }
+      mesh = new THREE.Mesh(this.dropIconGeo, mat);
     }
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
@@ -2768,23 +2818,34 @@ export class Game {
 
   private updateChunks() {
     const pcx = Math.floor(this.body.pos.x / CS), pcz = Math.floor(this.body.pos.z / CS);
-    // dirty first
+    // 2.8: przebudowy po zmianie bloku też mają budżet – wcześniej dziesięć
+    // dużych chunków naraz potrafiło zamrozić klatkę na kilkadziesiąt ms.
+    const t0 = performance.now();
+    // 2.8: na słabszym sprzęcie budujemy mniej na klatkę, żeby nie „szarpało”.
+    const adaptive = this.fps > 0 && this.fps < 28 ? 0.65 : 1;
     let rebuilt = 0;
     for (const k of this.world.dirty) {
       const c = this.world.chunks.get(k);
       this.world.dirty.delete(k);
-      if (c && c.built) { this.buildChunk(c.cx, c.cz); rebuilt++; }
-      if (rebuilt > 10) break;
+      if (c && c.built) {
+        this.buildChunk(c.cx, c.cz);
+        rebuilt++;
+      }
+      if (rebuilt >= 6 || performance.now() - t0 > this.gfx.chunkBudgetMs * 1.5 * adaptive) break;
     }
     let built = 0;
-    const t0 = performance.now();
     let total = 0, done = 0;
+    const loading = this.loadingProgress < 0.999;
+    // Podczas pierwszego wejścia do świata budżet jest hojniejszy, żeby horyzont
+    // pojawił się szybko; w trakcie gry liczy się przede wszystkim płynność.
+    const budget = this.gfx.chunkBudgetMs * adaptive * (loading ? 1.8 : 1);
+    const perFrame = this.gfx.chunksPerFrame * (loading ? 2 : 1);
     for (const [dx, dz] of this.offsets) {
       total++;
       const c = this.world.chunks.get(World.key(pcx + dx, pcz + dz));
       if (c && c.built) { done++; continue; }
       // 2.0: budżet zależny od jakości (na słabych telefonach mniejszy).
-      if (built < this.gfx.chunksPerFrame && performance.now() - t0 < this.gfx.chunkBudgetMs) {
+      if (built < perFrame && performance.now() - t0 < budget) {
         this.buildChunk(pcx + dx, pcz + dz);
         built++;
         done++;
@@ -2798,7 +2859,9 @@ export class Game {
       for (const [k, c] of this.world.chunks) {
         if (Math.abs(c.cx - pcx) > lim || Math.abs(c.cz - pcz) > lim) {
           for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
-          this.world.chunks.delete(k);
+          // 2.8: releaseChunk czyści też jednowpisowy cache świata.
+          this.world.releaseChunk(c.cx, c.cz);
+          void k;
         }
       }
     }
@@ -2835,25 +2898,45 @@ export class Game {
     return Math.max(0.16, Math.min(1, 0.55 + s * 1.6));
   }
 
+  /** 2.8: wspólna pula cząstek – jeden InstancedMesh na kolor. */
+  private particlePool(key: string, make: () => THREE.MeshBasicMaterial, cap: number): ParticlePool | null {
+    let pool = this.particlePools.get(key);
+    if (pool) return pool;
+    if (this.particlePools.size >= 40) return null;
+    const mat = make();
+    const mesh = new THREE.InstancedMesh(this.particleGeo, mat, cap);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    mesh.visible = false;
+    this.scene.add(mesh);
+    pool = { mesh, mat, list: [], cap };
+    this.particlePools.set(key, pool);
+    return pool;
+  }
+
   spawnParticles(x: number, y: number, z: number, id: number, n = 12, spread = 0.5) {
     // 2.0: budżet cząsteczek zależy od jakości (na „Niskich” leci ~35%).
     const scale = this.gfx.particleScale;
     if (scale <= 0.01) return;
     n = Math.max(1, Math.round(n * scale));
-    let mat = this.particleMats.get(id);
-    if (!mat) {
+    const cap = Math.floor(420 * Math.max(0.35, scale));
+    const pool = this.particlePool('b' + id, () => {
       const c = AVG_COLOR[id] || [128, 128, 128];
-      mat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(c[0] / 255, c[1] / 255, c[2] / 255, THREE.SRGBColorSpace) });
-      this.particleMats.set(id, mat);
-    }
+      return new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(c[0] / 255, c[1] / 255, c[2] / 255, THREE.SRGBColorSpace) });
+    }, cap);
+    if (!pool) return;
     for (let i = 0; i < n; i++) {
-      if (this.particles.length > Math.floor(400 * Math.max(0.35, scale))) break;
-      const m = new THREE.Mesh(this.particleGeo, mat);
-      const s = 0.06 + Math.random() * 0.08;
-      m.scale.setScalar(s);
-      m.position.set(x + (Math.random() - 0.5) * spread * 2, y + (Math.random() - 0.5) * spread * 2, z + (Math.random() - 0.5) * spread * 2);
-      this.scene.add(m);
-      this.particles.push({ mesh: m, vel: new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 4 + 1, (Math.random() - 0.5) * 4), life: 0, max: 0.5 + Math.random() * 0.5, gravity: 16 });
+      if (pool.list.length >= pool.cap) break;
+      pool.list.push({
+        p: new THREE.Vector3(x + (Math.random() - 0.5) * spread * 2, y + (Math.random() - 0.5) * spread * 2, z + (Math.random() - 0.5) * spread * 2),
+        v: new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 4 + 1, (Math.random() - 0.5) * 4),
+        size: 0.06 + Math.random() * 0.08,
+        life: 0,
+        max: 0.5 + Math.random() * 0.5,
+        gravity: 16,
+        grow: 0,
+      });
     }
   }
 
@@ -2861,18 +2944,73 @@ export class Game {
     const scale = this.gfx.particleScale;
     if (scale <= 0.01) return;
     n = Math.max(1, Math.round(n * scale));
-    let mat = this.particleMats.get(-1);
-    if (!mat) {
-      mat = new THREE.MeshBasicMaterial({ color: 0xdddddd, transparent: true, opacity: 0.8 });
-      this.particleMats.set(-1, mat);
-    }
+    const cap = Math.floor(240 * Math.max(0.35, scale));
+    const pool = this.particlePool('smoke', () => new THREE.MeshBasicMaterial({ color: 0xdddddd, transparent: true, opacity: 0.8 }), cap);
+    if (!pool) return;
     for (let i = 0; i < n; i++) {
-      if (this.particles.length > Math.floor(500 * Math.max(0.35, scale))) break;
-      const m = new THREE.Mesh(this.particleGeo, mat);
-      m.scale.setScalar(0.3 + Math.random() * 0.4);
-      m.position.set(x + (Math.random() - 0.5) * spread, y + (Math.random() - 0.5) * spread, z + (Math.random() - 0.5) * spread);
-      this.scene.add(m);
-      this.particles.push({ mesh: m, vel: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3), life: 0, max: 0.8 + Math.random() * 0.8, gravity: -1, grow: 1.2 });
+      if (pool.list.length >= pool.cap) break;
+      pool.list.push({
+        p: new THREE.Vector3(x + (Math.random() - 0.5) * spread, y + (Math.random() - 0.5) * spread, z + (Math.random() - 0.5) * spread),
+        v: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3),
+        size: 0.3 + Math.random() * 0.4,
+        life: 0,
+        max: 0.8 + Math.random() * 0.8,
+        gravity: -1,
+        grow: 1.2,
+      });
+    }
+  }
+
+  /** Usuwa wszystkie cząstki (zmiana wymiaru, wyłączanie gry). */
+  private clearParticles() {
+    // 2.8: obiekty odtwarzane w testach (Object.create) mogą nie mieć pul.
+    if (!this.particlePools) return;
+    for (const pool of this.particlePools.values()) {
+      pool.list.length = 0;
+      pool.mesh.count = 0;
+      pool.mesh.visible = false;
+    }
+  }
+
+  /** 2.8: aktualizacja i rysowanie cząstek – jedno przejście po pulach. */
+  private updateParticles(dt: number) {
+    if (!this.particlePools?.size) return;
+    const dummy = this.particleDummy;
+    for (const pool of this.particlePools.values()) {
+      const list = pool.list;
+      if (!list.length) {
+        if (pool.mesh.count !== 0) { pool.mesh.count = 0; pool.mesh.visible = false; }
+        continue;
+      }
+      const world = this.world;
+      let w = 0;
+      for (let i = 0; i < list.length; i++) {
+        const pt = list[i];
+        pt.life += dt;
+        if (pt.life >= pt.max) continue;
+        pt.v.y -= pt.gravity * dt;
+        pt.p.x += pt.v.x * dt;
+        pt.p.y += pt.v.y * dt;
+        pt.p.z += pt.v.z * dt;
+        if (pt.grow) pt.size *= 1 + dt * pt.grow;
+        if (pt.gravity > 0) {
+          const bx = Math.floor(pt.p.x), by = Math.floor(pt.p.y), bz = Math.floor(pt.p.z);
+          if (world.isSolid(bx, by, bz)) {
+            pt.p.y = by + 1.02;
+            pt.v.set(pt.v.x * 0.5, 0, pt.v.z * 0.5);
+          }
+        }
+        list[w++] = pt;
+        dummy.position.copy(pt.p);
+        dummy.rotation.set(pt.life * 2.4, pt.life * 1.7, 0);
+        dummy.scale.setScalar(pt.size);
+        dummy.updateMatrix();
+        pool.mesh.setMatrixAt(w - 1, dummy.matrix);
+      }
+      list.length = w;
+      pool.mesh.count = w;
+      pool.mesh.visible = w > 0;
+      if (w > 0) pool.mesh.instanceMatrix.needsUpdate = true;
     }
   }
 
@@ -3971,6 +4109,7 @@ export class Game {
       if (this.saveTimer > 30) { this.saveTimer = 0; this.save(); }
     }
     this.updateChunks();
+    this.uTime.value += dt;
     this.updateCamera(dt);
     this.updateSky();
 
@@ -4336,39 +4475,50 @@ export class Game {
     this.updateHand();
   }
 
+  /**
+   * 2.8: te trzy callbacki były tworzone od nowa dla KAŻDEGO moba w KAŻDEJ
+   * klatce (kilkadziesiąt alokacji na sekundę). Teraz są stałymi metodami.
+   */
+  private mobAttackPlayer = (dmg: number, mob: Mob) => {
+    if (this.ui === 'dead') return;
+    // A raised shield halves the hit and absorbs most of the knockback.
+    const shielded = this.holdingShield();
+    if (shielded) {
+      Sfx.playShield();
+      this.wearShield(8);
+      this.unlock('guardian');
+    }
+    this.damage(shielded ? Math.ceil(dmg / 2) : dmg);
+    if (this.mode === 'survival') {
+      const p = this.body.pos;
+      const dx = p.x - mob.body.pos.x, dz = p.z - mob.body.pos.z;
+      const l = Math.hypot(dx, dz) || 1;
+      this.body.vel.x += (dx / l) * (shielded ? 4 : 8);
+      this.body.vel.z += (dz / l) * (shielded ? 4 : 8);
+      this.body.vel.y = shielded ? 2 : 5;
+    }
+  };
+
+  private mobShootPlayer = (mob: Mob) => {
+    const p = this.body.pos;
+    // skeleton shot: aim slightly above the player's chest
+    const from = new THREE.Vector3(mob.body.pos.x, mob.body.pos.y + mob.body.h * 0.85, mob.body.pos.z);
+    const to = new THREE.Vector3(p.x, p.y + 1.0, p.z);
+    const dir = to.sub(from).normalize();
+    this.spawnArrow(from.addScaledVector(dir, 0.6), dir, 24, mob, 4);
+  };
+
+  private wolfBite = (target: Mob, wolf: Mob) => {
+    target.damage(4, wolf.body.pos.x, wolf.body.pos.z);
+    Sfx.playHurt();
+  };
+
   private updateMobs(dt: number) {
     const p = this.body.pos;
     const dl = this.daylight();
     const peaceful = this.mode === 'creative';
     for (const m of this.mobs) {
-      m.update(dt, this.world, p, (dmg, mob) => {
-        if (this.ui === 'dead') return;
-        // A raised shield halves the hit and absorbs most of the knockback.
-        const shielded = this.holdingShield();
-        if (shielded) {
-          Sfx.playShield();
-          this.wearShield(8);
-          this.unlock('guardian');
-        }
-        this.damage(shielded ? Math.ceil(dmg / 2) : dmg);
-        if (this.mode === 'survival') {
-          const dx = p.x - mob.body.pos.x, dz = p.z - mob.body.pos.z;
-          const l = Math.hypot(dx, dz) || 1;
-          this.body.vel.x += (dx / l) * (shielded ? 4 : 8);
-          this.body.vel.z += (dz / l) * (shielded ? 4 : 8);
-          this.body.vel.y = shielded ? 2 : 5;
-        }
-      }, (mob) => {
-        // skeleton shot: aim slightly above the player's chest
-        const from = new THREE.Vector3(mob.body.pos.x, mob.body.pos.y + mob.body.h * 0.85, mob.body.pos.z);
-        const to = new THREE.Vector3(p.x, p.y + 1.0, p.z);
-        const dir = to.sub(from).normalize();
-        this.spawnArrow(from.addScaledVector(dir, 0.6), dir, 24, mob, 4);
-      }, peaceful, this.mobs, (target) => {
-        // tamed wolf's bite
-        target.damage(4, m.body.pos.x, m.body.pos.z);
-        Sfx.playHurt();
-      });
+      m.update(dt, this.world, p, this.mobAttackPlayer, this.mobShootPlayer, peaceful, this.mobs, this.wolfBite);
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
         if (m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
@@ -4478,25 +4628,7 @@ export class Game {
   }
 
   private updateEntities(dt: number) {
-    // particles
-    this.particles = this.particles.filter((pt) => {
-      pt.life += dt;
-      if (pt.life >= pt.max) {
-        this.scene.remove(pt.mesh);
-        return false;
-      }
-      pt.vel.y -= pt.gravity * dt;
-      pt.mesh.position.addScaledVector(pt.vel, dt);
-      if (pt.grow) pt.mesh.scale.multiplyScalar(1 + dt * pt.grow);
-      if (pt.gravity > 0) {
-        const bx = Math.floor(pt.mesh.position.x), by = Math.floor(pt.mesh.position.y), bz = Math.floor(pt.mesh.position.z);
-        if (this.world.isSolid(bx, by, bz)) {
-          pt.mesh.position.y = by + 1.02;
-          pt.vel.set(pt.vel.x * 0.5, 0, pt.vel.z * 0.5);
-        }
-      }
-      return true;
-    });
+    this.updateParticles(dt);
     // TNT
     const done: TNTEntity[] = [];
     for (const t of this.tnts) {
@@ -4547,20 +4679,26 @@ export class Game {
     this.hand.rotation.set(-sw * 0.9, sw * 0.4, 0);
   }
 
+  /** 2.8: kolory nieba trzymane raz, bez alokacji w każdej klatce. */
+  private skyDay = new THREE.Color(0.47, 0.66, 1.0);
+  private skyNight = new THREE.Color(0.012, 0.015, 0.05);
+  private skySunset = new THREE.Color(1.0, 0.5, 0.25);
+  private skyStorm = new THREE.Color(0.85, 0.88, 1);
+  private skyColor = new THREE.Color();
+  private skySunDir = new THREE.Vector3();
+
   private updateSky() {
     const nether = this.isInNether;
     const ang = this.time * Math.PI * 2;
     const sunY = Math.sin(ang);
     const dl = this.daylight();
-    const dayCol = new THREE.Color(0.47, 0.66, 1.0);
-    const nightCol = new THREE.Color(0.012, 0.015, 0.05);
-    const sky = nightCol.clone().lerp(dayCol, Math.max(0, Math.min(1, (dl - 0.16) / 0.84)));
+    const sky = this.skyColor.copy(this.skyNight).lerp(this.skyDay, Math.max(0, Math.min(1, (dl - 0.16) / 0.84)));
     const sunset = Math.max(0, 1 - Math.abs(sunY) * 4) * (Math.cos(ang) > 0 || sunY > -0.2 ? 1 : 0);
-    sky.lerp(new THREE.Color(1.0, 0.5, 0.25), sunset * 0.45);
+    sky.lerp(this.skySunset, sunset * 0.45);
     const biome = this.biomeAt();
     const raining = !nether && this.weather === 'rain' && biome !== 'Pustynia';
     if (raining) sky.multiplyScalar(0.62);
-    if (this.lightning > 0) sky.lerp(new THREE.Color(0.85, 0.88, 1), Math.min(1, this.lightning));
+    if (this.lightning > 0) sky.lerp(this.skyStorm, Math.min(1, this.lightning));
 
     const fog = this.scene.fog as THREE.Fog;
     const eyeBlock = this.world.peekBlock(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z));
@@ -4602,7 +4740,15 @@ export class Game {
     this.clouds.visible = !nether && this.gfx.clouds;
 
     const cp = this.camera.position;
-    const sunDir = new THREE.Vector3(Math.cos(ang), Math.sin(ang), 0.25).normalize();
+    // 2.8: gradientowa kopuła nieba podąża za kamerą i dostaje kolor pory dnia.
+    if (this.skyDome) {
+      const domeMat = this.skyDome.material as THREE.MeshBasicMaterial;
+      const inLiquid = eyeBlock === B.WATER || eyeBlock === B.LAVA;
+      this.skyDome.visible = !nether && !inLiquid;
+      this.skyDome.position.copy(cp);
+      domeMat.color.copy(sky).multiplyScalar(1.06);
+    }
+    const sunDir = this.skySunDir.set(Math.cos(ang), Math.sin(ang), 0.25).normalize();
     this.sun.position.copy(cp).addScaledVector(sunDir, 400);
     this.sun.lookAt(cp);
     this.moon.position.copy(cp).addScaledVector(sunDir, -400);
@@ -4611,7 +4757,7 @@ export class Game {
     this.dirLight.target.position.copy(cp);
     this.stars.position.copy(cp);
     this.stars.rotation.z = ang;
-    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - dl * 1.8);
+    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - dl * 1.5);
     this.clouds.position.set(cp.x, 132, cp.z);
     const drift = performance.now() / 1000 * 1.2;
     this.cloudTex.offset.set((cp.x + drift) / 1200, -cp.z / 1200);
@@ -4953,12 +5099,6 @@ export class Game {
           Sfx.playPop();
           this.notePickup(d.id);
           this.scene.remove(d.mesh);
-          if (isItem(d.id)) {
-            const mesh = d.mesh as THREE.Mesh;
-            mesh.geometry?.dispose();
-            const mat = mesh.material;
-            if (mat && !Array.isArray(mat)) mat.dispose();
-          }
           return false;
         }
       }
@@ -5214,6 +5354,17 @@ export class Game {
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     const fx = -sin, fz = -cos;
     const rx = cos, rz = -sin;
+    // 2.8: indeks numeryczny zamiast 9 216 razy `World.key()` na każdą klatkę.
+    const index = this.miniChunks;
+    index.clear();
+    let rev = 0;
+    for (const c of this.world.chunks.values()) {
+      index.set((c.cx + 8192) * 16384 + (c.cz + 8192), c);
+      rev = (rev + c.revision * 31 + c.cx * 7 + c.cz * 13) | 0;
+    }
+    const sig = `${Math.floor(px * 2)},${Math.floor(pz * 2)},${Math.round(this.yaw * 80)},${rev},${this.currentDimension()},${this.waypoints.length},${this.activeWaypointId ?? '-'}`;
+    if (sig === this.miniSig) return; // nic się nie zmieniło – zostaw stary obraz
+    this.miniSig = sig;
     for (let sy = 0; sy < S; sy++) {
       for (let sx = 0; sx < S; sx++) {
         const ox = (sx - S / 2) * scale;
@@ -5221,13 +5372,13 @@ export class Game {
         const wx = Math.floor(px + rx * ox + fx * -oy);
         const wz = Math.floor(pz + rz * ox + fz * -oy);
         const cx = Math.floor(wx / CS), cz = Math.floor(wz / CS);
-        const chunk = this.world.chunks.get(World.key(cx, cz));
+        const chunk = index.get((cx + 8192) * 16384 + (cz + 8192));
         let r = 14, g = 14, b = 18;
         if (chunk) {
           const lx = wx - cx * CS, lz = wz - cz * CS;
           const h = chunk.heightMap[lz * CS + lx];
           const id = chunk.data[(h * CS + lz) * CS + lx];
-          const c = AVG_COLOR[id] || [90, 90, 90];
+          const c = AVG_COLOR[id] ?? GREY;
           const shade = 0.62 + (h / CH) * 0.55;
           r = c[0] * shade; g = c[1] * shade; b = c[2] * shade;
         }
@@ -5293,13 +5444,7 @@ export class Game {
     for (const f of this.falling) this.scene.remove(f.mesh);
     this.falling = [];
     this.leafDecay = [];
-    for (const d of this.drops) {
-      this.scene.remove(d.mesh);
-      const mesh = d.mesh as THREE.Mesh;
-      mesh.geometry?.dispose();
-      const mat = mesh.material;
-      if (mat && !Array.isArray(mat)) mat.dispose();
-    }
+    for (const d of this.drops) this.scene.remove(d.mesh);
     this.drops = [];
     // obiekty odłożone w drugim wymiarze
     for (const st of [this.dimStash.home, this.dimStash.nether]) {
@@ -5308,13 +5453,7 @@ export class Game {
       for (const a of st.arrows) this.scene.remove(a.mesh);
       for (const o of st.orbs) this.scene.remove(o.mesh);
       for (const f of st.falling) this.scene.remove(f.mesh);
-      for (const d of st.drops) {
-        this.scene.remove(d.mesh);
-        const mesh = d.mesh as THREE.Mesh;
-        mesh.geometry?.dispose();
-        const mat = mesh.material;
-        if (mat && !Array.isArray(mat)) mat.dispose();
-      }
+      for (const d of st.drops) this.scene.remove(d.mesh);
       st.mobs = [];
       st.drops = [];
       st.arrows = [];
@@ -5322,10 +5461,18 @@ export class Game {
       st.orbs = [];
       st.falling = [];
     }
-    for (const pt of this.particles) this.scene.remove(pt.mesh);
-    this.particles = [];
-    for (const mat of this.particleMats.values()) mat.dispose();
-    this.particleMats.clear();
+    for (const pool of this.particlePools.values()) {
+      this.scene.remove(pool.mesh);
+      pool.mesh.dispose();
+      pool.mat.dispose();
+    }
+    this.particlePools.clear();
+    this.dropIconGeo.dispose();
+    for (const mat of this.dropIconMats.values()) mat.dispose();
+    this.dropIconMats.clear();
+    this.skyDomeTex?.dispose();
+    this.skyDome?.geometry.dispose();
+    if (this.skyDome) (this.skyDome.material as THREE.Material).dispose();
     for (const mat of this.materials) mat.dispose();
     this.materials = [];
     this.handMat.dispose();

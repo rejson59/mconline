@@ -3,7 +3,7 @@ import type { GameMode } from '../game/engine';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { exportSave, exportSaves, importSaves, MAX_SAVES } from '../game/saves';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
-import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
+import { GAME_RELEASE_NAME, GAME_VERSION, RELEASE_HIGHLIGHTS } from '../utils/version';
 import SettingsScreen from './SettingsScreen';
 
 export type WorldType = 'normal' | 'flat';
@@ -15,8 +15,13 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  'BlockCraft 2.7: odkryj Bagna, Sawannę i Dżunglę!',
-  '2.7: nowe drzewa, błoto i lilie wodne!',
+  'BlockCraft 2.8: płynniej, szybciej, piękniej!',
+  '2.8: woda faluje, niebo ma gradient!',
+  'Mniej zacięć – więcej budowania!',
+  'Nowe menu, ten sam świat!',
+  'Chunki ładują się w tle – nie przerywaj kopania!',
+  'Odkryj Bagna, Sawannę i Dżunglę!',
+  '2.8: świat ładuje się w tle – buduj bez czekania!',
   'Dżungla kryje gęste zarośla, Sawanna – akacje!',
   'Ekwipunek nie gubi ani nie duplikuje przedmiotów!',
   'Szukaj receptur po nazwie albo składniku!',
@@ -52,27 +57,29 @@ const SPLASHES = [
 export function Title() {
   const [splash] = useState(() => SPLASHES[Math.floor(Math.random() * SPLASHES.length)]);
   return (
-    <div className="mb-7 flex w-full flex-col items-center text-center">
+    <div className="flex w-full flex-col items-center text-center">
       <h1
-        className="max-w-full whitespace-nowrap text-[clamp(2.3rem,12vw,4rem)] font-bold leading-none tracking-[0.05em]"
+        className="max-w-full whitespace-nowrap text-[clamp(2.2rem,11vw,3.9rem)] font-bold leading-none tracking-[0.05em]"
         style={{
-          color: '#bdbdbd',
-          textShadow: '0 2px 0 #8a8a8a, 0 4px 0 #6b6b6b, 0 6px 0 #4a4a4a, 0 8px 0 #2b2b2b, 0 10px 12px rgba(0,0,0,0.8)',
-          WebkitTextStroke: '2px #1c1c1c',
+          color: '#d7dbe2',
+          textShadow:
+            '0 2px 0 #9aa0ab, 0 4px 0 #6f757f, 0 6px 0 #4a4f57, 0 8px 0 #262a30, 0 12px 22px rgba(0,0,0,0.85)',
+          WebkitTextStroke: '2px #14161a',
         }}
       >
         BLOCKCRAFT
       </h1>
-      <div className="mt-3 flex w-full flex-wrap items-center justify-center gap-2 px-1">
-        <span
-          className="shrink-0 px-2 py-0.5 text-sm font-bold"
-          style={{ background: '#3c8527', color: '#fff', border: '2px solid #1c1c1c', boxShadow: '2px 2px 0 rgba(0,0,0,0.6)' }}
-        >
-          WERSJA {GAME_VERSION}
+      <div className="mt-2.5 flex w-full flex-wrap items-center justify-center gap-2 px-1">
+        <span className="mc-badge">WERSJA {GAME_VERSION}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/60 sm:text-[11px]">
+          {GAME_RELEASE_NAME}
         </span>
-        <span className="splash max-w-full text-center text-sm font-semibold leading-tight sm:text-xl" style={{ color: '#ffff70', textShadow: '2px 2px 0 #3f3f00' }}>
-          {splash}
-        </span>
+      </div>
+      <div
+        className="splash mt-2 max-w-full text-center text-[13px] font-semibold leading-tight sm:text-lg"
+        style={{ color: '#ffff70', textShadow: '2px 2px 0 #3f3f00' }}
+      >
+        {splash}
       </div>
     </div>
   );
@@ -324,27 +331,69 @@ export function MainMenu({
   };
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden">
+    <div className="absolute inset-0 flex flex-col overflow-hidden">
+      {/* tło świata + winieta + ciepła poświata słońca */}
       <div
         className="absolute inset-0 scale-110"
         style={{
           backgroundImage: `url("${MENU_BG}")`,
-          backgroundColor: '#3b2a1e',
+          backgroundColor: '#2b2118',
           backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          filter: 'blur(2px) brightness(0.8)',
+          backgroundPosition: 'center 42%',
+          filter: 'blur(2.5px) brightness(0.78) saturate(1.05)',
         }}
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
-      <div className="relative z-10 flex max-h-[calc(100dvh-5rem)] w-full max-w-[440px] flex-col items-center overflow-y-auto px-4 py-3">
-        <Title />
-        {view === 'main' && (
-          <div className="flex w-full flex-col gap-3">
-            {saves.length > 0 && (
-              <section aria-label="Zapisane światy" className="bg-black/40 p-2">
+      <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/10 to-black/80" />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: 'radial-gradient(circle at 66% 26%, rgba(255,213,140,0.30), rgba(255,160,60,0.08) 34%, transparent 62%)' }}
+      />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 menu-terrain" />
+
+      <div className="relative z-10 flex h-full w-full flex-col items-center overflow-y-auto px-3 py-3 sm:px-5 sm:py-5">
+        <div className="flex w-full max-w-[1040px] flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+          {/* ————— lewa kolumna: tytuł i główne akcje ————— */}
+          <div className="flex w-full flex-col items-center gap-4 lg:sticky lg:top-2 lg:w-[430px]">
+            <Title />
+            {view === 'main' ? (
+              <div className="flex w-full max-w-[430px] flex-col gap-2.5">
+                <button className="mc-btn mc-btn-primary" onClick={() => setView('new')}>
+                  {saves.length >= MAX_SAVES ? `Nowy świat · limit ${MAX_SAVES}` : 'Nowy świat'}
+                </button>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button className="mc-btn !px-2" onClick={() => setView('controls')}>
+                    Sterowanie
+                  </button>
+                  <button className="mc-btn !px-2" onClick={() => setView('options')}>
+                    Opcje
+                  </button>
+                  <button className="mc-btn !px-2 !text-[15px]" onClick={toggleFullscreen}>
+                    Pełny ekran
+                  </button>
+                  <button className="mc-btn !px-2 !text-[15px]" onClick={downloadSaves}>
+                    Eksport zapisów
+                  </button>
+                  <button className="mc-btn col-span-2 !py-2 !text-[15px]" onClick={() => fileRef.current?.click()}>
+                    Import zapisów
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="mc-btn w-full max-w-[430px]" onClick={() => setView('main')}>
+                ← Powrót do menu
+              </button>
+            )}
+          </div>
+
+          {/* ————— prawa kolumna: światy, nowy świat, opcje ————— */}
+          <div className="flex w-full min-w-0 flex-1 flex-col gap-3">
+            {view === 'main' && saves.length > 0 && (
+              <section aria-label="Zapisane światy" className="mc-card p-3 sm:p-4">
                 <p className="sr-only">W menu zarządzania możesz zmienić nazwę, utworzyć kopię, wyeksportować świat albo wybrać Usuń.</p>
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <h2 className="text-base text-yellow-200 mc-text">Twoje światy <span className="text-xs text-white/70">{saves.length}/8</span></h2>
+                  <h2 className="text-base text-yellow-200 mc-text">
+                    Twoje światy <span className="text-xs text-white/60">{saves.length}/8</span>
+                  </h2>
                   <label className="sr-only" htmlFor="world-sort">Sortuj światy</label>
                   <select
                     id="world-sort"
@@ -367,9 +416,9 @@ export function MainMenu({
                   onChange={(e) => setWorldQuery(e.target.value)}
                   placeholder="Szukaj nazwy, ziarna lub trybu…"
                 />
-                <div className="max-h-[25vh] space-y-2 overflow-y-auto">
+                <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-0.5 lg:max-h-[58vh]">
                   {visibleWorlds.map((s) => (
-                    <div key={s.id} className="bg-black/25 p-1">
+                    <div key={s.id} className="border border-white/10 bg-black/30 p-2 transition-colors hover:border-white/25">
                       <div className="flex gap-1.5">
                         <button
                           className="mc-btn !w-10 !px-1 !py-2 text-lg"
@@ -403,7 +452,7 @@ export function MainMenu({
                         </button>
                       </div>
                       {manageId === s.id && (
-                        <div className="mt-1.5 space-y-1.5 border border-white/20 bg-black/40 p-2">
+                        <div className="mt-1.5 space-y-1.5 border border-white/15 bg-black/50 p-2">
                           <form
                             className="flex gap-1.5"
                             onSubmit={(e) => {
@@ -459,99 +508,112 @@ export function MainMenu({
                 <div className="min-h-4 pt-1 text-center text-xs text-green-200" role="status" aria-live="polite">{menuNotice}</div>
               </section>
             )}
-            <button className="mc-btn" onClick={() => setView('new')}>
-              {saves.length >= 8 ? 'Nowy świat · limit 8' : 'Nowy świat'}
-            </button>
-            <button className="mc-btn" onClick={() => setView('controls')}>
-              Sterowanie
-            </button>
-            <button className="mc-btn" onClick={() => setView('options')}>
-              Opcje
-            </button>
-            <button className="mc-btn" onClick={toggleFullscreen}>
-              Pełny ekran
-            </button>
-            <div className="mt-1 flex gap-2">
-              <button className="mc-btn !py-2 !text-sm" onClick={downloadSaves}>
-                Eksport zapisów
-              </button>
-              <button className="mc-btn !py-2 !text-sm" onClick={() => fileRef.current?.click()}>
-                Import zapisów
-              </button>
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={(e) => { pickSavesFile(e.target.files?.[0]); e.target.value = ''; }}
-            />
-          </div>
-        )}
-        {view === 'new' && (
-          <div className="flex w-full flex-col gap-3 bg-black/50 p-5">
-            <div className="text-lg mc-text">{sharedSeed != null ? 'Świat z linku' : 'Utwórz nowy świat'}</div>
-            {sharedSeed != null && (
-              <div className="text-xs text-green-300">Ziarno i tryb zostały wczytane z adresu – kliknij „Stwórz świat”, aby zagrać.</div>
+
+            {view === 'main' && saves.length === 0 && (
+              <section aria-label="Witamy" className="mc-card p-4 sm:p-6">
+                <div className="mc-card-title">Witaj w BlockCraft</div>
+                <p className="text-sm leading-relaxed text-white/85">
+                  Zbuduj pierwszy świat: zetnij drzewo, wytwórz kilof i zejdź do jaskiń po diamenty.
+                  Nowa wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> renderuje świat szybciej,
+                  ma gładsze niebo, wodę z falami i odświeżony interfejs.
+                </p>
+                <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-white/75 sm:grid-cols-2">
+                  <div className="border border-white/10 bg-black/30 p-2">⚡ Szybsze chunki i mniej zacięć</div>
+                  <div className="border border-white/10 bg-black/30 p-2">💧 Falująca woda i gradient nieba</div>
+                  <div className="border border-white/10 bg-black/30 p-2">🎒 Lżejsze cząstki i upuszczone przedmioty</div>
+                  <div className="border border-white/10 bg-black/30 p-2">🖥️ Nowy, czytelniejszy interfejs</div>
+                </div>
+                <p className="mt-3 text-[11px] leading-snug text-white/50">
+                  Zapisane światy (do 8) trzymamy w tej przeglądarce. Możesz je eksportować i importować jako pliki JSON.
+                </p>
+              </section>
             )}
-            <label className="text-sm text-gray-300">Nazwa świata</label>
-            <input className="mc-input" value={worldName} onChange={(e) => setWorldName(e.target.value)} placeholder="np. Wyspa" onKeyDown={(e) => e.stopPropagation()} />
-            <label className="text-sm text-gray-300">Ziarno generatora (puste = losowe)</label>
-            <input className="mc-input" value={seedText} onChange={(e) => setSeedText(e.target.value)} placeholder="np. 12345 lub dowolny tekst" />
-            <button className="mc-btn" onClick={() => setMode(mode === 'survival' ? 'creative' : 'survival')}>
-              Tryb gry: {mode === 'survival' ? 'Przetrwanie' : 'Kreatywny'}
-            </button>
-            <button className="mc-btn" onClick={() => setWorldType(worldType === 'normal' ? 'flat' : 'normal')}>
-              Typ świata: {worldType === 'normal' ? 'Normalny' : 'Płaski'}
-            </button>
-            <div className="text-xs text-gray-300">
-              {worldType === 'flat'
-                ? 'Świat płaski: równa trawna równina na wysokości 64 – idealny do budowania i kopania rud.'
-                : mode === 'survival'
-                  ? 'Zetnij drzewo, wytwórz kilof, postaw drzwi i skrzynię. W jaskiniach leżą skrzynie.'
-                  : 'Nieograniczone bloki, latanie, natychmiastowe niszczenie, brak obrażeń.'}
-            </div>
-            <div className="text-xs text-gray-300">Grafika dobierze się automatycznie do twojego urządzenia (zmienisz w opcjach).</div>
-            <div className="text-xs text-gray-300">Nowy świat nie kasuje pozostałych zapisów. Maksymalnie 8 światów.</div>
-            <div className="flex gap-3">
-              <button className="mc-btn" onClick={() => setView('main')}>
-                Anuluj
-              </button>
-              <button className="mc-btn" onClick={create}>
-                Stwórz świat
-              </button>
-            </div>
+
+            {view === 'new' && (
+              <div className="mc-card flex w-full flex-col gap-3 p-4 sm:p-5">
+                <div className="text-lg mc-text">{sharedSeed != null ? 'Świat z linku' : 'Utwórz nowy świat'}</div>
+                {sharedSeed != null && (
+                  <div className="text-xs text-green-300">Ziarno i tryb zostały wczytane z adresu – kliknij „Stwórz świat”, aby zagrać.</div>
+                )}
+                <label className="text-sm text-gray-300">Nazwa świata</label>
+                <input className="mc-input" value={worldName} onChange={(e) => setWorldName(e.target.value)} placeholder="np. Wyspa" onKeyDown={(e) => e.stopPropagation()} />
+                <label className="text-sm text-gray-300">Ziarno generatora (puste = losowe)</label>
+                <input className="mc-input" value={seedText} onChange={(e) => setSeedText(e.target.value)} placeholder="np. 12345 lub dowolny tekst" />
+                <div className="grid grid-cols-2 gap-2">
+                  <button className="mc-btn !py-2 !text-[15px]" onClick={() => setMode(mode === 'survival' ? 'creative' : 'survival')}>
+                    Tryb: {mode === 'survival' ? 'Przetrwanie' : 'Kreatywny'}
+                  </button>
+                  <button
+                    className={`mc-btn !py-2 !text-[15px] ${worldType === 'flat' ? 'mc-btn-primary' : ''}`}
+                    aria-pressed={worldType === 'flat'}
+                    onClick={() => setWorldType(worldType === 'normal' ? 'flat' : 'normal')}
+                  >
+                    Typ świata: {worldType === 'normal' ? 'Normalny' : 'Płaski'}
+                  </button>
+                </div>
+                <div className="text-xs leading-snug text-gray-300">
+                  {worldType === 'flat'
+                    ? 'Świat płaski: równa trawna równina na wysokości 64 – idealny do budowania i kopania rud.'
+                    : mode === 'survival'
+                      ? 'Zetnij drzewo, wytwórz kilof, postaw drzwi i skrzynię. W jaskiniach leżą skrzynie.'
+                      : 'Nieograniczone bloki, latanie, natychmiastowe niszczenie, brak obrażeń.'}
+                </div>
+                <div className="text-xs text-gray-400">Grafika dobierze się automatycznie do twojego urządzenia (zmienisz w opcjach).</div>
+                <div className="text-xs text-gray-400">Nowy świat nie kasuje pozostałych zapisów. Maksymalnie {MAX_SAVES} światów.</div>
+                <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+                  <button className="mc-btn sm:flex-1" onClick={() => setView('main')}>
+                    Anuluj
+                  </button>
+                  <button className="mc-btn mc-btn-primary sm:flex-1" onClick={create}>
+                    Stwórz świat
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {view === 'controls' && (
+              <div className="mc-card flex w-full flex-col gap-4 p-4 sm:p-5">
+                <Controls />
+                <button className="mc-btn" onClick={() => setView('main')}>
+                  Gotowe
+                </button>
+              </div>
+            )}
+
+            {view === 'options' && (
+              <div className="mc-card p-3 sm:p-4">
+                <SettingsScreen
+                  settings={settings}
+                  onChange={(n) => {
+                    setSettings(n);
+                    saveSettings(n);
+                  }}
+                  onClose={() => setView('main')}
+                />
+              </div>
+            )}
           </div>
-        )}
-        {view === 'controls' && (
-          <div className="flex w-full flex-col gap-4 bg-black/60 p-5">
-            <Controls />
-            <button className="mc-btn" onClick={() => setView('main')}>
-              Gotowe
-            </button>
-          </div>
-        )}
-        {view === 'options' && (
-          <SettingsScreen
-            settings={settings}
-            onChange={(n) => {
-              setSettings(n);
-              saveSettings(n);
-            }}
-            onClose={() => setView('main')}
-          />
-        )}
+        </div>
+
+        <footer className="mt-3 flex w-full max-w-[1040px] flex-col items-center justify-between gap-1 border-t border-white/10 pt-2 text-center text-[11px] leading-tight text-white/55 sm:flex-row sm:text-left sm:text-xs">
+          <span>BlockCraft {GAME_VERSION} „{GAME_RELEASE_NAME}”</span>
+          <span>Gra w przeglądarce · Three.js · GitHub Pages</span>
+        </footer>
       </div>
-      <div
-        className="absolute inset-x-3 flex flex-col items-center gap-0.5 text-center text-[11px] leading-tight mc-text sm:flex-row sm:justify-between sm:text-sm sm:text-left"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}
-      >
-        <span>BlockCraft {GAME_VERSION} „{GAME_RELEASE_NAME}”</span>
-        <span className="opacity-80">Gra w przeglądarce · Three.js · GitHub Pages</span>
-      </div>
+      {/* 2.8: ukryty input na końcu drzewa – pola formularzy zostają pierwsze w DOM. */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json,.json"
+        aria-hidden="true"
+        tabIndex={-1}
+        className="hidden"
+        onChange={(e) => { pickSavesFile(e.target.files?.[0]); e.target.value = ''; }}
+      />
     </div>
   );
 }
+
 
 export function AchievementsPanel({ unlocked }: { unlocked: string[] }) {
   const have = new Set(unlocked);
@@ -608,39 +670,39 @@ export function PauseMenu({
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+  const [showNews, setShowNews] = useState(false);
   return (
-    <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)' }}>
-      <div className="flex max-h-[92vh] w-full max-w-[420px] flex-col items-center gap-3 overflow-y-auto px-4">
+    <div className="absolute inset-0 flex items-start justify-center overflow-y-auto sm:items-center" style={{ background: 'rgba(0,0,0,0.62)' }}>
+      <div className="flex max-h-[96vh] w-full max-w-[460px] flex-col items-stretch gap-2.5 px-4 py-5">
         {view === 'main' && (
           <>
-            <div className="mb-1 text-2xl mc-text">Menu gry</div>
-            {worldName && <div className="mb-3 text-sm opacity-80">{worldName}</div>}
-            <button className="mc-btn" onClick={onResume}>
+            <div className="mb-0.5 flex items-end justify-between gap-2">
+              <div className="text-2xl mc-text">Menu gry</div>
+              <span className="mc-badge">v{GAME_VERSION}</span>
+            </div>
+            {worldName && <div className="-mt-1 mb-1 text-sm opacity-75">{worldName}</div>}
+            <button className="mc-btn mc-btn-primary" onClick={onResume}>
               Wróć do gry
             </button>
-            <button className="mc-btn" onClick={() => setView('options')}>
-              Opcje...
-            </button>
-            <button className="mc-btn" onClick={() => setView('controls')}>
-              Sterowanie
-            </button>
-            <button className="mc-btn" onClick={onJournal}>
-              Dziennik przygód · J
-            </button>
-            {onWaypoints && (
-              <button className="mc-btn" onClick={onWaypoints}>
-                Punkty podróży · K
+            <div className="grid grid-cols-2 gap-2">
+              <button className="mc-btn !px-2 !py-2 !text-[15px]" onClick={() => setView('options')}>
+                Opcje...
               </button>
-            )}
-            <button className="mc-btn" onClick={() => setView('achievements')}>
-              Osiągnięcia ({unlocked?.length ?? 0}/{ACHIEVEMENTS.length})
-            </button>
-            <button className="mc-btn" onClick={copyLink}>
-              {copied ? 'Link skopiowany ✓' : 'Kopiuj link do świata'}
-            </button>
-            <button className="mc-btn" onClick={toggleFullscreen}>
-              Pełny ekran
-            </button>
+              <button className="mc-btn !px-2 !py-2 !text-[15px]" onClick={() => setView('controls')}>
+                Sterowanie
+              </button>
+              <button className="mc-btn col-span-2 !py-2 !text-[15px]" onClick={onJournal}>
+                Dziennik przygód · J
+              </button>
+              {onWaypoints && (
+                <button className="mc-btn col-span-2 !py-2 !text-[15px]" onClick={onWaypoints}>
+                  Punkty podróży · K
+                </button>
+              )}
+              <button className="mc-btn col-span-2 !py-2 !text-[15px]" onClick={() => setView('achievements')}>
+                Osiągnięcia ({unlocked?.length ?? 0}/{ACHIEVEMENTS.length})
+              </button>
+            </div>
             <button
               className="mc-btn"
               onClick={() => {
@@ -651,9 +713,36 @@ export function PauseMenu({
             >
               {saved ? 'Zapisano ✓' : 'Zapisz świat'}
             </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button className="mc-btn !px-2 !py-2 !text-[15px]" onClick={copyLink}>
+                {copied ? 'Skopiowano ✓' : 'Kopiuj link'}
+              </button>
+              <button className="mc-btn !px-2 !py-2 !text-[15px]" onClick={toggleFullscreen}>
+                Pełny ekran
+              </button>
+            </div>
             <button className="mc-btn" onClick={onQuit}>
               Zapisz i wyjdź do menu
             </button>
+            <div className="mt-1 border-t border-white/10 pt-1">
+              <button
+                className="flex w-full items-center justify-between px-1 py-1.5 text-sm text-yellow-200/90 hover:text-yellow-100"
+                aria-expanded={showNews}
+                onClick={() => setShowNews((v) => !v)}
+              >
+                <span>Nowości w {GAME_VERSION} „{GAME_RELEASE_NAME}”</span>
+                <span className="text-xs opacity-70">{showNews ? '▲' : '▼'}</span>
+              </button>
+              {showNews && (
+                <ul className="mt-1 space-y-1.5 border border-white/10 bg-black/40 p-2 text-xs leading-snug text-white/80">
+                  {RELEASE_HIGHLIGHTS.map((h) => (
+                    <li key={h.title}>
+                      <span className="text-yellow-200">{h.title}:</span> {h.text}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </>
         )}
         {view === 'options' && (

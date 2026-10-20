@@ -719,7 +719,7 @@ export class Mob {
     if (this.hurtTime <= 0 && this.health < this.maxHealth) this.health = Math.min(this.maxHealth, this.health + dt * 0.2);
   }
 
-  private updateTamed(dt: number, world: World, player: THREE.Vector3, allies: Mob[], onBite: (mob: Mob) => void): void {
+  private updateTamed(dt: number, world: World, player: THREE.Vector3, allies: Mob[], onBite: (mob: Mob, wolf: Mob) => void): void {
     const b = this.body;
     // pick a target: hostile, within 16 of the wolf, within 24 of the player
     let target: Mob | null = null;
@@ -738,7 +738,7 @@ export class Mob {
         this.walking = false;
         if (this.attackCooldown <= 0) {
           this.attackCooldown = 1.1;
-          onBite(target);
+          onBite(target, this);
         }
       } else {
         this.walking = true;
@@ -781,7 +781,7 @@ export class Mob {
     onShoot: (mob: Mob) => void,
     peaceful: boolean,
     allies: Mob[] = [],
-    onBite: (mob: Mob) => void = () => {}
+    onBite: (mob: Mob, wolf: Mob) => void = () => {}
   ) {
     const b = this.body;
     if (this.hurtTime > 0) {
