@@ -1,15 +1,14 @@
-# BlockCraft 2.13 🧱
+# BlockCraft 2.14 🧱
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
 
-**Wersja 2.13 „Jak w Minecrafcie”** – ekwipunek, crafting i poziom na telefonie:
+**Wersja 2.14 „Auto-bicie”** – automatyczna walka i auto-skok:
 
-* **Ekwipunek w układzie z Minecrafta.** Plecak ma teraz po lewej zbroję i podgląd własnej postaci, na górze siatkę rzemieślniczą **2×2** (przy stole **3×3**), pod spodem 27 slotów i pasek szybkiego dostępu. Okno jest jasnoszare, ze slotami w ciemnych ramkach – jak w grze, a nie jak w formularzu. Przy stole panel pokazuje pełną siatkę 3×3 i chowa zbroję, dokładnie jak w Minecrafcie.
-* **Deski i stół jednym tapnięciem.** Wcześniej tapnięcie odkładało do siatki cały stos, więc 4 deski lądowały w jednym polu i przepis na stół nigdy nie pasował. Teraz tapnięcie kładzie **jedną sztukę** (przytrzymanie – cały stos), a na górze pojawiają się skróty **„Deski (dąb/brzoza/akacja)”** i **„Stół rzemieślniczy”**, gdy tylko masz składniki. Jedno dotknięcie i przedmiot jest w plecaku.
-* **Książka przepisów.** Przycisk **📖 Receptury** otwiera listę wszystkich przepisów z wyszukiwarką i filtrem „Możliwe”. Tapnięcie pozycji wytwarza przedmiot od razu, bez układania składników. Na komputerze książka jest otwarta domyślnie, na telefonie schowana, żeby plecak zmieścił się na ekranie.
-* **Telefon gra się w poziomie.** W grze w pionie pojawia się duża prośba o obrót, a przycisk **„Pełny ekran i poziomo”** wchodzi w fullscreen i blokuje orientację przez Screen Orientation API. To samo robi przycisk ⛶ w HUD i „Pełny ekran” w pauzie – a drugie kliknięcie wraca do okna. Telefony z blokadą rotacji dostają czytelny komunikat i mogą grać w pionie (nikt nie utknie).
-* **Lepszy dotyk.** Przycisk zamykania okien omija notch i pasek gestów (`safe-area`), panel plecaka mieści się w poziomie bez przewijania, a przy niskich ekranach znikają podpisy i podgląd postaci, żeby zostało miejsce na sloty.
-* **Testy.** `npm test` to **1418 kontroli silnika + 207 testów UI** – m.in. cztery deski w kwadracie, tapnięcie po jednej sztuce, skróty „Deski/Stół”, układ 2×2 i 3×3, blokada orientacji oraz ekran „Obróć telefon”. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą; wersja **2.13.0** jest na GitHub Pages.
+* **Auto-bicie wrogich mobów.** Silnik sam wybiera najbliższego wrogiego moba w zasięgu ręki (zombie, creeper, szkielet, pająk, enderman, slime, ghast) i uderza go z normalnym cooldownem, obrażeniami narzędzia, zużyciem i dźwiękami – dokładnie tak, jak ręczny cios. Cios nie przechodzi przez ściany (promień od oczu do moba), a zwierzęta, mieszkańcy i golemy są bezpieczni. Włączasz w **Opcje → Sterowanie** albo jednym przyciskiem **Auto-bicie** w pauzie.
+* **Auto-skok, który wreszcie działa.** Stara wersja wymagała jednocześnie zderzenia ze ścianą (`hitWall`) **i niezerowej prędkości** – a `stepBody` zeruje prędkość dokładnie w chwili zderzenia, więc auto-skok praktycznie nigdy się nie odpalał. Teraz postać sprawdza klocek *przed* sobą i wskakuje na każdy jednoblokowy schodek, zanim się o niego zablokuje. Auto-skok wyciąga też z wody na brzeg.
+* **Dwa szybkie przełączniki w pauzie.** W menu gry są teraz przyciski **Auto-skok: wł./wył.** i **Auto-bicie: wł./wył.** – bez wchodzenia w opcje. Wybór zapisuje się w `localStorage` razem z resztą ustawień i działa w każdym świecie.
+* **Wygodnie na telefonie.** Na dotyku postać delikatnie obraca się w stronę najbliższego wroga (5 rad/s), więc walka palcem nie wymaga precyzyjnego celowania. Na komputerze kamera zostaje w pełni pod kontrolą myszy.
+* **Testy.** `npm test` to **1453 kontroli silnika + 214 testów UI** – m.in. wybór tylko wrogich mobów, cios przez ścianę, cooldown, wyłączanie w ekwipunku, `applyGfx`, skok na schodek i ścianę 2 bloki, szyba vs kamienna ściana oraz przełączniki w opcjach i pauzie. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą; wersja **2.14.0** jest na GitHub Pages.
 
 **Wersja 2.12 „Skórki i dotyk”** – crafting, postać i telefon:
 

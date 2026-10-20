@@ -3101,9 +3101,9 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 
 section('2.8/2.8.1: wersja wydania');
 {
-  // 2.13: wydanie dodaje ekwipunek z Minecrafta i tryb poziomy na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.13'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Jak w Minecrafcie');
+  // 2.14: wydanie dodaje auto-bicie wrogich mobów i auto-skok.
+  check('release label is the current line', GAME_VERSION.startsWith('2.14'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Auto-bicie');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3116,8 +3116,9 @@ section('2.8/2.8.1: wersja wydania');
   check('2.12 highlights mention skins', RELEASE_HIGHLIGHTS.some((h) => /skórk|postać/i.test(h.title + h.text)));
   check('2.12 highlights mention the phone controls', RELEASE_HIGHLIGHTS.some((h) => /telefon|dotyk/i.test(h.title + h.text)));
   check('2.13 highlights mention the Minecraft inventory', RELEASE_HIGHLIGHTS.some((h) => /ekwipun/i.test(h.title)));
-  check('2.13 highlights explain the one-tap crafting fix', RELEASE_HIGHLIGHTS.some((h) => /tapnięcie kładzie/i.test(h.text)));
   check('2.13 highlights mention forced landscape', RELEASE_HIGHLIGHTS.some((h) => /poziom/i.test(h.title) && /fullscreen|pełny ekran/i.test(h.text)));
+  check('2.14 highlights announce auto-attack', RELEASE_HIGHLIGHTS.some((h) => /auto-bicie/i.test(h.title)));
+  check('2.14 highlights explain the auto-jump fix', RELEASE_HIGHLIGHTS.some((h) => /auto-skok/i.test(h.title) && /schodek/i.test(h.text)));
 }
 
 // ============================================ 2.13 „Jak w Minecrafcie”
@@ -3155,6 +3156,138 @@ section('2.13: ekwipunek i crafting jak w Minecrafcie');
   check('książka przepisów jest domyślna na dużym ekranie', screen.includes('initialBookOpen'));
   check('plecak pokazuje podgląd postaci', screen.includes('SkinAvatar') && screen.includes('getSkinId'));
   check('okno przy stole ma własny tytuł', screen.includes("atTable ? 'Stół rzemieślniczy' : 'Ekwipunek'"));
+}
+
+section('2.14: auto-skok i auto-bicie');
+{
+  // Ustawienia: jedno i drugie ma być domyślnie włączone i odporne na śmieci.
+  eq('auto-bicie jest domyślnie włączone', DEFAULT_SETTINGS.autoAttack, true);
+  eq('auto-skok jest domyślnie włączony', DEFAULT_SETTINGS.autoJump, true);
+  eq('wyłączenie auto-bicia jest pamiętane', normalizeSettings({ autoAttack: false }).autoAttack, false);
+  eq('śmieci w auto-biciu wracają do domyślnego', normalizeSettings({ autoAttack: 'tak' }).autoAttack, true);
+  eq('stare zapisy dostają auto-bicie', normalizeSettings({ sensitivity: 1 }).autoAttack, true);
+
+  const engine = readSource('src/game/engine.ts');
+  const settingsScreen = readSource('src/components/SettingsScreen.tsx');
+  const menus = readSource('src/components/Menus.tsx');
+  const gameView = readSource('src/components/GameView.tsx');
+
+  check('silnik przyjmuje auto-bicie przez applyGfx', /autoAttack\?: boolean/.test(engine) && /o\.autoAttack !== undefined/.test(engine));
+  check('auto-bicie wybiera tylko wrogie moby', /isHostileMob\(m\.type\)/.test(engine));
+  check('auto-bicie nie bije przez ścianę', /clearShot\(eye\.x, eye\.y, eye\.z/.test(engine) && /OCCLUDES\[id\] !== 0/.test(engine));
+  check('auto-bicie bije z cooldownem', /autoAttackTick\(dt: number\)[\s\S]{0,600}attackCooldown > 0/.test(engine));
+  check('auto-bicie nie działa w otwartym oknie', /autoAttackTick\(dt: number\)[\s\S]{0,200}this\.ui !== 'playing'/.test(engine));
+  check('auto-bicie jest wołane w pętli gry', /updateMobs\(dt\);[\s\S]{0,200}autoAttackTick\(dt\)/.test(engine));
+  check('auto-skok nie czeka na zderzenie ze ścianą', /const mvx = Math\.sign\(wx\), mvz = Math\.sign\(wz\)/.test(engine) && !/autoJump && playing && b\.onGround && b\.hitWall/.test(engine));
+  check('auto-skok wyciąga z wody', /auto-skok z wody/.test(engine));
+  check('ekran opcji ma przełącznik auto-bicia', /Auto-bicie potworów/.test(settingsScreen));
+  check('pauza ma szybkie przełączniki', /Auto-bicie: \{settings\.autoAttack/.test(menus) && /Auto-skok: \{settings\.autoJump/.test(menus));
+  check('ustawienie trafia z opcji do silnika', /autoAttack: effective\.autoAttack/.test(gameView));
+
+  // Prototyp silnika: prawdziwe World + prawdziwe moby, atak podmieniony na zapis.
+  const w = new World(2026, true);
+  w.getChunk(0, 0);
+  const g = Object.create(Game.prototype) as Record<string, any>;
+  g.world = w;
+  g.mobs = [];
+  g.ui = 'playing';
+  g.mode = 'survival';
+  g.touchInput = false;
+  g.autoAttack = true;
+  g.attackCooldown = 0;
+  g.yaw = 0;
+  g.eyeHeight = 1.62;
+  g.body = { pos: new THREE.Vector3(8.5, FLAT_H + 1, 8.5), vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+  const hits: string[] = [];
+  g.attackMob = (m: { type: string }) => { hits.push(m.type); g.attackCooldown = 0.5; };
+
+  const pig = new Mob('pig', 9.6, FLAT_H + 1, 8.5);
+  const zombie = new Mob('zombie', 10.4, FLAT_H + 1, 8.5);
+  const skeleton = new Mob('skeleton', 20.5, FLAT_H + 1, 8.5);
+  g.mobs = [pig, zombie, skeleton];
+  eq('auto-bicie wybiera zombiego, a nie prosiaka', g.findAutoAttackTarget(3.5)?.type ?? '', 'zombie');
+  g.autoAttackTick(1 / 60);
+  eq('auto-bicie uderza zombiego', hits.join(','), 'zombie');
+  g.autoAttackTick(1 / 60);
+  eq('cooldown blokuje podwójny cios', hits.length, 1);
+  g.attackCooldown = 0;
+  g.autoAttack = false;
+  g.autoAttackTick(1 / 60);
+  eq('wyłączone auto-bicie nic nie robi', hits.length, 1);
+  g.autoAttack = true;
+  g.ui = 'inventory';
+  g.autoAttackTick(1 / 60);
+  eq('auto-bicie nie bije w ekwipunku', hits.length, 1);
+  g.ui = 'playing';
+
+  // Ściana między graczem a mobem: ani jednego ciosu przez blok.
+  w.setBlock(9, FLAT_H + 1, 8, B.STONE);
+  w.setBlock(9, FLAT_H + 1, 9, B.STONE);
+  w.setBlock(9, FLAT_H + 1, 7, B.STONE);
+  w.setBlock(9, FLAT_H + 2, 8, B.STONE);
+  w.setBlock(9, FLAT_H + 2, 9, B.STONE);
+  w.setBlock(9, FLAT_H + 2, 7, B.STONE);
+  g.attackCooldown = 0;
+  const blocked = g.findAutoAttackTarget(3.5);
+  check('ściana zasłania zombiego', blocked === null, blocked?.type ?? 'brak');
+  hits.length = 0;
+  g.autoAttackTick(1 / 60);
+  eq('auto-bicie nie bije przez ścianę', hits.length, 0);
+
+  // Auto-skok: klocek przed graczem i wolna przestrzeń nad nim.
+  g.world = new World(2027, true);
+  g.world.getChunk(0, 0);
+  g.body.pos.set(8.5, FLAT_H + 1, 8.5);
+  const canStep = (g.canAutoStep as (p: THREE.Vector3, dx: number, dz: number) => boolean).bind(g);
+  check('płaski teren nie wymaga skoku', canStep(g.body.pos, 1, 0) === false);
+  g.world.setBlock(9, FLAT_H + 1, 8, B.STONE);
+  check('schodek przed graczem wymaga auto-skoku', canStep(g.body.pos, 1, 0) === true);
+  g.world.setBlock(9, FLAT_H + 2, 8, B.STONE);
+  check('ściana 2 bloki wysokości nie daje się przeskoczyć', canStep(g.body.pos, 1, 0) === false);
+
+  // Cały cios na prawdziwym mobie: auto-bicie ma zabierać zdrowie i cooldown.
+  const g3 = Object.create(Game.prototype) as Record<string, any>;
+  const w3 = new World(2028, true);
+  w3.getChunk(0, 0);
+  g3.world = w3;
+  g3.body = { pos: new THREE.Vector3(8.5, FLAT_H + 1, 8.5), vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+  g3.eyeHeight = 1.62;
+  g3.yaw = 0;
+  g3.pitch = 0;
+  g3.touchInput = true;
+  g3.ui = 'playing';
+  g3.mode = 'survival';
+  g3.autoAttack = true;
+  g3.attackCooldown = 0;
+  g3.hunger = 20;
+  g3.sprinting = false;
+  g3.swingT = 1;
+  g3.selectedStack = () => null;
+  g3.hasEffect = () => false;
+  g3.wearTool = () => {};
+  const live = new Mob('zombie', 9.6, FLAT_H + 1, 8.5);
+  g3.mobs = [live];
+  const hpBefore = live.health;
+  g3.autoAttackTick(1 / 60);
+  check('auto-bicie naprawdę zabiera zdrowie', live.health < hpBefore, `${hpBefore} → ${live.health}`);
+  check('auto-bicie ustawia cooldown ciosu', g3.attackCooldown > 0, String(g3.attackCooldown));
+  check('na dotyku postać obraca się w stronę wroga', Math.abs(g3.yaw) > 0.001, String(g3.yaw));
+
+  // clearShot: ściana zasłania, szyba nie.
+  check('czysty strzał do moba', g3.clearShot(8.5, FLAT_H + 2.6, 8.5, 1, 0, 0, 1.5) === true);
+  w3.setBlock(9, FLAT_H + 2, 8, B.STONE);
+  check('kamienna ściana przerywa auto-bicie', g3.clearShot(8.5, FLAT_H + 2.6, 8.5, 1, 0, 0, 1.5) === false);
+  w3.setBlock(9, FLAT_H + 2, 8, B.AIR);
+  w3.setBlock(9, FLAT_H + 2, 8, B.GLASS);
+  check('szyba nie przerywa auto-bicia', g3.clearShot(8.5, FLAT_H + 2.6, 8.5, 1, 0, 0, 1.5) === true);
+
+  // applyGfx przekazuje ustawienie do silnika.
+  const gf = Object.create(Game.prototype) as Record<string, any>;
+  gf.emitHud = () => {};
+  gf.applyGfx({ autoAttack: true });
+  check('applyGfx włącza auto-bicie', gf.autoAttack === true);
+  gf.applyGfx({ autoAttack: false });
+  check('applyGfx wyłącza auto-bicie', gf.autoAttack === false);
 }
 
 section('2.13: telefon gra się w poziomie');

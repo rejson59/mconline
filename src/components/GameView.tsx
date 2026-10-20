@@ -140,6 +140,7 @@ export default function GameView({
       chunksPerFrame: gfxPreset.chunksPerFrame,
       unloadMargin: gfxPreset.unloadMargin,
       autoJump: effective.autoJump,
+      autoAttack: effective.autoAttack,
       haptics: effective.haptics,
       viewBobbing: effective.viewBobbing,
       showFps: effective.showFps,

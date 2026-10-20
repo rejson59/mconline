@@ -17,6 +17,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.14: auto-bicie – postać sama walczy!',
+  '2.14: auto-skok – ani jednego zablokowania!',
+  '2.14: auto-bicie włączysz w pauzie!',
   '2.13: ekwipunek jak w Minecrafcie!',
   '2.13: telefon gra się w poziomie!',
   '2.13: 4 deski w kwadracie = stół!',
@@ -747,6 +750,21 @@ export function PauseMenu({
               </button>
               <button className="mc-btn !px-2 !py-2 !text-[15px]" onClick={() => setView('controls')}>
                 Sterowanie
+              </button>
+              {/* 2.14: szybkie przełączniki ułatwień – bez wchodzenia w opcje. */}
+              <button
+                className={`mc-btn !px-2 !py-2 !text-[13px] ${settings.autoJump ? '!border-green-400/60' : 'opacity-70'}`}
+                aria-pressed={settings.autoJump}
+                onClick={() => onSettings({ ...settings, autoJump: !settings.autoJump })}
+              >
+                Auto-skok: {settings.autoJump ? 'wł.' : 'wył.'}
+              </button>
+              <button
+                className={`mc-btn !px-2 !py-2 !text-[13px] ${settings.autoAttack ? '!border-green-400/60' : 'opacity-70'}`}
+                aria-pressed={settings.autoAttack}
+                onClick={() => onSettings({ ...settings, autoAttack: !settings.autoAttack })}
+              >
+                Auto-bicie: {settings.autoAttack ? 'wł.' : 'wył.'}
               </button>
               <button className="mc-btn col-span-2 !py-2 !text-[15px]" onClick={onJournal}>
                 Dziennik przygód · J

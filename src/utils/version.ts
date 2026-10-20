@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.13.0';
-export const GAME_RELEASE_NAME = 'Jak w Minecrafcie';
+export const GAME_VERSION = '2.14.0';
+export const GAME_RELEASE_NAME = 'Auto-bicie';
 
 /**
  * 2.10: krótka lista zmian pokazywana w menu pauzy.
@@ -9,23 +9,23 @@ export const GAME_RELEASE_NAME = 'Jak w Minecrafcie';
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
   {
-    title: 'Ekwipunek jak w Minecrafcie',
-    text: 'Plecak ma teraz siatkę rzemieślniczą 2×2 na górze (a przy stole 3×3), obok zbroję i podgląd własnej postaci, pod spodem 27 slotów i pasek szybkiego dostępu. Książka przepisów otwiera się jednym przyciskiem.',
+    title: 'Auto-bicie wrogich mobów',
+    text: 'Postać sama uderza zombie, creepery, szkielety, pająki, slimy, endermany i ghasty w zasięgu ręki – z tym samym cooldownem, obrażeniami narzędzia i dźwiękami, co ręczny cios. Auto-bicie nie bije przez ściany, a zwierzęta i mieszkańcy zostają bezpieczni.',
   },
   {
-    title: 'Deski i stół bez zgadywania',
-    text: 'Tapnięcie kładzie w siatce JEDEN przedmiot, więc cztery deski w kwadracie robi się czterema tapnięciami. Na górze są też skróty „Deski (dąb)” i „Stół rzemieślniczy” – jeśli masz składniki, wystarczy jedno dotknięcie.',
+    title: 'Auto-skok, który wreszcie działa',
+    text: 'Stara wersja wymagała zderzenia ze ścianą i niezerowej prędkości, a zderzenie zeruje prędkość – więc auto-skok prawie nigdy się nie odpalał. Teraz postać sprawdza klocek przed sobą i wskakuje na każdy jednoblokowy schodek bez zatrzymania. Auto-skok wyciąga też z wody na brzeg.',
   },
   {
-    title: 'Telefon gra się w poziomie',
-    text: 'W grze w pionie pojawia się czytelna prośba o obrót, a przycisk „Pełny ekran i poziomo” włącza fullscreen i blokuje orientację (tam, gdzie przeglądarka na to pozwala). Przycisk ⛶ w grze robi teraz jedno i drugie.',
+    title: 'Włączasz w pauzie, nie w opcjach',
+    text: 'W menu pauzy są teraz dwa szybkie przełączniki: Auto-skok i Auto-bicie. To samo znajdziesz w Opcje → Sterowanie. Wybór zapisuje się w przeglądarce i obowiązuje w każdym świecie.',
   },
   {
-    title: 'Lepszy dotyk w oknach',
-    text: 'Książka przepisów jest domyślnie otwarta na komputerze i schowana na telefonie, przycisk zamykania omija notch, a w poziomie panel plecaka mieści się bez przewijania.',
+    title: 'Wygodne na telefonie i na komputerze',
+    text: 'Na dotyku postać dodatkowo delikatnie obraca się w stronę najbliższego wroga, więc walka palcem nie wymaga precyzyjnego celowania. Na komputerze działa to samo auto-bicie, a kamera zostaje pod pełną kontrolą myszy.',
   },
   {
-    title: 'Nadal: publiczny serwer, skórki i pochodnia',
-    text: 'Osiem skórek, publiczny serwer z jednym wspólnym światem, budowle w chmurze, wspólna pora dnia i pogoda, nowoczesne tekstury, lista komend w czacie, pochodnia w dłoni oświetlająca okolicę i naprawione kody zaproszeń (koniec błędu „wrong state”) – wszystko zostaje.',
+    title: 'Nadal: publiczny serwer, ekwipunek i poziom',
+    text: 'Osiem skórek, publiczny serwer z jednym wspólnym światem i budowlami w chmurze, ekwipunek jak w Minecrafcie (siatka 2×2, stół 3×3, 1 pień → 4 deski), wymuszony poziom i pełny ekran na telefonie, dotykowe sterowanie, nowoczesne tekstury, lista komend w czacie, pochodnia w dłoni i naprawione kody zaproszeń („wrong state”) – wszystko zostaje.',
   },
 ];
