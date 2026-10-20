@@ -235,6 +235,33 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         </div>
       )}
 
+      {/* 2.10: obsada sesji – widoczna tylko w multiplayerze. */}
+      {(hud.players?.length ?? 0) > 0 && (
+        <div className="absolute right-2 top-16 flex flex-col items-end gap-1 sm:left-2 sm:right-auto sm:top-9 sm:items-start">
+          <div className="px-2 py-1 text-[11px] leading-tight mc-text" style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.18)' }}>
+            <span className="text-green-300">● {hud.players!.length}</span> w sesji
+            {hud.netRole === 'host' && <span className="ml-1 text-yellow-200">· gospodarz</span>}
+          </div>
+          <div className="flex flex-col items-end gap-0.5 sm:items-start">
+            {hud.players!.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] leading-tight mc-text"
+                style={{ background: 'rgba(0,0,0,0.45)' }}
+                title={p.ping >= 0 ? `${p.ping} ms` : 'ping…'}
+              >
+                <span
+                  className="inline-block"
+                  style={{ width: 8, height: 8, background: `hsl(${p.hue} 60% 55%)`, border: '1px solid #000' }}
+                />
+                <span className={p.self ? 'text-yellow-200' : ''}>{p.name}{p.self ? ' (ty)' : ''}</span>
+                <span className="text-white/45">{p.ping >= 0 ? `${p.ping} ms` : '…'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {hud.minimap && (
         <div className="absolute right-3 top-3 hidden flex-col items-center gap-1 sm:flex">
           <div className="relative" style={{ filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.55))' }}>

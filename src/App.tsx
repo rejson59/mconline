@@ -2,6 +2,8 @@ import { useState } from 'react';
 import GameView from './components/GameView';
 import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
 import { type GameMode, type SaveData } from './game/engine';
+import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
+import type { NetSession } from './game/net';
 import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
 
 interface Session {
@@ -12,6 +14,8 @@ interface Session {
   worldId: string;
   worldName: string;
   worldType: WorldType;
+  /** 2.10: sesja sieciowa (null/brak = gra jednoosobowa). */
+  net?: NetSession;
 }
 
 function asSave(raw: ReturnType<typeof loadSaves>[number]): SaveData {
@@ -49,6 +53,25 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [saves, setSaves] = useState<WorldCard[]>(cards);
   const [shared, setShared] = useState(readSharedWorld);
+  const [multiplayer, setMultiplayer] = useState(false);
+
+  const startMultiplayer = (s: NetStart) => {
+    setMultiplayer(false);
+    try {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    } catch {
+      /* ignore */
+    }
+    setSession({
+      seed: s.seed,
+      mode: s.mode,
+      id: Date.now(),
+      worldId: 'mp' + Date.now().toString(36),
+      worldName: s.worldName,
+      worldType: s.worldType,
+      net: s.net,
+    });
+  };
 
   const refresh = () => setSaves(cards());
 
@@ -62,6 +85,7 @@ export default function App() {
         worldId={session.worldId}
         worldName={session.worldName}
         worldType={session.worldType}
+        net={session.net}
         onQuit={() => {
           setSession(null);
           setTimeout(refresh, 50);
@@ -70,8 +94,13 @@ export default function App() {
     );
   }
 
+  if (multiplayer) {
+    return <MultiplayerScreen onStart={startMultiplayer} onClose={() => setMultiplayer(false)} />;
+  }
+
   return (
     <MainMenu
+      onMultiplayer={() => setMultiplayer(true)}
       saves={saves}
       sharedSeed={shared.seed}
       sharedMode={shared.mode}

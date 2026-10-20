@@ -12,7 +12,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MainMenu, Controls, AchievementsPanel, PauseMenu, filterAndSortWorlds } from '../src/components/Menus';
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS, applyPreset } from '../src/utils/settings';
-import { GAME_RELEASE_NAME } from '../src/utils/version';
+import { GAME_RELEASE_NAME, GAME_VERSION } from '../src/utils/version';
 import SettingsScreen from '../src/components/SettingsScreen';
 import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/components/JournalScreen';
 import EnchantScreen from '../src/components/EnchantScreen';
@@ -22,6 +22,7 @@ import AnvilScreen from '../src/components/AnvilScreen';
 import BrewingScreen from '../src/components/BrewingScreen';
 import InventoryScreen from '../src/components/InventoryScreen';
 import ChatScreen from '../src/components/ChatScreen';
+import MultiplayerScreen from '../src/components/MultiplayerScreen';
 import { COMMANDS, COMMAND_CATEGORIES, commandByName, applyCommandSuggestion } from '../src/game/commands';
 import { anvilResult } from '../src/game/anvil';
 import { Inventory, RECIPES } from '../src/game/inventory';
@@ -168,13 +169,32 @@ section('world list: search and sorting');
   check('pinned worlds stay above the selected sort', filterAndSortWorlds([{ ...worlds[0], favorite: true }, worlds[1], worlds[2]], '', 'day').map((w) => w.id).join() === 'z,a,b');
 }
 
+section('2.10: ekran „Gra razem”');
+{
+  const mp = renderToStaticMarkup(<MultiplayerScreen onStart={noop} onClose={noop} />);
+  check('ekran multiplayera ma tytuł', mp.includes('Gra razem'));
+  check('ekran tłumaczy brak serwera', /bez serwera|nie ma serwera/i.test(mp));
+  check('są dwa transporty', mp.includes('Ta sama przeglądarka') && mp.includes('Przez internet'));
+  check('można utworzyć sesję i dołączyć', mp.includes('Utwórz sesję') && mp.includes('Dołącz'));
+  check('kod pokoju jest widoczny', mp.includes('Kod pokoju'));
+  check('jest pole nazwy gracza', mp.includes('Twoja nazwa'));
+  check('gospodarz ustawia świat', mp.includes('Ziarno świata') && mp.includes('Tryb / teren'));
+  check('gospodarz ma przycisk otwarcia pokoju', mp.includes('Otwórz pokój'));
+  check('jest losowanie kodu pokoju', mp.includes('Losuj'));
+
+  const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} onMultiplayer={noop} />);
+  check('menu główne prowadzi do multiplayera', menu.includes('Gra razem · multiplayer'));
+  const noMp = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
+  check('bez obsługi multiplayera przycisk się nie pojawia', !noMp.includes('Gra razem · multiplayer'));
+}
+
 section('menus: static render');
 {
   const menu = renderToStaticMarkup(
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.9') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.10') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -217,7 +237,28 @@ section('menus: static render');
   check('pause menu offers resume and save', pause.includes('Wróć do gry') && pause.includes('Zapisz świat'));
   check('pause menu opens the adventure journal', pause.includes('Dziennik przygód'));
   check('pause menu counts achievements', pause.includes(`/${ACHIEVEMENTS.length}`));
-  check('pause menu announces the new release', pause.includes('Nowości w 2.9') && pause.includes(GAME_RELEASE_NAME));
+  check('pause menu announces the new release', pause.includes(`Nowości w ${GAME_VERSION}`) && pause.includes(GAME_RELEASE_NAME));
+
+  const pauseMp = renderToStaticMarkup(
+    <PauseMenu
+      settings={DEFAULT_SETTINGS}
+      shareUrl="http://x/"
+      onSettings={noop}
+      onResume={noop}
+      onJournal={noop}
+      onQuit={noop}
+      onSave={noop}
+      session={{ role: 'host', players: [
+        { id: 'a', name: 'Ala', hue: 0, ping: 12, self: true },
+        { id: 'b', name: 'Bob', hue: 120, ping: 48 },
+      ] }}
+    />
+  );
+  check('pause menu lists the session players', pauseMp.includes('Gra razem · 2 os.') && pauseMp.includes('Bob'));
+  check('pause menu shows who is the host', pauseMp.includes('gospodarz'));
+  check('pause menu shows player pings', pauseMp.includes('12 ms') && pauseMp.includes('48 ms'));
+  check('pause menu hides saving in a session', !pauseMp.includes('Zapisz świat') && pauseMp.includes('Wyjdź z sesji do menu'));
+  check('pause menu explains the host owns the world', pauseMp.includes('Świat prowadzi gospodarz'));
 
   // 2.0: ekran opcji (zakładki, presety jakości, sterowanie dotykowe)
   const settingsHtml = renderToStaticMarkup(
@@ -422,7 +463,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces release 2.8', menu.includes('2.8'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.9'));
+  check('the menu names the current release', menu.includes('WERSJA 2.10'));
 }
 
 section('2.4: brewing rules');
@@ -545,6 +586,28 @@ async function mountWithJsdom(): Promise<boolean> {
   const byText = (label: string) => buttons().find((b) => (b.textContent ?? '').includes(label));
 
   check('app renders the title screen', text().includes('BLOCKCRAFT'));
+
+  // 2.10: wejście do poczekalni multiplayer i powrót bez uruchamiania świata.
+  await React.act(async () => {
+    byText('Gra razem · multiplayer')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('multiplayer screen opens from the menu', text().includes('Gra razem') && text().includes('Kod pokoju'));
+  check('multiplayer screen offers both transports', text().includes('Ta sama przeglądarka') && text().includes('Przez internet'));
+
+  await React.act(async () => {
+    byText('Dołącz')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('joining asks for the room code', text().includes('Dołącz do pokoju'));
+
+  await React.act(async () => {
+    byText('Przez internet')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('internet mode explains the invite code', /kod zaproszenia/i.test(text()));
+
+  await React.act(async () => {
+    byText('Wróć')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('back from multiplayer returns to the menu', text().includes('BLOCKCRAFT'));
 
   await React.act(async () => {
     byText('Nowy świat')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));

@@ -281,6 +281,12 @@ export class World {
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
+  /**
+   * 2.10: wywoływane po każdej zmianie bloku w czasie gry (nie przy
+   * generowaniu terenu ani przy odtwarzaniu zapisu). Multiplayer wysyła
+   * z tego listę zmian pozostałym graczom.
+   */
+  onEdit: ((x: number, y: number, z: number, id: number) => void) | null = null;
   private n1: SimplexNoise;
   private n2: SimplexNoise;
   private n3: SimplexNoise;
@@ -898,6 +904,7 @@ export class World {
     // przy stawianiu zwykłego bloku).
     if (EMIT[previous] || EMIT[id]) c.refreshEmitters();
     c.revision++;
+    this.onEdit?.(x, y, z, id);
     const k = World.key(cx, cz);
     let m = this.mods.get(k);
     if (!m) { m = new Map(); this.mods.set(k, m); }
