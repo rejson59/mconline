@@ -15,6 +15,8 @@ import WaypointsScreen from './WaypointsScreen';
 import { DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
 import { ChatInput } from './ChatScreen';
 import TouchControls from './TouchControls';
+import OrientationGuard from './OrientationGuard';
+import { enterLandscapeMode } from '../utils/screen';
 import {
   effectiveSettings,
   loadSettings,
@@ -59,7 +61,6 @@ export default function GameView({
   // 2.9: czat otwierany z pauzy pokazuje od razu listę komend.
   const [chatList, setChatList] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
-  const [portraitHint, setPortraitHint] = useState(false);
   // 2.5: wersja PC i dotykowa są wyraźnie rozdzielone – decyduje tryb
   // sterowania (auto wg głównego wskaźnika urządzenia albo wymuszony).
   const [touch, setTouch] = useState(() => resolveControlMode(loadSettings()) === 'touch');
@@ -199,19 +200,6 @@ export default function GameView({
     };
   }, [ui, touch]);
 
-  // 2.0: podpowiedź „obróć telefon” w pionie na małych ekranach.
-  useEffect(() => {
-    if (!touch) return;
-    const check = () => setPortraitHint(window.innerHeight > window.innerWidth && window.innerWidth < 560);
-    check();
-    window.addEventListener('resize', check);
-    window.addEventListener('orientationchange', check);
-    return () => {
-      window.removeEventListener('resize', check);
-      window.removeEventListener('orientationchange', check);
-    };
-  }, [touch]);
-
   if (fatal) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
@@ -232,7 +220,22 @@ export default function GameView({
   const resume = () => {
     setStarted(true);
     gameRef.current?.setUI('playing');
+    // 2.13: tapnięcie „Dotknij, aby grać” to gest użytkownika, więc właśnie
+    // tu możemy poprosić o pełny ekran i zablokować poziom na telefonie.
+    if (touch) void enterLandscapeMode();
   };
+
+  // 2.13: poziom wymuszamy w grze i w oknach ze slotami. Czat, dziennik
+  // i pauza zostają wygodne także w pionie.
+  const wantsLandscape =
+    ui === 'playing' ||
+    ui === 'inventory' ||
+    ui === 'chest' ||
+    ui === 'furnace' ||
+    ui === 'anvil' ||
+    ui === 'enchant' ||
+    ui === 'brewing' ||
+    ui === 'trade';
 
   return (
     <div className="absolute inset-0">
@@ -264,14 +267,8 @@ export default function GameView({
           onWaypoints={() => game.setUI('waypoints')}
         />
       )}
-      {touch && portraitHint && ui === 'playing' && (
-        <div className="absolute left-1/2 top-2 z-40 flex -translate-x-1/2 items-center gap-2 px-3 py-1.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.6)', border: '2px solid #3a3a3a' }}>
-          <span>Obróć telefon poziomo – będzie wygodniej</span>
-          <button className="px-1 text-base opacity-80" onClick={() => setPortraitHint(false)}>
-            ✕
-          </button>
-        </div>
-      )}
+      {/* 2.13: w grze wymuszamy poziom – w pionie HUD i sterowanie na siebie nachodzą. */}
+      {wantsLandscape && <OrientationGuard />}
       {game && ui === 'inventory' && <InventoryScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'furnace' && <FurnaceScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
       {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}

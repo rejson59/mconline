@@ -6,6 +6,7 @@ import { loadSettings, saveSettings, type Settings } from '../utils/settings';
 import { GAME_RELEASE_NAME, GAME_VERSION, RELEASE_HIGHLIGHTS } from '../utils/version';
 import SettingsScreen from './SettingsScreen';
 import { SkinHead } from './SkinPicker';
+import { toggleFullscreenLandscape } from '../utils/screen';
 
 export type WorldType = 'normal' | 'flat';
 
@@ -16,6 +17,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.13: ekwipunek jak w Minecrafcie!',
+  '2.13: telefon gra się w poziomie!',
+  '2.13: 4 deski w kwadracie = stół!',
   '2.12: nowe skórki – wybierz swoją postać!',
   '2.12: pień → deski → stół rzemieślniczy!',
   '2.12: przyciski dotykowe w Twoim rozmiarze!',
@@ -186,14 +190,12 @@ export function Controls() {
   );
 }
 
-/** Fullscreen is unavailable on some mobile browsers – never throw. */
+/**
+ * 2.13: pełny ekran na telefonie od razu próbuje zablokować poziom.
+ * Przeglądarki, które tego nie umieją, po prostu zostają w oknie.
+ */
 export function toggleFullscreen() {
-  try {
-    if (document.fullscreenElement) void document.exitFullscreen?.();
-    else void document.documentElement.requestFullscreen?.();
-  } catch {
-    /* ignore */
-  }
+  void toggleFullscreenLandscape();
 }
 
 /** Builds a shareable link that recreates this world (seed + mode in the hash). */

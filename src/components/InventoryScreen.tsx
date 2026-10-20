@@ -1,15 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Game } from '../game/engine';
-import { CREATIVE_BLOCKS } from '../game/blocks';
-import { RECIPES, mergeable } from '../game/inventory';
+import { B, CREATIVE_BLOCKS } from '../game/blocks';
+import { LOG_IDS, RECIPES, mergeable, type Recipe } from '../game/inventory';
 import { filterRecipes } from '../utils/recipeSearch';
 import { CREATIVE_ITEMS, displayName, stackLimit } from '../game/items';
 import { TooltipBody } from '../utils/tooltip';
 import { ARMOR, armorPoints, ARMOR_SLOT_NAMES } from '../game/armor';
 import Slot from './Slot';
 import CloseButton from './CloseButton';
+import { SkinAvatar } from './SkinPicker';
 
-export default function InventoryScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
+/**
+ * 2.13: ekwipunek w układzie z Minecrafta.
+ *
+ * Wcześniej crafting był osobnym panelem obok plecaka, siatka 3×3 udawała
+ * 2×2 (z wygaszonymi polami), a na telefonie całość trzeba było przewijać,
+ * żeby w ogóle zobaczyć przepisy. Teraz jest jak w grze:
+ *
+ *  • po lewej zbroja i podgląd własnej postaci,
+ *  • obok siatka rzemieślnicza: 2×2 w plecaku, 3×3 przy stole,
+ *  • pod spodem 27 slotów plecaka i pasek szybkiego dostępu,
+ *  • „Receptury” to odpowiednik książki przepisów – tapnij pozycję i masz
+ *    przedmiot bez przekładania składników.
+ *
+ * Najważniejsza poprawka dotyczy układania składników dotykiem: tapnięcie
+ * kładzie JEDEN przedmiot (a nie cały stos), więc „4 deski w kwadracie”
+ * da się zrobić czterema tapnięciami – wcześniej trzeba było przytrzymywać
+ * palec i prawie nikt tego nie odkrywał.
+ */
+export default function InventoryScreen({
+  game,
+  icons,
+  onChange,
+  /** Wymusza otwartą książkę przepisów (testy, duże ekrany). */
+  initialBookOpen,
+}: {
+  game: Game;
+  icons: Record<number, string>;
+  onChange: () => void;
+  initialBookOpen?: boolean;
+}) {
   const [, setTick] = useState(0);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<string | null>(null);
@@ -17,9 +47,17 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
   const [recipeQuery, setRecipeQuery] = useState('');
   const [tab, setTab] = useState<'blocks' | 'items'>('blocks');
   const [onlyReady, setOnlyReady] = useState(false);
+  // Na komputerze książka przepisów jest otwarta od razu (jak w Minecrafcie),
+  // na telefonie chowamy ją, żeby plecak zmieścił się na ekranie.
+  const [book, setBook] = useState(
+    () => initialBookOpen ?? (typeof window !== 'undefined' && window.innerWidth >= 900)
+  );
   const inv = game.inventory;
   const creative = game.mode === 'creative';
-  const gridMatch = creative ? null : inv.gridMatch(!!game.craftingTable);
+  const atTable = !!game.craftingTable;
+  const gridMatch = creative ? null : inv.gridMatch(atTable);
+  const skinId = game.getSkinId?.() ?? 'steve';
+
   const refresh = () => {
     setTick((t) => t + 1);
     onChange();
@@ -43,10 +81,70 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
     refresh();
   };
 
+  /**
+   * Siatka rzemieślnicza: z kursorem tapnięcie kładzie jedną sztukę,
+   * przytrzymanie – cały stos. Bez kursora tapnięcie bierze wszystko,
+   * przytrzymanie – połowę (jak PPM w Minecrafcie).
+   */
+  const clickGrid = (i: number, right: boolean) => {
+    if (!inv.cursor && !inv.grid[i]) return;
+    inv.clickGrid(i, inv.cursor ? !right : right);
+    refresh();
+  };
+
+  const takeResult = () => {
+    if (!gridMatch) return;
+    const cur = inv.cursor;
+    if (cur && !mergeable(cur, gridMatch.out)) return;
+    const room = cur ? stackLimit(cur.id) - cur.count : stackLimit(gridMatch.out.id);
+    if (room <= 0) return;
+    const made = inv.craftGrid(atTable);
+    if (!made) return;
+    const take = Math.min(made.count, room);
+    if (cur) {
+      cur.count += take;
+    } else {
+      inv.cursor = { ...made, count: take, ...(made.ench ? { ench: { ...made.ench } } : {}) };
+    }
+    if (made.count > take && !inv.add(made.id, made.count - take, made.dur, made.ench, made.name)) {
+      game.spawnDrop(made.id, made.count - take, game.body.pos.x, game.body.pos.y + 1, game.body.pos.z, made.dur, undefined, undefined, undefined, made.ench, made.name);
+      game.message('Brak miejsca – nadmiar wytworzonego przedmiotu upadł na ziemię.');
+    }
+    game.onCraft(made.id);
+    refresh();
+  };
+
+  const craftDirect = (recipe: Recipe) => {
+    if (!inv.craft(recipe)) return;
+    game.onCraft(recipe.out.id);
+    refresh();
+  };
+
+  // --- 2.13: szybkie przepisy, które rozwiązują „nie mogę zrobić desek”.
+  const plankRecipes = useMemo(
+    () => LOG_IDS.map((logId) => RECIPES.find((r) => r.out.id === B.PLANKS && !r.table && r.inputs.length === 1 && r.inputs[0].id === logId)).filter((r): r is Recipe => !!r),
+    []
+  );
+  const tableRecipe = useMemo(() => RECIPES.find((r) => r.out.id === B.CRAFTING), []);
+  // Bez `useMemo`: plecak zmienia się w miejscu, więc świeżość jest ważniejsza
+  // niż kilka tanich sprawdzeń przy każdym renderze.
+  const woodName = (id: number) => (
+    { [B.LOG]: 'dąb', [B.BIRCH_LOG]: 'brzoza', [B.ACACIA_LOG]: 'akacja' } as Record<number, string>
+  )[id] ?? 'drewno';
+  const quick: { recipe: Recipe; label: string; hint: string }[] = [];
+  for (const r of plankRecipes) {
+    if (inv.canCraftToInventory(r)) quick.push({ recipe: r, label: `Deski (${woodName(r.inputs[0].id)})`, hint: '1 pień → 4 deski' });
+  }
+  if (tableRecipe && inv.canCraftToInventory(tableRecipe)) {
+    quick.push({ recipe: tableRecipe, label: 'Stół rzemieślniczy', hint: '4 deski → stół' });
+  }
+
   const hotbar = (
-    <div className="flex gap-0">
+    <div className="mc-inv-hotbar flex gap-0">
       {inv.slots.slice(0, 9).map((s, i) => (
-        <Slot key={i} stack={s} icons={icons} onClick={(r) => clickSlot(i, r)} onHover={setHover} showCount={!creative} highlight={i === game.selected} />
+        <div key={i} data-hotbar-slot={i} className="contents">
+          <Slot stack={s} icons={icons} onClick={(r) => clickSlot(i, r)} onHover={setHover} showCount={!creative} highlight={i === game.selected} />
+        </div>
       ))}
     </div>
   );
@@ -55,8 +153,12 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
   const filtered = pool.filter((id) => displayName(id).toLowerCase().includes(search.toLowerCase()));
   const recipeRows = filterRecipes(RECIPES, recipeQuery).filter((recipe) => {
     if (!onlyReady) return true;
-    return inv.canCraftToInventory(recipe) && !(recipe.table && !game.craftingTable);
+    return inv.canCraftToInventory(recipe) && !(recipe.table && !atTable);
   });
+  const readyCount = RECIPES.filter((r) => inv.canCraftToInventory(r) && !(r.table && !atTable)).length;
+
+  // Siatka: 2×2 w plecaku (komórki 0,1,3,4) albo pełne 3×3 przy stole.
+  const cells = atTable ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [0, 1, 3, 4];
 
   return (
     <div
@@ -64,151 +166,178 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
       style={{ background: 'rgba(0,0,0,0.55)' }}
       onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => {
-        // 2.9: na dotyku nie było żadnego wyjścia – tapnięcie poza panelem
-        // zamyka ekwipunek. Trzymany przedmiot wraca do plecaka w
-        // `closeInventory()`, więc nic nie ginie (inaczej niż przy starym
-        // „klik poza = usuń” w trybie kreatywnym).
+        // 2.9: na dotyku tapnięcie poza panelem zamyka ekwipunek. Trzymany
+        // przedmiot wraca do plecaka w `closeInventory()`, więc nic nie ginie.
         if (e.target === e.currentTarget) game.closeInventory();
       }}
     >
       <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
-      <div className="flex max-h-[94dvh] max-w-[100vw] flex-wrap items-start justify-center gap-3 overflow-x-hidden overflow-y-auto p-3 pb-20 sm:gap-4">
-        <div className="mc-panel inventory-main-panel w-fit max-w-[calc(100vw-24px)] p-4">
-          {creative ? (
-            <>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="flex gap-2 text-lg font-semibold">
-                  <button type="button" className={tab === 'blocks' ? 'underline' : 'opacity-60'} onClick={() => setTab('blocks')}>Bloki</button>
-                  <button type="button" className={tab === 'items' ? 'underline' : 'opacity-60'} onClick={() => setTab('items')}>Przedmioty</button>
+
+      <div className="flex max-h-[96dvh] max-w-[100vw] flex-wrap items-start justify-center gap-2 overflow-x-hidden overflow-y-auto px-1 pb-20 pt-1 sm:gap-3 sm:p-3 sm:pb-20">
+        {!creative ? (
+          <div className="mc-panel mc-inv">
+            <div className="mc-inv-head">
+              <span className="mc-inv-title">{atTable ? 'Stół rzemieślniczy' : 'Ekwipunek'}</span>
+              <button
+                type="button"
+                className="mc-inv-book-btn"
+                aria-pressed={book}
+                onClick={() => setBook((v) => !v)}
+                title="Książka przepisów – tapnij, aby wytworzyć przedmiot"
+              >
+                📖 Receptury
+                {readyCount > 0 && <span className="mc-inv-book-count">{readyCount}</span>}
+              </button>
+            </div>
+
+            <div className="mc-inv-body">
+              {!atTable && (
+                <div className="mc-inv-side">
+                  <div className="mc-inv-armor">
+                    {game.armor.map((s, i) => (
+                      <Slot
+                        key={i}
+                        stack={s}
+                        icons={icons}
+                        onClick={() => {
+                          game.clickArmorSlot(i);
+                          refresh();
+                        }}
+                        onHover={(name) => {
+                          if (!name) {
+                            setHover(ARMOR_SLOT_NAMES[i]);
+                            return;
+                          }
+                          const [title, ...enchLines] = name.split('\n');
+                          const slot = `${title} · ${ARMOR_SLOT_NAMES[i]}${ARMOR[s!.id]?.points ? ` (+${ARMOR[s!.id]!.points} pkt pancerza)` : ''}`;
+                          setHover(enchLines.length ? `${slot}\n§5${enchLines.join('\n').replace(/^§5/, '')}` : slot);
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div className="mc-inv-preview" aria-hidden="true">
+                    <SkinAvatar skin={skinId} size={54} />
+                    <div className="mc-inv-armor-pts">🛡 {armorPoints(game.armor)}</div>
+                  </div>
                 </div>
-                <input
-                  className="mc-input !w-44 !py-1 !text-sm"
-                  placeholder="Szukaj..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => e.stopPropagation()}
-                />
-              </div>
-              <div className="mb-3 grid max-h-[300px] w-fit grid-cols-9 overflow-y-auto">
-                {filtered.map((id) => (
-                  <Slot
-                    key={id}
-                    stack={{ id, count: 64 }}
-                    icons={icons}
-                    showCount={false}
-                    onHover={setHover}
-                    onClick={() => {
-                      if (inv.cursor) inv.cursor = null;
-                      else inv.cursor = { id, count: stackLimit(id) === 1 ? 1 : 64 };
-                      refresh();
-                    }}
-                  />
-                ))}
-              </div>
-              <div className="mb-1 text-sm">Kliknij blok, a potem slot paska. Klik poza oknem usuwa trzymany blok.</div>
-            <div className="mb-1 text-xs opacity-70">Na dotyku: tapnij, aby wybrać · przytrzymaj, aby wziąć jeden.</div>
-              {hotbar}
-            </>
-          ) : (
-            <>
-              <div className="mb-2 text-lg font-semibold">Ekwipunek</div>
-              <div className="mb-3 flex items-center gap-3">
-                <div className="flex gap-0">
-                  {game.armor.map((s, i) => (
+              )}
+
+              <div className="mc-inv-main">
+                <div className={`mc-craft ${gridMatch ? 'is-ready' : ''}`}>
+                  <div className={`mc-craft-grid ${atTable ? 'is-3' : 'is-2'}`}>
+                    {cells.map((i) => (
+                      <div key={i} data-craft-cell={i} className="contents">
+                        <Slot
+                          stack={inv.grid[i]}
+                          icons={icons}
+                          onHover={setHover}
+                          onClick={(right) => clickGrid(i, right)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <span className="mc-craft-arrow" aria-hidden="true">➜</span>
+                  <div data-craft-result className="contents">
                     <Slot
-                      key={i}
-                      stack={s}
+                      stack={gridMatch ? { ...gridMatch.out } : null}
                       icons={icons}
+                      showCount
+                      onHover={setHover}
+                      onClick={takeResult}
+                    />
+                  </div>
+                </div>
+
+                {quick.length > 0 && (
+                  <div className="mc-quick" aria-label="Szybkie przepisy">
+                    {quick.map((q) => (
+                      <button
+                        key={q.label}
+                        type="button"
+                        className="mc-quick-btn"
+                        title={q.hint}
+                        onClick={() => craftDirect(q.recipe)}
+                      >
+                        <img src={icons[q.recipe.out.id]} width={20} height={20} className="pixelated" alt="" />
+                        <span>{q.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mc-inv-storage">
+                  {inv.slots.slice(9, 36).map((s, i) => (
+                    <Slot key={i + 9} stack={s} icons={icons} onClick={(r) => clickSlot(i + 9, r)} onHover={setHover} />
+                  ))}
+                </div>
+                {hotbar}
+              </div>
+            </div>
+
+            <div className="mc-inv-hint">
+              {atTable
+                ? 'Ułóż wzór w siatce 3×3 i tapnij wynik. Tapnięcie kładzie 1 sztukę, przytrzymanie – cały stos.'
+                : 'Siatka 2×2: tapnij składnik, potem pole siatki. 1 pień → 4 deski, 4 deski w kwadracie → stół rzemieślniczy.'}
+            </div>
+          </div>
+        ) : (
+          <div className="mc-panel mc-inv">
+            <div className="mc-inv-head">
+              <span className="mc-inv-title">Ekwipunek <span className="mc-inv-mode">· kreatywny</span></span>
+            </div>
+            <div className="mc-inv-body">
+              <div className="mc-inv-main">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex gap-2 text-base font-semibold">
+                    <button type="button" className={tab === 'blocks' ? 'underline' : 'opacity-60'} onClick={() => setTab('blocks')}>Bloki</button>
+                    <button type="button" className={tab === 'items' ? 'underline' : 'opacity-60'} onClick={() => setTab('items')}>Przedmioty</button>
+                  </div>
+                  <input
+                    className="mc-input mc-inv-search"
+                    placeholder="Szukaj..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  />
+                </div>
+                <div className="mc-inv-creative">
+                  {filtered.map((id) => (
+                    <Slot
+                      key={id}
+                      stack={{ id, count: 64 }}
+                      icons={icons}
+                      showCount={false}
+                      onHover={setHover}
                       onClick={() => {
-                        game.clickArmorSlot(i);
+                        if (inv.cursor) inv.cursor = null;
+                        else inv.cursor = { id, count: stackLimit(id) === 1 ? 1 : 64 };
                         refresh();
-                      }}
-                      onHover={(name) => {
-                        if (!name) { setHover(ARMOR_SLOT_NAMES[i]); return; }
-                        const [title, ...enchLines] = name.split('\n');
-                        const slot = `${title} · ${ARMOR_SLOT_NAMES[i]}${ARMOR[s!.id]?.points ? ` (+${ARMOR[s!.id]!.points} pkt pancerza)` : ''}`;
-                        setHover(enchLines.length ? `${slot}\n§5${enchLines.join('\n').replace(/^§5/, '')}` : slot);
                       }}
                     />
                   ))}
                 </div>
-                <span className="text-xs opacity-70">Pancerz: {armorPoints(game.armor)} pkt</span>
+                <div className="mc-inv-hint">
+                  Tapnij blok, a potem slot paska. Tap poza oknem odkłada trzymany przedmiot.
+                </div>
+                {hotbar}
               </div>
-              <div className="mb-3 grid grid-cols-9">
-                {inv.slots.slice(9, 36).map((s, i) => (
-                  <Slot key={i + 9} stack={s} icons={icons} onClick={(r) => clickSlot(i + 9, r)} onHover={setHover} />
-                ))}
-              </div>
-              {hotbar}
-              <div className="mt-2 text-xs opacity-80">LPM: weź/połóż stos · PPM: połowa / jeden · dotyk: przytrzymaj = PPM</div>
-            </>
-          )}
-        </div>
+            </div>
+          </div>
+        )}
 
-        {!creative && (
-          <div className="mc-panel w-[min(330px,calc(100vw-24px))] p-4">
-            <div className="mb-1 flex items-center justify-between gap-2 text-lg font-semibold">
-              <span>{game.craftingTable ? 'Stół rzemieślniczy' : 'Wytwarzanie'}</span>
-              <span className="text-xs font-normal opacity-70">{recipeRows.length}/{RECIPES.length}</span>
+        {!creative && book && (
+          <div className="mc-panel mc-recipe-book">
+            <div className="mc-inv-head">
+              <span className="mc-inv-title">📖 Receptury</span>
+              <span className="mc-recipe-count">{recipeRows.length}/{RECIPES.length}</span>
             </div>
-
-            {/* crafting grid: 2x2 by hand, 3x3 at the table */}
-            <div className="mb-3 flex items-center gap-3">
-              <div className="grid w-fit grid-cols-3 gap-0">
-                {inv.grid.map((cell, i) => {
-                  const row = Math.floor(i / 3), col = i % 3;
-                  const enabled = game.craftingTable || (row < 2 && col < 2);
-                  return (
-                    <div key={i} style={{ opacity: enabled ? 1 : 0.25 }}>
-                      <Slot
-                        stack={enabled ? cell : null}
-                        icons={icons}
-                        onHover={setHover}
-                        onClick={(r) => { if (enabled) { inv.clickGrid(i, r); refresh(); } }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              <span className="text-2xl">→</span>
-              <Slot
-                stack={gridMatch ? { ...gridMatch.out } : null}
-                icons={icons}
-                showCount
-                onHover={setHover}
-                onClick={() => {
-                  if (!gridMatch) return;
-                  const cur = inv.cursor;
-                  if (cur && !mergeable(cur, gridMatch.out)) return;
-                  const room = cur ? stackLimit(cur.id) - cur.count : stackLimit(gridMatch.out.id);
-                  if (room <= 0) return;
-                  const made = inv.craftGrid(!!game.craftingTable);
-                  if (!made) return;
-                  const take = Math.min(made.count, room);
-                  if (cur) { cur.count += take; }
-                  else inv.cursor = { ...made, count: take, ...(made.ench ? { ench: { ...made.ench } } : {}) };
-                  if (made.count > take && !inv.add(made.id, made.count - take, made.dur, made.ench, made.name)) {
-                    game.spawnDrop(made.id, made.count - take, game.body.pos.x, game.body.pos.y + 1, game.body.pos.z, made.dur, undefined, undefined, undefined, made.ench, made.name);
-                    game.message('Brak miejsca – nadmiar wytworzonego przedmiotu upadł na ziemię.');
-                  }
-                  game.onCraft(made.id);
-                  refresh();
-                }}
-              />
-            </div>
-            <div className="mb-2 text-xs opacity-80">
-              {game.craftingTable
-                ? 'Ułóż składniki wzorem w siatce 3×3 i weź wynik. Pasują też wzory narzędzi: np. 3 deski nad 2 patykami = kilof.'
-                : 'Siatka 2×2 – ułóż składniki i weź wynik. Stoł rzemieślniczy (4 deski) odblokowuje siatkę 3×3.'}
-            </div>
-            {!game.craftingTable && <div className="mb-2 text-xs">Narzędzia, łóżko i piec wymagają stołu (PPM na stół). Piec przetapia rudy – PPM na piec.</div>}
             <div className="mb-2 flex gap-2">
               <label className="sr-only" htmlFor="recipe-search">Szukaj receptur po nazwie lub składniku</label>
               <input
                 id="recipe-search"
                 className="mc-input min-w-0 flex-1 !py-1 !text-sm"
                 type="search"
-                placeholder="Szukaj receptury lub składnika…"
+                placeholder="Szukaj receptur po nazwie lub składniku"
                 value={recipeQuery}
                 onChange={(e) => setRecipeQuery(e.target.value)}
                 onKeyDown={(e) => e.stopPropagation()}
@@ -222,14 +351,14 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                 {onlyReady ? 'Wszystkie' : 'Możliwe'}
               </button>
             </div>
-            <div className="max-h-[min(380px,46dvh)] space-y-1 overflow-y-auto pr-1">
+            <div className="mc-recipe-list">
               {recipeRows.length === 0 && (
                 <div className="px-2 py-5 text-center text-sm text-[#444]" role="status">
                   {recipeQuery.trim() ? 'Nie znaleziono takiej receptury.' : 'Brak receptur możliwych do wykonania. Zdobądź potrzebne składniki.'}
                 </div>
               )}
               {recipeRows.map((r) => {
-                const needTable = r.table && !game.craftingTable;
+                const needTable = r.table && !atTable;
                 const hasInputs = inv.canCraft(r);
                 const can = hasInputs && !needTable && inv.canCraftToInventory(r);
                 const noRoom = hasInputs && !needTable && !inv.canCraftToInventory(r);
@@ -238,10 +367,8 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                     key={RECIPES.indexOf(r)}
                     title={noRoom ? 'Zrób miejsce w ekwipunku na wynik.' : needTable ? 'Wymaga stołu rzemieślniczego.' : undefined}
                     disabled={!can}
-                    onClick={() => {
-                      if (inv.craft(r)) { game.onCraft(r.out.id); refresh(); }
-                    }}
-                    className="flex w-full items-center gap-2 border-2 border-[#555] px-2 py-1 text-left"
+                    onClick={() => craftDirect(r)}
+                    className="mc-recipe-row"
                     style={{ background: can ? '#9fd39a' : '#a9a9a9', opacity: needTable ? 0.55 : 1, cursor: can ? 'pointer' : 'default' }}
                     onMouseEnter={() => setHover(displayName(r.out.id))}
                     onMouseLeave={() => setHover(null)}
@@ -249,21 +376,24 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
                     <div className="flex items-center gap-1">
                       {r.inputs.map((inp, j) => (
                         <div key={j} className="relative">
-                          <img src={icons[inp.id]} width={26} height={26} className="pixelated" />
+                          <img src={icons[inp.id]} width={24} height={24} className="pixelated" alt="" />
                           <span className="absolute -bottom-1 right-0 text-xs font-bold text-white mc-text">{inp.count}</span>
                         </div>
                       ))}
                     </div>
                     <span className="text-lg">→</span>
                     <div className="relative">
-                      <img src={icons[r.out.id]} width={30} height={30} className="pixelated" />
+                      <img src={icons[r.out.id]} width={28} height={28} className="pixelated" alt="" />
                       <span className="absolute -bottom-1 right-0 text-xs font-bold text-white mc-text">{r.out.count}</span>
                     </div>
                     <span className="ml-1 truncate text-sm text-[#222]">{displayName(r.out.id)}</span>
-                    {r.table && <span className="ml-auto text-xs">🛠</span>}
+                    {r.table && <span className="ml-auto text-xs" title="Wymaga stołu">🛠</span>}
                   </button>
                 );
               })}
+            </div>
+            <div className="mc-inv-hint">
+              Tapnij recepturę, aby wytworzyć od razu – nie trzeba układać składników w siatce.
             </div>
           </div>
         )}
@@ -276,7 +406,7 @@ export default function InventoryScreen({ game, icons, onChange }: { game: Game;
       )}
       {inv.cursor && (
         <div className="pointer-events-none fixed z-50" style={{ left: mouse.x - 17, top: mouse.y - 17 }}>
-          <img src={icons[inv.cursor.id]} width={34} height={34} className="pixelated" />
+          <img src={icons[inv.cursor.id]} width={34} height={34} className="pixelated" alt="" />
           {!creative && inv.cursor.count > 1 && <span className="mc-count">{inv.cursor.count}</span>}
         </div>
       )}

@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.12.0';
-export const GAME_RELEASE_NAME = 'Skórki i dotyk';
+export const GAME_VERSION = '2.13.0';
+export const GAME_RELEASE_NAME = 'Jak w Minecrafcie';
 
 /**
  * 2.10: krótka lista zmian pokazywana w menu pauzy.
@@ -9,27 +9,23 @@ export const GAME_RELEASE_NAME = 'Skórki i dotyk';
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
   {
-    title: 'Wreszcie stół rzemieślniczy z każdego drewna',
-    text: 'Każdy pień – dąb, brzoza i akacja – daje teraz 4 deski w siatce 2×2, a 4 deski składają się w stół rzemieślniczy. Wcześniej przepis na deski z akacji nie istniał, więc w sawannie nie dało się zrobić nawet stołu.',
+    title: 'Ekwipunek jak w Minecrafcie',
+    text: 'Plecak ma teraz siatkę rzemieślniczą 2×2 na górze (a przy stole 3×3), obok zbroję i podgląd własnej postaci, pod spodem 27 slotów i pasek szybkiego dostępu. Książka przepisów otwiera się jednym przyciskiem.',
   },
   {
-    title: 'Wybierz swoją postać',
-    text: 'Nowa zakładka „Postać” w opcjach i pasek skórek w poczekalni multiplayera: 8 wyglądów (Steve, Alex, creeper, enderman, rycerz, ninja, złoty i podróżnik). Skórka zapisuje się w przeglądarce i jest widoczna u innych graczy – także na liście osób online.',
+    title: 'Deski i stół bez zgadywania',
+    text: 'Tapnięcie kładzie w siatce JEDEN przedmiot, więc cztery deski w kwadracie robi się czterema tapnięciami. Na górze są też skróty „Deski (dąb)” i „Stół rzemieślniczy” – jeśli masz składniki, wystarczy jedno dotknięcie.',
   },
   {
-    title: 'Telefon wreszcie na pierwszym miejscu',
-    text: 'Możesz wybrać rozmiar przycisków dotykowych (małe, średnie, duże). Na niskim ekranie – czyli po obróceniu telefonu poziomo – przyciski i hotbar same się zmniejszają, czat nie wchodzi na serca, a menu i okna omijają notcha oraz pasek gestów (safe-area).',
+    title: 'Telefon gra się w poziomie',
+    text: 'W grze w pionie pojawia się czytelna prośba o obrót, a przycisk „Pełny ekran i poziomo” włącza fullscreen i blokuje orientację (tam, gdzie przeglądarka na to pozwala). Przycisk ⛶ w grze robi teraz jedno i drugie.',
   },
   {
-    title: 'Wygodniejszy ekwipunek na dotyku',
-    text: 'Siatka rzemieślnicza nie rozjeżdża się już na małych ekranach, pola tekstowe mają 16 px (iOS nie przybliża wtedy strony), a każde dotknięcie trafia w element o wysokości co najmniej 44 px.',
+    title: 'Lepszy dotyk w oknach',
+    text: 'Książka przepisów jest domyślnie otwarta na komputerze i schowana na telefonie, przycisk zamykania omija notch, a w poziomie panel plecaka mieści się bez przewijania.',
   },
   {
-    title: 'Publiczny serwer i pochodnia w dłoni – bez zmian',
-    text: 'Serwer publiczny z jednym wspólnym światem działa jak w 2.11, a pochodnia trzymana w dłoni nadal oświetla najbliższe bloki w jaskini i w nocy. Tekstury, liście i chmury zostały po staremu.',
-  },
-  {
-    title: 'Nadal: serwer, tekstury, komendy i dotyk',
-    text: 'Wszystko z 2.9–2.11 zostaje: jeden przycisk „Graj online”, wspólny świat i budowle w chmurze, nowoczesne tekstury, lista komend w czacie, naprawione kody zaproszeń (koniec błędu „wrong state”) oraz zamykanie ekwipunku dotykiem.',
+    title: 'Nadal: publiczny serwer, skórki i pochodnia',
+    text: 'Osiem skórek, publiczny serwer z jednym wspólnym światem, budowle w chmurze, wspólna pora dnia i pogoda, nowoczesne tekstury, lista komend w czacie, pochodnia w dłoni oświetlająca okolicę i naprawione kody zaproszeń (koniec błędu „wrong state”) – wszystko zostaje.',
   },
 ];

@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.12.0",
-  "description": "BlockCraft 2.12 „Skórki i dotyk” – polska gra sandboxowa w przeglądarce: publiczny serwer, wybór skórek, crafting jak w Minecrafcie, wygodne sterowanie dotykowe i nowoczesne tekstury.",
+  "version": "2.13.0",
+  "description": "BlockCraft 2.13 „Jak w Minecrafcie” – polska gra sandboxowa w przeglądarce: publiczny serwer, ekwipunek i crafting jak w Minecrafcie, skórki, wymuszony tryb poziomy na telefonie i nowoczesne tekstury.",
   "type": "module",
   "license": "MIT",
   "keywords": [

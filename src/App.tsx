@@ -3,6 +3,7 @@ import GameView from './components/GameView';
 import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
 import { type GameMode, type SaveData } from './game/engine';
 import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
+import OrientationGuard from './components/OrientationGuard';
 import type { NetLike } from './game/net';
 import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
 
@@ -95,60 +96,72 @@ export default function App() {
   }
 
   if (multiplayer) {
-    return <MultiplayerScreen onStart={startMultiplayer} onClose={() => setMultiplayer(false)} />;
+    return (
+      <div className="flex h-full w-full flex-col">
+        <OrientationGuard variant="menu" />
+        <div className="relative min-h-0 w-full flex-1">
+          <MultiplayerScreen onStart={startMultiplayer} onClose={() => setMultiplayer(false)} />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <MainMenu
-      onMultiplayer={() => setMultiplayer(true)}
-      saves={saves}
-      sharedSeed={shared.seed}
-      sharedMode={shared.mode}
-      onDelete={(id) => {
-        deleteSave(id);
-        refresh();
-      }}
-      onRename={(id, name) => {
-        renameSave(id, name);
-        refresh();
-      }}
-      onDuplicate={(id) => {
-        const copied = duplicateSave(id) !== null;
-        if (copied) refresh();
-        return copied;
-      }}
-      onToggleFavorite={(id) => {
-        toggleFavoriteSave(id);
-        refresh();
-      }}
-      onImported={refresh}
-      onPlay={(id) => {
-        const s = loadSaves().find((w) => w.id === id);
-        if (!s) return;
-        const save = asSave(s);
-        setSession({
-          seed: save.seed,
-          mode: save.mode ?? 'survival',
-          save,
-          id: Date.now(),
-          worldId: save.id || id,
-          worldName: save.name || 'Świat',
-          worldType: save.worldType === 'flat' ? 'flat' : 'normal',
-        });
-      }}
-      onNew={(seed, mode, name, worldType) => {
-        if (saves.length >= MAX_SAVES) {
-          window.alert(`Możesz mieć najwyżej ${MAX_SAVES} światów. Usuń jeden, żeby utworzyć nowy.`);
-          return;
-        }
-        try {
-          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
-        } catch {
-          /* ignore */
-        }
-        setShared({ seed: null, mode: null });
-        setSession({ seed, mode, id: Date.now(), worldId: 'w' + Date.now().toString(36), worldName: name, worldType });
-      }}
-    />
+    <div className="flex h-full w-full flex-col">
+      <OrientationGuard variant="menu" />
+      <div className="relative min-h-0 w-full flex-1">
+        <MainMenu
+        onMultiplayer={() => setMultiplayer(true)}
+        saves={saves}
+        sharedSeed={shared.seed}
+        sharedMode={shared.mode}
+        onDelete={(id) => {
+          deleteSave(id);
+          refresh();
+        }}
+        onRename={(id, name) => {
+          renameSave(id, name);
+          refresh();
+        }}
+        onDuplicate={(id) => {
+          const copied = duplicateSave(id) !== null;
+          if (copied) refresh();
+          return copied;
+        }}
+        onToggleFavorite={(id) => {
+          toggleFavoriteSave(id);
+          refresh();
+        }}
+        onImported={refresh}
+        onPlay={(id) => {
+          const s = loadSaves().find((w) => w.id === id);
+          if (!s) return;
+          const save = asSave(s);
+          setSession({
+            seed: save.seed,
+            mode: save.mode ?? 'survival',
+            save,
+            id: Date.now(),
+            worldId: save.id || id,
+            worldName: save.name || 'Świat',
+            worldType: save.worldType === 'flat' ? 'flat' : 'normal',
+          });
+        }}
+        onNew={(seed, mode, name, worldType) => {
+          if (saves.length >= MAX_SAVES) {
+            window.alert(`Możesz mieć najwyżej ${MAX_SAVES} światów. Usuń jeden, żeby utworzyć nowy.`);
+            return;
+          }
+          try {
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+          } catch {
+            /* ignore */
+          }
+          setShared({ seed: null, mode: null });
+          setSession({ seed, mode, id: Date.now(), worldId: 'w' + Date.now().toString(36), worldName: name, worldType });
+        }}
+        />
+      </div>
+    </div>
   );
 }

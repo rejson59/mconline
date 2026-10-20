@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/engine';
 import { I } from '../game/items';
 import type { Settings } from '../utils/settings';
+import { toggleFullscreenLandscape } from '../utils/screen';
 
 /** True on phones/tablets – 2.5: tylko pomocniczo, tryb wybiera utils/input. */
 export function isTouchDevice(): boolean {
@@ -372,15 +373,11 @@ export default function TouchControls({
     }
   };
 
-  // 2.5: pełny ekran – odrzucenie obietnicy (iOS Safari) nie może zostać
-  // jako „unhandled rejection” w konsoli.
+  // 2.13: pełny ekran + blokada orientacji poziomej. Odrzucenie obietnicy
+  // (iOS Safari, brak zgody użytkownika) nie może zostać jako unhandled
+  // rejection – funkcja sama łapie błędy.
   const toggleFullscreenSafe = () => {
-    try {
-      if (document.fullscreenElement) void document.exitFullscreen?.()?.catch?.(() => {});
-      else void document.documentElement.requestFullscreen?.()?.catch?.(() => {});
-    } catch {
-      /* niektóre przeglądarki mobilne nie pozwalają */
-    }
+    void toggleFullscreenLandscape();
   };
 
   // Podgląd postępu kopania dla pierścienia pod palcem.
