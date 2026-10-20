@@ -514,9 +514,9 @@ export function MainMenu({
                 <div className="mc-card-title">Witaj w BlockCraft</div>
                 <p className="text-sm leading-relaxed text-white/85">
                   Zbuduj pierwszy świat: zetnij drzewo, wytwórz kilof i zejdź do jaskiń po diamenty.
-                  Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> poprawia światło:
-                  cień koron, ciepłe pochodnie i blask trzymanego przedmiotu. Liście są gęste, a chmury zmieniają
-                  się razem z pogodą.
+                  Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> sadzi drzewa od nowa:
+                  pełne korony bez dziur i czarnych pni, kierunkowe światło słońca, pochodnia naprawdę świecąca w dłoni
+                  oraz spokojne chmury zgodne z pogodą.
                 </p>
                 <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-white/75 sm:grid-cols-2">
                   <div className="border border-white/10 bg-black/30 p-2">☀️ Realistyczne światło i cień koron</div>

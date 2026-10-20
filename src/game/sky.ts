@@ -1,5 +1,5 @@
 /**
- * BlockCraft 2.8.1 „Światło i chmury” – wygląd nieba w zależności od pogody.
+ * BlockCraft 2.8.2 „Drzewa i światło” – wygląd nieba w zależności od pogody.
  *
  * Wcześniej chmury były jedną białą warstwą: podczas deszczu jedynie lekko
  * ciemniały, a nocą robiły się szare. Do tego zmiana pogody następowała
@@ -64,10 +64,13 @@ export function cloudLook(weather: Weather, daylight: number, stormBlend: number
     stormColor: [stormPlane[0], stormPlane[1], stormPlane[2]],
     // Warstwa burzowa pojawia się dopiero, gdy deszcz naprawdę się rozkręci.
     stormOpacity: storm * 0.85,
-    altitude: 132,
-    stormAltitude: 112 + 4 * day,
-    // Wiatr: przy deszczu chmury płyną ponad dwa razy szybciej.
-    drift: 1 + storm * 1.4,
+    // 2.8.2: warstwy wyżej i bliżej siebie – chmury są większe i spokojniejsze.
+    altitude: 150,
+    stormAltitude: 126 + 4 * day,
+    // Wiatr: deszcz przyspiesza chmury tylko o kilkanaście procent. Wcześniej
+    // mnożnik 2,4× w połączeniu z dużą prędkością bazową dawał „przewijaną
+    // tapetę” zamiast pogody.
+    drift: 1 + storm * 0.28,
   };
 }
 

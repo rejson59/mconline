@@ -45,7 +45,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 }
 
 // ------------------------------------------------------------------ imports
-import { World, CS, CH, SEA, FLAT_H } from '../src/game/world';
+import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
 import { B, BLOCKS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
@@ -93,6 +93,8 @@ import { resolveControlMode } from '../src/utils/input';
 import { GAME_VERSION, GAME_RELEASE_NAME, RELEASE_HIGHLIGHTS } from '../src/utils/version';
 import { lightFactor, heldFalloff, patchChunkMaterial, HELD_POWER, HELD_RANGE, AMBIENT } from '../src/game/lighting';
 import { cloudLook, rainFogMix } from '../src/game/sky';
+import { treeShape, trunkHeight, treeKindForBiome, type TreeKind } from '../src/game/trees';
+import { densifyTileData, TILE as ATLAS_TILE, ATLAS_TILES, ATLAS_SIZE } from '../src/game/textures';
 import { filterRecipes } from '../src/utils/recipeSearch';
 
 // ------------------------------------------------------------------- runner
@@ -3047,7 +3049,7 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   check('release label is the 2.8 line', GAME_VERSION.startsWith('2.8'));
-  check('release name is set', GAME_RELEASE_NAME === 'Światło i chmury' || GAME_RELEASE_NAME === 'Płynny świat');
+  check('release name is set', GAME_RELEASE_NAME === 'Zdrowe drzewa' || GAME_RELEASE_NAME === 'Światło i chmury');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.8.1 highlights mention clouds and weather', RELEASE_HIGHLIGHTS.some((h) => /chmur/i.test(h.title) && /pogod/i.test(h.title + h.text)));
@@ -3057,10 +3059,13 @@ section('2.8/2.8.1: wersja wydania');
 // ====================================== 2.8.1 „Światło i chmury” – poprawki
 section('2.8.1: model światła');
 {
-  const noon = lightFactor(1, 0, 1);
-  check('noon keeps full brightness', noon > 0.95 && noon < 1.2, noon.toFixed(3));
+  // 2.8.2: górna ściana w południe jest zwrócona do słońca (sun = 1).
+  const noon = lightFactor(1, 0, 1, 0, 1);
+  check('noon keeps full brightness', noon > 0.95 && noon < 1.5, noon.toFixed(3));
   const night = lightFactor(1, 0, 0.16);
-  check('night is dim but never black', night > 0.12 && night < 0.4, night.toFixed(3));
+  // 2.8.2: noc ma księżycówkę (shade * MOON_SKY), więc jest czytelna,
+  // ale nadal wyraźnie ciemniejsza od dnia.
+  check('night is dim but never black', night > 0.3 && night < 0.5, night.toFixed(3));
   // korona drzew rzuca cień: atrybut ~0.09 (sky ≈ 0.3) nie może dać czerni
   const canopy = lightFactor(0.09, 0, 1);
   check('shadow under a canopy stays readable', canopy > 0.25, canopy.toFixed(3));
@@ -3121,9 +3126,9 @@ section('2.8.1: światło w ręce');
   let held: any = { id: B.TORCH };
   g.selectedStack = () => held;
   g.updateHeldLight();
-  check('holding a torch switches the light on', g.heldLight.strength > 1, String(g.heldLight.strength));
+  check('holding a torch switches the light on', g.heldLight.strength > HELD_POWER * 0.9, String(g.heldLight.strength));
   check('the uniform follows the eyes', g.heldLight.pos.x === 4 && g.heldLight.pos.z === -3);
-  check('the material uniform is updated', uniform.value > 1, String(uniform.value));
+  check('the material uniform is updated', uniform.value > HELD_POWER * 0.9, String(uniform.value));
   held = { id: B.STONE };
   g.updateHeldLight();
   eq('a stone in hand turns the light off', uniform.value, 0);
@@ -3140,7 +3145,9 @@ section('2.8.1: chmury i pogoda');
     rain.color[0] < clear.color[0] - 0.2 && rain.stormColor[0] < rain.color[0]);
   check('night clouds are darker than day clouds',
     night.color[0] < clear.color[0] - 0.3 && night.color[2] >= night.color[0]);
-  check('wind pushes storm clouds faster', rain.drift > clear.drift * 1.5);
+  // 2.8.2: wiatr tylko delikatnie przyspiesza chmury (było 2,4× i wyglądało
+  // jak przewijana tapeta).
+  check('rain wind is slightly stronger, but still calm', rain.drift > clear.drift && rain.drift < clear.drift * 1.5);
   check('storm layer floats below the fair-weather layer', rain.stormAltitude < rain.altitude);
   const partial = cloudLook('rain', 1, 0.4);
   check('the weather transition is gradual', partial.stormOpacity > 0 && partial.stormOpacity < rain.stormOpacity);
@@ -3206,6 +3213,165 @@ section('2.8.1: światło nieba pod koroną');
   check('a solid roof leaves the cave dark', cave < 0.05, cave.toFixed(3));
   check('a cave is darker than a forest floor', cave < under * 0.2);
   check('a hard roof becomes the new surface height', w.heightAt(4, 4) === gy + 4);
+}
+
+
+// ============================================ 2.8.2 „Zdrowe drzewa” – drzewa
+section('2.8.2: drzewa generowane od zera');
+{
+  const kinds: TreeKind[] = ['oak', 'birch', 'jungle', 'acacia'];
+  for (const kind of kinds) {
+    const shape = treeShape(kind, 12, -7, 4242);
+    const h = trunkHeight(kind, 12, -7, 4242);
+    // Pień: pełna kolumna od y=0 do y=h-1, bez dziur.
+    for (let dy = 0; dy < h; dy++) {
+      const b = shape.blocks.find((v) => v.dx === 0 && v.dy === dy && v.dz === 0);
+      check(`${kind}: trunk block at height ${dy}`, !!b && (b.id === B.LOG || b.id === B.BIRCH_LOG || b.id === B.ACACIA_LOG));
+    }
+    // Korona nie może mieć dziur: każdy blok w prostokącie korony nad pniem,
+    // który NIE jest liściem, musi być poza sylwetką (czyli korona jest gęsta).
+    const leaves = shape.blocks.filter((b) => b.id !== B.LOG && b.id !== B.BIRCH_LOG && b.id !== B.ACACIA_LOG);
+    check(`${kind}: canopy has plenty of leaves`, leaves.length > 25, String(leaves.length));
+    // Żaden liść nie wisi samotnie daleko od pnia.
+    const far = leaves.filter((b) => Math.max(Math.abs(b.dx), Math.abs(b.dz)) > 3);
+    check(`${kind}: no stray leaves far from the trunk`, far.length === 0, String(far.length));
+    // Kształt jest deterministyczny – dwa wywołania dają identyczny wynik.
+    const again = treeShape(kind, 12, -7, 4242);
+    check(`${kind}: shape is deterministic`, JSON.stringify(shape.blocks) === JSON.stringify(again.blocks));
+    // Inne ziarno/pozycja może dać inne drzewo, ale nigdy nie inne w połowie.
+    check(`${kind}: every block is unique`, new Set(shape.blocks.map((b) => `${b.dx},${b.dy},${b.dz}`)).size === shape.blocks.length);
+  }
+  check('birch trunks are taller than oak trunks',
+    trunkHeight('birch', 3, 3, 9) > trunkHeight('oak', 3, 3, 9));
+  check('jungle trees are the tallest', trunkHeight('jungle', 3, 3, 9) > trunkHeight('birch', 3, 3, 9));
+  check('acacia has a flat umbrella canopy', (() => {
+    const shape = treeShape('acacia', 5, 5, 77);
+    const leaves = shape.blocks.filter((b) => b.id === B.ACACIA_LEAVES);
+    const spread = Math.max(...leaves.map((b) => Math.abs(b.dx)), 0);
+    const height = Math.max(...leaves.map((b) => b.dy)) - Math.min(...leaves.map((b) => b.dy));
+    return spread >= 3 && height <= 4;
+  })());
+  eq('jungle biome grows jungle trees', treeKindForBiome('Dżungla', 0.9), 'jungle');
+  eq('savanna biome grows acacias', treeKindForBiome('Sawanna', 0.1), 'acacia');
+  eq('birch forest mostly grows birches', treeKindForBiome('Brzozowy las', 0.2), 'birch');
+  eq('plains grow oaks', treeKindForBiome('Równiny', 0.5), 'oak');
+
+  // Drzewo postawione w świecie: pień + korona, żadnych dziur w liściach.
+  const w = new World(99, true);
+  w.getChunk(0, 0);
+  const gy = w.heightAt(8, 8);
+  check('planting a sapling succeeds on grass', plantTree(w, 8, gy + 1, 8, false));
+  const shape = treeShape('oak', 8, 8, w.seed);
+  let missing = 0;
+  for (const b of shape.blocks) {
+    if (w.peekBlock(8 + b.dx, gy + 1 + b.dy, 8 + b.dz) !== b.id) missing++;
+  }
+  eq('every block of the planned tree exists in the world', missing, 0);
+  check('the trunk base is dirt, not grass', w.peekBlock(8, gy, 8) === B.DIRT);
+
+  // Sadzenie na zajętym miejscu nie psuje świata.
+  const before = w.peekBlock(8, gy + 1, 8);
+  plantTree(w, 8, gy + 1, 8, false);
+  eq('a blocked sapling changes nothing', w.peekBlock(8, gy + 1, 8), before);
+}
+
+// ======================================== 2.8.2: liście bez dziur w atlasie
+section('2.8.2: atlas liści bez dziur');
+{
+  // Prawdziwy canvas nie istnieje w Node, więc testujemy czystą funkcję,
+  // która wypełnia dziury w kaflu – dokładnie tę, której używa buildAtlas().
+  const data = new Uint8ClampedArray(ATLAS_SIZE * ATLAS_SIZE * 4);
+  const tile = 7;
+  const baseX = (tile % ATLAS_TILES) * ATLAS_TILE;
+  const baseY = Math.floor(tile / ATLAS_TILES) * ATLAS_TILE;
+  const set = (x: number, y: number, a: number) => {
+    const i = ((baseY + y) * ATLAS_SIZE + baseX + x) * 4;
+    data[i] = 60; data[i + 1] = 120; data[i + 2] = 40; data[i + 3] = a;
+  };
+  for (let y = 0; y < ATLAS_TILE; y++)
+    for (let x = 0; x < ATLAS_TILE; x++) set(x, y, (x * 7 + y * 13) % 5 === 0 ? 0 : 255);
+  let holesBefore = 0;
+  for (let y = 0; y < ATLAS_TILE; y++)
+    for (let x = 0; x < ATLAS_TILE; x++) {
+      const i = ((baseY + y) * ATLAS_SIZE + baseX + x) * 4;
+      if (data[i + 3] === 0) holesBefore++;
+    }
+  check('the test tile really starts with holes', holesBefore > 20, String(holesBefore));
+  densifyTileData(data, tile);
+  let holesAfter = 0, dark = 0;
+  for (let y = 0; y < ATLAS_TILE; y++)
+    for (let x = 0; x < ATLAS_TILE; x++) {
+      const i = ((baseY + y) * ATLAS_SIZE + baseX + x) * 4;
+      if (data[i + 3] < 255) holesAfter++;
+      if (data[i] + data[i + 1] + data[i + 2] < 60) dark++;
+    }
+  eq('every hole in a leaf tile is filled', holesAfter, 0);
+  eq('no filled pixel stays black', dark, 0);
+}
+
+// ================================================== 2.8.2: kierunkowe światło
+section('2.8.2: kierunkowe słońce');
+{
+  // Ta sama ściana, różne pory dnia: słońce z prawej oświetla ścianę wschodnią.
+  const noon = lightFactor(1, 0, 1, 0, 1);
+  const north = lightFactor(1, 0, 1, 0, 0);
+  check('a sunlit face is brighter than a shadowed one', noon > north + 0.3, `${noon.toFixed(2)} vs ${north.toFixed(2)}`);
+  check('the light stays within sane bounds', noon < 2.4);
+
+  type Shader = { uniforms: Record<string, { value: number }>; vertexShader: string; fragmentShader: string };
+  const compileLight = () => {
+    const mat = new THREE.MeshBasicMaterial() as THREE.MeshBasicMaterial;
+    const day = { value: 1 };
+    const time = { value: 0 };
+    const sun = { dir: new THREE.Vector3(0.4, 0.8, 0.2).normalize(), power: 0.9 };
+    patchChunkMaterial(mat, day, { time, sun });
+    const shader: Shader = {
+      uniforms: {},
+      vertexShader: THREE.ShaderLib.basic.vertexShader,
+      fragmentShader: THREE.ShaderLib.basic.fragmentShader,
+    };
+    (mat.onBeforeCompile as unknown as (s: Shader, r: unknown) => void)(shader, undefined);
+    return { shader, mat };
+  };
+  const { shader, mat } = compileLight();
+  check('the shader receives the sun direction', 'uSunDir' in shader.uniforms && 'uSun' in shader.uniforms);
+  check('the vertex shader passes the face id', shader.vertexShader.includes('attribute float aFace') && shader.vertexShader.includes('vFace = aFace'));
+  check('the fragment shader has a face normal helper', shader.fragmentShader.includes('faceNormal'));
+  check('sunlight uses a dot product', shader.fragmentShader.includes('dot(faceNormal(vFace), uSunDir)'));
+  check('sunlight is gated by sky exposure', shader.fragmentShader.includes('clamp(sky * 4.0, 0.0, 1.0)'));
+  check('light materials use a fresh cache key', mat.customProgramCacheKey() === 'blockcraft-light-4');
+
+  // Światło trzymane w dłoni jest mocniejsze i sięga dalej niż w 2.8.1.
+  check('the held torch reaches further than before', HELD_RANGE >= 12);
+  // 2.8.2: 0.72 wystarcza, by nocą rozjaśnić okolicę, ale nie wypala
+  // tekstur na biało (przy 1.7 bliskie ściany były przepalone).
+  check('the held torch is bright enough to matter', HELD_POWER >= 0.7 && HELD_POWER <= 1.0);
+  check('the held light gets a warm tint in the shader', shader.fragmentShader.includes('vec3(1.06, 0.86, 0.62)'));
+  check('held light at arm distance is clearly visible', heldFalloff(3, HELD_POWER) > 0.4);
+
+  // Chunki dostają atrybut ściany, więc shader ma z czego liczyć słońce.
+  const w = new World(7, true);
+  w.getChunk(0, 0);
+  const geo = w.buildMesh(w.getChunk(0, 0))[0];
+  check('chunk meshes carry the face attribute', !!geo.getAttribute('aFace'));
+  const faceAttr = geo.getAttribute('aFace');
+  let badFaces = 0;
+  for (let i = 0; i < faceAttr.count; i++) {
+    const v = faceAttr.getX(i);
+    if (v < 0 || v > 5) badFaces++;
+  }
+  eq('every face id is in range', badFaces, 0);
+}
+
+// ==================================================== 2.8.2: spokojne chmury
+section('2.8.2: chmury płyną spokojnie');
+{
+  const clear = cloudLook('clear', 1, 0);
+  const rain = cloudLook('rain', 1, 1);
+  check('rain still darkens the sky', rain.stormOpacity > 0.5 && rain.color[0] < clear.color[0]);
+  check('wind picks up by less than a third in rain', rain.drift <= clear.drift * 1.3);
+  check('storm layer sits below the fair-weather layer', rain.stormAltitude < rain.altitude);
+  check('cloud layers stay in the sky, not at head height', clear.altitude > 100 && rain.stormAltitude > 100);
 }
 
 

@@ -34,6 +34,8 @@ export const T = {
   basalt_top: 140, basalt_side: 141, blackstone: 142, soul_soil: 143, crying_obsidian: 144,
   target_top: 145, target_side: 146, honey_block: 147, honeycomb_block: 148,
   mud: 149, acacia_side: 150, acacia_top: 151, jungle_leaves: 152, lily_pad: 153,
+  // 2.8.2: akacja ma własne, oliwkowe liście (wcześniej dzieliła kafelek z dżunglą).
+  acacia_leaves: 154,
 } as const;
 
 export const B = {
@@ -303,7 +305,7 @@ def(B.HONEYCOMB_BLOCK, 'Blok plastra miodu', T.honeycomb_block, { hardness: 0.6,
 // 3.0: materials and plants found in the new warm and wet biomes.
 def(B.MUD, 'Błoto', T.mud, { hardness: 0.45, sound: 'sand' });
 def(B.ACACIA_LOG, 'Pień akacji', [T.acacia_top, T.acacia_top, T.acacia_side], { hardness: 2, sound: 'wood' });
-def(B.ACACIA_LEAVES, 'Liście akacji', T.jungle_leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
+def(B.ACACIA_LEAVES, 'Liście akacji', T.acacia_leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.JUNGLE_LEAVES, 'Gęste liście tropikalne', T.jungle_leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.LILY_PAD, 'Lilia wodna', T.lily_pad, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0.1, sound: 'grass' });
 

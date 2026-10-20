@@ -214,7 +214,7 @@ section('menus: static render');
   check('settings highlight the active preset', medium.includes('ring-yellow-300'));
   // 2.8: szybki tryb wydajności i sekcja o optymalizacjach
   check('2.8 settings offer a one-click performance mode', settingsHtml.includes('Tryb wydajności'));
-  check('2.8 settings explain the new optimisations', settingsHtml.includes('indeks świateł'));
+  check('2.8 settings explain the new optimisations', settingsHtml.includes('2.8.2') && settingsHtml.includes('kierunkowe'));
   check('2.8.1 settings mention the held-torch light', settingsHtml.includes('pochodni'));
 
   const ach = renderToStaticMarkup(<AchievementsPanel unlocked={['wood', 'diamond']} />);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SimplexNoise } from './noise';
 import { B, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
 import { tileUV } from './textures';
+import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
 import {
   applyVillages,
@@ -100,7 +101,6 @@ const FACES = [
   { dir: [0, 0, -1], shade: 0.8, c: [[1, 0, 0, 0, 0], [0, 0, 0, 1, 0], [1, 1, 0, 0, 1], [0, 1, 0, 1, 1]] },
   { dir: [0, 0, 1], shade: 0.8, c: [[0, 0, 1, 0, 0], [1, 0, 1, 1, 0], [0, 1, 1, 0, 1], [1, 1, 1, 1, 1]] },
 ];
-const AO_CURVE = [0.45, 0.62, 0.8, 1.0];
 
 // Shared BFS scratch for buildMesh (single-threaded, never nested).
 let lightScratch: Uint8Array | null = null;
@@ -127,6 +127,8 @@ class MeshBuffer {
   col: Float32Array;
   block: Float32Array;
   wave: Float32Array;
+  /** 2.8.2: numer ściany (0–5) – shader liczy z niego kierunek słońca. */
+  face: Float32Array;
   ind: Uint32Array;
   count = 0;
   icount = 0;
@@ -137,6 +139,7 @@ class MeshBuffer {
     this.col = new Float32Array(capacity * 3);
     this.block = new Float32Array(capacity);
     this.wave = new Float32Array(capacity);
+    this.face = new Float32Array(capacity);
     this.ind = new Uint32Array(capacity * 1.5);
   }
 
@@ -154,6 +157,7 @@ class MeshBuffer {
     this.col = copy(this.col, 3);
     this.block = copy(this.block, 1);
     this.wave = copy(this.wave, 1);
+    this.face = copy(this.face, 1);
   }
 
   private growIndices(need: number) {
@@ -165,7 +169,7 @@ class MeshBuffer {
     this.ind = next;
   }
 
-  vertex(px: number, py: number, pz: number, u: number, v: number, r: number, g: number, b: number, blk: number, wave = 0) {
+  vertex(px: number, py: number, pz: number, u: number, v: number, r: number, g: number, b: number, blk: number, wave = 0, face = 3) {
     this.growVertices(this.count + 1);
     const i = this.count++;
     const i3 = i * 3;
@@ -175,6 +179,7 @@ class MeshBuffer {
     this.col[i3] = r; this.col[i3 + 1] = g; this.col[i3 + 2] = b;
     this.block[i] = blk;
     this.wave[i] = wave;
+    this.face[i] = face;
   }
 
   /** Zapisuje indeksy czworokąta (kolejność zależna od kierunku AO). */
@@ -202,6 +207,7 @@ class MeshBuffer {
     g.setAttribute('color', new THREE.BufferAttribute(this.col.slice(0, vertices * 3), 3));
     g.setAttribute('aBlock', new THREE.BufferAttribute(this.block.slice(0, vertices), 1));
     g.setAttribute('aWave', new THREE.BufferAttribute(this.wave.slice(0, vertices), 1));
+    g.setAttribute('aFace', new THREE.BufferAttribute(this.face.slice(0, vertices), 1));
     const indices = this.ind.subarray(0, this.icount);
     g.setIndex(vertices > 65535
       ? new THREE.BufferAttribute(indices.slice(), 1)
@@ -238,7 +244,7 @@ function addBox(
     for (let k = 0; k < 4; k++) {
       const cr = F.c[k];
       const uv = tileUV(tile, cr[3], cr[4]);
-      buf.vertex(ox + map(cr[0], x0, x1), oy + map(cr[1], y0, y1), oz + map(cr[2], z0, z1), uv[0], uv[1], br, br, br, bl);
+      buf.vertex(ox + map(cr[0], x0, x1), oy + map(cr[1], y0, y1), oz + map(cr[2], z0, z1), uv[0], uv[1], br, br, br, bl, 0, f);
     }
     buf.quad(base);
   }
@@ -567,9 +573,8 @@ export class World {
         else if (info.biome === 'Góry' && info.h < 98) chance = 0.008;
         if (r > chance) continue;
         if (info.h <= SEA) continue;
-        const birch = info.biome === 'Brzozowy las' ? hash(tx, 2, tz, s) < 0.8 : hash(tx, 2, tz, s) < 0.15;
-        const kind = info.biome === 'Dżungla' ? 'jungle' : info.biome === 'Sawanna' ? 'acacia' : undefined;
-        const top = this.growTree(c, tx, tz, info.h + 1, birch, vmask, kind);
+        const kind = treeKindForBiome(info.biome, hash(tx, 2, tz, s));
+        const top = this.growTree(c, tx, tz, info.h + 1, kind === 'birch', vmask, kind);
         if (top > maxY) maxY = top;
       }
 
@@ -606,47 +611,38 @@ export class World {
   }
 
   /**
-   * Places an oak or birch trunk with its canopy, clipping to this chunk only.
-   * Returns the highest y the tree reaches (for maxY bookkeeping).
+   * 2.8.2: stawia drzewo z `trees.ts`, przycinając je do tego chunku.
+   * Kształt jest deterministyczny (zależy od pozycji i ziarna), więc korona
+   * leżąca na granicy dwóch chunków wygląda w obu miejscach identycznie.
+   * Zwraca najwyższy zajęty blok – do księgowania `maxY`.
    */
-  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean, skip?: Uint8Array, kind?: 'jungle' | 'acacia'): number {
+  private growTree(c: Chunk, tx: number, tz: number, base: number, birch: boolean, skip?: Uint8Array, kind?: TreeKind): number {
     const d = c.data;
     const ox = c.cx * CS, oz = c.cz * CS;
-    const s = this.seed;
-    const logId = kind === 'acacia' ? B.ACACIA_LOG : birch ? B.BIRCH_LOG : B.LOG;
-    const leafId = kind === 'jungle' ? B.JUNGLE_LEAVES : kind === 'acacia' ? B.ACACIA_LEAVES : birch ? B.BIRCH_LEAVES : B.LEAVES;
-    const th = kind === 'acacia' ? 5 + Math.floor(hash(tx, 6, tz, s) * 2) : kind === 'jungle' ? 7 + Math.floor(hash(tx, 6, tz, s) * 4) : 4 + Math.floor(hash(tx, 6, tz, s) * 3);
-    const topY = base + th;
-    if (topY + 1 >= CH) return base;
-    const put = (x: number, y: number, z: number, id: number, force: boolean) => {
-      const lx = x - ox, lz = z - oz;
-      if (lx < 0 || lx >= CS || lz < 0 || lz >= CS || y < 0 || y >= CH) return;
-      if (skip && skip[lz * CS + lx]) return;
+    const shape = treeShape(kind ?? (birch ? 'birch' : 'oak'), tx, tz, this.seed);
+    let maxY = base;
+    for (const b of shape.blocks) {
+      const lx = tx + b.dx - ox, lz = tz + b.dz - oz;
+      if (lx < 0 || lx >= CS || lz < 0 || lz >= CS) continue;
+      if (skip && skip[lz * CS + lx]) continue;
+      const y = base + b.dy;
+      if (y < 0 || y >= CH) continue;
       const i = idx(lx, y, lz);
       const cur = d[i];
-      if (force || cur === B.AIR || cur === B.TALLGRASS || cur === B.FLOWER_RED || cur === B.FLOWER_YELLOW) d[i] = id;
-    };
-    for (let ly = topY - (kind === 'jungle' ? 4 : 3); ly <= topY; ly++) {
-      const rad = kind === 'acacia' ? (ly >= topY - 1 ? 3 : ly >= topY - 3 ? 2 : 1) : kind === 'jungle' ? (ly >= topY - 2 ? 2 : 3) : ly >= topY - 1 ? 1 : 2;
-      for (let dx = -rad; dx <= rad; dx++)
-        for (let dz = -rad; dz <= rad; dz++) {
-          if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || hash(tx + dx, ly, tz + dz, s) < 0.5)) continue;
-          put(tx + dx, ly, tz + dz, leafId, false);
-        }
+      const isLog = b.id === B.LOG || b.id === B.BIRCH_LOG || b.id === B.ACACIA_LOG;
+      // Pień zawsze zajmuje swoje miejsce, liście tylko wolne przestrzenie
+      // (nie zamalowują sąsiedniego drzewa, wody ani domów).
+      if (!isLog && !(cur === B.AIR || RENDER[cur] === 1 || IS_LEAFY[cur])) continue;
+      d[i] = b.id;
+      if (y > maxY) maxY = y;
     }
-    put(tx, topY + 1, tz, leafId, false);
-    put(tx + 1, topY + 1, tz, leafId, false);
-    put(tx - 1, topY + 1, tz, leafId, false);
-    put(tx, topY + 1, tz + 1, leafId, false);
-    put(tx, topY + 1, tz - 1, leafId, false);
-    for (let y = base; y < topY; y++) put(tx, y, tz, logId, true);
-    if (kind === 'acacia') {
-      const side = hash(tx, 8, tz, s) < 0.5 ? 1 : -1;
-      for (let n = 1; n <= 2; n++) put(tx + side * n, topY - 2 + n, tz, logId, true);
-      for (let n = 1; n <= 2; n++) put(tx - side * n, topY - 1, tz, logId, true);
+    // Ziemia pod pniem – jak w klasyce, pień nigdy nie stoi na trawie.
+    const gx = tx - ox, gz = tz - oz;
+    if (gx >= 0 && gx < CS && gz >= 0 && gz < CS && base - 1 >= 0) {
+      const gi = idx(gx, base - 1, gz);
+      if (d[gi] === B.GRASS || d[gi] === B.SNOW) d[gi] = B.DIRT;
     }
-    put(tx, base - 1, tz, B.DIRT, true);
-    return topY + 3;
+    return maxY;
   }
 
   /** Superflat: one grass layer at FLAT_H, ores below, no caves and a few trees. */
@@ -1105,7 +1101,7 @@ export class World {
               const n = buf.count;
               for (let k = 0; k < 4; k++) {
                 const uv = tileUV(t, uvs[k][0], uvs[k][1]);
-                buf.vertex(wx + q[k][0], y + q[k][1] * 0.95, wz + q[k][2], uv[0], uv[1], skyB, skyB, skyB, blkB);
+                buf.vertex(wx + q[k][0], y + q[k][1] * 0.95, wz + q[k][2], uv[0], uv[1], skyB, skyB, skyB, blkB, 0, 3);
               }
               buf.quad(n);
             }
@@ -1174,11 +1170,11 @@ export class World {
             // 2.8: fala wody – tylko górna tafla porusza się w shaderze.
             const wave = isLiquid && F.dir[1] === 1 ? 1 : 0;
             const base = buf.count;
-            let ao0 = 3, ao1 = 3, ao2 = 3, ao3 = 3;
+            const ao = [1, 1, 1, 1];
             for (let k = 0; k < 4; k++) {
               const cr = F.c[k];
               let px = cr[0], py = cr[1], pz = cr[2];
-              let ao = 3;
+              let aoF = 1;
               if (!isLiquid) {
                 // compute AO
                 const d = F.dir;
@@ -1186,14 +1182,17 @@ export class World {
                 if (d[0] !== 0) { s1y = py ? 1 : -1; s2z = pz ? 1 : -1; }
                 else if (d[1] !== 0) { s1x = px ? 1 : -1; s2z = pz ? 1 : -1; }
                 else { s1x = px ? 1 : -1; s2y = py ? 1 : -1; }
-                // 2.8.1: liście nie są pełnym okluderem – inaczej pień w koronie
-                // dostawał AO=0 i zlewał się w czarną plamę.
-                const a = OCCLUDES[get(nx + s1x, ny + s1y, nz + s1z)];
-                const b = OCCLUDES[get(nx + s2x, ny + s2y, nz + s2z)];
-                const cc = OCCLUDES[get(nx + s1x + s2x, ny + s1y + s2y, nz + s1z + s2z)];
-                ao = a && b ? 0 : 3 - (a + b + cc);
+                // 2.8.2: miękkie AO. Liście liczą się jako PÓŁ okludera (0.55),
+                // więc pień pod koroną ma delikatny cień zamiast czarnej plamy,
+                // a gęsty las nadal wygląda na głęboki.
+                const occ = (bid: number) => (OCCLUDES[bid] ? 1 : IS_LEAFY[bid] ? 0.55 : 0);
+                const a = occ(get(nx + s1x, ny + s1y, nz + s1z));
+                const b = occ(get(nx + s2x, ny + s2y, nz + s2z));
+                const cc = occ(get(nx + s1x + s2x, ny + s1y + s2y, nz + s1z + s2z));
+                const occl = a > 0 && b > 0 ? 1 : Math.min(1, a + b + cc);
+                aoF = 1 - 0.42 * occl;
               }
-              if (k === 0) ao0 = ao; else if (k === 1) ao1 = ao; else if (k === 2) ao2 = ao; else ao3 = ao;
+              ao[k] = aoF;
               let vy = y + py;
               if (liquidTopLow && py === 1) vy -= 0.12;
               if (id === B.CACTUS) {
@@ -1201,13 +1200,13 @@ export class World {
                 if (f === 4) pz = 0.0625; else if (f === 5) pz = 0.9375;
               }
               const uv = tileUV(t, cr[3], cr[4]);
-              const shadeAo = F.shade * AO_CURVE[ao];
+              const shadeAo = F.shade * aoF;
               const skyB = shadeAo * sky;
               const br = skyB * skyB;
               const bb = shadeAo * blk;
-              buf.vertex(ox + x + px, vy, oz + z + pz, uv[0], uv[1], br, br, br, bb * bb, wave);
+              buf.vertex(ox + x + px, vy, oz + z + pz, uv[0], uv[1], br, br, br, bb * bb, wave, f);
             }
-            buf.quad(base, ao0 + ao3 > ao1 + ao2);
+            buf.quad(base, ao[0] + ao[3] > ao[1] + ao[2]);
           }
         }
 
@@ -1241,41 +1240,21 @@ export class World {
 
 /** Grows an oak or birch where a sapling stands. Returns false if the space is blocked. */
 export function plantTree(world: World, x: number, y: number, z: number, birch: boolean): boolean {
-  const logId = birch ? B.BIRCH_LOG : B.LOG;
-  const leafId = birch ? B.BIRCH_LEAVES : B.LEAVES;
+  const kind: TreeKind = birch ? 'birch' : 'oak';
   const ground = world.getBlock(x, y - 1, z);
   if (ground !== B.DIRT && ground !== B.GRASS && ground !== B.FARMLAND) return false;
-  const th = 4 + Math.floor(Math.random() * 3);
-  const topY = y + th - 1;
-  if (topY + 1 >= CH) return false;
-  const clearish = (id: number) =>
-    id === B.AIR || id === B.SAPLING || id === B.BIRCH_SAPLING || id === B.LEAVES || id === B.BIRCH_LEAVES || RENDER[id] === 1;
-  for (let ly = y; ly < topY; ly++) if (!clearish(world.getBlock(x, ly, z))) return false;
-  for (let ly = topY - 2; ly <= topY + 1; ly++) {
-    for (let dx = -2; dx <= 2; dx++)
-      for (let dz = -2; dz <= 2; dz++) {
-        if (dx === 0 && dz === 0) continue;
-        if (!clearish(world.getBlock(x + dx, ly, z + dz))) return false;
-      }
+  const shape = treeShape(kind, x, z, world.seed);
+  if (y + shape.top >= CH) return false;
+  const replaceable = (id: number) =>
+    id === B.AIR || id === B.SAPLING || id === B.BIRCH_SAPLING || RENDER[id] === 1 || IS_LEAFY[id];
+  // Najpierw sprawdzamy całe miejsce – nieudane sadzenie nie zostawia połowy
+  // drzewa ani nie zamalowuje sąsiednich bloków.
+  for (const b of shape.blocks) {
+    const wx = x + b.dx, wy = y + b.dy, wz = z + b.dz;
+    if (wy < 0 || wy >= CH) return false;
+    if (!replaceable(world.getBlock(wx, wy, wz))) return false;
   }
-  const put = (px: number, py: number, pz: number, id: number, force: boolean) => {
-    if (py < 0 || py >= CH) return;
-    const cur = world.getBlock(px, py, pz);
-    if (force || clearish(cur)) world.setBlock(px, py, pz, id);
-  };
-  for (let ly = topY - 3; ly <= topY; ly++) {
-    const rad = ly >= topY - 1 ? 1 : 2;
-    for (let dx = -rad; dx <= rad; dx++)
-      for (let dz = -rad; dz <= rad; dz++) {
-        if (Math.abs(dx) === rad && Math.abs(dz) === rad && (ly === topY || Math.random() < 0.5)) continue;
-        put(x + dx, ly, z + dz, leafId, false);
-      }
-  }
-  put(x, topY + 1, z, leafId, false);
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
-    if (Math.random() < 0.65) put(x + dx, topY + 1, z + dz, leafId, false);
-  }
-  for (let ly = y; ly < topY; ly++) put(x, ly, z, logId, true);
-  if (ground !== B.DIRT) put(x, y - 1, z, B.DIRT, true);
+  for (const b of shape.blocks) world.setBlock(x + b.dx, y + b.dy, z + b.dz, b.id);
+  if (ground !== B.DIRT) world.setBlock(x, y - 1, z, B.DIRT);
   return true;
 }
