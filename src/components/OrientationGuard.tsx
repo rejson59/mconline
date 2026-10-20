@@ -7,6 +7,7 @@ import {
   portraitDismissed,
   watchLandscape,
 } from '../utils/screen';
+import { onViewportChange } from '../utils/viewport';
 
 /**
  * 2.13: „Obróć telefon” – BlockCraft gra się w poziomie.
@@ -35,12 +36,12 @@ export default function OrientationGuard({ variant = 'game' }: { variant?: 'game
       setDismissed(portraitDismissed());
     };
     check();
-    window.addEventListener('resize', check);
-    window.addEventListener('orientationchange', check);
+    // 2.15: jedno źródło prawdy o rozmiarze ekranu – łapie też pełny ekran,
+    // pasek adresu i spóźnione zdarzenia po wymuszonym obrocie.
+    const unwatchViewport = onViewportChange(check);
     const unwatch = watchLandscape(check);
     return () => {
-      window.removeEventListener('resize', check);
-      window.removeEventListener('orientationchange', check);
+      unwatchViewport();
       unwatch();
     };
   }, []);

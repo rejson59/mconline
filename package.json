@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.14.0",
-  "description": "BlockCraft 2.14 „Auto-bicie” – polska gra sandboxowa w przeglądarce: automatyczne bicie wrogich mobów i auto-skok, publiczny serwer, ekwipunek i crafting jak w Minecrafcie, skórki i tryb poziomy na telefonie.",
+  "version": "2.15.0",
+  "description": "BlockCraft 2.15 „Stabilny ekran” – polska gra sandboxowa w przeglądarce: naprawiony pełny ekran na telefonie, automatyczne bicie wrogich mobów i auto-skok, publiczny serwer, ekwipunek i crafting jak w Minecrafcie.",
   "type": "module",
   "license": "MIT",
   "keywords": [

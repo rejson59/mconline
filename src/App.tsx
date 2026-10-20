@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import GameView from './components/GameView';
 import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
 import { type GameMode, type SaveData } from './game/engine';
@@ -6,6 +6,8 @@ import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen
 import OrientationGuard from './components/OrientationGuard';
 import type { NetLike } from './game/net';
 import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
+import { onViewportChange } from './utils/viewport';
+import { watchLandscape } from './utils/screen';
 
 interface Session {
   seed: number;
@@ -51,6 +53,20 @@ function readSharedWorld(): { seed: number | null; mode: GameMode | null } {
 }
 
 export default function App() {
+  // 2.15: powłoka trzyma się zmierzonego widocznego ekranu (pełny ekran,
+  // obrót, pasek adresu). Bez tego po fullscreenie `#root` potrafił być
+  // wyższy niż ekran i ucinać dolne przyciski oraz panele.
+  useEffect(() => {
+    const offViewport = onViewportChange(() => {});
+    // 2.15: wyjście z pełnego ekranu (Esc, gest systemowy) zawsze zwalnia
+    // blokadę orientacji – nawet gdy ekran gry z nią nie jest otwarty.
+    const offFullscreen = watchLandscape();
+    return () => {
+      offViewport();
+      offFullscreen();
+    };
+  }, []);
+
   const [session, setSession] = useState<Session | null>(null);
   const [saves, setSaves] = useState<WorldCard[]>(cards);
   const [shared, setShared] = useState(readSharedWorld);

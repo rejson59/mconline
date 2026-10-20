@@ -1,6 +1,14 @@
-# BlockCraft 2.14 🧱
+# BlockCraft 2.15 🧱
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+**Wersja 2.15 „Stabilny ekran”** – pełny ekran bez znikających przycisków:
+
+* **Kamera nie „przybliża się” po wejściu w pełny ekran.** Wcześniej po fullscreenie (i wymuszonym obrocie) płótno gry mogło zostać z rozmiarem sprzed zmiany, a przeglądarka rozciągała obraz – wyglądało to jak zoom kamery i przycinało scenę. Teraz bufor rysowania zawsze odpowiada **faktycznemu** rozmiarowi kontenera (`canvas { width/height: 100% }` + `renderer.setSize(w, h, false)`), a proporcje kamery są przeliczane od razu.
+* **Przyciski i drążek zostają na ekranie.** Sterowanie dotykowe mierzy własną warstwę gry (`getBoundingClientRect` + `ResizeObserver` + zapasowy pomiar co 0,8 s), a nie `window.innerHeight`, który po fullscreenie bywał nieaktualny. Dzięki temu drążek, skok, ekwipunek i górny pasek nie uciekają poza dolną krawędź.
+* **Panele znów się przewijają.** Powłoka `#root` jest przypięta do widocznego ekranu (`position: fixed; inset: 0`, wysokość z `visualViewport` w `--bc-app-height`) zamiast `height: 100dvh`. Okna plecaka, kowadła, statywu, dziennika i punktów podróży mają `max-h-full`, więc mieszczą się w kadrze i można je doscrollować także po obrocie.
+* **Czyste wejście i wyjście z pełnego ekranu.** Fullscreen działa na powłoce aplikacji (`#root`), a nie na `<html>`, więc style przeglądarki nie mieszają się z układem. Orientację blokujemy wyłącznie na urządzeniach dotykowych; Esc/gest systemowy zawsze ją zwalnia. Po każdej zmianie (`resize`, `orientationchange`, `fullscreenchange`, `visualViewport`) silnik robi kilka kontrolnych pomiarów w pierwszej sekundzie, więc spóźnione zdarzenia mobilnych przeglądarek nie zostawiają gry w złym rozmiarze.
+* **Testy.** `npm test` to **1483 kontrole silnika + 214 testów UI** – m.in. przypięcie powłoki do viewportu, pełny ekran na `#root`, pomiar płótna i proporcji kamery po obrocie (także przy zerowym kontenerze), drążek liczony z warstwy gry oraz panele bez `dvh`. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą; wersja **2.15.0** jest na GitHub Pages.
 
 **Wersja 2.14 „Auto-bicie”** – automatyczna walka i auto-skok:
 
@@ -8,7 +16,7 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **
 * **Auto-skok, który wreszcie działa.** Stara wersja wymagała jednocześnie zderzenia ze ścianą (`hitWall`) **i niezerowej prędkości** – a `stepBody` zeruje prędkość dokładnie w chwili zderzenia, więc auto-skok praktycznie nigdy się nie odpalał. Teraz postać sprawdza klocek *przed* sobą i wskakuje na każdy jednoblokowy schodek, zanim się o niego zablokuje. Auto-skok wyciąga też z wody na brzeg.
 * **Dwa szybkie przełączniki w pauzie.** W menu gry są teraz przyciski **Auto-skok: wł./wył.** i **Auto-bicie: wł./wył.** – bez wchodzenia w opcje. Wybór zapisuje się w `localStorage` razem z resztą ustawień i działa w każdym świecie.
 * **Wygodnie na telefonie.** Na dotyku postać delikatnie obraca się w stronę najbliższego wroga (5 rad/s), więc walka palcem nie wymaga precyzyjnego celowania. Na komputerze kamera zostaje w pełni pod kontrolą myszy.
-* **Testy.** `npm test` to **1453 kontroli silnika + 214 testów UI** – m.in. wybór tylko wrogich mobów, cios przez ścianę, cooldown, wyłączanie w ekwipunku, `applyGfx`, skok na schodek i ścianę 2 bloki, szyba vs kamienna ściana oraz przełączniki w opcjach i pauzie. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą; wersja **2.14.0** jest na GitHub Pages.
+* **Testy.** `npm test` to **1453 kontrole silnika + 214 testów UI** – m.in. wybór tylko wrogich mobów, cios przez ścianę vs szybę, cooldown, wyłączenie w ekwipunku, `applyGfx`, prawdziwe obrażenia na mobie, skok na schodek, przełączniki w opcjach i pauzie.
 
 **Wersja 2.12 „Skórki i dotyk”** – crafting, postać i telefon:
 

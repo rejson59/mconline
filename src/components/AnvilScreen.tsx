@@ -73,7 +73,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
       }}
     >
       <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
-      <div className="mc-panel flex max-h-[94dvh] w-[min(430px,96vw)] flex-col gap-3 overflow-y-auto p-4">
+      <div className="mc-panel flex max-h-full w-[min(430px,96vw)] flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-center justify-between">
           <div className="text-lg font-semibold">Kowadło</div>
           <div className="text-xs text-[#444]">Poziom: {game.xp.info().level}</div>

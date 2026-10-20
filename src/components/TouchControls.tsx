@@ -130,24 +130,46 @@ export default function TouchControls({
   const [creative, setCreative] = useState(game.mode === 'creative');
   const [holdRing, setHoldRing] = useState<{ x: number; y: number; p: number } | null>(null);
   const lastJumpTap = useRef(0);
-  // Wysokość viewportu dla stałej podkładki drążka (zanim gracz dotknie ekranu).
-  const [vh, setVh] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
+  // 2.15: mierzymy WŁASNĄ warstwę gry, a nie `window.innerHeight`. Po wejściu
+  // w pełny ekran (i po wymuszonym obrocie) okno potrafi przez chwilę podawać
+  // starą wysokość – drążek i przyciski akcji lądowały wtedy poza ekranem.
+  // Warstwa gry zawsze ma realny rozmiar, więc to jedyne wiarygodne źródło.
+  const [box, setBox] = useState(() => ({
+    w: typeof window !== 'undefined' ? window.innerWidth : 800,
+    h: typeof window !== 'undefined' ? window.innerHeight : 600,
+  }));
+  const vh = box.h;
   // 2.12: telefon poziomo ma mało wysokości – przyciski muszą się wtedy zmniejszyć,
   // inaczej zasłaniają pół ekranu i nie da się celować.
-  const [shortScreen, setShortScreen] = useState(
-    () => typeof window !== 'undefined' && window.innerHeight <= 460,
-  );
+  const shortScreen = box.h > 0 && box.h <= 460;
   useEffect(() => {
-    const onResize = () => {
-      setVh(window.innerHeight);
-      setShortScreen(window.innerHeight <= 460);
+    const el = rootRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      const w = Math.round(r.width);
+      const h = Math.round(r.height);
+      if (w < 1 || h < 1) return;
+      setBox((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     };
-    onResize();
-    window.addEventListener('resize', onResize);
-    window.addEventListener('orientationchange', onResize);
+    measure();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      ro.observe(el);
+    }
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    document.addEventListener('fullscreenchange', measure);
+    // Zapas dla przeglądarek bez ResizeObserver i dla spóźnionych zmian
+    // po pełnym ekranie (kilka milisekund po zdarzeniu potrafi być za wcześnie).
+    const timer = window.setInterval(measure, 800);
     return () => {
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('orientationchange', onResize);
+      ro?.disconnect();
+      clearInterval(timer);
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+      document.removeEventListener('fullscreenchange', measure);
     };
   }, []);
   // 2.12: gracz wybiera rozmiar w opcjach; na niskich ekranach dodatkowo 0,86×.
