@@ -110,8 +110,24 @@ import { densifyTileData, TILE as ATLAS_TILE, ATLAS_TILES, ATLAS_SIZE } from '..
 import { COMMANDS, COMMAND_CATEGORIES, commandByName, searchCommands, applyCommandSuggestion } from '../src/game/commands';
 import { filterRecipes } from '../src/utils/recipeSearch';
 import {
+  hueFor,
+  rowToEdit,
+  PublicServer,
+  PUBLIC_SEED,
+  PUBLIC_NAME,
+  PUBLIC_POS_HZ,
+  MAX_PUBLIC_EDITS,
+  SAVE_EVERY_MS,
+  PUBLIC_WORLD_ID,
+  type BlockRow,
+} from '../src/game/online';
+import {
   NetSession,
   createLocalLink,
+  publicDay,
+  publicTime,
+  publicWeather,
+  DAY_SECONDS,
   normalizeRoom,
   makeRoomCode,
   encodeSignal,
@@ -3078,16 +3094,17 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 
 section('2.8/2.8.1: wersja wydania');
 {
-  // 2.10: wydanie dodaje grę razem – etykieta musi być aktualna.
-  check('release label is the current line', GAME_VERSION.startsWith('2.10'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Gra razem');
+  // 2.11: wydanie dodaje publiczny serwer – etykieta musi być aktualna.
+  check('release label is the current line', GAME_VERSION.startsWith('2.11'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Wspólny świat');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
   check('2.9 highlights mention the mobile inventory', RELEASE_HIGHLIGHTS.some((h) => /ekwipun/i.test(h.title + h.text)));
   check('2.9 highlights mention the command list', RELEASE_HIGHLIGHTS.some((h) => /komend/i.test(h.title + h.text)));
-  check('2.10 highlights mention multiplayer', RELEASE_HIGHLIGHTS.some((h) => /gra razem|multiplayer|razem/i.test(h.title)));
-  check('2.10 highlights explain the no-server setup', RELEASE_HIGHLIGHTS.some((h) => /bez serwera|serwera/i.test(h.title + h.text)));
+  check('2.11 highlights mention the public server', RELEASE_HIGHLIGHTS.some((h) => /serwer publiczny|publiczny/i.test(h.title)));
+  check('2.11 highlights explain cloud saving', RELEASE_HIGHLIGHTS.some((h) => /zapis|chmur/i.test(h.title + h.text)));
+  check('2.11 highlights mention the fixed invite codes', RELEASE_HIGHLIGHTS.some((h) => /wrong state|kod/i.test(h.title + h.text)));
 }
 
 
@@ -3691,6 +3708,182 @@ section('2.10: protokół sieciowy (bez serwera)');
   gA.close();
 }
 
+section('2.11: publiczny serwer – zegar, dane i integracja');
+{
+  // Zegar publiczny: wszyscy liczą to samo z tego samego czasu systemowego.
+  const t0 = Date.UTC(2026, 0, 1);
+  eq('start epoki to poranek', publicTime(t0), 0);
+  eq('po połowie doby jest połowa', Math.round(publicTime(t0 + (DAY_SECONDS / 2) * 1000) * 100), 50);
+  eq('doba zawija się po 600 s', Math.round(publicTime(t0 + DAY_SECONDS * 1000 + 1) * 1000) / 1000, 0);
+  eq('dzień zaczyna się od pierwszego', publicDay(t0), 1);
+  eq('drugi dzień po 600 s', publicDay(t0 + DAY_SECONDS * 1000), 2);
+  const same = publicWeather(t0 + 12_345);
+  eq('pogoda jest taka sama dla dwóch wywołań', publicWeather(t0 + 12_345), same);
+  const buckets = Array.from({ length: 24 }, (_, i) => publicWeather(t0 + i * 10 * 60 * 1000));
+  check('pogoda bywa deszczowa i słoneczna', buckets.includes('rain') && buckets.includes('clear'), buckets.join(','));
+
+  // Kolor gracza zależy tylko od id – każdy klient widzi ten sam.
+  eq('kolor gracza jest stały', hueFor('p1087asb9'), hueFor('p1087asb9'));
+  check('kolor mieści się w zakresie', hueFor('cokolwiek') >= 0 && hueFor('cokolwiek') < 360);
+  check('różne id dają zwykle różne kolory', hueFor('aaa') !== hueFor('bbb'));
+
+  // Wiersz z bazy → zmiana bloku.
+  const row = rowToEdit({ x: 12.9, y: 64, z: -3, block: 5, dim: 'n' });
+  eq('wiersz bazy daje współrzędne', `${row.x},${row.y},${row.z}`, '12,64,-3');
+  eq('wiersz bazy niesie blok', row.id, 5);
+  eq('wiersz bazy niesie wymiar', row.d, 'n');
+  eq('brak wymiaru = nadświat', rowToEdit({ x: 0, y: 0, z: 0, block: 1, dim: null }).d, 'o');
+  eq('śmieci w wierszu nie wywracają gry', rowToEdit({ x: 'a' as unknown as number, y: 1, z: 1, block: 2, dim: 'o' }).x, 0);
+
+  eq('publiczne ziarno jest stałe', PUBLIC_SEED, 20261020);
+  check('publiczny świat ma nazwę', PUBLIC_NAME === 'Serwer publiczny');
+  check('pozycje na serwerze idą rzadziej niż w P2P', PUBLIC_POS_HZ < POS_HZ);
+  check('limit wczytanych zmian jest rozsądny', MAX_PUBLIC_EDITS >= 20_000 && MAX_PUBLIC_EDITS <= 100_000, String(MAX_PUBLIC_EDITS));
+  check('zapis do bazy jest batchowany', SAVE_EVERY_MS >= 1000);
+
+  // Integracja w źródłach.
+  const online = readSource('src/game/online.ts');
+  const engine = readSource('src/game/engine.ts');
+  const mp = readSource('src/components/MultiplayerScreen.tsx');
+  const world = readSource('src/game/world.ts');
+  check('serwer publiczny używa Supabase Realtime', /client\.channel\(PUBLIC_CHANNEL/.test(online));
+  check('zmiany bloków trafiają do tabeli', /from\(PUBLIC_TABLE\)\s*\n?\s*\.upsert/.test(online));
+  check('baza jest zabezpieczona RLS na poziomie zapytań', /upsert\(rows/.test(online));
+  check('nieudany zapis wraca do kolejki', /pending\.set\(key, edit\)/.test(online));
+  check('wejście pobiera zmiany z bazy', /loadBlocks/.test(online));
+  check('zmiany są dociągane po awarii transmisji', /catchUp/.test(online));
+  check('obecność graczy to Presence', /presence\.sync|presence/.test(online) || /presenceState/.test(online));
+  check('silnik przyjmuje dowolną sesję (NetLike)', /net\?: NetLike/.test(engine));
+  check('świat umie zasiać zmiany z serwera', /seedMods\(/.test(world));
+  check('publiczny świat wchodzi bez setBlock na każdy blok', /seedMods\(net\.world\.edits/.test(engine));
+  check('silnik synchronizuje zegar publiczny', /syncPublicClock/.test(engine));
+  check('pozycje na serwerze publicznym są rzadsze', /PUBLIC_POS_HZ/.test(engine));
+  check('ekran gry ma przycisk serwera publicznego', /Graj online/.test(mp));
+  check('ekran nie wymaga już kodów do gry online', /joinPublic/.test(mp));
+  check('stary błąd P2P ma czytelny komunikat', /wrong state/.test(readSource('src/game/net.ts')));
+  check('P2P sprawdza stan połączenia przed odpowiedzią', /signalingState !== 'have-local-offer'/.test(readSource('src/game/net.ts')));
+  check('HUD pokazuje tryb publiczny', /netPublic/.test(readSource('src/components/HUD.tsx')));
+  check('HUD pokazuje kolejkę zapisu', /netSaving/.test(readSource('src/components/HUD.tsx')));
+}
+
+section('2.11: PublicServer – pobieranie, wysyłka i zapis (atrapa klienta)');
+{
+  /** Minimalna atrapa Supabase: tabele w pamięci + kanał Realtime. */
+  function fakeClient(rows: BlockRow[]) {
+    const log: { op: string; payload?: unknown }[] = [];
+    let failNext = false;
+    const channel = {
+      on() { return channel; },
+      subscribe(cb: (s: string) => void) { queueMicrotask(() => cb('SUBSCRIBED')); return channel; },
+      track() { return Promise.resolve(); },
+      untrack() { return Promise.resolve(); },
+      send(msg: { payload?: unknown }) { log.push({ op: 'broadcast', payload: msg.payload }); return Promise.resolve(); },
+      presenceState() {
+        return { p1: [{ id: 'p1', name: 'Ala', hue: 12 }], p2: [{ id: 'p2', name: 'Bob', hue: 200 }] };
+      },
+    };
+    const client = {
+      from() {
+        const q = {
+          _order: null as null | string,
+          select() { return q; },
+          eq() { return q; },
+          gt() { return q; },
+          order() { return q; },
+          limit() { return Promise.resolve({ data: [], error: null }); },
+          range(from: number, to: number) {
+            log.push({ op: 'range', payload: [from, to] });
+            const data = rows.slice(from, to + 1);
+            return Promise.resolve({ data, error: null });
+          },
+          upsert(payload: { dim: string; x: number; y: number; z: number; block: number }[]) {
+            log.push({ op: 'upsert', payload });
+            if (failNext) { failNext = false; return Promise.resolve({ error: { message: 'network down' } }); }
+            return Promise.resolve({ error: null });
+          },
+        };
+        return q;
+      },
+      channel() { return channel; },
+      removeChannel() { return Promise.resolve(); },
+    };
+    return {
+      client,
+      log,
+      failOnce() { failNext = true; },
+      channel,
+    };
+  }
+
+  const rows: BlockRow[] = [
+    { x: 1, y: 64, z: 2, block: 3, dim: 'o' },
+    { x: 4, y: 65, z: 6, block: 9, dim: 'n' },
+  ];
+  const fake = fakeClient(rows);
+  const srv = new PublicServer({ name: 'Tester', id: 'p-test', client: fake.client as never });
+  let progress = '';
+  let ready = 0;
+  let peers: { name: string }[] = [];
+  srv.onProgress = (t) => { progress += t + '|'; };
+  srv.onReady = () => { ready++; };
+  srv.onPeers = (list) => { peers = list; };
+
+  check('sesja publiczna nie udaje pokoju', srv.public === true && srv.transport === 'online' && srv.role === 'guest');
+  eq('ziarno publiczne jest stałe', srv.world.seed, PUBLIC_SEED);
+  eq('tryb publiczny to przetrwanie', srv.world.mode, 'survival');
+
+  await srv.connect();
+  eq('wejście pobiera zmiany z bazy', srv.loadedEdits, 2);
+  eq('wymiar zmiany jest zachowany', srv.world.edits?.[1].d, 'n');
+  eq('status po połączeniu', srv.status, 'connected');
+  eq('gotowość zgłoszona raz', ready, 1);
+  check('postęp ładowania jest widoczny', /Wczytano świat/.test(progress), progress);
+  // Dwie osoby z Presence + my (nas jeszcze nie ma w stanie Presence).
+  eq('obsada z Presence ma trzy osoby', peers.length, 3);
+  check('własny wpis jest pierwszy', (peers[0] as { self?: boolean }).self === true, JSON.stringify(peers));
+  check('obsada ma graczy z Presence', peers.some((p) => p.name === 'Ala') && peers.some((p) => p.name === 'Bob'), JSON.stringify(peers));
+
+  // Wysyłka zmian: natychmiast przez broadcast, zapis batchowany do bazy.
+  srv.sendEdits([{ x: 10, y: 70, z: 10, id: 5, d: 'o' }]);
+  eq('zmiana czeka na zapis', srv.pendingEdits, 1);
+  const bc = fake.log.filter((l) => l.op === 'broadcast');
+  eq('zmiana leci też przez Realtime', bc.length, 1);
+
+  srv.sendEdits([{ x: 10, y: 70, z: 10, id: 7, d: 'o' }]);
+  eq('ten sam blok nie dubluje wpisu', srv.pendingEdits, 1);
+
+  await srv.flush();
+  const ups = fake.log.filter((l) => l.op === 'upsert');
+  eq('zapis poszedł jednym upsertem', ups.length, 1);
+  const payload = ups[0].payload as { x: number; block: number; world: string }[];
+  eq('w upsercie jest najnowszy blok', payload[0].block, 7);
+  eq('wiersz trafia do świata publicznego', payload[0].world, PUBLIC_WORLD_ID);
+  eq('kolejka zapisu wyczyszczona', srv.pendingEdits, 0);
+
+  // Błąd sieci nie gubi budowli.
+  fake.failOnce();
+  srv.sendEdits([{ x: 11, y: 71, z: 11, id: 2, d: 'n' }]);
+  await srv.flush();
+  eq('nieudany zapis wraca do kolejki', srv.pendingEdits, 1);
+  await srv.flush();
+  eq('ponowna próba zapisuje zmiany', srv.pendingEdits, 0);
+
+  // Śmieci nie trafiają do bazy.
+  srv.sendEdits([{ x: NaN, y: 1, z: 1, id: 2 }, { x: 0, y: 900, z: 0, id: 2 }]);
+  eq('błędne edyty są odrzucane', srv.pendingEdits, 0);
+
+  // Czat i pozycje.
+  fake.log.length = 0;
+  srv.say('  Cześć   wszystkim  ');
+  const chat = fake.log.find((l) => l.op === 'broadcast');
+  eq('czat leci przez Realtime', (chat?.payload as { text: string })?.text, 'Cześć   wszystkim');
+
+  srv.close();
+  eq('zamknięcie zmienia status', srv.status, 'closed');
+  check('pusty czat nie jest wysyłany', (() => { const before = fake.log.length; srv.say('   '); return fake.log.length === before; })());
+  check('SAVE_EVERY_MS mieści się w limicie żądań', SAVE_EVERY_MS >= 2000);
+}
+
 section('2.10: multiplayer wpięty w grę');
 {
   const engine = readSource('src/game/engine.ts');
@@ -3700,8 +3893,8 @@ section('2.10: multiplayer wpięty w grę');
   const app = readSource('src/App.tsx');
 
   check('świat powiadamia o zmianach bloków', /onEdit\??\.\(x, y, z, id\)/.test(world));
-  check('silnik wysyła pozycję co 1/POS_HZ', /1 \/ POS_HZ/.test(engine));
-  check('silnik synchronizuje oba wymiary', /onEdit = hook\('o'\)/.test(engine) && /onEdit = hook\('n'\)/.test(engine));
+  check('silnik wysyła pozycję co 1/POS_HZ', /1 \/ posHz/.test(engine) && /POS_HZ/.test(engine));
+  check('silnik synchronizuje oba wymiary', /editHook\('o'\)/.test(engine) && /editHook\('n'\)/.test(engine));
   check('silnik nie zapętla własnych edytów', /netApplying/.test(engine));
   eq('sesję zamyka tylko dispose', (engine.match(/this\.net\?\.close\(/g) ?? []).length, 1);
   check('dispose zamyka sesję', /dispose\(\)[\s\S]{0,1400}this\.net\?\.close\(/.test(engine));

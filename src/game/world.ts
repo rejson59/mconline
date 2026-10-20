@@ -933,6 +933,36 @@ export class World {
     }
     return out;
   }
+  /**
+   * 2.11: zmiany bloków pobrane z serwera publicznego. Wpisujemy je do `mods`
+   * (tak samo jak zapis świata), więc każdy generowany później chunk od razu
+   * ma właściwe bloki – bez tysiąca `setBlock` i przebudów siatki przy wejściu.
+   * Chunki już wczytane aktualizujemy od razu.
+   */
+  seedMods(list: { x: number; y: number; z: number; id: number }[]) {
+    for (const e of list) {
+      if (!Number.isFinite(e.x) || !Number.isFinite(e.y) || !Number.isFinite(e.z) || !Number.isFinite(e.id)) continue;
+      if (e.y < 0 || e.y >= CH) continue;
+      const cx = Math.floor(e.x / CS), cz = Math.floor(e.z / CS);
+      const lx = e.x - cx * CS, lz = e.z - cz * CS;
+      const i = idx(lx, e.y, lz);
+      const k = World.key(cx, cz);
+      let m = this.mods.get(k);
+      if (!m) {
+        m = new Map();
+        this.mods.set(k, m);
+      }
+      m.set(i, e.id);
+      const c = this.chunks.get(k);
+      if (!c) continue;
+      if (c.data[i] === e.id) continue;
+      c.data[i] = e.id;
+      c.recomputeHeight(lx, lz);
+      c.revision++;
+      this.dirty.add(k);
+    }
+  }
+
   loadMods(data: Record<string, number[]>) {
     for (const k in data) {
       const m = new Map<number, number>();

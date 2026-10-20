@@ -27,7 +27,17 @@ const HELD_LIGHT_ITEMS: ReadonlySet<number> = new Set<number>([
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
 import { Inventory, RECIPES, type Stack } from './inventory';
 import { COMMANDS, commandByName, searchCommands } from './commands';
-import { NetSession, POS_HZ, type NetEdit, type NetMessage, type NetPlayer } from './net';
+import {
+  POS_HZ,
+  publicDay,
+  publicTime,
+  publicWeather,
+  type NetEdit,
+  type NetLike,
+  type NetMessage,
+  type NetPlayer,
+} from './net';
+import { PUBLIC_POS_HZ } from './online';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
@@ -104,6 +114,10 @@ export interface HUDState {
   /** 2.10: gracze w sesji (własny wpis pierwszy; puste w trybie solo). */
   players?: NetPlayer[];
   netRole?: 'host' | 'guest' | null;
+  /** 2.11: gra na publicznym serwerze (jeden świat dla wszystkich). */
+  netPublic?: boolean;
+  /** 2.11: ile zmian bloków czeka jeszcze na zapis w serwerze. */
+  netSaving?: number;
   hotbar: (Stack | null)[];
   selected: number;
   health: number;
@@ -596,7 +610,7 @@ export class Game {
   /** 2.8.1: światło trzymanego przedmiotu (pochodnia, latarnia…). */
   private heldLight: HeldLightState = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
   /** 2.10: sesja multiplayer (null = gra jednoosobowa). */
-  net: NetSession | null = null;
+  net: NetLike | null = null;
   /** Lista graczy do HUD (własny wpis na początku). */
   netPlayers: NetPlayer[] = [];
   private netEditQueue: NetEdit[] = [];
@@ -747,7 +761,7 @@ export class Game {
 
   constructor(
     container: HTMLElement,
-    opts: { seed: number; mode: GameMode; save?: SaveData; renderDistance?: number; worldId?: string; worldName?: string; worldType?: 'normal' | 'flat'; net?: NetSession },
+    opts: { seed: number; mode: GameMode; save?: SaveData; renderDistance?: number; worldId?: string; worldName?: string; worldType?: 'normal' | 'flat'; net?: NetLike },
     cb: { onHud: (h: HUDState) => void; onUI: (s: UIState) => void }
   ) {
     this.container = container;
@@ -1026,13 +1040,77 @@ export class Game {
    * gospodarza (terenu nie wysyłamy – świat jest deterministyczny), a każda
    * dalsza zmiana leci do pozostałych graczy.
    */
-  private bindNet(net: NetSession) {
+  /** Hook `World.onEdit` dla danego wymiaru – zbiera zmiany do wysyłki. */
+  private editHook(dim: 'o' | 'n') {
+    return (x: number, y: number, z: number, id: number) => {
+      if (this.netApplying) return;
+      this.netEditQueue.push({ x, y, z, id, d: dim });
+      if (this.netEditQueue.length > 400) this.flushNetEdits();
+    };
+  }
+
+  private bindNet(net: NetLike) {
     this.net = net;
     this.netName = net.name;
     net.name = this.netName;
     const me = net.players.find((p) => p.id === net.id);
     this.netHue = me?.hue ?? 0;
     this.netPlayers = net.players.length ? net.players : [{ id: net.id, name: net.name, hue: this.netHue, ping: -1, self: true }];
+
+    // --- wspólne dla wszystkich transportów: obsługa zdarzeń sesji
+    net.onMessage = (m) => this.onNetMessage(m);
+    net.onPeers = (players) => {
+      const before = new Set(this.netPlayers.map((p) => p.id));
+      this.netPlayers = players;
+      const meNow = players.find((p) => p.id === this.net!.id);
+      if (meNow) this.netHue = meNow.hue;
+      for (const p of players) {
+        if (p.self) continue;
+        this.ensureRemote(p);
+        // Nowy gracz w trakcie gry – warto go przywitać w czacie.
+        if (before.size > 0 && !before.has(p.id)) this.message(`${p.name} dołączył do gry.`);
+      }
+      for (const id of [...this.remotes.keys()]) if (!players.some((p) => p.id === id)) this.dropRemote(id);
+      this.emitHud();
+    };
+    net.onChat = (name, text) => this.message(`<${name}> ${text}`);
+    net.onStatus = (status, error) => {
+      if (status === 'error' && error) this.message('Sieć: ' + error);
+      else if (status === 'closed') this.message('Rozłączono z sesją.');
+      this.emitHud();
+    };
+    // Każda zmiana bloku (poza odtwarzaniem zmian z sieci) idzie do innych.
+    // Oba wymiary mają własny hook – dzięki temu Nether też się synchronizuje.
+    this.homeWorld.onEdit = this.editHook('o');
+    this.netherWorld.onEdit = this.editHook('n');
+    // Start świata obsługuje ekran multiplayer – tu go już nie potrzebujemy.
+    net.onStart = undefined;
+
+    // --- publiczny serwer: jeden świat, zapisywany w chmurze
+    if (net.public) {
+      // Świat wchodzi przez `seedMods`, zanim wygenerują się chunki – inaczej
+      // każdy zbudowany blok wymagałby osobnej przebudowy siatki.
+      if (net.world?.edits?.length) {
+        this.homeWorld.seedMods(net.world.edits.filter((e) => e.d !== 'n'));
+        this.netherWorld.seedMods(net.world.edits.filter((e) => e.d === 'n'));
+      }
+      if (net.world) {
+        this.time = net.world.time;
+        this.day = net.world.day;
+        this.applyNetWeather(net.world.weather);
+      }
+      // Na serwerze publicznym wszyscy są równi – punkt startu bierzemy
+      // z generatora, a nie od „gospodarza”.
+      const spawnX = Math.round(this.body.pos.x) + (this.netHue % 7) - 3;
+      const spawnZ = Math.round(this.body.pos.z) + (this.netHue % 5) - 2;
+      const ground = this.homeWorld.heightAt(spawnX, spawnZ) + 1;
+      this.body.pos.set(spawnX + 0.5, ground, spawnZ + 0.5);
+      this.spawnPoint.copy(this.body.pos);
+      this.fallStart = this.body.pos.y;
+      this.message('Witaj na serwerze publicznym! Wszyscy budujecie jeden wspólny świat. T – czat, /help – komendy.');
+      this.emitHud();
+      return;
+    }
 
     // Migawka świata od gospodarza.
     if (net.role === 'guest' && net.world) {
@@ -1060,40 +1138,6 @@ export class Game {
     }
     // To, co gospodarz pokaże nowym graczom.
     net.setWorld({ seed: this.world.seed, mode: this.mode, worldType: this.worldType, name: this.worldName, time: this.time, day: this.day, weather: this.weather });
-
-    net.onMessage = (m) => this.onNetMessage(m);
-    net.onPeers = (players) => {
-      const before = new Set(this.netPlayers.map((p) => p.id));
-      this.netPlayers = players;
-      const meNow = players.find((p) => p.id === this.net!.id);
-      if (meNow) this.netHue = meNow.hue;
-      for (const p of players) {
-        if (p.self) continue;
-        this.ensureRemote(p);
-        // Nowy gracz w trakcie gry – warto go przywitać w czacie.
-        if (before.size > 0 && !before.has(p.id)) this.message(`${p.name} dołączył do gry.`);
-      }
-      for (const id of [...this.remotes.keys()]) if (!players.some((p) => p.id === id)) this.dropRemote(id);
-      this.emitHud();
-    };
-    net.onChat = (name, text) => this.message(`<${name}> ${text}`);
-    net.onStatus = (status, error) => {
-      if (status === 'error' && error) this.message('Sieć: ' + error);
-      else if (status === 'closed') this.message('Rozłączono z sesją.');
-      this.emitHud();
-    };
-
-    // Każda zmiana bloku (poza odtwarzaniem zmian z sieci) idzie do innych.
-    // Oba wymiary mają własny hook – dzięki temu Nether też się synchronizuje.
-    const hook = (dim: 'o' | 'n') => (x: number, y: number, z: number, id: number) => {
-      if (this.netApplying) return;
-      this.netEditQueue.push({ x, y, z, id, d: dim });
-      if (this.netEditQueue.length > 400) this.flushNetEdits();
-    };
-    this.homeWorld.onEdit = hook('o');
-    this.netherWorld.onEdit = hook('n');
-    // Start świata obsługuje ekran multiplayer – tu go już nie potrzebujemy.
-    net.onStart = undefined;
     this.message(
       net.role === 'host'
         ? 'Sesja utworzona. Kod pokoju podaj znajomym, żeby dołączyli.'
@@ -1161,6 +1205,20 @@ export class Game {
     }
   }
 
+  /**
+   * 2.11: na serwerze publicznym porę dnia i pogodę wylicza zegar (`net.ts`),
+   * więc nie trzeba ich rozsyłać ani trzymać w bazie – wszyscy liczą to samo.
+   */
+  private syncPublicClock() {
+    const net = this.net;
+    if (!net?.public) return;
+    const now = Date.now();
+    this.time = publicTime(now);
+    this.day = publicDay(now);
+    const weather = publicWeather(now);
+    if (weather !== this.weather) this.applyNetWeather(weather);
+  }
+
   private flushNetEdits() {
     if (!this.net || !this.netEditQueue.length) return;
     const list = this.netEditQueue.splice(0, this.netEditQueue.length);
@@ -1173,6 +1231,7 @@ export class Game {
     if (!net) return;
     const now = performance.now();
     net.tick();
+    this.syncPublicClock();
     this.netEditTimer += dt;
     if (this.netEditTimer >= 0.12) {
       this.netEditTimer = 0;
@@ -1180,7 +1239,10 @@ export class Game {
     }
     if (this.ui === 'playing' || this.ui === 'chat') {
       this.netPosTimer += dt;
-      if (this.netPosTimer >= 1 / POS_HZ) {
+      // Publiczny serwer ma limit wiadomości Realtime – 4 pozycje na sekundę
+      // w zupełności wystarczą, bo awatary i tak są wygładzane.
+      const posHz = net.public ? PUBLIC_POS_HZ : POS_HZ;
+      if (this.netPosTimer >= 1 / posHz) {
         this.netPosTimer = 0;
         const p = this.body.pos;
         net.sendPos({
@@ -5337,6 +5399,8 @@ export class Game {
     this.onHud({
       players: this.net ? this.netPlayers : [],
       netRole: this.net?.role ?? null,
+      netPublic: this.net?.public ?? false,
+      netSaving: this.net?.public ? (this.net as { pendingEdits?: number }).pendingEdits ?? 0 : 0,
       hotbar: this.inventory.slots.slice(0, 9).map((s) => (s ? { ...s } : null)),
       selected: this.selected,
       health: this.health,
@@ -5834,7 +5898,7 @@ export class Game {
   private setWeather(w: 'clear' | 'rain') {
     this.weather = w;
     // 2.10: gospodarz rozsyła pogodę od razu, a nie dopiero za 4 s.
-    if (this.net?.role === 'host') this.net.sendState({ time: this.time, day: this.day, weather: w });
+    if (this.net?.role === 'host') this.net.sendState?.({ time: this.time, day: this.day, weather: w });
     this.weatherTimer = w === 'rain' ? 45 + Math.random() * 40 : 90 + Math.random() * 80;
     Sfx.setRain(w === 'rain');
     this.message(w === 'rain' ? 'Zaczyna padać.' : 'Niebo się przejaśnia.');

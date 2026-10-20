@@ -1,7 +1,18 @@
-# BlockCraft 2.10 👥
+# BlockCraft 2.11 🌍
 
-Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.10 „Gra razem”** dodaje **multiplayer**: można grać we wspólnym świecie w dwóch kartach tej samej przeglądarki albo przez internet, łącząc się bezpośrednio i wymieniając krótkie kody. Gra działa na komputerach i urządzeniach dotykowych, a hostowana jest statycznie na GitHub Pages – bez własnego backendu, WebSocketów i bazy danych.
+Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
 
+**Wersja 2.11 „Wspólny świat”** – publiczny serwer:
+
+* **Jeden przycisk „Graj online”.** W menu „Gra razem” nie ma już kodów pokoju ani gospodarza: wpisujesz nazwę i wchodzisz do wspólnego świata. Wszyscy gracze trafiają do tego samego terenu (stałe ziarno `20261020`).
+* **Budowle zostają.** Każde postawienie lub zburzenie bloku trafia do tabeli `blockcraft_blocks` w Supabase (upsert po współrzędnych). Po wejściu gra pobiera cały świat, a w trakcie gry zmiany idą natychmiast przez Realtime; co 45 sekund klient dociąga to, co mogło zginąć w transmisji. Nieudany zapis wraca do kolejki, więc budowla nie przepada przy zerwaniu internetu.
+* **Kto jest online.** Lista graczy pochodzi z Presence i pokazuje nazwy, kolory, liczbę osób oraz kto właśnie dołączył (komunikat w czacie). Pozycje idą 4 razy na sekundę – wystarczająco płynnie, a nie przekracza limitów Realtime.
+* **Wspólna pora dnia i pogoda.** Dzień, noc i deszcz wynikają z zegara, nie z serwera: każdy klient liczy identyczną porę dnia (doba = 600 s) i pogodę z tego samego okna czasu, więc niebo jest takie samo u wszystkich bez wysyłania stanu.
+* **Naprawione kody zaproszeń.** Wcześniej dwukrotne użycie tego samego kodu kończyło się surowym błędem przeglądarki `Failed to set remote answer sdp: Called in wrong state: stable`. Teraz gra sprawdza stan połączenia i pokazuje po polsku, że zaproszenie zostało już użyte, a każdy błąd WebRTC dostaje zrozumiały komunikat.
+* **Tryby dodatkowe.** „Ta przeglądarka” (BroadcastChannel – dwie karty, działa offline) i „Przez internet” (WebRTC z ręcznymi kodami) zostały dla osób, które chcą własnego, prywatnego świata. Serwer publiczny nie wymaga od nich niczego.
+* **Testy.** `npm test` to **1347 kontroli silnika + 187 testów UI**: protokół obu transportów, zegar publiczny, mapowanie wierszy bazy, paginacja wczytywania, batchowanie upsertu, ponawianie nieudanego zapisu, obsada z Presence, ekran „Gra razem” i HUD.
+
+**Wersja 2.10 „Gra razem”** – pierwszy multiplayer bez serwera:
 **Wersja 2.10 „Gra razem”** – multiplayer bez serwera:
 
 * **Nowy ekran „Gra razem”.** W menu głównym jest teraz przycisk otwierający poczekalnię. Ustawiasz nazwę, wybierasz **„Ta sama przeglądarka”** albo **„Przez internet”**, tworzysz sesję lub dołączasz do istniejącej. Cała komunikacja i etykiety są po polsku, a każdy krok ma duży przycisk – także na telefonie.
@@ -21,7 +32,7 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwer
 * **Tekstury w stylu współczesnego Minecrafta.** Nowy warsztat malarski w `textures.ts`: zamiast losowego ziarna na każdym pikselu – **wygładzony szum z zawijaniem** (kafelek łączy się sam ze sobą) w dwóch–trzech oktawach, krótka paleta kolorów i światło z lewego górnego rogu. Ziemia ma grudki i kamyki, trawa – nierówną krawędź i źdźbła, kamień – miękkie łaty i pęknięcia, bruk – zaokrąglone otoczaki z fugą, kora – pionowe bruzdy i sęki, deski – cztery klepki z własnym odcieniem i sękami, liście – nakładające się kiście z jasną górną i ciemną dolną krawędzią. Żwir to obtoczone kamyki, piasek drobne ziarno z muszelkami, a rudy mają grudki z błyskiem i cieniem zamiast przypadkowych kropek.
 * **Nowe generatory dla reszty bloków.** Wełna ma splot nitek, beton drobne kruszywo, lawa rozżarzone komórki na stygnącej skale, obsydian szkliste fioletowe refleksy, lód rysy i rozbłyski, a netherrack, end stone, kwarc, purpur i terakota wspólny generator skały (`rockTile`). Bloki magazynowe (żelazo, złoto, diament, lapis, szmaragd, kwarc) dostały siatkę sztabek z fazowaniem i błyskiem.
 * **Czytelne bloki.** Każdy nieprzezroczysty kafel dostaje delikatny skos (górna i lewa jaśniejsza, dolna i prawa ciemniejsza), a mieszanie krawędzi zmalało z 40% do 28% – wcześniej zjadało drobny rysunek (sęki, listki, żebra) i wszystkie bloki wyglądały podobnie. Generowanie atlasu zajmuje ok. 130 ms przy starcie, bez wpływu na klatki.
-* **Testy.** `npm test` to teraz **1283 kontrole + 182 testy UI**: protokół i ekran multiplayera, katalog komend (spójność z silnikiem, wyszukiwanie po polsku, wstawianie do pola), przyciski zamknięcia w ekwipunku, czat (lista, przykłady, wysyłanie) oraz zgodność etykiet wydania 2.10.
+* **Testy.** `npm test` obejmuje teraz **1347 kontroli + 187 testów UI**: protokół i ekran multiplayera, katalog komend (spójność z silnikiem, wyszukiwanie po polsku, wstawianie do pola), przyciski zamknięcia w ekwipunku, czat (lista, przykłady, wysyłanie) oraz zgodność etykiet wydania 2.11.
 
 **Wersja 2.8.1 „Światło i chmury”** – poprawki i realistyczne światło:
 
@@ -243,37 +254,74 @@ Gra włącza pełne sterowanie kieszonkowe:
 
 ## 👥 Gra razem (multiplayer)
 
-BlockCraft **nie ma serwera** – i nie potrzebuje go do wspólnej gry. Są dwa sposoby:
+### Serwer publiczny (domyślnie)
 
-### Ta sama przeglądarka (najprostszy)
+1. Menu główne → **Gra razem · multiplayer** → zakładka **🌍 Serwer publiczny**.
+2. Wpisz nazwę i kliknij **▶ Graj online**.
+3. To wszystko – jesteś w wspólnym świecie. Pozostali gracze są na liście w prawym górnym rogu, a ich awatary widać w terenie.
 
-1. Menu główne → **Gra razem · multiplayer** → zakładka **Ta sama przeglądarka**.
-2. Jedna osoba wybiera **Utwórz sesję**, wpisuje nazwę i kod pokoju (albo klika **Losuj**), ustawia ziarno, tryb i teren, po czym klika **Otwórz pokój**.
-3. Druga osoba otwiera grę w **drugiej karcie lub oknie** (ten sam profil przeglądarki), przechodzi do **Gra razem**, wybiera **Dołącz** i wpisuje **ten sam kod**.
-4. Gospodarz klika **„Wejdź do świata i zaproś graczy”** – gość wchodzi automatycznie do tego samego świata.
+Świat jest **jeden dla wszystkich**: stałe ziarno, tryb przetrwania, zapis bloków w chmurze. Pora dnia i pogoda są wspólne. Ekwipunek, zdrowie, moby i ustawienia grafiki są indywidualne.
 
-Zalety: zero konfiguracji, działa offline, idealne do sprawdzenia i do grania na jednym komputerze (dwie karty obok siebie). Ograniczenie: karty muszą być w tej samej przeglądarce (na tym samym profilu).
+**Jak to działa bez własnego serwera?** Gra jest hostowana statycznie na GitHub Pages, więc trwały stan i transmisję trzyma Supabase:
 
-### Przez internet (WebRTC)
+| Warstwa | Rola |
+| --- | --- |
+| Postgres (`blockcraft_blocks`) | trwały zapis bloków – jeden wiersz na współrzędną, upsert nadpisuje starszy |
+| Realtime broadcast | natychmiastowe zmiany bloków, pozycje (4 Hz) i czat |
+| Presence | lista graczy online i ich kolory |
 
-1. Gospodarz: **Przez internet → Utwórz sesję → 1. Utwórz kod zaproszenia**, a potem **Kopiuj kod** i wyślij go znajomemu (np. komunikatorem).
-2. Gość: **Przez internet → Dołącz**, wkleja kod zaproszenia i klika **2. Przyjmij zaproszenie**. Dostaje **kod odpowiedzi** – kopiuje go i odsyła gospodarzowi.
-3. Gospodarz wkleja kod odpowiedzi i klika **3. Połącz**.
-4. Gdy status zmieni się na „Połączono”, gospodarz wchodzi do świata, a gość dostaje start automatycznie.
+Klucz użyty w grze jest **publiczny** („anon”) – nie da się nim nic zepsuć poza światem gry: reguły RLS pozwalają tylko czytać oraz dopisywać/aktualizować bloki świata `public`, w zakresie wysokości 0–255.
 
-Połączenie jest **bezpośrednie** (P2P) – dane nie przechodzą przez żaden serwer gry; publiczny STUN Googla służy tylko do ustalenia adresów. Jeśli sieć blokuje P2P (NAT symetryczny, niektóre sieci firmowe i szkolne), użyj trybu lokalnego albo tej samej sieci Wi-Fi. Kody są długie, bo zawierają opis połączenia – najlepiej użyć przycisku **Kopiuj**, a na komputerze `Ctrl+V`.
+Jeśli chcesz własną kopię serwera, utwórz projekt Supabase, wykonaj SQL z sekcji „Baza danych” poniżej i podmień `SUPABASE_URL`/`SUPABASE_ANON` w `src/game/online.ts`.
+
+### Ta sama przeglądarka (offline, dwie karty)
+
+1. Zakładka **💻 Ta przeglądarka** → **Utwórz sesję**, nazwa, kod pokoju (albo **Losuj**), **Otwórz pokój**.
+2. W drugiej karcie/oknie: **Dołącz** i ten sam kod.
+3. Gospodarz klika **„Wejdź do świata i zaproś graczy”** – gość wchodzi automatycznie.
+
+Działa bez internetu; karty muszą być w tej samej przeglądarce i na tym samym profilu.
+
+### Przez internet (WebRTC, kody)
+
+1. Gospodarz: **🔗 Przez internet → Utwórz sesję → 1. Utwórz kod zaproszenia**, **Kopiuj kod** i wyślij go znajomemu.
+2. Gość: **Dołącz**, wkleja kod, klika **2. Przyjmij zaproszenie** i odsyła gospodarzowi **kod odpowiedzi**.
+3. Gospodarz wkleja odpowiedź i klika **3. Połącz**, a potem wchodzi do świata.
+
+Połączenie jest bezpośrednie (P2P, publiczny STUN). Jeśli sieć blokuje P2P (NAT symetryczny), użyj serwera publicznego – działa zawsze.
 
 ### Co jest wspólne, a co osobne
 
-* **Wspólne:** bloki (także w Netherze), czat, pora dnia, pogoda, lista graczy, awatary i ping.
-* **Osobne:** ekwipunek, zdrowie, głód, osiągnięcia, moby i ich zachowanie, minimapa, punkty podróży i ustawienia grafiki. Każdy gracz ma własny punkt odrodzenia.
-* **Zapis:** sesja multiplayer nie trafia do slotów zapisu – świat żyje w pamięci gospodarza. Po wyjściu z gry wróć do menu i dołącz ponownie.
+* **Wspólne:** bloki (także w Netherze), czat, pora dnia, pogoda, lista graczy, awatary.
+* **Osobne:** ekwipunek, zdrowie, głód, osiągnięcia, moby, minimapa, punkty podróży i ustawienia grafiki. Każdy gracz ma własny punkt odrodzenia.
+* **Zapis:** serwer publiczny zapisuje bloki w chmurze. Pokój lokalny/P2P żyje w pamięci gospodarza i nie trafia do slotów zapisu.
+
+### Baza danych (Supabase)
+
+```sql
+create table public.blockcraft_blocks (
+  id bigserial primary key,
+  world text not null default 'public',
+  dim char(1) not null default 'o',
+  x integer not null,
+  y smallint not null,
+  z integer not null,
+  block smallint not null,
+  updated_at timestamptz not null default now(),
+  unique (world, dim, x, y, z)
+);
+alter table public.blockcraft_blocks enable row level security;
+create policy blockcraft_read on public.blockcraft_blocks for select to anon using (true);
+create policy blockcraft_insert on public.blockcraft_blocks for insert to anon
+  with check (world = 'public' and y between 0 and 255);
+create policy blockcraft_update on public.blockcraft_blocks for update to anon
+  using (true) with check (world = 'public');
+grant select, insert, update on public.blockcraft_blocks to anon;
+```
 
 ### Bezpieczeństwo
 
-Wiadomości z sieci są ograniczane (rozmiar ramki, liczba zmian bloków, zakresy współrzędnych i identyfikatorów), a nazwy graczy skracane. Kod pokoju to tylko etykieta kanału `BroadcastChannel` – nie jest hasłem, więc nie podawaj go osobom, którym nie ufasz; w trybie P2P dostęp ma wyłącznie osoba, która ma kod zaproszenia i odpowiedzi.
-
----
+Wiadomości i wiersze z bazy są walidowane (zakresy współrzędnych i identyfikatorów, długość czatu, nazwy skracane do 20 znaków), a zapis do bazy jest ograniczony regułami RLS. Nie ma kont ani haseł – nazwa jest tylko etykietą.
 
 ## 🚀 Uruchomienie lokalne
 
@@ -380,7 +428,7 @@ src/
   index.css                # styl w klimacie Minecrafta (Tailwind 4)
   components/
     Menus.tsx              # menu główne, pauza, ekran śmierci, czat
-    MultiplayerScreen.tsx  # 2.10: poczekalnia – pokoje lokalne i kody WebRTC
+    MultiplayerScreen.tsx  # „Gra razem”: serwer publiczny, pokoje lokalne i kody WebRTC
     SettingsScreen.tsx     # 2.0: opcje w zakładkach (grafika/sterowanie/dźwięk)
     JournalScreen.tsx      # 2.1: dziennik rozdziałów, cele i postęp
     GameView.tsx           # montowanie silnika, HUD, obsługa błędów
@@ -397,7 +445,8 @@ src/
     performance.ts         # 2.0: profil urządzenia i automat graficzny
   game/
     engine.ts              # pętla gry, gracz, interakcje, zapis
-    net.ts                 # 2.10: protokół sesji, BroadcastChannel, WebRTC (bez serwera)
+    net.ts                 # protokół sesji, BroadcastChannel, WebRTC, zegar publiczny
+    online.ts              # 2.11: publiczny serwer – Supabase Realtime + zapis bloków w chmurze
     world.ts               # chunk'i, generator terenu, meshowanie
     village.ts             # generator wiosek (1.6)
     trading.ts             # zawody, oferty i poziomy mieszkańców (1.6)
@@ -431,7 +480,7 @@ npm run test:ui     # tylko test interfejsu React
 Runner `.harness/run.mjs` bundluje testy przez **esbuild** i uruchamia je w Node – nie trzeba niczego instalować dodatkowo.
 
 `.harness/smoke.ts` to asercje na czysty silnik: generowanie świata (także płaskiego), bloki, przedmioty, ekwipunek i receptury (w tym papier, książka, biblioteczka i stół zaklęć), **system zaklęć** (dopasowanie, oferty, pierścień biblioteczek, zużycie XP i lazurytu, dropy ze Szczęściem i Jedwabnym Dotykiem), fizyka, AI mobów, piece i skrzynie, zapisy, osiągnięcia, tekstury oraz algorytm opadania liści – wszystko bez WebGL. Od 2.3 dołączyły **tabele połowu i czas brań, receptury wędki/lornety/totemu, reguły kowadła (scalanie, nazwy, koszt poziomu) razem z kowadłem w silniku, Totem Ratowania w `damage()` oraz zestaw naprawionych błędów** (dzielenie stosu, ŚPM poza paskiem, import nazw, odbicie szlamu, obrażenia miecza, XP z rud).
-Od 2.10 dochodzi **protokół multiplayer**: normalizacja kodów pokoju, pakowanie SDP w kod base64url, handshake `hello → welcome` z migawką świata, przekazywanie edytów i czatu przez gospodarza, ping/pong, timeout gracza, walidacja danych z sieci, a także handshake na **prawdziwym `BroadcastChannel`** (Node ma go wbudowany, więc test nie potrzebuje przeglądarki). Kontrole źródła pilnują, że silnik wysyła pozycje, synchronizuje oba wymiary i nie zapętla własnych edytów.
+Od 2.11 dochodzi **publiczny serwer**: zegar dnia i pogody, mapowanie wierszy bazy na bloki, paginacja wczytywania świata, batchowanie upsertu (maks. 300 wierszy), ponawianie nieudanego zapisu, obsada z Presence oraz brak wysyłki pustych wiadomości – wszystko na atrapie klienta Supabase, bez sieci. Od 2.10 jest **protokół multiplayer**: normalizacja kodów pokoju, pakowanie SDP w kod base64url, handshake `hello → welcome` z migawką świata, przekazywanie edytów i czatu przez gospodarza, ping/pong, timeout gracza, walidacja danych z sieci, a także handshake na **prawdziwym `BroadcastChannel`** (Node ma go wbudowany, więc test nie potrzebuje przeglądarki). Kontrole źródła pilnują, że silnik wysyła pozycje, synchronizuje oba wymiary i nie zapętla własnych edytów.
 
 `.harness/ui.tsx` renderuje menu przez `react-dom/server` (bez przeglądarki), a gdy zainstalowany jest `jsdom` (`npm i --no-save jsdom`) montuje całe `<App/>`, przechodzi tworzenie świata i sprawdza, że brak WebGL kończy się czytelnym komunikatem, a nie białą stroną. Bez jsdom ten drugi krok jest pomijany. Od 2.3 renderuje też **ekran kowadła** (oba wejścia, wynik z kosztem, ostrzeżenie o braku poziomów, pole nazwy) i sprawdza **nowy rozdział dziennika przygód**.
 
@@ -448,6 +497,9 @@ Od 2.10 dochodzi **protokół multiplayer**: normalizacja kodów pokoju, pakowan
 | „Nie znaleziono gospodarza pokoju” | Sprawdź kod pokoju (małe litery, myślnik zamiast spacji) i upewnij się, że druga karta jest w **tej samej przeglądarce** i na tym samym profilu. |
 | Połączenie P2P wisi na „Łączę…” | Sieć blokuje ruch bezpośredni (NAT symetryczny, firewall). Spróbujcie w tej samej sieci Wi-Fi albo użyjcie trybu „Ta sama przeglądarka”. |
 | Gość nie widzi zmian bloków | Sprawdź, czy oba okna pokazują ten sam kod pokoju i czy gospodarz nie zamknął karty – sesja żyje tylko w jego przeglądarce. |
+| „Brak połączenia z internetem” na serwerze publicznym | Gra potrzebuje sieci, żeby pobrać świat. Sprawdź połączenie i odśwież stronę – budowle są w chmurze, więc nic nie ginie. |
+| „Baza serwera nie jest jeszcze przygotowana” | W projekcie Supabase brakuje tabeli `blockcraft_blocks` – wykonaj SQL z sekcji „Baza danych”. |
+| Chcę grać bez internetu | Wybierz **Ta przeglądarka** – pokój działa lokalnie, a świat nie opuszcza komputera. |
 
 ## 📜 Licencja
 

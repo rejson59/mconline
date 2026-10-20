@@ -15,6 +15,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.11: serwer publiczny – jeden świat dla wszystkich!',
+  'Buduj razem z całą Polską!',
+  'Twoja budowla zostaje w chmurze!',
   '2.10: graj razem – bez serwera!',
   'Otwórz pokój, podaj kod, budujcie razem!',
   'Druga karta? Ten sam świat!',
@@ -527,17 +530,17 @@ export function MainMenu({
               <section aria-label="Witamy" className="mc-card p-4 sm:p-6">
                 <div className="mc-card-title">Witaj w BlockCraft</div>
                 <p className="text-sm leading-relaxed text-white/85">
-                  Zbuduj pierwszy świat sam albo razem z kimś: zetnij drzewo, wytwórz kilof i zejdź do jaskiń po diamenty.
-                  Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> dodaje wspólną grę bez serwera –
-                  pokój w dwóch kartach albo zaproszenie przez internet. Zostają nowe tekstury, okna zamykane dotykiem i lista komend.
+                  Zagraj sam albo wejdź na <b className="text-yellow-200">serwer publiczny</b>: jeden świat dla wszystkich,
+                  bez kodów i bez gospodarza. Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b>
+                  zapisuje budowle w chmurze, więc zostają po wyjściu i po odświeżeniu strony.
                 </p>
                 <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-white/75 sm:grid-cols-2">
-                  <div className="border border-white/10 bg-black/30 p-2">👥 Gra razem bez serwera</div>
-                  <div className="border border-white/10 bg-black/30 p-2">💻 Dwie karty, jeden świat</div>
-                  <div className="border border-white/10 bg-black/30 p-2">🌍 Zaproszenia przez internet</div>
+                  <div className="border border-white/10 bg-black/30 p-2">🌍 Serwer publiczny – jeden świat</div>
+                  <div className="border border-white/10 bg-black/30 p-2">☁️ Budowle zapisane w chmurze</div>
+                  <div className="border border-white/10 bg-black/30 p-2">🕒 Wspólna pora dnia i pogoda</div>
+                  <div className="border border-white/10 bg-black/30 p-2">👥 Awatary i lista graczy online</div>
                   <div className="border border-white/10 bg-black/30 p-2">🎨 Tekstury jak w nowym Minecrafcie</div>
                   <div className="border border-white/10 bg-black/30 p-2">⌨️ Lista komend w czacie</div>
-                  <div className="border border-white/10 bg-black/30 p-2">☀️ Światło i drzewa z 2.8.2</div>
                 </div>
                 <p className="mt-3 text-[11px] leading-snug text-white/50">
                   Zapisane światy (do 8) trzymamy w tej przeglądarce. Możesz je eksportować i importować jako pliki JSON.

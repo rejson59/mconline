@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Game, type GameMode, type HUDState, type SaveData, type UIState } from '../game/engine';
 import { setVolume } from '../game/audio';
 import HUD from './HUD';
-import type { NetSession } from '../game/net';
+import type { NetLike } from '../game/net';
 import InventoryScreen from './InventoryScreen';
 import FurnaceScreen from './FurnaceScreen';
 import ChestScreen from './ChestScreen';
@@ -46,7 +46,7 @@ export default function GameView({
   worldName: string;
   worldType: WorldType;
   /** 2.10: sesja multiplayer przekazana z poczekalni. */
-  net?: NetSession;
+  net?: NetLike;
   onQuit: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);

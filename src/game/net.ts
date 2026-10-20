@@ -28,7 +28,7 @@
  */
 
 export type NetRole = 'host' | 'guest';
-export type NetTransport = 'local' | 'p2p';
+export type NetTransport = 'local' | 'p2p' | 'online';
 export type NetStatus = 'connecting' | 'connected' | 'closed' | 'error';
 export type NetWeather = 'clear' | 'rain';
 
@@ -182,15 +182,105 @@ export const PEER_TIMEOUT = 12;
 /** Limit zapamiętanych zmian w migawce dla nowych graczy. */
 export const MAX_SNAPSHOT_EDITS = 20_000;
 
+/** Pozycja gracza wysyłana do innych (10 razy na sekundę). */
+export interface NetPos {
+  d: 'o' | 'n';
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  pitch: number;
+  held?: number;
+  name: string;
+  hue: number;
+}
+
+/**
+ * Wspólny interfejs sesji dla silnika. `NetSession` obsługuje pokoje lokalne
+ * i P2P, a `PublicServer` (online.ts) – publiczny serwer Supabase. Silnik gra
+ * tak samo w obu przypadkach, więc nie musi znać transportu.
+ */
+export interface NetLike {
+  readonly id: string;
+  readonly role: NetRole;
+  readonly transport: NetTransport;
+  /** Czy to publiczny serwer (inna obsługa czasu, pogody i zapisu). */
+  readonly public: boolean;
+  name: string;
+  world: WorldHandshake | null;
+  players: NetPlayer[];
+  status: NetStatus;
+  ping: number;
+
+  onMessage?: (m: NetMessage) => void;
+  onPeers?: (players: NetPlayer[]) => void;
+  onStatus?: (status: NetStatus, error?: string | null) => void;
+  onReady?: (world: WorldHandshake) => void;
+  onChat?: (name: string, text: string) => void;
+  onStart?: () => void;
+
+  /** Tylko transporty tekstowe (lokalny/P2P); serwer publiczny go nie ma. */
+  ingest?(raw: string): void;
+  setWorld(patch: Partial<WorldHandshake>): void;
+  sendEdits(list: NetEdit[]): void;
+  sendPos(p: NetPos): void;
+  pushState(state: { time: number; day: number; weather: NetWeather }): void;
+  /** Nagła zmiana pogody (gospodarz pokoju); serwer publiczny jej nie potrzebuje. */
+  sendState?(state: { time: number; day: number; weather: NetWeather }): void;
+  say(text: string): void;
+  tick(): void;
+  close(reason?: string): void;
+}
+
+// ------------------------------------------------ zegar serwera publicznego
+
+/** Długość doby w silniku (sekundy) – `time` rośnie o dt/600. */
+export const DAY_SECONDS = 600;
+/** Stała epoka: dzięki niej wszyscy widzą tę samą porę dnia i ten sam dzień. */
+const CLOCK_EPOCH = Date.UTC(2026, 0, 1);
+/** Co ile zmienia się pogoda na serwerze publicznym (ms). */
+const WEATHER_BUCKET_MS = 10 * 60 * 1000;
+
+function hash32(n: number): number {
+  let h = n | 0;
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+/** Pora dnia 0–1 – identyczna u każdego gracza, bez serwerowego zegara. */
+export function publicTime(now: number = Date.now()): number {
+  const elapsed = Math.max(0, now - CLOCK_EPOCH) / 1000;
+  return (elapsed / DAY_SECONDS) % 1;
+}
+
+/** Numer dnia od startu serwera (zaczyna się od 1). */
+export function publicDay(now: number = Date.now()): number {
+  const elapsed = Math.max(0, now - CLOCK_EPOCH) / 1000;
+  return 1 + Math.floor(elapsed / DAY_SECONDS);
+}
+
+/**
+ * Pogoda z tego samego koszyka czasu u wszystkich. Deszcz wypada średnio raz
+ * na pięć okienek – bez serwera nie ma kto „rzucić kostką”, a losowanie u
+ * każdego klienta dałoby różne niebo.
+ */
+export function publicWeather(now: number = Date.now()): NetWeather {
+  const bucket = Math.floor(Math.max(0, now - CLOCK_EPOCH) / WEATHER_BUCKET_MS);
+  return hash32(bucket * 31 + 7) % 5 === 0 ? 'rain' : 'clear';
+}
+
 /**
  * Sesja sieciowa: protokół, obsada graczy, przekazywanie wiadomości.
  * Nie zna się na Three.js ani na React – dzięki temu da się ją przetestować
  * w Node bez przeglądarki (testy podstawiają własny `NetLink`).
  */
-export class NetSession {
+export class NetSession implements NetLike {
   readonly id: string;
   readonly role: NetRole;
   readonly transport: NetTransport;
+  /** Pokój lokalny/P2P nigdy nie jest publicznym serwerem. */
+  readonly public = false;
   name: string;
   world: WorldHandshake | null = null;
   players: NetPlayer[] = [];
@@ -822,9 +912,27 @@ export function createRtcHost(onMessage: (raw: string) => void, onLink: (link: N
     async acceptAnswer(code: string): Promise<void> {
       const data = decodeSignal<{ sdp?: string; type?: string }>(code);
       if (!data?.sdp || data.type !== 'answer') {
-        throw new Error('To nie jest kod odpowiedzi. Wklej kod, który dostałeś od drugiego gracza.');
+        throw new Error(
+          'To nie jest kod odpowiedzi. Wklej kod, który dostałeś od gościa (gospodarz wysyła kod zaproszenia).'
+        );
       }
-      await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
+      // „Called in wrong state: stable” z przeglądarki oznacza, że odpowiedź
+      // już przyjęto (albo kliknięto „Połącz” drugi raz). Zamiast surowego
+      // błędu DOM pokazujemy konkretną podpowiedź.
+      if (pc.signalingState !== 'have-local-offer') {
+        throw new Error(
+          'To zaproszenie zostało już użyte albo wygasło. Utwórz nowy kod zaproszenia (krok 1) i poproś gościa o nową odpowiedź.'
+        );
+      }
+      try {
+        await pc.setRemoteDescription({ type: 'answer', sdp: data.sdp });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/wrong state|stable/i.test(msg)) {
+          throw new Error('To zaproszenie zostało już użyte. Utwórz nowy kod i poproś gościa o nową odpowiedź.');
+        }
+        throw new Error('Nie udało się przyjąć odpowiedzi: ' + msg);
+      }
     },
     get link() {
       return link;
@@ -850,8 +958,18 @@ export function createRtcGuest(onMessage: (raw: string) => void, onLink: (link: 
   return {
     async acceptOffer(code: string): Promise<string> {
       const data = decodeSignal<{ sdp?: string }>(code);
-      if (!data?.sdp) throw new Error('Nieprawidłowy kod zaproszenia. Skopiuj go w całości (jest długi).');
-      await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
+      if (!data?.sdp) {
+        throw new Error('Nieprawidłowy kod zaproszenia. Skopiuj go w całości (jest długi) – bez spacji na końcu.');
+      }
+      if (pc.signalingState !== 'stable') {
+        throw new Error('To zaproszenie zostało już przyjęte. Utwórz kod odpowiedzi i odeślij go gospodarzowi.');
+      }
+      try {
+        await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error('Nie udało się odczytać zaproszenia: ' + msg);
+      }
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       await waitForIce(pc);
