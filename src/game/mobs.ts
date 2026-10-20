@@ -3,6 +3,7 @@ import type { World } from './world';
 import { stepBody, type Body } from './physics';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
+import { kindForColor, mobMaterial, type MobTexKind } from './mobTextures';
 
 export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
@@ -15,17 +16,27 @@ export function isVillageMob(type: MobType): boolean {
   return type === 'villager' || type === 'golem';
 }
 
-function box(w: number, h: number, d: number, color: number, mats: Map<number, THREE.Material>) {
-  let m = mats.get(color);
+/**
+ * 2.16: części ciała dostają pikselowe tekstury (sierść, runo, pancerz,
+ * ubranie). Drobne dodatki – oczy, dziób, nity – zostają płaskie, bo
+ * 2-pikselowa tekstura na 2-centymetrowym klocku tylko szumi.
+ */
+function box(w: number, h: number, d: number, color: number, mats: Map<string, THREE.Material>, kind?: MobTexKind) {
+  const textured = Math.max(w, h, d) >= 0.14 && Math.min(w, h, d) >= 0.095;
+  const texKind = kind ?? kindForColor(color);
+  const key = textured ? `t:${texKind}:${color}` : `c:${color}`;
+  let m = mats.get(key);
   if (!m) {
-    m = new THREE.MeshLambertMaterial({ color });
-    mats.set(color, m);
+    m = textured ? mobMaterial(texKind, color) : new THREE.MeshLambertMaterial({ color });
+    mats.set(key, m);
   }
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  mesh.userData.mobColor = color;
+  mesh.userData.mobKind = texKind;
   return mesh;
 }
 
-const sharedMats = new Map<number, THREE.Material>();
+const sharedMats = new Map<string, THREE.Material>();
 
 export class Mob {
   type: MobType;
@@ -116,18 +127,24 @@ export class Mob {
     this.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
-      const m = mesh.material as THREE.MeshLambertMaterial;
-      const hex = m.color.getHex();
-      if (hex === 0x7a8089) m.color.setHex(0xa05a48); // coat turns rust-red
-      else if (hex === 0x5d626b) m.color.setHex(0x7a4238);
+      const base = mesh.userData.mobColor as number | undefined;
+      // 2.16: materiał ma teksturę i białą bazę, więc kolor czytamy z
+      // `userData`, a nie z `material.color`.
+      if (base !== 0x7a8089 && base !== 0x5d626b) return;
+      const next = base === 0x7a8089 ? 0xa05a48 : 0x7a4238; // coat turns rust-red
+      const old = mesh.material as THREE.MeshLambertMaterial;
+      const mat = mobMaterial(kindForColor(next), next).clone();
+      mat.emissive.copy(old.emissive);
+      mesh.material = mat;
+      mesh.userData.mobColor = next;
     });
     return true;
   }
 
-  private addLeg(x: number, y: number, z: number, w: number, h: number, d: number, color: number, arr: THREE.Object3D[]) {
+  private addLeg(x: number, y: number, z: number, w: number, h: number, d: number, color: number, arr: THREE.Object3D[], kind?: MobTexKind) {
     const pivot = new THREE.Group();
     pivot.position.set(x, y, z);
-    const m = box(w, h, d, color, sharedMats);
+    const m = box(w, h, d, color, sharedMats, kind);
     m.position.y = -h / 2;
     pivot.add(m);
     this.meshes.push(m);
@@ -410,7 +427,7 @@ export class Mob {
       const skin = 0xa8785a;
       const skinDk = 0x8a5f45;
       const legH = 0.45;
-      const body = box(0.62, 0.92, 0.36, robe, sharedMats);
+      const body = box(0.62, 0.92, 0.36, robe, sharedMats, 'robe');
       body.position.set(0, legH + 0.46, 0);
       g.add(body);
       this.meshes.push(body);
@@ -440,7 +457,7 @@ export class Mob {
       g.add(head);
       this.head = head;
       // ręce złożone z przodu, jak na bazarze
-      const armL = box(0.14, 0.16, 0.44, robe, sharedMats);
+      const armL = box(0.14, 0.16, 0.44, robe, sharedMats, 'robe');
       armL.position.set(-0.34, legH + 0.86, 0.18);
       const armR = armL.clone();
       armR.position.x = 0.34;
@@ -564,7 +581,14 @@ export class Mob {
       if ((o as THREE.Mesh).isMesh) {
         // clone material per mob so we can tint on hurt
         const mesh = o as THREE.Mesh;
-        mesh.material = (mesh.material as THREE.MeshLambertMaterial).clone();
+        const mat = (mesh.material as THREE.MeshLambertMaterial).clone();
+        // 2.16: slime jest półprzezroczysty jak w Minecrafcie (oczy zostają ostre).
+        if (this.type === 'slime' && mesh.userData.mobKind === 'slime') {
+          mat.transparent = true;
+          mat.opacity = 0.82;
+          mat.depthWrite = false;
+        }
+        mesh.material = mat;
       }
     });
   }
@@ -769,7 +793,7 @@ export class Mob {
   shear(): boolean {
     if (this.type !== 'sheep' || this.dead || this.sheared) return false;
     this.sheared = true;
-    if (this.woolMesh) this.woolMesh.material = new THREE.MeshLambertMaterial({ color: 0xd8c8b0 });
+    if (this.woolMesh) this.woolMesh.material = mobMaterial('sheep-face', 0xd8c8b0).clone();
     return true;
   }
 

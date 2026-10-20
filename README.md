@@ -1,6 +1,15 @@
-# BlockCraft 2.15 🧱
+# BlockCraft 2.16 🧱
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+**Wersja 2.16 „Pikselowe tekstury”** – moby i gracze jak w Minecrafcie, plus 23 nowe przepisy:
+
+* **Każdy mob ma wielobarwną teksturę 16 × 16.** Wcześniej każda część ciała była jednym, płaskim kolorem – owca wyglądała jak biały karton, a zombie jak zielony kloc. Teraz krowa ma kremowe łaty na brązowej sierści, owca kędzierzawe runo, creeper ciemnozielone plamy i jasny mech, pająk włochaty pancerz z połyskiem, szkielet szare pęknięcia na kościach, wilk pręgi futra, mieszkaniec fałdy szaty, a żelazny golem szczotkowane żelazo z nitami. Slime jest w końcu półprzezroczysty (oczy zostają ostre), a strzyżona owca ma teksturę gołej skóry.
+* **Skórki graczy też są pikselowe.** Koszulka i rękawy mają splot tkaniny ze ściegami, spodnie ukośny jeansowy splot i szwy, buty skórzaną podeszwę, włosy pasma, a skóra delikatne cieniowanie i rumieńce. Zmiana skórki nadal działa jednym kliknięciem, a pozostali gracze widzą ją na publicznym serwerze.
+* **23 nowe przepisy (razem 155).** Doszły schody ceglane, z cegieł kamiennych, piaskowcowe, netherowe i kwarcowe (6 bloków → 4 stopnie), płyty brukowe, ceglane, piaskowcowe i netherowe (3 bloki → 6 płyt), snop siana i rozbiórka na 9 pszenicy, latarnia, dzwon, blok szmaragdu (i rozbiórka), blok miodu z 4 butelek, terakota, beton w czterech nowych kolorach (niebieski, zielony, żółty, czarny), błoto oraz wełna z 4 nici – klasyczny ratunek, gdy w pobliżu nie ma owiec.
+* **Naprawiony blackstone.** Wypalanie blackstone’u zwracało… blackstone, więc piec zużywał paliwo i nic nie robił. Teraz blackstone nie jest już ani paliwem, ani wynikiem wypalania, a soul sand nadal daje soul soil.
+* **Wydajność.** Wszystkie tekstury to `DataTexture` 16 × 16 (bez canvasu i bez DOM), cache’owane globalnie: setki mobów dzielą kilkadziesiąt tekstur, a każdy `kind` + kolor zawsze daje tę samą instancję.
+* **Testy.** `npm test` to **1523 kontrole silnika + 214 testów UI** – m.in. wielobarwność każdej z 22 tekstur, teksturowane części wszystkich 14 mobów, przezroczystość slime’a, tekstury awatarów, nowe przepisy w siatce 3×3 i brak samowypalania blackstone’u. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą; wersja **2.16.0** jest na GitHub Pages.
 
 **Wersja 2.15 „Stabilny ekran”** – pełny ekran bez znikających przycisków:
 
@@ -8,7 +17,7 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **
 * **Przyciski i drążek zostają na ekranie.** Sterowanie dotykowe mierzy własną warstwę gry (`getBoundingClientRect` + `ResizeObserver` + zapasowy pomiar co 0,8 s), a nie `window.innerHeight`, który po fullscreenie bywał nieaktualny. Dzięki temu drążek, skok, ekwipunek i górny pasek nie uciekają poza dolną krawędź.
 * **Panele znów się przewijają.** Powłoka `#root` jest przypięta do widocznego ekranu (`position: fixed; inset: 0`, wysokość z `visualViewport` w `--bc-app-height`) zamiast `height: 100dvh`. Okna plecaka, kowadła, statywu, dziennika i punktów podróży mają `max-h-full`, więc mieszczą się w kadrze i można je doscrollować także po obrocie.
 * **Czyste wejście i wyjście z pełnego ekranu.** Fullscreen działa na powłoce aplikacji (`#root`), a nie na `<html>`, więc style przeglądarki nie mieszają się z układem. Orientację blokujemy wyłącznie na urządzeniach dotykowych; Esc/gest systemowy zawsze ją zwalnia. Po każdej zmianie (`resize`, `orientationchange`, `fullscreenchange`, `visualViewport`) silnik robi kilka kontrolnych pomiarów w pierwszej sekundzie, więc spóźnione zdarzenia mobilnych przeglądarek nie zostawiają gry w złym rozmiarze.
-* **Testy.** `npm test` to **1483 kontrole silnika + 214 testów UI** – m.in. przypięcie powłoki do viewportu, pełny ekran na `#root`, pomiar płótna i proporcji kamery po obrocie (także przy zerowym kontenerze), drążek liczony z warstwy gry oraz panele bez `dvh`. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą; wersja **2.15.0** jest na GitHub Pages.
+* **Testy.** `npm test` to **1483 kontrole silnika + 214 testów UI** (stan z wydania 2.15) – m.in. przypięcie powłoki do viewportu, pełny ekran na `#root`, pomiar płótna i proporcji kamery po obrocie (także przy zerowym kontenerze), drążek liczony z warstwy gry oraz panele bez `dvh`.
 
 **Wersja 2.14 „Auto-bicie”** – automatyczna walka i auto-skok:
 

@@ -1,31 +1,31 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.15.0';
-export const GAME_RELEASE_NAME = 'Stabilny ekran';
+export const GAME_VERSION = '2.16.0';
+export const GAME_RELEASE_NAME = 'Pikselowe tekstury';
 
 /**
- * 2.10: krótka lista zmian pokazywana w menu pauzy.
- * Nowość: multiplayer bez serwera – dwie karty tej samej przeglądarki
- * (BroadcastChannel) albo gra przez internet (WebRTC + kody zaproszeń).
+ * 2.16: każda część moba i awatara gracza ma własną, wielobarwną teksturę
+ * pikselową (sierść, łaty, runo, pancerz, tkanina, jeans), a nie jeden płaski
+ * kolor. Do tego kilkadziesiąt nowych przepisów i naprawiony blackstone.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
   {
-    title: 'Kamera nie „przybliża się” po pełnym ekranie',
-    text: 'Po wejściu w pełny ekran obraz potrafił się przyciąć i wyglądał jak zoom. Teraz płótno gry ma zawsze bufor dokładnie tej wielkości co widoczny ekran, a proporcje kamery są przeliczane natychmiast – także wtedy, gdy przeglądarka zgłosi nowy rozmiar z opóźnieniem po obrocie.',
+    title: 'Moby wreszcie mają pikselowe tekstury',
+    text: 'Krowa ma kremowe łaty na brązowej sierści, owca kędzierzawe runo, creeper ciemnozielone plamy i mech, pająk włochaty pancerz, szkielet szare pęknięcia na kościach, a golem szczotkowane żelazo z nitami. Każda część ciała ma 16×16 pikseli i kilka odcieni – koniec z jednokolorowymi klockami.',
   },
   {
-    title: 'Przyciski i drążek zawsze w kadrze',
-    text: 'Sterowanie dotykowe mierzy własną warstwę gry, a nie `window.innerHeight`, który po pełnym ekranie bywa nieaktualny. Drążek, skok, ekwipunek i pasek górny zostają na swoim miejscu – nie znikają poza dolną krawędź.',
+    title: 'Gracze też dostali pikselowe skórki',
+    text: 'Koszulka ma splot tkaniny, spodnie jeansowy ukośny splot, buty skórzaną podeszwę, włosy pasma, a skóra delikatne cieniowanie. Tekstury są wspólne dla wszystkich skórek, więc zmiana wyglądu nadal działa jednym kliknięciem, a inni gracze widzą ją na publicznym serwerze.',
   },
   {
-    title: 'Panele znów się przewijają',
-    text: 'Powłoka aplikacji jest przypięta do widocznego ekranu (z zapasem z `visualViewport`), a okna plecaka, kowadła, statywu, dziennika i punktów podróży liczą wysokość od niej, nie od `dvh`. Koniec z listami, których nie dało się doscrollować po obrocie.',
+    title: 'Nowe przepisy: schody, płyty i dekoracje',
+    text: 'Doszły schody ceglane, kamienne, piaskowcowe, netherowe i kwarcowe, płyty brukowe, ceglane, piaskowcowe i netherowe, snop siana, latarnia, dzwon, blok szmaragdu, blok miodu, terakota, beton w czterech nowych kolorach i błoto. Wełnę da się teraz uwić z czterech nici, a snop siana rozmienić na dziewięć pszenicy – razem 155 przepisów.',
   },
   {
-    title: 'Czyste wejście i wyjście z pełnego ekranu',
-    text: 'Pełny ekran działa na powłoce aplikacji (nie na `<html>`), orientację blokujemy tylko na urządzeniach dotykowych, a Esc lub gest systemowy zawsze zwalnia blokadę i przebudza pomiary. Kilka kontrolnych pomiarów w pierwszej sekundzie łapie spóźnione zdarzenia przeglądarki.',
+    title: 'Pełny ekran i kamera bez zoomu, panele bez scrollowania',
+    text: 'Poprawka z 2.15 zostaje: pełny ekran nie przycina obrazu ani nie przybliża kamery, drążek i przyciski dotykowe są zawsze w kadrze, a okna ekwipunku, kowadła i czatu dają się przewijać (scroll) także po obrocie telefonu.',
   },
   {
     title: 'Nadal: publiczny serwer, ekwipunek i poziom',
-    text: 'Auto-bicie wrogich mobów i auto-skok na każdy schodek, ekwipunek jak w Minecrafcie (siatka 2×2, stół 3×3, książka receptur), wymuszony poziom i pełny ekran na telefonie, publiczny serwer z jednym wspólnym światem i zapisem w chmurze, skórki postaci (osiem wzorów), nowoczesne tekstury, lista komend w czacie, pochodnia w dłoni i naprawione kody zaproszeń („wrong state”) – wszystko zostaje. Jedna pień daje cztery deski, a cztery deski – stół rzemieślniczy.',
+    text: 'Auto-bicie wrogich mobów i auto-skok na każdy schodek, ekwipunek jak w Minecrafcie (siatka 2×2, stół 3×3, książka receptur), wymuszony poziom i pełny ekran na telefonie, publiczny serwer z jednym wspólnym światem i zapisem w chmurze, skórki postaci, lista komend w czacie, pochodnia w dłoni i naprawione kody zaproszeń („wrong state”) – wszystko zostaje. Jeden pień daje cztery deski, a cztery deski – stół rzemieślniczy.',
   },
 ];

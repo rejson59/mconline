@@ -582,8 +582,6 @@ export function smeltResult(id: number): number | null {
       return I.NETHER_BRICK_ITEM;
     case B.QUARTZ_ORE:
       return I.QUARTZ;
-    case B.BLACKSTONE:
-      return B.BLACKSTONE;
     case B.COBBLE_STAIRS_N:
       return B.STONE;
     case B.LOG:

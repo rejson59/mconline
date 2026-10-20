@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.15.0",
-  "description": "BlockCraft 2.15 „Stabilny ekran” – polska gra sandboxowa w przeglądarce: naprawiony pełny ekran na telefonie, automatyczne bicie wrogich mobów i auto-skok, publiczny serwer, ekwipunek i crafting jak w Minecrafcie.",
+  "version": "2.16.0",
+  "description": "BlockCraft 2.16 „Pikselowe tekstury” – polska gra sandboxowa w przeglądarce: wielobarwne tekstury mobów i graczy, 155 przepisów rzemieślniczych, publiczny serwer, ekwipunek i crafting jak w Minecrafcie.",
   "type": "module",
   "license": "MIT",
   "keywords": [
