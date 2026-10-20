@@ -107,8 +107,7 @@ export default function SettingsScreen({
             role="tab"
             aria-selected={tab === id}
             aria-controls={`settings-panel-${id}`}
-            className="mc-btn !py-1.5 !text-sm"
-            style={tab === id ? { background: 'linear-gradient(#8e98d6,#6c75b8)', color: '#ffffa0' } : undefined}
+            className="mc-tab flex-1"
             onClick={() => setTab(id)}
           >
             {label}
@@ -141,6 +140,19 @@ export default function SettingsScreen({
               Tryb Auto dobiera grafikę do urządzenia przy każdym uruchomieniu gry. Wskazówka na dziś: {PRESETS[auto].label.toLowerCase()}.
             </div>
           )}
+          {settings.quality !== 'low' && (
+            <button
+              className="mc-btn !py-2 !text-[14px]"
+              onClick={() => onChange(applyPreset({ ...settings, quality: 'low' }, 'low'))}
+              title="Najszybsze ustawienia: krótszy zasięg, mniej cząsteczek, limit 30 FPS"
+            >
+              Tryb wydajności – jedno kliknięcie
+            </button>
+          )}
+          <div className="border border-white/10 bg-black/30 p-2 text-[11px] leading-snug text-white/60">
+            <b className="text-green-300">2.8 „Płynny świat”:</b> indeks świateł zamiast skanowania chunków, cząstki w jednym obiekcie,
+            współdzielone ikony przedmiotów i budżet czasu na przebudowę terenu. Gorąca klawisz <b>F3</b> pokaże FPS i liczbę kresleń.
+          </div>
           <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={14} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => set({ renderDistance: v })} />
           <OptionSlider label="Rozdzielczość" value={settings.pixelRatio} min={0.75} max={2} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ pixelRatio: v })} />
           <OptionSlider label="Cząsteczki i deszcz" value={settings.particles} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ particles: v })} />

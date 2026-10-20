@@ -20,7 +20,7 @@ import {
   type Settings,
 } from '../utils/settings';
 import { resolveControlMode } from '../utils/input';
-import { detectDeviceProfile, type DeviceProfile } from '../utils/performance';
+import { detectDeviceProfile, recommendPreset, PRESETS, type DeviceProfile } from '../utils/performance';
 
 export type { Settings };
 
@@ -61,6 +61,8 @@ export default function GameView({
   const profile: DeviceProfile = useMemo(() => detectDeviceProfile(), []);
   // Ustawienia efektywne (Auto = dobierane do urządzenia).
   const effective = useMemo(() => effectiveSettings(settings, profile), [settings, profile]);
+  // 2.8: budżet budowania chunków zależy od presetu – silnik dostaje go wprost.
+  const gfxPreset = PRESETS[effective.quality === 'auto' ? recommendPreset(profile) : effective.quality];
 
   useEffect(() => {
     const s = effectiveSettings(loadSettings(), profile);
@@ -126,6 +128,9 @@ export default function GameView({
       clouds: effective.clouds,
       dynamicResolution: effective.dynamicResolution,
       fpsCap: effective.fpsCap,
+      chunkBudgetMs: gfxPreset.chunkBudgetMs,
+      chunksPerFrame: gfxPreset.chunksPerFrame,
+      unloadMargin: gfxPreset.unloadMargin,
       autoJump: effective.autoJump,
       haptics: effective.haptics,
       viewBobbing: effective.viewBobbing,

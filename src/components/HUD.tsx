@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { HUDState } from '../game/engine';
 import { displayName, durabilityMax } from '../game/items';
 import { enchList } from '../game/enchant';
-import { GAME_VERSION } from '../utils/version';
+import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 
 const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
 const BUBBLE = ['.XXX.', 'X..XX', 'X.XXX', 'XXXXX', '.XXX.'];
@@ -73,13 +73,15 @@ export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<
         return (
           <div
             key={i}
-            className="hotbar-slot relative flex items-center justify-center"
+            className={`hotbar-slot relative flex items-center justify-center ${i === hud.selected ? 'is-selected' : ''}`}
+            aria-current={i === hud.selected ? 'true' : undefined}
             onPointerDown={onSelect ? (e) => { e.stopPropagation(); onSelect(i); } : undefined}
             style={{
-              border: i === hud.selected ? '3px solid #fff' : '3px solid #6b6b6b',
-              outline: i === hud.selected ? '2px solid #000' : 'none',
-              zIndex: i === hud.selected ? 2 : 1,
-              background: 'rgba(40,40,40,0.35)',
+              border: i === hud.selected ? '3px solid #fdfdfd' : '3px solid #5d5d5d',
+              outline: '2px solid #000',
+              background: i === hud.selected
+                ? 'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(90,90,90,0.45))'
+                : 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(20,20,20,0.35))',
               margin: -1,
               cursor: onSelect ? 'pointer' : undefined,
               touchAction: onSelect ? 'none' : undefined,
@@ -159,9 +161,12 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
 
       {/* crosshair */}
       {!hud.zoom && (
-        <div className="absolute left-1/2 top-1/2" style={{ transform: 'translate(-50%,-50%)', mixBlendMode: 'difference' }}>
-          <div style={{ position: 'absolute', left: -10, top: -1.5, width: 20, height: 3, background: '#fff' }} />
-          <div style={{ position: 'absolute', left: -1.5, top: -10, width: 3, height: 20, background: '#fff' }} />
+        <div className="absolute left-1/2 top-1/2" style={{ transform: 'translate(-50%,-50%)' }} aria-hidden="true">
+          <div style={{ position: 'absolute', left: -10, top: -2.5, width: 20, height: 5, background: 'rgba(0,0,0,0.55)' }} />
+          <div style={{ position: 'absolute', left: -2.5, top: -10, width: 5, height: 20, background: 'rgba(0,0,0,0.55)' }} />
+          <div style={{ position: 'absolute', left: -9, top: -1.5, width: 18, height: 3, background: '#fff', boxShadow: '0 0 3px rgba(0,0,0,0.5)' }} />
+          <div style={{ position: 'absolute', left: -1.5, top: -9, width: 3, height: 18, background: '#fff', boxShadow: '0 0 3px rgba(0,0,0,0.5)' }} />
+          <div style={{ position: 'absolute', left: -1, top: -1, width: 2, height: 2, background: 'rgba(255,255,255,0.85)' }} />
         </div>
       )}
 
@@ -192,7 +197,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft ${GAME_VERSION} (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
+            `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}” (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -231,13 +236,26 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
       )}
 
       {hud.minimap && (
-        <canvas
-          ref={mapRef}
-          width={96}
-          height={96}
-          className="pixelated absolute right-3 top-3 hidden sm:block"
-          style={{ width: 112, height: 112, border: '2px solid #111', boxShadow: '0 0 0 2px rgba(255,255,255,0.25)', background: '#111' }}
-        />
+        <div className="absolute right-3 top-3 hidden flex-col items-center gap-1 sm:flex">
+          <div className="relative" style={{ filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.55))' }}>
+            <canvas
+              ref={mapRef}
+              width={96}
+              height={96}
+              className="pixelated block"
+              style={{ width: 116, height: 116, border: '2px solid #0b0b0b', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)', background: '#0c0e12' }}
+            />
+            <span
+              className="pointer-events-none absolute left-1/2 top-0.5 -translate-x-1/2 text-[10px] font-bold"
+              style={{ color: '#ffe066', textShadow: '1px 1px 0 #000' }}
+            >
+              N
+            </span>
+          </div>
+          <div className="px-1.5 py-0.5 text-[10px] leading-none mc-text" style={{ background: 'rgba(0,0,0,0.5)' }}>
+            {hud.biome} · dzień {hud.day}
+          </div>
+        </div>
       )}
 
       {/* chat messages */}
@@ -283,12 +301,17 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
           </div>
         )}
         {hud.mode === 'survival' && (
-          <div className="mb-1 flex w-full flex-col gap-0.5 px-1" style={{ width: 'min(432px, calc(100vw - 16px))' }}>
-            <div className="flex justify-between">
+          <div className="mb-1 flex w-full flex-col gap-1" style={{ width: 'min(432px, calc(100vw - 16px))' }}>
+            <div className="hud-strip flex items-center justify-between" style={{ borderRadius: 1 }}>
               <div className="flex gap-[2px]">{hearts}</div>
               <div className="flex flex-row-reverse gap-[2px]">{hud.air < hud.maxAir - 0.01 ? bubbles : null}</div>
             </div>
-            <div className="flex gap-[2px]">{drums}</div>
+            <div className="hud-strip flex items-center justify-between" style={{ borderRadius: 1 }}>
+              <div className="flex gap-[2px]">{drums}</div>
+              <span className="px-1 text-[10px] leading-none opacity-70">
+                {Math.round(hud.health)}/20
+              </span>
+            </div>
           </div>
         )}
         {hud.heldHint && <div className="mb-1 text-sm text-yellow-200 mc-text">{hud.heldHint}</div>}
@@ -302,11 +325,22 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         )}
         {hud.sprinting && <div className="mb-1 text-sm opacity-80 mc-text">Sprint</div>}
         {hud.mode === 'creative' && hud.flying && <div className="mb-1 text-sm opacity-80 mc-text">✈ Latanie</div>}
-        <div className="relative mb-1 h-[10px]" style={{ width: 'min(432px, calc(100vw - 16px))', background: 'rgba(0,0,0,0.55)', border: '2px solid #1a1a1a' }}>
-          <div className="h-full" style={{ width: `${Math.round(hud.xpFrac * 100)}%`, background: '#7ec850' }} />
+        <div
+          className="relative mb-1 h-[12px] overflow-hidden"
+          style={{
+            width: 'min(432px, calc(100vw - 16px))',
+            background: 'linear-gradient(180deg, #101510, #1d241d)',
+            border: '2px solid #0a0a0a',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
+          }}
+        >
+          <div
+            className="h-full transition-[width] duration-200"
+            style={{ width: `${Math.round(hud.xpFrac * 100)}%`, background: 'linear-gradient(180deg, #a6e86a, #5cae3a)' }}
+          />
           <span
             className="absolute inset-0 flex items-center justify-center text-[11px] font-bold"
-            style={{ color: '#ffe97a', textShadow: '1px 1px 0 #000, -1px -1px 0 #000' }}
+            style={{ color: '#f4ffcc', textShadow: '1px 1px 0 #000, -1px -1px 0 #000' }}
           >
             {hud.level}
           </span>
@@ -315,11 +349,12 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
       </div>
 
       {hud.loading < 0.5 && (
-        <div className="absolute left-1/2 top-24 -translate-x-1/2 text-center mc-text">
-          <div className="text-lg">Generowanie terenu... {Math.round(hud.loading * 100)}%</div>
-          <div className="mx-auto mt-1 h-2 w-64 bg-black/60">
-            <div className="h-full bg-green-500" style={{ width: `${hud.loading * 100}%` }} />
+        <div className="absolute left-1/2 top-1/4 -translate-x-1/2 text-center mc-text">
+          <div className="text-lg">Przygotowuję świat… {Math.round(hud.loading * 100)}%</div>
+          <div className="mx-auto mt-1.5 h-2 w-72 overflow-hidden border border-black/60 bg-black/60">
+            <div className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-[width] duration-200" style={{ width: `${hud.loading * 100}%` }} />
           </div>
+          <div className="mt-1 text-xs opacity-70">Chunki budują się w tle – możesz już się rozejrzeć</div>
         </div>
       )}
     </div>

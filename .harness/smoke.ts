@@ -90,6 +90,7 @@ import { slabFullBlock } from '../src/game/blocks';
 import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
+import { GAME_VERSION, GAME_RELEASE_NAME, RELEASE_HIGHLIGHTS } from '../src/utils/version';
 import { filterRecipes } from '../src/utils/recipeSearch';
 
 // ------------------------------------------------------------------- runner
@@ -2962,6 +2963,90 @@ section('2.5: wielka naprawa sterowania');
   check('one-shot keys never repeat', !(Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has('KeyE'));
   check('drop key never repeats', !(Game as unknown as { HOLD_KEYS: Set<string> }).HOLD_KEYS.has('KeyQ'));
 }
+
+// ============================================ 2.8 „Płynny świat” – silnik
+section('2.8: płynny świat (chunki, światło, cząstki)');
+{
+  const w = new World(777);
+  const c = w.getChunk(0, 0);
+  let emitBlocks = 0;
+  for (let i = 0; i < c.data.length; i++) if (EMIT[c.data[i]]) emitBlocks++;
+  eq('light index lists every emitter in the chunk', c.emitters.length, emitBlocks);
+
+  const gy = w.heightAt(2, 2);
+  const torchIndex = ((gy + 1) * CS + 2) * CS + 2;
+  w.setBlock(2, gy + 1, 2, B.TORCH);
+  check('placing a torch updates the light index', w.getChunk(0, 0).emitters.includes(torchIndex));
+  w.setBlock(2, gy + 1, 2, B.AIR);
+  check('removing the torch cleans the light index', !w.getChunk(0, 0).emitters.includes(torchIndex));
+
+  // mesh for a tiny flat world: water top faces carry the wave flag
+  const fw = new World(5, true);
+  fw.getChunk(0, 0);
+  for (let x = 0; x < 3; x++) for (let z = 0; z < 3; z++) fw.setBlock(x, FLAT_H + 1, z, B.WATER);
+  const geos = fw.buildMesh(fw.getChunk(0, 0));
+  const solidGeo = geos[0];
+  const waterGeo = geos[2];
+  check('chunk meshes keep position/uv/colour/light attributes',
+    !!solidGeo.getAttribute('position') && !!solidGeo.getAttribute('uv') &&
+    !!solidGeo.getAttribute('color') && !!solidGeo.getAttribute('aBlock'));
+  check('every chunk mesh has the wave attribute', !!solidGeo.getAttribute('aWave'));
+  const waveAttr = waterGeo.getAttribute('aWave');
+  let waveVerts = 0;
+  if (waveAttr) for (let i = 0; i < waveAttr.count; i++) if ((waveAttr.getX(i) as number) > 0.5) waveVerts++;
+  check('only the water surface is animated', waveVerts > 0);
+  const index = solidGeo.getIndex();
+  check('small chunks use compact 16-bit indices', !!index && index.array instanceof Uint16Array);
+  check('flat chunk really has solid geometry', (solidGeo.getAttribute('position')?.count ?? 0) > 0);
+
+  // new neighbours rebuild old meshes (no holes at chunk borders)
+  const nw = new World(42);
+  const c00 = nw.getChunk(0, 0);
+  c00.built = true;
+  nw.dirty.clear();
+  nw.getChunk(1, 0);
+  check('a new chunk marks a built neighbour for rebuild', nw.dirty.has('0,0'));
+
+  // releasing a chunk also drops the hot single-entry cache
+  const rx = 0, rz = 0;
+  eq('cached peek reads the chunk', nw.peekBlock(0, CH - 5, 0), c00.data[((CH - 5) * CS + 0) * CS + 0]);
+  nw.releaseChunk(rx, rz);
+  eq('released chunks read as stone', nw.peekBlock(0, CH - 5, 0), B.STONE);
+  check('a released chunk can be generated again', !!nw.getChunk(rx, rz));
+
+  // particles: one InstancedMesh per colour, no per-particle scene objects
+  type G = Record<string, any>;
+  const g = Object.create(Game.prototype) as G;
+  g.gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, clouds: true };
+  const sceneOps: string[] = [];
+  g.scene = { add: () => void sceneOps.push('add'), remove: () => void sceneOps.push('remove') };
+  g.particleGeo = new THREE.BoxGeometry(1, 1, 1);
+  g.particlePools = new Map();
+  g.particleDummy = new THREE.Object3D();
+  g.world = new World(3, true);
+  for (let x = 0; x < 4; x++) for (let z = 0; z < 4; z++) g.world.getChunk(0, 0);
+  g.spawnParticles(0.5, FLAT_H + 2, 0.5, B.GRASS, 12, 0.5);
+  const pool = [...g.particlePools.values()][0];
+  check('particles live in a single instanced mesh', !!pool && pool.mesh.isInstancedMesh === true);
+  eq('all spawned particles are queued', pool?.list.length, 12);
+  eq('spawning does not add one object per particle', sceneOps.filter((o) => o === 'add').length, 1);
+  g.updateParticles(0.05);
+  eq('live instances are drawn in one call', pool.mesh.count, 12);
+  for (let i = 0; i < 40; i++) g.updateParticles(0.05);
+  eq('particles expire without leaking', pool.mesh.count, 0);
+
+  // a second burst re-uses the same pool
+  g.spawnParticles(0.5, FLAT_H + 2, 0.5, B.GRASS, 4, 0.5);
+  eq('the pool is reused on the next burst', g.particlePools.size, 1);
+}
+
+section('2.8: wersja wydania');
+{
+  check('release label is 2.8', GAME_VERSION === '2.8');
+  check('release name is set', GAME_RELEASE_NAME === 'Płynny świat');
+  check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
+}
+
 
 // =================================================================== report
 console.log(`\n${'='.repeat(56)}`);

@@ -66,7 +66,7 @@ export const PRESETS: Record<PresetName, Preset> = {
   },
   medium: {
     label: 'Średnie',
-    renderDistance: 6,
+    renderDistance: 7,
     pixelRatio: 1.35,
     particles: 0.7,
     clouds: true,
@@ -78,7 +78,7 @@ export const PRESETS: Record<PresetName, Preset> = {
   },
   high: {
     label: 'Wysokie',
-    renderDistance: 8,
+    renderDistance: 9,
     pixelRatio: 2,
     particles: 1,
     clouds: true,

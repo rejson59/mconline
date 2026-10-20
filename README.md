@@ -1,6 +1,20 @@
-# BlockCraft 2.7 🟩
+# BlockCraft 2.8 🟩
 
-Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.7 „Nowe horyzonty”** rozbudowuje eksplorację o trzy nowe biomy, ich roślinność i nowe bloki. Gra działa na komputerach i urządzeniach dotykowych.
+Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.8 „Płynny świat”** to wydanie wydajnościowe i wizualne: szybsze budowanie terenu, lżejsze efekty, falująca woda, nowe niebo i odświeżony interfejs. Gra działa na komputerach i urządzeniach dotykowych.
+
+**Wersja 2.8 „Płynny świat”** – mniej zacięć, więcej klimatu:
+
+* **Chunki budują się w tle i nie przerywają gry.** Przebudowa terenu ma teraz własny **budżet czasu na klatkę** (domyślnie 0–12 ms zależnie od presetu): silnik kończy bieżący chunk, odkłada resztę na następną klatkę i nie zamraża sterowania. Podczas ładowania świata limit jest podwojony, więc pierwsze sekundy są krótsze, a ekran ładowania pokazuje realny postęp.
+* **Światło bez skanowania całego chunku.** Każdy chunk prowadzi **indeks emiterów** (pochodnie, ogniska, lawa, świecące bloki), aktualizowany przy stawianiu i burzeniu. Pętla świateł odwiedza tylko bloki, które naprawdę świecą – na dużych światach to nawet kilkadziesiąt razy mniej pracy na klatkę.
+* **Pojedyncze zapytania o blok są wielokrotnie tańsze.** `peekBlock` i `heightAt` korzystają z jednowpisowego cache ostatniego chunku, więc fizyka, moby i cząstki nie tworzą już tysięcy kluczy tekstowych „cx,cz” na sekundę.
+* **Cząstki w jednym obiekcie.** Zamiast setek osobnych meshy każdy kolor ma jedną `InstancedMesh` z własną pulą; wybuch, kopanie bloku i dym z ogniska to nadal **jedno kreslenie na kolor**, a cząstki są recyklingowane zamiast tworzone od zera.
+* **Lżejsze przedmioty na ziemi.** Ikony dropów współdzielą jedną geometrię i cztery materiały zamiast tworzyć nowe materiały przy każdym wyrzuceniu – mniej pracy dla sterownika i mniej śmieci w pamięci.
+* **Płynniejsza woda.** Górna tafla wody faluje w vertex shaderze (`aWave` + `uTime`), więc animacja nie kosztuje ani jednego przebudowania siatki. Efekt działa też w Netherze na lawie.
+* **Nowe niebo.** Kopuła nieba z czterostopniowym gradientem (od chłodnego zenitu po ciepły horyzont), słońce i księżyc na wspólnym kierunku, mocniejsze gwiazdy nocą oraz warstwowe chmury – wszystko bez alokacji w pętli klatki.
+* **Tekstury bez „kafelkowej” siatki.** Generator atlasu miesza teraz krawędzie kafli z ich przeciwległymi odpowiednikami, delikatnie podbija górne i lewe krawędzie oraz przyciemnia dolne i prawe. Bloki z przezroczystością (liście, szkło, rośliny) są pomijane, więc nie pojawiają się na nich obwódki.
+* **Odświeżony interfejs.** Nowe menu główne z kartami światów, wyszukiwaniem i sortowaniem, spójne przyciski (`mc-btn`), karty (`mc-card`), odznaki wersji i panele. Menu pauzy pokazuje **„Nowości w 2.8”**, ekran Opcji – jednym kliknięciem **tryb wydajności**, a HUD dostał czytelniejszy celownik, ramkę minimapy z kompasem, biomem i dniem, pasek doświadczenia z gradientem oraz licznik zdrowia.
+* **Minimapa liczona tylko wtedy, gdy coś się zmieniło.** Rysowanie 96×96 pikseli korzysta z numerycznego indeksu chunków i odcisku stanu (pozycja, obrót, suma rewizji chunków, wymiar, punkty podróży); bez zmian w świecie obraz nie jest liczony ponownie.
+* **Nowe testy.** Zestaw kontrolny sprawdza indeks świateł, atrybut fali tylko na powierzchni wody, kompaktowe indeksy 16-bitowe, przebudowę sąsiadów po dojściu nowego chunku, pule cząstek, cache zwalniania chunków oraz etykiety wydania 2.8.
 
 **Wersja 2.7 „Nowe horyzonty”**:
 - trzy nowe, generowane proceduralnie biomy: **Bagno**, **Sawanna** i **Dżungla**; ich rozmieszczenie jest stabilne dla ziarna świata,

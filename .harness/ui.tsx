@@ -143,13 +143,15 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows release 2.7', menu.includes('WERSJA 2.7') && menu.includes('Nowe horyzonty'));
+  check('main menu shows release 2.8', menu.includes('WERSJA 2.8') && menu.includes('Płynny świat'));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
   check('fullscreen button', menu.includes('Pełny ekran'));
   check('export/import buttons', menu.includes('Eksport zapisów') && menu.includes('Import zapisów'));
   check('menu background is a relative url', !menu.includes('url("/menu-bg.jpg'));
+  check('2.8 menu keeps the primary action', menu.includes('mc-btn-primary') && menu.includes('Nowy świat'));
+  check('2.8 menu shows the release highlight card', menu.includes('Witaj w BlockCraft') && menu.includes('Płynny świat'));
 
   const withSaves = renderToStaticMarkup(
     <MainMenu
@@ -183,6 +185,7 @@ section('menus: static render');
   check('pause menu offers resume and save', pause.includes('Wróć do gry') && pause.includes('Zapisz świat'));
   check('pause menu opens the adventure journal', pause.includes('Dziennik przygód'));
   check('pause menu counts achievements', pause.includes(`/${ACHIEVEMENTS.length}`));
+  check('2.8 pause menu announces the new release', pause.includes('Nowości w 2.8') && pause.includes('Płynny świat'));
 
   // 2.0: ekran opcji (zakładki, presety jakości, sterowanie dotykowe)
   const settingsHtml = renderToStaticMarkup(
@@ -207,6 +210,9 @@ section('menus: static render');
     <SettingsScreen settings={applyPreset(DEFAULT_SETTINGS, 'medium')} onChange={noop} onClose={noop} />
   );
   check('settings highlight the active preset', medium.includes('ring-yellow-300'));
+  // 2.8: szybki tryb wydajności i sekcja o optymalizacjach
+  check('2.8 settings offer a one-click performance mode', settingsHtml.includes('Tryb wydajności'));
+  check('2.8 settings explain the new optimisations', settingsHtml.includes('indeks świateł'));
 
   const ach = renderToStaticMarkup(<AchievementsPanel unlocked={['wood', 'diamond']} />);
   check('unlocked achievements are revealed', ach.includes('Pierwsze drewno') && ach.includes('Diamenty!'));
@@ -381,9 +387,9 @@ section('2.3/2.4: journal chapter and menus');
   check('controls document respawn key', controls.includes('Enter / R (ekran śmierci)'));
   check('controls document touch long-press in windows', controls.includes('przytrzymaj: połowa / jeden'));
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
-  check('the menu announces release 2.7', menu.includes('2.7'));
+  check('the menu announces release 2.8', menu.includes('2.8'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the 2.7 release', menu.includes('WERSJA 2.7'));
+  check('the menu names the 2.8 release', menu.includes('WERSJA 2.8'));
 }
 
 section('2.4: brewing rules');
@@ -555,6 +561,7 @@ try {
 } catch (e) {
   fail++;
   failures.push(`jsdom mount threw: ${(e as Error)?.message ?? e}`);
+  console.log((e as Error)?.stack);
 }
 
 // =================================================================== report

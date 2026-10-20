@@ -51,26 +51,44 @@ body {
   text-shadow: 2px 2px 0 #3f3f3f;
 }
 
+/* ------------------------------------------------------------------ 2.8
+   Odświeżony system przycisków: głębszy skos, delikatny blask przy najechaniu
+   i wyraźny stan aktywny. Wszystko nadal w duchu pikselowej grafiki. */
 .mc-btn {
   position: relative;
   display: block;
   width: 100%;
-  padding: 10px 16px;
+  padding: 11px 18px;
   font-family: 'Pixelify Sans', monospace;
   font-size: 18px;
-  color: #e0e0e0;
-  text-shadow: 2px 2px 0 #383838;
-  background: linear-gradient(#8b8b8b, #6d6d6d);
-  border: 2px solid #000;
-  box-shadow: inset 2px 2px 0 #aaaaaa, inset -2px -3px 0 #555555;
+  line-height: 1.2;
+  color: #f0f0f0;
+  text-shadow: 2px 2px 0 #2d2d2d;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(#8b8b8b, #6a6a6a);
+  border: 2px solid #0b0b0b;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.42),
+    inset -2px -3px 0 rgba(0, 0, 0, 0.42),
+    0 2px 0 #111,
+    0 6px 14px rgba(0, 0, 0, 0.28);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease, transform 90ms ease;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 90ms ease, letter-spacing 140ms ease;
   -webkit-tap-highlight-color: transparent;
+  letter-spacing: 0.01em;
 }
-.mc-btn:hover {
-  background: linear-gradient(#8e98d6, #6c75b8);
-  color: #ffffa0;
-  box-shadow: inset 2px 2px 0 #b4bdf3, inset -2px -3px 0 #4a528d;
+.mc-btn:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0) 46%),
+    linear-gradient(#8f9ade, #656eb5);
+  color: #fff9b0;
+  letter-spacing: 0.03em;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.5),
+    inset -2px -3px 0 rgba(0, 0, 0, 0.38),
+    0 2px 0 #111,
+    0 8px 20px rgba(108, 117, 184, 0.45);
 }
 .mc-btn:disabled {
   background: #2c2c2c;
@@ -79,27 +97,109 @@ body {
   cursor: default;
 }
 
+/* Główne wezwanie do działania – zielone, jak w klasycznym menu gry. */
+.mc-btn-primary {
+  color: #f4ffe9;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(#5aa54a, #35762c);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.45),
+    inset -2px -3px 0 rgba(0, 0, 0, 0.45),
+    0 2px 0 #132010,
+    0 8px 20px rgba(52, 120, 44, 0.45);
+  font-size: 20px;
+}
+.mc-btn-primary:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 48%),
+    linear-gradient(#6cbb59, #3f8a35);
+  color: #ffffff;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.5),
+    inset -2px -3px 0 rgba(0, 0, 0, 0.4),
+    0 2px 0 #132010,
+    0 10px 24px rgba(90, 180, 74, 0.5);
+}
+
 .mc-panel {
-  background: linear-gradient(145deg, #d2d2d2 0%, #c6c6c6 45%, #b8b8b8 100%);
+  background: linear-gradient(145deg, #d8d8d8 0%, #cacaca 45%, #b6b6b6 100%);
   border: 3px solid #000;
   box-shadow: inset 3px 3px 0 #ffffff, inset -3px -3px 0 #555555, 0 12px 32px rgba(0, 0, 0, 0.28);
   color: #3f3f3f;
 }
 
+/* 2.8: szklane karty menu – czytelne nad zdjęciem tła, bez utraty klimatu. */
+.mc-card {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(28, 34, 44, 0.82), rgba(12, 16, 22, 0.88));
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+}
+.mc-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%);
+}
+
+.mc-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 15px;
+  color: #ffe680;
+  text-shadow: 2px 2px 0 #2b2308;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.mc-card-title::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255, 230, 128, 0.5), rgba(255, 230, 128, 0));
+}
+
+/* Pozioma listwa nad menu – informacje o wersji i skróty. */
+.mc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #efffe4;
+  background: linear-gradient(#4e9a3f, #2f6b28);
+  border: 2px solid #12210e;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.35), 2px 2px 0 rgba(0, 0, 0, 0.55);
+}
+
 .mc-slot {
   width: 44px;
   height: 44px;
-  background: #8b8b8b;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.12)),
+    #8b8b8b;
   border-style: solid;
   border-width: 2px;
-  border-color: #373737 #ffffff #ffffff #373737;
+  border-color: #2f2f2f #f2f2f2 #f2f2f2 #2f2f2f;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 120ms ease, box-shadow 120ms ease;
 }
 .mc-slot:hover {
-  background: #a8a8a8;
+  background: #b3b3b3;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
 
 .mc-slot > img {
@@ -112,6 +212,23 @@ body {
   width: 48px;
   height: 48px;
   flex: 0 0 48px;
+  border-radius: 1px;
+  transition: transform 90ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+/* 2.8: wybrany slot „unosi się” i świeci – łatwiej go znaleźć kątem oka. */
+.hotbar-slot.is-selected {
+  transform: translateY(-4px);
+  z-index: 3;
+  box-shadow: 0 0 0 2px #000, 0 0 12px rgba(255, 255, 255, 0.55), 0 6px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Pasek życia/głodu na szklanym tle – czytelny na każdym biomie. */
+.hud-strip {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.3));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  padding: 4px 6px;
 }
 
 .hotbar-slot > img {
@@ -331,4 +448,51 @@ textarea {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* 2.8: dolna krawędź menu – delikatna sylwetka trawiastych wzgórz. */
+.menu-terrain {
+  background:
+    linear-gradient(180deg, rgba(32, 58, 26, 0) 0%, rgba(34, 62, 28, 0.55) 55%, rgba(22, 42, 20, 0.92) 100%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 14px, transparent 14px 28px);
+  mask-image: linear-gradient(180deg, transparent, #000 45%);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 45%);
+}
+
+/* Pasek postępu w stylu pikselowym (ekrany ładowania, warzenie, piec). */
+.mc-progress {
+  height: 10px;
+  background: linear-gradient(180deg, #0f120f, #1b211b);
+  border: 2px solid #000;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.mc-progress > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(180deg, #a6e86a, #5cae3a);
+  transition: width 120ms linear;
+}
+
+/* Karty ekwipunku i okien – spójne z nowym menu. */
+.mc-window {
+  background: linear-gradient(180deg, rgba(30, 34, 40, 0.97), rgba(18, 21, 26, 0.98));
+  border: 2px solid #0a0a0a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+.mc-tab {
+  padding: 6px 12px;
+  font-size: 14px;
+  color: #d8d8d8;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-bottom-color: transparent;
+  cursor: pointer;
+}
+.mc-tab[aria-selected='true'] {
+  color: #fff4a8;
+  background: linear-gradient(180deg, rgba(142, 152, 214, 0.55), rgba(108, 117, 184, 0.25));
+  border-color: rgba(255, 255, 255, 0.35);
 }
