@@ -53,7 +53,7 @@ export default function JournalScreen({ hud, unlocked, onClose }: { hud: HUDStat
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="journal-title">
-      <section className="mc-panel flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden p-3 sm:p-5">
+      <section className="mc-panel flex max-h-full w-full max-w-3xl flex-col overflow-hidden p-3 sm:p-5">
         <header className="mb-3 flex items-start justify-between gap-3">
           <div>
             <h2 id="journal-title" className="text-2xl font-bold text-[#303030]">Dziennik przygód</h2>

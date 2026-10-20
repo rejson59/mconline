@@ -17,6 +17,8 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.15: pełny ekran naprawiony – wszystko w kadrze!',
+  '2.15: kamera nie przybliża się po fullscreenie!',
   '2.14: auto-bicie – postać sama walczy!',
   '2.14: auto-skok – ani jednego zablokowania!',
   '2.14: auto-bicie włączysz w pauzie!',

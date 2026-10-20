@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { PRESETS, detectDeviceProfile, recommendPreset, describeProfile, type DeviceProfile } from '../src/utils/performance';
 import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, loadSettings, normalizeSettings, SETTINGS_KEY } from '../src/utils/settings';
+import { visibleViewport, onViewportChange, applyViewportHeight, pokeLayout } from '../src/utils/viewport';
 
 // ---------------------------------------------------------------- DOM stubs
 const ctx2d = {
@@ -3101,9 +3102,9 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 
 section('2.8/2.8.1: wersja wydania');
 {
-  // 2.14: wydanie dodaje auto-bicie wrogich mobów i auto-skok.
-  check('release label is the current line', GAME_VERSION.startsWith('2.14'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Auto-bicie');
+  // 2.15: wydanie naprawia pełny ekran na telefonie.
+  check('release label is the current line', GAME_VERSION.startsWith('2.15'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Stabilny ekran');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3117,8 +3118,11 @@ section('2.8/2.8.1: wersja wydania');
   check('2.12 highlights mention the phone controls', RELEASE_HIGHLIGHTS.some((h) => /telefon|dotyk/i.test(h.title + h.text)));
   check('2.13 highlights mention the Minecraft inventory', RELEASE_HIGHLIGHTS.some((h) => /ekwipun/i.test(h.title)));
   check('2.13 highlights mention forced landscape', RELEASE_HIGHLIGHTS.some((h) => /poziom/i.test(h.title) && /fullscreen|pełny ekran/i.test(h.text)));
-  check('2.14 highlights announce auto-attack', RELEASE_HIGHLIGHTS.some((h) => /auto-bicie/i.test(h.title)));
-  check('2.14 highlights explain the auto-jump fix', RELEASE_HIGHLIGHTS.some((h) => /auto-skok/i.test(h.title) && /schodek/i.test(h.text)));
+  check('2.14 highlights announce auto-attack', RELEASE_HIGHLIGHTS.some((h) => /auto-bicie/i.test(h.title + h.text)));
+  check('2.14 highlights explain the auto-jump fix', RELEASE_HIGHLIGHTS.some((h) => /auto-skok/i.test(h.title + h.text) && /schodek/i.test(h.text)));
+  check('2.15 highlights announce the fullscreen fix', RELEASE_HIGHLIGHTS.some((h) => /pełn/i.test(h.title) && /kamer|zoom/i.test(h.text)));
+  check('2.15 highlights mention touch buttons stay visible', RELEASE_HIGHLIGHTS.some((h) => /drążek|przycisk/i.test(h.text)));
+  check('2.15 highlights mention scrolling panels', RELEASE_HIGHLIGHTS.some((h) => /scroll|przewij/i.test(h.text)));
 }
 
 // ============================================ 2.13 „Jak w Minecrafcie”
@@ -3290,6 +3294,72 @@ section('2.14: auto-skok i auto-bicie');
   check('applyGfx wyłącza auto-bicie', gf.autoAttack === false);
 }
 
+section('2.15: pełny ekran nie psuje sterowania');
+{
+  // 2.15: powłoka przypięta do widocznego ekranu, a nie do `dvh`.
+  const css = readSource('src/index.css');
+  const app = readSource('src/App.tsx');
+  const engine = readSource('src/game/engine.ts');
+  const touch = readSource('src/components/TouchControls.tsx');
+  const screenSrc = readSource('src/utils/screen.ts');
+  const inventory = readSource('src/components/InventoryScreen.tsx');
+
+  check('powłoka jest przypięta do widocznego ekranu', /#root\s*\{[\s\S]{0,260}position: fixed;[\s\S]{0,160}inset: 0/.test(css));
+  check('powłoka ma zapas wysokości z JS', /--bc-app-height/.test(css) && /--bc-app-height/.test(readSource('src/utils/viewport.ts')));
+  check('nie ma już wysokości dvh na powłoce', !/#root\s*\{[\s\S]{0,220}height: 100dvh/.test(css));
+  check('pełny ekran ma własne, pełne wymiary', /#root:fullscreen[\s\S]{0,260}height: 100%/.test(css));
+  check('pełny ekran działa na powłoce aplikacji, nie na <html>', /getElementById\(APP_ROOT_ID\)/.test(screenSrc) && /APP_ROOT_ID = 'root'/.test(screenSrc));
+  check('po wejściu w pełny ekran wymiary są mierzone ponownie', /pokeLayout\(\)/.test(screenSrc));
+  check('blokada orientacji tylko na dotyku', /isTouchScreen\(\) \? await lockLandscape\(\) : false/.test(screenSrc));
+  check('aplikacja nasłuchuje zmian widocznego ekranu', /onViewportChange/.test(app) && /onViewportChange/.test(readSource('src/components/OrientationGuard.tsx')));
+
+  // Silnik: płótno dopasowuje się do kontenera i słucha pełnego ekranu.
+  check('silnik mierzy kontener zamiast polegać na resize', /syncViewport\(\)/.test(engine) && /clientWidth/.test(engine) && /clientHeight/.test(engine));
+  check('silnik reaguje na pełny ekran i orientację', /'fullscreenchange'/.test(engine) && /'orientationchange'/.test(engine));
+  check('silnik ma ResizeObserver na kontenerze', /new ResizeObserver/.test(engine) && /viewRO\.observe\(this\.container\)/.test(engine));
+  check('płótno wypełnia kontener przez CSS', /domElement\.style\.width = '100%'/.test(engine) && /domElement\.style\.height = '100%'/.test(engine));
+  check('rozmiar jest sprawdzany także w pętli gry', /this\.viewCheck = \(this\.viewCheck \+ 1\) % 30/.test(engine));
+  check('pomiar nie wyzeruje kamery przy zerowym kontenerze', /Math\.max\(1, Math\.round\(el\.clientHeight/.test(engine));
+
+  // Silnik na prototypie: zmiana rozmiaru kontenera (fullscreen/obrót)
+  // natychmiast poprawia bufor płótna i proporcje kamery.
+  const vp = Object.create(Game.prototype) as Record<string, any>;
+  const sizeCalls: [number, number, boolean][] = [];
+  vp.container = { clientWidth: 800, clientHeight: 400 };
+  vp.renderer = { setSize: (w: number, h: number, style: boolean) => sizeCalls.push([w, h, style]) };
+  vp.camera = { aspect: 0, updateProjectionMatrix: () => { vp.camera.projected = true; } };
+  vp.viewW = 0;
+  vp.viewH = 0;
+  vp.syncViewport();
+  eq('płótno dostaje realny rozmiar ekranu', sizeCalls[0]?.join(','), '800,400,false');
+  eq('kamera dostaje proporcje poziome', vp.camera.aspect, 2);
+  check('macierz kamery jest przeliczana', vp.camera.projected === true);
+  vp.syncViewport();
+  eq('bez zmiany rozmiaru nie ma zbędnego setSize', sizeCalls.length, 1);
+  vp.container = { clientWidth: 400, clientHeight: 800 };
+  vp.syncViewport();
+  eq('obrót do pionu zmienia proporcje kamery', vp.camera.aspect, 0.5);
+  eq('płótno jest mierzone ponownie', sizeCalls.length, 2);
+  vp.container = { clientWidth: 0, clientHeight: 0 };
+  vp.syncViewport();
+  check('zerowy kontener nie daje nieskończonych proporcji', Number.isFinite(vp.camera.aspect) && vp.camera.aspect > 0, String(vp.camera.aspect));
+
+  // Sterowanie dotykowe mierzy własną warstwę, a nie okno.
+  check('drążek i przyciski liczą się z warstwy gry', /getBoundingClientRect\(\)/.test(touch) && !/setVh\(window\.innerHeight\)/.test(touch));
+  check('warstwa gry jest mierzona obserwatorem rozmiaru', /ResizeObserver/.test(touch) && /ro\.observe\(el\)/.test(touch));
+  check('panele nie wychodzą poza powłokę', !/max-h-\[9\ddvh\]/.test(inventory) && /max-h-full/.test(inventory));
+
+  // Sam moduł viewportu: bezpieczny poza przeglądarką i zawsze sensowny.
+  check('pomiar ekranu poza przeglądarką nie rzuca', visibleViewport().width >= 0 && visibleViewport().height >= 0);
+  const off = onViewportChange(() => {});
+  check('nasłuch zmian ekranu można wyłączyć', typeof off === 'function');
+  off();
+  applyViewportHeight();
+  const poke = pokeLayout();
+  poke();
+  check('odświeżenie układu jest bezpieczne', true);
+}
+
 section('2.13: telefon gra się w poziomie');
 {
   check('pion poznajemy po wysokości większej od szerokości', isPortraitSize(360, 640));
@@ -3308,7 +3378,7 @@ section('2.13: telefon gra się w poziomie');
 
   const screenSrc = readSource('src/utils/screen.ts');
   check('blokujemy poziom przez Screen Orientation API', screenSrc.includes("lock!('landscape')"));
-  check('pełny ekran jest wymagany przed blokadą', /enterLandscapeMode[\s\S]{0,240}requestFullscreen[\s\S]{0,120}lockLandscape/.test(screenSrc));
+  check('pełny ekran jest wymagany przed blokadą', /enterLandscapeMode[\s\S]{0,700}requestFullscreen[\s\S]{0,500}lockLandscape/.test(screenSrc));
   const guard = readSource('src/components/OrientationGuard.tsx');
   check('nakładka każe obrócić telefon', guard.includes('Obróć telefon poziomo'));
   check('jest przycisk pełnego ekranu i poziomu', guard.includes('Pełny ekran i poziomo'));

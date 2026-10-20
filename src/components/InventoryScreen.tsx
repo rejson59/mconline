@@ -173,7 +173,7 @@ export default function InventoryScreen({
     >
       <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
 
-      <div className="flex max-h-[96dvh] max-w-[100vw] flex-wrap items-start justify-center gap-2 overflow-x-hidden overflow-y-auto px-1 pb-20 pt-1 sm:gap-3 sm:p-3 sm:pb-20">
+      <div className="flex max-h-full max-w-[100vw] flex-wrap items-start justify-center gap-2 overflow-x-hidden overflow-y-auto px-1 pb-20 pt-1 sm:gap-3 sm:p-3 sm:pb-20">
         {!creative ? (
           <div className="mc-panel mc-inv">
             <div className="mc-inv-head">

@@ -767,6 +767,13 @@ export class Game {
   private onHud: (h: HUDState) => void;
   private onUI: (s: UIState) => void;
   private listeners: [EventTarget, string, EventListener, AddEventListenerOptions | undefined][] = [];
+  /** 2.15: ostatni zmierzony rozmiar płótna (CSS px) – chroni przed zbędnym setSize. */
+  private viewW = 0;
+  private viewH = 0;
+  /** 2.15: obserwator rozmiaru kontenera (działa też w pełnym ekranie i po obrocie). */
+  private viewRO: ResizeObserver | null = null;
+  private viewTimers: number[] = [];
+  private viewCheck = 0;
 
   constructor(
     container: HTMLElement,
@@ -795,13 +802,23 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
     this.renderer.setPixelRatio(Math.min(this.basePixelRatio, 1.5));
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.domElement.style.display = 'block';
+    // 2.15: płótno zawsze wypełnia kontener przez CSS (100%), a bufor rysowania
+    // dopasowuje `syncViewport`. Dzięki temu nawet spóźniony `resize` po
+    // pełnym ekranie nie rozciąga obrazu (wcześniej wyglądał jak zoom kamery).
+    this.renderer.domElement.style.width = '100%';
+    this.renderer.domElement.style.height = '100%';
     container.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(this.fovBase, container.clientWidth / container.clientHeight, 0.05, 1200);
+    // 2.15: kontener bywa chwilowo zerowy (montowanie po fullscreenie) –
+    // dzielenie 0/0 dawało kamerze nieskończone proporcje i „zoom”.
+    const aspect0 = Math.max(1, container.clientWidth) / Math.max(1, container.clientHeight);
+    this.camera = new THREE.PerspectiveCamera(this.fovBase, aspect0, 0.05, 1200);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
+    // Pierwszy pomiar robimy dopiero z gotową kamerą – wcześniej nie ma czego
+    // przeliczać, a `setSize` i tak musi znać proporcje.
+    this.syncViewport();
     this.remoteGroup = new THREE.Group();
     this.remoteGroup.name = 'gracze';
     this.scene.add(this.remoteGroup);
@@ -1646,14 +1663,71 @@ export class Game {
     this.listeners.push([t, type, fn, opts]);
   }
 
+  /**
+   * 2.15: dopasowanie płótna do **faktycznego** rozmiaru kontenera.
+   *
+   * Kontener (`absolute inset-0` w powłoce przypiętej do widocznego ekranu)
+   * ma zawsze realny rozmiar – także po pełnym ekranie i wymuszonym obrocie.
+   * Zmieniamy bufor rysowania tylko wtedy, gdy rozmiar naprawdę się zmienił,
+   * więc metoda jest tania i można ją wołać często.
+   */
+  syncViewport() {
+    const el = this.container;
+    if (!el || !this.renderer || !this.camera) return;
+    const w = Math.max(1, Math.round(el.clientWidth || 0));
+    const h = Math.max(1, Math.round(el.clientHeight || 0));
+    if (w === this.viewW && h === this.viewH) return;
+    this.viewW = w;
+    this.viewH = h;
+    // updateStyle = false: rozmiar CSS trzyma `width/height: 100%`,
+    // więc przeglądarka nigdy nie rozciąga starego bufora.
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
+  /**
+   * 2.15: po pełnym ekranie/orientacji przeglądarki zgłaszają nowy rozmiar
+   * z opóźnieniem (animacja, obrót, pasek adresu). Mierzymy od razu i jeszcze
+   * kilka razy w ciągu sekundy – każdy pomiar jest darmowy, gdy nic się nie
+   * zmieniło.
+   */
+  scheduleViewportSync() {
+    this.syncViewport();
+    // Nie trzymamy nieskończonej listy timerów przy częstych zmianach paska
+    // adresu – wystarczy kilka ostatnich serii.
+    if (this.viewTimers.length > 64) {
+      for (const t of this.viewTimers) clearTimeout(t);
+      this.viewTimers = [];
+    }
+    for (const ms of [80, 200, 500, 1000]) {
+      this.viewTimers.push(window.setTimeout(() => this.syncViewport(), ms));
+    }
+  }
+
+  private bindViewport() {
+    const bump = () => this.scheduleViewportSync();
+    this.on(window, 'resize', bump);
+    this.on(window, 'orientationchange', bump);
+    this.on(document, 'fullscreenchange', bump);
+    this.on(document, 'webkitfullscreenchange', bump);
+    const vv = window.visualViewport;
+    if (vv) this.on(vv, 'resize', bump);
+    // ResizeObserver łapie zmiany, przy których `resize` nie leci (np. panel
+    // chowany przez Reacta albo nowy rozmiar tuż po wejściu w pełny ekran).
+    if (typeof ResizeObserver !== 'undefined') {
+      try {
+        this.viewRO = new ResizeObserver(() => this.syncViewport());
+        this.viewRO.observe(this.container);
+      } catch {
+        this.viewRO = null;
+      }
+    }
+  }
+
   private bindEvents() {
     const canvas = this.renderer.domElement;
-    this.on(window, 'resize', () => {
-      const w = this.container.clientWidth, h = this.container.clientHeight;
-      this.renderer.setSize(w, h);
-      this.camera.aspect = w / h;
-      this.camera.updateProjectionMatrix();
-    });
+    this.bindViewport();
     this.on(document, 'pointerlockchange', () => {
       const was = this.locked;
       this.locked = document.pointerLockElement === canvas;
@@ -4764,6 +4838,10 @@ export class Game {
     let dt = (now - this.lastTime) / 1000;
     this.lastTime = now;
     if (dt > 0.1) dt = 0.1;
+    // 2.15: awaryjna kontrola rozmiaru (2 odczyty layoutu na ~0,5 s) – gdyby
+    // przeglądarka zgubiła zdarzenie resize, obraz i tak wróci do proporcji.
+    this.viewCheck = (this.viewCheck + 1) % 30;
+    if (this.viewCheck === 0) this.syncViewport();
     this.fpsFrames++;
     this.fpsTime += dt;
     if (this.fpsTime >= 0.5) {
@@ -6229,6 +6307,10 @@ export class Game {
 
   dispose() {
     cancelAnimationFrame(this.raf);
+    this.viewRO?.disconnect();
+    this.viewRO = null;
+    for (const t of this.viewTimers) clearTimeout(t);
+    this.viewTimers = [];
     Sfx.setRain(false);
     for (const [t, type, fn, opts] of this.listeners) t.removeEventListener(type, fn, opts);
     if (document.pointerLockElement) document.exitPointerLock();

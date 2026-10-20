@@ -159,7 +159,7 @@ export function ChatInput({
 
         {/* Pełna lista komend – grupy, składnia, opis i gotowy przykład. */}
         {showList && (
-          <div ref={listRef} className="max-h-[46dvh] overflow-y-auto px-2 py-2" role="list">
+          <div ref={listRef} className="max-h-[min(460px,46vh)] overflow-y-auto px-2 py-2" role="list">
             {COMMAND_CATEGORIES.map((cat) => {
               const items = COMMANDS.filter((c) => c.category === cat.id);
               if (!items.length) return null;

@@ -9,6 +9,17 @@
  * telefon”, a gra nigdy nie rzuca wyjątkiem w konsoli.
  */
 
+import { pokeLayout } from './viewport';
+
+/**
+ * 2.15: pełny ekran uruchamiamy na powłoce aplikacji (`#root`), a nie na
+ * `<html>`. Powłoka ma wtedy własny, dokładnie zmierzony rozmiar, a style
+ * przeglądarki dla `html:fullscreen` nie mieszają się z naszym układem
+ * (wcześniej `dvh` na `<html>` potrafiło zostać w rozmiarze sprzed obrotu,
+ * przez co dolne przyciski i drążek lądowały poza ekranem).
+ */
+export const APP_ROOT_ID = 'root';
+
 type LockableOrientation = ScreenOrientation & {
   lock?: (orientation: 'landscape' | 'landscape-primary' | 'landscape-secondary' | 'portrait' | 'any') => Promise<void>;
   unlock?: () => void;
@@ -94,7 +105,11 @@ export function inFullscreen(): boolean {
 
 export async function requestFullscreen(): Promise<boolean> {
   if (typeof document === 'undefined') return false;
-  const el = (document.documentElement ?? document.body) as FullscreenElement | undefined;
+  // `document` w testach/headless bywa atrapą bez getElementById – sprawdzamy.
+  const shell = typeof document.getElementById === 'function'
+    ? (document.getElementById(APP_ROOT_ID) as FullscreenElement | null)
+    : null;
+  const el = (shell ?? document.documentElement ?? document.body) as FullscreenElement | undefined;
   if (!el) return false;
   try {
     if (el.requestFullscreen) {
@@ -134,7 +149,10 @@ export interface LandscapeResult {
  */
 export async function enterLandscapeMode(): Promise<LandscapeResult> {
   const fullscreen = inFullscreen() ? true : await requestFullscreen();
-  const locked = await lockLandscape();
+  // 2.15: blokada obrotu ma sens tylko na dotyku. Na komputerze
+  // `lock('landscape')` potrafi przewrócić okno i zepsuć proporcje obrazu.
+  const locked = isTouchScreen() ? await lockLandscape() : false;
+  pokeLayout();
   return { fullscreen, locked };
 }
 
@@ -143,6 +161,9 @@ export async function toggleFullscreenLandscape(): Promise<LandscapeResult> {
   if (inFullscreen()) {
     unlockOrientation();
     await exitFullscreen();
+    // 2.15: po wyjściu trzeba przebudzić pomiary – inaczej gra została
+    // z rozmiarem z pełnego ekranu (przybliżona kamera, przyciski poza kadrem).
+    pokeLayout();
     return { fullscreen: false, locked: false };
   }
   return enterLandscapeMode();
@@ -161,6 +182,8 @@ export function watchLandscape(onChange?: (fullscreen: boolean) => void): () => 
     wasFull = full;
     if (full) void lockLandscape();
     else unlockOrientation();
+    // 2.15: każda zmiana pełnego ekranu = nowy rozmiar viewportu.
+    pokeLayout();
     onChange?.(full);
   };
   document.addEventListener('fullscreenchange', sync);

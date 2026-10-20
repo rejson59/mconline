@@ -17,7 +17,7 @@ export default function WaypointsScreen({ game, onClose }: { game: Game; onClose
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 p-3">
-      <div className="flex max-h-[92dvh] w-full max-w-[520px] flex-col gap-3 overflow-hidden border-2 border-black bg-stone-800 p-4 shadow-xl">
+      <div className="flex max-h-full w-full max-w-[520px] flex-col gap-3 overflow-hidden border-2 border-black bg-stone-800 p-4 shadow-xl">
         <div>
           <h2 className="text-2xl text-yellow-200 mc-text">Punkty podróży</h2>
           <p className="text-sm text-gray-300">{label} · zaznacz bazę, kopalnię lub ciekawe miejsce i śledź je na HUD-zie oraz minimapie.</p>
