@@ -514,14 +514,15 @@ export function MainMenu({
                 <div className="mc-card-title">Witaj w BlockCraft</div>
                 <p className="text-sm leading-relaxed text-white/85">
                   Zbuduj pierwszy świat: zetnij drzewo, wytwórz kilof i zejdź do jaskiń po diamenty.
-                  Nowa wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> renderuje świat szybciej,
-                  ma gładsze niebo, wodę z falami i odświeżony interfejs.
+                  Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> poprawia światło:
+                  cień koron, ciepłe pochodnie i blask trzymanego przedmiotu. Liście są gęste, a chmury zmieniają
+                  się razem z pogodą.
                 </p>
                 <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-white/75 sm:grid-cols-2">
-                  <div className="border border-white/10 bg-black/30 p-2">⚡ Szybsze chunki i mniej zacięć</div>
-                  <div className="border border-white/10 bg-black/30 p-2">💧 Falująca woda i gradient nieba</div>
-                  <div className="border border-white/10 bg-black/30 p-2">🎒 Lżejsze cząstki i upuszczone przedmioty</div>
-                  <div className="border border-white/10 bg-black/30 p-2">🖥️ Nowy, czytelniejszy interfejs</div>
+                  <div className="border border-white/10 bg-black/30 p-2">☀️ Realistyczne światło i cień koron</div>
+                  <div className="border border-white/10 bg-black/30 p-2">🔦 Pochodnia w dłoni oświetla okolicę</div>
+                  <div className="border border-white/10 bg-black/30 p-2">🌿 Gęste liście bez dziur</div>
+                  <div className="border border-white/10 bg-black/30 p-2">🌧️ Chmury zgodne z pogodą</div>
                 </div>
                 <p className="mt-3 text-[11px] leading-snug text-white/50">
                   Zapisane światy (do 8) trzymamy w tej przeglądarce. Możesz je eksportować i importować jako pliki JSON.

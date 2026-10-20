@@ -798,6 +798,13 @@ export function buildAtlas(): AtlasResult {
     }
   }
 
+  // --------------------------------------------------------------- 2.8.1 „Światło i chmury”
+  // Liście są teraz pełnymi blokami (opaque), więc dziury w ich teksturze
+  // muszą zniknąć – inaczej w miejscu „przezroczystych” pikseli pojawiłaby
+  // się czerń. Każdy pusty piksel dostaje kolor sąsiada przyciemniony o 18%,
+  // dzięki czemu korona wygląda gęsto, ale wciąż ma rysunek liści.
+  densifyTiles([T.leaves, T.birch_leaves, T.jungle_leaves]);
+
   // --------------------------------------------------------------- 2.8 „Płynny świat”
   // Mikro-odetnienia: każdy nieprzezroczysty kafelek dostaje miękkie,
   // spójne krawędzie (przeciwległe piksele delikatnie się mieszają) oraz
@@ -849,6 +856,50 @@ export function buildAtlas(): AtlasResult {
   }
 
   return { canvas, icons, cracks };
+}
+
+/**
+ * 2.8.1: wypełnia dziury w kaflach liści. Piksele bez pokrycia dostają kolor
+ * najbliższego nieprzezroczystego sąsiada (przyciemniony), więc pełny blok
+ * liści nie ma czarnych plam, a sylwetka liścia pozostaje widoczna.
+ */
+function densifyTiles(tiles: number[]) {
+  const read = (tile: number, x: number, y: number): [number, number, number, number] => getPx(tile, x, y);
+  for (const tile of tiles) {
+    const src = new Uint8ClampedArray(TILE * TILE * 4);
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) {
+        const p = read(tile, x, y);
+        const o = (y * TILE + x) * 4;
+        src[o] = p[0]; src[o + 1] = p[1]; src[o + 2] = p[2]; src[o + 3] = p[3];
+      }
+    // Dwa przebiegi: pierwszy domyka większość dziur, drugi – resztę.
+    for (let pass = 0; pass < 2; pass++) {
+      for (let y = 0; y < TILE; y++)
+        for (let x = 0; x < TILE; x++) {
+          const i = (y * TILE + x) * 4;
+          if (src[i + 3] >= 128) continue;
+          let r = 0, g = 0, b = 0, n = 0;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= TILE || ny >= TILE) continue;
+              const j = (ny * TILE + nx) * 4;
+              if (src[j + 3] < 128) continue;
+              r += src[j]; g += src[j + 1]; b += src[j + 2]; n++;
+            }
+          const shade = 0.82;
+          const rr = n ? r / n : 60, gg = n ? g / n : 96, bb = n ? b / n : 40;
+          src[i] = rr * shade; src[i + 1] = gg * shade; src[i + 2] = bb * shade; src[i + 3] = 255;
+        }
+    }
+    for (let y = 0; y < TILE; y++)
+      for (let x = 0; x < TILE; x++) {
+        const i = (y * TILE + x) * 4;
+        if (src[i + 3] < 128) continue;
+        setPx(tile, x, y, src[i], src[i + 1], src[i + 2], src[i + 3]);
+      }
+  }
 }
 
 /** Czy kafelek jest w pełni nieprzezroczysty (bez dziur i półprzezroczystości). */

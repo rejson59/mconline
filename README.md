@@ -1,6 +1,18 @@
-# BlockCraft 2.8 🟩
+# BlockCraft 2.8.1 🟩
 
-Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.8 „Płynny świat”** to wydanie wydajnościowe i wizualne: szybsze budowanie terenu, lżejsze efekty, falująca woda, nowe niebo i odświeżony interfejs. Gra działa na komputerach i urządzeniach dotykowych.
+Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.8.1 „Światło i chmury”** poprawia to, co zgłosili gracze po 2.8: czarne drzewa, prześwitujące liście, płaskie światło i chmury niezgodne z pogodą. Gra działa na komputerach i urządzeniach dotykowych.
+
+**Wersja 2.8.1 „Światło i chmury”** – poprawki i realistyczne światło:
+
+* **Koniec z czarnymi drzewami.** Shader nie dzieli już koloru wierzchołka przez jasność nieba (przez co całe zacienienie było skracane do zera), a zacienienie nie jest już liczone podwójnie – wcześniej kolor wierzchołka mnożył się raz w swoim fragmencie, a drugi raz w standardowym `color_fragment`, więc cień szedł do trzeciej potęgi i las zlewał się w czerń. Teraz kolor wierzchołka to prawdziwe zacienienie (AO, kierunek ściany, ekspozycja na niebo), a noc ma **podłogę jasności** dopasowaną do jasności nieba. Cień korony nadal jest wyraźnie ciemniejszy – po prostu nie jest już czarny.
+* **Pochodnia w dłoni naprawdę świeci.** Trzymany przedmiot emitujący światło (pochodnia, latarnia, jasnogłaz, ognisko, grzyboświatło, zapalona lampa czerwonego kamienia) oświetla najbliższe bloki ciepłym, lekko migoczącym blaskiem w promieniu 9 klocków – także w jaskini i w Netherze. Blask pochodzi z oczu gracza i pada na to, na co patrzysz.
+* **Ciepłe światło bloków.** Pochodnie, lawa i ogniska dają teraz pomarańczowy odcień zamiast białego rozświetlenia, a ich blask łagodnie wygasa (`sqrt` zamiast kwadratu). Dodano stałą, bardzo ciemną poświatę otoczenia, więc jaskinie są mroczne, ale nie są dziurą w ekranie.
+* **Cień korony zamiast smoły.** Światło nieba liczone jest teraz kolumnowo od góry: pełny blok odcina je całkowicie (jaskinie są ciemne, jak być powinno), a liście tłumią je stopniowo – po kilku blokach korony zostaje miękki, zielony półcień. Pień i dolne gałęzie przestały być czarnymi plamami, a cień pod drzewem nadal jest wyraźnie ciemniejszy od otwartej polany. Liście nie są już też pełnym okluderem AO, więc załomy korony nie zapadają się w czerń.
+* **Gęste liście bez dziur.** Liście (dębu, brzozy, akacji i dżungli) są nieprzezroczyste dla siatki: tekstura jest zagęszczana (puste piksele dostają kolor sąsiada), więc korona nie prześwituje i nie ma w niej czarnych ścianek. Wewnętrzne ścianki liści są cullowane, co dodatkowo oszczędza rysowanie w lasach.
+* **Mgła opowiada tę samą pogodę.** W deszczu mgła gęstnieje, ciemnieje i lekko sinieje razem z chmurami, więc horyzont nie zostaje jasny, gdy nad głową wisi burza.
+* **Chmury zgodne z pogodą.** Oprócz warstwy „ładnej” pogody jest druga, gęsta i niska warstwa burzowa. Gdy pada, podstawowe chmury ciemnieją i gęstnieją, dochodzi ciemna warstwa burzowa, a wiatr gna je ponad dwa razy szybciej. Nocą chmury są granatowe, a nie białe. Przejście pogody jest płynne (kilka sekund), bez skoku koloru i krycia.
+* **Lepszy start świata.** Nowy świat nie zaczyna się na czubku drzewa: gracz zawsze staje na prawdziwym gruncie. Wysokość kolumny ignoruje korony, więc deszcz, minimapa, moby i punkt odrodzenia widzą ziemię, a nie czubek liści.
+* **Nowe testy.** Zestaw kontrolny sprawdza model światła (południe, noc, cień korony, jaskinia, pochodnia), spadek światła trzymanego przedmiotu, aktualizację uniformu w silniku, wygląd chmur dla pogody i pory dnia, to, że wszystkie rodzaje liści są pełne, oraz – na prawdziwej siatce – że korona daje półcień, a kamienny strop prawdziwą ciemność.
 
 **Wersja 2.8 „Płynny świat”** – mniej zacięć, więcej klimatu:
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, EMIT, IS_OPAQUE, IS_SOLID, LAYER, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
+import { B, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
 import { tileUV } from './textures';
 import { CH, CS, FLAT_H, SEA } from './constants';
 import {
@@ -78,8 +78,11 @@ export class Chunk {
       this.heightMap[z * CS + x] = 0;
       return;
     }
+    // 2.8.1: korona drzewa nie jest gruntem – wysokość kolumny ma wskazywać
+    // ziemię (spawn, deszcz, minimapa), a nie czubek liści.
     for (let y = CH - 1; y >= 0; y--) {
-      if (IS_OPAQUE[this.data[idx(x, y, z)]]) {
+      const id = this.data[idx(x, y, z)];
+      if (IS_OPAQUE[id] && !IS_LEAFY[id]) {
         this.heightMap[z * CS + x] = y;
         return;
       }
@@ -101,6 +104,13 @@ const AO_CURVE = [0.45, 0.62, 0.8, 1.0];
 
 // Shared BFS scratch for buildMesh (single-threaded, never nested).
 let lightScratch: Uint8Array | null = null;
+// 2.8.1: bufor światła nieba – jedna kolumna na x/z z jednym blokiem zapasu.
+const SKY_PAD = 1;
+const SKY_W = CS + SKY_PAD * 2;
+const LEAF_SHADE = 0.9; // ile światła przechodzi przez jeden blok liści
+const MIN_SKY = 0.16; // pod gęstą koroną zostaje resztka światła
+const MIN_CAVE_SKY = 0.04; // pod pełnym blokiem zostaje tylko mrok jaskini
+let skyScratch: Float32Array | null = null;
 const qx: number[] = [];
 const qy: number[] = [];
 const qz: number[] = [];
@@ -947,12 +957,6 @@ export class World {
       const n = neigh[ncz * 3 + ncx];
       return n.data[idx(x - (ncx - 1) * CS, y, z - (ncz - 1) * CS)];
     };
-    const heightLocal = (x: number, z: number): number => {
-      const ncx = x < 0 ? 0 : x >= CS ? 2 : 1;
-      const ncz = z < 0 ? 0 : z >= CS ? 2 : 1;
-      const n = neigh[ncz * 3 + ncx];
-      return n.heightMap[(z - (ncz - 1) * CS) * CS + (x - (ncx - 1) * CS)];
-    };
     // Block light (torches, lava, lit furnaces) spread a few blocks across chunk borders.
     // The BFS scratch is module-level: buildMesh never runs re-entrantly, so a
     // rebuild only fills the buffer instead of allocating 128 KB every time.
@@ -1013,10 +1017,59 @@ export class World {
       if (y < 0 || y >= CH || x < -PAD || x >= CS + PAD || z < -PAD || z >= CS + PAD) return 0;
       return Lmap[lat(x, y, z)] / 15;
     };
+    // 2.8.1: światło nieba liczone kolumnowo, z góry na dół. Liście tłumią je
+    // stopniowo, więc pod koroną jest miękkie, zielone półcienie zamiast
+    // czarnego pnia; pełny blok odcina światło całkowicie (jaskinie).
+    const skyNeed = SKY_W * SKY_W * CH;
+    if (!skyScratch || skyScratch.length < skyNeed) skyScratch = new Float32Array(skyNeed);
+    else skyScratch.fill(0, 0, skyNeed);
+    const skyMap = skyScratch;
+    const skyIndex = (x: number, y: number, z: number) => (y * SKY_W + (z + SKY_PAD)) * SKY_W + (x + SKY_PAD);
+    if (c.nether) {
+      // 2.8.1: w Netherze nie ma nieba – otwarta jaskinia między podłogą
+      // a stropem liczy się jako „na zewnątrz”, inaczej strop gasi cały wymiar.
+      const floorLocal = (x: number, z: number): number => {
+        const ncx = x < 0 ? 0 : x >= CS ? 2 : 1;
+        const ncz = z < 0 ? 0 : z >= CS ? 2 : 1;
+        const n = neigh[ncz * 3 + ncx];
+        return n.heightMap[(z - (ncz - 1) * CS) * CS + (x - (ncx - 1) * CS)];
+      };
+      for (let z = -SKY_PAD; z < CS + SKY_PAD; z++) {
+        for (let x = -SKY_PAD; x < CS + SKY_PAD; x++) {
+          const fh = floorLocal(x, z);
+          for (let y = 0; y < CH; y++) {
+            skyMap[skyIndex(x, y, z)] = y >= fh ? 1 : Math.max(MIN_CAVE_SKY, Math.pow(0.72, fh - y));
+          }
+        }
+      }
+    } else {
+      for (let z = -SKY_PAD; z < CS + SKY_PAD; z++) {
+        for (let x = -SKY_PAD; x < CS + SKY_PAD; x++) {
+          let sky = 1;
+          for (let y = CH - 1; y >= 0; y--) {
+            skyMap[skyIndex(x, y, z)] = sky;
+            const id = get(x, y, z);
+            if (IS_OPAQUE[id]) {
+              if (IS_LEAFY[id]) {
+                sky *= LEAF_SHADE;
+                if (sky < MIN_SKY) sky = MIN_SKY;
+              } else {
+                // Poniżej pełnego bloku nie ma bezpośredniego nieba. Bufor
+                // zostaje wyzerowany (szybkie `fill` na starcie), a `skyLight`
+                // zamienia zero na nikłą poświatę jaskiń – bez zapisywania
+                // setek komórek na kolumnę.
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
     const skyLight = (x: number, y: number, z: number): number => {
-      const h = heightLocal(x, z);
-      if (y > h) return 1;
-      return Math.max(0.12, 1 - (h - y + 1) * 0.11);
+      if (y < 0) return 0;
+      if (y >= CH) return 1;
+      const v = skyMap[skyIndex(x, y, z)];
+      return v > 0 ? v : MIN_CAVE_SKY;
     };
 
     const maxY = Math.min(CH - 1, c.maxY);
@@ -1133,9 +1186,11 @@ export class World {
                 if (d[0] !== 0) { s1y = py ? 1 : -1; s2z = pz ? 1 : -1; }
                 else if (d[1] !== 0) { s1x = px ? 1 : -1; s2z = pz ? 1 : -1; }
                 else { s1x = px ? 1 : -1; s2y = py ? 1 : -1; }
-                const a = IS_OPAQUE[get(nx + s1x, ny + s1y, nz + s1z)];
-                const b = IS_OPAQUE[get(nx + s2x, ny + s2y, nz + s2z)];
-                const cc = IS_OPAQUE[get(nx + s1x + s2x, ny + s1y + s2y, nz + s1z + s2z)];
+                // 2.8.1: liście nie są pełnym okluderem – inaczej pień w koronie
+                // dostawał AO=0 i zlewał się w czarną plamę.
+                const a = OCCLUDES[get(nx + s1x, ny + s1y, nz + s1z)];
+                const b = OCCLUDES[get(nx + s2x, ny + s2y, nz + s2z)];
+                const cc = OCCLUDES[get(nx + s1x + s2x, ny + s1y + s2y, nz + s1z + s2z)];
                 ao = a && b ? 0 : 3 - (a + b + cc);
               }
               if (k === 0) ao0 = ao; else if (k === 1) ao1 = ao; else if (k === 2) ao2 = ao; else ao3 = ao;

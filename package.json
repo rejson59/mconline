@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.8.0",
-  "description": "BlockCraft 2.8 „Płynny świat” – polska gra sandboxowa w przeglądarce: szybsze chunki, instancjonowane cząstki, falująca woda, gradientowe niebo i odświeżony interfejs.",
+  "version": "2.8.1",
+  "description": "BlockCraft 2.8.1 „Światło i chmury” – polska gra sandboxowa w przeglądarce: realistyczne światło z cieniem koron, pochodnia oświetlająca okolicę, gęste liście i chmury zgodne z pogodą.",
   "type": "module",
   "license": "MIT",
   "keywords": [
