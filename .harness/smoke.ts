@@ -109,6 +109,23 @@ import { treeShape, trunkHeight, treeKindForBiome, type TreeKind } from '../src/
 import { densifyTileData, TILE as ATLAS_TILE, ATLAS_TILES, ATLAS_SIZE } from '../src/game/textures';
 import { COMMANDS, COMMAND_CATEGORIES, commandByName, searchCommands, applyCommandSuggestion } from '../src/game/commands';
 import { filterRecipes } from '../src/utils/recipeSearch';
+import {
+  NetSession,
+  createLocalLink,
+  normalizeRoom,
+  makeRoomCode,
+  encodeSignal,
+  decodeSignal,
+  sanitizeWorld,
+  sortPlayers,
+  nextHue,
+  POS_HZ,
+  PEER_TIMEOUT,
+  MAX_SNAPSHOT_EDITS,
+  decodeMessage,
+  type NetEdit,
+  type NetLink,
+} from '../src/game/net';
 
 // ------------------------------------------------------------------- runner
 let pass = 0;
@@ -3061,14 +3078,16 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 
 section('2.8/2.8.1: wersja wydania');
 {
-  // 2.9: wydanie odmienia wygląd gry – etykieta musi być aktualna.
-  check('release label is the current line', GAME_VERSION.startsWith('2.9'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Nowy wygląd' || GAME_RELEASE_NAME === 'Zdrowe drzewa');
+  // 2.10: wydanie dodaje grę razem – etykieta musi być aktualna.
+  check('release label is the current line', GAME_VERSION.startsWith('2.10'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Gra razem');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
-  check('2.9 highlights mention the mobile inventory', RELEASE_HIGHLIGHTS.some((h) => /ekwipun/i.test(h.title)));
-  check('2.9 highlights mention the command list', RELEASE_HIGHLIGHTS.some((h) => /komend/i.test(h.title)));
+  check('2.9 highlights mention the mobile inventory', RELEASE_HIGHLIGHTS.some((h) => /ekwipun/i.test(h.title + h.text)));
+  check('2.9 highlights mention the command list', RELEASE_HIGHLIGHTS.some((h) => /komend/i.test(h.title + h.text)));
+  check('2.10 highlights mention multiplayer', RELEASE_HIGHLIGHTS.some((h) => /gra razem|multiplayer|razem/i.test(h.title)));
+  check('2.10 highlights explain the no-server setup', RELEASE_HIGHLIGHTS.some((h) => /bez serwera|serwera/i.test(h.title + h.text)));
 }
 
 
@@ -3423,6 +3442,318 @@ section('2.8.2: chmury płyną spokojnie');
   check('wind picks up by less than a third in rain', rain.drift <= clear.drift * 1.3);
   check('storm layer sits below the fair-weather layer', rain.stormAltitude < rain.altitude);
   check('cloud layers stay in the sky, not at head height', clear.altitude > 100 && rain.stormAltitude > 100);
+}
+
+
+// ============================================================== 2.10: multiplayer
+section('2.10: protokół sieciowy (bez serwera)');
+{
+  /** Kanał w pamięci – dwa końce, wiadomości trafiają tylko do drugiego. */
+  function bridge() {
+    const state = { a: true, b: true };
+    const a: NetLink = {
+      get connected() { return state.a; },
+      label: 'test A',
+      send: (d) => queueMicrotask(() => bSession?.ingest(d)),
+      close: () => { state.a = false; },
+    };
+    const b: NetLink = {
+      get connected() { return state.b; },
+      label: 'test B',
+      send: (d) => queueMicrotask(() => aSession?.ingest(d)),
+      close: () => { state.b = false; },
+    };
+    let aSession: NetSession | null = null;
+    let bSession: NetSession | null = null;
+    return {
+      hostLink: a,
+      guestLink: b,
+      bindHost: (s: NetSession) => { aSession = s; },
+      bindGuest: (s: NetSession) => { bSession = s; },
+    };
+  }
+
+  eq('kody pokoju normalizują się do małych liter', normalizeRoom('  Las-123 '), 'las-123');
+  eq('polskie znaki w kodzie pokoju są sprowadzane do łaciny', normalizeRoom('Łąka_Żółta!'), 'laka-zolta');
+  check('pusty kod pokoju jest odrzucany', normalizeRoom('   ') === '');
+  const code = makeRoomCode();
+  check('losowy kod pokoju ma sensowny kształt', /^[a-z]+-\d{3}$/.test(code), code);
+  check('każdy kod pokoju jest inny', new Set(Array.from({ length: 20 }, makeRoomCode)).size > 10);
+
+  // Sygnalizacja WebRTC: SDP pakujemy w base64url, żeby dało się wkleić w czat.
+  const sdp = 'v=0\r\no=- 123 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\n';
+  const encoded = encodeSignal({ v: 1, sdp, type: 'offer' });
+  check('kod zaproszenia nie zawiera znaków psujących wklejanie', /^[A-Za-z0-9_-]+$/.test(encoded), encoded.slice(0, 24));
+  const decoded = decodeSignal<{ sdp: string; type: string }>(encoded);
+  eq('SDP wraca bez zmian', decoded?.sdp, sdp);
+  eq('typ sygnalizacji wraca bez zmian', decoded?.type, 'offer');
+  eq('śmieci nie są udawanym kodem', decodeSignal('to-nie-jest-kod'), null);
+  eq('ucięty kod jest odrzucany', decodeSignal(encoded.slice(0, 12)), null);
+
+  // --- handshake: gość → hello → gospodarz → welcome z migawką świata
+  const br = bridge();
+  const host = new NetSession({ role: 'host', name: 'Ala', transport: 'local', id: 'host-1' });
+  const guest = new NetSession({ role: 'guest', name: 'Bob', transport: 'local', id: 'guest-1' });
+  br.bindHost(host);
+  br.bindGuest(guest);
+  host.setWorld({ seed: 4242, mode: 'creative', worldType: 'flat', name: 'Wspólny', time: 0.4, day: 3, weather: 'rain' });
+  host.sendEdits([{ x: 1, y: 2, z: 3, id: 5, d: 'o' }]);
+  check('gospodarz pamięta własne zmiany bloków', host.snapshot().edits?.length === 1);
+  host.attach(br.hostLink);
+  guest.attach(br.guestLink);
+
+  const readyBox: { world: ReturnType<NetSession['snapshot']> | null } = { world: null };
+  guest.onReady = (w) => { readyBox.world = w; };
+  const chat: string[] = [];
+  guest.onChat = (name, text) => chat.push(`${name}: ${text}`);
+
+  guest.tick();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  check('gość dostaje migawkę świata', !!readyBox.world);
+  eq('seed jest ten sam', readyBox.world?.seed, 4242);
+  eq('tryb jest ten sam', readyBox.world?.mode, 'creative');
+  eq('typ terenu jest ten sam', readyBox.world?.worldType, 'flat');
+  eq('pora dnia jest ta sama', readyBox.world?.time, 0.4);
+  eq('pogoda jest ta sama', readyBox.world?.weather, 'rain');
+  eq('zmiany bloków sprzed dołączenia są odtworzone', readyBox.world?.edits?.length, 1);
+  eq('gość widzi dwóch graczy', guest.players.length, 2);
+  check('własny wpis jest pierwszy na liście', guest.players[0].self === true, guest.players.map((p) => p.name).join(','));
+  eq('gospodarz zna nazwę gościa', host.players.find((p) => p.id === 'guest-1')?.name, 'Bob');
+  check('gospodarz i gość mają różne kolory', host.players.find((p) => p.id === 'guest-1')!.hue !== host.players.find((p) => p.id === 'host-1')!.hue);
+
+  // --- zmiany bloków: gość → gospodarz → drugi gość
+  const guest2 = new NetSession({ role: 'guest', name: 'Cyt', transport: 'local', id: 'guest-2' });
+  const br2 = bridge();
+  br2.bindHost(host);
+  br2.bindGuest(guest2);
+  guest2.attach(br2.guestLink);
+  // gospodarz ma tylko jeden kanał w tym teście, więc podpinamy drugi „na boku”
+  // — sprawdzamy samą trasę edytów przez `relay` na poziomie protokołu.
+  const got: NetEdit[] = [];
+  const visitorGone: string[] = [];
+  let guestStatus = '';
+  let guestWeather = '';
+  guest.onStatus = (_st, err) => { if (err) guestStatus = err; };
+  guest.onMessage = (m) => {
+    if (m.t === 'edits') got.push(...m.list);
+    if (m.t === 'bye') visitorGone.push(m.from);
+    if (m.t === 'state') guestWeather = m.weather;
+  };
+  const hostGot: NetEdit[] = [];
+  host.onMessage = (m) => { if (m.t === 'edits') hostGot.push(...m.list); };
+
+  host.ingest(JSON.stringify({ t: 'edits', from: 'guest-2', to: 'host', list: [{ x: 9, y: 8, z: 7, id: 12 }] }));
+  await Promise.resolve();
+  await Promise.resolve();
+  check('gospodarz przyjmuje edyt gościa', hostGot.length === 1 && hostGot[0].id === 12);
+  check('gospodarz przekazuje edyt dalej', got.length === 1 && got[0].x === 9);
+  eq('edyt zapamiętany w migawce dla nowych graczy', host.snapshot().edits?.length, 2);
+  eq('ten sam blok nadpisuje starszy wpis', host.snapshot().edits?.filter((e) => e.x === 9).length, 1);
+
+  // --- pogoda i czas z gospodarza
+  host.sendState({ time: 0.75, day: 5, weather: 'rain' });
+  await Promise.resolve();
+  await Promise.resolve();
+  eq('zmiana pogody dociera od razu', guestWeather, 'rain');
+  eq('migawka zapamiętuje nową porę dnia', host.snapshot().day, 5);
+  eq('migawka pamięta pogodę', host.snapshot().weather, 'rain');
+
+  // --- czat
+  host.ingest(JSON.stringify({ t: 'chat', from: 'guest-2', to: 'host', name: 'Cyt', text: 'Cześć!' }));
+  await Promise.resolve();
+  await Promise.resolve();
+  eq('czat dociera do gospodarza', chat[0], 'Cyt: Cześć!');
+
+  // --- wyjście innego gościa nie kończy sesji
+  visitorGone.length = 0;
+  host.ingest(JSON.stringify({ t: 'bye', from: 'guest-2', to: '*' }));
+  await Promise.resolve();
+  await Promise.resolve();
+  check('gospodarz przekazuje „bye” pozostałym gościom', visitorGone.includes('guest-2'), visitorGone.join(','));
+  check('gość nie traktuje wyjścia kolegi jak koniec gry', !/gospodarz zakończył/i.test(guestStatus));
+
+  // --- ping/pong i timeout
+  eq('pozycje wysyłane są 10 razy na sekundę', POS_HZ, 10);
+  check('timeout gracza jest dłuższy niż interwał pozycji', PEER_TIMEOUT * 1000 > 1000 / POS_HZ);
+  const t0 = Date.now();
+  host.tick(t0);
+  const guestSeen = host.players.find((p) => p.id === 'guest-1');
+  check('gość jest widoczny przed timeoutem', !!guestSeen);
+  const gone: string[] = [];
+  host.onMessage = (m) => { if (m.t === 'bye') gone.push(m.from); };
+  host.tick(t0 + (PEER_TIMEOUT + 1) * 1000);
+  check('milczący gracz wypada z sesji', !host.players.some((p) => p.id === 'guest-1'));
+  check('pozostali dostają informację o wyjściu', gone.includes('guest-1'), gone.join(','));
+
+  // --- gość bez gospodarza zgłasza błąd po 6 s
+  const lonely = new NetSession({ role: 'guest', name: 'Sam', transport: 'local', id: 'guest-x' });
+  const noop: NetLink = { connected: true, label: 'cisza', send: () => {}, close: () => {} };
+  let lonelyErr = '';
+  lonely.onStatus = (_st, err) => { if (err) lonelyErr = err; };
+  lonely.attach(noop);
+  const ts = Date.now();
+  lonely.tick(ts);
+  check('brak gospodarza przez chwilę nie jest błędem', lonelyErr === '');
+  lonely.tick(ts + 7000);
+  check('brak gospodarza po 6 s daje czytelny błąd', /nie znaleziono gospodarza/i.test(lonelyErr), lonelyErr);
+
+  // --- walidacja danych z sieci
+  eq('śmieci nie są wiadomością', decodeMessage('{"t":123}'), null);
+  eq('nie-JSON jest odrzucany', decodeMessage('hej'), null);
+  eq('wiadomość bez nadawcy jest odrzucana', decodeMessage('{"t":"hello"}'), null);
+  check('poprawna wiadomość przechodzi', decodeMessage('{"t":"hello","from":"a","name":"A","hue":0}')?.t === 'hello');
+  const bigFrame = JSON.stringify({ t: 'welcome', from: 'h', to: 'g', world: { seed: 1, edits: Array.from({ length: 20_000 }, (_, i) => ({ x: i, y: 1, z: 1, id: 2 })) }, players: [] });
+  check('migawka 20 000 zmian mieści się w limicie ramki', bigFrame.length > 200_000 && decodeMessage(bigFrame)?.t === 'welcome', String(bigFrame.length));
+
+  eq('sanitizeWorld odrzuca brak seeda', sanitizeWorld({ mode: 'creative' }), null);
+  eq('sanitizeWorld odrzuca null', sanitizeWorld(null), null);
+  const clean = sanitizeWorld({ seed: -77, mode: 'nonsense', worldType: 'x', time: 9, day: -4, weather: 'snow', edits: [{ x: 1, y: 2, z: 3, id: 4 }, { x: 'a' }] });
+  eq('seed jest brany po wartości bezwzględnej', clean?.seed, 77);
+  eq('nieznany tryb spada do przetrwania', clean?.mode, 'survival');
+  eq('nieznany teren spada do normalnego', clean?.worldType, 'normal');
+  check('pora dnia jest przycinana do zakresu', (clean?.time ?? -1) >= 0 && (clean?.time ?? 2) <= 1, String(clean?.time));
+  check('dzień nie może być ujemny', (clean?.day ?? 0) >= 1);
+  eq('nieznana pogoda to brak deszczu', clean?.weather, 'clear');
+  eq('błędne edyty są odrzucane', clean?.edits?.length, 1);
+  eq('sanitizeWorld gubi „started”', sanitizeWorld({ seed: 1, started: true })?.started, true);
+  eq('brak „started” to fałsz', sanitizeWorld({ seed: 1 })?.started, false);
+  const withSpawn = sanitizeWorld({ seed: 1, spawn: { x: 10.7, y: 64.2, z: -3.9, d: 'o' } });
+  eq('pozycja gospodarza jest zaokrąglana', withSpawn?.spawn?.x, 10);
+  eq('wysokość startu jest przycinana do świata', sanitizeWorld({ seed: 1, spawn: { x: 0, y: 900, z: 0 } })?.spawn?.y, 255);
+  eq('wymiar startu domyślnie nadświat', withSpawn?.spawn?.d, 'o');
+  eq('brak sensownej pozycji = brak spawnu', sanitizeWorld({ seed: 1, spawn: { x: 'a', y: 1, z: 1 } })?.spawn, undefined);
+  const many = sanitizeWorld({ seed: 1, edits: Array.from({ length: MAX_SNAPSHOT_EDITS + 50 }, (_, i) => ({ x: i, y: 1, z: 1, id: 2 })) });
+  eq('migawka ma ograniczoną długość', many?.edits?.length, MAX_SNAPSHOT_EDITS);
+
+  const roster = sortPlayers([
+    { id: 'b', name: 'B', hue: 10, ping: 20 },
+    { id: 'me', name: 'Ja', hue: 20, ping: 5 },
+    { id: 'a', name: 'A', hue: 30, ping: 10 },
+  ], 'me');
+  eq('własny wpis jest zawsze pierwszy', roster[0].id, 'me');
+  eq('sortPlayers oznacza własny wpis', roster[0].self, true);
+  check('nextHue nie daje koloru sąsiada', nextHue([{ id: 'x', name: 'X', hue: 0, ping: 0 }]) !== 0);
+
+  // --- transport lokalny na prawdziwym BroadcastChannel (Node 22 ma go w tle).
+  const rawA: string[] = [];
+  const rawB: string[] = [];
+  const la = createLocalLink('test-room', (d) => rawA.push(d));
+  const lb = createLocalLink('test-room', (d) => rawB.push(d));
+  la.send('cześć');
+  lb.send('hej');
+  await new Promise((r) => setTimeout(r, 30));
+  check('BroadcastChannel dostarcza wiadomości do drugiej karty', rawB.includes('cześć'), rawB.join('|'));
+  check('BroadcastChannel nie odbija wiadomości do nadawcy', !rawA.includes('cześć'), rawA.join('|'));
+  check('drugi koniec też wysyła', rawA.includes('hej'), rawA.join('|'));
+  la.close();
+  lb.close();
+
+  // Pełny handshake dwoma sesjami na prawdziwym kanale.
+  const hA = new NetSession({ role: 'host', name: 'Ala', transport: 'local', id: 'real-host' });
+  const gA = new NetSession({ role: 'guest', name: 'Bob', transport: 'local', id: 'real-guest' });
+  hA.setWorld({ seed: 9001, mode: 'survival', worldType: 'normal', name: 'Kanał', time: 0.5, day: 2, weather: 'clear' });
+  const linkH = createLocalLink('real-room', (d) => hA.ingest(d));
+  const linkG = createLocalLink('real-room', (d) => gA.ingest(d));
+  const box: { world: ReturnType<NetSession['snapshot']> | null } = { world: null };
+  gA.onReady = (w) => { box.world = w; };
+  hA.attach(linkH);
+  gA.attach(linkG);
+  for (let i = 0; i < 20 && !box.world; i++) {
+    gA.tick();
+    await new Promise((r) => setTimeout(r, 15));
+  }
+  eq('handshake przechodzi przez prawdziwy kanał', box.world?.seed, 9001);
+  check('gość trafia na listę gospodarza', hA.players.some((p) => p.name === 'Bob'), hA.players.map((p) => p.name).join(','));
+
+  // Gospodarz wchodzi do świata – gość już w poczekalni dostaje start.
+  let starts = 0;
+  gA.onStart = () => { starts++; };
+  hA.startWorld();
+  for (let i = 0; i < 10 && starts === 0; i++) await new Promise((r) => setTimeout(r, 15));
+  eq('„start” dociera do gościa w poczekalni', starts, 1);
+  eq('migawka zapamiętuje start świata', hA.snapshot().started, true);
+
+  // Spóźniony gość dostaje start razem z migawką.
+  const gB = new NetSession({ role: 'guest', name: 'Cyt', transport: 'local', id: 'real-guest-2' });
+  const lB = createLocalLink('real-room', (d) => gB.ingest(d));
+  let lateStart = 0;
+  gB.onStart = () => { lateStart++; };
+  gB.attach(lB);
+  for (let i = 0; i < 20 && lateStart === 0; i++) {
+    gB.tick();
+    await new Promise((r) => setTimeout(r, 15));
+  }
+  eq('gość dołączający po starcie wchodzi od razu', lateStart, 1);
+  gB.close();
+  hA.close();
+  gA.close();
+}
+
+section('2.10: multiplayer wpięty w grę');
+{
+  const engine = readSource('src/game/engine.ts');
+  const world = readSource('src/game/world.ts');
+  const hud = readSource('src/components/HUD.tsx');
+  const mp = readSource('src/components/MultiplayerScreen.tsx');
+  const app = readSource('src/App.tsx');
+
+  check('świat powiadamia o zmianach bloków', /onEdit\??\.\(x, y, z, id\)/.test(world));
+  check('silnik wysyła pozycję co 1/POS_HZ', /1 \/ POS_HZ/.test(engine));
+  check('silnik synchronizuje oba wymiary', /onEdit = hook\('o'\)/.test(engine) && /onEdit = hook\('n'\)/.test(engine));
+  check('silnik nie zapętla własnych edytów', /netApplying/.test(engine));
+  eq('sesję zamyka tylko dispose', (engine.match(/this\.net\?\.close\(/g) ?? []).length, 1);
+  check('dispose zamyka sesję', /dispose\(\)[\s\S]{0,1400}this\.net\?\.close\(/.test(engine));
+  check('zmiana wymiaru chowa awatary zamiast zrywać sesję', /Awatary są przywiązane do współrzędnych wymiaru/.test(engine));
+  check('silnik nie zapisuje sesji sieciowej do slotów', /if \(this\.net\) return;/.test(engine));
+  check('silnik odtwarza migawkę zmian od gospodarza', /applyNetEdits\(net\.world\.edits\)/.test(engine));
+  check('silnik rysuje awatary innych graczy', /makeAvatar/.test(engine));
+  check('gość startuje obok gospodarza', /net\.world\.spawn/.test(engine));
+  check('gospodarz publikuje swoją pozycję w migawce', /spawn: \{ x: Math\.round\(p\.x\)/.test(engine));
+  check('silnik ma etykiety z nazwami graczy', /fillText\(name\.slice\(0, 16\)/.test(engine));
+  check('HUD pokazuje obsadę sesji', /hud\.players/.test(hud));
+  check('HUD pokazuje ping graczy', /p\.ping/.test(hud));
+  check('poczekalnia ma tryb tej samej przeglądarki', /createLocalLink/.test(mp));
+  check('poczekalnia ma tryb przez internet', /createRtcHost/.test(mp) && /createRtcGuest/.test(mp));
+  check('poczekalnia kopiuje kody jednym przyciskiem', /navigator\.clipboard/.test(mp));
+  check('menu główne ma wejście do multiplayera', /Gra razem/.test(readSource('src/components/Menus.tsx')));
+  check('aplikacja przekazuje sesję do gry', /net=\{session\.net\}/.test(app));
+  check('aplikacja sprząta sesję po powrocie do menu', /setMultiplayer\(false\)/.test(app));
+
+  // Silnik na prototypie (bez WebGL): odtwarzanie edytów z sieci i czat.
+  const netg = Object.create(Game.prototype) as Record<string, any>;
+  netg.homeWorld = new World(3, true);
+  netg.netherWorld = new World(3, false, true);
+  netg.netApplying = false;
+  netg.netEditQueue = [];
+  netg.messages = [];
+  netg.message = (t: string) => netg.messages.push(t);
+  netg.netPlayers = [{ id: 'host-1', name: 'Ala', hue: 0, ping: 5 }];
+  netg.remotes = new Map();
+  netg.netName = 'Bob';
+  const sentChat: string[] = [];
+  netg.net = { id: 'guest-9', role: 'guest', name: 'Bob', say: (t: string) => sentChat.push(t) };
+
+  netg.onNetMessage({ t: 'edits', from: 'host-1', list: [{ x: 2, y: FLAT_H, z: 2, id: B.STONE, d: 'o' }] });
+  eq('edyt z sieci trafia do nadświatu', netg.homeWorld.getBlock(2, FLAT_H, 2), B.STONE);
+  check('edyt z sieci nie zawiesza flagi odtwarzania', netg.netApplying === false);
+
+  netg.onNetMessage({ t: 'edits', from: 'host-1', list: [{ x: 3, y: 40, z: 3, id: B.NETHERRACK, d: 'n' }] });
+  eq('edyt z Netheru trafia do właściwego wymiaru', netg.netherWorld.getBlock(3, 40, 3), B.NETHERRACK);
+  check('edyt z Netheru nie zmienia nadświatu', netg.homeWorld.getBlock(3, 40, 3) !== B.NETHERRACK, String(netg.homeWorld.getBlock(3, 40, 3)));
+
+  let hookCalls = 0;
+  netg.homeWorld.onEdit = () => { hookCalls++; };
+  netg.homeWorld.setBlock(5, FLAT_H + 1, 5, B.STONE);
+  eq('każda zmiana bloku woła hook sieci', hookCalls, 1);
+
+  netg.onNetMessage({ t: 'bye', from: 'host-1' });
+  check('wyjście gracza trafia do czatu', netg.messages.some((m: string) => /Ala opuścił grę/.test(m)), netg.messages.join('|'));
+
+  netg.command('Cześć wszystkim');
+  eq('czat w sesji leci do sieci', sentChat.join('|'), 'Cześć wszystkim');
+  check('czat w sesji widać też lokalnie', netg.messages.some((m: string) => m === '<Bob> Cześć wszystkim'), netg.messages.join('|'));
 }
 
 

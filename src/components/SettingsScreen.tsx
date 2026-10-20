@@ -150,10 +150,10 @@ export default function SettingsScreen({
             </button>
           )}
           <div className="border border-white/10 bg-black/30 p-2 text-[11px] leading-snug text-white/60">
-            <b className="text-green-300">2.9 „Nowy wygląd”:</b> nowy warsztat malarski – miękkie łaty szumu zamiast ziarna,
-            krótka paleta i światło z lewej góry; kora z bruzdami, deski z sękami, kiście liści, kamyki w żwirze. Okna gry mają
-            <b> duży przycisk zamknięcia</b> (działa na dotyku), a czat – <b>pełną listę komend</b> z podpowiedziami i przykładem.
-            Z 2.8.2 zostają: pełne korony drzew, kierunkowe słońce, księżycówka i pochodnia świecąca w dłoni na 14 bloków.
+            <b className="text-green-300">2.10 „Gra razem”:</b> multiplayer bez serwera – pokój w tej samej przeglądarce
+            (dwie karty) albo gra przez internet na kodach zaproszeń (WebRTC). Wspólny świat, czat, pora dnia i pogoda,
+            awatary graczy z nazwami oraz lista osób z pingiem w HUD. Z 2.9 zostają nowe tekstury, zamykanie okien dotykiem
+            i pełna lista komend; z 2.8.2 – pełne korony drzew, kierunkowe słońce i pochodnia w dłoni.
           </div>
           <OptionSlider label="Zasięg renderowania" value={settings.renderDistance} min={2} max={14} step={1} fmt={(v) => `${v} chunków`} onChange={(v) => set({ renderDistance: v })} />
           <OptionSlider label="Rozdzielczość" value={settings.pixelRatio} min={0.75} max={2} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ pixelRatio: v })} />

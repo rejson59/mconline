@@ -1,6 +1,17 @@
-# BlockCraft 2.9 🎨
+# BlockCraft 2.10 👥
 
-Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.9 „Nowy wygląd”** odpowiada na trzy uwagi z telefonu i z ekranu: ekwipunku nie dało się zamknąć dotykiem, komendy trzeba było znać na pamięć, a tekstury wyglądały jak z najstarszych wersji Minecrafta. Gra działa na komputerach i urządzeniach dotykowych.
+Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwera i bez zewnętrznych zasobów wymaganych do uruchomienia. Wydanie **2.10 „Gra razem”** dodaje **multiplayer**: można grać we wspólnym świecie w dwóch kartach tej samej przeglądarki albo przez internet, łącząc się bezpośrednio i wymieniając krótkie kody. Gra działa na komputerach i urządzeniach dotykowych, a hostowana jest statycznie na GitHub Pages – bez własnego backendu, WebSocketów i bazy danych.
+
+**Wersja 2.10 „Gra razem”** – multiplayer bez serwera:
+
+* **Nowy ekran „Gra razem”.** W menu głównym jest teraz przycisk otwierający poczekalnię. Ustawiasz nazwę, wybierasz **„Ta sama przeglądarka”** albo **„Przez internet”**, tworzysz sesję lub dołączasz do istniejącej. Cała komunikacja i etykiety są po polsku, a każdy krok ma duży przycisk – także na telefonie.
+* **Dwie karty, zero konfiguracji.** Tryb lokalny działa na `BroadcastChannel`: wystarczy otworzyć grę w drugiej karcie lub oknie i wpisać ten sam kod pokoju (np. `las-123`). Nie potrzeba internetu, konta ani serwera – wiadomości nie opuszczają przeglądarki.
+* **Internet na kodach zaproszeń.** Tryb P2P używa **WebRTC** z publicznym STUN-em: gospodarz kopiuje kod zaproszenia, gość wkleja go i odsyła krótki kod odpowiedzi – oba kopiują się jednym przyciskiem. Topologia gwiazdy: gospodarz przekazuje ruch między gośćmi, więc każdy łączy się tylko z nim.
+* **Wspólny świat bez przesyłania terenu.** Świat jest deterministyczny, więc nowy gracz dostaje tylko **ziarno, tryb, typ terenu, porę dnia, pogodę** oraz listę zmienionych bloków (do 20 000, z deduplikacją). Dzięki temu dołączenie jest natychmiastowe i nie zamula łącza.
+* **Zmiany bloków, czat i awatary.** Każde postawienie lub zburzenie bloku (w obu wymiarach) leci do pozostałych graczy, czat w grze działa jak zwykły czat, a nad innymi graczami widać **kolorowe awatary z nazwami**, animacją nóg i trzymanym blokiem. Pozycje idą 10 razy na sekundę i są wygładzane, więc ruch nie „skacze”.
+* **Dołączanie obok gospodarza.** Gość pojawia się kilka bloków od gospodarza (na ziemi), a nie w tym samym punkcie startowym – dzięki temu awatary nie nachodzą na kamerę. Gospodarz wysyła swoją pozycję w migawce świata.
+* **Lista graczy i ping w HUD.** W prawym górnym rogu widać liczbę osób, nazwy, kolory i opóźnienie; gospodarz ma oznaczenie. Milczący gracz wypada z sesji po 12 sekundach, a wyjście jest komunikowane w czacie.
+* **Bezpieczne dane z sieci.** Wiadomości przechodzą walidację (rozmiar, typy, zakresy) – śmieci nie mogą wywrócić generatora ani silnika. Sesje multiplayer **nie zapisują się** do slotów: świat należy do gospodarza, a gracz zawsze może wrócić do menu i dołączyć ponownie.
 
 **Wersja 2.9 „Nowy wygląd”** – tekstury, dotyk i komendy:
 
@@ -10,7 +21,7 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwer
 * **Tekstury w stylu współczesnego Minecrafta.** Nowy warsztat malarski w `textures.ts`: zamiast losowego ziarna na każdym pikselu – **wygładzony szum z zawijaniem** (kafelek łączy się sam ze sobą) w dwóch–trzech oktawach, krótka paleta kolorów i światło z lewego górnego rogu. Ziemia ma grudki i kamyki, trawa – nierówną krawędź i źdźbła, kamień – miękkie łaty i pęknięcia, bruk – zaokrąglone otoczaki z fugą, kora – pionowe bruzdy i sęki, deski – cztery klepki z własnym odcieniem i sękami, liście – nakładające się kiście z jasną górną i ciemną dolną krawędzią. Żwir to obtoczone kamyki, piasek drobne ziarno z muszelkami, a rudy mają grudki z błyskiem i cieniem zamiast przypadkowych kropek.
 * **Nowe generatory dla reszty bloków.** Wełna ma splot nitek, beton drobne kruszywo, lawa rozżarzone komórki na stygnącej skale, obsydian szkliste fioletowe refleksy, lód rysy i rozbłyski, a netherrack, end stone, kwarc, purpur i terakota wspólny generator skały (`rockTile`). Bloki magazynowe (żelazo, złoto, diament, lapis, szmaragd, kwarc) dostały siatkę sztabek z fazowaniem i błyskiem.
 * **Czytelne bloki.** Każdy nieprzezroczysty kafel dostaje delikatny skos (górna i lewa jaśniejsza, dolna i prawa ciemniejsza), a mieszanie krawędzi zmalało z 40% do 28% – wcześniej zjadało drobny rysunek (sęki, listki, żebra) i wszystkie bloki wyglądały podobnie. Generowanie atlasu zajmuje ok. 130 ms przy starcie, bez wpływu na klatki.
-* **Testy.** `npm test` to teraz **1181 kontroli + 153 testy UI**: katalog komend (spójność z silnikiem, wyszukiwanie po polsku, wstawianie do pola), przyciski zamknięcia w ekwipunku, czat (lista, przykłady, wysyłanie) oraz zgodność etykiet wydania 2.9.
+* **Testy.** `npm test` to teraz **1283 kontrole + 182 testy UI**: protokół i ekran multiplayera, katalog komend (spójność z silnikiem, wyszukiwanie po polsku, wstawianie do pola), przyciski zamknięcia w ekwipunku, czat (lista, przykłady, wysyłanie) oraz zgodność etykiet wydania 2.10.
 
 **Wersja 2.8.1 „Światło i chmury”** – poprawki i realistyczne światło:
 
@@ -230,6 +241,40 @@ Gra włącza pełne sterowanie kieszonkowe:
 
 ---
 
+## 👥 Gra razem (multiplayer)
+
+BlockCraft **nie ma serwera** – i nie potrzebuje go do wspólnej gry. Są dwa sposoby:
+
+### Ta sama przeglądarka (najprostszy)
+
+1. Menu główne → **Gra razem · multiplayer** → zakładka **Ta sama przeglądarka**.
+2. Jedna osoba wybiera **Utwórz sesję**, wpisuje nazwę i kod pokoju (albo klika **Losuj**), ustawia ziarno, tryb i teren, po czym klika **Otwórz pokój**.
+3. Druga osoba otwiera grę w **drugiej karcie lub oknie** (ten sam profil przeglądarki), przechodzi do **Gra razem**, wybiera **Dołącz** i wpisuje **ten sam kod**.
+4. Gospodarz klika **„Wejdź do świata i zaproś graczy”** – gość wchodzi automatycznie do tego samego świata.
+
+Zalety: zero konfiguracji, działa offline, idealne do sprawdzenia i do grania na jednym komputerze (dwie karty obok siebie). Ograniczenie: karty muszą być w tej samej przeglądarce (na tym samym profilu).
+
+### Przez internet (WebRTC)
+
+1. Gospodarz: **Przez internet → Utwórz sesję → 1. Utwórz kod zaproszenia**, a potem **Kopiuj kod** i wyślij go znajomemu (np. komunikatorem).
+2. Gość: **Przez internet → Dołącz**, wkleja kod zaproszenia i klika **2. Przyjmij zaproszenie**. Dostaje **kod odpowiedzi** – kopiuje go i odsyła gospodarzowi.
+3. Gospodarz wkleja kod odpowiedzi i klika **3. Połącz**.
+4. Gdy status zmieni się na „Połączono”, gospodarz wchodzi do świata, a gość dostaje start automatycznie.
+
+Połączenie jest **bezpośrednie** (P2P) – dane nie przechodzą przez żaden serwer gry; publiczny STUN Googla służy tylko do ustalenia adresów. Jeśli sieć blokuje P2P (NAT symetryczny, niektóre sieci firmowe i szkolne), użyj trybu lokalnego albo tej samej sieci Wi-Fi. Kody są długie, bo zawierają opis połączenia – najlepiej użyć przycisku **Kopiuj**, a na komputerze `Ctrl+V`.
+
+### Co jest wspólne, a co osobne
+
+* **Wspólne:** bloki (także w Netherze), czat, pora dnia, pogoda, lista graczy, awatary i ping.
+* **Osobne:** ekwipunek, zdrowie, głód, osiągnięcia, moby i ich zachowanie, minimapa, punkty podróży i ustawienia grafiki. Każdy gracz ma własny punkt odrodzenia.
+* **Zapis:** sesja multiplayer nie trafia do slotów zapisu – świat żyje w pamięci gospodarza. Po wyjściu z gry wróć do menu i dołącz ponownie.
+
+### Bezpieczeństwo
+
+Wiadomości z sieci są ograniczane (rozmiar ramki, liczba zmian bloków, zakresy współrzędnych i identyfikatorów), a nazwy graczy skracane. Kod pokoju to tylko etykieta kanału `BroadcastChannel` – nie jest hasłem, więc nie podawaj go osobom, którym nie ufasz; w trybie P2P dostęp ma wyłącznie osoba, która ma kod zaproszenia i odpowiedzi.
+
+---
+
 ## 🚀 Uruchomienie lokalne
 
 Wymagany **Node.js 20+**.
@@ -335,6 +380,7 @@ src/
   index.css                # styl w klimacie Minecrafta (Tailwind 4)
   components/
     Menus.tsx              # menu główne, pauza, ekran śmierci, czat
+    MultiplayerScreen.tsx  # 2.10: poczekalnia – pokoje lokalne i kody WebRTC
     SettingsScreen.tsx     # 2.0: opcje w zakładkach (grafika/sterowanie/dźwięk)
     JournalScreen.tsx      # 2.1: dziennik rozdziałów, cele i postęp
     GameView.tsx           # montowanie silnika, HUD, obsługa błędów
@@ -351,6 +397,7 @@ src/
     performance.ts         # 2.0: profil urządzenia i automat graficzny
   game/
     engine.ts              # pętla gry, gracz, interakcje, zapis
+    net.ts                 # 2.10: protokół sesji, BroadcastChannel, WebRTC (bez serwera)
     world.ts               # chunk'i, generator terenu, meshowanie
     village.ts             # generator wiosek (1.6)
     trading.ts             # zawody, oferty i poziomy mieszkańców (1.6)
@@ -384,6 +431,8 @@ npm run test:ui     # tylko test interfejsu React
 Runner `.harness/run.mjs` bundluje testy przez **esbuild** i uruchamia je w Node – nie trzeba niczego instalować dodatkowo.
 
 `.harness/smoke.ts` to asercje na czysty silnik: generowanie świata (także płaskiego), bloki, przedmioty, ekwipunek i receptury (w tym papier, książka, biblioteczka i stół zaklęć), **system zaklęć** (dopasowanie, oferty, pierścień biblioteczek, zużycie XP i lazurytu, dropy ze Szczęściem i Jedwabnym Dotykiem), fizyka, AI mobów, piece i skrzynie, zapisy, osiągnięcia, tekstury oraz algorytm opadania liści – wszystko bez WebGL. Od 2.3 dołączyły **tabele połowu i czas brań, receptury wędki/lornety/totemu, reguły kowadła (scalanie, nazwy, koszt poziomu) razem z kowadłem w silniku, Totem Ratowania w `damage()` oraz zestaw naprawionych błędów** (dzielenie stosu, ŚPM poza paskiem, import nazw, odbicie szlamu, obrażenia miecza, XP z rud).
+Od 2.10 dochodzi **protokół multiplayer**: normalizacja kodów pokoju, pakowanie SDP w kod base64url, handshake `hello → welcome` z migawką świata, przekazywanie edytów i czatu przez gospodarza, ping/pong, timeout gracza, walidacja danych z sieci, a także handshake na **prawdziwym `BroadcastChannel`** (Node ma go wbudowany, więc test nie potrzebuje przeglądarki). Kontrole źródła pilnują, że silnik wysyła pozycje, synchronizuje oba wymiary i nie zapętla własnych edytów.
+
 `.harness/ui.tsx` renderuje menu przez `react-dom/server` (bez przeglądarki), a gdy zainstalowany jest `jsdom` (`npm i --no-save jsdom`) montuje całe `<App/>`, przechodzi tworzenie świata i sprawdza, że brak WebGL kończy się czytelnym komunikatem, a nie białą stroną. Bez jsdom ten drugi krok jest pomijany. Od 2.3 renderuje też **ekran kowadła** (oba wejścia, wynik z kosztem, ostrzeżenie o braku poziomów, pole nazwy) i sprawdza **nowy rozdział dziennika przygód**.
 
 ## 🛠️ Rozwiązywanie problemów
@@ -396,6 +445,9 @@ Runner `.harness/run.mjs` bundluje testy przez **esbuild** i uruchamia je w Node
 | „Kliknij, aby kontynuować” i brak reakcji na klawiaturę | Kliknij w ekran gry – przeglądarka musi ponownie przejąć blokadę kursora. |
 | Zbyt wolno na słabym sprzęcie | Wybierz profil **Niskie** (albo zostaw **Auto**) w opcjach – zasięg, rozdzielczość, cząsteczki i limit FPS dostosują się same. Dynamiczna rozdzielczość dodatkowo utrzymuje płynność w ruchu. |
 | Chcę przenieść światy na inny komputer | Menu główne → *Eksport zapisów*, a na drugim urządzeniu *Import zapisów*. |
+| „Nie znaleziono gospodarza pokoju” | Sprawdź kod pokoju (małe litery, myślnik zamiast spacji) i upewnij się, że druga karta jest w **tej samej przeglądarce** i na tym samym profilu. |
+| Połączenie P2P wisi na „Łączę…” | Sieć blokuje ruch bezpośredni (NAT symetryczny, firewall). Spróbujcie w tej samej sieci Wi-Fi albo użyjcie trybu „Ta sama przeglądarka”. |
+| Gość nie widzi zmian bloków | Sprawdź, czy oba okna pokazują ten sam kod pokoju i czy gospodarz nie zamknął karty – sesja żyje tylko w jego przeglądarce. |
 
 ## 📜 Licencja
 

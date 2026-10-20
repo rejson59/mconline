@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.9.0",
-  "description": "BlockCraft 2.9 „Nowy wygląd” – polska gra sandboxowa w przeglądarce: nowe tekstury w stylu współczesnego Minecrafta, wygodny ekwipunek na telefonie i czat z listą komend.",
+  "version": "2.10.0",
+  "description": "BlockCraft 2.10 „Gra razem” – polska gra sandboxowa w przeglądarce: multiplayer bez serwera (dwie karty lub WebRTC), wspólny świat, czat i nowoczesne tekstury.",
   "type": "module",
   "license": "MIT",
   "keywords": [

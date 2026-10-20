@@ -15,6 +15,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.10: graj razem – bez serwera!',
+  'Otwórz pokój, podaj kod, budujcie razem!',
+  'Druga karta? Ten sam świat!',
   '2.9: tekstury jak w nowym Minecrafcie!',
   'Ekwipunek zamyka się na dotyku!',
   'Wpisz „/”, aby zobaczyć komendy!',
@@ -248,8 +251,11 @@ export function MainMenu({
   onDuplicate,
   onToggleFavorite,
   onImported,
+  onMultiplayer,
 }: {
   saves: WorldCard[];
+  /** 2.10: otwiera poczekalnię multiplayer. */
+  onMultiplayer?: () => void;
   /** called after a save file was imported so the list can refresh */
   onImported?: () => void;
   /** seed / mode taken from the URL hash (shareable world links) */
@@ -363,6 +369,11 @@ export function MainMenu({
                 <button className="mc-btn mc-btn-primary" onClick={() => setView('new')}>
                   {saves.length >= MAX_SAVES ? `Nowy świat · limit ${MAX_SAVES}` : 'Nowy świat'}
                 </button>
+                {onMultiplayer && (
+                  <button className="mc-btn" onClick={onMultiplayer}>
+                    Gra razem · multiplayer
+                  </button>
+                )}
                 <div className="grid grid-cols-2 gap-2.5">
                   <button className="mc-btn !px-2" onClick={() => setView('controls')}>
                     Sterowanie
@@ -516,13 +527,15 @@ export function MainMenu({
               <section aria-label="Witamy" className="mc-card p-4 sm:p-6">
                 <div className="mc-card-title">Witaj w BlockCraft</div>
                 <p className="text-sm leading-relaxed text-white/85">
-                  Zbuduj pierwszy świat: zetnij drzewo, wytwórz kilof i zejdź do jaskiń po diamenty.
-                  Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> odmienia wygląd gry:
-                  nowe tekstury bloków, wygodne okna zamykane na dotyku i czat z pełną listą komend.
+                  Zbuduj pierwszy świat sam albo razem z kimś: zetnij drzewo, wytwórz kilof i zejdź do jaskiń po diamenty.
+                  Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b> dodaje wspólną grę bez serwera –
+                  pokój w dwóch kartach albo zaproszenie przez internet. Zostają nowe tekstury, okna zamykane dotykiem i lista komend.
                 </p>
                 <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-white/75 sm:grid-cols-2">
+                  <div className="border border-white/10 bg-black/30 p-2">👥 Gra razem bez serwera</div>
+                  <div className="border border-white/10 bg-black/30 p-2">💻 Dwie karty, jeden świat</div>
+                  <div className="border border-white/10 bg-black/30 p-2">🌍 Zaproszenia przez internet</div>
                   <div className="border border-white/10 bg-black/30 p-2">🎨 Tekstury jak w nowym Minecrafcie</div>
-                  <div className="border border-white/10 bg-black/30 p-2">📱 Koniec z zablokowanym ekwipunkiem</div>
                   <div className="border border-white/10 bg-black/30 p-2">⌨️ Lista komend w czacie</div>
                   <div className="border border-white/10 bg-black/30 p-2">☀️ Światło i drzewa z 2.8.2</div>
                 </div>
@@ -645,10 +658,13 @@ export function PauseMenu({
   onCommands,
   onQuit,
   onSave,
+  session,
 }: {
   settings: Settings;
   shareUrl: string;
   worldName?: string;
+  /** 2.10: gra w sesji – chowamy zapis i pokazujemy obsadę. */
+  session?: { role: 'host' | 'guest'; players: { id: string; name: string; hue: number; ping: number; self?: boolean }[] } | null;
   unlocked?: string[];
   onSettings: (s: Settings) => void;
   onResume: () => void;
@@ -687,6 +703,23 @@ export function PauseMenu({
               <span className="mc-badge">v{GAME_VERSION}</span>
             </div>
             {worldName && <div className="-mt-1 mb-1 text-sm opacity-75">{worldName}</div>}
+            {session && (
+              <div className="mb-1 border border-white/15 bg-black/40 p-2 text-left text-xs">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-green-300">Gra razem · {session.players.length} os.</span>
+                  <span className="text-white/50">{session.role === 'host' ? 'gospodarz' : 'gość'}</span>
+                </div>
+                <div className="space-y-0.5">
+                  {session.players.map((p) => (
+                    <div key={p.id} className="flex items-center gap-1.5">
+                      <span style={{ width: 8, height: 8, background: `hsl(${p.hue} 60% 55%)`, border: '1px solid #000' }} />
+                      <span className={p.self ? 'text-yellow-200' : ''}>{p.name}{p.self ? ' (ty)' : ''}</span>
+                      <span className="ml-auto text-white/40">{p.ping >= 0 ? `${p.ping} ms` : '…'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <button className="mc-btn mc-btn-primary" onClick={onResume}>
               Wróć do gry
             </button>
@@ -714,26 +747,34 @@ export function PauseMenu({
                 Osiągnięcia ({unlocked?.length ?? 0}/{ACHIEVEMENTS.length})
               </button>
             </div>
-            <button
-              className="mc-btn"
-              onClick={() => {
-                onSave();
-                setSaved(true);
-                setTimeout(() => setSaved(false), 1500);
-              }}
-            >
-              {saved ? 'Zapisano ✓' : 'Zapisz świat'}
-            </button>
-            <div className="grid grid-cols-2 gap-2">
-              <button className="mc-btn !px-2 !py-2 !text-[15px]" onClick={copyLink}>
-                {copied ? 'Skopiowano ✓' : 'Kopiuj link'}
+            {!session && (
+              <button
+                className="mc-btn"
+                onClick={() => {
+                  onSave();
+                  setSaved(true);
+                  setTimeout(() => setSaved(false), 1500);
+                }}
+              >
+                {saved ? 'Zapisano ✓' : 'Zapisz świat'}
               </button>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              {!session ? (
+                <button className="mc-btn !px-2 !py-2 !text-[15px]" onClick={copyLink}>
+                  {copied ? 'Skopiowano ✓' : 'Kopiuj link'}
+                </button>
+              ) : (
+                <div className="flex items-center justify-center text-[11px] leading-tight text-white/40">
+                  Świat prowadzi gospodarz
+                </div>
+              )}
               <button className="mc-btn !px-2 !py-2 !text-[15px]" onClick={toggleFullscreen}>
                 Pełny ekran
               </button>
             </div>
             <button className="mc-btn" onClick={onQuit}>
-              Zapisz i wyjdź do menu
+              {session ? 'Wyjdź z sesji do menu' : 'Zapisz i wyjdź do menu'}
             </button>
             <div className="mt-1 border-t border-white/10 pt-1">
               <button

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Game, type GameMode, type HUDState, type SaveData, type UIState } from '../game/engine';
 import { setVolume } from '../game/audio';
 import HUD from './HUD';
+import type { NetSession } from '../game/net';
 import InventoryScreen from './InventoryScreen';
 import FurnaceScreen from './FurnaceScreen';
 import ChestScreen from './ChestScreen';
@@ -36,6 +37,7 @@ export default function GameView({
   worldName,
   worldType,
   onQuit,
+  net,
 }: {
   seed: number;
   mode: GameMode;
@@ -43,6 +45,8 @@ export default function GameView({
   worldId: string;
   worldName: string;
   worldType: WorldType;
+  /** 2.10: sesja multiplayer przekazana z poczekalni. */
+  net?: NetSession;
   onQuit: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -74,7 +78,7 @@ export default function GameView({
     try {
       game = new Game(
         containerRef.current!,
-        { seed, mode, save, renderDistance: s.renderDistance, worldId, worldName, worldType },
+        { seed, mode, save, renderDistance: s.renderDistance, worldId, worldName, worldType, net },
         { onHud: setHud, onUI: setUi }
       );
     } catch (e) {
@@ -329,6 +333,7 @@ export default function GameView({
             game.setUI('chat');
           }}
           onSave={() => game.save()}
+          session={hud?.players?.length ? { role: hud.netRole ?? 'host', players: hud.players } : null}
           onQuit={() => {
             game.save();
             onQuit();

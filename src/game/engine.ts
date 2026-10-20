@@ -27,6 +27,7 @@ const HELD_LIGHT_ITEMS: ReadonlySet<number> = new Set<number>([
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
 import { Inventory, RECIPES, type Stack } from './inventory';
 import { COMMANDS, commandByName, searchCommands } from './commands';
+import { NetSession, POS_HZ, type NetEdit, type NetMessage, type NetPlayer } from './net';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
@@ -81,7 +82,28 @@ export interface Waypoint {
   kind?: 'custom' | 'death';
 }
 
+/** 2.10: awatar zdalnego gracza w scenie (bloki + sprite z nazwą). */
+interface RemoteAvatar {
+  group: THREE.Group;
+  head: THREE.Mesh;
+  armL: THREE.Mesh;
+  legL: THREE.Mesh;
+  legR: THREE.Mesh;
+  hand: THREE.Mesh;
+  target: THREE.Vector3;
+  yaw: number;
+  pitch: number;
+  held: number;
+  heldId: number;
+  name: string;
+  walk: number;
+  seen: number;
+}
+
 export interface HUDState {
+  /** 2.10: gracze w sesji (własny wpis pierwszy; puste w trybie solo). */
+  players?: NetPlayer[];
+  netRole?: 'host' | 'guest' | null;
   hotbar: (Stack | null)[];
   selected: number;
   health: number;
@@ -573,6 +595,18 @@ export class Game {
   private stormBlend = 0;
   /** 2.8.1: światło trzymanego przedmiotu (pochodnia, latarnia…). */
   private heldLight: HeldLightState = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
+  /** 2.10: sesja multiplayer (null = gra jednoosobowa). */
+  net: NetSession | null = null;
+  /** Lista graczy do HUD (własny wpis na początku). */
+  netPlayers: NetPlayer[] = [];
+  private netEditQueue: NetEdit[] = [];
+  private netEditTimer = 0;
+  private netPosTimer = 0;
+  private netApplying = false;
+  private remotes = new Map<string, RemoteAvatar>();
+  private remoteGroup: THREE.Group | null = null;
+  private netName = 'Gracz';
+  private netHue = 0;
   /** 2.8.2: kierunkowe słońce – shader liczy nim `dot(ściana, słońce)`. */
   private sunState: SunState = { dir: new THREE.Vector3(0.35, 1, 0.2).normalize(), power: 0.8 };
   ambient: THREE.HemisphereLight;
@@ -713,7 +747,7 @@ export class Game {
 
   constructor(
     container: HTMLElement,
-    opts: { seed: number; mode: GameMode; save?: SaveData; renderDistance?: number; worldId?: string; worldName?: string; worldType?: 'normal' | 'flat' },
+    opts: { seed: number; mode: GameMode; save?: SaveData; renderDistance?: number; worldId?: string; worldName?: string; worldType?: 'normal' | 'flat'; net?: NetSession },
     cb: { onHud: (h: HUDState) => void; onUI: (s: UIState) => void }
   ) {
     this.container = container;
@@ -745,6 +779,9 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(this.fovBase, container.clientWidth / container.clientHeight, 0.05, 1200);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
+    this.remoteGroup = new THREE.Group();
+    this.remoteGroup.name = 'gracze';
+    this.scene.add(this.remoteGroup);
     this.scene.fog = new THREE.Fog(0x88bbff, 20, this.renderDistance * CS);
 
     const atlas = getAtlas();
@@ -974,11 +1011,313 @@ export class Game {
     this.minimapCanvas = document.createElement('canvas');
     this.minimapCanvas.width = this.minimapCanvas.height = 96;
     this.minimapCtx = this.minimapCanvas.getContext('2d')!;
+    if (opts.net) this.bindNet(opts.net);
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
     this.message(this.mode === 'creative'
       ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
       : `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}”: szukaj receptur po nazwie lub składniku; pełny ekwipunek nie gubi łupu. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.`);
+  }
+
+  // ------------------------------------------------------- 2.10: multiplayer
+
+  /**
+   * Podpina sesję sieciową do świata. Gość dostaje migawkę zmian bloków od
+   * gospodarza (terenu nie wysyłamy – świat jest deterministyczny), a każda
+   * dalsza zmiana leci do pozostałych graczy.
+   */
+  private bindNet(net: NetSession) {
+    this.net = net;
+    this.netName = net.name;
+    net.name = this.netName;
+    const me = net.players.find((p) => p.id === net.id);
+    this.netHue = me?.hue ?? 0;
+    this.netPlayers = net.players.length ? net.players : [{ id: net.id, name: net.name, hue: this.netHue, ping: -1, self: true }];
+
+    // Migawka świata od gospodarza.
+    if (net.role === 'guest' && net.world) {
+      this.netApplying = true;
+      try {
+        if (net.world.edits?.length) this.applyNetEdits(net.world.edits);
+        if (Number.isFinite(net.world.time)) this.time = net.world.time;
+        if (Number.isFinite(net.world.day)) this.day = Math.max(1, net.world.day);
+        this.applyNetWeather(net.world.weather);
+      } finally {
+        this.netApplying = false;
+      }
+      // Spóźniony gość pojawia się obok gospodarza, a nie w tym samym punkcie
+      // co on (i co drugi gość) – inaczej awatary nachodzą na kamerę.
+      const hostSpawn = net.world.spawn;
+      if (hostSpawn && hostSpawn.d === 'o') {
+        const angle = ((this.netHue % 360) * Math.PI) / 180;
+        const gx = Math.round(hostSpawn.x + Math.cos(angle) * 3);
+        const gz = Math.round(hostSpawn.z + Math.sin(angle) * 3);
+        const ground = this.homeWorld.heightAt(gx, gz) + 1;
+        this.body.pos.set(gx + 0.5, Math.max(hostSpawn.y, ground), gz + 0.5);
+        this.spawnPoint.copy(this.body.pos);
+        this.fallStart = this.body.pos.y;
+      }
+    }
+    // To, co gospodarz pokaże nowym graczom.
+    net.setWorld({ seed: this.world.seed, mode: this.mode, worldType: this.worldType, name: this.worldName, time: this.time, day: this.day, weather: this.weather });
+
+    net.onMessage = (m) => this.onNetMessage(m);
+    net.onPeers = (players) => {
+      const before = new Set(this.netPlayers.map((p) => p.id));
+      this.netPlayers = players;
+      const meNow = players.find((p) => p.id === this.net!.id);
+      if (meNow) this.netHue = meNow.hue;
+      for (const p of players) {
+        if (p.self) continue;
+        this.ensureRemote(p);
+        // Nowy gracz w trakcie gry – warto go przywitać w czacie.
+        if (before.size > 0 && !before.has(p.id)) this.message(`${p.name} dołączył do gry.`);
+      }
+      for (const id of [...this.remotes.keys()]) if (!players.some((p) => p.id === id)) this.dropRemote(id);
+      this.emitHud();
+    };
+    net.onChat = (name, text) => this.message(`<${name}> ${text}`);
+    net.onStatus = (status, error) => {
+      if (status === 'error' && error) this.message('Sieć: ' + error);
+      else if (status === 'closed') this.message('Rozłączono z sesją.');
+      this.emitHud();
+    };
+
+    // Każda zmiana bloku (poza odtwarzaniem zmian z sieci) idzie do innych.
+    // Oba wymiary mają własny hook – dzięki temu Nether też się synchronizuje.
+    const hook = (dim: 'o' | 'n') => (x: number, y: number, z: number, id: number) => {
+      if (this.netApplying) return;
+      this.netEditQueue.push({ x, y, z, id, d: dim });
+      if (this.netEditQueue.length > 400) this.flushNetEdits();
+    };
+    this.homeWorld.onEdit = hook('o');
+    this.netherWorld.onEdit = hook('n');
+    // Start świata obsługuje ekran multiplayer – tu go już nie potrzebujemy.
+    net.onStart = undefined;
+    this.message(
+      net.role === 'host'
+        ? 'Sesja utworzona. Kod pokoju podaj znajomym, żeby dołączyli.'
+        : `Dołączono do sesji ${net.world?.name ?? ''} – grasz z gospodarzem.`
+    );
+  }
+
+  private onNetMessage(m: NetMessage) {
+    switch (m.t) {
+      case 'edits':
+        this.netApplying = true;
+        try {
+          this.applyNetEdits(m.list);
+        } finally {
+          this.netApplying = false;
+        }
+        break;
+      case 'pos': {
+        if (m.from === this.net?.id) break;
+        const player = this.netPlayers.find((p) => p.id === m.from);
+        const avatar = this.ensureRemote(player ?? { id: m.from, name: m.name, hue: m.hue, ping: -1 });
+        // Awatara widać tylko wtedy, gdy gracz jest w tym samym wymiarze.
+        if ((m.d === 'n') !== this.isInNether) {
+          avatar.group.visible = false;
+          break;
+        }
+        avatar.group.visible = true;
+        avatar.target.set(m.x, m.y, m.z);
+        avatar.yaw = m.yaw;
+        avatar.pitch = m.pitch;
+        avatar.held = m.held ?? 0;
+        avatar.seen = performance.now();
+        break;
+      }
+      case 'state':
+        if (this.net?.role !== 'guest') break;
+        if (Number.isFinite(m.time)) this.time = m.time;
+        if (Number.isFinite(m.day)) this.day = Math.max(1, m.day);
+        this.applyNetWeather(m.weather);
+        break;
+      case 'bye': {
+        const who = this.netPlayers.find((p) => p.id === m.from);
+        if (who && !who.self) this.message(`${who.name} opuścił grę.`);
+        this.dropRemote(m.from);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  /** Pogoda z sieci: bez lokalnego komunikatu i bez przestawiania zegara. */
+  private applyNetWeather(w: 'clear' | 'rain') {
+    if (this.weather === w) return;
+    this.weather = w;
+    Sfx.setRain(w === 'rain');
+  }
+
+  private applyNetEdits(list: NetEdit[]) {
+    for (const e of list) {
+      if (!e || !Number.isFinite(e.x) || !Number.isFinite(e.y) || !Number.isFinite(e.z) || !Number.isFinite(e.id)) continue;
+      const world = e.d === 'n' ? this.netherWorld : this.homeWorld;
+      if (!world) continue;
+      world.setBlock(Math.round(e.x), Math.round(e.y), Math.round(e.z), e.id);
+    }
+  }
+
+  private flushNetEdits() {
+    if (!this.net || !this.netEditQueue.length) return;
+    const list = this.netEditQueue.splice(0, this.netEditQueue.length);
+    this.net.sendEdits(list);
+  }
+
+  /** Wywoływane z pętli gry: wysyłka, zegar sesji i płynne awatary. */
+  private tickNet(dt: number) {
+    const net = this.net;
+    if (!net) return;
+    const now = performance.now();
+    net.tick();
+    this.netEditTimer += dt;
+    if (this.netEditTimer >= 0.12) {
+      this.netEditTimer = 0;
+      this.flushNetEdits();
+    }
+    if (this.ui === 'playing' || this.ui === 'chat') {
+      this.netPosTimer += dt;
+      if (this.netPosTimer >= 1 / POS_HZ) {
+        this.netPosTimer = 0;
+        const p = this.body.pos;
+        net.sendPos({
+          d: this.isInNether ? 'n' : 'o',
+          x: p.x, y: p.y, z: p.z,
+          yaw: this.yaw, pitch: this.pitch,
+          held: this.selectedStack()?.id ?? 0,
+          name: net.name,
+          hue: this.netHue,
+        });
+      }
+    }
+    // `pushState` sam pilnuje odstępu (STATE_EVERY) i zapisuje dane w migawce;
+    // wołanie `setWorld` co klatkę kopiowałoby listę edytów bez potrzeby.
+    if (net.role === 'host') {
+      net.pushState({ time: this.time, day: this.day, weather: this.weather });
+      // `setWorld` jest teraz tanie (bez kopiowania listy edytów), więc migawka
+      // dla nowych graczy zna aktualną pozycję gospodarza.
+      const p = this.body.pos;
+      net.setWorld({ spawn: { x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z), d: this.isInNether ? 'n' : 'o' } });
+    }
+    // Awatary: łagodne dojście do ostatniej znanej pozycji + animacja nóg.
+    for (const [id, a] of this.remotes) {
+      if (now - a.seen > 9000) {
+        this.message(`${a.name} zniknął z sesji.`);
+        this.dropRemote(id);
+        continue;
+      }
+      const k = Math.min(1, dt * 10);
+      a.group.position.lerp(a.target, k);
+      a.group.rotation.y = a.yaw;
+      a.head.rotation.x = -a.pitch * 0.6;
+      const moving = a.group.position.distanceToSquared(a.target) > 0.0016;
+      if (moving) a.walk += dt * 7;
+      const swing = moving ? Math.sin(a.walk) * 0.55 : 0;
+      a.legL.rotation.x = swing;
+      a.legR.rotation.x = -swing;
+      a.armL.rotation.x = -swing * 0.8;
+      if (a.held !== a.heldId) {
+        a.heldId = a.held;
+        a.hand.visible = !!a.held;
+      }
+    }
+  }
+
+  private ensureRemote(p: NetPlayer): RemoteAvatar {
+    const existing = this.remotes.get(p.id);
+    if (existing) return existing;
+    const avatar = this.makeAvatar(p.name, p.hue);
+    avatar.target.copy(this.spawnPoint);
+    avatar.group.position.copy(avatar.target);
+    // Do pierwszej wiadomości `pos` nie wiemy, gdzie gracz jest – lepiej go
+    // nie pokazywać na środku własnej postaci.
+    avatar.group.visible = false;
+    this.remoteGroup?.add(avatar.group);
+    this.remotes.set(p.id, avatar);
+    return avatar;
+  }
+
+  private dropRemote(id: string) {
+    const a = this.remotes.get(id);
+    if (!a) return;
+    this.remoteGroup?.remove(a.group);
+    a.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+      for (const one of Array.isArray(mat) ? mat : mat ? [mat] : []) {
+        const map = (one as THREE.SpriteMaterial).map;
+        map?.dispose();
+        one.dispose();
+      }
+    });
+    this.remotes.delete(id);
+  }
+
+  /**
+   * Prostoliniowy awatar z bloków: tułów, głowa, ręce i nogi. Nazwa gracza
+   * jest sprite'em z kanwy, więc widać ją z daleka i nie trzeba czcionek 3D.
+   */
+  private makeAvatar(name: string, hue: number): RemoteAvatar {
+    const group = new THREE.Group();
+    const shade = (l: number) => new THREE.Color().setHSL((hue % 360) / 360, 0.55, l);
+    const bodyMat = new THREE.MeshBasicMaterial({ color: shade(0.42) });
+    const skinMat = new THREE.MeshBasicMaterial({ color: 0xd9a066 });
+    const limbMat = new THREE.MeshBasicMaterial({ color: shade(0.3) });
+
+    // Grupa stoi na ziemi (stopy w y = 0), więc da się ją podstawić pod
+    // `body.pos` bez korekty. Proporcje jak w Minecrafcie: ~1,8 bloku wzrostu.
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.28), bodyMat);
+    body.position.y = 0.9;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), skinMat);
+    head.position.y = 1.42;
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.18), bodyMat);
+    armL.position.set(-0.33, 0.9, 0);
+    const armR = armL.clone();
+    armR.position.x = 0.33;
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.22), limbMat);
+    legL.position.set(-0.13, 0.3, 0);
+    const legR = legL.clone();
+    legR.position.x = 0.13;
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), new THREE.MeshBasicMaterial({ color: 0xc9a227 }));
+    hand.position.set(0.36, 0.62, -0.24);
+    hand.visible = false;
+    group.add(body, head, armL, armR, legL, legR, hand);
+
+    // Etykieta z nazwą.
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 12, 256, 40);
+    ctx.font = 'bold 28px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(name.slice(0, 16), 128, 33);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
+    sprite.scale.set(1.7, 0.42, 1);
+    sprite.position.y = 2.05;
+    group.add(sprite);
+
+    return {
+      group, head, armL, legL, legR, hand,
+      target: new THREE.Vector3(),
+      yaw: 0, pitch: 0, held: 0, heldId: -1,
+      name, walk: 0, seen: performance.now(),
+    };
+  }
+
+  /** Czy gra jest w sesji sieciowej (UI ukrywa wtedy ekran pauzy „pauzujący świat”). */
+  get multiplayer(): boolean {
+    return !!this.net;
   }
 
   /** True when solid rock covers the player – used for cave ambience. */
@@ -2449,6 +2788,9 @@ export class Game {
     const s = this.dimStash[this.isInNether ? 'nether' : 'home'];
     for (const m of this.mobs) this.scene.remove(m.group);
     for (const d of this.drops) this.scene.remove(d.mesh);
+    // Awatary są przywiązane do współrzędnych wymiaru – po przejściu chowamy
+    // je do pierwszej wiadomości `pos` z właściwego świata.
+    for (const a of this.remotes?.values() ?? []) a.group.visible = false;
     for (const a of this.arrows) this.scene.remove(a.mesh);
     for (const t of this.tnts) this.scene.remove(t.mesh);
     for (const o of this.orbs) this.scene.remove(o.mesh);
@@ -2649,7 +2991,16 @@ export class Game {
   command(input: string) {
     const txt = input.trim();
     if (!txt) return;
-    if (!txt.startsWith('/')) { this.message('<Gracz> ' + txt); return; }
+    if (!txt.startsWith('/')) {
+      // 2.10: w sesji zwykła wiadomość leci do wszystkich graczy.
+      if (this.net) {
+        this.net.say(txt);
+        this.message(`<${this.netName}> ${txt}`);
+      } else {
+        this.message(`<${this.netName}> ${txt}`);
+      }
+      return;
+    }
     const [cmd, ...args] = txt.slice(1).split(/\s+/);
     switch (cmd.toLowerCase()) {
       case 'help': {
@@ -2894,6 +3245,9 @@ export class Game {
 
   // ---------- Save ----------
   save() {
+    // 2.10: sesje multiplayer nie zapisują się do slotów – świat należy do
+    // gospodarza, a każda rozgrywka miałaby inny identyfikator.
+    if (this.net) return;
     try {
       // homeWorld zawsze istnieje w pełnej grze; defensywny fallback
       // przydaje się też testom, które budują obiekt przez Game.prototype.
@@ -4257,6 +4611,7 @@ export class Game {
     this.updateCamera(dt);
     this.updateSky();
     this.updateHeldLight();
+    this.tickNet(dt);
 
     this.hudTimer += dt;
     if (this.hudTimer > 0.1) { this.hudTimer = 0; this.emitHud(); }
@@ -4980,6 +5335,8 @@ export class Game {
     const now = performance.now();
     this.refreshMinimap();
     this.onHud({
+      players: this.net ? this.netPlayers : [],
+      netRole: this.net?.role ?? null,
       hotbar: this.inventory.slots.slice(0, 9).map((s) => (s ? { ...s } : null)),
       selected: this.selected,
       health: this.health,
@@ -5476,6 +5833,8 @@ export class Game {
 
   private setWeather(w: 'clear' | 'rain') {
     this.weather = w;
+    // 2.10: gospodarz rozsyła pogodę od razu, a nie dopiero za 4 s.
+    if (this.net?.role === 'host') this.net.sendState({ time: this.time, day: this.day, weather: w });
     this.weatherTimer = w === 'rain' ? 45 + Math.random() * 40 : 90 + Math.random() * 80;
     Sfx.setRain(w === 'rain');
     this.message(w === 'rain' ? 'Zaczyna padać.' : 'Niebo się przejaśnia.');
@@ -5518,7 +5877,8 @@ export class Game {
       else if (roll < 0.5) Sfx.playWind();
     }
     this.weatherTimer -= dt;
-    if (this.weatherTimer <= 0) this.setWeather(this.weather === 'clear' ? 'rain' : 'clear');
+    // 2.10: w sesji pogodę ustala gospodarz – gość nie zmienia jej po swojemu.
+    if (this.weatherTimer <= 0 && (!this.net || this.net.role === 'host')) this.setWeather(this.weather === 'clear' ? 'rain' : 'clear');
     this.lightning = Math.max(0, this.lightning - dt * 1.6);
     const biome = this.biomeAt();
     const raining = this.weather === 'rain' && biome !== 'Pustynia';
@@ -5648,6 +6008,8 @@ export class Game {
     for (const m of this.mobs) m.dispose();
     for (const t of this.tnts) (t.mesh.material as THREE.Material).dispose();
     this.tnts = [];
+    this.net?.close('Koniec gry');
+    this.net = null;
     for (const a of this.arrows) this.scene.remove(a.mesh);
     this.arrows = [];
     for (const o of this.orbs) this.scene.remove(o.mesh);
