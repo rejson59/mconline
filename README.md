@@ -9,8 +9,6 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce – bez serwer
 - przywracanie domyślnych ustawień obrazu, sterowania i dźwięku z ekranu Opcji,
 - nowe ID bloków są dopisane bez naruszania starych zapisów; testy sprawdzają powtarzalność i dostępność nowych biomów.
 
-Pełny plan przyszłego wydania 3.0 znajduje się w [`PLAN-100-BLOCKCRAFT-3.0.md`](PLAN-100-BLOCKCRAFT-3.0.md).
-
 **Wersja 2.6 „Warsztat bez wpadek”**:
 
 * **Ekwipunek działa transakcyjnie.** Niepełne miejsce nie przyjmuje po cichu części stosu – łup zostaje na ziemi, a nieudana wymiana nie pobiera zapłaty. Wynik rzemiosła nie znika, gdy plecak jest pełny; receptury uwzględniają miejsce zwalniane przez składniki.
