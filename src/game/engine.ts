@@ -6521,8 +6521,12 @@ export class Game {
       const attr = this.rainGeo.getAttribute('position') as THREE.BufferAttribute;
       const arr = attr.array as Float32Array;
       const snow = biome === 'Tundra' || biome === 'Góry';
-      (this.rain.material as THREE.PointsMaterial).color.setHex(snow ? 0xf4f7ff : 0xb7d4ff);
-      (this.rain.material as THREE.PointsMaterial).size = snow ? 2.6 : 2.1;
+      // 2.20: kropla z tekstury (`rain.png`) ma własny kształt paska – nie
+      // wolno jej rozdmuchiwać do 2 bloków, bo w kadrze robiły się białe plamy.
+      const rainMat = this.rain.material as THREE.PointsMaterial;
+      const textured = !!rainMat.map;
+      rainMat.color.setHex(snow ? 0xf4f7ff : textured ? 0xffffff : 0xb7d4ff);
+      rainMat.size = textured ? (snow ? 1.5 : 1.1) : snow ? 2.6 : 2.1;
       const speed = snow ? 4.5 : 16;
       const cam = this.camera.position;
       for (let i = 0; i < arr.length; i += 3) {

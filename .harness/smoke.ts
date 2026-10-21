@@ -5230,6 +5230,8 @@ section('2.20: słońce, kaktus, drzwi i dachy wiosek');
 
   // --- ręka: blok nie może zasłaniać pół ekranu
   check('blok w ręce jest mniejszy niż 0,3', /mesh\.scale\.setScalar\(cross \? 0\.3 : 0\.2\)/.test(engineSrc));
+  check('teksturowany deszcz nie puchnie do 2 bloków', /textured \? \(snow \? 1\.5 : 1\.1\)/.test(engineSrc));
+  check('śnieg ma większe płatki niż deszcz', /snow \? 1\.5 : 1\.1/.test(engineSrc));
 }
 
 // =================================================================== report
