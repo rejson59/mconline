@@ -4,13 +4,31 @@ import { displayName, durabilityMax } from '../game/items';
 import { enchList } from '../game/enchant';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import { SkinHead } from './SkinPicker';
+import { airSprite, armorSprite, foodSprite, guiSprite, heartSprite } from '../game/art/uiSprites';
 
 const HEART = ['.XX.XX.', 'XXXXXXX', 'XXXXXXX', '.XXXXX.', '..XXX..', '...X...'];
 const BUBBLE = ['.XXX.', 'X..XX', 'X.XXX', 'XXXXX', '.XXX.'];
 
 const outline = 'drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000) drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000)';
 
+/**
+ * 2.18: serca, głód i powietrze rysujemy grafiką z paczki (`gui/sprites/hud`).
+ * Gdyby jej zabrakło (starszy build), zostaje pikselowy rysunek SVG.
+ */
+function PackIcon({ src, size, alt = '' }: { src: string | null; size: number; alt?: string }) {
+  if (!src) return null;
+  return <img src={src} width={size} height={size} className="pixelated" alt={alt} draggable={false} />;
+}
+
 function Heart({ fill }: { fill: 0 | 1 | 2 }) {
+  const src = heartSprite(fill);
+  if (src) {
+    return (
+      <span style={{ filter: outline, display: 'inline-flex' }}>
+        <PackIcon src={src} size={18} />
+      </span>
+    );
+  }
   return (
     <svg width={18} height={16} viewBox="0 0 7 6" style={{ filter: outline }} shapeRendering="crispEdges">
       {HEART.flatMap((row, y) =>
@@ -26,11 +44,13 @@ function Heart({ fill }: { fill: 0 | 1 | 2 }) {
 }
 
 function Bubble({ pop }: { pop: boolean }) {
+  const src = airSprite(pop);
+  if (src) return <PackIcon src={src} size={16} />;
   return (
     <svg width={16} height={16} viewBox="0 0 5 5" style={{ filter: outline, opacity: pop ? 0.25 : 1 }} shapeRendering="crispEdges">
       {BUBBLE.flatMap((row, y) =>
         row.split('').map((c, x) =>
-          c === 'X' ? <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill="#3a8ee6" /> : c === '.' ? null : null
+          c === 'X' ? <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill="#3a8ee6" /> : null
         )
       )}
       <rect x={1} y={1} width={1} height={1} fill="#fff" />
@@ -39,8 +59,10 @@ function Bubble({ pop }: { pop: boolean }) {
 }
 
 function ArmorPiece({ icon, frac, enchanted }: { icon: string; frac: number; enchanted?: boolean }) {
+  const plate = armorSprite(frac >= 0.66 ? 2 : frac >= 0.33 ? 1 : 0);
   return (
     <div className="relative flex items-center justify-center" style={{ width: 22, height: 22, background: 'rgba(40,40,40,0.5)', border: '1px solid #1a1a1a' }}>
+      {plate && <img src={plate} width={22} height={22} className="pixelated absolute inset-0 opacity-70" alt="" draggable={false} />}
       <img src={icon} className="pixelated" width={18} height={18} draggable={false} />
       {enchanted && <span className="ench-glint" />}
       {frac < 1 && <span className="dur-bar"><i style={{ width: `${frac * 100}%`, background: frac < 0.25 ? '#e04040' : '#3dba3d' }} /></span>}
@@ -49,6 +71,14 @@ function ArmorPiece({ icon, frac, enchanted }: { icon: string; frac: number; enc
 }
 
 function Drumstick({ fill }: { fill: 0 | 1 | 2 }) {
+  const src = foodSprite(fill);
+  if (src) {
+    return (
+      <span style={{ filter: outline, display: 'inline-flex' }}>
+        <PackIcon src={src} size={18} />
+      </span>
+    );
+  }
   const meat = fill === 0 ? '#4a2a12' : '#c47a32';
   const bone = fill === 0 ? '#3a3a3a' : '#f2efe6';
   return (
@@ -66,7 +96,15 @@ export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<
   return (
     <div
       className="hotbar flex"
-      style={{ background: 'rgba(0,0,0,0.35)', border: '2px solid #1a1a1a', padding: 2, pointerEvents: onSelect ? 'auto' : undefined }}
+      style={{
+        background: guiSprite('hotbar') ? undefined : 'rgba(0,0,0,0.35)',
+        backgroundImage: guiSprite('hotbar') ? `url(${guiSprite('hotbar')})` : undefined,
+        backgroundSize: '100% 100%',
+        imageRendering: 'pixelated',
+        border: guiSprite('hotbar') ? undefined : '2px solid #1a1a1a',
+        padding: 2,
+        pointerEvents: onSelect ? 'auto' : undefined,
+      }}
     >
       {hud.hotbar.map((s, i) => {
         const max = s ? durabilityMax(s.id) : 0;
@@ -78,8 +116,8 @@ export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<
             aria-current={i === hud.selected ? 'true' : undefined}
             onPointerDown={onSelect ? (e) => { e.stopPropagation(); onSelect(i); } : undefined}
             style={{
-              border: i === hud.selected ? '3px solid #fdfdfd' : '3px solid #5d5d5d',
-              outline: '2px solid #000',
+              border: i === hud.selected ? '3px solid #fdfdfd' : '3px solid rgba(0,0,0,0.28)',
+              outline: i === hud.selected ? '2px solid #000' : undefined,
               background: i === hud.selected
                 ? 'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(90,90,90,0.45))'
                 : 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(20,20,20,0.35))',
@@ -160,8 +198,20 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 34%, rgba(0,0,0,0.85) 72%)' }} />
       )}
 
-      {/* crosshair */}
-      {!hud.zoom && (
+      {/* crosshair – 2.18: obrazek z paczki, z pikselowym fallbackiem */}
+      {!hud.zoom && guiSprite('crosshair') && (
+        <img
+          src={guiSprite('crosshair')!}
+          width={18}
+          height={18}
+          className="pixelated absolute left-1/2 top-1/2"
+          style={{ transform: 'translate(-50%,-50%)', filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.9))' }}
+          alt=""
+          draggable={false}
+          aria-hidden="true"
+        />
+      )}
+      {!hud.zoom && !guiSprite('crosshair') && (
         <div className="absolute left-1/2 top-1/2" style={{ transform: 'translate(-50%,-50%)' }} aria-hidden="true">
           <div style={{ position: 'absolute', left: -10, top: -2.5, width: 20, height: 5, background: 'rgba(0,0,0,0.55)' }} />
           <div style={{ position: 'absolute', left: -2.5, top: -10, width: 5, height: 20, background: 'rgba(0,0,0,0.55)' }} />
@@ -357,17 +407,26 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
         {hud.sprinting && <div className="mb-1 text-sm opacity-80 mc-text">Sprint</div>}
         {hud.mode === 'creative' && hud.flying && <div className="mb-1 text-sm opacity-80 mc-text">✈ Latanie</div>}
         <div
-          className="relative mb-1 h-[12px] overflow-hidden"
+          className="relative mb-1 h-[14px] overflow-hidden"
           style={{
             width: 'min(432px, calc(100vw - 16px))',
-            background: 'linear-gradient(180deg, #101510, #1d241d)',
-            border: '2px solid #0a0a0a',
+            background: guiSprite('exp_background')
+              ? `url(${guiSprite('exp_background')}) 0 0 / 100% 100% no-repeat, #101510`
+              : 'linear-gradient(180deg, #101510, #1d241d)',
+            imageRendering: 'pixelated',
+            border: guiSprite('exp_background') ? undefined : '2px solid #0a0a0a',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
           }}
         >
           <div
             className="h-full transition-[width] duration-200"
-            style={{ width: `${Math.round(hud.xpFrac * 100)}%`, background: 'linear-gradient(180deg, #a6e86a, #5cae3a)' }}
+            style={guiSprite('exp_progress')
+              ? {
+                width: `${Math.round(hud.xpFrac * 100)}%`,
+                background: `url(${guiSprite('exp_progress')}) 0 0 / 100% 100% no-repeat`,
+                imageRendering: 'pixelated',
+              }
+              : { width: `${Math.round(hud.xpFrac * 100)}%`, background: 'linear-gradient(180deg, #a6e86a, #5cae3a)' }}
           />
           <span
             className="absolute inset-0 flex items-center justify-center text-[11px] font-bold"

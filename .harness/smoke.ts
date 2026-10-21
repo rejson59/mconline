@@ -73,6 +73,11 @@ import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
 import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial, type MobTexKind } from '../src/game/mobTextures';
 import { decodePng } from '../src/game/art/miniPng';
+import { MOB_MODELS, boxFaces, buildMobModel, mobSkinTexture, mobModelCount } from '../src/game/mobModels';
+import { MOB_SKINS, GUI_SPRITES } from '../src/game/art/vanillaArt.generated';
+import { guiSprite, hasGuiSprite, heartSprite, foodSprite, armorSprite, airSprite, guiSpriteCount } from '../src/game/art/uiSprites';
+import { spriteTexture } from '../src/game/art/spriteTex';
+import { installPackTheme } from '../src/utils/packTheme';
 import { BLOCK_ATLAS_PNG, ITEM_ATLAS_PNG, OFFICIAL_TILES, MOB_PALETTES, PLAYER_SKIN_PNG } from '../src/game/art/vanillaArt.generated';
 import { officialBlockAtlas, officialItemAtlas, officialItemPixels, isOfficialTile, officialTileCount, officialItemCount, applyOfficialTiles } from '../src/game/packArt';
 import { WIDE_LAYOUT, SLIM_LAYOUT, faceRects, applySkinUv, hasPackSkin, packSkinCount, playerSkinTexture } from '../src/game/skinArt';
@@ -3109,8 +3114,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.17'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Grafika jak w Minecrafcie');
+  check('release label is the current line', GAME_VERSION.startsWith('2.18'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Moby jak w Minecrafcie');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3137,6 +3142,10 @@ section('2.8/2.8.1: wersja wydania');
   check('2.17 highlights mention the blocks', RELEASE_HIGHLIGHTS.some((h) => /blok/i.test(h.title)));
   check('2.17 highlights mention the item icons', RELEASE_HIGHLIGHTS.some((h) => /ekwipun|ikon/i.test(h.title + h.text)));
   check('2.17 highlights mention the player skins', RELEASE_HIGHLIGHTS.some((h) => /Steve|Alex/i.test(h.text)));
+  check('2.18 highlights announce the 1:1 mobs', RELEASE_HIGHLIGHTS.some((h) => /mob/i.test(h.title) && /1:1/.test(h.title + h.text)));
+  check('2.18 highlights mention the HUD sprites', RELEASE_HIGHLIGHTS.some((h) => /serce|serdusz|hotbar/i.test(h.text)));
+  check('2.18 highlights mention the sky from the pack', RELEASE_HIGHLIGHTS.some((h) => /chmur/i.test(h.title + h.text)));
+  check('2.18 highlights mention block breaking stages', RELEASE_HIGHLIGHTS.some((h) => /pękan/i.test(h.text)));
 }
 
 // ============================================ 2.13 „Jak w Minecrafcie”
@@ -4413,9 +4422,22 @@ section('2.16: pikselowe tekstury mobów i graczy');
     });
     return seen;
   };
-  check('wilk ma teksturę futra', coatColors().has(0x7a8089));
+  // 2.18: wilk ma prawdziwą skórkę z paczki, więc oswojenie zaznacza
+  // czerwona obroża, a nie przemalowanie sierści (jak w Minecrafcie).
+  check('wilk dostał model 1:1 z paczki', wolf.hasVanillaModel());
+  check('wilk ma teksturę futra', coatColors().size === 0 || coatColors().has(0x7a8089));
   wolf.tame();
-  check('oswojony wilk zmienia sierść na rdzawą', coatColors().has(0xa05a48) && !coatColors().has(0x7a8089), [...coatColors()].join(','));
+  const collar = new THREE.Box3();
+  let hasCollar = false;
+  wolf.group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mat = mesh.material as THREE.MeshLambertMaterial;
+    if (mat.map) return;
+    if (mat.color && mat.color.getHex() === 0xc02020) hasCollar = true;
+  });
+  void collar;
+  check('oswojony wilk dostaje czerwoną obrożę', hasCollar);
 
   // Gracze: awatary dostają te same pikselowe tekstury (tkanina, jeans, skóra).
   const shirt = avatarMaterial('cloth', 0x00a8a8);
@@ -4604,6 +4626,184 @@ section('2.17: tekstury z paczki w całej grze');
   setMobPalette('__brak__');
   eq('mob bez palety zachowuje kolor', snapToPalette(0x123456), 0x123456);
   setMobPalette('cow');
+}
+
+// ============================================ 2.18: moby i HUD 1:1 z paczki
+section('2.18: moby 1:1 z Minecrafta');
+{
+  // --- modele
+  eq('15 modeli mobów (14 typów + wełna owcy)', mobModelCount(), 15);
+  const required = ['pig', 'cow', 'sheep', 'sheep_wool', 'chicken', 'creeper', 'zombie', 'skeleton', 'spider', 'wolf', 'villager', 'golem', 'enderman', 'slime', 'ghast'];
+  eq('wszystkie modele są na liście', required.filter((t) => MOB_MODELS[t]).length, required.length);
+  eq('skórki mobów 1:1 z paczki', Object.keys(MOB_SKINS).length, 19);
+  check('każdy model ma skórkę', required.every((t) => MOB_SKINS[MOB_MODELS[t].skin] != null));
+
+  // --- rozmiary tekstur (tak jak w paczce)
+  const dims = (key: string) => { const img = decodePng(MOB_SKINS[key].png); return `${img.width}×${img.height}`; };
+  eq('krowa ma teksturę 64×64', dims('cow'), '64×64');
+  eq('świnia ma teksturę 64×64', dims('pig'), '64×64');
+  eq('owca ma teksturę 64×32', dims('sheep'), '64×32');
+  eq('golem ma teksturę 128×128', dims('golem'), '128×128');
+  eq('ghast ma teksturę 128×64', dims('ghast'), '128×64');
+
+  // --- UV: każda ściana każdego pudełka trafia w niepusty fragment tekstury
+  const coverage = (type: string) => {
+    const model = MOB_MODELS[type];
+    const img = decodePng(MOB_SKINS[model.skin].png);
+    let opaque = 0, total = 0;
+    for (const p of model.parts) for (const b of p.boxes) {
+      if (b.color !== undefined) continue;
+      for (const f of boxFaces(b.uv, b.size[0], b.size[1], b.size[2], b.mirror, model.uvScale ?? 1)) {
+        for (let y = Math.floor(f.y0); y < Math.ceil(f.y1); y++) {
+          for (let x = Math.floor(f.x0); x < Math.ceil(f.x1); x++) {
+            total++;
+            if (x >= 0 && y >= 0 && x < img.width && y < img.height && img.data[(y * img.width + x) * 4 + 3] > 8) opaque++;
+          }
+        }
+      }
+    }
+    return total ? opaque / total : 0;
+  };
+  const poor = required.map((t) => [t, coverage(t)] as const).filter(([, c]) => c < 0.7);
+  eq('UV każdego moba pokrywa teksturę (≥ 70%)', poor.map(([t]) => t).join(','), '');
+  check('krowa pokrywa praktycznie całą teksturę', coverage('cow') > 0.97);
+  check('ghast używa podwójnego UV', MOB_MODELS.ghast.uvScale === 2 && coverage('ghast') > 0.97);
+
+  // --- układ ścian jak w wanilii
+  const head = boxFaces(MOB_MODELS.pig.parts[0].boxes[0].uv, 8, 8, 8);
+  eq('przód głowy świni to (8,8)-(16,16)', `${head[5].x0},${head[5].y0},${head[5].x1},${head[5].y1}`, '8,8,16,16');
+  eq('góra głowy świni to (8,0)-(16,8)', `${head[2].x0},${head[2].y0},${head[2].x1},${head[2].y1}`, '8,0,16,8');
+  const normal = boxFaces([0, 16], 4, 12, 4, false);
+  const mirrored = boxFaces([0, 16], 4, 12, 4, true);
+  eq('lustrzane UV odwraca oś U', `${mirrored[5].x0},${mirrored[5].x1}`, `${normal[5].x1},${normal[5].x0}`);
+
+  // --- budowa modelu
+  const pig = buildMobModel(MOB_MODELS.pig, 'pig')!;
+  check('model świni się buduje', !!pig);
+  eq('świnia ma 7 pudełek', pig.meshes.length, 7);
+  check('model ma głowę, tułów i 4 nogi', ['head', 'body', 'rightHindLeg', 'leftHindLeg', 'rightFrontLeg', 'leftFrontLeg'].every((n) => pig.parts[n]));
+  const pigTex = mobSkinTexture('pig')!;
+  eq('tekstura moba nie jest odwrócona', pigTex.flipY, false);
+  eq('tekstura świni ma 64 px', (pigTex.image as { width: number }).width, 64);
+
+  // --- w grze: każdy mob dostaje model z paczki
+  const w = new World(9182, true);
+  w.getChunk(0, 0);
+  const gy = w.heightAt(4, 4);
+  const types: MobType[] = ['pig', 'cow', 'sheep', 'chicken', 'creeper', 'zombie', 'skeleton', 'spider', 'wolf', 'villager', 'golem', 'enderman', 'slime', 'ghast'];
+  const legacy: string[] = [];
+  const noMap: string[] = [];
+  for (const t of types) {
+    const m = new Mob(t, 4.5, gy + 2, 4.5);
+    if (!m.hasVanillaModel()) legacy.push(t);
+    if (!m.meshes.some((mesh) => (mesh.material as THREE.MeshLambertMaterial).map)) noMap.push(t);
+    m.dispose();
+  }
+  eq('wszystkie moby używają modelu 1:1', legacy.join(','), '');
+  eq('każdy mob ma teksturowane pudełka', noMap.join(','), '');
+
+  // --- owca: wełna chowana po strzyżeniu
+  const sheep = new Mob('sheep', 4.5, gy + 2, 4.5);
+  const woolRoot = sheep.group.children[0].children.find((c) => c.children.some((g) => g.children.some((m) => (m as THREE.Mesh).isMesh)));
+  const woolVisible = () => sheep.meshes.filter((m) => m.userData.mobKind === 'sheep_wool' && m.visible).length;
+  check('owca ma wełnę przed strzyżeniem', woolVisible() > 0);
+  check('strzyżenie się udaje', sheep.shear());
+  const woolHidden = sheep.group.children[0].children.some((c) => c.visible === false);
+  check('po strzyżeniu wełna znika', woolHidden, `${woolVisible()} widocznych`);
+  void woolRoot;
+
+  // --- owca: kolor runa (16 barwników), wełna zabarwiona materiałem
+  const tints = new Set<number>();
+  for (let i = 0; i < 40; i++) {
+    const s2 = new Mob('sheep', 4.5 + i * 3.1, gy + 2, 4.5 + i * 1.7);
+    tints.add(s2.woolColor);
+    s2.dispose();
+  }
+  check('owce mają różne kolory runa', tints.size >= 3, `${tints.size} kolorów`);
+  check('większość owiec jest biała', (() => {
+    let white = 0;
+    for (let i = 0; i < 60; i++) { const s2 = new Mob('sheep', 4.5 + i * 3.1, gy + 2, 4.5 + i * 1.7); if (s2.woolColor === 0xf9fffe) white++; s2.dispose(); }
+    return white > 30;
+  })());
+  const dyed = new Mob('sheep', 30.5, gy + 2, 30.5);
+  const woolMesh = dyed.meshes.find((m) => m.userData.mobKind === 'sheep_wool');
+  check('wełna ma barwnik w materiale', !!woolMesh && (woolMesh.material as THREE.MeshLambertMaterial).color.getHex() === dyed.woolColor);
+  dyed.dispose();
+
+  // --- mieszkaniec: zawód wybiera własną teksturę
+  const skins = new Set<string>();
+  for (let i = 0; i < 5; i++) skins.add(`villager${i}`);
+  check('każdy zawód mieszkańca ma teksturę', [...skins].every((k) => MOB_SKINS[k] != null));
+
+  // --- wilk: obroża po oswojeniu
+  const wolf = new Mob('wolf', 4.5, gy + 2, 4.5);
+  wolf.tame();
+  let collar = false;
+  wolf.group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mat = mesh.material as THREE.MeshLambertMaterial;
+    if (!mat.map && mat.color && mat.color.getHex() === 0xc02020) collar = true;
+  });
+  check('oswojony wilk ma obrożę', collar);
+
+  // --- głowa odwraca się w stronę gracza
+  const cow = new Mob('cow', 4.5, gy + 2, 4.5);
+  const player = new THREE.Vector3(4.5, gy + 1, 10.5);
+  let maxTurn = 0;
+  for (let i = 0; i < 90; i++) {
+    cow.update(1 / 30, w, player, () => {}, () => {}, true, []);
+    maxTurn = Math.max(maxTurn, Math.abs(cow.head.rotation.y));
+  }
+  check('mob odwraca głowę do gracza', maxTurn > 0.1, `${maxTurn.toFixed(2)}`);
+  check('obrót głowy jest ograniczony', maxTurn <= 0.95, `${maxTurn.toFixed(2)}`);
+}
+
+section('2.18: interfejs i niebo z paczki');
+{
+  const sprites = Object.keys(GUI_SPRITES);
+  check('co najmniej 40 grafik interfejsu z paczki', sprites.length >= 40, `${sprites.length}`);
+  check('serce pełne pochodzi z paczki', (heartSprite(2) ?? '').startsWith('data:image/png;base64,'));
+  eq('adres grafiki ma dokładnie jeden prefiks data:', (heartSprite(2) ?? '').split('data:image/png').length - 1, 1);
+  eq('adres hotbara ma dokładnie jeden prefiks data:', (guiSprite('hotbar') ?? '').split('data:image/png').length - 1, 1);
+  check('serce pół i puste też', (heartSprite(1) ?? '').includes('base64') && (heartSprite(0) ?? '').includes('base64'));
+  check('głód pochodzi z paczki', (foodSprite(2) ?? '').includes('base64') && (foodSprite(0) ?? '').includes('base64'));
+  check('pancerz i powietrze z paczki', (armorSprite(2) ?? '').includes('base64') && (airSprite(true) ?? '').includes('base64'));
+  check('celownik i hotbar z paczki', hasGuiSprite('crosshair') && hasGuiSprite('hotbar') && hasGuiSprite('hotbar_selection'));
+  check('pasek doświadczenia z paczki', hasGuiSprite('exp_background') && hasGuiSprite('exp_progress'));
+  check('słońce, księżyc i chmury z paczki', hasGuiSprite('sun') && hasGuiSprite('moon') && hasGuiSprite('clouds'));
+  check('dziesięć faz pękania bloku', Array.from({ length: 10 }, (_, i) => hasGuiSprite(`destroy_${i}`)).every(Boolean));
+  check('deszcz i śnieg z paczki', hasGuiSprite('rain') && hasGuiSprite('snow'));
+  eq('licznik grafik zgadza się z listą', guiSpriteCount(), sprites.length);
+
+  const sun = spriteTexture('sun')!;
+  eq('słońce ma 32×32', (sun.image as { width: number }).width, 32);
+  const destroy = spriteTexture('destroy_0')!;
+  eq('faza pękania ma 16×16', (destroy.image as { width: number }).width, 16);
+  const rainTex = spriteTexture('rain')!;
+  eq('deszcz to pierwsza klatka arkusza', (rainTex.image as { height: number }).height, 64);
+  eq('tekstury GUI nie są odwróconej osi Y', sun.flipY, false);
+
+  // motyw CSS: zmienne ustawiane bez wyjątku (nawet bez DOM)
+  const style = { values: new Map<string, string>(), setProperty(k: string, v: string) { this.values.set(k, v); } };
+  installPackTheme({ style } as unknown as HTMLElement);
+  check('slot dostaje grafikę z paczki', (style.values.get('--mc-slot-img') ?? '').startsWith('url(data:image/png'));
+  check('przycisk dostaje grafikę z paczki', (style.values.get('--mc-btn-img') ?? '').includes('base64'));
+
+  // silnik: pęknięcia z paczki, deszcz z teksturą, chmury z paczki
+  const eng = readSource('src/game/engine.ts');
+  check('silnik bierze pęknięcia z paczki', /spriteTexture\(`destroy_\$\{i\}`\)/.test(eng));
+  check('silnik bierze deszcz z paczki', /spriteTexture\('rain'\)/.test(eng));
+  check('silnik bierze chmury z paczki', /spriteTexture\('clouds'\)/.test(eng));
+  check('silnik bierze słońce i księżyc z paczki', /spriteTexture\('sun'\)/.test(eng) && /spriteTexture\('moon'\)/.test(eng));
+  const hud = readSource('src/components/HUD.tsx');
+  check('HUD używa serc z paczki', /heartSprite\(/.test(hud));
+  check('HUD używa głodu z paczki', /foodSprite\(/.test(hud));
+  check('HUD używa celownika z paczki', /guiSprite\('crosshair'\)/.test(hud));
+  check('HUD używa hotbara z paczki', /guiSprite\('hotbar'\)/.test(hud));
+  const mobsSrc = readSource('src/game/mobs.ts');
+  check('moby budują model 1:1', /buildMobModel\(/.test(mobsSrc));
+  check('mieszkaniec wybiera teksturę zawodu', /villager\$\{this\.profession % 5\}/.test(mobsSrc));
 }
 
 // =================================================================== report

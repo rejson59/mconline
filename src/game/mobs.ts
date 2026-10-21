@@ -4,6 +4,13 @@ import { stepBody, type Body } from './physics';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 import { kindForColor, mobMaterial, setMobPalette, snapToPalette, type MobTexKind } from './mobTextures';
+import { MOB_MODELS, buildMobModel, type BuiltMob } from './mobModels';
+
+/** 2.18: 16 kolorów wełny, dokładnie jak paleta barwników w grze. */
+export const SHEEP_WOOL_COLORS = [
+  0xf9fffe, 0xf9801d, 0xc74eb5, 0x3ab3da, 0xfed83d, 0x80c71f, 0xf38baa, 0x474f52,
+  0x9d9d97, 0x169c9c, 0x8932b8, 0x3c44aa, 0x835432, 0x5e7c16, 0xb02e26, 0x1d1d21,
+] as const;
 
 export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
@@ -78,6 +85,14 @@ export class Mob {
   /** 1.6: mieszkaniec ucieka przez kilka sekund po otrzymaniu ciosu. */
   panic = 0;
   private woolMesh: THREE.Mesh | null = null;
+  /** 2.18: części wełny owcy (chowamy je po strzyżeniu). */
+  private woolParts: THREE.Object3D[] = [];
+  /** 2.18: czerwona obroża oswojonego wilka. */
+  private collar: THREE.Object3D | null = null;
+  /** 2.18: czy model ma osobną głowę (można nią obracać w stronę gracza). */
+  private headCanTurn = false;
+  /** 2.18: kolor runa owcy – z pozycji, więc każda owca ma swój (jak w grze). */
+  readonly woolColor: number;
   legs: THREE.Object3D[] = [];
   arms: THREE.Object3D[] = [];
   head!: THREE.Object3D;
@@ -86,6 +101,9 @@ export class Mob {
   constructor(type: MobType, x: number, y: number, z: number, profession = 0) {
     this.type = type;
     this.home.set(x, y, z);
+    // Jak w grze: większość owiec jest biała, kolorowe trafiają się rzadziej.
+    const wc = Math.abs(Math.round(x * 7 + z * 13));
+    this.woolColor = wc % 10 < 8 ? 0xf9fffe : SHEEP_WOOL_COLORS[wc % SHEEP_WOOL_COLORS.length];
     const w =
       type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
         : type === 'chicken' ? 0.45
@@ -128,6 +146,12 @@ export class Mob {
     if (this.type !== 'wolf' || this.tamed || this.dead) return false;
     this.tamed = true;
     this.health = this.maxHealth;
+    // 2.18: wilk ma prawdziwą teksturę, więc oswojenie zaznacza czerwona
+    // obroża – tak jak w Minecrafcie (wcześniej przemalowywaliśmy sierść).
+    if (this.hasVanillaModel()) {
+      this.addCollar();
+      return true;
+    }
     this.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -146,6 +170,25 @@ export class Mob {
     return true;
   }
 
+  /** Czy mob dostał model 1:1 z paczki (a nie stary, kolorowy). */
+  hasVanillaModel(): boolean {
+    return this.meshes.some((m) => m.userData.mobKind === this.type && m.material instanceof THREE.MeshLambertMaterial && !!m.material.map);
+  }
+
+  /** Czerwona obroża oswojonego wilka (cieńsze pudełko wokół szyi). */
+  private addCollar() {
+    if (this.collar) return;
+    const geom = new THREE.BoxGeometry(0.42, 0.09, 0.42);
+    const mat = new THREE.MeshLambertMaterial({ color: 0xc02020 });
+    const collar = new THREE.Mesh(geom, mat);
+    // Model wilka ma pivot głowy w (-1, 13.5, -7), więc obroża leży tuż pod
+    // nią – na dolnej krawędzi pudełka głowy.
+    collar.position.set(0.06, -0.19, 0.06);
+    this.head.add(collar);
+    this.collar = collar;
+    this.meshes.push(collar);
+  }
+
   private addLeg(x: number, y: number, z: number, w: number, h: number, d: number, color: number, arr: THREE.Object3D[], kind?: MobTexKind) {
     const pivot = new THREE.Group();
     pivot.position.set(x, y, z);
@@ -161,6 +204,66 @@ export class Mob {
   private build() {
     // 2.17: paleta kolorów z prawdziwej tekstury tego moba w paczce.
     setMobPalette(this.type);
+    // 2.18: najpierw próbujemy prawdziwego modelu z paczki. Gdyby tekstury
+    // brakowało, zostaje stary, kolorowy model – gra nigdy nie zostaje bez moba.
+    const model = MOB_MODELS[this.type];
+    if (model) {
+      const skin = this.type === 'villager' ? `villager${this.profession % 5}` : model.skin;
+      const built = buildMobModel(model, skin);
+      if (built) {
+        this.mountBuiltModel(built);
+        return;
+      }
+    }
+    this.buildLegacy();
+  }
+
+  /**
+   * 2.18: podłącza model 1:1 (prawdziwe pudełka i UV z Minecrafta) i zachowuje
+   * te same „uchwyty” animacji, których używa reszta klasy: `legs`, `arms`,
+   * `head` oraz lista siatek do podświetlenia po trafieniu.
+   */
+  private mountBuiltModel(built: BuiltMob) {
+    const g = this.group;
+    g.add(built.root);
+    this.meshes = built.meshes;
+    const P = built.parts;
+    const legs = this.type === 'spider'
+      ? ['rightHindLeg', 'rightMiddleHindLeg', 'rightMiddleFrontLeg', 'rightFrontLeg',
+         'leftHindLeg', 'leftMiddleHindLeg', 'leftMiddleFrontLeg', 'leftFrontLeg']
+      : ['rightHindLeg', 'leftHindLeg', 'rightFrontLeg', 'leftFrontLeg'];
+    let picked = legs.map((n) => P[n]).filter(Boolean);
+    if (picked.length === 0) picked = ['rightLeg', 'leftLeg'].map((n) => P[n]).filter(Boolean);
+    this.legs = picked;
+    const arms = this.type === 'chicken' ? ['rightWing', 'leftWing'] : ['rightArm', 'leftArm'];
+    this.arms = arms.map((n) => P[n]).filter(Boolean);
+    if (P.head) {
+      this.head = P.head;
+      this.headCanTurn = this.type !== 'ghast';
+    }
+    for (const mesh of built.meshes) {
+      mesh.userData.mobTint = 0xffffff;
+      mesh.userData.mobKind = this.type;
+    }
+    // Owca: wełna to osobny, „spuchnięty” model – po strzyżeniu po prostu go chowamy.
+    if (this.type === 'sheep') {
+      const wool = buildMobModel(MOB_MODELS.sheep_wool, 'sheep_wool');
+      if (wool) {
+        built.root.add(wool.root);
+        this.woolParts = [wool.root];
+        this.meshes.push(...wool.meshes);
+        for (const mesh of wool.meshes) {
+          mesh.userData.mobKind = 'sheep_wool';
+          mesh.userData.mobTint = this.woolColor;
+          const mat = mesh.material as THREE.MeshLambertMaterial;
+          if (mat.map) mat.color.setHex(this.woolColor);
+        }
+        if (this.sheared && wool.root) wool.root.visible = false;
+      }
+    }
+  }
+
+  private buildLegacy() {
     const g = this.group;
     if (this.type === 'pig' || this.type === 'sheep' || this.type === 'cow') {
       const isSheep = this.type === 'sheep';
@@ -800,6 +903,8 @@ export class Mob {
   shear(): boolean {
     if (this.type !== 'sheep' || this.dead || this.sheared) return false;
     this.sheared = true;
+    // 2.18: wełna to osobny model – wystarczy go schować.
+    for (const part of this.woolParts) part.visible = false;
     if (this.woolMesh) {
       const skin = snapToPalette(0xd8c8b0);
       this.woolMesh.material = mobMaterial('sheep-face', skin).clone();
@@ -1011,6 +1116,19 @@ export class Mob {
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
     this.group.rotation.y += diff * Math.min(1, dt * 8);
+
+    // 2.18: głowa odwraca się w stronę gracza, gdy ten jest blisko – tak jak
+    // w grze. Kąt jest ograniczony, żeby mob nie skręcał karku na plecy.
+    if (this.headCanTurn && !this.dead && this.head) {
+      const toPlayer = Math.atan2(player.x - b.pos.x, player.z - b.pos.z);
+      let rel = toPlayer - this.group.rotation.y;
+      while (rel > Math.PI) rel -= Math.PI * 2;
+      while (rel < -Math.PI) rel += Math.PI * 2;
+      const dist = Math.hypot(player.x - b.pos.x, player.z - b.pos.z);
+      const want = dist < 12 ? Math.max(-0.9, Math.min(0.9, -rel)) : 0;
+      const cur = this.head.rotation.y;
+      this.head.rotation.y = cur + (want - cur) * Math.min(1, dt * 6);
+    }
   }
 
   /** Cheap visibility test used by the skeleton before it shoots. */
