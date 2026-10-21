@@ -26,3 +26,6 @@ pnpm-debug.log*
 
 # 2.17: podglądy atlasów i duże archiwa paczek (zip jest w repo)
 .art-preview/
+
+# 2.18: jednorazowe narzędzia do renderowania modeli mobów (nie są częścią gry)
+.artwork/

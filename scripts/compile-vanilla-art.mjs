@@ -629,6 +629,147 @@ for (const [id, file] of Object.entries(PLAYER_SKINS)) {
 }
 
 // ---------------------------------------------------------------------------
+// skórki mobów 1:1 – baza + warstwy (oczy, zawód mieszkańca, owcza wełna)
+// ---------------------------------------------------------------------------
+
+/** Nakłada kolejne warstwy (z alfa) na pierwszą teksturę. */
+function composeLayers(files) {
+  const imgs = files.map((f) => loadTex(f)).filter(Boolean);
+  if (!imgs.length) return null;
+  const w = Math.max(...imgs.map((i) => i.w));
+  const h = Math.max(...imgs.map((i) => i.h));
+  const data = new Uint8Array(w * h * 4);
+  for (const img of imgs) {
+    for (let y = 0; y < img.h; y++) {
+      for (let x = 0; x < img.w; x++) {
+        const s = (y * img.w + x) * 4;
+        const d = (y * w + x) * 4;
+        const a = img.data[s + 3] / 255;
+        if (a <= 0) continue;
+        for (let c = 0; c < 3; c++) data[d + c] = Math.round(img.data[s + c] * a + data[d + c] * (1 - a));
+        data[d + 3] = Math.max(data[d + 3], Math.round(a * 255));
+      }
+    }
+  }
+  return { w, h, data };
+}
+
+// Zawody w grze (kolejność z `PROFESSIONS` w src/game/trading.ts) → tekstury.
+const VILLAGER_PROFESSIONS = ['farmer', 'toolsmith', 'librarian', 'shepherd', 'mason'];
+const MOB_SKIN_FILES = {
+  pig: [E + 'pig/pig_temperate.png'],
+  cow: [E + 'cow/cow_temperate.png'],
+  sheep: [E + 'sheep/sheep.png'],
+  sheep_wool: [E + 'sheep/sheep_wool.png'],
+  chicken: [E + 'chicken/chicken_temperate.png'],
+  creeper: [E + 'creeper/creeper.png'],
+  zombie: [E + 'zombie/zombie.png'],
+  skeleton: [E + 'skeleton/skeleton.png'],
+  spider: [E + 'spider/spider.png', E + 'spider/spider_eyes.png'],
+  wolf: [E + 'wolf/wolf.png'],
+  golem: [E + 'iron_golem/iron_golem.png'],
+  enderman: [E + 'enderman/enderman.png', E + 'enderman/enderman_eyes.png'],
+  slime: [E + 'slime/slime.png'],
+  ghast: [E + 'ghast/ghast.png'],
+  ...Object.fromEntries(
+    VILLAGER_PROFESSIONS.map((p, i) => [
+      `villager${i}`,
+      [E + 'villager/villager.png', E + 'villager/type/plains.png', E + `villager/profession/${p}.png`],
+    ])
+  ),
+};
+const mobSkins = {};
+const missingSkins = [];
+for (const [type, files] of Object.entries(MOB_SKIN_FILES)) {
+  const img = composeLayers(files);
+  if (!img) {
+    missingSkins.push(type);
+    continue;
+  }
+  mobSkins[type] = { png: encodePNG(img.w, img.h, img.data).toString('base64'), w: img.w, h: img.h };
+}
+
+// ---------------------------------------------------------------------------
+// grafika interfejsu (serca, głód, hotbar, sloty, przyciski, niebo)
+// ---------------------------------------------------------------------------
+const GUI_FILES = {
+  hotbar: 'gui/sprites/hud/hotbar.png',
+  hotbar_selection: 'gui/sprites/hud/hotbar_selection.png',
+  crosshair: 'gui/sprites/hud/crosshair.png',
+  heart_full: 'gui/sprites/hud/heart/full.png',
+  heart_half: 'gui/sprites/hud/heart/half.png',
+  heart_container: 'gui/sprites/hud/heart/container.png',
+  heart_poisoned: 'gui/sprites/hud/heart/poisoned_full.png',
+  food_full: 'gui/sprites/hud/food_full.png',
+  food_half: 'gui/sprites/hud/food_half.png',
+  food_empty: 'gui/sprites/hud/food_empty.png',
+  armor_full: 'gui/sprites/hud/armor_full.png',
+  armor_half: 'gui/sprites/hud/armor_half.png',
+  armor_empty: 'gui/sprites/hud/armor_empty.png',
+  air: 'gui/sprites/hud/air.png',
+  air_empty: 'gui/sprites/hud/air_empty.png',
+  exp_background: 'gui/sprites/hud/experience_bar_background.png',
+  exp_progress: 'gui/sprites/hud/experience_bar_progress.png',
+  slot: 'gui/sprites/container/slot.png',
+  button: 'gui/sprites/widget/button.png',
+  button_highlighted: 'gui/sprites/widget/button_highlighted.png',
+  button_disabled: 'gui/sprites/widget/button_disabled.png',
+  sun: 'environment/celestial/sun.png',
+  clouds: 'environment/clouds.png',
+  rain: 'environment/rain.png',
+  snow: 'environment/snow.png',
+  particle_generic: 'particle/generic_0.png',
+  particle_explosion: 'particle/explosion_0.png',
+  particle_flame: 'particle/flame.png',
+  particle_smoke: 'particle/big_smoke_0.png',
+  particle_crit: 'particle/critical_hit.png',
+  ...Object.fromEntries(
+    Array.from({ length: 10 }, (_, i) => [`destroy_${i}`, `block/destroy_stage_${i}.png`])
+  ),
+};
+const G = 'assets/minecraft/textures/';
+const guiSprites = {};
+const missingGui = [];
+for (const [name, file] of Object.entries(GUI_FILES)) {
+  const img = loadTex(G + file);
+  if (!img) {
+    missingGui.push(name);
+    continue;
+  }
+  if (name === 'rain' || name === 'snow') {
+    // Arkusz 64×256: cztery klatki 64×64 jedna pod drugą – bierzemy pierwszą.
+    const w = img.w, h = Math.min(64, img.h);
+    const out = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const s = (y * img.w + x) * 4;
+      const d = (y * w + x) * 4;
+      out[d] = img.data[s]; out[d + 1] = img.data[s + 1];
+      out[d + 2] = img.data[s + 2]; out[d + 3] = img.data[s + 3];
+    }
+    guiSprites[name] = encodePNG(w, h, out).toString('base64');
+    continue;
+  }
+  if (name === 'clouds') {
+    // `clouds.png` w paczce to maska 1-bitowa (czarne/tło i białe kłęby).
+    // Do gry potrzebujemy białych chmur z przezroczystym tłem.
+    const out = new Uint8Array(img.data);
+    for (let i = 0; i < img.w * img.h; i++) {
+      const on = out[i * 4] > 0 || out[i * 4 + 1] > 0 || out[i * 4 + 2] > 0;
+      out[i * 4] = 255; out[i * 4 + 1] = 255; out[i * 4 + 2] = 255;
+      out[i * 4 + 3] = on ? 255 : 0;
+    }
+    guiSprites[name] = encodePNG(img.w, img.h, out).toString('base64');
+    continue;
+  }
+  guiSprites[name] = encodePNG(img.w, img.h, img.data).toString('base64');
+}
+
+// księżyc: paczka trzyma fazy w katalogu `environment/celestial/moon/`.
+const moonImg = loadTex(G + 'environment/celestial/moon/full_moon.png');
+if (moonImg) guiSprites.moon = encodePNG(moonImg.w, moonImg.h, moonImg.data).toString('base64');
+else missingGui.push('moon');
+
+// ---------------------------------------------------------------------------
 // identyfikatory z kodu gry (T i I)
 // ---------------------------------------------------------------------------
 function readIds(file, startMarker, endMarker, pattern) {
@@ -769,6 +910,20 @@ export const PLAYER_SKIN_PNG: Readonly<Record<string, string>> = {${Object.entri
   .join('')}
 };
 
+/** Skórki mobów 1:1 (64×64 / 128×128 …) z paczki, gotowe do oklejenia modeli. */
+export const MOB_SKINS: Readonly<Record<string, { readonly png: string; readonly w: number; readonly h: number }>> = {
+${Object.entries(mobSkins)
+  .map(([type, s2]) => `  ${type}: { w: ${s2.w}, h: ${s2.h}, png: 'data:image/png;base64,${s2.png}' },`)
+  .join('\n')}
+};
+
+/** Grafika interfejsu i nieba z paczki (serca, hotbar, sloty, słońce…). */
+export const GUI_SPRITES: Readonly<Record<string, string>> = {
+${Object.entries(guiSprites)
+  .map(([name, png]) => `  ${name}: 'data:image/png;base64,${png}',`)
+  .join('\n')}
+};
+
 /** Palety mobów wyliczone z prawdziwych tekstur encji (najczęstsze kolory). */
 export const MOB_PALETTES: Readonly<Record<string, readonly number[]>> = {${Object.entries(mobPalettes)
   .map(([type, cols]) => `\n  ${type}: [${cols.map((c) => '0x' + c.toString(16).padStart(6, '0')).join(', ')}],`)
@@ -789,6 +944,9 @@ console.log(`kafelki bloków z paczki: ${officialTiles.length}/${Object.keys(T_I
 console.log(`ikony przedmiotów z paczki: ${nextItemTile}/${Object.keys(ITEM_IDS()).length}`);
 console.log(`podglądy: .art-preview/blocks.png, .art-preview/items.png`);
 console.log(`skórki graczy: ${Object.keys(playerSkins).length}, palety mobów: ${Object.keys(mobPalettes).length}`);
+console.log(`skórki mobów 1:1: ${Object.keys(mobSkins).length}, grafika GUI: ${Object.keys(guiSprites).length}`);
+if (missingSkins.length) console.log('brakujące skórki mobów:', missingSkins.join(', '));
+if (missingGui.length) console.log('brakująca grafika GUI:', missingGui.join(', '));
 if (missingMobs.length) console.log('brakujące moby:', missingMobs.join(', '));
 if (missingBlocks.length) console.log('brakujące kafelki:', missingBlocks.join(', '));
 if (missingItems.length) console.log('brakujące ikony:', missingItems.join(', '));

@@ -1,12 +1,25 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.17.1';
-export const GAME_RELEASE_NAME = 'Grafika jak w Minecrafcie';
+export const GAME_VERSION = '2.18.0';
+export const GAME_RELEASE_NAME = 'Moby jak w Minecrafcie';
 
 /**
- * 2.17: prawdziwa paczka tekstur w całej grze – bloki, przedmioty, skórki
- * graczy, a moby dostają kolory z prawdziwych tekstur encji.
+ * 2.18: prawdziwe modele mobów 1:1 z Minecrafta (waniliowe pudełka i UV),
+ * pikselowy interfejs HUD z paczki (serca, głód, hotbar, celownik), chmury,
+ * słońce, księżyc, deszcz i pęknięcia bloków wprost z tekstur paczki.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Moby 1:1 jak w Minecrafcie',
+    text: 'Każdy z 14 mobów ma teraz prawdziwy model z gry: te same pudełka, te same punkty zawiasów i ten sam układ UV, więc tekstura z paczki trafia dokładnie na swoją ścianę. Krowa ma łaty i różowy ryjek, świnia oczy i chrapkę, creeper twarz z charakterystycznym grymasem, owca wełnę (osobny, „spuchnięty” model chowany po strzyżeniu), a mieszkaniec szatę zależną od zawodu. Wilk po oswojeniu dostaje czerwoną obrożę, a każdy mob odwraca głowę w stronę gracza.',
+  },
+  {
+    title: 'Pikselowy interfejs z paczki',
+    text: 'Serca, drumsticki głodu, pancerz i pęcherzyki powietrza to teraz grafiki z paczki – z konturem pustego serca, półsercami i pełnym paskiem doświadczenia. Hotbar ma tło i ramkę wybranego slotu jak w grze, celownik jest pikselowy, a sloty ekwipunku dostały teksturę z paczki.',
+  },
+  {
+    title: 'Niebo, deszcz i pęknięcia bloków z paczki',
+    text: 'Chmury mają kształty z paczki (maska kłębów z przezroczystym tłem, sterowana pogodą), słońce i księżyc są pikselowe, deszcz pada w postaci kropli z tekstury, a przy kopaniu bloku widać dziesięć prawdziwych faz pękania.',
+  },
   {
     title: 'Wszystkie bloki proszą się o paczkę tekstur',
     text: 'Cały świat – 155 kafelków od trawy i bruku po kwarc, beton, błoto i owoce morza – rysuje się teraz teksturami z paczki w stylu waniliowego Minecrafta. Trawa i liście są zabarwione kolorami biomu z colormapy paczki, więc wyglądają dokładnie jak w oryginale.',

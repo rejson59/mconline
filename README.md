@@ -1,6 +1,14 @@
-# BlockCraft 2.17 🧱
+# BlockCraft 2.18 🧱
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+**Wersja 2.18 „Moby jak w Minecrafcie”** – prawdziwe modele i pikselowy interfejs:
+
+* **Moby 1:1 z gry.** Nowy moduł `src/game/mobModels.ts` odwzorowuje **waniliowe modele** z Minecrafta: te same prostopadłościany, te same punkty zawiasów (`pivot`) i ten sam układ UV, co w grze. Dzięki temu tekstura z paczki trafia dokładnie na swoją ścianę – oczy, ryjek, łaty krowy i grymas creepera są tam, gdzie w oryginale. Modele przechodzą konwersję waniliowego układu (piksele, oś Y w dół, stopy w y = 24) na świat Three – razem z dylatacją (wełna owcy, czapka mieszkańca) i lustrzanymi UV lewych kończyn. W grze: **14 typów mobów + wełna owcy** = 15 modeli, każdy z własną skórką z paczki.
+* **Zachowanie jak w grze.** Owca ma osobny, „spuchnięty” model wełny, który znika po strzyżeniu, a jej runo ma jeden z **16 kolorów barwników** (większość owiec jest biała, kolorowe trafiają się rzadziej – jak w grze). Wilk po oswojeniu dostaje **czerwoną obrożę** (zamiast przemalowanej sierści). Mieszkaniec wybiera jedną z **pięciu tekstur zawodów** (rolnik, kowal, bibliotekarz, pasterz, budowniczy). Każdy mob **odwraca głowę w stronę gracza** (z ograniczeniem kąta), a modele humanoidalne mają skalę 15/16 jak w wanilii.
+* **Interfejs z paczki.** `src/game/art/uiSprites.ts` + `packTheme.ts`: serca (pełne, pół, kontur), drumsticki głodu, pancerz, pęcherzyki powietrza, pasek doświadczenia, celownik, tło hotbara i ramka wybranego slotu, tekstura slotów ekwipunku oraz **przyciski menu** (`button`, `button_highlighted`, `button_disabled`) wstawiane przez zmienne CSS. Wszystko z fallbackiem do rysunków z poprzednich wersji.
+* **Niebo i efekty z paczki.** Chmury mają kształty kłębów z paczki (maska 1-bitowa zamieniona na białe chmury z przezroczystym tłem, sterowana pogodą), słońce i księżyc są pikselowe, deszcz pada jako kropla z tekstury, a kopany blok pokazuje **10 prawdziwych faz pękania** (`destroy_stage_0..9`).
+* **Testy.** `npm test` to **1637 kontroli silnika + 214 testów UI**. Nowa sekcja 2.18 sprawdza m.in.: 15 modeli i 19 skórek, rozmiary tekstur (krowa 64×64, owca 64×32, golem 128×128, ghast 128×64), **pokrycie UV każdego moba ≥ 70%** (czyli każda ściana trafia w niepusty fragment tekstury), układ ścian głowy świni, lustrzane UV, budowę modelu, to, że każdy mob w grze używa modelu 1:1, chowanie wełny, obrożę, obrót głowy, a także grafiki HUD (w tym to, że każdy adres `data:` ma **dokładnie jeden prefiks**), motyw CSS z paczki, słońce, deszcz i fazy pękania.
 
 **Wersja 2.17 „Grafika jak w Minecrafcie”** – prawdziwa paczka tekstur w całej grze:
 

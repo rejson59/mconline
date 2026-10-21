@@ -52,6 +52,7 @@ import {
 import * as Sfx from './audio';
 import { patchChunkMaterial, HELD_POWER, type HeldLightState, type SunState } from './lighting';
 import { cloudLook, rainFogMix } from './sky';
+import { spriteTexture } from './art/spriteTex';
 import { buildItemIcons } from './itemIcons';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
@@ -844,12 +845,18 @@ export class Game {
       patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime, held: this.heldLight, sun: this.sunState })
     );
     this.dropMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.4, side: THREE.DoubleSide });
-    this.crackTex = atlas.cracks.map((c) => {
-      const t = new THREE.CanvasTexture(c);
-      t.magFilter = THREE.NearestFilter;
-      t.minFilter = THREE.NearestFilter;
-      return t;
-    });
+    // 2.18: pęknięcia bloku wprost z paczki (10 faz, jak w grze). Gdyby
+    // grafiki zabrakło – zostają proceduralne szczeliny z atlasu.
+    this.crackTex = Array.from({ length: 10 }, (_, i) => spriteTexture(`destroy_${i}`))
+      .filter((t): t is THREE.Texture => !!t);
+    if (this.crackTex.length < 10) {
+      this.crackTex = atlas.cracks.map((c) => {
+        const t = new THREE.CanvasTexture(c);
+        t.magFilter = THREE.NearestFilter;
+        t.minFilter = THREE.NearestFilter;
+        return t;
+      });
+    }
 
     // selection box
     const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004));
@@ -869,7 +876,8 @@ export class Game {
     this.scene.add(this.ambient, this.dirLight, this.dirLight.target);
 
     // sky objects
-    const sunTex = makeCanvasTex(32, (c) => {
+    // 2.18: słońce i księżyc wprost z paczki (pikselowe, jak w grze).
+    const sunTex = spriteTexture('sun') ?? makeCanvasTex(32, (c) => {
       c.fillStyle = 'rgba(255,240,150,0.25)';
       c.fillRect(0, 0, 32, 32);
       c.fillStyle = '#fff8c0';
@@ -878,7 +886,7 @@ export class Game {
       c.fillRect(9, 9, 14, 14);
     });
     this.sun = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshBasicMaterial({ map: sunTex, transparent: true, fog: false, depthWrite: false }));
-    const moonTex = makeCanvasTex(32, (c) => {
+    const moonTex = spriteTexture('moon') ?? makeCanvasTex(32, (c) => {
       c.fillStyle = '#dde2ee';
       c.fillRect(8, 8, 16, 16);
       c.fillStyle = '#9aa0b0';
@@ -922,7 +930,15 @@ export class Game {
     // 2.8.2: chmury z prawdziwego szumu, wolniejsze i dwuwarstwowe.
     // Warstwa podstawowa: rzadkie, jasne kłęby. Warstwa burzowa: gęsta,
     // niska i ciemniejsza – pojawia się płynnie wraz z deszczem.
-    this.cloudTex = makeCloudTexture(256, 0x5eed1, 0.54);
+    // 2.18: chmury w kształtach z paczki (maska 1-bitowa → białe kłęby
+    // z przezroczystym tłem). Gdyby grafiki brakowało, zostaje szum 2.8.
+    const packClouds = spriteTexture('clouds');
+    if (packClouds) {
+      this.cloudTex = packClouds;
+      this.cloudTex.wrapS = this.cloudTex.wrapT = THREE.RepeatWrapping;
+    } else {
+      this.cloudTex = makeCloudTexture(256, 0x5eed1, 0.54);
+    }
     this.cloudTex.repeat.set(3, 3);
     this.stormTex = makeCloudTexture(256, 0xb017, 0.42);
     this.stormTex.repeat.set(2.2, 2.2);
@@ -1524,9 +1540,13 @@ export class Game {
     }
     this.rainGeo = new THREE.BufferGeometry();
     this.rainGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    // 2.18: kropla deszczu to pikselowy „pasek” z paczki (`environment/rain.png`).
+    const rainTex = spriteTexture('rain');
     this.rain = new THREE.Points(
       this.rainGeo,
-      new THREE.PointsMaterial({ color: 0xb7d4ff, size: 2.1, sizeAttenuation: false, transparent: true, opacity: 0.55, fog: false, depthWrite: false })
+      rainTex
+        ? new THREE.PointsMaterial({ map: rainTex, color: 0xffffff, size: 1.1, sizeAttenuation: true, transparent: true, opacity: 0.75, alphaTest: 0.05, fog: false, depthWrite: false })
+        : new THREE.PointsMaterial({ color: 0xb7d4ff, size: 2.1, sizeAttenuation: false, transparent: true, opacity: 0.55, fog: false, depthWrite: false })
     );
     this.rain.frustumCulled = false;
     this.rain.visible = false;

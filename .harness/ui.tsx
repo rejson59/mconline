@@ -10,6 +10,7 @@
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MainMenu, Controls, AchievementsPanel, PauseMenu, filterAndSortWorlds } from '../src/components/Menus';
+import HUD from '../src/components/HUD';
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS, applyPreset } from '../src/utils/settings';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../src/utils/version';
@@ -234,7 +235,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.17') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.18') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -528,7 +529,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces the public server', menu.includes('Serwer publiczny'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.17'));
+  check('the menu names the current release', menu.includes('WERSJA 2.18'));
 }
 
 section('2.4: brewing rules');
@@ -720,6 +721,41 @@ async function mountWithJsdom(): Promise<boolean> {
   check('unmount leaves no markup', (container.textContent ?? '').length === 0);
   dom.window.close();
   return true;
+}
+
+section('2.18: motyw interfejsu z paczki');
+{
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require('node:fs') as typeof import('node:fs');
+  const css = fs.readFileSync(`${process.cwd()}/src/index.css`, 'utf8');
+  check('sloty używają grafiki z paczki', css.includes('var(--mc-slot-img'));
+  check('przyciski używają grafiki z paczki', css.includes('var(--mc-btn-img'));
+  check('przyciski mają stan hover z paczki', css.includes('var(--mc-btn-hover-img'));
+  check('przyciski mają stan disabled z paczki', css.includes('var(--mc-btn-disabled-img'));
+  check('piksele nie są rozmywane', css.includes('image-rendering: pixelated'));
+  const main = fs.readFileSync(`${process.cwd()}/src/main.tsx`, 'utf8');
+  check('motyw jest instalowany przy starcie', main.includes('installPackTheme()'));
+  const vite = fs.readFileSync(`${process.cwd()}/vite.config.ts`, 'utf8');
+  check('preview działa spoza localhost', vite.includes('allowedHosts: true'));
+}
+
+section('2.18: HUD rysuje grafiki z paczki');
+{
+  const state = {
+    mode: 'survival', health: 14, maxHealth: 20, hunger: 12, armor: [null, null, { id: 1, dur: 100 }, null],
+    air: 8, maxAir: 10, xp: 0.4, level: 3, hotbar: Array(9).fill(null), selected: 1,
+    effects: [], messages: [], holdItem: null, sprinting: false, flying: false, underwater: false, sneaking: false,
+    time: 0.4, hurtCount: 0, zoom: false, minimap: false, bow: -1,
+  } as unknown as Parameters<typeof HUD>[0]['hud'];
+  const html = renderToStaticMarkup(<HUD hud={state} icons={{}} />);
+  const images = (html.match(/<img/g) ?? []).length;
+  check('HUD składa się z grafik, nie z rysowanych kształtów', images >= 30, `${images} obrazków`);
+  check('każdy adres ma jeden prefiks data:', !html.includes('base64,data:'));
+  check('serca pochodzą z paczki', (html.match(/width="18" height="18" class="pixelated"/g) ?? []).length >= 20, `${images}`);
+  check('hotbar ma tło z paczki', html.includes('url(data:image/png'));
+  check('pasek doświadczenia ma tło i postęp', (html.match(/url\(data:image\/png/g) ?? []).length >= 2);
+  check('celownik jest obrazkiem, nie divem', /translate\(-50%,\s?-50%\)/.test(html));
+  check('poziom życia nadal jest wypisany', html.includes('14/20'), html.slice(-400));
 }
 
 try {
