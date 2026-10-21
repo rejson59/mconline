@@ -1,6 +1,15 @@
-# BlockCraft 2.16 🧱
+# BlockCraft 2.17 🧱
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+**Wersja 2.17 „Grafika jak w Minecrafcie”** – prawdziwa paczka tekstur w całej grze:
+
+* **Wszystkie bloki z paczki.** Świat rysuje się teraz teksturami z dołączonej paczki w stylu waniliowego Minecrafta – **155 kafelków**, od trawy, bruku i desek, przez rudy, beton i terakotę, po kwarc, nether, błoto i lilię wodną. Trawa i liście są barwione kolorami z `colormap` paczki (`grass 124,189,108`, `foliage 91,171,71`), a animacje (woda, lawa, magma, portal) biorą pierwszą klatkę. Kafelki z paczki nie przechodzą już przez „wygładzanie” proceduralne, więc drobny rysunek (cegły, deski, sęki) zostaje ostry.
+* **Ikony przedmiotów jak w oryginale.** **99 z 100** przedmiotów ma prawdziwe ikony 16×16: kilofy, siekiery, miecze, zbroje, jedzenie, sztabki, klejnoty, mikstury z kolorowym płynem (warstwa `potion_overlay` zabarwiona jak w grze), wiadra, pochodnie i wędka. Są powiększane do 48 px bez wygładzania, więc wyglądają ostro także na telefonie.
+* **Steve i Alex w prawdziwych skórkach.** Skórki 64×64 z paczki są rozłożone na ciało według **waniliowego układu UV** (twarz, koszulka, spodnie, buty – każda ściana z właściwego miejsca tekstury). Pozostałe skórki zachowują pikselowe tekstury z 2.16, więc wybór wyglądu nadal działa.
+* **Moby w kolorach z paczki.** Każdy z **14 mobów** dostaje paletę wyliczoną z własnej tekstury encji (najczęstsze kolory), a odcień każdej części ciała trafia na najbliższy kolor z tej palety. Dzięki temu krowa ma brązy i kremowe łaty, creeper soczyste zielenie, a zombie zieleń i turkus – bez ryzykownego mapowania UV na uproszczonych modelach.
+* **Bez zależności i bez sieci.** Cała grafika jest wkompilowana w build jako PNG w base64 (razem ~63 kB) i dekodowana własnym dekoderem PNG + DEFLATE (`src/game/art/miniPng.ts`), synchronicznie, bez canvasu – działa też w testach w Node. Build pozostaje jednym plikiem HTML.
+* **Testy.** `npm test` to **1565 kontroli silnika + 214 testów UI** – m.in. dekodowanie obu atlasów, 155 niepustych kafelków z detalem, podmiana kafelków w atlasie gry, ikony przedmiotów, 64×64 skórka Steve’a z ciemnymi oczami w prostokącie twarzy, układ UV ścian głowy, palety wszystkich 14 mobów i zrzut kolorów na paletę. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą; wersja **2.17.0** jest na GitHub Pages.
 
 **Wersja 2.16 „Pikselowe tekstury”** – moby i gracze jak w Minecrafcie, plus 23 nowe przepisy:
 

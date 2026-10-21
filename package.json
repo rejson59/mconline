@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.16.0",
-  "description": "BlockCraft 2.16 „Pikselowe tekstury” – polska gra sandboxowa w przeglądarce: wielobarwne tekstury mobów i graczy, 155 przepisów rzemieślniczych, publiczny serwer, ekwipunek i crafting jak w Minecrafcie.",
+  "version": "2.17.0",
+  "description": "BlockCraft 2.17 „Grafika jak w Minecrafcie” – polska gra sandboxowa w przeglądarce: tekstury bloków, przedmiotów i skórek z paczki w stylu Minecrafta, 155 przepisów, publiczny serwer i crafting jak w oryginale.",
   "type": "module",
   "license": "MIT",
   "keywords": [

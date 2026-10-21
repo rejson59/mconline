@@ -16,6 +16,7 @@
  */
 
 import * as THREE from 'three';
+import { MOB_PALETTES } from './art/vanillaArt.generated';
 
 export type MobTexKind =
   | 'grain'
@@ -454,6 +455,48 @@ function paintKind(kind: MobTexKind, p: Painter) {
       break;
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Palety z paczki tekstur
+// ---------------------------------------------------------------------------
+
+/**
+ * 2.17: każdy mob dostaje paletę wyliczoną z prawdziwej tekstury encji z
+ * paczki (`MOB_PALETTES`). Kolor części ciała przesuwamy na najbliższy kolor
+ * z tej palety, ale tylko gdy jest naprawdę blisko – dzięki temu moby mają
+ * dokładnie te odcienie co w Minecrafcie, a żaden drobny element (np. różowy
+ * ryjek świni) nie zmienia się w losowy kolor.
+ */
+let activePalette: readonly number[] | null = null;
+
+export function setMobPalette(type: string) {
+  activePalette = MOB_PALETTES[type] ?? null;
+}
+
+export function activeMobPalette(): readonly number[] {
+  return activePalette ?? [];
+}
+
+/** Najbliższy kolor palety (dist ≤ maxDistance) albo kolor wejściowy. */
+export function snapToPalette(color: number, maxDistance = 64): number {
+  if (!activePalette || activePalette.length === 0) return color;
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  let best = color;
+  let bestD = maxDistance * maxDistance;
+  for (const c of activePalette) {
+    const dr = ((c >> 16) & 0xff) - r;
+    const dg = ((c >> 8) & 0xff) - g;
+    const db = (c & 0xff) - b;
+    const d = dr * dr + dg * dg + db * db;
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best;
 }
 
 // ---------------------------------------------------------------------------

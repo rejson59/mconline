@@ -1,4 +1,5 @@
 import { ITEM_LIST, type ItemDef } from './items';
+import { officialItemPixels } from './packArt';
 
 /**
  * Pixel-art painter for item icons.
@@ -1618,9 +1619,51 @@ function armorPal(it: ItemDef): Record<string, string> {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * 2.17: ikona z paczki (16×16 RGBA) → data URL 48×48 powiększony bez
+ * wygładzania. Gdy canvas nie działa (np. w testach), zwracamy `null`
+ * i gra zostaje przy rysowanej ikonie.
+ */
+function paintPixels(px: Uint8Array): string | null {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 16;
+    c.height = 16;
+    const ctx = c.getContext('2d');
+    if (!ctx) return null;
+    const img = ctx.createImageData(16, 16);
+    img.data.set(px);
+    ctx.putImageData(img, 0, 0);
+    const out = document.createElement('canvas');
+    out.width = 48;
+    out.height = 48;
+    const o = out.getContext('2d');
+    if (!o) return c.toDataURL();
+    o.imageSmoothingEnabled = false;
+    o.drawImage(c, 0, 0, 48, 48);
+    const url = out.toDataURL();
+    return url && url.length > 'data:,'.length ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildItemIcons(): Record<number, string> {
   const icons: Record<number, string> = {};
+  // 2.17: najpierw ikony z paczki (Pixel Perfection CE) – tylko dla
+  // przedmiotów, które paczka 1.16 naprawdę ma.
+  const fromPack: Record<number, string> = {};
   for (const it of ITEM_LIST) {
+    const px = officialItemPixels(it.id);
+    if (!px) continue;
+    const url = paintPixels(px);
+    if (url) fromPack[it.id] = url;
+  }
+  for (const it of ITEM_LIST) {
+    if (fromPack[it.id]) {
+      icons[it.id] = fromPack[it.id];
+      continue;
+    }
     if (it.kind === 'armor') icons[it.id] = paint(armorArt(it), armorPal(it));
     else if (it.kind === 'tool') icons[it.id] = paint(toolArt(it), toolPal(it));
     else if (ART[it.id]) icons[it.id] = paint(ART[it.id][1], ART[it.id][0]);

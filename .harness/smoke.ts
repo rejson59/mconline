@@ -72,6 +72,11 @@ import {
 import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
 import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
 import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial, type MobTexKind } from '../src/game/mobTextures';
+import { decodePng } from '../src/game/art/miniPng';
+import { BLOCK_ATLAS_PNG, ITEM_ATLAS_PNG, OFFICIAL_TILES, MOB_PALETTES, PLAYER_SKIN_PNG } from '../src/game/art/vanillaArt.generated';
+import { officialBlockAtlas, officialItemAtlas, officialItemPixels, isOfficialTile, officialTileCount, officialItemCount, applyOfficialTiles } from '../src/game/packArt';
+import { WIDE_LAYOUT, SLIM_LAYOUT, faceRects, hasPackSkin, packSkinCount, playerSkinTexture } from '../src/game/skinArt';
+import { setMobPalette, snapToPalette, activeMobPalette } from '../src/game/mobTextures';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
 import {
@@ -3104,8 +3109,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.16'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Pikselowe tekstury');
+  check('release label is the current line', GAME_VERSION.startsWith('2.17'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Grafika jak w Minecrafcie');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3128,6 +3133,10 @@ section('2.8/2.8.1: wersja wydania');
   check('2.16 highlights say the mobs are multicoloured', RELEASE_HIGHLIGHTS.some((h) => /łaty|runo|plamy|pancerz/i.test(h.text)));
   check('2.16 highlights mention player textures', RELEASE_HIGHLIGHTS.some((h) => /gracz|postać/i.test(h.title) && /tkanin|jeans|skór/i.test(h.text)));
   check('2.16 highlights list the new recipes', RELEASE_HIGHLIGHTS.some((h) => /schod/i.test(h.text) && /płat|płyt/i.test(h.text)));
+  check('2.17 highlights announce the texture pack', RELEASE_HIGHLIGHTS.some((h) => /paczk/i.test(h.text)));
+  check('2.17 highlights mention the blocks', RELEASE_HIGHLIGHTS.some((h) => /blok/i.test(h.title)));
+  check('2.17 highlights mention the item icons', RELEASE_HIGHLIGHTS.some((h) => /ekwipun|ikon/i.test(h.title + h.text)));
+  check('2.17 highlights mention the player skins', RELEASE_HIGHLIGHTS.some((h) => /Steve|Alex/i.test(h.text)));
 }
 
 // ============================================ 2.13 „Jak w Minecrafcie”
@@ -4416,7 +4425,7 @@ section('2.16: pikselowe tekstury mobów i graczy');
   const eng = readSource('src/game/engine.ts');
   check('silnik buduje awatary z teksturami', /avatarMaterial\(AVATAR_KINDS\[kind\]/.test(eng));
   const mobsSrc = readSource('src/game/mobs.ts');
-  check('moby biorą materiał z modułu tekstur', /mobMaterial\(texKind, color\)/.test(mobsSrc) && /kindForColor/.test(mobsSrc));
+  check('moby biorą materiał z modułu tekstur', /mobMaterial\(texKind, base\)/.test(mobsSrc) && /kindForColor/.test(mobsSrc));
 }
 
 section('2.16: nowe przepisy rzemieślnicze');
@@ -4475,6 +4484,111 @@ section('2.16: nowe przepisy rzemieślnicze');
   // Naprawiony błąd: blackstone nie „wypala się” w siebie.
   eq('blackstone nie jest paliwem ani wynikiem wypalania', smeltResult(B.BLACKSTONE), null);
   eq('soul sand nadal daje soul soil', smeltResult(B.SOUL_SAND), B.SOUL_SOIL);
+}
+
+// ============================================ 2.17: grafika z paczki tekstur
+section('2.17: tekstury z paczki w całej grze');
+{
+  // --- atlas bloków
+  const blocks = decodePng(BLOCK_ATLAS_PNG);
+  eq('atlas bloków z paczki ma 256×256', `${blocks.width}×${blocks.height}`, '256×256');
+  const colors = new Set<number>();
+  for (let i = 0; i < blocks.data.length; i += 4) {
+    colors.add((blocks.data[i] << 16) | (blocks.data[i + 1] << 8) | blocks.data[i + 2]);
+  }
+  check('atlas bloków jest wielobarwny', colors.size > 800, `${colors.size} kolorów`);
+  eq('wszystkie 155 kafelków pochodzi z paczki', officialTileCount(), 155);
+  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 155 && OFFICIAL_TILES[154] === 154);
+  check('kafelek spoza listy nie jest oficjalny', !isOfficialTile(999) && isOfficialTile(0));
+  const cached = officialBlockAtlas();
+  check('atlas bloków dekoduje się w grze', cached != null && cached.width === 256);
+
+  // --- podmiana kafelków w atlasie gry
+  const fake = { data: new Uint8ClampedArray(256 * 256 * 4) };
+  const copied = applyOfficialTiles(fake as unknown as ImageData);
+  eq('applyOfficialTiles podmienia 155 kafelków', copied, 155);
+  let nonZero = 0;
+  for (let i = 0; i < fake.data.length; i += 4) if (fake.data[i + 3] > 0) nonZero++;
+  check('po podmianie atlas ma niepuste piksele', nonZero > 155 * 16 * 16 * 0.5, `${nonZero} px`);
+
+  // Każdy oficjalny kafelek jest niepusty i ma co najmniej 2 kolory.
+  let emptyTiles = 0;
+  let flatTiles = 0;
+  for (const tile of OFFICIAL_TILES) {
+    const ox = (tile % 16) * 16;
+    const oy = Math.floor(tile / 16) * 16;
+    const seen = new Set<number>();
+    let opaque = 0;
+    for (let y = 0; y < 16; y++) {
+      for (let x = 0; x < 16; x++) {
+        const i = ((oy + y) * 256 + ox + x) * 4;
+        if (blocks.data[i + 3] > 8) opaque++;
+        seen.add((blocks.data[i] << 16) | (blocks.data[i + 1] << 8) | blocks.data[i + 2]);
+      }
+    }
+    if (opaque === 0) emptyTiles++;
+    if (seen.size < 2) flatTiles++;
+  }
+  eq('żaden kafelek z paczki nie jest pusty', emptyTiles, 0);
+  eq('każdy kafelek z paczki ma detal (>= 2 kolory)', flatTiles, 0);
+
+  // --- ikony przedmiotów
+  const items = decodePng(ITEM_ATLAS_PNG);
+  eq('atlas ikon ma 256×256', `${items.width}×${items.height}`, '256×256');
+  check('ikony przedmiotów pochodzą z paczki', officialItemCount() >= 95, `${officialItemCount()}`);
+  check('kilof ma ikonę z paczki', officialItemPixels(I.WOOD_PICK) != null);
+  check('miecz ma ikonę z paczki', officialItemPixels(I.DIAMOND_SWORD) != null);
+  check('mikstura ma ikonę z paczki', officialItemPixels(I.POTION_HEAL) != null);
+  check('nieznany przedmiot nie ma ikony z paczki', officialItemPixels(99999) == null);
+  const pick = officialItemPixels(I.WOOD_PICK)!;
+  let pickOpaque = 0;
+  for (let i = 3; i < pick.length; i += 4) if (pick[i] > 8) pickOpaque++;
+  check('ikona kilofa ma widoczne piksele', pickOpaque > 20, `${pickOpaque} px`);
+  eq('oficjalny atlas ikon dekoduje się w grze', officialItemAtlas()?.width, 256);
+
+  // --- skórki graczy
+  eq('dwie skórki graczy z paczki', packSkinCount(), 2);
+  check('Steve ma skórkę z paczki', hasPackSkin('steve') && PLAYER_SKIN_PNG.steve.startsWith('data:image/png;base64,'));
+  check('Alex ma skórkę z paczki', hasPackSkin('alex'));
+  check('inne skórki zostają proceduralne', !hasPackSkin('creeper'));
+  const steve = decodePng(PLAYER_SKIN_PNG.steve);
+  eq('skórka Steve ma 64×64', `${steve.width}×${steve.height}`, '64×64');
+  // Twarz: prostokąt front głowy (8,8)-(16,16) musi mieć jasną skórę i ciemne oczy.
+  let skinPx = 0;
+  let darkPx = 0;
+  for (let y = 8; y < 16; y++) {
+    for (let x = 8; x < 16; x++) {
+      const i = (y * 64 + x) * 4;
+      if (steve.data[i + 3] < 128) continue;
+      skinPx++;
+      if (steve.data[i] < 70 && steve.data[i + 1] < 70) darkPx++;
+    }
+  }
+  check('twarz Steve ma piksele skóry', skinPx >= 60, `${skinPx}`);
+  check('twarz Steve ma ciemne oczy', darkPx >= 2, `${darkPx}`);
+
+  // --- układ UV
+  const head = faceRects(WIDE_LAYOUT.head);
+  eq('sześć ścian głowy', head.length, 6);
+  eq('przód głowy to (8,8)-(16,16)', `${head[5].x0},${head[5].y0},${head[5].x1},${head[5].y1}`, '8,8,16,16');
+  eq('góra głowy to (8,0)-(16,8)', `${head[2].x0},${head[2].y0},${head[2].x1},${head[2].y1}`, '8,0,16,8');
+  eq('prawa ręka Alexa jest węższa', SLIM_LAYOUT.rightArm.w, 3);
+  eq('prawa ręka Steve’a ma 4 piksele', WIDE_LAYOUT.rightArm.w, 4);
+  check('tekstura skórki tworzy się w grze', playerSkinTexture('steve') != null);
+
+  // --- palety mobów
+  eq('palety wszystkich 14 mobów', Object.keys(MOB_PALETTES).length, 14);
+  check('paleta krowy ma brązy', MOB_PALETTES.cow.some((c) => ((c >> 16) & 0xff) > 0x30 && ((c >> 16) & 0xff) < 0x80));
+  check('paleta creepera ma zielenie', MOB_PALETTES.creeper.some((c) => ((c >> 8) & 0xff) > 0x80));
+  setMobPalette('creeper');
+  check('paleta moba jest aktywna', activeMobPalette().length >= 5);
+  const snapped = snapToPalette(0x3aaa32);
+  check('kolor creepera trafia w paletę paczki', MOB_PALETTES.creeper.includes(snapped), snapped.toString(16));
+  const far = snapToPalette(0x0000ff, 8);
+  eq('odległy kolor nie jest przesuwany', far, 0x0000ff);
+  setMobPalette('__brak__');
+  eq('mob bez palety zachowuje kolor', snapToPalette(0x123456), 0x123456);
+  setMobPalette('cow');
 }
 
 // =================================================================== report
