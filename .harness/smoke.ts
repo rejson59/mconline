@@ -70,7 +70,7 @@ import {
   SKINS, DEFAULT_SKIN_ID, SKIN_KEY, skinById, loadSkinId, saveSkinId, nextSkinId, fallbackSkin,
 } from '../src/game/skins';
 import { aabbIntersectsBlock, stepBody, STEP_HEIGHT, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, SHEEP_WOOL_COLORS, woolBlockFor, type MobType } from '../src/game/mobs';
 import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial, type MobTexKind } from '../src/game/mobTextures';
 import { decodePng } from '../src/game/art/miniPng';
 import { MOB_MODELS, boxFaces, buildMobModel, mobSkinTexture, mobModelCount } from '../src/game/mobModels';
@@ -609,29 +609,31 @@ section('mobs: behaviour');
 
   check('mobs actually wander', moved.length >= 3, moved.join(','));
 
-  // spider: bites up close, climbs over a wall
-  const w3 = new World(31337);
-  w3.getChunk(0, 0);
-  const near = playerAt(7.0, h + 1, 6.5);
+  // spider: bites up close, climbs over a wall.
+  // 2.22: pająk ma waniliowe pudełko 1,4 × 0,9 bloku, więc testy stawiają go
+  // na płaskiej łące – na zboczu o szerokości 0,9 wchodził w sąsiedni blok.
+  const w3 = new World(31337, true);
+  const g3 = FLAT_H + 1;
+  const near = playerAt(7.0, g3, 6.5);
   let bites = 0;
-  const sp = new Mob('spider', 6.5, h + 1, 6.5);
+  const sp = new Mob('spider', 6.0, g3, 6.5);
   for (let i = 0; i < 60 && bites === 0; i++) sp.update(1 / 60, w3, near, () => bites++, () => {}, false);
   check('spider bites up close', bites > 0);
 
-  w3.setBlock(7, h + 1, 6, B.STONE);
-  const sp2 = new Mob('spider', 6.5, h + 1, 6.5);
+  w3.setBlock(7, g3, 6, B.STONE);
+  const sp2 = new Mob('spider', 6.0, g3, 6.5);
   const y0 = sp2.body.pos.y;
   let peak = y0;
-  for (let i = 0; i < 60 * 4; i++) { sp2.update(1 / 60, w3, player, () => {}, () => {}, false); peak = Math.max(peak, sp2.body.pos.y); }
+  const ahead = playerAt(10.5, g3, 6.5);
+  for (let i = 0; i < 60 * 4; i++) { sp2.update(1 / 60, w3, ahead, () => {}, () => {}, false); peak = Math.max(peak, sp2.body.pos.y); }
   check('spider climbs over a block', peak > y0 + 0.9, `y0=${y0} peak=${peak}`);
 
   // a tall wall: the spider crawls up it while the player is above
-  const w5 = new World(31337);
-  w5.getChunk(0, 0);
-  const h5 = w5.heightAt(6, 6);
+  const w5 = new World(31337, true);
+  const h5 = FLAT_H;
   for (let dy = 1; dy <= 3; dy++) w5.setBlock(7, h5 + dy, 6, B.STONE);
   const onTop = playerAt(10.5, h5 + 4, 6.5);
-  const sp3 = new Mob('spider', 6.5, h5 + 1, 6.5);
+  const sp3 = new Mob('spider', 6.0, h5 + 1, 6.5);
   const y1 = sp3.body.pos.y;
   let climbed = 0, sawClimb = false;
   for (let i = 0; i < 60 * 4; i++) {
@@ -683,7 +685,7 @@ section('mobs: behaviour');
   const sheep = new Mob('sheep', 6.5, h + 1, 6.5);
   check('sheep can be sheared once', sheep.shear() && !sheep.shear());
   const cow = new Mob('cow', 6.5, h + 1, 6.5);
-  check('cow has a body', cow.body.w > 0.9);
+  check('cow has a body', cow.body.w === 0.9);
 }
 
 // ============================================================ chests/furnaces
@@ -3137,8 +3139,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.21'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Bloki i przedmioty jak w grze');
+  check('release label is the current line', GAME_VERSION.startsWith('2.22'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Moby i świat 1:1 jak w grze');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3196,6 +3198,11 @@ section('2.8/2.8.1: wersja wydania');
   check('2.21 highlights describe the drop rule', RELEASE_HIGHLIGHTS.some((h) => /poziomu kilofa/i.test(h.text) && /drop/i.test(h.text)));
   check('2.21 highlights mention the cactus growth', RELEASE_HIGHLIGHTS.some((h) => /kaktus/i.test(h.text) && /trzech bloków/i.test(h.text)));
   check('2.21 highlights mention stack sizes', RELEASE_HIGHLIGHTS.some((h) => /wiadro|mikstur/i.test(h.text)));
+  check('2.22 highlights announce the sheep', RELEASE_HIGHLIGHTS.some((h) => /owca/i.test(h.title) && /12-pikselowe/i.test(h.text)));
+  check('2.22 highlights mention grazing', RELEASE_HIGHLIGHTS.some((h) => /wypas|skubie/i.test(h.text)));
+  check('2.22 highlights list all 16 wool colours', RELEASE_HIGHLIGHTS.some((h) => /16 kolorów wełny/i.test(h.title)));
+  check('2.22 highlights mention mob hitboxes', RELEASE_HIGHLIGHTS.some((h) => /EntityDimensions/.test(h.text) && /0,6 × 1,99/.test(h.text)));
+  check('2.22 highlights fix the spider', RELEASE_HIGHLIGHTS.some((h) => /body1|odwłok/i.test(h.text)));
 }
 
 // ============================================ 2.13 „Jak w Minecrafcie”
@@ -4592,8 +4599,8 @@ section('2.17: tekstury z paczki w całej grze');
     colors.add((blocks.data[i] << 16) | (blocks.data[i + 1] << 8) | blocks.data[i + 2]);
   }
   check('atlas bloków jest wielobarwny', colors.size > 800, `${colors.size} kolorów`);
-  eq('wszystkie 157 kafelków pochodzi z paczki', officialTileCount(), 157);
-  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 157 && OFFICIAL_TILES[156] === 156);
+  eq('wszystkie 167 kafelków pochodzi z paczki', officialTileCount(), 167);
+  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 167 && OFFICIAL_TILES[166] === 166);
   check('kafelek spoza listy nie jest oficjalny', !isOfficialTile(999) && isOfficialTile(0));
   const cached = officialBlockAtlas();
   check('atlas bloków dekoduje się w grze', cached != null && cached.width === 256);
@@ -4601,7 +4608,7 @@ section('2.17: tekstury z paczki w całej grze');
   // --- podmiana kafelków w atlasie gry
   const fake = { data: new Uint8ClampedArray(256 * 256 * 4) };
   const copied = applyOfficialTiles(fake as unknown as ImageData);
-  eq('applyOfficialTiles podmienia 157 kafelków', copied, 157);
+  eq('applyOfficialTiles podmienia 167 kafelków', copied, 167);
   let nonZero = 0;
   for (let i = 0; i < fake.data.length; i += 4) if (fake.data[i + 3] > 0) nonZero++;
   check('po podmianie atlas ma niepuste piksele', nonZero > 155 * 16 * 16 * 0.5, `${nonZero} px`);
@@ -4807,6 +4814,39 @@ section('2.18: moby 1:1 z Minecrafta');
   const woolMesh = dyed.meshes.find((m) => m.userData.mobKind === 'sheep_wool');
   check('wełna ma barwnik w materiale', !!woolMesh && (woolMesh.material as THREE.MeshLambertMaterial).color.getHex() === dyed.woolColor);
   dyed.dispose();
+
+  // --- 2.22: owca 1:1 – 12-pikselowe nogi, wypas i odrastanie runa
+  const sheepLeg = MOB_MODELS.sheep.parts.find((p) => p.name === 'rightHindLeg')!.boxes[0];
+  eq('owca ma 12-pikselowe nogi (jak wanilia)', sheepLeg.size[1], 12);
+  eq('owca stoi na zawiasie y=12', MOB_MODELS.sheep.parts.find((p) => p.name === 'rightHindLeg')!.pivot[1], 12);
+  const woolLeg = MOB_MODELS.sheep_wool.parts.find((p) => p.name === 'rightHindLeg')!.boxes[0];
+  check('wełna na nogach to krótka „skarpetka”', woolLeg.size[1] === 6 && woolLeg.inflate === 0.5);
+  eq('owca ma pudełko 0,9 × 1,3', (() => { const m = new Mob('sheep', 8.5, gy + 2, 8.5); const d = `${m.body.w},${m.body.h}`; m.dispose(); return d; })(), '0.9,1.3');
+  eq('szkielet ma pudełko 0,6 × 1,99', (() => { const m = new Mob('skeleton', 8.5, gy + 2, 8.5); const d = `${m.body.w},${m.body.h}`; m.dispose(); return d; })(), '0.6,1.99');
+  eq('golem ma pudełko 1,4 × 2,7', (() => { const m = new Mob('golem', 8.5, gy + 2, 8.5); const d = `${m.body.w},${m.body.h}`; m.dispose(); return d; })(), '1.4,2.7');
+  eq('pająk jest szeroki (1,4 × 0,9)', (() => { const m = new Mob('spider', 8.5, gy + 2, 8.5); const d = `${m.body.w},${m.body.h}`; m.dispose(); return d; })(), '1.4,0.9');
+  eq('krowa ma 0,9 szerokości', (() => { const m = new Mob('cow', 8.5, gy + 2, 8.5); const d = `${m.body.w},${m.body.h}`; m.dispose(); return d; })(), '0.9,1.4');
+  eq('creeper ma 20 HP', (() => { const m = new Mob('creeper', 8.5, gy + 2, 8.5); const hp = m.maxHealth; m.dispose(); return hp; })(), 20);
+
+  // pełna paleta wełny: 16 kolorów runa → 16 różnych bloków
+  const woolBlocks = new Set<number>();
+  for (const color of SHEEP_WOOL_COLORS) woolBlocks.add(woolBlockFor(color));
+  eq('każdy kolor runa ma własny blok wełny', woolBlocks.size, 16);
+  eq('biała owca daje białą wełnę', woolBlockFor(0xf9fffe), B.WOOL_WHITE);
+  eq('czarna owca daje czarną wełnę', woolBlockFor(0x1d1d21), B.WOOL_BLACK);
+  check('jest 16 bloków wełny', [B.WOOL_WHITE, B.WOOL_ORANGE, B.WOOL_MAGENTA, B.WOOL_LIGHT_BLUE, B.WOOL_YELLOW, B.WOOL_LIME, B.WOOL_PINK, B.WOOL_GRAY, B.WOOL_LIGHT_GRAY, B.WOOL_CYAN, B.WOOL_PURPLE, B.WOOL_BLUE, B.WOOL_BROWN, B.WOOL_GREEN, B.WOOL_RED, B.WOOL_BLACK].every((id) => !!BLOCKS[id]));
+
+  // wypas: ostrzyżona owca na trawie odrasta, a trawa zamienia się w ziemię
+  const wg = new World(555, true);
+  const gg = FLAT_H + 1;
+  wg.setBlock(3, gg - 1, 3, B.GRASS);
+  const grazer = new Mob('sheep', 3.5, gg, 3.5);
+  grazer.shear();
+  grazer.grazeTimer = 0;
+  for (let i = 0; i < 120; i++) grazer.update(1 / 60, wg, new THREE.Vector3(20, gg, 20), () => {}, () => {}, false);
+  check('owca pasie się na trawie', wg.peekBlock(3, gg - 1, 3) === B.DIRT, `blok=${wg.peekBlock(3, gg - 1, 3)}`);
+  check('po wypasie runo odrasta', !grazer.sheared);
+  grazer.dispose();
 
   // --- mieszkaniec: zawód wybiera własną teksturę
   const skins = new Set<string>();

@@ -12,6 +12,24 @@ export const SHEEP_WOOL_COLORS = [
   0x9d9d97, 0x169c9c, 0x8932b8, 0x3c44aa, 0x835432, 0x5e7c16, 0xb02e26, 0x1d1d21,
 ] as const;
 
+/**
+ * 2.21.1: każdy z 16 kolorów runa ma własny blok wełny – owca strzyżona
+ * i zabita oddaje wełnę dokładnie w swoim kolorze, jak w Minecrafcie.
+ * Kolejność jest zgodna z `SHEEP_WOOL_COLORS` (barwniki z gry).
+ */
+export const SHEEP_WOOL_BLOCKS = [
+  B.WOOL_WHITE, B.WOOL_ORANGE, B.WOOL_MAGENTA, B.WOOL_LIGHT_BLUE,
+  B.WOOL_YELLOW, B.WOOL_LIME, B.WOOL_PINK, B.WOOL_GRAY,
+  B.WOOL_LIGHT_GRAY, B.WOOL_CYAN, B.WOOL_PURPLE, B.WOOL_BLUE,
+  B.WOOL_BROWN, B.WOOL_GREEN, B.WOOL_RED, B.WOOL_BLACK,
+] as const;
+
+/** Blok wełny odpowiadający kolorowi runa owcy (0xRRGGBB). */
+export function woolBlockFor(color: number): number {
+  const i = (SHEEP_WOOL_COLORS as readonly number[]).indexOf(color);
+  return SHEEP_WOOL_BLOCKS[i < 0 ? 0 : i];
+}
+
 export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
 export function isHostileMob(type: MobType): boolean {
@@ -69,6 +87,12 @@ export class Mob {
   exploded = false;
   looted = false;
   sheared = false;
+  /** 2.21.1: licznik do wypasu – owca od czasu do czasu opuszcza głowę. */
+  grazeTimer = 6 + Math.random() * 10;
+  /** 0 = głowa do góry, 1 = pasie się (opuszczona). */
+  grazing = 0;
+  /** Wysokość zawiasu głowy w chwili zbudowania modelu (do animacji wypasu). */
+  private headBaseY = 0;
   /** Tamed wolves follow the player and fight hostiles for them. */
   tamed = false;
   /** Grabież (Looting): extra drops rolled when this mob's loot is collected. */
@@ -101,30 +125,32 @@ export class Mob {
   constructor(type: MobType, x: number, y: number, z: number, profession = 0) {
     this.type = type;
     this.home.set(x, y, z);
-    // Jak w grze: większość owiec jest biała, kolorowe trafiają się rzadziej.
-    const wc = Math.abs(Math.round(x * 7 + z * 13));
-    this.woolColor = wc % 10 < 8 ? 0xf9fffe : SHEEP_WOOL_COLORS[wc % SHEEP_WOOL_COLORS.length];
-    const w =
-      type === 'zombie' || type === 'creeper' || type === 'villager' ? 0.6
-        : type === 'chicken' ? 0.45
-          : type === 'cow' ? 1.1
-            : type === 'golem' ? 1.0
-              : type === 'wolf' ? 0.6
-                : type === 'enderman' ? 0.6
-                  : type === 'slime' ? 0.9
-                    : type === 'ghast' ? 2.0 : 0.9;
-    const h =
-      type === 'zombie' || type === 'villager' ? 1.9
-        : type === 'creeper' ? 1.7
-          : type === 'golem' ? 2.2
-            : type === 'enderman' ? 2.9
-              : type === 'slime' ? 0.9
-                : type === 'ghast' ? 2.0
-                  : type === 'cow' ? 1.4 : type === 'chicken' ? 0.7 : type === 'sheep' ? 1.2 : type === 'wolf' ? 0.9 : 0.9;
+    // 2.21.1: dokładny rozkład z `SheepEntity`: 83,6% białych, 5% czarnych,
+    // 5% szarych, 5% jasnoszarych, 3% brązowych i 2% różowych.
+    const wc = Math.abs(Math.round(x * 7 + z * 13)) % 100;
+    this.woolColor = wc < 5 ? 0x1d1d21
+      : wc < 10 ? 0x474f52
+        : wc < 15 ? 0x9d9d97
+          : wc < 18 ? 0x835432
+            : wc < 20 ? 0xf38baa
+              : 0xf9fffe;
+    // 2.21.1: pudełka kolizji dokładnie z waniliowych `EntityDimensions`
+    // (`PigEntity`, `CowEntity`, `SheepEntity`, `ChickenEntity`, `WolfEntity`,
+    // `VillagerEntity`, `ZombieEntity`, `SkeletonEntity`, `CreeperEntity`,
+    // `SpiderEntity`, `EndermanEntity`, `IronGolemEntity`, `GhastEntity`).
+    // Wcześniej szkielet miał 0,9 × 0,9 bloku (nie dało się w niego trafić
+    // w głowę), krowa była szersza niż w grze, a golem o pół bloku za niski.
+    const dims: Record<string, [number, number]> = {
+      pig: [0.9, 0.9], cow: [0.9, 1.4], sheep: [0.9, 1.3], chicken: [0.4, 0.7],
+      wolf: [0.6, 0.85], villager: [0.6, 1.95], zombie: [0.6, 1.95],
+      skeleton: [0.6, 1.99], creeper: [0.6, 1.7], spider: [1.4, 0.9],
+      enderman: [0.6, 2.9], golem: [1.4, 2.7], slime: [0.9, 0.9], ghast: [4.0, 4.0],
+    };
+    const [w, h] = dims[type] ?? [0.9, 0.9];
     this.body = { pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w, h, onGround: false, hitWall: false };
     this.maxHealth = this.health =
       type === 'zombie' ? 20
-        : type === 'creeper' ? 16
+        : type === 'creeper' ? 20
           : type === 'cow' ? 10
             : type === 'chicken' ? 4
               : type === 'sheep' ? 8
@@ -239,6 +265,7 @@ export class Mob {
     this.arms = arms.map((n) => P[n]).filter(Boolean);
     if (P.head) {
       this.head = P.head;
+      this.headBaseY = P.head.position.y;
       this.headCanTurn = this.type !== 'ghast';
     }
     for (const mesh of built.meshes) {
@@ -899,6 +926,11 @@ export class Mob {
     this.moveAndAnimate(dt, world, player, this.walking ? 4.6 : 0);
   }
 
+  /** Blok wełny w kolorze tego runa (owca zawsze ma swój kolor). */
+  get woolBlock(): number {
+    return woolBlockFor(this.woolColor);
+  }
+
   /** Removes a sheep's wool once. Returns false if it was already sheared or isn't a sheep. */
   shear(): boolean {
     if (this.type !== 'sheep' || this.dead || this.sheared) return false;
@@ -909,6 +941,17 @@ export class Mob {
       const skin = snapToPalette(0xd8c8b0);
       this.woolMesh.material = mobMaterial('sheep-face', skin).clone();
     }
+    return true;
+  }
+
+  /**
+   * 2.21.1: owca po zjedzeniu trawy odrasta – w wanilii dzieje się to po
+   * wypasie (klocek trawy zamienia się w ziemię, runo wraca).
+   */
+  regrowWool(): boolean {
+    if (this.type !== 'sheep' || !this.sheared) return false;
+    this.sheared = false;
+    for (const part of this.woolParts) part.visible = true;
     return true;
   }
 
@@ -1016,6 +1059,29 @@ export class Mob {
         this.body.vel.y += (Math.sin(performance.now() * 0.001 + this.home.x) * 0.5 - this.body.vel.y) * dt * 2;
       }
     }
+    // 2.21.1: owca co kilkanaście sekund opuszcza głowę i skubie trawę.
+    // Ostrzyżona owca po wypasie odrasta – klocek trawy zamienia się w ziemię,
+    // dokładnie jak w `SheepEntity.eatGrass`.
+    if (this.type === 'sheep' && !this.dead) {
+      if (this.grazing <= 0) {
+        this.grazeTimer -= dt;
+        if (this.grazeTimer <= 0 && b.onGround) {
+          this.grazeTimer = 10 + Math.random() * 14;
+          this.grazing = 1;
+          this.walking = false;
+          if (this.sheared) {
+            const gx = Math.floor(b.pos.x), gz = Math.floor(b.pos.z), gy = Math.floor(b.pos.y) - 1;
+            if (world.peekBlock(gx, gy, gz) === B.GRASS) {
+              world.setBlock(gx, gy, gz, B.DIRT);
+              this.regrowWool();
+            }
+          }
+        }
+      } else {
+        this.grazing = Math.max(0, this.grazing - dt / 2.2);
+        this.walking = false;
+      }
+    }
 
     this.moveAndAnimate(dt, world, player, this.walking && this.hurtTime < 0.3 ? speed : 0);
   }
@@ -1048,7 +1114,11 @@ export class Mob {
       // Spiders climb: a low ledge is a hop, a real wall is crawled up while the
       // player is above it (the body stays flush against the face, so rising is
       // free) – `climbing` keeps the crawl going between frames.
-      const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.7), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.7);
+      // 2.22: sonda sięga od krawędzi pudełka, a nie od środka – pająk ma
+      // 1,4 bloku szerokości i przy ścianie stał tuż przed nią, więc
+      // 0,7-blokowa sonda trafiała w powietrze i nie zaczynał się wspinać.
+      const reach = b.w / 2 + 0.35;
+      const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * reach), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * reach);
       const hy = Math.floor(b.pos.y);
       const at = (dy: number) => IS_SOLID[world.peekBlock(fx, hy + dy, fz)];
       const wallFace = at(0); // the wall keeps going as long as its face is solid
@@ -1102,9 +1172,6 @@ export class Mob {
         const flap = Math.sin(this.walkPhase * 2) * 0.45;
         this.arms[0].rotation.z = 0.4 + flap;
         this.arms[1].rotation.z = -0.4 - flap;
-      } else if (this.type === 'skeleton' && this.arms.length) {
-        this.arms[0].rotation.x = -1.15 + Math.sin(this.walkPhase * 0.5) * 0.05;
-        this.arms[1].rotation.x = -1.15 - Math.sin(this.walkPhase * 0.5) * 0.05;
       } else if (this.arms.length) {
         // 2.20: tylko zombie trzyma ręce wyciągnięte do przodu.
         // Golem, enderman i inni dwunożni mają ręce opuszczone i lekko
@@ -1141,6 +1208,14 @@ export class Mob {
       const want = dist < 12 ? Math.max(-0.9, Math.min(0.9, rel)) : 0;
       const cur = this.head.rotation.y;
       this.head.rotation.y = cur + (want - cur) * Math.min(1, dt * 6);
+    }
+
+    // 2.21.1: wypas – głowa zjeżdża w dół i przechyla się do trawy
+    // (waniliowe `getNeckAngle`/`getHeadAngle`), a potem wraca do góry.
+    if (this.type === 'sheep' && this.head) {
+      const dip = this.grazing > 0 ? Math.sin(Math.PI * (1 - this.grazing)) : 0;
+      this.head.position.y = this.headBaseY - dip * (9 / 16);
+      this.head.rotation.x = dip * 0.62;
     }
   }
 

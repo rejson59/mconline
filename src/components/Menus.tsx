@@ -17,10 +17,10 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  '2.21: płot, pochodnia i skrzynia jak w grze!',
-  '2.21: wchodzisz na płytę bez skoku!',
-  '2.21: trwałości i dropy 1:1!',
-  '2.21: kaktus rośnie do trzech bloków!',
+  '2.22: owca pasie się i odrasta!',
+  '2.22: 16 kolorów wełny jak w grze!',
+  '2.22: moby mają prawdziwe hitboxy!',
+  '2.22: pająk, szkielet i kura po poprawkach!',
   '2.21: skrzynia z prawdziwą teksturą!',
   '2.20: słońce bez czarnego kwadratu!',
   '2.20: drzwi i latarnie jak w grze!',

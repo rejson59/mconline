@@ -39,6 +39,11 @@ export const T = {
   // 2.21: prawdziwe tekstury modeli latarni i dzwonu z paczki 26.2
   // (dotąd były tam ikony przedmiotów, bo blok był billboardem).
   lantern_block: 155, bell_body: 156,
+  // 2.21.1: pozostałe 10 kolorów wełny – gra ma teraz pełną paletę 16 barwników
+  // z Minecrafta, a owca strzyżona oddaje wełnę dokładnie swojego koloru.
+  wool_orange: 157, wool_magenta: 158, wool_light_blue: 159, wool_lime: 160,
+  wool_pink: 161, wool_gray: 162, wool_light_gray: 163, wool_cyan: 164,
+  wool_purple: 165, wool_brown: 166,
 } as const;
 
 export const B = {
@@ -97,6 +102,10 @@ export const B = {
   SOUL_SOIL: 336, CRYING_OBSIDIAN: 337, TARGET: 338, HONEY_BLOCK: 339, HONEYCOMB_BLOCK: 340,
   // 3.0 biomes: append-only ids preserve existing worlds.
   MUD: 400, ACACIA_LOG: 401, ACACIA_LEAVES: 402, JUNGLE_LEAVES: 403, LILY_PAD: 404,
+  // 2.21.1: brakujące kolory wełny (uzupełnienie palety do 16 barwników).
+  WOOL_ORANGE: 405, WOOL_MAGENTA: 406, WOOL_LIGHT_BLUE: 407, WOOL_LIME: 408,
+  WOOL_PINK: 409, WOOL_GRAY: 410, WOOL_LIGHT_GRAY: 411, WOOL_CYAN: 412,
+  WOOL_PURPLE: 413, WOOL_BROWN: 414,
 } as const;
 
 export type RenderType =
@@ -191,6 +200,17 @@ def(B.WOOL_BLUE, 'Niebieska wełna', T.wool_blue, { hardness: 0.8, sound: 'cloth
 def(B.WOOL_GREEN, 'Zielona wełna', T.wool_green, { hardness: 0.8, sound: 'cloth' });
 def(B.WOOL_YELLOW, 'Żółta wełna', T.wool_yellow, { hardness: 0.8, sound: 'cloth' });
 def(B.WOOL_BLACK, 'Czarna wełna', T.wool_black, { hardness: 0.8, sound: 'cloth' });
+// 2.21.1: pełna paleta wełny – kolory dokładnie jak barwniki w grze.
+def(B.WOOL_ORANGE, 'Pomarańczowa wełna', T.wool_orange, { hardness: 0.8, sound: 'cloth' });
+def(B.WOOL_MAGENTA, 'Karmazynowa wełna', T.wool_magenta, { hardness: 0.8, sound: 'cloth' });
+def(B.WOOL_LIGHT_BLUE, 'Jasnoniebieska wełna', T.wool_light_blue, { hardness: 0.8, sound: 'cloth' });
+def(B.WOOL_LIME, 'Jasnozielona wełna', T.wool_lime, { hardness: 0.8, sound: 'cloth' });
+def(B.WOOL_PINK, 'Różowa wełna', T.wool_pink, { hardness: 0.8, sound: 'cloth' });
+def(B.WOOL_GRAY, 'Szara wełna', T.wool_gray, { hardness: 0.8, sound: 'cloth' });
+def(B.WOOL_LIGHT_GRAY, 'Jasnoszara wełna', T.wool_light_gray, { hardness: 0.8, sound: 'cloth' });
+def(B.WOOL_CYAN, 'Turkusowa wełna', T.wool_cyan, { hardness: 0.8, sound: 'cloth' });
+def(B.WOOL_PURPLE, 'Fioletowa wełna', T.wool_purple, { hardness: 0.8, sound: 'cloth' });
+def(B.WOOL_BROWN, 'Brązowa wełna', T.wool_brown, { hardness: 0.8, sound: 'cloth' });
 def(B.LAVA, 'Lawa', T.lava, { solid: false, opaque: false, layer: 2, render: 'liquid', hardness: -1, drop: -1 });
 def(B.SANDSTONE, 'Piaskowiec', [T.sandstone_top, T.sandstone_top, T.sandstone_side], { hardness: 0.8 });
 def(B.PUMPKIN, 'Dynia', [T.pumpkin_top, T.pumpkin_top, T.pumpkin_side, T.pumpkin_face], { hardness: 1, sound: 'wood' });
