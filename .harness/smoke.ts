@@ -70,6 +70,7 @@ import {
   SKINS, DEFAULT_SKIN_ID, SKIN_KEY, skinById, loadSkinId, saveSkinId, nextSkinId, fallbackSkin,
 } from '../src/game/skins';
 import { aabbIntersectsBlock, stepBody, STEP_HEIGHT, type Body } from '../src/game/physics';
+import { fallPath, fallColumnHeight, isCrushable, isFallingBlock, isSupported } from '../src/game/gravity';
 import { Mob, isHostileMob, isVillageMob, mobVariantForBiome, SHEEP_WOOL_COLORS, woolBlockFor, type MobType } from '../src/game/mobs';
 import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial, type MobTexKind } from '../src/game/mobTextures';
 import { decodePng } from '../src/game/art/miniPng';
@@ -3142,8 +3143,11 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.24'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Klasyczne menu wraca');
+  check('release label is the current line', GAME_VERSION.startsWith('2.25'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Ręce do przodu, piasek w dół');
+  // 2.25: ręce mobów i fizyka spadających bloków.
+  check('2.25 highlights mention the mob arms', RELEASE_HIGHLIGHTS.some((h) => /ręk/i.test(h.title)));
+  check('2.25 highlights mention the falling sand', RELEASE_HIGHLIGHTS.some((h) => /piasek/i.test(h.title)));
   // 2.24.1: powrót do poprzedniego wyglądu – klasyczne menu jest pierwszym ekranem.
   check('2.24.1 highlights announce the classic menu', RELEASE_HIGHLIGHTS.some((h) => /klasyczne menu/i.test(h.title)));
   check('2.24.1 highlights explain the #launcher route', RELEASE_HIGHLIGHTS.some((h) => /#launcher/.test(h.text)));
@@ -4996,6 +5000,158 @@ section('2.18: moby 1:1 z Minecrafta');
     golem.arms.map((a) => a.rotation.x.toFixed(2)).join(',')
   );
   golem.dispose();
+}
+
+// ===================================================== 2.25: poza mobów i fizyka
+section('2.25: ręce i głowy mobów patrzą w stronę ruchu');
+{
+  // 2.25: animacja dokłada się do pozy z modelu. Wcześniej nadpisywała ją
+  // i zombie „chował ręce za plecami”, bo wpis -PI/2 kasował waniliowe +PI/2.
+  const partBox = (mob: Mob, part: THREE.Object3D) => {
+    mob.group.updateMatrixWorld(true);
+    const b = new THREE.Box3();
+    part.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const g = mesh.geometry.boundingBox ?? (mesh.geometry.computeBoundingBox(), mesh.geometry.boundingBox);
+      if (g) b.union(g.clone().applyMatrix4(mesh.matrixWorld));
+    });
+    return b;
+  };
+  const zombie = new Mob('zombie', 4.5, 70, 4.5);
+  zombie.walkPhase = 1.9;
+  zombie.animateLimbs(0.7);
+  const arm = partBox(zombie, zombie.arms[0]);
+  // Przód modelu to +Z w układzie grupy (korzeń obraca model o π).
+  check('zombie trzyma ręce z przodu po animacji', arm.max.z > 0.35 && arm.min.z > -0.25,
+    `z=${arm.min.z.toFixed(2)}..${arm.max.z.toFixed(2)}`);
+  check('ręce zombie nie chowają się za plecami', arm.max.z > Math.abs(arm.min.z),
+    `${arm.min.z.toFixed(2)}..${arm.max.z.toFixed(2)}`);
+  zombie.dispose();
+
+  // Każdy mob z głową: przód głowy (−Z modelu) po obrocie korzenia patrzy w +Z,
+  // czyli tam, gdzie mob idzie (`yaw = 0`).
+  const headTypes: MobType[] = ['zombie', 'skeleton', 'villager', 'golem', 'cow', 'pig', 'sheep', 'chicken', 'wolf', 'spider'];
+  const wrong: string[] = [];
+  for (const type of headTypes) {
+    const m = new Mob(type, 4.5, 70, 4.5);
+    m.animateLimbs(0.4);
+    m.group.updateMatrixWorld(true);
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(m.head.getWorldQuaternion(new THREE.Quaternion()));
+    if (dir.z < 0.6) wrong.push(`${type} z=${dir.z.toFixed(2)}`);
+    m.dispose();
+  }
+  check('każda głowa patrzy w stronę ruchu', wrong.length === 0, wrong.join(', '));
+
+  // Poza z modelu przeżywa animację: mieszkaniec nie opuszcza złożonych dłoni,
+  // pająk nie prostuje nóg, a zombie nie traci wyciągniętych rąk.
+  const villagerBuilt = buildMobModel(MOB_MODELS.villager)!;
+  check('mieszkaniec ma złożone ręce w modelu', Math.abs(villagerBuilt.parts.arms.rotation.x - 0.75) < 1e-6,
+    villagerBuilt.parts.arms.rotation.x.toFixed(2));
+  const villager = new Mob('villager', 4.5, 70, 4.5);
+  villager.animateLimbs(0.6);
+  check('animacja nie rusza złożonych rąk mieszkańca', villager.arms.length === 0);
+  villager.dispose();
+  const spider = new Mob('spider', 4.5, 70, 4.5);
+  const legYaw = spider.legs.map((l) => l.rotation.y);
+  const legRoll = spider.legs.map((l) => l.rotation.z);
+  spider.animateLimbs(0.6);
+  check('pająk zachowuje rozstaw nóg', spider.legs.every((l, i) =>
+    Math.abs(l.rotation.y - legYaw[i]) < 1e-6 && Math.abs(l.rotation.z - legRoll[i]) < 1e-6),
+    spider.legs.map((l) => `${l.rotation.y.toFixed(2)}/${l.rotation.z.toFixed(2)}`).join(','));
+  spider.dispose();
+}
+
+section('2.25: fizyka spadających bloków');
+{
+  check('piasek i żwir są sypkie', isFallingBlock(B.SAND) && isFallingBlock(B.GRAVEL));
+  check('kamień i szkło nie spadają', !isFallingBlock(B.STONE) && !isFallingBlock(B.GLASS));
+  check('rośliny i pochodnie są zmiatane', isCrushable(B.TORCH) && isCrushable(B.SAPLING));
+  check('skrzynia nie jest drobiazgiem', !isCrushable(B.CHEST));
+
+  // Filar z kamienia wysoko w powietrzu, żeby wynik nie zależał od terenu.
+  const pw = new World(4242);
+  const pillar = (x: number, z: number) => {
+    for (let y = 64; y <= 114; y++) pw.setBlock(x, y, z, B.STONE);
+    for (let y = 115; y <= 127; y++) pw.setBlock(x, y, z, B.AIR);
+  };
+  pillar(5, 5);
+  pw.setBlock(5, 121, 5, B.SAND);
+  pw.setBlock(5, 122, 5, B.SAND);
+  check('kolumna piasku ma wysokość 2', fallColumnHeight(pw, 5, 121, 5) === 2);
+  check('piasek bez podparcia ma spaść', !isSupported(pw, 5, 121, 5));
+  check('ścieżka spadania sięga filaru', fallPath(pw, 5, 121, 5).to === 115);
+
+  // Silnik: kolumna spada razem i układa się jedna na drugiej.
+  const gAny = Object.create(Game.prototype) as Record<string, any>;
+  gAny.world = pw;
+  gAny.scene = new THREE.Scene();
+  gAny.falling = [];
+  gAny.dropGeos = new Map();
+  gAny.dropMat = new THREE.MeshBasicMaterial();
+  gAny.body = { pos: new THREE.Vector3(5.5, 126, 5.5), h: 1.8 };
+  gAny.mode = 'creative';
+  gAny.ui = 'playing';
+  gAny.spawnParticles = () => {};
+  gAny.damage = () => {};
+  gAny.spawnDrop = () => {};
+  gAny.selectedStack = () => null;
+  (gAny as unknown as Game).fallGravity(5, 121, 5);
+  check('kolumna leci jako dwa klocki', gAny.falling.length === 2, `${gAny.falling.length}`);
+  check('klocek jest wyrównany do kratki', gAny.falling.every((f: any) => Math.abs(f.mesh.position.y - (f.pos.y + 0.5)) < 1e-6),
+    gAny.falling.map((f: any) => `${f.mesh.position.y}/${f.pos.y}`).join(' '));
+  for (let i = 0; i < 240 && gAny.falling.length; i++) (gAny as unknown as Game)['updateFalling'](1 / 60);
+  check('kolumna wylądowała na filarze', pw.getBlock(5, 115, 5) === B.SAND && pw.getBlock(5, 116, 5) === B.SAND,
+    `${pw.getBlock(5, 115, 5)},${pw.getBlock(5, 116, 5)}`);
+
+  // Pochodnia pod piaskiem zostaje zmiażdżona, a piasek ląduje niżej.
+  pillar(7, 5);
+  pw.setBlock(7, 118, 5, B.TORCH);
+  pw.setBlock(7, 121, 5, B.SAND);
+  (gAny as unknown as Game).fallGravity(7, 121, 5);
+  for (let i = 0; i < 240 && gAny.falling.length; i++) (gAny as unknown as Game)['updateFalling'](1 / 60);
+  check('spadający piasek niszczy pochodnię', pw.getBlock(7, 118, 5) === B.AIR);
+  check('piasek spadł na filar pod pochodnią', pw.getBlock(7, 115, 5) === B.SAND);
+
+  // Woda: piasek wpada na dno i wypiera kratkę, w której wylądował.
+  pillar(9, 5);
+  pw.setBlock(9, 115, 5, B.WATER);
+  pw.setBlock(9, 116, 5, B.WATER);
+  pw.setBlock(9, 120, 5, B.SAND);
+  (gAny as unknown as Game).fallGravity(9, 120, 5);
+  for (let i = 0; i < 240 && gAny.falling.length; i++) (gAny as unknown as Game)['updateFalling'](1 / 60);
+  check('piasek wypiera wodę na dnie', pw.getBlock(9, 115, 5) === B.SAND && pw.getBlock(9, 116, 5) === B.WATER,
+    `${pw.getBlock(9, 115, 5)},${pw.getBlock(9, 116, 5)}`);
+
+  // Podparty piasek zostaje na miejscu, a `settle` przenosi całą kolumnę.
+  pillar(13, 5);
+  pw.setBlock(13, 118, 5, B.STONE);
+  pw.setBlock(13, 119, 5, B.SAND);
+  eq('podparty piasek się nie rusza', (gAny as unknown as Game).settle(13, 119, 5), 0);
+  check('piasek nadal leży', pw.getBlock(13, 119, 5) === B.SAND);
+  pillar(15, 5);
+  pw.setBlock(15, 118, 5, B.STONE);
+  pw.setBlock(15, 119, 5, B.SAND);
+  pw.setBlock(15, 120, 5, B.SAND);
+  pw.setBlock(15, 118, 5, B.AIR);
+  eq('settle przenosi całą kolumnę', (gAny as unknown as Game).settle(15, 119, 5), 2);
+  check('kolumna osiadła na filarze', pw.getBlock(15, 115, 5) === B.SAND && pw.getBlock(15, 116, 5) === B.SAND);
+
+  // Eksplozja pod piaskiem uruchamia opadanie (wcześniej piasek wisiał).
+  // Wybuch o mocy 1,8 niszczy zawsze kratkę o 1 niżej, a nigdy o 2 – piasek
+  // o dwa pola nad środkiem zostaje, ale traci podparcie i musi ruszyć.
+  pillar(17, 5);
+  for (let y = 115; y <= 118; y++) pw.setBlock(17, y, 5, B.STONE);
+  pw.setBlock(17, 119, 5, B.SAND);
+  gAny.falling = [];
+  gAny.shake = 0;
+  gAny.spawnSmoke = () => {};
+  gAny.mobs = [];
+  (gAny as unknown as Game).explode(17.5, 117.5, 5.5, 1.8);
+  check('eksplozja uruchamia spadanie piasku', gAny.falling.length >= 1, `${gAny.falling.length}`);
+  for (let i = 0; i < 240 && gAny.falling.length; i++) (gAny as unknown as Game)['updateFalling'](1 / 60);
+  check('piasek po wybuchu osiadł niżej', pw.getBlock(17, 119, 5) !== B.SAND && pw.getBlock(17, 116, 5) === B.SAND,
+    `119=${pw.getBlock(17, 119, 5)} 116=${pw.getBlock(17, 116, 5)}`);
 }
 
 section('2.18: interfejs i niebo z paczki');

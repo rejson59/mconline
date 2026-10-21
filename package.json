@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.24.1",
-  "description": "BlockCraft 2.24 „Launcher w przeglądarce” – polski klient gry sandboxowej w stylu Lunar Client: profil i skórki z paczki 26.2, instancje światów, publiczny serwer, paczki, ustawienia grafiki i konsola. Bez instalacji i bez konta.",
+  "version": "2.25.0",
+  "description": "BlockCraft 2.25 „Ręce do przodu, piasek w dół” – polska gra sandboxowa w przeglądarce: modele mobów z paczki 26.2 z poprawną animacją kończyn, spadający piasek i żwir, publiczny serwer, bez instalacji i bez konta.",
   "type": "module",
   "license": "MIT",
   "keywords": [

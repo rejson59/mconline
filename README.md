@@ -1,6 +1,17 @@
-# BlockCraft 2.24.1 🚀
+# BlockCraft 2.25 🚀
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 2.25 „Ręce do przodu, piasek w dół” 🧟 🏖️
+
+Dwie rzeczy naraz: **moby przestały odwracać się plecami** (animacja nie kasuje już pozy z modelu), a **świat dostał prawdziwą fizykę sypkich bloków** – piasek i żwir spadają, niszczą drobiazgi po drodze, wypierają wodę i osypują się po wybuchu.
+
+* **Koniec z rękami do tyłu.** Animacja kończyn dokłada się teraz do obrotu zapisanego w modelu, a nie go nadpisuje. Zombie ma w modelu waniliową pozę +90° (ręce do przodu), a kod animacji wpisywał −90° – w pierwszej klatce ręce wędrowały więc za plecy. Teraz baza zostaje, a chód tylko lekko ją kołysze (±0,08 rad).
+* **Audyt wszystkich 19 modeli.** Nowa sekcja testów przechodzi po każdym mobie i sprawdza, że głowa patrzy w stronę ruchu (lokalne −Z po obrocie korzenia o π daje +Z, czyli kierunek `yaw`), a animacja nie psuje pozy z modelu: mieszkaniec nie opuszcza złożonych rąk, pająk nie prostuje nóg (zostaje mu yaw ±π/4 i roll ±0,58), kura nie chowa skrzydeł, a golem i enderman nie dostają pozy zombie.
+* **Piasek i żwir naprawdę spadają.** Cała kolumna naraz (a nie blok po bloku), z przyspieszeniem do 30 bloków/s, chmurą kurzu i dźwiękiem osiadania. Blisko gracza widać lecące klocki, dalej materiał osiada od razu – bez marnowania klatek. Nowy moduł `src/game/gravity.ts` trzyma czyste reguły (`isFallingBlock`, `fallPath`, `isCrushable`), więc fizykę da się testować bez WebGL.
+* **Fizyka, która sprząta po sobie.** Spadający blok niszczy po drodze pochodnie, rośliny, szyny i lilie (wypadają jako przedmioty), wypiera wodę, rani za 2 serca, jeśli spadnie na głowę, a po wylądowaniu uruchamia opadanie tego, co leżało wyżej. Wybuch dopisuje zniszczone kratki do kolejki i osypuje piasek nad wyrwą – wcześniej wisiał w powietrzu.
+* **Przedmioty toną powoli.** W wodzie przedmioty wyhamowują i opadają z prędkością do 2,2 bloku/s zamiast spadać jak kamień.
+* **Testy.** `npm test` to **1900 kontroli silnika + 222 testy UI** (246 z jsdom). Sekcja 2.25 sprawdza pozę zombie po animacji, kierunek głów wszystkich mobów, bazę pozy mieszkańca i pająka oraz fizykę: kolumnę piasku, zmiażdżoną pochodnię, wypartą wodę, podparty piasek, `settle` i osypywanie po wybuchu. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą.
 
 ## Wersja 2.24.1 „Klasyczne menu wraca” 🔙
 

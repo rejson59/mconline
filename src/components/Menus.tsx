@@ -17,9 +17,10 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  '2.24.1: klasyczne menu wróciło!',
-  '2.24.1: launcher czeka pod #launcher!',
-  '2.24.1: zero zmian w grze!',
+  '2.25: zombie znowu wyciąga ręce do przodu!',
+  '2.25: piasek i żwir naprawdę spadają!',
+  '2.25: spadający blok niszczy pochodnię!',
+  '2.25: audyt wszystkich 19 modeli mobów!',
   '2.22: owca pasie się i odrasta!',
   '2.22: 16 kolorów wełny jak w grze!',
   '2.22: moby mają prawdziwe hitboxy!',
