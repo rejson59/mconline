@@ -433,6 +433,10 @@ const BLOCK_TILES = {
   emerald_block: B + 'emerald_block.png',
   // 2.20: to samo co latarnia – ikona przedmiotu zamiast UV modelu.
   bell: I_ + 'bell.png',
+  // 2.21: tekstury prawdziwych modeli (latarnia i dzwon przestały być
+  // billboardami) – korpus latarni oraz złoty korpus dzwonu z tekstury encji.
+  lantern_block: B + 'lantern.png',
+  bell_body: E + 'bell/bell_body.png',
   redstone_ore: B + 'redstone_ore.png',
   redstone_block: B + 'redstone_block.png',
   redstone_torch: B + 'redstone_torch.png',

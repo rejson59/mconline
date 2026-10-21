@@ -36,6 +36,9 @@ export const T = {
   mud: 149, acacia_side: 150, acacia_top: 151, jungle_leaves: 152, lily_pad: 153,
   // 2.8.2: akacja ma własne, oliwkowe liście (wcześniej dzieliła kafelek z dżunglą).
   acacia_leaves: 154,
+  // 2.21: prawdziwe tekstury modeli latarni i dzwonu z paczki 26.2
+  // (dotąd były tam ikony przedmiotów, bo blok był billboardem).
+  lantern_block: 155, bell_body: 156,
 } as const;
 
 export const B = {
@@ -98,7 +101,8 @@ export const B = {
 
 export type RenderType =
   | 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail'
-  | 'cactus' | 'bed' | 'fence' | 'torch' | 'lily' | 'chest';
+  | 'cactus' | 'bed' | 'fence' | 'torch' | 'lily' | 'chest'
+  | 'lantern' | 'bell' | 'brewing';
 
 export interface BlockDef {
   id: number;
@@ -231,10 +235,10 @@ def(B.PATH, 'Ścieżka', [T.path_top, T.dirt, T.path_side], { hardness: 0.65, dr
 def(B.HAY, 'Bela siana', [T.hay_top, T.hay_top, T.hay_side], { hardness: 0.5, sound: 'grass' });
 // 2.20: latarnia i dzwon to sprite'y z ikon przedmiotów – jako pełne
 // sześciany dawały czarne kostki z żółtym środkiem.
-def(B.LANTERN, 'Latarnia', T.lantern, { hardness: 3.5, solid: false, opaque: false, layer: 1, render: 'cross', sound: 'glass', drop: B.LANTERN });
+def(B.LANTERN, 'Latarnia', T.lantern_block, { hardness: 3.5, solid: false, opaque: false, layer: 1, render: 'lantern', sound: 'glass', drop: B.LANTERN });
 def(B.EMERALD_ORE, 'Ruda szmaragdu', T.emerald_ore, { hardness: 3 });
 def(B.EMERALD_BLOCK, 'Blok szmaragdu', T.emerald_block, { hardness: 5 });
-def(B.BELL, 'Dzwon', T.bell, { hardness: 5, solid: false, opaque: false, layer: 1, render: 'cross', sound: 'stone' });
+def(B.BELL, 'Dzwon', T.bell, { hardness: 5, solid: false, opaque: false, layer: 1, render: 'bell', sound: 'stone' });
 // 1.7 „Nether & Redstone“
 def(B.REDSTONE_ORE, 'Ruda czerwonego kamienia', T.redstone_ore, { hardness: 3, drop: -1 });
 def(B.REDSTONE_BLOCK, 'Blok czerwonego kamienia', T.redstone_block, { hardness: 5 });
@@ -302,7 +306,7 @@ def(B.RAIL, 'Tory', T.rail, { solid: false, opaque: false, layer: 1, render: 'ra
 def(B.POWERED_RAIL, 'Zasilane tory', T.powered_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'stone' });
 def(B.DETECTOR_RAIL, 'Tory detekcyjne', T.detector_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'stone' });
 def(B.ANVIL, 'Kowadło', T.anvil, { hardness: 5, sound: 'stone' });
-def(B.BREWING, 'Statyw alchemiczny', T.brewing_top, { hardness: 0.5, sound: 'stone', solid: false, opaque: false, layer: 1, render: 'cross' as any });
+def(B.BREWING, 'Statyw alchemiczny', T.brewing_top, { hardness: 0.5, sound: 'stone', solid: false, opaque: false, layer: 1, render: 'brewing' });
 def(B.SHROOMLIGHT, 'Shroomlight', T.shroomlight, { hardness: 1, sound: 'wood' });
 def(B.BASALT, 'Bazalt', [T.basalt_top, T.basalt_top, T.basalt_side], { hardness: 1.25 });
 def(B.BLACKSTONE, 'Czernit', T.blackstone, { hardness: 1.5 });
@@ -352,6 +356,9 @@ for (const d of defs) {
   else if (d.render === 'torch') RENDER[d.id] = 10;
   else if (d.render === 'lily') RENDER[d.id] = 11;
   else if (d.render === 'chest') RENDER[d.id] = 12;
+  else if (d.render === 'lantern') RENDER[d.id] = 13;
+  else if (d.render === 'bell') RENDER[d.id] = 14;
+  else if (d.render === 'brewing') RENDER[d.id] = 15;
   else RENDER[d.id] = 0;
 }
 

@@ -4592,8 +4592,8 @@ section('2.17: tekstury z paczki w całej grze');
     colors.add((blocks.data[i] << 16) | (blocks.data[i + 1] << 8) | blocks.data[i + 2]);
   }
   check('atlas bloków jest wielobarwny', colors.size > 800, `${colors.size} kolorów`);
-  eq('wszystkie 155 kafelków pochodzi z paczki', officialTileCount(), 155);
-  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 155 && OFFICIAL_TILES[154] === 154);
+  eq('wszystkie 157 kafelków pochodzi z paczki', officialTileCount(), 157);
+  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 157 && OFFICIAL_TILES[156] === 156);
   check('kafelek spoza listy nie jest oficjalny', !isOfficialTile(999) && isOfficialTile(0));
   const cached = officialBlockAtlas();
   check('atlas bloków dekoduje się w grze', cached != null && cached.width === 256);
@@ -4601,7 +4601,7 @@ section('2.17: tekstury z paczki w całej grze');
   // --- podmiana kafelków w atlasie gry
   const fake = { data: new Uint8ClampedArray(256 * 256 * 4) };
   const copied = applyOfficialTiles(fake as unknown as ImageData);
-  eq('applyOfficialTiles podmienia 155 kafelków', copied, 155);
+  eq('applyOfficialTiles podmienia 157 kafelków', copied, 157);
   let nonZero = 0;
   for (let i = 0; i < fake.data.length; i += 4) if (fake.data[i + 3] > 0) nonZero++;
   check('po podmianie atlas ma niepuste piksele', nonZero > 155 * 16 * 16 * 0.5, `${nonZero} px`);
@@ -5148,16 +5148,18 @@ section('2.20: słońce, kaktus, drzwi i dachy wiosek');
   check('woda ma niebieski odcień', wb > wr + 60 && wg > wr, `${wr},${wg},${wb}`);
 
   // --- bloki-sprite'y i własne bryły
-  eq('latarnia to sprite (cross)', RENDER[B.LANTERN], 1);
+  eq('latarnia ma model 3D', RENDER[B.LANTERN], 13);
+  eq('statyw alchemiczny ma model 3D', RENDER[B.BREWING], 15);
   eq('latarnia tnie alfę', LAYER[B.LANTERN], 1);
   check('latarnia nie blokuje ruchu', IS_SOLID[B.LANTERN] === 0);
-  eq('dzwon to sprite (cross)', RENDER[B.BELL], 1);
+  eq('dzwon ma model 3D', RENDER[B.BELL], 14);
   eq('kaktus ma własną bryłę', RENDER[B.CACTUS], 7);
   eq('łóżko ma własną bryłę', RENDER[B.BED], 8);
   eq('górne drzwi tną alfę (szyby)', LAYER[B.DOOR_UN], 1);
   eq('dolne drzwi tną alfę', LAYER[B.DOOR_N], 1);
   const atlasSrc = readSource('scripts/compile-vanilla-art.mjs');
   check('latarnia i dzwon z ikon przedmiotów', /lantern: I_ \+ 'lantern\.png'/.test(atlasSrc) && /bell: I_ \+ 'bell\.png'/.test(atlasSrc));
+  check('modele latarni i dzwonu mają tekstury z paczki', /lantern_block: B \+ 'lantern\.png'/.test(atlasSrc) && /bell_body: E \+ 'bell\/bell_body\.png'/.test(atlasSrc));
 
   // --- meshing: drzwi to cienka płyta, kaktus 14/16
   const w2 = new World(4242, true);
@@ -5316,6 +5318,16 @@ section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
   w5.setBlock(10, gy5, 10, B.CHEST);
   const cv = verts(10, 10);
   check('skrzynia jest niższa niż blok', Math.max(...cv) - gy5 < 0.94 && Math.max(...cv) - gy5 > 0.9);
+  w5.setBlock(12, gy5, 12, B.LANTERN);
+  const lv = verts(12, 12);
+  check('latarnia ma model 11/16 wysokości', Math.abs(Math.max(...lv) - gy5 - 11 / 16) < 0.02, `${(Math.max(...lv) - gy5).toFixed(2)}`);
+  w5.setBlock(14, gy5, 14, B.BREWING);
+  const bv = verts(14, 14);
+  check('statyw alchemiczny sięga 14/16', Math.abs(Math.max(...bv) - gy5 - 14 / 16) < 0.02, `${(Math.max(...bv) - gy5).toFixed(2)}`);
+  w5.setBlock(2, gy5, 14, B.BELL);
+  const ev = verts(2, 14);
+  check('dzwon stoi na słupkach do pełnej wysokości', Math.abs(Math.max(...ev) - gy5 - 1) < 0.01);
+  check('dzwon ma serce zawieszone pod belką', ev.some((v) => Math.abs(v - gy5 - 0.25) < 0.01));
 
   // --- narzędzia 1:1: trwałość, obrażenia, wymagane poziomy kilofa
   eq('drewniany kilof ma 59 użyć', durabilityMax(I.WOOD_PICK), 59);

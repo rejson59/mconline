@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, isDoor, isDoorOpen, isFence, doorFacing, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
+import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, isDoor, isDoorOpen, isFence, doorFacing, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
 import { tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
@@ -420,6 +420,99 @@ function specialBoxes(id: number): SpecialBox[] | null {
       bottom: tileFor(id, 2),
       inset: 1,
     }];
+  }
+  if (id === B.LANTERN) {
+    // 2.21: waniliowy model latarni (template_lantern.json) – korpus 6×7 px
+    // i czapka 4×2 px z dokładnymi wycinkami tekstury z paczki, plus uchwyt
+    // z dwóch cienkich prętów. Wcześniej był to billboard z ikony przedmiotu.
+    const t = tileFor(id, 0);
+    const l = (u0: number, v0: number, u1: number, v1: number) => uvPx(u0, v0, u1, v1);
+    return [
+      {
+        b: [5 / 16, 0, 5 / 16, 11 / 16, 7 / 16, 11 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [l(0, 2, 6, 9), l(0, 2, 6, 9), l(0, 9, 6, 15), l(0, 9, 6, 15), l(0, 2, 6, 9), l(0, 2, 6, 9)],
+      },
+      {
+        b: [6 / 16, 7 / 16, 6 / 16, 10 / 16, 9 / 16, 10 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [l(1, 0, 5, 2), l(1, 0, 5, 2), null, l(1, 10, 5, 14), l(1, 0, 5, 2), l(1, 0, 5, 2)],
+      },
+      {
+        b: [6.5 / 16, 9 / 16, 7.9 / 16, 9.5 / 16, 11 / 16, 8.1 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [null, null, null, null, l(11, 1, 14, 3), l(11, 1, 14, 3)],
+      },
+      {
+        b: [7.9 / 16, 9 / 16, 6.5 / 16, 8.1 / 16, 11 / 16, 9.5 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [l(11, 10, 14, 12), l(11, 10, 14, 12), null, null, null, null],
+      },
+    ];
+  }
+  if (id === B.BELL) {
+    // 2.21: waniliowy dzwon (bell_floor.json) – drewniana belka na dwóch
+    // kamiennych słupkach. Sam dzwon jest w wanilii rendererem encji, więc
+    // dokładamy go z tekstury `entity/bell/bell_body` jako trzy zwężające się
+    // bryły (kark, korpus i dolna krawędź).
+    const bar = T.planks;
+    const post = T.stone;
+    const gold = T.bell_body;
+    const b = (u0: number, v0: number, u1: number, v1: number) => uvPx(u0, v0, u1, v1);
+    const bell = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, crop: readonly [number, number, number, number]): SpecialBox => ({
+      b: [x0 / 16, y0 / 16, z0 / 16, x1 / 16, y1 / 16, z1 / 16],
+      tiles: [gold, gold, gold, gold, gold, gold],
+      crops: [crop, crop, crop, crop, crop, crop],
+    });
+    return [
+      {
+        b: [2 / 16, 13 / 16, 7 / 16, 14 / 16, 15 / 16, 9 / 16],
+        tiles: [bar, bar, bar, bar, bar, bar],
+        crops: [b(2, 2, 14, 4), b(2, 3, 14, 5), b(2, 3, 14, 5), b(2, 3, 14, 5), b(2, 2, 14, 4), b(2, 3, 14, 5)],
+      },
+      {
+        b: [14 / 16, 0, 6 / 16, 1, 1, 10 / 16],
+        tiles: [post, post, post, post, post, post],
+        crops: [b(0, 1, 2, 16), b(0, 1, 4, 16), b(0, 0, 2, 4), b(0, 0, 2, 4), b(0, 1, 2, 16), b(0, 1, 2, 16)],
+      },
+      {
+        b: [0, 0, 6 / 16, 2 / 16, 1, 10 / 16],
+        tiles: [post, post, post, post, post, post],
+        crops: [b(0, 1, 2, 16), b(0, 1, 4, 16), b(0, 0, 2, 4), b(0, 0, 2, 4), b(0, 1, 2, 16), b(0, 1, 2, 16)],
+      },
+      bell(4, 4, 4, 12, 8, 12, [4, 5.5, 12, 9.5]),
+      bell(5.5, 8, 5.5, 10.5, 12, 10.5, [0, 9.5, 12, 13]),
+      bell(6.5, 12, 6.5, 9.5, 14, 9.5, [3, 13, 9, 16]),
+    ];
+  }
+  if (id === B.BREWING) {
+    // 2.21: waniliowy statyw alchemiczny (brewing_stand.json) – słupek 2×14 px
+    // i trzy ramiona podstawy z tekstury `brewing_stand(_base)`.
+    const stand = T.brewing_top;
+    const base = T.brewing_side;
+    const b = (u0: number, v0: number, u1: number, v1: number) => uvPx(u0, v0, u1, v1);
+    return [
+      {
+        b: [7 / 16, 0, 7 / 16, 9 / 16, 14 / 16, 9 / 16],
+        tiles: [stand, stand, stand, stand, stand, stand],
+        crops: [b(7, 2, 9, 16), b(7, 2, 9, 16), b(7, 7, 9, 9), b(7, 7, 9, 9), b(7, 2, 9, 16), b(7, 2, 9, 16)],
+      },
+      {
+        b: [9 / 16, 0, 5 / 16, 15 / 16, 2 / 16, 11 / 16],
+        tiles: [base, base, base, base, base, base],
+        crops: [b(5, 14, 11, 16), b(5, 14, 11, 16), b(9, 5, 15, 11), b(9, 5, 15, 11), b(9, 14, 15, 16), b(9, 14, 15, 16)],
+      },
+      {
+        b: [1 / 16, 0, 1 / 16, 7 / 16, 2 / 16, 7 / 16],
+        tiles: [base, base, base, base, base, base],
+        crops: [b(1, 14, 7, 16), b(1, 14, 7, 16), b(1, 1, 7, 7), b(1, 1, 7, 7), b(1, 14, 7, 16), b(1, 14, 7, 16)],
+      },
+      {
+        b: [1 / 16, 0, 9 / 16, 7 / 16, 2 / 16, 15 / 16],
+        tiles: [base, base, base, base, base, base],
+        crops: [b(9, 14, 15, 16), b(9, 14, 15, 16), b(1, 9, 7, 15), b(1, 9, 7, 15), b(1, 14, 7, 16), b(1, 14, 7, 16)],
+      },
+    ];
   }
   if (!isDoor(id)) return null;
   const f = doorFacing(id);

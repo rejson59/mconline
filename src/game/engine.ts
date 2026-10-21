@@ -407,8 +407,18 @@ function blockGeometry(id: number): THREE.BufferGeometry {
           ? [7 / 16, 7 / 16, 9 / 16, 9 / 16, 0, 10 / 16]
           : rt === 12
             ? [1 / 16, 1 / 16, 15 / 16, 15 / 16, 0, 15 / 16]
-            : null;
+            : rt === 13
+              ? [5 / 16, 5 / 16, 11 / 16, 11 / 16, 0, 11 / 16]
+              : rt === 14
+                ? [2 / 16, 6 / 16, 14 / 16, 10 / 16, 4 / 16, 1]
+                : rt === 15
+                  ? [7 / 16, 7 / 16, 9 / 16, 9 / 16, 0, 14 / 16]
+                  : null;
   const inset = rt === 7 ? 1 : 0;
+  // 2.21: w ręce bierzemy ten sam wycinek tekstury co model w świecie
+  // (latarnia – korpus, statyw – słupek), a nie rozciągnięty kafelek.
+  const handCrop: readonly [number, number, number, number] | null =
+    rt === 10 ? [7, 0, 9, 10] : rt === 13 ? [0, 2, 6, 9] : rt === 15 ? [7, 2, 9, 16] : null;
   if (rt === 11) {
     const g = new THREE.PlaneGeometry(1, 1);
     g.rotateX(-Math.PI / 2);
@@ -439,8 +449,8 @@ function blockGeometry(id: number): THREE.BufferGeometry {
     const tile = tileFor(id, faceMap[f]);
     for (let v = 0; v < 4; v++) {
       const i = f * 4 + v;
-      const [U, V] = rt === 10
-        ? tileUVRect(tile, [7, 0, 9, 10], Math.round(uv.getX(i)), Math.round(uv.getY(i)))
+      const [U, V] = handCrop
+        ? tileUVRect(tile, handCrop, Math.round(uv.getX(i)), Math.round(uv.getY(i)))
         : tileUVInset(tile, Math.round(uv.getX(i)), Math.round(uv.getY(i)), inset);
       uv.setXY(i, U, V);
       const s = shades[f] * shades[f];

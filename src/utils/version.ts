@@ -4,12 +4,17 @@ export const GAME_RELEASE_NAME = 'Bloki i przedmioty jak w grze';
 
 /**
  * 2.21: bryły i zachowanie bloków oraz przedmiotów 1:1 z Minecraftem –
- * własne modele płotu, pochodni, skrzyni, kowadła, ogniska, ścieżki i lilii,
+ * własne modele płotu, pochodni, skrzyni, kowadła, ogniska, ścieżki, lilii,
+ * latarni, dzwonu i statywu alchemicznego,
  * kolizje płyty/schodów/płotu, step-up, waniliowe trwałości, obrażenia,
  * poziomy kilofów, dropy, jedzenie i stosy.
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Koniec billboardów: latarnia, dzwon i statyw',
+    text: 'Latarnia to teraz waniliowy model z paczki: korpus 6×7 px, czapka 4×2 px i uchwyt z prętów (wcześniej dwie skrzyżowane ikony). Dzwon dostał kamienne słupki i drewnianą belkę z `bell_floor.json`, a samo serce dzwonu – trzy zwężające się bryły z tekstury `entity/bell/bell_body`. Statyw alchemiczny ma słupek 2×14 px i trzy ramiona podstawy z `brewing_stand.json`. Wszystkie trzy trzymają w ręce ten sam kształt co w świecie.',
+  },
   {
     title: 'Bryły bloków 1:1 z Minecraftem',
     text: 'Płot ma słupek 4×16 px i dwa szczeble w stronę sąsiadów, pochodnia to dokładnie 2×10 px patyczka (na ziemi i na ścianie), skrzynia dostała prawdziwą teksturę encji z korpusem 14/16 i wiekiem, kowadło – cztery waniliowe elementy z własnym UV każdej ściany, ognisko – cztery bale w dwóch warstwach, ścieżka i grządka – 15/16 wysokości z przyciętym bokiem, a lilia to płaski liść tuż nad wodą. Szyna leży płasko na 1/16, rośliny sięgają pełnej wysokości kratki, a drabina to deska 0,3 px od ściany.',
