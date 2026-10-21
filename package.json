@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.23.0",
-  "description": "BlockCraft 2.23 „Minecraft 26.2: moby i tekstury 1:1” – polska gra sandboxowa w przeglądarce: modele mobów z waniliowej geometrii 26.2, warianty biomowe krowy, świni i kury, wszystkie 100 ikon z paczki, 16 kolorów wełny i 155 przepisów.",
+  "version": "2.24.0",
+  "description": "BlockCraft 2.24 „Launcher w przeglądarce” – polski klient gry sandboxowej w stylu Lunar Client: profil i skórki z paczki 26.2, instancje światów, publiczny serwer, paczki, ustawienia grafiki i konsola. Bez instalacji i bez konta.",
   "type": "module",
   "license": "MIT",
   "keywords": [

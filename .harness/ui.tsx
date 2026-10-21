@@ -10,6 +10,7 @@
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MainMenu, Controls, AchievementsPanel, PauseMenu, filterAndSortWorlds } from '../src/components/Menus';
+import Launcher from '../src/components/Launcher';
 import HUD from '../src/components/HUD';
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS, applyPreset } from '../src/utils/settings';
@@ -36,6 +37,35 @@ import type { Stack } from '../src/game/inventory';
 import { rollEnchantOptions } from '../src/game/enchant';
 import { createVillagerState, offersFor } from '../src/game/trading';
 import type { Game, TradeRow } from '../src/game/engine';
+
+section('2.24: launcher – ekran startowy');
+{
+  const noop = () => {};
+  const html = renderToStaticMarkup(
+    <Launcher
+      saves={[]}
+      onPlayWorld={noop}
+      onNewWorld={noop}
+      onDeleteWorld={noop}
+      onRenameWorld={noop}
+      onDuplicateWorld={() => true}
+      onToggleFavoriteWorld={noop}
+      onMultiplayer={noop}
+      onClassicMenu={noop}
+    />
+  );
+  check('launcher pokazuje przycisk GRAJ', /GRAJ/.test(html));
+  check(
+    'launcher ma wszystkie sekcje',
+    ['Start', 'Światy', 'Serwery', 'Paczki i mody', 'Skórki', 'Ustawienia', 'Konsola'].every((t) => html.includes(t))
+  );
+  check('launcher pokazuje bieżącą wersję', html.includes(GAME_VERSION));
+  check('launcher pokazuje cel Minecraft 26.2', html.includes('26.2'));
+  check('launcher zachęca do pierwszego świata', /Utwórz pierwszy świat/.test(html));
+  check('launcher ma powrót do klasycznego menu', /Klasyczne menu/.test(html));
+  check('launcher pokazuje statystyki paczki', /kafelk/i.test(html) && /ikon przedmiot/i.test(html));
+  check('launcher nie jest pusty', html.length > 4000, String(html.length));
+}
 
 // ------------------------------------------------------------------- runner
 let pass = 0;
@@ -235,7 +265,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.23') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.24') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -529,7 +559,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces the public server', menu.includes('Serwer publiczny'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.23'));
+  check('the menu names the current release', menu.includes('WERSJA 2.24'));
 }
 
 section('2.4: brewing rules');
@@ -652,6 +682,33 @@ async function mountWithJsdom(): Promise<boolean> {
   const byText = (label: string) => buttons().find((b) => (b.textContent ?? '').includes(label));
 
   check('app renders the title screen', text().includes('BLOCKCRAFT'));
+
+  // 2.24: pierwszy ekran to launcher – przechodzimy po zakładkach.
+  check('launcher is the first screen', text().includes('GRAJ') && text().includes('Co nowego'));
+  await React.act(async () => {
+    byText('Światy')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('launcher: zakładka światów', text().includes('Każdy świat to osobna instancja'));
+  await React.act(async () => {
+    byText('Serwery')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('launcher: zakładka serwerów', text().includes('Dołącz do serwera'));
+  await React.act(async () => {
+    byText('Paczki i mody')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('launcher: zakładka paczek', text().includes('26.2.x Template'));
+  await React.act(async () => {
+    byText('Skórki')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('launcher: zakładka skórek', text().includes('Wybierz postać'));
+  await React.act(async () => {
+    byText('Konsola')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('launcher: konsola zbiera wpisy', text().includes('Dziennik launchera') && text().includes('Launcher BlockCraft'));
+  await React.act(async () => {
+    byText('Klasyczne menu')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+  });
+  check('classic menu is reachable from the launcher', text().includes('BLOCKCRAFT'));
 
   // 2.10: wejście do poczekalni multiplayer i powrót bez uruchamiania świata.
   await React.act(async () => {
