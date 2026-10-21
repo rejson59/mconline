@@ -4843,7 +4843,12 @@ section('2.18: moby 1:1 z Minecrafta');
   const grazer = new Mob('sheep', 3.5, gg, 3.5);
   grazer.shear();
   grazer.grazeTimer = 0;
-  for (let i = 0; i < 120; i++) grazer.update(1 / 60, wg, new THREE.Vector3(20, gg, 20), () => {}, () => {}, false);
+  // owca stoi w miejscu – inaczej losowy spacer mógłby zejść z klocka trawy
+  for (let i = 0; i < 120; i++) {
+    grazer.walking = false;
+    grazer.aiTimer = 5;
+    grazer.update(1 / 60, wg, new THREE.Vector3(20, gg, 20), () => {}, () => {}, false);
+  }
   check('owca pasie się na trawie', wg.peekBlock(3, gg - 1, 3) === B.DIRT, `blok=${wg.peekBlock(3, gg - 1, 3)}`);
   check('po wypasie runo odrasta', !grazer.sheared);
   grazer.dispose();
