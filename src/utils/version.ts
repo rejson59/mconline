@@ -1,10 +1,16 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.23.0';
-export const GAME_RELEASE_NAME = 'Minecraft 26.2: moby i tekstury 1:1';
+export const GAME_VERSION = '2.24.0';
+export const GAME_RELEASE_NAME = 'Launcher w przeglądarce';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.24: launcher w przeglądarce – gra startuje z klienta w stylu Lunar Client:
+ * profil gracza i skórka, instancje światów (seed, tryb, typ), publiczny
+ * serwer, paczka tekstur z ustawieniami wydajności, ustawienia gry i konsola
+ * zdarzeń. Launcher jest w 100% lokalny, nie pobiera plików Mojanga i nie
+ * łączy się z kontem Minecrafta – uruchamia tę samą grę co wcześniej, tylko
+ * z wybranym światem i profilem.
  * 2.23: zgodność z Minecraftem 26.2 – modele mobów z waniliowej geometrii tej
  * wersji (pysk i rogi krowy, lustrzane UV nóg, czapka zombie,
  * rond kapelusza mieszkańca, macki ghasta), warianty biomowe krowy, świni
@@ -22,6 +28,26 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Launcher zamiast menu',
+    text: 'Gra startuje teraz z klienta w stylu Lunar Client: lewa nawigacja, pasek profilu, karty nowości i duży przycisk GRAJ. Wszystko działa w przeglądarce i offline – launcher nie pobiera żadnych plików, bo tekstury, modele i dźwięki są wbudowane w build.',
+  },
+  {
+    title: 'Światy jako instancje',
+    text: 'Zakładka „Światy” to menedżer instancji: tworzysz świat z własnym seedem, trybem (przetrwanie/kreatywny) i typem (normalny/płaski), a potem grasz, zmieniasz nazwę, duplikujesz, przypinasz do ulubionych lub usuwasz. Ostatni świat wraca jednym kliknięciem z ekranu Start.',
+  },
+  {
+    title: 'Paczki, wydajność i skórki',
+    text: 'Zakładka „Paczki i mody” pokazuje wbudowaną paczkę 26.2 (167 kafelków, 100 ikon, 25 skórek) i pozwala przełączać presety graficzne oraz suwaki cząsteczek i zasięgu. W „Skórkach” wybierasz jedną z 9 postaci z paczki i ustawiasz nick, a profil pamięta liczbę uruchomień.',
+  },
+  {
+    title: 'Serwer i konsola',
+    text: 'Publiczny serwer ma własną kartę z jednoklikowym dołączeniem, a konsola pokazuje dziennik launchera: etapy uruchamiania, wykryty sprzęt, zmiany ustawień i zdarzenia świata. Wszystko po polsku i czytelnie – także na telefonie.',
+  },
+  {
+    title: 'Uczciwie o oryginale',
+    text: 'Oryginalny klient Minecrafta (Java) nie działa w przeglądarce i nie da się go legalnie uruchomić bez plików Mojanga, dlatego launcher obsługuje BlockCraft: własną grę z paczką tekstur 26.2. Nie łączy się z kontem ani serwerami Minecrafta i niczego nie pobiera z sieci.',
+  },
   {
     title: 'Moby z modeli Minecrafta 26.2',
     text: 'Modele zwierząt pochodzą teraz z waniliowej geometrii wersji 26.2: krowa ma wystający pysk i rogi w miejscu z gry, nogi krowy, świni i owcy mają lustrzane UV, zombie nosi zewnętrzną warstwę głowy, mieszkaniec dostał rond kapelusza, a ghast – dziewięć macek o prawdziwych długościach. Dzięki temu każdy piksel tekstury z paczki trafia dokładnie tam, gdzie w grze.',

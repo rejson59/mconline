@@ -119,6 +119,9 @@ import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
 import { GAME_VERSION, GAME_RELEASE_NAME, MINECRAFT_TARGET, RELEASE_HIGHLIGHTS } from '../src/utils/version';
 import {
+  LAUNCHER_TABS, LAUNCH_STEPS, DEFAULT_PROFILE, TARGET_LABEL, launcherNews, loadLauncherProfile, sinceLabel, worldMeta,
+} from '../src/components/launcher/model';
+import {
   isPortraitSize, isPhoneScreen, isTouchScreen, canLockOrientation, inFullscreen,
   toggleFullscreenLandscape, PORTRAIT_DISMISS_KEY, watchLandscape,
 } from '../src/utils/screen';
@@ -3139,11 +3142,13 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.23'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Minecraft 26.2: moby i tekstury 1:1');
+  check('release label is the current line', GAME_VERSION.startsWith('2.24'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Launcher w przeglądarce');
   check('gra celuje w konkretną wersję Minecrafta', MINECRAFT_TARGET.startsWith('26.2'), MINECRAFT_TARGET);
   check('2.23 highlights mention the 26.2 models', RELEASE_HIGHLIGHTS.some((h) => /26\.2/.test(h.title)));
   check('2.23 highlights mention biome variants', RELEASE_HIGHLIGHTS.some((h) => /wariant/i.test(h.title)));
+  check('2.24 highlights mention the launcher', RELEASE_HIGHLIGHTS.some((h) => /launcher/i.test(h.title)));
+  check('2.24 highlights are honest about the original client', RELEASE_HIGHLIGHTS.some((h) => /przeglądarce/i.test(h.text) && /Mojang|Java/i.test(h.text)));
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -4859,6 +4864,23 @@ section('2.18: moby 1:1 z Minecrafta');
   const warmPig = new Mob('pig', 8.5, gy + 2, 8.5, 0, 'warm');
   eq('ciepła świnia ma teksturę wariantu', (warmPig.meshes[0].material as THREE.MeshLambertMaterial).map?.image != null, true);
   warmPig.dispose();
+
+  // --- 2.24: model danych launchera
+  {
+    const news = launcherNews(3);
+    eq('launcher pokazuje 3 nowości', news.length, 3);
+    check('pierwsza nowość to bieżące wydanie', news[0].tag.includes(GAME_VERSION), news[0].tag);
+    check('launcher zna docelową wersję Minecrafta', TARGET_LABEL.includes('26.2'), TARGET_LABEL);
+    eq('meta świata: tryb, typ, seed i dzień', worldMeta({ mode: 'creative', worldType: 'flat', seed: 42, day: 3 }), 'Kreatywny · płaski · seed 42 · dzień 3');
+    eq('meta świeżego świata', worldMeta({ seed: 7 }), 'Przetrwanie · normalny · seed 7 · nowy');
+    eq('sinceLabel bez uruchomień', sinceLabel(null), 'jeszcze nie uruchamiano');
+    eq('sinceLabel dla teraz', sinceLabel(Date.now()), 'przed chwilą');
+    eq('etapy uruchamiania rosną', LAUNCH_STEPS.map((s) => s.progress).join(','), '22,54,82,100');
+    eq('launcher ma 7 zakładek', LAUNCHER_TABS.length, 7);
+    eq('domyślna zakładka to Start', DEFAULT_PROFILE.tab, 'home');
+    const prof = loadLauncherProfile();
+    check('profil ma nick', typeof prof.name === 'string' && prof.name.length > 0, prof.name);
+  }
 
   // --- 2.23: ikona tarczy (w paczce nie ma `item/shield.png`) i skrzynia
   {

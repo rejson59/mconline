@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import GameView from './components/GameView';
 import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
+import Launcher from './components/Launcher';
 import { type GameMode, type SaveData } from './game/engine';
 import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
 import OrientationGuard from './components/OrientationGuard';
@@ -71,6 +72,18 @@ export default function App() {
   const [saves, setSaves] = useState<WorldCard[]>(cards);
   const [shared, setShared] = useState(readSharedWorld);
   const [multiplayer, setMultiplayer] = useState(false);
+  // 2.24: launcher jest teraz pierwszym ekranem – klasyczne menu gry zostaje
+  // pod przyciskiem „Klasyczne menu” (i pod adresem #menu).
+  const [screen, setScreen] = useState<'launcher' | 'menu'>(() => {
+    try {
+      const hash = window.location.hash.replace(/^#/, '');
+      // Link do świata (`#seed=…&mode=…`) otwiera od razu kreator w klasycznym
+      // menu – launcher nie ma sensu, skoro gracz przyszedł na konkretny seed.
+      return hash === 'menu' || /(^|&)(seed|mode)=/.test(hash) ? 'menu' : 'launcher';
+    } catch {
+      return 'launcher';
+    }
+  });
 
   const startMultiplayer = (s: NetStart) => {
     setMultiplayer(false);
@@ -91,6 +104,37 @@ export default function App() {
   };
 
   const refresh = () => setSaves(cards());
+
+  /** 2.24: wspólne wejście do świata dla launchera i klasycznego menu. */
+  const playWorld = (id: string) => {
+    const s = loadSaves().find((w) => w.id === id);
+    if (!s) return;
+    const save = asSave(s);
+    setSession({
+      seed: save.seed,
+      mode: save.mode ?? 'survival',
+      save,
+      id: Date.now(),
+      worldId: save.id || id,
+      worldName: save.name || 'Świat',
+      worldType: save.worldType === 'flat' ? 'flat' : 'normal',
+    });
+  };
+
+  /** 2.24: nowy świat z launchera albo z klasycznego menu. */
+  const newWorld = (seed: number, mode: GameMode, name: string, worldType: WorldType) => {
+    if (saves.length >= MAX_SAVES) {
+      window.alert(`Możesz mieć najwyżej ${MAX_SAVES} światów. Usuń jeden, żeby utworzyć nowy.`);
+      return;
+    }
+    try {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    } catch {
+      /* ignore */
+    }
+    setShared({ seed: null, mode: null });
+    setSession({ seed, mode, id: Date.now(), worldId: 'w' + Date.now().toString(36), worldName: name, worldType });
+  };
 
   if (session) {
     return (
@@ -122,60 +166,69 @@ export default function App() {
     );
   }
 
+  if (screen === 'launcher') {
+    return (
+      <div className="flex h-full w-full flex-col">
+        <OrientationGuard variant="menu" />
+        <div className="relative min-h-0 w-full flex-1">
+          <Launcher
+            saves={saves}
+            onPlayWorld={playWorld}
+            onNewWorld={newWorld}
+            onDeleteWorld={(id) => {
+              deleteSave(id);
+              refresh();
+            }}
+            onRenameWorld={(id, name) => {
+              renameSave(id, name);
+              refresh();
+            }}
+            onDuplicateWorld={(id) => {
+              const copied = duplicateSave(id) !== null;
+              if (copied) refresh();
+              return copied;
+            }}
+            onToggleFavoriteWorld={(id) => {
+              toggleFavoriteSave(id);
+              refresh();
+            }}
+            onMultiplayer={() => setMultiplayer(true)}
+            onClassicMenu={() => setScreen('menu')}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full w-full flex-col">
       <OrientationGuard variant="menu" />
       <div className="relative min-h-0 w-full flex-1">
         <MainMenu
-        onMultiplayer={() => setMultiplayer(true)}
-        saves={saves}
-        sharedSeed={shared.seed}
-        sharedMode={shared.mode}
-        onDelete={(id) => {
-          deleteSave(id);
-          refresh();
-        }}
-        onRename={(id, name) => {
-          renameSave(id, name);
-          refresh();
-        }}
-        onDuplicate={(id) => {
-          const copied = duplicateSave(id) !== null;
-          if (copied) refresh();
-          return copied;
-        }}
-        onToggleFavorite={(id) => {
-          toggleFavoriteSave(id);
-          refresh();
-        }}
-        onImported={refresh}
-        onPlay={(id) => {
-          const s = loadSaves().find((w) => w.id === id);
-          if (!s) return;
-          const save = asSave(s);
-          setSession({
-            seed: save.seed,
-            mode: save.mode ?? 'survival',
-            save,
-            id: Date.now(),
-            worldId: save.id || id,
-            worldName: save.name || 'Świat',
-            worldType: save.worldType === 'flat' ? 'flat' : 'normal',
-          });
-        }}
-        onNew={(seed, mode, name, worldType) => {
-          if (saves.length >= MAX_SAVES) {
-            window.alert(`Możesz mieć najwyżej ${MAX_SAVES} światów. Usuń jeden, żeby utworzyć nowy.`);
-            return;
-          }
-          try {
-            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
-          } catch {
-            /* ignore */
-          }
-          setShared({ seed: null, mode: null });
-          setSession({ seed, mode, id: Date.now(), worldId: 'w' + Date.now().toString(36), worldName: name, worldType });
-        }}
+          onMultiplayer={() => setMultiplayer(true)}
+          saves={saves}
+          sharedSeed={shared.seed}
+          sharedMode={shared.mode}
+          onDelete={(id) => {
+            deleteSave(id);
+            refresh();
+          }}
+          onRename={(id, name) => {
+            renameSave(id, name);
+            refresh();
+          }}
+          onDuplicate={(id) => {
+            const copied = duplicateSave(id) !== null;
+            if (copied) refresh();
+            return copied;
+          }}
+          onToggleFavorite={(id) => {
+            toggleFavoriteSave(id);
+            refresh();
+          }}
+          onImported={refresh}
+          onPlay={playWorld}
+          onNew={newWorld}
         />
       </div>
     </div>
