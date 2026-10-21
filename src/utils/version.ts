@@ -1,10 +1,14 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.24.0';
-export const GAME_RELEASE_NAME = 'Launcher w przeglądarce';
+export const GAME_VERSION = '2.24.1';
+export const GAME_RELEASE_NAME = 'Klasyczne menu wraca';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.24.1: powrót do poprzedniego wyglądu – pierwszym ekranem jest znowu
+ * klasyczne menu gry (tło z paczki, duże BLOCKCRAFT, przyciski jak wcześniej).
+ * Launcher został w kodzie i wchodzi się do niego tylko pod adresem
+ * `#launcher`; nie zmienia niczego w rozgrywce, zapisach ani grafice.
  * 2.24: launcher w przeglądarce – gra startuje z klienta w stylu Lunar Client:
  * profil gracza i skórka, instancje światów (seed, tryb, typ), publiczny
  * serwer, paczka tekstur z ustawieniami wydajności, ustawienia gry i konsola
@@ -29,8 +33,12 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
   {
-    title: 'Launcher zamiast menu',
-    text: 'Gra startuje teraz z klienta w stylu Lunar Client: lewa nawigacja, pasek profilu, karty nowości i duży przycisk GRAJ. Wszystko działa w przeglądarce i offline – launcher nie pobiera żadnych plików, bo tekstury, modele i dźwięki są wbudowane w build.',
+    title: 'Klasyczne menu wraca',
+    text: 'Po 2.24 pierwszym ekranem znów jest stare, dobre menu gry: tło z paczki, wielkie BLOCKCRAFT, podpis wersji i te same przyciski co wcześniej. Nic nie zostało przeprojektowane – wrócił dokładnie poprzedni wygląd.',
+  },
+  {
+    title: 'Launcher bez przeszkadzania',
+    text: 'Klient z 2.24 nie zniknął: profile, instancje światów, paczki, skórki i konsola czekają pod adresem z dopiskiem #launcher. Domyślnie się nie pokazuje, więc nie zmienia pierwszego wrażenia ani nie zabiera miejsca na telefonie.',
   },
   {
     title: 'Światy jako instancje',
