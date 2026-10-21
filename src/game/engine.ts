@@ -1,6398 +1,1981 @@
-import * as THREE from 'three';
-import { World, CS, CH, SEA, plantTree, type Biome, type Chunk } from './world';
-import { B, BLOCKS, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
-import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
-import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
-import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
-import {
-  BREW_FUELS, BREWING_INGREDIENTS, HEAL_AMOUNT, SPEED_FACTOR, STRENGTH_DAMAGE, POTIONS,
-  brewingKey, emptyBrewing, tickBrewing,
-  type BrewingState, type PotionEffectId,
-} from './brewing';
-import { getAtlas, tileUV, AVG_COLOR } from './textures';
-import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, type MobType } from './mobs';
+import type { FloatText, GameMode, KillEvent, Light, MapId, Particle, PlayerConfig, PowerUpState, ShellState, TankState, WallState } from './types';
+import { MAPS, WORLD_H, WORLD_W } from './maps';
+import { gameAudio } from './audio';
+import type { PadFx, PadInput } from '../net/protocol';
+import type { Language } from '../platform/i18n';
+import { uiOwnsKeyboard } from '../lib/inputOwnership';
 
-const GREY: readonly number[] = [90, 90, 90];
-
-/** 2.8.2: prędkość wiatru dla chmur w jednostkach świata na sekundę. */
-const CLOUD_SPEED = 6.5;
-/** 2.14: zasięg auto-bicia – tyle samo, ile ręczny cios (3,5 klocka + promień moba). */
-const AUTO_ATTACK_RANGE = 3.5;
-
-/** 2.8.1: przedmioty, które świecą także wtedy, gdy trzyma je gracz. */
-const HELD_LIGHT_ITEMS: ReadonlySet<number> = new Set<number>([
-  B.TORCH, B.LANTERN, B.GLOWSTONE, B.CAMPFIRE, B.SHROOMLIGHT, B.REDSTONE_LAMP_ON, B.REDSTONE_TORCH, B.MAGMA,
-]);
-
-/** Mobs that attack the player – used for the night/cave spawn cap. */
-const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
-import { Inventory, RECIPES, type Stack } from './inventory';
-import { COMMANDS, commandByName, searchCommands } from './commands';
-import {
-  POS_HZ,
-  publicDay,
-  publicTime,
-  publicWeather,
-  type NetEdit,
-  type NetLike,
-  type NetMessage,
-  type NetPlayer,
-} from './net';
-import { PUBLIC_POS_HZ } from './online';
-import { fallbackSkin, loadSkinId, skinById } from './skins';
-import { AVATAR_KINDS, avatarMaterial } from './mobTextures';
-import {
-  rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
-  canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
-  sharpnessDamage, knockbackFactor, powerFactor, totalProtection, fallDamageFactor,
-  type EnchOption,
-} from './enchant';
-import * as Sfx from './audio';
-import { patchChunkMaterial, HELD_POWER, type HeldLightState, type SunState } from './lighting';
-import { cloudLook, rainFogMix } from './sky';
-import { buildItemIcons } from './itemIcons';
-import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
-import {
-  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown,
-  blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
-} from './items';
-import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
-import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
-import { achievementById } from './achievements';
-import { upsertSave } from './saves';
-import { Xp } from './xp';
-import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT } from './armor';
-import {
-  applyTrade,
-  canTrade,
-  offersFor,
-  professionFor,
-  restockIfDue,
-  restockIn,
-  usesLeft,
-  villagerLevel,
-  villagerProgress,
-  villagerTitle,
-  PROFESSIONS,
-  createVillagerState,
-  type TradeBlock,
-  type TradeOffer,
-  type VillagerState,
-} from './trading';
-import { villageSpawnSpots } from './village';
-import { isVillageMob } from './mobs';
-
-export type GameMode = 'survival' | 'creative';
-export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'anvil' | 'brewing';
-
-export interface Waypoint {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  z: number;
-  dimension: 'overworld' | 'nether';
-  kind?: 'custom' | 'death';
+export interface HudTank {
+  id: number; name: string; color: string;
+  hp: number; maxHp: number; alive: boolean;
+  kills: number; deaths: number; lives: number;
+  shield: number; isBot: boolean; respawn: number;
+  rapid: boolean; big: boolean; speed: boolean;
 }
 
-/** 2.10: awatar zdalnego gracza w scenie (bloki + sprite z nazwą). */
-interface RemoteAvatar {
-  group: THREE.Group;
-  head: THREE.Mesh;
-  armL: THREE.Mesh;
-  legL: THREE.Mesh;
-  legR: THREE.Mesh;
-  hand: THREE.Mesh;
-  target: THREE.Vector3;
-  yaw: number;
-  pitch: number;
-  held: number;
-  heldId: number;
-  name: string;
-  walk: number;
-  seen: number;
-  /** 2.12: aktualna skórka (żeby nie odtwarzać awatara bez potrzeby). */
-  skinId: string;
-}
-
-export interface HUDState {
-  /** 2.10: gracze w sesji (własny wpis pierwszy; puste w trybie solo). */
-  players?: NetPlayer[];
-  netRole?: 'host' | 'guest' | null;
-  /** 2.11: gra na publicznym serwerze (jeden świat dla wszystkich). */
-  netPublic?: boolean;
-  /** 2.11: ile zmian bloków czeka jeszcze na zapis w serwerze. */
-  netSaving?: number;
-  hotbar: (Stack | null)[];
-  selected: number;
-  health: number;
-  air: number;
-  maxAir: number;
+export interface HudState {
+  tanks: HudTank[];
+  timeLeft: number;
+  killLimit: number;
   mode: GameMode;
-  fps: number;
-  pos: [number, number, number];
-  facing: string;
-  biome: Biome;
-  chunks: number;
-  time: number;
-  target: string;
-  underwater: boolean;
-  inLava: boolean;
-  flying: boolean;
-  debug: boolean;
-  hurtCount: number;
-  mobs: number;
-  seed: number;
-  messages: { text: string; t: number }[];
-  loading: number;
-  day: number;
-  locked: boolean;
-  hunger: number;
-  weather: 'clear' | 'rain';
-  toast: { title: string; text: string } | null;
-  sprinting: boolean;
-  worldName: string;
-  worldType: 'normal' | 'flat';
-  minimap: boolean;
-  heldHint: string | null;
-  /** -1 when the bow is idle, otherwise the draw charge 0–1. */
-  bow: number;
-  /** Experience level (bar above the hotbar). */
-  level: number;
-  /** 0–1 progress inside the current level. */
-  xpFrac: number;
-  /** Four equipped armor pieces (head, chest, legs, feet). */
-  armor: (Stack | null)[];
-  /** Sum of armor points of the equipped pieces. */
-  armorPoints: number;
-  /** 1.6: co jest pod celownikiem (mob) – nazwa i wskazówka. */
-  mobHint: string | null;
-  /** 1.6: opis najbliższej wioski, gdy gracz jest na jej terenie. */
-  village: string | null;
-  /** 1.6: liczba udanych wymian z mieszkańcami. */
-  trades: number;
-  /** 2.0: bieżąca skala rozdzielczości (dynamiczna rozdzielczość). */
-  resScale: number;
-  /** 2.5: czy gra używa wersji dotykowej (podpowiedzi HUD adaptują treść). */
-  touch: boolean;
-  /** 2.5: chwilowe „cooldown” po wyjściu z blokady kursora (Esc w Chrome). */
-  lockCooldown: boolean;
-  /** 2.0: czy pokazywać wzmocniony licznik FPS w HUD. */
-  showFps: boolean;
-  /** 2.0: wywołania rysowania w ostatniej klatce (debug). */
-  drawCalls: number;
-  /** 2.2: aktywny cel nawigacji w tym wymiarze. */
-  waypoint: { name: string; distance: number; direction: string; bearing: number } | null;
-  /** 2.3: lorneta w dłoni – pole widzenia jest zwężone. */
-  zoom: boolean;
-  /** 2.3: stan wędkarstwa: 'idle' | 'cast' | 'waiting' | 'bite'. */
-  fishing: 'idle' | 'cast' | 'waiting' | 'bite';
-  /** 2.4: aktywne efekty napojów (ikona, nazwa, sekundy pozostałe). */
-  effects: { id: string; icon: string; name: string; left: number }[];
+  killFeed: KillEvent[];
+  countdown: number;
+  paused: boolean;
 }
 
-export interface TradeRow {
-  /** Pozycja oferty w liście – podawana do tradeWith(). */
-  index: number;
-  offer: TradeOffer;
-  /** Ile wymian zostało do wyczerpania zapasów. */
-  left: number;
-  max: number;
-  blocked: 'ok' | 'uses' | 'items' | 'space';
-}
-
-export interface SaveData {
-  seed: number;
+interface EngineOpts {
+  players: PlayerConfig[];
+  mapId: MapId;
   mode: GameMode;
-  mods: Record<string, number[]>;
-  pos: [number, number, number];
-  yaw: number;
-  pitch: number;
-  inv: (Stack | null)[];
-  time: number;
-  health: number;
-  day: number;
-  id?: string;
-  name?: string;
-  worldType?: 'normal' | 'flat';
-  updated?: number;
-  hunger?: number;
-  spawn?: [number, number, number];
-  furnaces?: FurnaceState[];
-  chests?: ChestState[];
-  unlocked?: string[];
-  weather?: 'clear' | 'rain';
-  xp?: number;
-  armor?: (Stack | null)[];
-  /** 1.6: licznik wymian (osiągnięcie „Kupiec”). */
-  trades?: number;
-  /** 1.8: modyfikacje bloków w Netherze – osobny wymiar, osobny zapis. */
-  netherMods?: Record<string, number[]>;
-  /** 1.8: czy zapis jest w środku Netheru. */
-  isInNether?: boolean;
-  /** 1.8: powrót do nadświatu – pozycja portalu, przez który gracz wszedł. */
-  portalExit?: [number, number, number];
-  /** 2.2: własne punkty nawigacyjne i aktualnie śledzony punkt. */
-  waypoints?: Waypoint[];
-  activeWaypointId?: string | null;
-  /** 2.3: zawartość kowadeł (scalanie i przemianowywanie narzędzi). */
-  anvils?: AnvilState[];
-  /** 2.3: ile ryb udało się złowić (osiągnięcie „Wędkarz”). */
-  fishCaught?: number;
-  /** 2.4: zawartość statywów alchemicznych (fiolki, składnik, paliwo). */
-  brewings?: BrewingState[];
-  /** 2.4: wypiłe typy napojów (osiągnięcie „Mistrz eliksirów”). */
-  potionsDrunk?: number[];
+  killLimit: number;
+  lives: number;
+  timeLimit: number;
+  language?: Language;
+  onHud: (h: HudState) => void;
+  onKill: (k: KillEvent) => void;
+  onFrame?: (canvas: HTMLCanvasElement) => void;
+  onGameOver: (winnerId: number | null, tanks: HudTank[]) => void;
+  /** Analogowe wejście z telefonów-padów, indeks = id gracza (slot). */
+  padInputs?: PadInput[];
+  /** Zdarzenia dla haptyki / dźwięku na telefonie danego gracza. */
+  onPadFx?: (slot: number, fx: PadFx) => void;
+  /** HUD per gracz na telefon. */
+  onPadHud?: (slot: number, tank: HudTank, hud: HudState) => void;
 }
 
-export const SAVE_KEY = 'blockcraft-save-v1';
-
-/** 2.4: ikona i nazwa wzmocnienia dla HUD-u (klucz = PotionEffectId bez 'none'). */
-const EFFECT_META: Record<Exclude<PotionEffectId, 'none'>, { icon: string; name: string }> = {
-  heal: { icon: '❤', name: 'Leczenie' },
-  fire: { icon: '🔥', name: 'Ognioodporność' },
-  speed: { icon: '🏃', name: 'Szybkość' },
-  night: { icon: '👁', name: 'Nocne widzenie' },
-  strength: { icon: '💪', name: 'Siła' },
-  regen: { icon: '✚', name: 'Regeneracja' },
-};
-
-/** Polskie nazwy mobów – używane w podpowiedzi pod celownikiem. */
-export const MOB_NAMES: Record<MobType, string> = {
-  pig: 'Świnia',
-  sheep: 'Owca',
-  cow: 'Krowa',
-  chicken: 'Kurczak',
-  wolf: 'Wilk',
-  zombie: 'Zombie',
-  creeper: 'Creeper',
-  spider: 'Pająk',
-  skeleton: 'Szkielet',
-  villager: 'Mieszkaniec',
-  golem: 'Żelazny golem',
-  enderman: 'Enderman',
-  slime: 'Slime',
-  ghast: 'Ghast',
-};
-
-/** A sand/gravel block tumbling down until it lands. */
-interface FallingBlock {
-  mesh: THREE.Mesh;
-  pos: THREE.Vector3;
-  vel: number;
-  id: number;
+function rand(a: number, b: number) { return a + Math.random() * (b - a); }
+function clamp(v: number, a: number, b: number) { return Math.max(a, Math.min(b, v)); }
+function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
+function angDiff(a: number, b: number) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
 }
+function dist(x1: number, y1: number, x2: number, y2: number) { return Math.hypot(x2 - x1, y2 - y1); }
 
-/**
- * Everything that lives in ONE dimension and must never leak into the other:
- * mobs, ground items, arrows, TNT, XP orbs, falling blocks and the redstone
- * timers. Stashed whole (meshes included) when the player uses a portal.
- */
-interface DimStash {
-  mobs: Mob[];
-  drops: DropEntity[];
-  arrows: ArrowEntity[];
-  tnts: TNTEntity[];
-  orbs: { mesh: THREE.Mesh; pos: THREE.Vector3; vel: THREE.Vector3; value: number; age: number }[];
-  falling: FallingBlock[];
-  buttons: [string, number][];
-  redstone: string[];
-}
+/* --- Telefon w trybie „KIERUNEK” (jedziesz tam, gdzie pchasz gałkę) --- */
+/** Jak szybko kadłub dogania kierunek z gałki [rad/s] — 180° zawrócenia trwa ~0,4 s. */
+const PAD_TURN_SPEED = 8.5;
+/** Jak szybko prędkość dogania gałkę [1/s] — lekka bezwładność, ale bez „pływania”. */
+const PAD_DIR_RESPONSE = 5.5;
+/** Martwa strefa wektora kierunku — drżący palec nie rusza czołgu. */
+const PAD_DIR_DEAD = 0.14;
 
-function emptyStash(): DimStash {
-  return { mobs: [], drops: [], arrows: [], tnts: [], orbs: [], falling: [], buttons: [], redstone: [] };
-}
+/* --- Joystick celowania (obrót wieży) --- */
+/** Szybkość obrotu wieży za gałką celowania [rad/s] — pół obrotu w ~0,3 s. */
+const PAD_AIM_SPEED = 11;
+/** Martwa strefa celowania. */
+const PAD_AIM_DEAD = 0.2;
+/** Ile sekund wieża trzyma cel po puszczeniu gałki, zanim wróci do kierunku kadłuba. */
+const PAD_AIM_HOLD = 1.6;
 
-/**
- * 2.8: cząstka to lekki rekord (bez własnej siatki). Wszystkie cząstki jednego
- * koloru rysuje JEDEN InstancedMesh, więc eksplozja z 80 cząstek to nadal
- * jedno wywołanie rysowania zamiast osiemdziesięciu osobnych obiektów.
- */
-interface Particle {
-  p: THREE.Vector3;
-  v: THREE.Vector3;
-  size: number;
-  life: number;
-  max: number;
-  gravity: number;
-  grow: number;
-}
+export class TankGame {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  ground: HTMLCanvasElement;
+  gctx: CanvasRenderingContext2D;
+  lightCanvas: HTMLCanvasElement;
+  lctx: CanvasRenderingContext2D;
+  opts: EngineOpts;
+  language: Language = 'pl';
+  map = MAPS.desert;
 
-interface ParticlePool {
-  mesh: THREE.InstancedMesh;
-  mat: THREE.MeshBasicMaterial;
-  list: Particle[];
-  cap: number;
-}
+  tanks: TankState[] = [];
+  shells: ShellState[] = [];
+  walls: WallState[] = [];
+  particles: Particle[] = [];
+  texts: FloatText[] = [];
+  powerups: PowerUpState[] = [];
+  lights: Light[] = [];
+  rain: { x: number; y: number; s: number }[] = [];
+  dust: { x: number; y: number; s: number; a: number; v: number }[] = [];
 
-interface TNTEntity {
-  mesh: THREE.Mesh;
-  body: Body;
-  fuse: number;
-}
-
-interface ArrowEntity {
-  mesh: THREE.Mesh;
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  life: number;
-  power: number;
-  /** The mob that fired it, or null when the player shot it. */
-  from: Mob | null;
-  /** Perła Endu: nie rani, tylko teleportuje gracza w miejsce upadku (1.9). */
-  pearl?: boolean;
-}
-
-interface DropEntity {
-  id: number;
-  count: number;
-  dur?: number;
-  ench?: Record<string, number>;
-  name?: string;
-  mesh: THREE.Object3D;
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  age: number;
-}
-
-/** 2.3: spławik wędkarstwa – lekki, tonie w wodzie i czeka na brań. */
-interface Bobber {
-  mesh: THREE.Mesh;
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  /** flying – w locie, rest – leży, water – czeka, bite – brań, reeling – wraca. */
-  state: 'flying' | 'rest' | 'water' | 'bite' | 'reeling';
-  /** Ile przynęta czeka (s) – po tym czasie woda ją zmywa. */
-  wait: number;
-  /** Kiedy nadeszła brań – czas oczekiwania na branie (s). */
-  biteAt: number;
-  /** Ile zostało na branie (s). */
-  window: number;
-}
-
-function blockGeometry(id: number): THREE.BufferGeometry {
-  if (RENDER[id] === 1) {
-    const g = new THREE.PlaneGeometry(1, 1);
-    const uv = g.attributes.uv as THREE.BufferAttribute;
-    const t = tileFor(id, 0);
-    for (let i = 0; i < uv.count; i++) {
-      const [U, V] = tileUV(t, Math.round(uv.getX(i)), Math.round(uv.getY(i)));
-      uv.setXY(i, U, V);
-    }
-    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(uv.count * 3).fill(1), 3));
-    return g;
-  }
-  const g = new THREE.BoxGeometry(1, 1, 1);
-  const faceMap = [1, 0, 3, 2, 5, 4];
-  const shades = [0.62, 0.62, 1, 0.5, 0.8, 0.8];
-  const uv = g.attributes.uv as THREE.BufferAttribute;
-  const cols = new Float32Array(uv.count * 3);
-  for (let f = 0; f < 6; f++) {
-    const tile = tileFor(id, faceMap[f]);
-    for (let v = 0; v < 4; v++) {
-      const i = f * 4 + v;
-      const [U, V] = tileUV(tile, Math.round(uv.getX(i)), Math.round(uv.getY(i)));
-      uv.setXY(i, U, V);
-      const s = shades[f] * shades[f];
-      cols[i * 3] = cols[i * 3 + 1] = cols[i * 3 + 2] = s;
-    }
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-  return g;
-}
-
-/**
- * 2.8.2: bezszwowa tekstura chmur z szumu wartości (fBm).
- *
- * Wcześniejsze „chmury” były losowymi prostokątami w siatce 128×128 – z bliska
- * wyglądały jak piksele, a przy powtarzaniu atlasu zdradzały kafel. Szum
- * wartości z zawijaniem na krawędziach daje miękkie, organiczne kłęby, które
- * łączą się w nieskończoną warstwę.
- */
-function makeCloudTexture(size: number, seed: number, coverage: number) {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
-  const image = ctx.createImageData(size, size);
-  let st = seed >>> 0;
-  const rnd = () => {
-    st = (Math.imul(st, 1664525) + 1013904223) >>> 0;
-    return st / 4294967296;
-  };
-  const octaves = [4, 8, 16, 32];
-  const weights = [0.5, 0.28, 0.15, 0.07];
-  const grids = octaves.map((n) => {
-    const a = new Float32Array(n * n);
-    for (let i = 0; i < a.length; i++) a[i] = rnd();
-    return a;
-  });
-  const smooth = (t: number) => t * t * (3 - 2 * t);
-  const at = (grid: Float32Array, n: number, x: number, y: number) =>
-    grid[(((y % n) + n) % n) * n + (((x % n) + n) % n)];
-  const sample = (grid: Float32Array, n: number, x: number, y: number) => {
-    const x0 = Math.floor(x), y0 = Math.floor(y);
-    const fx = smooth(x - x0), fy = smooth(y - y0);
-    const a = at(grid, n, x0, y0), b = at(grid, n, x0 + 1, y0);
-    const c = at(grid, n, x0, y0 + 1), d = at(grid, n, x0 + 1, y0 + 1);
-    return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
-  };
-  for (let y = 0; y < size; y++)
-    for (let x = 0; x < size; x++) {
-      let v = 0;
-      for (let o = 0; o < octaves.length; o++) {
-        v += weights[o] * sample(grids[o], octaves[o], (x / size) * octaves[o], (y / size) * octaves[o]);
-      }
-      const t = Math.max(0, Math.min(1, (v - coverage) / Math.max(0.001, 1 - coverage)));
-      const a = Math.min(1, smooth(t) * 1.25);
-      const i = (y * size + x) * 4;
-      image.data[i] = 255;
-      image.data[i + 1] = 255;
-      image.data[i + 2] = 255;
-      image.data[i + 3] = Math.round(255 * a);
-    }
-  ctx.putImageData(image, 0, 0);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.magFilter = THREE.LinearFilter;
-  tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-/** Miękkie wygaszenie chmur przy horyzoncie – brak widocznej krawędzi planu. */
-function makeCloudFade(size = 128) {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
-  const g = ctx.createRadialGradient(size / 2, size / 2, size * 0.12, size / 2, size / 2, size * 0.5);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.55, '#d8d8d8');
-  g.addColorStop(0.82, '#5a5a5a');
-  g.addColorStop(1, '#000000');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.colorSpace = THREE.NoColorSpace;
-  return tex;
-}
-
-function makeCanvasTex(size: number, draw: (ctx: CanvasRenderingContext2D) => void) {
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const ctx = c.getContext('2d')!;
-  draw(ctx);
-  const t = new THREE.CanvasTexture(c);
-  t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-const FACING = ['Północ (-Z)', 'Zachód (-X)', 'Południe (+Z)', 'Wschód (+X)'];
-
-export class Game {
-  container: HTMLElement;
-  renderer: THREE.WebGLRenderer;
-  scene = new THREE.Scene();
-  camera: THREE.PerspectiveCamera;
-  world: World;
-  /** Nadświat – zawsze tickuje i zapisuje się niezależnie od tego, gdzie jest gracz. */
-  homeWorld: World;
-  /** Nether – osobny wymiar z własnymi chunkami i modyfikacjami. */
-  netherWorld: World;
-  /** Powrót: pozycja (stopy) portalu w nadświanie, przez który gracz wszedł. */
-  portalExit: [number, number, number] | null = null;
-  /** Obiekty odłożone na czas pobytu w drugim wymiarze. */
-  private dimStash = { home: emptyStash(), nether: emptyStash() };
-  mode: GameMode;
-  ui: UIState = 'paused';
-  inventory = new Inventory();
-  selected = 0;
-  icons: Record<number, string>;
-  craftingTable = false;
-  renderDistance = 6;
-  sensitivity = 1;
-  fovBase = 72;
-
-  // ——— 2.0: automat graficzny ———
-  /** Sprzętowy pixel ratio ograniczony do 2 – punkt wyjścia dla skalowania. */
-  basePixelRatio = 1;
-  /** Bieżąca skala rozdzielczości (dynamiczna rozdzielczość, 0.55–1). */
-  resScale = 1;
-  /** Czy silnik może sam zmieniać rozdzielczość (DRS). */
-  drEnabled = true;
-  private drCooldown = 2;
-  /** Twardy limit klatek (0 = bez limitu). Oszczędza baterię na telefonach. */
-  fpsCap = 0;
-  /** Budżety jakości ustawiane przez applyGfx(). */
-  gfx = { chunkBudgetMs: 12, chunksPerFrame: 3, unloadMargin: 2, particleScale: 1, clouds: true };
-  /** Automatyczne wskakiwanie na 1-blokowe schodki (sterowanie mobilne). */
-  autoJump = false;
-  /** 2.14: automatyczne bicie wrogich mobów w zasięgu ręki. */
-  autoAttack = false;
-  /** Krótkie wibracje przy kopaniu i obrażeniach. */
-  haptics = false;
-  viewBobbing = true;
-  showFps = false;
-  /** Telefon nie używa Pointer Lock — blokował on gesty w części mobilnych przeglądarek. */
-  touchInput = false;
-  /** Cel dotyku w NDC (-1..1) – gdy ustawione, celownik podąża za palcem. */
-  touchAim: { x: number; y: number } | null = null;
-  /** Kierunek celowania z ostatniej klatki (crosshair albo palec). */
-  aimDir: THREE.Vector3 | null = null;
-  /** Ostatni automatyczny skok – anty-drganiowa przerwa. */
-  private autoJumpCd = 0;
-
-  // player
-  body: Body = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: false, hitWall: false };
-  yaw = 0;
-  pitch = 0;
-  health = 20;
-  hunger = 20;
-  air = 12;
-  maxAir = 12;
-  flying = false;
-  sprinting = false;
-  eyeHeight = 1.62;
-  fallStart = 0;
-  hurtCount = 0;
-  lastHurt = 0;
-  regenAcc = 0;
-  drownAcc = 0;
-  starveAcc = 0;
-  lavaAcc = 0;
-  stepDist = 0;
-  bobPhase = 0;
-  shake = 0;
-  spawnPoint = new THREE.Vector3();
-
-  // input
   keys = new Set<string>();
-  mouseLeft = false;
-  mouseRight = false;
-  locked = false;
-  /** 2.5: kiedy ostatnio utracono blokadę kursora (Esc cooldown w Chrome). */
-  lastLockExit = 0;
-  lastSpace = 0;
-  lastW = 0;
-  debug = false;
+  running = false;
+  raf = 0;
+  lastT = 0;
+  elapsed = 0;
+  timeLeft = 300;
+  countdown = 3.6;
+  timeScale = 1;
+  slowMo = 0;
+  trauma = 0;
+  killFeed: KillEvent[] = [];
+  killId = 0;
+  private finishTimers: ReturnType<typeof setTimeout>[] = [];
+  gameOver = false;
+  paused = false;
+  hudTimer = 0;
+  powerupTimer = 5;
+  stats = { shots: 0, explosions: 0 };
+  finished = false;
+  dpr = 1;
+  viewScale = 1;
+  viewX = 0; viewY = 0;
 
-  // interaction
-  target: ReturnType<World['raycast']> = null;
-  breakProgress = 0;
-  breakKey = '';
-  breakCooldown = 0;
-  placeCooldown = 0;
-  attackCooldown = 0;
-  digSoundTimer = 0;
-  swingT = 1;
-
-  // world time
-  time = 0.03;
-  day = 1;
-
-  // rendering
-  materials: THREE.Material[];
-  atlasTex: THREE.Texture;
-  selection: THREE.LineSegments;
-  crackMesh: THREE.Mesh;
-  crackTex: THREE.Texture[];
-  hand = new THREE.Group();
-  handMesh: THREE.Mesh | null = null;
-  handId = -2;
-  handMat: THREE.MeshBasicMaterial;
-  sun: THREE.Mesh;
-  moon: THREE.Mesh;
-  stars: THREE.Points;
-  clouds: THREE.Mesh;
-  cloudTex: THREE.Texture;
-  /** 2.8.1: gęsta warstwa chmur widoczna tylko podczas deszczu. */
-  stormClouds!: THREE.Mesh;
-  stormTex!: THREE.Texture;
-  /** 2.8.2: wspólne wygaszenie chmur przy horyzoncie. */
-  cloudFadeTex!: THREE.Texture;
-  /** Płynne przejście pogody (0 = jasno, 1 = pełny deszcz). */
-  private stormBlend = 0;
-  /** 2.8.1: światło trzymanego przedmiotu (pochodnia, latarnia…). */
-  private heldLight: HeldLightState = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
-  /** 2.10: sesja multiplayer (null = gra jednoosobowa). */
-  net: NetLike | null = null;
-  /** Lista graczy do HUD (własny wpis na początku). */
-  netPlayers: NetPlayer[] = [];
-  private netEditQueue: NetEdit[] = [];
-  private netEditTimer = 0;
-  private netPosTimer = 0;
-  private netApplying = false;
-  private remotes = new Map<string, RemoteAvatar>();
-  private remoteGroup: THREE.Group | null = null;
-  private netName = 'Gracz';
-  private netHue = 0;
-  /** 2.12: skórka gracza wysyłana w pozycjach (i widoczna u innych). */
-  private netSkin = '';
-  /** 2.8.2: kierunkowe słońce – shader liczy nim `dot(ściana, słońce)`. */
-  private sunState: SunState = { dir: new THREE.Vector3(0.35, 1, 0.2).normalize(), power: 0.8 };
-  ambient: THREE.HemisphereLight;
-  dirLight: THREE.DirectionalLight;
-  particleGeo = new THREE.BoxGeometry(1, 1, 1);
-  /** 2.8: pule instancjonowanych cząstek (klucz = kolor/blok albo „smoke”). */
-  private particlePools = new Map<string, ParticlePool>();
-  private particleDummy = new THREE.Object3D();
-  /** 2.8: czas dla shadera (fala wody). */
-  private uTime = { value: 0 };
-  /** 2.8: gradientowe niebo zamiast jednego płaskiego koloru. */
-  private skyDome: THREE.Mesh | null = null;
-  private skyDomeTex: THREE.CanvasTexture | null = null;
-  /** 2.8: współdzielone materiały ikon na ziemi (koniec alokacji na upadek). */
-  private dropIconGeo = new THREE.PlaneGeometry(0.32, 0.32);
-  private dropIconMats = new Map<number, THREE.MeshBasicMaterial>();
-  tnts: TNTEntity[] = [];
-  mobs: Mob[] = [];
-  tntGeo: THREE.BufferGeometry;
-  drops: DropEntity[] = [];
-  furnaces = new Map<string, FurnaceState>();
-  furnacePos: { x: number; y: number; z: number } | null = null;
-  chests = new Map<string, ChestState>();
-  chestPos: { x: number; y: number; z: number } | null = null;
-  /** 2.3: kowadła – PPM otwiera ekran scalania i przemianowywania. */
-  anvils = new Map<string, AnvilState>();
-  anvilPos: { x: number; y: number; z: number } | null = null;
-  /** 2.4: statywy alchemiczne – PPM otwiera ekran warzenia napojów. */
-  brewings = new Map<string, BrewingState>();
-  brewingPos: { x: number; y: number; z: number } | null = null;
-  /** 2.4: aktywne efekty napojów (id → pozostałe ms). Krótkie – nie zapisują się. */
-  private effects = new Map<PotionEffectId, number>();
-  /** 2.4: odliczanie leczenia z napoju regeneracji. */
-  private potionRegenAcc = 0;
-  /** 2.4: jakie butelki gracz kiedykolwiek wypił (osiągnięcie „Mistrz eliksirów”). */
-  potionsDrunk = new Set<number>();
-  /** 2.3: aktywna wędka (spławik w locie / w wodzie). */
-  private bobber: Bobber | null = null;
-  private bobberGeo: THREE.BoxGeometry | null = null;
-  private bobberMat: THREE.MeshBasicMaterial | null = null;
-  /** 2.3: licznik złowionych ryb (zapisuje się ze światem). */
-  fishCaught = 0;
-  /** 2.3: lorneta – prawy przycisk myszy w dłoni. */
-  private zooming = false;
-  /** 2.5: podgląd lornety dla sterowania dotykowego (spowolnienie gestu). */
-  isZooming() {
-    return this.zooming;
-  }
-  /** 2.3: sekundy regeneracji po uratowaniu przez totem. */
-  private totemHeal = 0;
-  private campfireHurt = 0;
-  private arrows: ArrowEntity[] = [];
-  private arrowGeo!: THREE.BufferGeometry;
-  private arrowMat!: THREE.MeshBasicMaterial;
-  /** Experience – persisted as a total, level derived from the curve. */
-  xp = new Xp(0);
-  /** Equipped armor: [head, chest, legs, feet]. */
-  armor: (Stack | null)[] = new Array(ARMOR_SLOT_COUNT).fill(null);
-  /** Floating XP orbs dropped by mobs and ores. */
-  private orbs: { mesh: THREE.Mesh; pos: THREE.Vector3; vel: THREE.Vector3; value: number; age: number }[] = [];
-  private orbGeo!: THREE.BufferGeometry;
-  private orbMat!: THREE.MeshBasicMaterial;
-  /** Seconds the bow has been drawn, -1 when idle. */
-  private bowDraw = -1;
-  /** Rzuty perłą Endu mają krótki odstęp (1.9). */
-  private pearlCd = 0;
-  private pearlGeo: THREE.SphereGeometry | null = null;
-  private pearlMat: THREE.MeshBasicMaterial | null = null;
-  private biomeCache = new Map<string, Biome>();
-  /** Stół zaklęć: gdzie stoi i co właśnie w nim siedzi. */
-  enchantPos: { x: number; y: number; z: number } | null = null;
-  enchantItem: Stack | null = null;
-  enchOptions: EnchOption[] = [];
-  /** 1.6: mieszkaniec, z którym właśnie handlujemy. */
-  tradeMob: Mob | null = null;
-  /** 1.6: liczba udanych wymian i wioski już odwiedzone w tej sesji. */
-  trades = 0;
-  private villageSeen = new Set<string>();
-  private villageName: string | null = null;
-  private villageCheck = 0;
-  worldId = '';
-  worldName = 'Świat';
-  worldType: 'normal' | 'flat' = 'normal';
-  unlocked = new Set<string>();
-  toast: { title: string; text: string; at: number } | null = null;
-  showMinimap = true;
-  /** 2.2: maksymalnie 12 znaczników na świat, w tym automatyczny punkt śmierci. */
-  waypoints: Waypoint[] = [];
-  activeWaypointId: string | null = null;
-  minimapCanvas!: HTMLCanvasElement;
-  private minimapCtx!: CanvasRenderingContext2D;
-  private minimapImg: ImageData | null = null;
-  /** 2.8: numeryczny indeks chunków + odcisk stanu – minimapa nie liczy się bez potrzeby. */
-  private miniChunks = new Map<number, Chunk>();
-  private miniSig = '';
-  private uDay = { value: 1 };
-  private dropMat!: THREE.MeshBasicMaterial;
-  private itemTex = new Map<number, THREE.Texture>();
-  private dropGeos = new Map<number, THREE.BufferGeometry>();
-  private falling: FallingBlock[] = [];
-  /** Leaves waiting to fall apart after their tree lost its last log. */
-  private leafDecay: { x: number; y: number; z: number; t: number }[] = [];
-  private growables = new Map<string, number>();
-  private buttonTimers = new Map<string, number>();
-  private redstoneDirty = new Set<string>();
-  portalCooldown = 0;
-  isInNether = false;
-  private growAcc = 0;
-  private growCursor = 0;
-  private eatCooldown = 0;
-  private toldPick = false;
-  private wasInWater = false;
-  weather: 'clear' | 'rain' = 'clear';
-  private weatherTimer = 70;
-  private lightning = 0;
-  private musicTimer = 90 + Math.random() * 150;
-  private ambientTimer = 12 + Math.random() * 18;
-  private underground = false;
-  private nextBolt = 12;
-  private rain!: THREE.Points;
-  private rainGeo!: THREE.BufferGeometry;
-
-  private offsets: [number, number][] = [];
-  private raf = 0;
-  private lastTime = performance.now();
-  private hudTimer = 0;
-  private fpsFrames = 0;
-  private fpsTime = 0;
-  private fps = 0;
-  private spawnTimer = 0;
-  private unloadTimer = 0;
-  private saveTimer = 0;
-  private messages: { text: string; t: number }[] = [];
-  private loadingProgress = 0;
-  private onHud: (h: HUDState) => void;
-  private onUI: (s: UIState) => void;
-  private listeners: [EventTarget, string, EventListener, AddEventListenerOptions | undefined][] = [];
-  /** 2.15: ostatni zmierzony rozmiar płótna (CSS px) – chroni przed zbędnym setSize. */
-  private viewW = 0;
-  private viewH = 0;
-  /** 2.15: obserwator rozmiaru kontenera (działa też w pełnym ekranie i po obrocie). */
-  private viewRO: ResizeObserver | null = null;
-  private viewTimers: number[] = [];
-  private viewCheck = 0;
-
-  constructor(
-    container: HTMLElement,
-    opts: { seed: number; mode: GameMode; save?: SaveData; renderDistance?: number; worldId?: string; worldName?: string; worldType?: 'normal' | 'flat'; net?: NetLike },
-    cb: { onHud: (h: HUDState) => void; onUI: (s: UIState) => void }
-  ) {
-    this.container = container;
-    this.onHud = cb.onHud;
-    this.onUI = cb.onUI;
-    this.mode = opts.save ? opts.save.mode : opts.mode;
-    this.renderDistance = opts.renderDistance ?? 6;
-    this.worldId = opts.worldId || opts.save?.id || 'w' + Date.now().toString(36);
-    this.worldName = opts.worldName || opts.save?.name || 'Świat';
-    const seed = opts.save ? opts.save.seed : opts.seed;
-    const worldType = opts.save?.worldType ?? opts.worldType ?? 'normal';
-    this.worldType = worldType;
-    this.world = new World(seed, worldType === 'flat');
-    this.homeWorld = this.world;
-    // Nether istnieje od razu jako osobny wymiar – nigdy nie nadpisuje nadświatu.
-    this.netherWorld = new World(seed, false, true);
-    if (opts.save) {
-      this.world.loadMods(opts.save.mods);
-      this.netherWorld.loadMods(opts.save.netherMods ?? {});
-    }
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-    this.renderer.setPixelRatio(Math.min(this.basePixelRatio, 1.5));
-    this.renderer.domElement.style.display = 'block';
-    // 2.15: płótno zawsze wypełnia kontener przez CSS (100%), a bufor rysowania
-    // dopasowuje `syncViewport`. Dzięki temu nawet spóźniony `resize` po
-    // pełnym ekranie nie rozciąga obrazu (wcześniej wyglądał jak zoom kamery).
-    this.renderer.domElement.style.width = '100%';
-    this.renderer.domElement.style.height = '100%';
-    container.appendChild(this.renderer.domElement);
-
-    // 2.15: kontener bywa chwilowo zerowy (montowanie po fullscreenie) –
-    // dzielenie 0/0 dawało kamerze nieskończone proporcje i „zoom”.
-    const aspect0 = Math.max(1, container.clientWidth) / Math.max(1, container.clientHeight);
-    this.camera = new THREE.PerspectiveCamera(this.fovBase, aspect0, 0.05, 1200);
-    this.camera.rotation.order = 'YXZ';
-    this.scene.add(this.camera);
-    // Pierwszy pomiar robimy dopiero z gotową kamerą – wcześniej nie ma czego
-    // przeliczać, a `setSize` i tak musi znać proporcje.
-    this.syncViewport();
-    this.remoteGroup = new THREE.Group();
-    this.remoteGroup.name = 'gracze';
-    this.scene.add(this.remoteGroup);
-    this.scene.fog = new THREE.Fog(0x88bbff, 20, this.renderDistance * CS);
-
-    const atlas = getAtlas();
-    this.icons = { ...atlas.icons, ...buildItemIcons() };
-    const tex = new THREE.CanvasTexture(atlas.canvas);
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestFilter;
-    tex.generateMipmaps = false;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    this.atlasTex = tex;
-    this.materials = [
-      new THREE.MeshBasicMaterial({ map: tex, vertexColors: true }),
-      new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
-      new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
-    ];
-    // 2.8: warstwa przezroczysta (woda, szkło, portal) dostaje delikatną falę.
-    this.materials.forEach((m, i) =>
-      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime, held: this.heldLight, sun: this.sunState })
-    );
-    this.dropMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.4, side: THREE.DoubleSide });
-    this.crackTex = atlas.cracks.map((c) => {
-      const t = new THREE.CanvasTexture(c);
-      t.magFilter = THREE.NearestFilter;
-      t.minFilter = THREE.NearestFilter;
-      return t;
-    });
-
-    // selection box
-    const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004));
-    this.selection = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.55 }));
-    this.selection.visible = false;
-    this.scene.add(this.selection);
-    this.crackMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(1.006, 1.006, 1.006),
-      new THREE.MeshBasicMaterial({ map: this.crackTex[0], transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 })
-    );
-    this.crackMesh.visible = false;
-    this.scene.add(this.crackMesh);
-
-    // lights for mobs
-    this.ambient = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2);
-    this.dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    this.scene.add(this.ambient, this.dirLight, this.dirLight.target);
-
-    // sky objects
-    const sunTex = makeCanvasTex(32, (c) => {
-      c.fillStyle = 'rgba(255,240,150,0.25)';
-      c.fillRect(0, 0, 32, 32);
-      c.fillStyle = '#fff8c0';
-      c.fillRect(6, 6, 20, 20);
-      c.fillStyle = '#ffffff';
-      c.fillRect(9, 9, 14, 14);
-    });
-    this.sun = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshBasicMaterial({ map: sunTex, transparent: true, fog: false, depthWrite: false }));
-    const moonTex = makeCanvasTex(32, (c) => {
-      c.fillStyle = '#dde2ee';
-      c.fillRect(8, 8, 16, 16);
-      c.fillStyle = '#9aa0b0';
-      c.fillRect(11, 11, 4, 4);
-      c.fillRect(18, 16, 3, 3);
-      c.fillRect(13, 19, 2, 2);
-    });
-    this.moon = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshBasicMaterial({ map: moonTex, transparent: true, fog: false, depthWrite: false }));
-    this.sun.renderOrder = -1;
-    this.moon.renderOrder = -1;
-    this.scene.add(this.sun, this.moon);
-    const starPos: number[] = [];
-    for (let i = 0; i < 1500; i++) {
-      const v = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize().multiplyScalar(500);
-      starPos.push(v.x, v.y, v.z);
-    }
-    const sg = new THREE.BufferGeometry();
-    sg.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-    this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, fog: false, depthWrite: false }));
-    this.scene.add(this.stars);
-
-    // 2.8: niebo z gradientem (zenit → jasny horyzont) zamiast jednego koloru.
-    // Zwykła tekstura + MeshBasicMaterial – zero własnych shaderów do awarii.
-    this.skyDomeTex = makeCanvasTex(64, (c) => {
-      const grad = c.createLinearGradient(0, 0, 0, 64);
-      grad.addColorStop(0, '#9fb8e8');
-      grad.addColorStop(0.55, '#cfe0ff');
-      grad.addColorStop(0.82, '#f4f1ee');
-      grad.addColorStop(1, '#fff6e8');
-      c.fillStyle = grad;
-      c.fillRect(0, 0, 64, 64);
-    });
-    this.skyDome = new THREE.Mesh(
-      new THREE.SphereGeometry(620, 24, 14),
-      new THREE.MeshBasicMaterial({ map: this.skyDomeTex, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false, toneMapped: false })
-    );
-    this.skyDome.renderOrder = -20;
-    this.skyDome.frustumCulled = false;
-    this.scene.add(this.skyDome);
-
-    // 2.8.2: chmury z prawdziwego szumu, wolniejsze i dwuwarstwowe.
-    // Warstwa podstawowa: rzadkie, jasne kłęby. Warstwa burzowa: gęsta,
-    // niska i ciemniejsza – pojawia się płynnie wraz z deszczem.
-    this.cloudTex = makeCloudTexture(256, 0x5eed1, 0.54);
-    this.cloudTex.repeat.set(3, 3);
-    this.stormTex = makeCloudTexture(256, 0xb017, 0.42);
-    this.stormTex.repeat.set(2.2, 2.2);
-    this.cloudFadeTex = makeCloudFade(128);
-    this.clouds = new THREE.Mesh(
-      new THREE.PlaneGeometry(3200, 3200),
-      new THREE.MeshBasicMaterial({
-        map: this.cloudTex,
-        alphaMap: this.cloudFadeTex,
-        transparent: true,
-        opacity: 0.8,
-        fog: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      })
-    );
-    this.clouds.rotation.x = -Math.PI / 2;
-    this.clouds.renderOrder = -5;
-    this.scene.add(this.clouds);
-
-    this.stormClouds = new THREE.Mesh(
-      new THREE.PlaneGeometry(3400, 3400),
-      new THREE.MeshBasicMaterial({
-        map: this.stormTex,
-        alphaMap: this.cloudFadeTex,
-        transparent: true,
-        opacity: 0,
-        fog: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      })
-    );
-    this.stormClouds.rotation.x = -Math.PI / 2;
-    this.stormClouds.renderOrder = -4;
-    this.stormClouds.visible = false;
-    this.scene.add(this.stormClouds);
-
-    // hand
-    this.handMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, depthTest: false, alphaTest: 0.3, side: THREE.FrontSide });
-    this.camera.add(this.hand);
-    this.tntGeo = blockGeometry(B.TNT);
-    this.arrowGeo = new THREE.BoxGeometry(0.09, 0.09, 0.78);
-    this.arrowMat = new THREE.MeshBasicMaterial({ color: 0x9a7a4a });
-    this.orbGeo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
-    this.orbMat = new THREE.MeshBasicMaterial({ color: 0x8ef55a });
-
-    this.computeOffsets();
-
-    // Player setup
-    if (opts.save) {
-      this.body.pos.set(...opts.save.pos);
-      this.yaw = opts.save.yaw;
-      this.pitch = opts.save.pitch;
-      this.time = opts.save.time;
-      this.health = opts.save.health > 0 ? opts.save.health : 20;
-      this.hunger = opts.save.hunger ?? 20;
-      this.day = opts.save.day || 1;
-      opts.save.inv.forEach((s, i) => (this.inventory.slots[i] = s ? { ...s } : null));
-      for (const f of opts.save.furnaces ?? []) this.furnaces.set((f.dim ? 'n:' : '') + furnaceKey(f.x, f.y, f.z), { ...f, input: f.input ? { ...f.input } : null, fuel: f.fuel ? { ...f.fuel } : null, output: f.output ? { ...f.output } : null });
-      for (const c of opts.save.chests ?? []) this.chests.set((c.dim ? 'n:' : '') + chestKey(c.x, c.y, c.z), { x: c.x, y: c.y, z: c.z, dim: c.dim, slots: (c.slots ?? []).slice(0, 27).map((s) => (s ? { ...s } : null)) });
-      for (const a of opts.save.anvils ?? []) {
-        if (!a || typeof a.x !== 'number' || typeof a.y !== 'number' || typeof a.z !== 'number') continue;
-        this.anvils.set((a.dim ? 'n:' : '') + anvilKey(a.x, a.y, a.z), {
-          x: a.x, y: a.y, z: a.z, dim: a.dim,
-          a: a.a ? { ...a.a, ench: a.a.ench ? { ...a.a.ench } : undefined } : null,
-          b: a.b ? { ...a.b, ench: a.b.ench ? { ...a.b.ench } : undefined } : null,
-          name: cleanItemName(a.name ?? ''),
-          burn: a.burn ?? 0, burnMax: a.burnMax ?? 0,
-        });
-      }
-      // 2.4: statywy alchemiczne – fiolki, składnik i paliwo wracają do kotła.
-      for (const b of opts.save.brewings ?? []) {
-        if (!b || typeof b.x !== 'number' || typeof b.y !== 'number' || typeof b.z !== 'number') continue;
-        const clean = emptyBrewing(b.x, b.y, b.z);
-        clean.dim = b.dim;
-        clean.bottles = (Array.isArray(b.bottles) ? b.bottles : []).slice(0, 3).map((s) => (s && typeof s.id === 'number' ? { ...s } : null));
-        while (clean.bottles.length < 3) clean.bottles.push(null);
-        clean.ingredient = b.ingredient && typeof b.ingredient.id === 'number' ? { ...b.ingredient } : null;
-        clean.fuel = b.fuel && typeof b.fuel.id === 'number' ? { ...b.fuel } : null;
-        clean.fuelLeft = Math.max(0, Math.min(BREW_FUELS, Math.floor(b.fuelLeft ?? 0)));
-        clean.progress = Math.max(0, Math.min(8, b.progress ?? 0));
-        this.brewings.set((b.dim ? 'n:' : '') + brewingKey(b.x, b.y, b.z), clean);
-      }
-      this.fishCaught = Math.max(0, Math.floor(opts.save.fishCaught ?? 0));
-      for (const id of Array.isArray(opts.save.potionsDrunk) ? opts.save.potionsDrunk : []) {
-        if (typeof id === 'number' && POTIONS[id]) this.potionsDrunk.add(id);
-      }
-      for (const id of opts.save.unlocked ?? []) this.unlocked.add(id);
-      this.weather = opts.save.weather === 'rain' ? 'rain' : 'clear';
-      this.xp = new Xp(opts.save.xp ?? 0);
-      this.trades = opts.save.trades ?? 0;
-      this.waypoints = (opts.save.waypoints ?? []).filter((w) =>
-        w && typeof w.id === 'string' && typeof w.name === 'string' &&
-        Number.isFinite(w.x) && Number.isFinite(w.y) && Number.isFinite(w.z) &&
-        (w.dimension === 'overworld' || w.dimension === 'nether')
-      ).slice(0, 12).map((w) => ({ ...w, name: w.name.slice(0, 32) }));
-      this.activeWaypointId = this.waypoints.some((w) => w.id === opts.save?.activeWaypointId) ? (opts.save.activeWaypointId ?? null) : null;
-      if (opts.save.armor) {
-        for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
-          const s = opts.save.armor[i];
-          this.armor[i] = s ? { id: s.id, count: s.count, dur: s.dur, ench: s.ench ? { ...s.ench } : undefined } : null;
-        }
-      }
-      if ((opts.save.day || 1) >= 2) this.unlocked.add('night');
-      this.findSpawn();
-      if (opts.save.spawn) this.spawnPoint.set(...opts.save.spawn);
-      // Zapis w Netherze: aktywuj wymiar PRZED wczytaniem chunków wokół gracza.
-      if (opts.save.isInNether) {
-        this.world = this.netherWorld;
-        this.isInNether = true;
-        this.portalExit = opts.save.portalExit ?? null;
-      }
-      this.world.getChunk(Math.floor(this.body.pos.x / CS), Math.floor(this.body.pos.z / CS));
-    } else {
-      this.findSpawn();
-      this.body.pos.copy(this.spawnPoint);
-      this.giveStarterItems();
-    }
-    this.fallStart = this.body.pos.y;
-
-    // Build nearby chunks right away
-    const pcx = Math.floor(this.body.pos.x / CS), pcz = Math.floor(this.body.pos.z / CS);
-    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) this.buildChunk(pcx + dx, pcz + dz);
-
-    this.bindEvents();
-    this.updateHand();
-    this.initWeather();
-    this.minimapCanvas = document.createElement('canvas');
-    this.minimapCanvas.width = this.minimapCanvas.height = 96;
-    this.minimapCtx = this.minimapCanvas.getContext('2d')!;
-    if (opts.net) this.bindNet(opts.net);
-    this.loop = this.loop.bind(this);
-    this.raf = requestAnimationFrame(this.loop);
-    this.message(this.mode === 'creative'
-      ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}”: szukaj receptur po nazwie lub składniku; pełny ekwipunek nie gubi łupu. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.`);
-  }
-
-  // ------------------------------------------------------- 2.10: multiplayer
-
-  /**
-   * Podpina sesję sieciową do świata. Gość dostaje migawkę zmian bloków od
-   * gospodarza (terenu nie wysyłamy – świat jest deterministyczny), a każda
-   * dalsza zmiana leci do pozostałych graczy.
-   */
-  /** Hook `World.onEdit` dla danego wymiaru – zbiera zmiany do wysyłki. */
-  private editHook(dim: 'o' | 'n') {
-    return (x: number, y: number, z: number, id: number) => {
-      if (this.netApplying) return;
-      this.netEditQueue.push({ x, y, z, id, d: dim });
-      if (this.netEditQueue.length > 400) this.flushNetEdits();
-    };
-  }
-
-  private bindNet(net: NetLike) {
-    this.net = net;
-    this.netName = net.name;
-    this.netSkin = loadSkinId();
-    net.name = this.netName;
-    net.skin = this.netSkin;
-    const me = net.players.find((p) => p.id === net.id);
-    this.netHue = me?.hue ?? 0;
-    this.netPlayers = net.players.length ? net.players : [{ id: net.id, name: net.name, hue: this.netHue, ping: -1, self: true, skin: this.netSkin }];
-
-    // --- wspólne dla wszystkich transportów: obsługa zdarzeń sesji
-    net.onMessage = (m) => this.onNetMessage(m);
-    net.onPeers = (players) => {
-      const before = new Set(this.netPlayers.map((p) => p.id));
-      this.netPlayers = players;
-      const meNow = players.find((p) => p.id === this.net!.id);
-      if (meNow) this.netHue = meNow.hue;
-      for (const p of players) {
-        if (p.self) continue;
-        this.ensureRemote(p);
-        // Nowy gracz w trakcie gry – warto go przywitać w czacie.
-        if (before.size > 0 && !before.has(p.id)) this.message(`${p.name} dołączył do gry.`);
-      }
-      for (const id of [...this.remotes.keys()]) if (!players.some((p) => p.id === id)) this.dropRemote(id);
-      this.emitHud();
-    };
-    net.onChat = (name, text) => this.message(`<${name}> ${text}`);
-    net.onStatus = (status, error) => {
-      if (status === 'error' && error) this.message('Sieć: ' + error);
-      else if (status === 'closed') this.message('Rozłączono z sesją.');
-      this.emitHud();
-    };
-    // Każda zmiana bloku (poza odtwarzaniem zmian z sieci) idzie do innych.
-    // Oba wymiary mają własny hook – dzięki temu Nether też się synchronizuje.
-    this.homeWorld.onEdit = this.editHook('o');
-    this.netherWorld.onEdit = this.editHook('n');
-    // Start świata obsługuje ekran multiplayer – tu go już nie potrzebujemy.
-    net.onStart = undefined;
-
-    // --- publiczny serwer: jeden świat, zapisywany w chmurze
-    if (net.public) {
-      // Świat wchodzi przez `seedMods`, zanim wygenerują się chunki – inaczej
-      // każdy zbudowany blok wymagałby osobnej przebudowy siatki.
-      if (net.world?.edits?.length) {
-        this.homeWorld.seedMods(net.world.edits.filter((e) => e.d !== 'n'));
-        this.netherWorld.seedMods(net.world.edits.filter((e) => e.d === 'n'));
-      }
-      if (net.world) {
-        this.time = net.world.time;
-        this.day = net.world.day;
-        this.applyNetWeather(net.world.weather);
-      }
-      // Na serwerze publicznym wszyscy są równi – punkt startu bierzemy
-      // z generatora, a nie od „gospodarza”.
-      const spawnX = Math.round(this.body.pos.x) + (this.netHue % 7) - 3;
-      const spawnZ = Math.round(this.body.pos.z) + (this.netHue % 5) - 2;
-      const ground = this.homeWorld.heightAt(spawnX, spawnZ) + 1;
-      this.body.pos.set(spawnX + 0.5, ground, spawnZ + 0.5);
-      this.spawnPoint.copy(this.body.pos);
-      this.fallStart = this.body.pos.y;
-      this.message('Witaj na serwerze publicznym! Wszyscy budujecie jeden wspólny świat. T – czat, /help – komendy.');
-      this.emitHud();
-      return;
-    }
-
-    // Migawka świata od gospodarza.
-    if (net.role === 'guest' && net.world) {
-      this.netApplying = true;
-      try {
-        if (net.world.edits?.length) this.applyNetEdits(net.world.edits);
-        if (Number.isFinite(net.world.time)) this.time = net.world.time;
-        if (Number.isFinite(net.world.day)) this.day = Math.max(1, net.world.day);
-        this.applyNetWeather(net.world.weather);
-      } finally {
-        this.netApplying = false;
-      }
-      // Spóźniony gość pojawia się obok gospodarza, a nie w tym samym punkcie
-      // co on (i co drugi gość) – inaczej awatary nachodzą na kamerę.
-      const hostSpawn = net.world.spawn;
-      if (hostSpawn && hostSpawn.d === 'o') {
-        const angle = ((this.netHue % 360) * Math.PI) / 180;
-        const gx = Math.round(hostSpawn.x + Math.cos(angle) * 3);
-        const gz = Math.round(hostSpawn.z + Math.sin(angle) * 3);
-        const ground = this.homeWorld.heightAt(gx, gz) + 1;
-        this.body.pos.set(gx + 0.5, Math.max(hostSpawn.y, ground), gz + 0.5);
-        this.spawnPoint.copy(this.body.pos);
-        this.fallStart = this.body.pos.y;
-      }
-    }
-    // To, co gospodarz pokaże nowym graczom.
-    net.setWorld({ seed: this.world.seed, mode: this.mode, worldType: this.worldType, name: this.worldName, time: this.time, day: this.day, weather: this.weather });
-    this.message(
-      net.role === 'host'
-        ? 'Sesja utworzona. Kod pokoju podaj znajomym, żeby dołączyli.'
-        : `Dołączono do sesji ${net.world?.name ?? ''} – grasz z gospodarzem.`
-    );
-  }
-
-  private onNetMessage(m: NetMessage) {
-    switch (m.t) {
-      case 'edits':
-        this.netApplying = true;
-        try {
-          this.applyNetEdits(m.list);
-        } finally {
-          this.netApplying = false;
-        }
-        break;
-      case 'pos': {
-        if (m.from === this.net?.id) break;
-        const player = this.netPlayers.find((p) => p.id === m.from);
-        const avatar = this.ensureRemote(player ?? { id: m.from, name: m.name, hue: m.hue, ping: -1 });
-        // Awatara widać tylko wtedy, gdy gracz jest w tym samym wymiarze.
-        if ((m.d === 'n') !== this.isInNether) {
-          avatar.group.visible = false;
-          break;
-        }
-        avatar.group.visible = true;
-        avatar.target.set(m.x, m.y, m.z);
-        avatar.yaw = m.yaw;
-        avatar.pitch = m.pitch;
-        avatar.held = m.held ?? 0;
-        avatar.seen = performance.now();
-        if (m.skin && m.skin !== avatar.skinId) this.setRemoteSkin(m.from, m.skin);
-        break;
-      }
-      case 'state':
-        if (this.net?.role !== 'guest') break;
-        if (Number.isFinite(m.time)) this.time = m.time;
-        if (Number.isFinite(m.day)) this.day = Math.max(1, m.day);
-        this.applyNetWeather(m.weather);
-        break;
-      case 'bye': {
-        const who = this.netPlayers.find((p) => p.id === m.from);
-        if (who && !who.self) this.message(`${who.name} opuścił grę.`);
-        this.dropRemote(m.from);
-        break;
-      }
-      default:
-        break;
-    }
-  }
-
-  /** Pogoda z sieci: bez lokalnego komunikatu i bez przestawiania zegara. */
-  private applyNetWeather(w: 'clear' | 'rain') {
-    if (this.weather === w) return;
-    this.weather = w;
-    Sfx.setRain(w === 'rain');
-  }
-
-  private applyNetEdits(list: NetEdit[]) {
-    for (const e of list) {
-      if (!e || !Number.isFinite(e.x) || !Number.isFinite(e.y) || !Number.isFinite(e.z) || !Number.isFinite(e.id)) continue;
-      const world = e.d === 'n' ? this.netherWorld : this.homeWorld;
-      if (!world) continue;
-      world.setBlock(Math.round(e.x), Math.round(e.y), Math.round(e.z), e.id);
-    }
-  }
-
-  /**
-   * 2.11: na serwerze publicznym porę dnia i pogodę wylicza zegar (`net.ts`),
-   * więc nie trzeba ich rozsyłać ani trzymać w bazie – wszyscy liczą to samo.
-   */
-  private syncPublicClock() {
-    const net = this.net;
-    if (!net?.public) return;
-    const now = Date.now();
-    this.time = publicTime(now);
-    this.day = publicDay(now);
-    const weather = publicWeather(now);
-    if (weather !== this.weather) this.applyNetWeather(weather);
-  }
-
-  private flushNetEdits() {
-    if (!this.net || !this.netEditQueue.length) return;
-    const list = this.netEditQueue.splice(0, this.netEditQueue.length);
-    this.net.sendEdits(list);
-  }
-
-  /** Wywoływane z pętli gry: wysyłka, zegar sesji i płynne awatary. */
-  private tickNet(dt: number) {
-    const net = this.net;
-    if (!net) return;
-    const now = performance.now();
-    net.tick();
-    this.syncPublicClock();
-    this.netEditTimer += dt;
-    if (this.netEditTimer >= 0.12) {
-      this.netEditTimer = 0;
-      this.flushNetEdits();
-    }
-    if (this.ui === 'playing' || this.ui === 'chat') {
-      this.netPosTimer += dt;
-      // Publiczny serwer ma limit wiadomości Realtime – 4 pozycje na sekundę
-      // w zupełności wystarczą, bo awatary i tak są wygładzane.
-      const posHz = net.public ? PUBLIC_POS_HZ : POS_HZ;
-      if (this.netPosTimer >= 1 / posHz) {
-        this.netPosTimer = 0;
-        const p = this.body.pos;
-        net.sendPos({
-          d: this.isInNether ? 'n' : 'o',
-          x: p.x, y: p.y, z: p.z,
-          yaw: this.yaw, pitch: this.pitch,
-          held: this.selectedStack()?.id ?? 0,
-          name: net.name,
-          hue: this.netHue,
-          skin: this.netSkin,
-        });
-      }
-    }
-    // `pushState` sam pilnuje odstępu (STATE_EVERY) i zapisuje dane w migawce;
-    // wołanie `setWorld` co klatkę kopiowałoby listę edytów bez potrzeby.
-    if (net.role === 'host') {
-      net.pushState({ time: this.time, day: this.day, weather: this.weather });
-      // `setWorld` jest teraz tanie (bez kopiowania listy edytów), więc migawka
-      // dla nowych graczy zna aktualną pozycję gospodarza.
-      const p = this.body.pos;
-      net.setWorld({ spawn: { x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z), d: this.isInNether ? 'n' : 'o' } });
-    }
-    // Awatary: łagodne dojście do ostatniej znanej pozycji + animacja nóg.
-    for (const [id, a] of this.remotes) {
-      if (now - a.seen > 9000) {
-        this.message(`${a.name} zniknął z sesji.`);
-        this.dropRemote(id);
-        continue;
-      }
-      const k = Math.min(1, dt * 10);
-      a.group.position.lerp(a.target, k);
-      a.group.rotation.y = a.yaw;
-      a.head.rotation.x = -a.pitch * 0.6;
-      const moving = a.group.position.distanceToSquared(a.target) > 0.0016;
-      if (moving) a.walk += dt * 7;
-      const swing = moving ? Math.sin(a.walk) * 0.55 : 0;
-      a.legL.rotation.x = swing;
-      a.legR.rotation.x = -swing;
-      a.armL.rotation.x = -swing * 0.8;
-      if (a.held !== a.heldId) {
-        a.heldId = a.held;
-        a.hand.visible = !!a.held;
-      }
-    }
-  }
-
-  private ensureRemote(p: NetPlayer): RemoteAvatar {
-    const existing = this.remotes.get(p.id);
-    if (existing) {
-      // 2.12: skórka mogła się zmienić w trakcie sesji (presence/hello).
-      if (p.skin && p.skin !== existing.skinId) {
-        this.setRemoteSkin(p.id, p.skin);
-        return this.remotes.get(p.id) ?? existing;
-      }
-      return existing;
-    }
-    const avatar = this.makeAvatar(p.name, p.hue, p.skin);
-    avatar.target.copy(this.spawnPoint);
-    avatar.group.position.copy(avatar.target);
-    // Do pierwszej wiadomości `pos` nie wiemy, gdzie gracz jest – lepiej go
-    // nie pokazywać na środku własnej postaci.
-    avatar.group.visible = false;
-    this.remoteGroup?.add(avatar.group);
-    this.remotes.set(p.id, avatar);
-    return avatar;
-  }
-
-  private dropRemote(id: string) {
-    const a = this.remotes.get(id);
-    if (!a) return;
-    this.remoteGroup?.remove(a.group);
-    a.group.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (mesh.geometry) mesh.geometry.dispose();
-      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
-      for (const one of Array.isArray(mat) ? mat : mat ? [mat] : []) {
-        const map = (one as THREE.SpriteMaterial).map;
-        map?.dispose();
-        one.dispose();
-      }
-    });
-    this.remotes.delete(id);
-  }
-
-  /**
-   * Prostoliniowy awatar z bloków: tułów, głowa, ręce i nogi. Nazwa gracza
-   * jest sprite'em z kanwy, więc widać ją z daleka i nie trzeba czcionek 3D.
-   */
-  private makeAvatar(name: string, hue: number, skinId?: string): RemoteAvatar {
-    const skin = skinId ? skinById(skinId) : fallbackSkin(hue);
-    const group = new THREE.Group();
-    // 2.16: pikselowe tekstury skórki (tkanina, jeans, skóra, włosy) zamiast
-    // jednego płaskiego koloru na każdą część ciała.
-    const mat = (color: number, kind: keyof typeof AVATAR_KINDS) => avatarMaterial(AVATAR_KINDS[kind], color);
-
-    // Grupa stoi na ziemi (stopy w y = 0), więc da się ją podstawić pod
-    // `body.pos` bez korekty. Proporcje jak w Minecrafcie: ~1,8 bloku wzrostu.
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.28), mat(skin.shirt, 'shirt'));
-    body.position.y = 0.9;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), mat(skin.skin, 'head'));
-    head.position.y = 1.42;
-    // Włosy to cienka „czapka” na głowie – bez nich awatar wygląda jak lalka.
-    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.42), mat(skin.hair, 'hair'));
-    hair.position.y = 1.66;
-    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.08), mat(skin.hair, 'hair'));
-    hairBack.position.set(0, 1.5, 0.19);
-    // Oczy na przedniej ścianie (przód awatara to -Z, tak jak trzymany blok).
-    const eyeMat = new THREE.MeshBasicMaterial({ color: skin.eye ?? 0x2b2b2b });
-    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.02), eyeMat);
-    eyeL.position.set(-0.09, 1.46, -0.205);
-    const eyeR = eyeL.clone();
-    eyeR.position.x = 0.09;
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.18), mat(skin.sleeve, 'sleeve'));
-    armL.position.set(-0.33, 0.9, 0);
-    const armR = armL.clone();
-    armR.position.x = 0.33;
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.22), mat(skin.pants, 'pants'));
-    legL.position.set(-0.13, 0.3, 0);
-    const legR = legL.clone();
-    legR.position.x = 0.13;
-    const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.24), mat(skin.shoes, 'shoes'));
-    shoeL.position.set(-0.13, 0.07, -0.01);
-    const shoeR = shoeL.clone();
-    shoeR.position.x = 0.13;
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), new THREE.MeshBasicMaterial({ color: 0xc9a227 }));
-    hand.position.set(0.36, 0.62, -0.24);
-    hand.visible = false;
-    group.add(body, head, hair, hairBack, eyeL, eyeR, armL, armR, legL, legR, shoeL, shoeR, hand);
-
-    // Etykieta z nazwą.
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 12, 256, 40);
-    ctx.font = 'bold 28px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(name.slice(0, 16), 128, 33);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.magFilter = THREE.NearestFilter;
-    texture.minFilter = THREE.NearestFilter;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
-    sprite.scale.set(1.7, 0.42, 1);
-    sprite.position.y = 2.05;
-    group.add(sprite);
-
-    return {
-      group, head, armL, legL, legR, hand,
-      target: new THREE.Vector3(),
-      yaw: 0, pitch: 0, held: 0, heldId: -1,
-      name, walk: 0, seen: performance.now(), skinId: skin.id,
-    };
-  }
-
-  /**
-   * 2.12: zmiana skórki zdalnego gracza w locie. Awatar jest mały, więc
-   * najprościej i najbezpieczniej jest odtworzyć go od zera – zmiana zdarza
-   * się raz na sesję, a nie w każdej klatce.
-   */
-  private setRemoteSkin(id: string, skinId: string) {
-    const old = this.remotes.get(id);
-    if (!old) return;
-    const player = this.netPlayers.find((p) => p.id === id);
-    const fresh = this.makeAvatar(old.name, player?.hue ?? 0, skinId);
-    fresh.group.position.copy(old.group.position);
-    fresh.target.copy(old.target);
-    fresh.yaw = old.yaw;
-    fresh.pitch = old.pitch;
-    fresh.held = old.held;
-    fresh.seen = old.seen;
-    fresh.group.visible = old.group.visible;
-    this.remoteGroup?.add(fresh.group);
-    this.dropRemote(id);
-    this.remotes.set(id, fresh);
-  }
-
-  /** 2.13: aktualna skórka gracza – także poza sesją sieciową (podgląd w plecaku). */
-  getSkinId(): string {
-    if (!this.netSkin) this.netSkin = loadSkinId();
-    return this.netSkin;
-  }
-
-  /** Zmiana własnej skórki (z ekranu opcji/poczekalni) – bez restartu świata. */
-  setSkin(id: string) {
-    const prev = this.netSkin;
-    this.netSkin = skinById(id).id;
-    // Własna głowa w HUD zmienia się natychmiast, bez czekania na obsadę.
-    this.netPlayers = this.netPlayers.map((p) => (p.self ? { ...p, skin: this.netSkin } : p));
-    if (this.net) {
-      this.net.skin = this.netSkin;
-      // 2.12: inni widzą nową skórkę od razu – odświeżamy wpis w presence.
-      if (prev !== this.netSkin) this.net.updatePresence?.();
-    }
-    this.message(`Skórka zmieniona na „${skinById(id).name}”.`);
-    this.emitHud();
-  }
-
-  /** Czy gra jest w sesji sieciowej (UI ukrywa wtedy ekran pauzy „pauzujący świat”). */
-  get multiplayer(): boolean {
-    return !!this.net;
-  }
-
-  /** True when solid rock covers the player – used for cave ambience. */
-  private checkUnderground() {
-    const x = Math.floor(this.body.pos.x), y = Math.floor(this.body.pos.y), z = Math.floor(this.body.pos.z);
-    for (let dy = 1; dy <= 26; dy++) {
-      const id = this.world.peekBlock(x, y + dy, z);
-      if (id === B.AIR) continue;
-      this.underground = IS_SOLID[id] !== 0 || RENDER[id] === 1;
-      return;
-    }
-    this.underground = false;
-  }
-
-  private initWeather() {
-    const N = 420;
-    const pos = new Float32Array(N * 3);
-    for (let i = 0; i < N; i++) {
-      pos[i * 3] = (Math.random() - 0.5) * 36;
-      pos[i * 3 + 1] = Math.random() * 22;
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 36;
-    }
-    this.rainGeo = new THREE.BufferGeometry();
-    this.rainGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    this.rain = new THREE.Points(
-      this.rainGeo,
-      new THREE.PointsMaterial({ color: 0xb7d4ff, size: 2.1, sizeAttenuation: false, transparent: true, opacity: 0.55, fog: false, depthWrite: false })
-    );
-    this.rain.frustumCulled = false;
-    this.rain.visible = false;
-    this.scene.add(this.rain);
-  }
-
-  giveStarterItems() {
-    const inv = this.inventory;
-    if (this.mode === 'creative') {
-      const hot = [B.GRASS, B.STONE, B.PLANKS, B.LOG, B.GLASS, B.BRICK, B.TORCH, B.GLOWSTONE, B.TNT];
-      hot.forEach((id, i) => (inv.slots[i] = { id, count: 64 }));
-    } else {
-      inv.slots.fill(null);
-    }
-  }
-
-  findSpawn() {
-    for (let r = 0; r < 800; r += 8) {
-      for (let a = 0; a < Math.max(1, r / 2); a++) {
-        const ang = (a / Math.max(1, r / 2)) * Math.PI * 2;
-        const x = Math.floor(Math.cos(ang) * r), z = Math.floor(Math.sin(ang) * r);
-        const s = this.world.surface(x, z);
-        if (s.h > SEA + 1 && s.biome !== 'Ocean' && s.biome !== 'Góry') {
-          // 2.8.1: liście są pełnymi blokami, więc `heightAt` może wskazać
-          // koronę drzewa. Zejdź do prawdziwego gruntu, żeby gracz nie
-          // zaczynał na czubku dębu.
-          let y = this.world.heightAt(x, z);
-          let guard = 0;
-          while (y > 1 && guard++ < 96) {
-            const id = this.world.getBlock(x, y, z);
-            if (id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.ACACIA_LEAVES || id === B.JUNGLE_LEAVES || id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) y--;
-            else break;
-          }
-          while (y > 1 && !IS_SOLID[this.world.getBlock(x, y, z)]) y--;
-          // Nie startuj w wodzie ani pod nią.
-          if (this.world.getBlock(x, y, z) === B.WATER) continue;
-          this.spawnPoint.set(x + 0.5, y + 1, z + 0.5);
-          return;
-        }
-      }
-    }
-    this.spawnPoint.set(0.5, 100, 0.5);
-  }
-
-  computeOffsets() {
-    const R = this.renderDistance;
-    this.offsets = [];
-    for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) if (dx * dx + dz * dz <= R * R + 1) this.offsets.push([dx, dz]);
-    this.offsets.sort((a, b) => a[0] * a[0] + a[1] * a[1] - (b[0] * b[0] + b[1] * b[1]));
-  }
-
-  setRenderDistance(r: number) {
-    this.renderDistance = r;
-    this.computeOffsets();
-  }
-
-  /**
-   * 2.0: nakłada ustawienia graficzne w czasie rzeczywistym – wywoływane
-   * przez ekran opcji i automat ustawień. Nie wymaga restartu świata.
-   */
-  applyGfx(o: {
-    renderDistance?: number;
-    pixelRatio?: number;
-    particles?: number;
-    clouds?: boolean;
-    dynamicResolution?: boolean;
-    fpsCap?: number;
-    chunkBudgetMs?: number;
-    chunksPerFrame?: number;
-    unloadMargin?: number;
-    autoJump?: boolean;
-    autoAttack?: boolean;
-    haptics?: boolean;
-    viewBobbing?: boolean;
-    showFps?: boolean;
-  }) {
-    if (o.renderDistance !== undefined && o.renderDistance !== this.renderDistance) this.setRenderDistance(o.renderDistance);
-    if (o.pixelRatio !== undefined) {
-      this.basePixelRatio = Math.max(0.6, Math.min(3, o.pixelRatio));
-      this.applyResScale();
-    }
-    if (o.particles !== undefined) {
-      this.gfx.particleScale = Math.max(0, Math.min(1, o.particles));
-      if (this.rainGeo) this.rainGeo.setDrawRange(0, Math.floor(420 * this.gfx.particleScale));
-    }
-    if (o.clouds !== undefined) this.gfx.clouds = o.clouds;
-    if (o.dynamicResolution !== undefined) {
-      this.drEnabled = o.dynamicResolution;
-      if (!this.drEnabled && this.resScale !== 1) {
-        this.resScale = 1;
-        this.applyResScale();
-      }
-    }
-    if (o.fpsCap !== undefined) this.fpsCap = o.fpsCap > 0 ? Math.max(10, Math.min(240, o.fpsCap)) : 0;
-    if (o.chunkBudgetMs !== undefined) this.gfx.chunkBudgetMs = Math.max(3, Math.min(24, o.chunkBudgetMs));
-    if (o.chunksPerFrame !== undefined) this.gfx.chunksPerFrame = Math.max(1, Math.min(6, o.chunksPerFrame));
-    if (o.unloadMargin !== undefined) this.gfx.unloadMargin = Math.max(1, Math.min(4, o.unloadMargin));
-    if (o.autoJump !== undefined) this.autoJump = o.autoJump;
-    if (o.autoAttack !== undefined) this.autoAttack = o.autoAttack;
-    if (o.haptics !== undefined) this.haptics = o.haptics;
-    if (o.viewBobbing !== undefined) this.viewBobbing = o.viewBobbing;
-    if (o.showFps !== undefined) this.showFps = o.showFps;
-    this.emitHud();
-  }
-
-  /** Stosuje bieżącą skalę rozdzielczości do renderera. */
-  private applyResScale() {
-    try {
-      this.renderer.setPixelRatio(this.basePixelRatio * this.resScale);
-    } catch {
-      /* renderer może być już zniszczony przy wyłączaniu gry */
-    }
-  }
-
-  /** Krótkie wibracje (jeśli urządzenie wspiera i gracz ich chce). */
-  private buzz(ms: number) {
-    if (!this.haptics) return;
-    try {
-      navigator.vibrate?.(ms);
-    } catch {
-      /* brak wsparcia – ignoruj */
-    }
-  }
-
-  /** Publiczne: przelicza cel (crosshair albo palec) bez czekania na klatkę. */
-  refreshTarget() {
-    this.updateInteraction(0);
-  }
-
-  /**
-   * 2.0: tapnięcie palcem (tryb „Tapnij”). Najpierw sprawdzamy, czy pod
-   * palcem jest mob (atak), a gdy nie – używamy/postawiamy jak PPM.
-   * 2.5: tapnięcie po mieszkańcu otwiera handel (wcześniej uderzało go, co
-   * budziło golemy!), a tapnięcie wilka z surowym mięsem go oswoiło.
-   */
-  touchTap(nx: number, ny: number) {
-    if (this.ui !== 'playing') return;
-    const prev = this.touchAim;
-    this.touchAim = { x: nx, y: ny };
-    this.refreshTarget();
-    const { mob, dist } = this.findMobTarget(3.5);
-    const blockDist = this.target ? this.target.dist : Infinity;
-    const held = this.selectedStack();
-    if (mob && dist < blockDist && mob.type === 'villager' && !mob.dead) {
-      this.openTrade(mob);
-    } else if (mob && dist < blockDist && mob.type === 'wolf' && !mob.tamed && !mob.dead && (held?.id === I.RAW_PORK || held?.id === I.RAW_BEEF || held?.id === I.RAW_CHICKEN)) {
-      this.placeCooldown = 0;
-      this.tryUse();
-    } else if (mob && dist < blockDist && this.attackCooldown <= 0) {
-      this.tryAttack();
-    } else {
-      this.placeCooldown = 0;
-      this.tryUse();
-    }
-    this.touchAim = prev;
-  }
-
-  // ---------- Events ----------
-  private on(t: EventTarget, type: string, fn: EventListener, opts?: AddEventListenerOptions) {
-    t.addEventListener(type, fn, opts);
-    this.listeners.push([t, type, fn, opts]);
-  }
-
-  /**
-   * 2.15: dopasowanie płótna do **faktycznego** rozmiaru kontenera.
-   *
-   * Kontener (`absolute inset-0` w powłoce przypiętej do widocznego ekranu)
-   * ma zawsze realny rozmiar – także po pełnym ekranie i wymuszonym obrocie.
-   * Zmieniamy bufor rysowania tylko wtedy, gdy rozmiar naprawdę się zmienił,
-   * więc metoda jest tania i można ją wołać często.
-   */
-  syncViewport() {
-    const el = this.container;
-    if (!el || !this.renderer || !this.camera) return;
-    const w = Math.max(1, Math.round(el.clientWidth || 0));
-    const h = Math.max(1, Math.round(el.clientHeight || 0));
-    if (w === this.viewW && h === this.viewH) return;
-    this.viewW = w;
-    this.viewH = h;
-    // updateStyle = false: rozmiar CSS trzyma `width/height: 100%`,
-    // więc przeglądarka nigdy nie rozciąga starego bufora.
-    this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
-  }
-
-  /**
-   * 2.15: po pełnym ekranie/orientacji przeglądarki zgłaszają nowy rozmiar
-   * z opóźnieniem (animacja, obrót, pasek adresu). Mierzymy od razu i jeszcze
-   * kilka razy w ciągu sekundy – każdy pomiar jest darmowy, gdy nic się nie
-   * zmieniło.
-   */
-  scheduleViewportSync() {
-    this.syncViewport();
-    // Nie trzymamy nieskończonej listy timerów przy częstych zmianach paska
-    // adresu – wystarczy kilka ostatnich serii.
-    if (this.viewTimers.length > 64) {
-      for (const t of this.viewTimers) clearTimeout(t);
-      this.viewTimers = [];
-    }
-    for (const ms of [80, 200, 500, 1000]) {
-      this.viewTimers.push(window.setTimeout(() => this.syncViewport(), ms));
-    }
-  }
-
-  private bindViewport() {
-    const bump = () => this.scheduleViewportSync();
-    this.on(window, 'resize', bump);
-    this.on(window, 'orientationchange', bump);
-    this.on(document, 'fullscreenchange', bump);
-    this.on(document, 'webkitfullscreenchange', bump);
-    const vv = window.visualViewport;
-    if (vv) this.on(vv, 'resize', bump);
-    // ResizeObserver łapie zmiany, przy których `resize` nie leci (np. panel
-    // chowany przez Reacta albo nowy rozmiar tuż po wejściu w pełny ekran).
-    if (typeof ResizeObserver !== 'undefined') {
-      try {
-        this.viewRO = new ResizeObserver(() => this.syncViewport());
-        this.viewRO.observe(this.container);
-      } catch {
-        this.viewRO = null;
-      }
-    }
-  }
-
-  private bindEvents() {
-    const canvas = this.renderer.domElement;
-    this.bindViewport();
-    this.on(document, 'pointerlockchange', () => {
-      const was = this.locked;
-      this.locked = document.pointerLockElement === canvas;
-      // Sterowanie dotykowe nie korzysta z Pointer Lock. Na części telefonów
-      // jego nieudana aktywacja natychmiast pauzowała grę i zerowała gesty.
-      if (!this.touchInput && !this.locked && this.ui === 'playing') this.setUI('paused');
-      if (!this.locked && !this.touchInput) { this.mouseLeft = false; this.mouseRight = false; this.keys.clear(); }
-      if (was && !this.locked) this.lastLockExit = performance.now();
-    });
-    // 2.5: odrzucona blokada kursora (np. cooldown Chrome po Esc) nie może
-    // zostawić gracza bez żadnej reakcji – gra czeka na kolejne kliknięcie.
-    this.on(document, 'pointerlockerror', () => {
-      this.locked = false;
-    });
-    this.on(canvas, 'mousedown', ((e: MouseEvent) => {
-      if (this.ui !== 'playing') return;
-      if (!this.locked) { this.lockPointer(); return; }
-      Sfx.unlockAudio();
-      if (e.button === 0) { this.mouseLeft = true; this.tryAttack(); }
-      else if (e.button === 2) { this.mouseRight = true; this.placeCooldown = 0; this.tryUse(); }
-      else if (e.button === 1) { e.preventDefault(); this.pickBlock(); }
-    }) as EventListener);
-    this.on(window, 'mouseup', ((e: MouseEvent) => {
-      if (e.button === 0) { this.mouseLeft = false; this.breakProgress = 0; }
-      if (e.button === 2) this.mouseRight = false;
-    }) as EventListener);
-    this.on(canvas, 'contextmenu', (e) => e.preventDefault());
-    this.on(window, 'mousemove', ((e: MouseEvent) => {
-      if (!this.locked) return;
-      // 2.3: przy lornetcie celownik musi dać się ustawić precyzyjnie.
-      const s = 0.0022 * this.sensitivity * (this.zooming ? 0.4 : 1);
-      this.yaw -= e.movementX * s;
-      this.pitch -= e.movementY * s;
-      this.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, this.pitch));
-    }) as EventListener);
-    this.on(window, 'wheel', ((e: WheelEvent) => {
-      if (!this.locked) return;
-      this.selected = (this.selected + (e.deltaY > 0 ? 1 : -1) + 9) % 9;
-      this.emitHud();
-    }) as EventListener, { passive: true });
-    this.on(window, 'keydown', ((e: KeyboardEvent) => this.onKeyDown(e)) as EventListener);
-    this.on(window, 'keyup', ((e: KeyboardEvent) => {
-      this.keys.delete(e.code);
-      // 2.5: dwuklik W na sprint liczony od nowa po puszczeniu klawisza –
-      // wcześniej W→S→W w krótkim odstępie uruchamiało sprint.
-      if (e.code === 'KeyW') this.lastW = 0;
-    }) as EventListener);
-    this.on(document, 'visibilitychange', () => {
-      if (document.hidden) {
-        this.keys.clear();
-        this.mouseLeft = this.mouseRight = false;
-        this.save();
-      }
-    });
-  }
-
-  /** Klawisze ruchu – powtórzenia (e.repeat) mają je po prostu utrzymywać. */
-  static readonly HOLD_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight']);
-
-  private onKeyDown(e: KeyboardEvent) {
-    if (this.ui === 'chat') return;
-    // 2.5: Escape działa nawet, gdy fokus ma pole tekstowe (szukanie w
-    // dzienniku, suwak w opcjach) – bez tego Esc „nic nie robił”, dopóki
-    // gracz nie kliknął poza polem.
-    if (e.code === 'Escape') {
-      if (this.ui === 'paused' || this.ui === 'journal' || this.ui === 'waypoints') {
-        e.preventDefault();
-        this.setUI('playing');
-        return;
-      }
-      if (['inventory', 'furnace', 'chest', 'enchant', 'trade', 'anvil', 'brewing'].includes(this.ui)) {
-        e.preventDefault();
-        this.closeInventory();
-        return;
-      }
-      // 2.5: Esc pauzuje także, gdy blokada kursora nie jest aktywna (gdy jest,
-      // wyjście z blokady samo wywołuje pauzę przez pointerlockchange).
-      if (this.ui === 'playing' && !this.locked && !this.touchInput) {
-        e.preventDefault();
-        this.setUI('paused');
-        return;
-      }
-    }
-    // 2.3: pole nazwy w kowadle (i każdy inny input) ma pierwszeństwo dla
-    // pozostałych klawiszy – inaczej litera „e” zamykałaby ekran w trakcie pisania.
-    const target = e.target as HTMLElement | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-    if (this.ui === 'journal' || this.ui === 'waypoints') {
-      if (e.code === 'Escape' || (this.ui === 'waypoints' && e.code === 'KeyK')) {
-        e.preventDefault();
-        this.setUI('playing');
-      }
-      return;
-    }
-    if (this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'anvil' || this.ui === 'brewing') {
-      if (e.code === 'KeyE') {
-        e.preventDefault();
-        this.closeInventory();
-      }
-      return;
-    }
-    // 2.5: ekran śmierci obsługuje klawiaturę – Enter albo R odradza.
-    if (this.ui === 'dead') {
-      if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'KeyR') {
-        e.preventDefault();
-        this.respawn();
-      }
-      return;
-    }
-    // 2.5: Esc w pauzie wraca do gry (jak w klasyku); wcześniej pauzę można
-    // było opuścić wyłącznie myszą.
-    if (this.ui === 'paused') {
-      if (e.code === 'Escape') {
-        e.preventDefault();
-        this.setUI('playing');
-      }
-      return;
-    }
-    // 2.5: klawisze działają też bez aktywnej blokady kursora (np. po
-    // Alt-Tabs albo odrzuconym Pointer Lock) – blokada jest potrzebna tylko
-    // do rozglądania się myszą. Wcześniej całe sterowanie „zamierało”,
-    // dopóki gracz nie kliknął ponownie w ekran.
-    if (this.ui !== 'playing') return;
-    if (e.repeat) {
-      // Przytrzymane klawisze pozostają wciśnięte, ale akcje jednorazowe
-      // (E, Q, J…) nie mogą odpalać się wielokrotnie – wcześniej trzymanie
-      // „E” otwierało i zamykało ekwipunek w kółko.
-      if (Game.HOLD_KEYS.has(e.code)) this.keys.add(e.code);
-      return;
-    }
-    if (e.code === 'F3') { e.preventDefault(); this.debug = !this.debug; this.emitHud(); return; }
-    if (e.code === 'KeyM') { this.showMinimap = !this.showMinimap; this.emitHud(); return; }
-    if (e.code === 'KeyJ') { e.preventDefault(); this.setUI('journal'); return; }
-    if (e.code === 'KeyK') { e.preventDefault(); this.setUI('waypoints'); return; }
-    if (e.code.startsWith('Digit') || e.code.startsWith('Numpad')) {
-      const n = parseInt(e.code.slice(e.code.startsWith('Digit') ? 5 : 6), 10);
-      if (n >= 1 && n <= 9) { this.selected = n - 1; this.emitHud(); }
-    }
-    if (e.code === 'KeyE') { this.openInventory(false); return; }
-    if (e.code === 'KeyT' || e.code === 'Slash') { e.preventDefault(); this.setUI('chat'); return; }
-    // 2.5: Ctrl+Q wyrzuca cały stos (Q – pojedynczy przedmiot, jak w klasyku).
-    if (e.code === 'KeyQ') { this.dropItem(e.ctrlKey); }
-    if (e.code === 'KeyF' && this.mode === 'creative') { this.toggleFly(); }
-    if (e.code === 'Space') {
-      const now = performance.now();
-      if (this.mode === 'creative' && now - this.lastSpace < 300) { this.toggleFly(); }
-      this.lastSpace = now;
-    }
-    if (e.code === 'KeyW') {
-      const now = performance.now();
-      if (this.lastW > 0 && now - this.lastW < 280) this.sprinting = true;
-      this.lastW = now;
-    }
-    if (['Space', 'ControlLeft', 'ControlRight', 'Tab'].includes(e.code)) e.preventDefault();
+  keyDown = (e: KeyboardEvent) => {
+    // Nad areną stoi okienko (pauza, regulacje, wyniki) albo gracz coś wpisuje —
+    // klawiatura jest wtedy własnością interfejsu. Bez tego warunki nakładały się:
+    // `Esc` zamykał okienko (czyli wznawiał grę) i *jednocześnie* przełączał pauzę,
+    // a strzałki nie mogły przewinąć modalu ani przestawić `<select>` w ustawieniach.
+    if (uiOwnsKeyboard(e)) return;
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
     this.keys.add(e.code);
-  }
-
-  lockPointer() {
-    if (this.touchInput) return;
-    const c = this.renderer.domElement as HTMLCanvasElement & {
-      requestPointerLock: (opts?: { unadjustedMovement?: boolean }) => unknown;
-    };
-    // 2.5: surowy ruch myszy (bez przyspieszania z ustawień systemowych) daje
-    // celowanie jak w prawdziwym FPS; starsze przeglądarki dostają zwykłą wersję.
-    try {
-      const p = c.requestPointerLock({ unadjustedMovement: true });
-      if (p && typeof (p as Promise<void>).catch === 'function') {
-        (p as Promise<void>).catch(() => {
-          try {
-            const fallback = c.requestPointerLock();
-            if (fallback && typeof (fallback as Promise<void>).catch === 'function') (fallback as Promise<void>).catch(() => {});
-          } catch { /* ignore */ }
-        });
-      }
-    } catch { /* ignore */ }
-  }
-
-  setUI(s: UIState) {
-    this.ui = s;
-    try {
-      if (s === 'playing') {
-        this.lockPointer();
-        Sfx.unlockAudio();
-      } else if (document.pointerLockElement) {
-        document.exitPointerLock();
-      }
-    } catch (e) {
-      // Pointer lock / audio can be blocked by the browser: never let that
-      // stop the game from switching state (the React UI stays in sync).
-      console.warn('setUI side effect failed', e);
-    }
-    if (s === 'paused') this.save();
-    // Leaving the inventory must never eat the items sitting in the grid.
-    if (s !== 'inventory' && s !== 'chest' && s !== 'furnace' && s !== 'enchant') {
-      for (const left of this.inventory.returnGrid()) {
-        if (left) this.spawnDrop(left.id, left.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, left.dur, undefined, undefined, undefined, left.ench, left.name);
-      }
-    }
-    // …i dla mieszkańca, z którym właśnie handlowano.
-    if (s !== 'trade' && this.tradeMob) this.tradeMob = null;
-    // …same for the item waiting in the enchanting table.
-    if (s !== 'enchant' && this.enchantItem) {
-      const it = this.enchantItem;
-      this.enchantItem = null;
-      this.enchOptions = [];
-      if (!this.inventory.add(it.id, it.count, it.dur, it.ench, it.name)) {
-        this.spawnDrop(it.id, it.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, it.dur, undefined, undefined, undefined, it.ench, it.name);
-      }
-    }
-    this.keys.clear();
-    this.mouseLeft = this.mouseRight = false;
-    this.bowDraw = -1;
-    this.zooming = false;
-    this.touchAim = null;
-    if (s !== 'anvil') this.anvilPos = null;
-    if (s !== 'brewing') this.brewingPos = null;
-    if (s === 'anvil' && this.anvilPos) this.returnHeldStack();
-    this.onUI(s);
-  }
-
-  openInventory(table: boolean) {
-    this.craftingTable = table;
-    this.setUI('inventory');
-  }
-
-  /** Returns a held UI stack safely, spilling it instead of silently dropping it. */
-  private returnHeldStack() {
-    const held = this.inventory.cursor;
-    if (!held || this.inventory.returnCursor()) return;
-    this.inventory.cursor = null;
-    this.spawnDrop(held.id, held.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, held.dur, undefined, undefined, undefined, held.ench, held.name);
-    this.message('Brak miejsca – przedmiot z kursora upadł na ziemię.');
-  }
-
-  closeInventory() {
-    this.returnHeldStack();
-    this.furnacePos = null;
-    this.chestPos = null;
-    this.enchantPos = null;
-    this.setUI('playing');
-    this.emitHud();
-  }
-
-  // ---------- Handel z mieszkańcami (1.6) ----------
-
-  openTrade(mob: Mob) {
-    if (mob.type !== 'villager' || mob.dead) return;
-    if (!mob.trade) mob.trade = createVillagerState(mob.profession, this.nowSeconds());
-    this.tradeMob = mob;
-    this.setUI('trade');
-  }
-
-  closeTrade() {
-    this.tradeMob = null;
-    this.setUI('playing');
-    this.emitHud();
-  }
-
-  /** Czas w sekundach – używany do uzupełniania zapasów mieszkańców. */
-  private nowSeconds(): number {
-    return performance.now() / 1000;
-  }
-
-  /** Nazwa rozmówcy razem z jego poziomem („Rolnik (Czeladnik)”). */
-  tradeTitle(): string {
-    const st = this.tradeMob?.trade;
-    return st ? villagerTitle(st) : 'Mieszkaniec';
-  }
-
-  tradeLevel(): number {
-    const st = this.tradeMob?.trade;
-    return st ? villagerLevel(st) : 1;
-  }
-
-  tradeProgress(): number {
-    const st = this.tradeMob?.trade;
-    return st ? villagerProgress(st) : 0;
-  }
-
-  /** Ile sekund zostało do uzupełnienia zapasów. */
-  tradeRestockIn(): number {
-    const st = this.tradeMob?.trade;
-    return st ? restockIn(st, this.nowSeconds()) : 0;
-  }
-
-  /** Bieżące oferty mieszkańca, gotowe do wyświetlenia. */
-  tradeRows(): TradeRow[] {
-    const st = this.tradeMob?.trade;
-    if (!st) return [];
-    restockIfDue(st, this.nowSeconds());
-    return offersFor(st).map((offer, index) => ({
-      index,
-      offer,
-      left: usesLeft(st, offer),
-      max: offer.uses,
-      blocked: this.tradeBlocked(st, offer),
-    }));
-  }
-
-  private tradeBlocked(st: VillagerState, offer: TradeOffer): TradeBlock {
-    if (usesLeft(st, offer) <= 0) return 'uses';
-    // W trybie kreatywnym towar jest darmowy (zapasy nadal obowiązują),
-    // ale pełny ekwipunek nie może po cichu pożreć odebranego przedmiotu.
-    if (this.mode === 'creative') return this.inventory.canAdd(offer.get.id, offer.get.count) ? 'ok' : 'space';
-    return canTrade(st, this.inventory, offer);
-  }
-
-  /** Wykonuje wymianę o podanym numerze. Zwraca false, gdy się nie udała. */
-  tradeWith(i: number): boolean {
-    const st = this.tradeMob?.trade;
-    if (!st) return false;
-    const row = this.tradeRows()[i];
-    if (!row) return false;
-    if (row.blocked === 'uses') {
-      this.message('Zapasy tej oferty się wyczerpały – mieszkaniec uzupełni je po chwili.');
-      return false;
-    }
-    if (row.blocked === 'items') {
-      this.message('Nie masz dość towaru na tę wymianę.');
-      return false;
-    }
-    if (row.blocked === 'space') {
-      this.message('Brak miejsca w ekwipunku na towar z wymiany.');
-      return false;
-    }
-    const before = villagerLevel(st);
-    if (this.mode === 'creative') {
-      if (!this.inventory.add(row.offer.get.id, row.offer.get.count)) return false;
-      st.used[row.offer.key] = (st.used[row.offer.key] ?? 0) + 1;
-      st.xp += row.offer.xp;
-    } else if (!applyTrade(st, this.inventory, row.offer)) {
-      return false;
-    }
-    this.trades++;
-    this.gainXp(row.offer.xp);
-    this.unlock('trade');
-    if (this.trades >= 25) this.unlock('merchant');
-    Sfx.playPop();
-    const got = `${displayName(row.offer.get.id)} ×${row.offer.get.count}`;
-    const after = villagerLevel(st);
-    this.message(after > before ? `${got} – mieszkańcowi przybyło doświadczenia (poziom ${after}).` : `${got} w zamian za towar.`);
-    this.emitHud();
-    return true;
-  }
-
-  /** Klucz pieca z prefiksem wymiaru – piec w Netherze nie koliduje z piecem w nadświecie. */
-  private fKey(x: number, y: number, z: number) {
-    return (this.isInNether ? 'n:' : '') + furnaceKey(x, y, z);
-  }
-
-  /** Klucz skrzyni z prefiksem wymiaru. */
-  private cKey(x: number, y: number, z: number) {
-    return (this.isInNether ? 'n:' : '') + chestKey(x, y, z);
-  }
-
-  openFurnace(x: number, y: number, z: number) {
-    const key = this.fKey(x, y, z);
-    if (!this.furnaces.has(key)) {
-      const f = emptyFurnace(x, y, z);
-      f.dim = this.isInNether ? 1 : 0;
-      this.furnaces.set(key, f);
-    }
-    this.furnacePos = { x, y, z };
-    this.setUI('furnace');
-  }
-
-  currentFurnace(): FurnaceState | null {
-    if (!this.furnacePos) return null;
-    return this.furnaces.get(this.fKey(this.furnacePos.x, this.furnacePos.y, this.furnacePos.z)) ?? null;
-  }
-
-  /** Stół zaklęć: liczba biblioteczek w pierścieniu 5×5 wokół stołu. */
-  enchantPower(): number {
-    if (!this.enchantPos) return 0;
-    const { x, y, z } = this.enchantPos;
-    return countShelves((bx, by, bz) => this.world.peekBlock(bx, by, bz), x, y, z);
-  }
-
-  openEnchant(x: number, y: number, z: number) {
-    this.enchantPos = { x, y, z };
-    this.enchOptions = rollEnchantOptions(this.enchantItem, this.enchantPower(), Math.random);
-    this.setUI('enchant');
-    this.emitHud();
-  }
-
-  /** Moves the item between the cursor and the table's single slot. */
-  clickEnchantSlot(right: boolean) {
-    this.transfer(() => this.enchantItem, (s) => { this.enchantItem = s; }, right);
-    this.enchOptions = rollEnchantOptions(this.enchantItem, this.enchantPower(), Math.random);
-    this.emitHud();
-  }
-
-  /** True when the offer can be bought right now (levels, lapis, room on the stack). */
-  canEnchantWith(i: number): boolean {
-    const opt = this.enchOptions[i];
-    if (!opt || !this.enchantItem) return false;
-    if (!canAddEnch(this.enchantItem, opt.ench)) return false;
-    if (this.mode === 'creative') return true;
-    return this.xp.canSpend(opt.cost) && this.inventory.countOf(I.LAPIS) >= opt.lapis;
-  }
-
-  /** Buys offer `i`: spends levels + lapis, stamps the enchantment on the item. */
-  enchantWith(i: number): boolean {
-    const opt = this.enchOptions[i];
-    const item = this.enchantItem;
-    if (!opt || !item || !canAddEnch(item, opt.ench)) return false;
-    if (this.mode !== 'creative') {
-      if (!this.xp.spend(opt.cost)) { this.message('Za mało doświadczenia.'); return false; }
-      if (this.inventory.countOf(I.LAPIS) < opt.lapis) { this.message('Potrzebny jest lazuryt.'); return false; }
-      this.inventory.remove(I.LAPIS, opt.lapis);
-    }
-    addEnch(item, opt.ench, opt.level);
-    Sfx.playEnchant();
-    this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.4, this.body.pos.z, B.GLOWSTONE, 18, 1.1);
-    this.message(`Zaklęcie: ${enchName(opt.ench, opt.level)}.`);
-    this.unlock('enchant');
-    if (opt.level >= 4) this.unlock('enchant_master');
-    // nowa partia ofert na tym samym przedmiocie
-    this.enchOptions = rollEnchantOptions(item, this.enchantPower(), Math.random);
-    this.emitHud();
-    return true;
-  }
-
-  openChest(x: number, y: number, z: number) {
-    const key = this.cKey(x, y, z);
-    let chest = this.chests.get(key);
-    if (!chest) {
-      const id = this.world.getBlock(x, y, z);
-      chest = id === B.LOOT_CHEST ? lootChest(this.world.seed, x, y, z) : emptyChest(x, y, z);
-      chest.dim = this.isInNether ? 1 : 0;
-      if (id === B.LOOT_CHEST) {
-        this.world.setBlock(x, y, z, B.CHEST);
-        this.unlock('loot');
-      }
-      this.chests.set(key, chest);
-    }
-    while (chest.slots.length < 27) chest.slots.push(null);
-    this.chestPos = { x, y, z };
-    this.setUI('chest');
-  }
-
-  currentChest(): ChestState | null {
-    if (!this.chestPos) return null;
-    return this.chests.get(this.cKey(this.chestPos.x, this.chestPos.y, this.chestPos.z)) ?? null;
-  }
-
-  clickChest(i: number, right: boolean) {
-    const c = this.currentChest();
-    if (!c || i < 0 || i >= c.slots.length) return;
-    this.transfer(() => c.slots[i], (s) => { c.slots[i] = s; }, right);
-    if (this.inventory.cursor) this.notePickup(this.inventory.cursor.id);
-  }
-
-  private spillChest(x: number, y: number, z: number) {
-    const key = this.cKey(x, y, z);
-    const saved = this.chests.get(key);
-    const id = this.world.getBlock(x, y, z);
-    const stacks = saved ? saved.slots : id === B.LOOT_CHEST ? lootChest(this.world.seed, x, y, z).slots : [];
-    for (const s of stacks) {
-      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.dur, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2, s.ench, s.name);
-    }
-    this.chests.delete(key);
-  }
-
-  // ---------- 2.3: kowadło ----------
-  private aKey(x: number, y: number, z: number) {
-    return (this.isInNether ? 'n:' : '') + anvilKey(x, y, z);
-  }
-
-  openAnvil(x: number, y: number, z: number) {
-    const key = this.aKey(x, y, z);
-    let anvil = this.anvils.get(key);
-    if (!anvil) {
-      anvil = emptyAnvil(x, y, z);
-      anvil.dim = this.isInNether ? 1 : 0;
-      this.anvils.set(key, anvil);
-    }
-    this.anvilPos = { x, y, z };
-    this.setUI('anvil');
-    this.emitHud();
-  }
-
-  currentAnvil(): AnvilState | null {
-    if (!this.anvilPos) return null;
-    return this.anvils.get(this.aKey(this.anvilPos.x, this.anvilPos.y, this.anvilPos.z)) ?? null;
-  }
-
-  /** What the anvil would hand over right now (pure – see game/anvil.ts). */
-  anvilOffer(): AnvilResult {
-    const a = this.currentAnvil();
-    return a ? anvilResult(a.a, a.b, a.name) : { out: null, action: 'none', cost: 0, label: '' };
-  }
-
-  /** True when the player can afford the offered operation. */
-  canAnvilTake(): boolean {
-    const offer = this.anvilOffer();
-    if (!offer.out) return false;
-    if (this.mode === 'creative') return true;
-    return this.xp.canSpend(offer.cost);
-  }
-
-  /**
-   * Takes the result: charges levels, clears the inputs it consumed and adds
-   * the intact output to inventory (or drops it if the inventory is full).
-   */
-  takeAnvilResult(): boolean {
-    const a = this.currentAnvil();
-    const offer = this.anvilOffer();
-    if (!a || !offer.out) return false;
-    if (this.mode !== 'creative' && !this.xp.spend(offer.cost)) {
-      this.message('Za mało poziomów doświadczenia.');
-      return false;
-    }
-    // Never merge into the cursor by id alone: anvil outputs may have a new
-    // name, durability or enchantments, and tools themselves are unstackable.
-    if (!this.giveOrDrop(offer.out)) return false;
-    if (offer.action === 'merge') { a.a = null; a.b = null; this.unlock('smith'); }
-    if (offer.action === 'rename') { a.a = null; a.name = ''; this.unlock('namer'); }
-    a.burn = offer.cost;
-    a.burnMax = Math.max(a.burnMax, offer.cost * 8);
-    Sfx.playPlace('stone');
-    this.message(offer.action === 'merge' ? 'Przedmioty połączone.' : 'Nowa nazwa nadana.');
-    this.emitHud();
-    return true;
-  }
-
-  /** Cursor → inventory, or onto the ground when everything else is full. */
-  private giveOrDrop(stack: Stack): boolean {
-    if (this.inventory.add(stack.id, stack.count, stack.dur, stack.ench, stack.name)) return true;
-    this.spawnDrop(stack.id, stack.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, stack.dur, undefined, undefined, undefined, stack.ench, stack.name);
-    this.message('Brak miejsca – przedmiot upadł na ziemię.');
-    return true;
-  }
-
-  /** Rename field: the screen keeps the text, the rules live in game/anvil.ts. */
-  setAnvilName(name: string) {
-    const a = this.currentAnvil();
-    if (a) a.name = cleanItemName(name);
-  }
-
-  clickAnvilSlot(slot: 'a' | 'b', right: boolean) {
-    const a = this.currentAnvil();
-    if (!a) return;
-    this.transfer(() => (slot === 'a' ? a.a : a.b), (s) => { if (slot === 'a') a.a = s; else a.b = s; }, right);
-    if (slot === 'a' && a.a && !a.name) a.name = '';
-  }
-
-  /** Returns both inputs to the player when the screen is closed. */
-  private spillAnvil(x: number, y: number, z: number) {
-    const key = this.aKey(x, y, z);
-    const anvil = this.anvils.get(key);
-    if (!anvil) return;
-    for (const s of [anvil.a, anvil.b]) {
-      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.6, z + 0.5, s.dur, undefined, undefined, undefined, s.ench, s.name);
-    }
-    this.anvils.delete(key);
-  }
-
-  // ---------- 2.4: statyw alchemiczny ----------
-  private bKey(x: number, y: number, z: number) {
-    return (this.isInNether ? 'n:' : '') + brewingKey(x, y, z);
-  }
-
-  openBrewing(x: number, y: number, z: number) {
-    const key = this.bKey(x, y, z);
-    let stand = this.brewings.get(key);
-    if (!stand) {
-      stand = emptyBrewing(x, y, z);
-      stand.dim = this.isInNether ? 1 : 0;
-      this.brewings.set(key, stand);
-    }
-    while (stand.bottles.length < 3) stand.bottles.push(null);
-    this.brewingPos = { x, y, z };
-    this.setUI('brewing');
-    this.emitHud();
-  }
-
-  currentBrewing(): BrewingState | null {
-    if (!this.brewingPos) return null;
-    return this.brewings.get(this.bKey(this.brewingPos.x, this.brewingPos.y, this.brewingPos.z)) ?? null;
-  }
-
-  /**
-   * Move stacks between the cursor and a stand slot. `slot` is one of the
-   * three bottles, the ingredient cup or the fuel tray. The fuel tray only
-   * accepts blaze rods; the cup only accepts real brewing ingredients.
-   */
-  clickBrewing(slot: 'b0' | 'b1' | 'b2' | 'ingredient' | 'fuel', right: boolean) {
-    const s = this.currentBrewing();
-    if (!s) return;
-    const cur = this.inventory.cursor;
-    if (slot === 'fuel' && cur && cur.id !== I.BLAZE_ROD) {
-      this.message('Statyw pali się tylko płomienną różdżką.');
-      return;
-    }
-    if (slot === 'ingredient' && cur && !BREWING_INGREDIENTS.has(cur.id)) {
-      this.message('To nie jest składnik do warzenia.');
-      return;
-    }
-    const get = () => (slot === 'b0' ? s.bottles[0] : slot === 'b1' ? s.bottles[1] : slot === 'b2' ? s.bottles[2] : slot === 'ingredient' ? s.ingredient : s.fuel);
-    const set = (v: Stack | null) => {
-      if (slot === 'b0') s.bottles[0] = v;
-      else if (slot === 'b1') s.bottles[1] = v;
-      else if (slot === 'b2') s.bottles[2] = v;
-      else if (slot === 'ingredient') s.ingredient = v;
-      else s.fuel = v;
-    };
-    this.transfer(get, set, right);
-    if (this.inventory.cursor) this.notePickup(this.inventory.cursor.id);
-    // a touched slot restarts the batch, so a new mix re-brews from zero
-    s.progress = 0;
-    this.emitHud();
-  }
-
-  /** Spills bottles, ingredient and fuel when the stand block is gone. */
-  private spillBrewing(x: number, y: number, z: number) {
-    const key = this.bKey(x, y, z);
-    const s = this.brewings.get(key);
-    if (!s) return;
-    for (const stack of [...s.bottles, s.ingredient, s.fuel]) {
-      if (stack) this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.6, z + 0.5, stack.dur, undefined, undefined, undefined, stack.ench, stack.name);
-    }
-    this.brewings.delete(key);
-  }
-
-  /** Ticks every stand in the current dimension; a vanished block spills. */
-  private updateBrewings(dt: number) {
-    const dim = this.isInNether ? 1 : 0;
-    for (const s of this.brewings.values()) {
-      if ((s.dim ?? 0) !== dim) continue;
-      if (!this.world.hasChunk(Math.floor(s.x / CS), Math.floor(s.z / CS))) continue;
-      if (this.world.peekBlock(s.x, s.y, s.z) !== B.BREWING) {
-        if (this.brewingPos && this.brewingPos.x === s.x && this.brewingPos.y === s.y && this.brewingPos.z === s.z) this.closeInventory();
-        this.spillBrewing(s.x, s.y, s.z);
-        continue;
-      }
-      const before = s.bottles.map((b) => (b ? b.id : 0));
-      const { done } = tickBrewing(s, dt);
-      if (done) {
-        const after = s.bottles.map((b) => (b ? b.id : 0));
-        const first = after.findIndex((id, i) => id !== before[i] && id !== 0);
-        if (first >= 0) {
-          Sfx.playEnchant();
-          this.spawnParticles(s.x + 0.5, s.y + 0.8, s.z + 0.5, POTIONS[after[first]] ? B.GLOWSTONE : B.WOOL_WHITE, 14, 0.7);
-          this.message(`Zawarzone: ${displayName(after[first])}.`);
-          this.unlock('alchemist');
-        }
-      }
-    }
-  }
-
-  /** 2.4: applies (or refreshes) a potion buff. Durations never stack. */
-  applyEffect(id: PotionEffectId, seconds: number) {
-    if (id === 'none') return;
-    const cur = this.effects.get(id) ?? 0;
-    this.effects.set(id, Math.max(cur, seconds * 1000));
-  }
-
-  effectLeft(id: PotionEffectId): number {
-    return Math.max(0, this.effects.get(id) ?? 0) / 1000;
-  }
-
-  hasEffect(id: PotionEffectId): boolean {
-    return this.effectLeft(id) > 0;
-  }
-
-  /** Ticks buffs down; regeneration heals on its own rhythm.
-   *  The HUD refresh rides on the main 10 Hz emit, no extra calls needed. */
-  private updateEffects(dt: number) {
-    if (!this.effects.size) {
-      if (this.potionRegenAcc > 0) this.potionRegenAcc = 0;
-      return;
-    }
-    for (const [id, ms] of [...this.effects.entries()]) {
-      const next = ms - dt * 1000;
-      if (next <= 0) this.effects.delete(id);
-      else this.effects.set(id, next);
-    }
-    if (this.hasEffect('regen') && this.mode === 'survival') {
-      this.potionRegenAcc += dt;
-      if (this.potionRegenAcc >= 2) {
-        this.potionRegenAcc = 0;
-        if (this.health < 20 && this.health > 0) {
-          this.health = Math.min(20, this.health + 1);
-          Sfx.playEat();
-          this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.4, this.body.pos.z, B.WOOL_RED, 8, 0.8);
-        }
-      }
-    }
-  }
-
-  /** 2.4: drinks the selected bottle. Awkward brews taste like dirt. */
-  private drinkPotion(s: Stack) {
-    const def = POTIONS[s.id];
-    if (!def) return;
-    if (this.mode === 'survival') this.consumeSelected();
-    Sfx.playDrink();
-    this.swingT = 0;
-    // Mistrz eliksirów: only real (non-awkward) potions count, once per type.
-    if (def.effect !== 'none') {
-      this.potionsDrunk.add(s.id);
-      if (this.potionsDrunk.size >= 6) this.unlock('potioneer');
-    }
-    if (def.effect === 'none') {
-      this.message('Mętny smak. Potrzebny składnik do pełnej mocy.');
-      return;
-    }
-    if (def.effect === 'heal') {
-      this.health = Math.min(20, this.health + HEAL_AMOUNT);
-      this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, B.WOOL_RED, 16, 1);
-      this.message(`Wypito: ${def.name}. +${HEAL_AMOUNT} zdrowia.`);
-      this.unlock('tonic');
-    } else {
-      this.applyEffect(def.effect, def.duration);
-      this.message(`Wypito: ${def.name} (${def.duration} s).`);
-    }
-    this.emitHud();
-  }
-
-  /** Move stacks between the cursor and a furnace slot. Output can only be taken. */
-  clickFurnace(slot: 'input' | 'fuel' | 'output', right: boolean) {
-    const f = this.currentFurnace();
-    if (!f) return;
-    const cur = this.inventory.cursor;
-    if (slot === 'output') {
-      const o = f.output;
-      if (!o) return;
-      if (!cur) {
-        if (right && o.count > 1) {
-          const half = Math.ceil(o.count / 2);
-          this.inventory.cursor = { id: o.id, count: half };
-          o.count -= half;
-        } else {
-          this.inventory.cursor = o;
-          f.output = null;
-        }
-      } else if (cur.id === o.id && cur.dur === undefined) {
-        const n = Math.min(stackLimit(o.id) - cur.count, o.count);
-        cur.count += n;
-        o.count -= n;
-        if (o.count <= 0) f.output = null;
-      }
-      if (this.inventory.cursor) this.notePickup(this.inventory.cursor.id);
-      if (f.output?.id === I.IRON || this.inventory.cursor?.id === I.IRON) this.unlock('iron');
-      return;
-    }
-    if (cur && slot === 'input' && smeltResult(cur.id) == null) {
-      this.message('Tego nie da się przetopić.');
-      return;
-    }
-    if (cur && slot === 'fuel' && fuelSeconds(cur.id) <= 0) {
-      this.message('To nie jest paliwo. Węgiel, deski, patyki albo pnie.');
-      return;
-    }
-    const prev = f.input?.id;
-    const get = () => (slot === 'input' ? f.input : f.fuel);
-    const set = (s: Stack | null) => { if (slot === 'input') f.input = s; else f.fuel = s; };
-    this.transfer(get, set, right);
-    if (f.input?.id !== prev) f.cook = 0;
-  }
-
-  private transfer(get: () => Stack | null, set: (s: Stack | null) => void, right: boolean) {
-    const s = get();
-    const c = this.inventory.cursor;
-    if (!c) {
-      if (!s) return;
-      if (right && s.count > 1) {
-        const half = Math.ceil(s.count / 2);
-        // 2.3: połówka musi zachować zaklęcia i własną nazwę (jak w ekwipunku).
-        this.inventory.cursor = { id: s.id, count: half, dur: s.dur, ench: s.ench ? { ...s.ench } : undefined, name: s.name };
-        s.count -= half;
-      } else {
-        this.inventory.cursor = s;
-        set(null);
-      }
-      return;
-    }
-    if (!s) {
-      if (right) {
-        set({ id: c.id, count: 1, dur: c.dur, ench: c.ench ? { ...c.ench } : undefined, name: c.name });
-        c.count--;
-        if (c.count <= 0) this.inventory.cursor = null;
-      } else {
-        set(c);
-        this.inventory.cursor = null;
-      }
-      return;
-    }
-    // 2.3: stosy o różnej nazwie (albo o zaklęciach/wytrzymałości) nigdy się nie łączą.
-    if (s.id === c.id && s.dur === undefined && c.dur === undefined && !s.ench && !c.ench && s.name === c.name) {
-      const n = Math.min(stackLimit(s.id) - s.count, right ? 1 : c.count);
-      s.count += n;
-      c.count -= n;
-      if (c.count <= 0) this.inventory.cursor = null;
-      return;
-    }
-    set(c);
-    this.inventory.cursor = s;
-  }
-
-  onCraft(outId: number) {
-    this.unlock('craft');
-    if (ITEMS[outId]?.tool === 'pick') this.unlock('pick');
-    if (outId === B.IRON_BLOCK) this.unlock('foundry');
-    if (outId === I.BOOK) this.unlock('book');
-    if (outId === B.ENCHANT) this.unlock('table');
-    this.notePickup(outId);
-  }
-
-  achievementIds(): string[] {
-    return [...this.unlocked];
-  }
-
-  private unlock(id: string) {
-    if (this.unlocked.has(id)) return;
-    this.unlocked.add(id);
-    const a = achievementById(id);
-    if (!a) return;
-    this.toast = { title: a.title, text: a.text, at: performance.now() };
-    this.message(`Osiągnięcie: ${a.title}`);
-    this.emitHud();
-  }
-
-  private notePickup(id: number) {
-    if (id === B.LOG || id === B.BIRCH_LOG) this.unlock('wood');
-    if (id === I.COAL) this.unlock('coal');
-    if (id === I.DIAMOND) this.unlock('diamond');
-    if (id === I.IRON) this.unlock('iron');
-    if (id === I.WHEAT) this.unlock('farm');
-    if (id === I.LAPIS) this.unlock('lapis');
-    if (id === I.EMERALD) this.unlock('emerald');
-    if (id === B.SUGARCANE) this.unlock('cane');
-  }
-
-  private consumeSelected(n = 1) {
-    if (this.mode !== 'survival') return;
-    const s = this.selectedStack();
-    if (!s) return;
-    s.count -= n;
-    if (s.count <= 0) this.inventory.slots[this.selected] = null;
-    this.emitHud();
-  }
-
-  private wearTool() {
-    if (this.mode !== 'survival') return;
-    const s = this.selectedStack();
-    if (!s) return;
-    const max = ITEMS[s.id]?.durability;
-    if (!max) return;
-    // Niezniszczalność: część użyć nie kosztuje wytrzymałości
-    const lvl = enchLevel(s, 'unbreaking');
-    if (lvl > 0 && Math.random() > wearChance(lvl)) {
-      if (s.dur === undefined) s.dur = max;
-      this.emitHud();
-      return;
-    }
-    if (s.dur === undefined) s.dur = max;
-    s.dur--;
-    if (s.dur <= 0) {
-      this.inventory.slots[this.selected] = null;
-      Sfx.playBreak('wood');
-      this.message(`${displayName(s.id)} się zniszczyło.`);
-    }
-    this.emitHud();
-  }
-
-  // ---------- Experience ----------
-
-  /** Grants XP; a level-up plays a chime and pops green particles. */
-  gainXp(n: number) {
-    const before = this.xp.info().level;
-    this.xp.add(n);
-    const after = this.xp.info().level;
-    if (after > before) {
-      Sfx.playLevelUp();
-      this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.1, this.body.pos.z, B.WOOL_GREEN, 24, 1.4);
-      this.message(`Poziom doświadczenia: ${after}!`);
-      if (after >= 10) this.unlock('xp10');
-      this.emitHud();
-    }
-  }
-
-  /** One XP orb; mobs and ores scatter 1–3 of them around the kill site. */
-  spawnOrb(x: number, y: number, z: number, value: number) {
-    if (this.orbs.length > 48) return;
-    const pos = new THREE.Vector3(x, y, z);
-    const mesh = new THREE.Mesh(this.orbGeo, this.orbMat);
-    mesh.position.copy(pos);
-    this.scene.add(mesh);
-    this.orbs.push({
-      mesh,
-      pos,
-      vel: new THREE.Vector3((Math.random() - 0.5) * 1.6, 1.4 + Math.random() * 1.6, (Math.random() - 0.5) * 1.6),
-      value,
-      age: 0,
-    });
-  }
-
-  /** Splits `total` XP into 1–3 orbs around a point. */
-  private dropXpOrbs(total: number, x: number, y: number, z: number) {
-    const n = total > 4 ? 3 : total > 2 ? 2 : 1;
-    let left = total;
-    for (let i = 0; i < n; i++) {
-      const v = i === n - 1 ? left : Math.max(1, Math.round(left / (n - i)));
-      left -= v;
-      this.spawnOrb(x + (Math.random() - 0.5) * 0.9, y, z + (Math.random() - 0.5) * 0.9, Math.max(1, v));
-    }
-  }
-
-  /** Mobs drop XP worth their type: hostiles 3–7, passives 1–3, wolves 2–5. */
-  private mobXp(m: Mob, x: number, y: number, z: number) {
-    if (m.type === 'villager') return; // wieśniak nie daje doświadczenia
-    const total = m.type === 'golem'
-      ? 5 + Math.floor(Math.random() * 4)
-      : m.type === 'wolf'
-      ? 2 + Math.floor(Math.random() * 4)
-      : isHostileMob(m.type)
-        ? 3 + Math.floor(Math.random() * 5)
-        : 1 + Math.floor(Math.random() * 3);
-    this.dropXpOrbs(total, x, y, z);
-  }
-
-  private updateOrbs(dt: number) {
-    const p = this.body.pos;
-    this.orbs = this.orbs.filter((o) => {
-      o.age += dt;
-      if (o.age > 300) { this.scene.remove(o.mesh); return false; }
-      o.vel.y -= 22 * dt;
-      o.pos.addScaledVector(o.vel, dt);
-      const bx = Math.floor(o.pos.x), by = Math.floor(o.pos.y), bz = Math.floor(o.pos.z);
-      if (this.world.isSolid(bx, by, bz)) {
-        o.pos.y = by + 1.02;
-        o.vel.y = Math.max(0, -o.vel.y * 0.25);
-        o.vel.x *= 0.82;
-        o.vel.z *= 0.82;
-      }
-      const dist = Math.hypot(o.pos.x - p.x, o.pos.z - p.z, o.pos.y - (p.y + 0.9));
-      if (o.age > 0.5 && dist < 5 && dist > 0.2) {
-        o.vel.x += ((p.x - o.pos.x) / dist) * dt * 16;
-        o.vel.z += ((p.z - o.pos.z) / dist) * dt * 16;
-        o.vel.y += ((p.y + 0.6 - o.pos.y) / dist) * dt * 10;
-      }
-      if (o.age > 0.4 && dist < 1.4 && this.ui !== 'dead') {
-        this.gainXp(o.value);
-        Sfx.playPop();
-        this.scene.remove(o.mesh);
-        return false;
-      }
-      o.mesh.position.set(o.pos.x, o.pos.y + 0.12 + Math.sin(o.age * 3.2) * 0.06, o.pos.z);
-      o.mesh.rotation.y += dt * 3;
-      return true;
-    });
-  }
-
-  // ---------- Armor ----------
-
-  /** Inventory-screen click on one of the four armor slots. */
-  clickArmorSlot(i: number) {
-    if (i < 0 || i >= ARMOR_SLOT_COUNT) return;
-    const cur = this.inventory.cursor;
-    const slot = this.armor[i];
-    if (!cur) {
-      if (!slot) return;
-      this.inventory.cursor = slot;
-      this.armor[i] = null;
-    } else if (armorSlotOf(cur.id) === i) {
-      this.armor[i] = cur;
-      this.inventory.cursor = slot ?? null;
-      this.emitHud();
-    } else return;
-    if (this.armor.every((s) => s)) this.unlock('armor');
-    this.emitHud();
-  }
-
-  /** Every equipped piece takes a quarter of the hit; broken pieces fall off. */
-  private wearArmor(dealt: number) {
-    if (this.mode !== 'survival') return;
-    const wear = Math.max(1, Math.ceil(dealt / 4));
-    for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
-      const s = this.armor[i];
-      if (!s) continue;
-      const lvl = enchLevel(s, 'unbreaking');
-      if (lvl > 0 && Math.random() > wearChance(lvl)) continue;
-      const max = ITEMS[s.id]?.durability;
-      if (!max) continue;
-      if (s.dur === undefined) s.dur = max;
-      s.dur -= wear;
-      if (s.dur <= 0) {
-        this.armor[i] = null;
-        Sfx.playBreak('cloth');
-        this.message(`${displayName(s.id)} się zniszczyło.`);
-      }
-    }
-  }
-
-  /** Shield takes durability damage; used by parried hits and blocked arrows. */
-  private wearShield(n: number) {
-    if (this.mode !== 'survival') return;
-    const s = this.selectedStack();
-    if (!s || ITEMS[s.id]?.tool !== 'shield') return;
-    const lvl = enchLevel(s, 'unbreaking');
-    if (lvl > 0 && Math.random() > wearChance(lvl)) return;
-    const max = ITEMS[s.id]?.durability ?? 1;
-    if (s.dur === undefined) s.dur = max;
-    s.dur -= n;
-    if (s.dur <= 0) {
-      this.inventory.slots[this.selected] = null;
-      Sfx.playBreak('wood');
-      this.message('Tarcza się zniszczyła.');
-    }
-    this.emitHud();
-  }
-
-  private holdingShield(): boolean {
-    const s = this.selectedStack();
-    return !!s && ITEMS[s.id]?.tool === 'shield';
-  }
-
-  private tryEat(s: Stack) {
-    const food = ITEMS[s.id];
-    if (!food || food.kind !== 'food') return;
-    if (this.eatCooldown > 0) return;
-    if (this.hunger >= 20 && (food.heal ?? 0) <= 0) {
-      this.message('Nie jesteś głodny.');
-      return;
-    }
-    this.hunger = Math.min(20, this.hunger + (food.hunger ?? 0));
-    this.health = Math.min(20, this.health + (food.heal ?? 0));
-    this.eatCooldown = 0.7;
-    this.swingT = 0;
-    Sfx.playEat();
-    this.unlock('food');
-    this.consumeSelected();
-  }
-
-  private tryTill(t: NonNullable<ReturnType<World['raycast']>>): boolean {
-    if (t.ny !== 1) return false;
-    const id = this.world.getBlock(t.x, t.y, t.z);
-    if (id !== B.DIRT && id !== B.GRASS) return false;
-    const above = this.world.getBlock(t.x, t.y + 1, t.z);
-    if (above !== B.AIR && RENDER[above] !== 1) return false;
-    if (RENDER[above] === 1) this.breakBlock(t.x, t.y + 1, t.z);
-    this.world.setBlock(t.x, t.y, t.z, B.FARMLAND);
-    Sfx.playDig('grass');
-    this.swingT = 0;
-    this.wearTool();
-    return true;
-  }
-
-  private tryPlant(t: NonNullable<ReturnType<World['raycast']>>, s: Stack): boolean {
-    let x = t.x, y = t.y, z = t.z;
-    if (this.world.getBlock(x, y, z) === B.FARMLAND) y += 1;
-    else if (t.ny === 1 && this.world.getBlock(x, y, z) === B.FARMLAND) y += 1;
-    else {
-      x = t.x + t.nx; y = t.y + t.ny; z = t.z + t.nz;
-    }
-    if (this.world.getBlock(x, y - 1, z) !== B.FARMLAND) return false;
-    if (this.world.getBlock(x, y, z) !== B.AIR) return false;
-    this.world.setBlock(x, y, z, B.CROP0);
-    this.growables.set(`${x},${y},${z}`, performance.now());
-    Sfx.playPlace('grass');
-    this.swingT = 0;
-    void s;
-    this.consumeSelected();
-    return true;
-  }
-
-  private tryBucket(t: NonNullable<ReturnType<World['raycast']>>, s: Stack) {
-    if (s.id === I.BUCKET) {
-      if (t.id !== B.WATER && t.id !== B.LAVA) {
-        this.message('Najedź na wodę albo lawę.');
-        return;
-      }
-      const filled = t.id === B.WATER ? I.WATER_BUCKET : I.LAVA_BUCKET;
-      if (this.mode === 'survival') {
-        if (!this.inventory.add(filled, 1)) {
-          this.message('Brak miejsca na wiadro.');
-          return;
-        }
-        this.world.setBlock(t.x, t.y, t.z, B.AIR);
-        Sfx.playSplash();
-        this.consumeSelected();
-      } else {
-        // 2.4 fix: w trybie kreatywnym wiadro nie rozbierało już źródła wody
-        // ani lawy – a samo zamieniało się w pełne wiadro.
-        s.id = filled;
-        Sfx.playSplash();
-        this.updateHand();
-        this.emitHud();
-      }
-      return;
-    }
-    const fluid = s.id === I.WATER_BUCKET ? B.WATER : B.LAVA;
-    let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
-    if (RENDER[t.id] === 1) { px = t.x; py = t.y; pz = t.z; }
-    const cur = this.world.getBlock(px, py, pz);
-    if (cur !== B.AIR && RENDER[cur] !== 1 && cur !== B.WATER && cur !== B.LAVA) return;
-    if (py < 0 || py >= CH) return;
-    this.world.setBlock(px, py, pz, fluid);
-    Sfx.playSplash();
-    this.swingT = 0;
-    if (this.mode === 'survival') {
-      this.consumeSelected();
-      this.inventory.add(I.BUCKET, 1);
-    }
-  }
-
-  private facingOf(nx: number, ny: number, nz: number): number {
-    if (ny !== 0) {
-      const fx = -Math.sin(this.yaw);
-      const fz = -Math.cos(this.yaw);
-      return facingFromNormal(fx, fz);
-    }
-    return facingFromNormal(nx, nz);
-  }
-
-  private placeDoor(x: number, y: number, z: number, nx: number, ny: number, nz: number): boolean {
-    if (y + 1 >= CH) { this.message('Drzwi potrzebują dwóch wolnych kratek.'); return false; }
-    const above = this.world.getBlock(x, y + 1, z);
-    if (above !== B.AIR && RENDER[above] !== 1 && RENDER[above] !== 2) { this.message('Drzwi potrzebują dwóch wolnych kratek.'); return false; }
-    const b = this.body;
-    if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, x, y + 1, z)) return false;
-    const face = this.facingOf(nx, ny, nz);
-    this.world.setBlock(x, y, z, doorPair(face, false, false));
-    this.world.setBlock(x, y + 1, z, doorPair(face, false, true));
-    return true;
-  }
-
-  private toggleDoor(x: number, y: number, z: number) {
-    const id = this.world.getBlock(x, y, z);
-    const face = doorFacing(id);
-    if (face < 0) return;
-    const top = isDoorTop(id);
-    const open = !isDoorOpen(id);
-    const otherY = top ? y - 1 : y + 1;
-    const other = this.world.getBlock(x, otherY, z);
-    this.world.setBlock(x, y, z, doorPair(face, open, top));
-    if (other === B.AIR || isDoor(other)) this.world.setBlock(x, otherY, z, doorPair(face, open, !top));
-    Sfx.playPlace('wood');
-    this.swingT = 0;
-  }
-
-  private toggleTrap(x: number, y: number, z: number, nx: number, nz: number) {
-    const id = this.world.getBlock(x, y, z);
-    if (id === B.TRAP) {
-      const face = nx !== 0 || nz !== 0 ? facingFromNormal(nx, nz) : this.facingOf(0, 1, 0);
-      this.world.setBlock(x, y, z, B.TRAP_N + face);
-    } else if (isTrapOpen(id)) {
-      this.world.setBlock(x, y, z, B.TRAP);
-    }
-    Sfx.playPlace('wood');
-    this.swingT = 0;
-  }
-
-  private toggleLever(x: number, y: number, z: number) {
-    if (rsToggleLever(this.world, x, y, z)) {
-      Sfx.playPlace('stone');
-      this.swingT = 0;
-      this.onBlockChanged(x, y, z);
-      this.unlock('redstone');
-    }
-  }
-
-  private pressButton(x: number, y: number, z: number) {
-    if (rsPressButton(this.world, x, y, z)) {
-      Sfx.playPlace('stone');
-      this.swingT = 0;
-      this.onBlockChanged(x, y, z);
-      this.buttonTimers.set(`${x},${y},${z}`, 1.2);
-      this.unlock('redstone');
-    }
-  }
-
-  private playNoteBlock(x: number, y: number, z: number) {
-    const below = this.world.getBlock(x, y - 1, z);
-    const pitch = (x + z) % 24;
-    Sfx.playNote(pitch, below);
-    this.spawnParticles(x + 0.5, y + 1, z + 0.5, B.NOTE_BLOCK, 4, 0.2);
-    this.swingT = 0;
-  }
-
-  private enterPortal() {
-    if (this.portalCooldown > 0 || this.ui !== 'playing') return;
-    if (this.isInNether) { this.leaveNether(); return; }
-    this.message('Wkraczasz do portalu Netheru...');
-    this.portalCooldown = 4;
-    const px = this.body.pos.x, py = this.body.pos.y, pz = this.body.pos.z;
-    this.portalExit = [px, py, pz];
-    // Osobny wymiar: nadświat zostaje nietknięty w pamięci, gracz ląduje w
-    // zupełnie nowym świecie (współrzędne /8 jak w klasyku).
-    this.switchDimension(this.netherWorld);
-    const spot = this.prepareNetherArrival(px / 8, pz / 8);
-    this.body.pos.set(spot.x, spot.y, spot.z);
-    this.body.vel.set(0, 0, 0);
-    this.fallStart = spot.y;
-    this.spawnParticles(spot.x, spot.y + 1, spot.z, B.NETHER_PORTAL, 20, 0.5);
-    Sfx.playPortal();
-    this.message('Przeniesiono do Netheru! Uważaj na lawę i Ghasty.');
-    this.unlock('nether');
-    this.emitHud();
-  }
-
-  /** Powrót przez portal do nadświatu – dokładnie w miejsce, z którego gracz wszedł. */
-  private leaveNether() {
-    if (!this.isInNether) return;
-    this.portalCooldown = 4;
-    this.switchDimension(this.homeWorld);
-    const [ex, ey, ez] = this.portalExit ?? [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z];
-    this.portalExit = null;
-    // Stań TUŻ OBOK portalu – w środku natychmiast odbiłbyś się z powrotem.
-    let sx = ex, sy = ey, sz = ez;
-    const inPortal = (x: number, y: number, z: number) =>
-      this.world.getBlock(Math.floor(x), Math.floor(y), Math.floor(z)) === B.NETHER_PORTAL ||
-      this.world.getBlock(Math.floor(x), Math.floor(y) + 1, Math.floor(z)) === B.NETHER_PORTAL;
-    if (inPortal(sx, sy, sz)) {
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
-        const tx = sx + dx, tz = sz + dz;
-        const below = this.world.getBlock(Math.floor(tx), Math.floor(sy) - 1, Math.floor(tz));
-        if (!inPortal(tx, sy, tz) && IS_SOLID[below]) { sx = tx; sz = tz; break; }
-      }
-    }
-    this.body.pos.set(sx, sy, sz);
-    this.body.vel.set(0, 0, 0);
-    this.fallStart = sy;
-    this.spawnParticles(sx, sy + 1, sz, B.NETHER_PORTAL, 20, 0.5);
-    Sfx.playPortal();
-    this.message('Wróciłeś do normalnego świata.');
-    this.emitHud();
-  }
-
-  /**
-   * Zamienia aktywny wymiar. Chunki wymiaru, z którego wychodzimy, zostają
-   * w pamięci (raz z siatkami) – powrót jest natychmiastowy, bez regeneracji.
-   * Wszystkie żyjące obiekty (moby, przedmioty, strzały, TNT, XP) są
-   * przełączane razem ze światem, więc nigdy nie „wchodzą" na siebie.
-   */
-  private switchDimension(next: World) {
-    const prev = this.world;
-    if (prev === next) return;
-
-    // 1. odepnij siatki wymiaru, z którego wychodzimy (geometria zostaje)
-    for (const c of prev.chunks.values()) for (const m of c.meshes) this.scene.remove(m);
-    // 2. odłóż jego żyjące obiekty
-    this.stashLiveEntities();
-
-    // 3. przeskocz
-    this.world = next;
-    this.isInNether = next !== this.homeWorld;
-
-    // 4. przypnij siatki nowego wymiaru
-    for (const c of next.chunks.values()) for (const m of c.meshes) this.scene.add(m);
-    // 5. przywróć jego obiekty
-    this.restoreStashedEntities();
-
-    // 6. cache'e i stan przejściowy
-    this.biomeCache.clear();
-    this.villageName = null;
-    this.chestPos = null;
-    this.furnacePos = null;
-    this.enchantPos = null;
-    this.anvilPos = null;
-    // 2.3: przynęta i tak nie przeżyłaby zmiany wymiaru.
-    this.removeBobber();
-    this.tradeMob = null;
-    this.breakProgress = 0;
-    this.breakKey = '';
-    this.loadingProgress = 0;
-    this.unloadTimer = 0;
-  }
-
-  private stashLiveEntities() {
-    const s = this.dimStash[this.isInNether ? 'nether' : 'home'];
-    for (const m of this.mobs) this.scene.remove(m.group);
-    for (const d of this.drops) this.scene.remove(d.mesh);
-    // Awatary są przywiązane do współrzędnych wymiaru – po przejściu chowamy
-    // je do pierwszej wiadomości `pos` z właściwego świata.
-    for (const a of this.remotes?.values() ?? []) a.group.visible = false;
-    for (const a of this.arrows) this.scene.remove(a.mesh);
-    for (const t of this.tnts) this.scene.remove(t.mesh);
-    for (const o of this.orbs) this.scene.remove(o.mesh);
-    for (const f of this.falling) this.scene.remove(f.mesh);
-    s.mobs = this.mobs;
-    s.drops = this.drops;
-    s.arrows = this.arrows;
-    s.tnts = this.tnts;
-    s.orbs = this.orbs;
-    s.falling = this.falling;
-    s.buttons = [...this.buttonTimers.entries()];
-    s.redstone = [...this.redstoneDirty];
-    this.mobs = [];
-    this.drops = [];
-    this.arrows = [];
-    this.tnts = [];
-    this.orbs = [];
-    this.falling = [];
-    this.buttonTimers.clear();
-    this.redstoneDirty.clear();
-    this.tradeMob = null;
-    // cząstki są ulotne – znikają razem z wymiarem (pule zostają w scenie,
-    // ale bez instancji nie kosztują ani jednego wywołania rysowania)
-    this.clearParticles();
-  }
-
-  private restoreStashedEntities() {
-    const s = this.dimStash[this.isInNether ? 'nether' : 'home'];
-    for (const m of s.mobs) this.scene.add(m.group);
-    for (const d of s.drops) this.scene.add(d.mesh);
-    for (const a of s.arrows) this.scene.add(a.mesh);
-    for (const t of s.tnts) this.scene.add(t.mesh);
-    for (const o of s.orbs) this.scene.add(o.mesh);
-    for (const f of s.falling) this.scene.add(f.mesh);
-    this.mobs = s.mobs;
-    this.drops = s.drops;
-    this.arrows = s.arrows;
-    this.tnts = s.tnts;
-    this.orbs = s.orbs;
-    this.falling = s.falling;
-    this.buttonTimers.clear();
-    for (const [k, v] of s.buttons) this.buttonTimers.set(k, v);
-    this.redstoneDirty.clear();
-    for (const k of s.redstone) this.redstoneDirty.add(k);
-    s.buttons = [];
-    s.redstone = [];
-  }
-
-  /**
-   * Lądowanie w Netherze: wyrównuje mały plac, stawia ramę portalu z powrotem
-   * do nadświatu i zwraca punkt, w którym staje gracz (PRZED portalem).
-   * Maksymalnie dwa chunki generowane synchronicznie – reszta doładuje się
-   * budżetowo w pętli, więc wejście nie zawiesza klatek.
-   */
-  private prepareNetherArrival(nx: number, nz: number): { x: number; y: number; z: number } {
-    const w = this.netherWorld;
-    const cx = Math.floor(nx / CS), cz = Math.floor(nz / CS);
-    w.getChunk(cx, cz);
-    // Kandydaci na plac – w całości w środku chunka (max 2 generacje synchroniczne).
-    let bx = cx * CS + 6, bz = cz * CS + 6, h = 0;
-    for (const [ox, oz] of [[6, 6], [6, 9], [9, 6], [9, 9], [4, 4], [11, 11]]) {
-      const hh = w.heightAt(cx * CS + ox, cz * CS + oz);
-      if (hh >= 16) { bx = cx * CS + ox; bz = cz * CS + oz; h = hh; break; }
-      if (hh > h) { bx = cx * CS + ox; bz = cz * CS + oz; h = hh; }
-    }
-    h = Math.max(8, Math.min(CH - 10, h));
-    for (let dx = 0; dx <= 3; dx++) {
-      for (let dz = -1; dz <= 2; dz++) {
-        const x = bx + dx, z = bz + dz;
-        for (let y = h + 1; y <= h + 5; y++) if (w.getBlock(x, y, z) !== B.AIR) w.setBlock(x, y, z, B.AIR);
-        if (!IS_SOLID[w.getBlock(x, h, z)]) w.setBlock(x, h, z, B.NETHERRACK); // likwiduje dziury i lawę
-      }
-    }
-    // klasyczna rama 4×5 z wnętrzem 2×3
-    for (let dx = 0; dx <= 3; dx++) {
-      w.setBlock(bx + dx, h, bz, B.OBSIDIAN);
-      w.setBlock(bx + dx, h + 4, bz, B.OBSIDIAN);
-    }
-    for (let y = h + 1; y <= h + 3; y++) {
-      w.setBlock(bx, y, bz, B.OBSIDIAN);
-      w.setBlock(bx + 3, y, bz, B.OBSIDIAN);
-      w.setBlock(bx + 1, y, bz, B.NETHER_PORTAL);
-      w.setBlock(bx + 2, y, bz, B.NETHER_PORTAL);
-    }
-    return { x: bx + 1.5, y: h + 1, z: bz + 2 };
-  }
-
-  private onBlockChanged(x: number, y: number, z: number) {
-    this.redstoneDirty.add(`${x},${y},${z}`);
-    // also add neighbors
-    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as [number, number, number][]) {
-      this.redstoneDirty.add(`${x + dx},${y + dy},${z + dz}`);
-    }
-  }
-
-  private cookOnCampfire(s: Stack): boolean {
-    // mięso i ryby piecze się tu jak w piecu – cookedOf() łączy reguły 2.3
-    const meats: Record<number, number> = { [I.RAW_PORK]: I.COOKED_PORK, [I.RAW_BEEF]: I.COOKED_BEEF, [I.RAW_CHICKEN]: I.COOKED_CHICKEN };
-    const out = meats[s.id] ?? cookedOf(s.id);
-    if (!out) return false;
-    this.consumeSelected();
-    if (!this.inventory.add(out, 1)) {
-      this.spawnDrop(out, 1, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z);
-      this.message('Brak miejsca – mięso upadło na ziemię.');
-    } else this.message(`Upieczono: ${displayName(out)}.`);
-    Sfx.playEat();
-    this.unlock('food');
-    if (out === I.COOKED_FISH || out === I.COOKED_SALMON) this.unlock('chef');
-    this.swingT = 0;
-    return true;
-  }
-
-  private trySleep(x: number, y: number, z: number) {
-    if (this.isInNether) {
-      this.message('W Netheru nie da się spać – wróć przez portal.');
-      return;
-    }
-    this.spawnPoint.set(x + 0.5, y + 1, z + 0.5);
-    this.message('Punkt odrodzenia ustawiony.');
-    if (this.daylight() > 0.55) {
-      this.message('Możesz spać tylko w nocy.');
-      return;
-    }
-    const near = this.mobs.some((m) => !m.dead && (m.type === 'zombie' || m.type === 'creeper') && m.body.pos.distanceTo(this.body.pos) < 8);
-    if (near) {
-      this.message('Nie możesz spać – potwory są zbyt blisko.');
-      return;
-    }
-    this.time = 0.03;
-    this.day++;
-    this.health = Math.min(20, this.health + 2);
-    this.unlock('bed');
-    this.message('Przespałeś noc. Dzień ' + this.day + '.');
-    this.emitHud();
-  }
-
-  private spillFurnace(x: number, y: number, z: number) {
-    const f = this.furnaces.get(this.fKey(x, y, z));
-    if (!f) return;
-    for (const s of [f.input, f.fuel, f.output]) {
-      // 2.3: zaklęty przedmiot w rozbitym piecu nie może stracić zaklęć ani nazwy.
-      if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.6, z + 0.5, s.dur, undefined, undefined, undefined, s.ench, s.name);
-    }
-    this.furnaces.delete(this.fKey(x, y, z));
-  }
-
-  private itemTexture(id: number): THREE.Texture {
-    let t = this.itemTex.get(id);
-    if (t) return t;
-    t = new THREE.Texture();
-    t.magFilter = THREE.NearestFilter;
-    t.minFilter = THREE.NearestFilter;
-    t.colorSpace = THREE.SRGBColorSpace;
-    const img = new Image();
-    img.onload = () => { t!.image = img; t!.needsUpdate = true; };
-    img.src = this.icons[id] || '';
-    this.itemTex.set(id, t);
-    return t;
-  }
-
-  spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2, ench?: Record<string, number>, name?: string) {
-    if (count <= 0) return;
-    // The oldest drop makes room instead of silently eating the new item.
-    while (this.drops.length >= 120) {
-      const victim = this.drops.shift();
-      if (!victim) break;
-      // 2.8: materiały i geometrie są współdzielone – usuwamy tylko obiekt.
-      this.scene.remove(victim.mesh);
-    }
-    let mesh: THREE.Object3D;
-    if (BLOCKS[id]) {
-      let geo = this.dropGeos.get(id);
-      if (!geo) { geo = blockGeometry(id); this.dropGeos.set(id, geo); }
-      mesh = new THREE.Mesh(geo, this.dropMat);
-      mesh.scale.setScalar(RENDER[id] === 1 ? 0.4 : 0.28);
-    } else {
-      // 2.8: geometria i materiał są współdzielone – upadek przedmiotu nie
-      // alokuje już nowej tekstury, geometrii ani materiału.
-      let mat = this.dropIconMats.get(id);
-      if (!mat) {
-        mat = new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, alphaTest: 0.2, side: THREE.DoubleSide });
-        this.dropIconMats.set(id, mat);
-      }
-      mesh = new THREE.Mesh(this.dropIconGeo, mat);
-    }
-    mesh.position.set(x, y, z);
-    this.scene.add(mesh);
-    this.drops.push({ id, count, dur, ench, name, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0 });
-  }
-
-  // ---------- Messages & commands ----------
-  message(text: string) {
-    this.messages.push({ text, t: performance.now() });
-    if (this.messages.length > 50) this.messages.shift();
-    this.emitHud();
-  }
-
-  command(input: string) {
-    const txt = input.trim();
-    if (!txt) return;
-    if (!txt.startsWith('/')) {
-      // 2.10: w sesji zwykła wiadomość leci do wszystkich graczy.
-      if (this.net) {
-        this.net.say(txt);
-        this.message(`<${this.netName}> ${txt}`);
-      } else {
-        this.message(`<${this.netName}> ${txt}`);
-      }
-      return;
-    }
-    const [cmd, ...args] = txt.slice(1).split(/\s+/);
-    switch (cmd.toLowerCase()) {
-      case 'help': {
-        // 2.9: pomoc pochodzi z tego samego katalogu, co lista w czacie.
-        const wanted = commandByName(args[0] || '');
-        if (wanted) {
-          this.message(`/${wanted.usage} – ${wanted.description} Np. ${wanted.example}`);
-        } else {
-          this.message('Komendy: ' + COMMANDS.map((c) => `/${c.name}`).join(', '));
-          this.message(
-            'Pełna lista z opisami jest w czacie: przycisk „Komendy” (na telefonie 💬 → Komendy). ' +
-              'Szczegóły jednej komendy: /help give.'
-          );
-        }
-        break;
-      }
-      case 'enchant': {
-        const ench = resolveEnch(args[0] || '');
-        const held = this.selectedStack();
-        if (!ench) { this.message(`Zaklęcia: ${ENCHANTS.map((e) => e.id).join(', ')}`); break; }
-        if (!held) { this.message('Trzymaj przedmiot w ręce.'); break; }
-        if (!canEnchant(held.id, ench)) { this.message(`${displayName(held.id)} nie przyjmuje tego zaklęcia.`); break; }
-        const lvl = Math.max(1, Math.min(10, parseInt(args[1] || '1', 10) || 1));
-        addEnch(held, ench, lvl);
-        this.message(`${displayName(held.id)}: ${enchName(ench, lvl)}.`);
-        this.unlock('enchant');
-        break;
-      }
-      case 'waypoint': case 'punkt': {
-        const action = (args.shift() || 'list').toLowerCase();
-        if (['add', 'dodaj'].includes(action)) {
-          const point = this.addWaypoint(args.join(' ') || `Punkt ${this.waypoints.length + 1}`);
-          this.message(point ? `Dodano punkt „${point.name}” (${point.x}, ${point.y}, ${point.z}).` : 'Nie można dodać punktu — limit to 12.');
-        } else if (['list', 'lista'].includes(action)) {
-          this.message(this.waypoints.length ? this.waypoints.map((w, i) => `${i + 1}:${w.name}${w.id === this.activeWaypointId ? '*' : ''}`).join(', ') : 'Nie masz jeszcze punktów. Użyj /waypoint add <nazwa>.');
-        } else if (['select', 'wybierz'].includes(action)) {
-          const index = parseInt(args[0] || '', 10) - 1;
-          const point = this.waypoints[index];
-          if (point) { this.activateWaypoint(point.id); this.message(`Śledzisz punkt „${point.name}”.`); }
-          else this.message('Podaj numer z /waypoint list.');
-        } else if (['remove', 'usun', 'usuń'].includes(action)) {
-          const index = parseInt(args[0] || '', 10) - 1;
-          const point = this.waypoints[index];
-          if (point) { this.removeWaypoint(point.id); this.message(`Usunięto punkt „${point.name}”.`); }
-          else this.message('Podaj numer z /waypoint list.');
-        } else this.message('Użycie: /waypoint <add|list|select|remove> [nazwa/numer]');
-        break;
-      }
-      case 'gamemode': case 'gm': {
-        const m = (args[0] || '').toLowerCase();
-        if (['creative', 'c', '1', 'kreatywny'].includes(m)) this.setMode('creative');
-        else if (['survival', 's', '0', 'przetrwanie'].includes(m)) this.setMode('survival');
-        else this.message('Użycie: /gamemode <survival|creative>');
-        break;
-      }
-      case 'time': {
-        const v = (args[1] || args[0] || '').toLowerCase();
-        const map: Record<string, number> = { day: 0.05, dzien: 0.05, noon: 0.25, night: 0.55, noc: 0.55, midnight: 0.75 };
-        if (v in map) this.time = map[v];
-        else if (!isNaN(parseFloat(v))) this.time = (parseFloat(v) / 24000 + 0.0) % 1;
-        else { this.message('Użycie: /time set <day|night|noon|midnight>'); break; }
-        this.message('Ustawiono czas.');
-        break;
-      }
-      case 'tp': {
-        const [x, y, z] = args.map(Number);
-        if ([x, y, z].some((n) => isNaN(n))) { this.message('Użycie: /tp x y z'); break; }
-        this.body.pos.set(x, y, z);
-        this.body.vel.set(0, 0, 0);
-        this.fallStart = y;
-        this.message(`Teleportowano do ${x} ${y} ${z}`);
-        break;
-      }
-      case 'give': {
-        const id = resolveId(args[0] || '');
-        if (id == null) { this.message('Nie znam takiego przedmiotu. Np. /give kilof, /give wegiel 16, /give 5'); break; }
-        const fallback = ITEMS[id]?.kind === 'tool' || ITEMS[id]?.kind === 'bucket' || ITEMS[id]?.stack === 1 ? 1 : 64;
-        const n = args[1] ? parseInt(args[1], 10) : fallback;
-        const count = Number.isNaN(n) ? fallback : Math.max(1, Math.min(fallback === 1 ? 1 : 256, n));
-        if (this.inventory.add(id, count)) {
-          this.message(`Otrzymano ${count}x ${displayName(id)}`);
-        } else {
-          this.spawnDrop(id, count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z);
-          this.message(`Brak miejsca – ${count}x ${displayName(id)} upadło obok.`);
-        }
-        this.notePickup(id);
-        break;
-      }
-      case 'weather': case 'pogoda': {
-        const v = (args[0] || '').toLowerCase();
-        if (['clear', 'sun', 'slonce', 'słońce', 'jasno'].includes(v)) this.setWeather('clear');
-        else if (['rain', 'deszcz', 'burza'].includes(v)) this.setWeather('rain');
-        else this.message('Użycie: /weather <clear|rain>');
-        break;
-      }
-      case 'xp': {
-        const n = parseInt(args[0] || '', 10);
-        if (Number.isNaN(n) || n <= 0) { this.message('Użycie: /xp <ilość>  (np. /xp 50)'); break; }
-        this.gainXp(Math.min(5000, n));
-        this.message(`Dodano ${Math.min(5000, n)} doświadczenia. Poziom: ${this.xp.info().level}.`);
-        break;
-      }
-      case 'heal':
-        this.health = 20;
-        this.hunger = 20;
-        this.air = this.maxAir;
-        this.message('Uleczono.');
-        break;
-      case 'blocks':
-        this.message(BLOCKS.filter((b) => b && b.id > 0).map((b) => `${b.id}:${b.name}`).join(', '));
-        break;
-      case 'summon': {
-        const raw = (args[0] || 'pig').toLowerCase();
-        const map: Record<string, MobType> = {
-          pig: 'pig', swinia: 'pig', świnia: 'pig', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
-          cow: 'cow', krowa: 'cow', chicken: 'chicken', kurczak: 'chicken', creeper: 'creeper',
-          spider: 'spider', pająk: 'spider', pajak: 'spider', skeleton: 'skeleton', szkielet: 'skeleton',
-          wolf: 'wolf', wilk: 'wolf', pies: 'wolf',
-          villager: 'villager', mieszkaniec: 'villager', wieśniak: 'villager', wiesniak: 'villager',
-          golem: 'golem', zelazny_golem: 'golem', 'żelazny_golem': 'golem',
-          enderman: 'enderman', endermen: 'enderman', enderman_pl: 'enderman',
-          slime: 'slime', szlam: 'slime',
-          ghast: 'ghast',
-        };
-        const t = map[raw];
-        if (!t) {
-          this.message('Moby: pig, sheep, cow, chicken, wolf, zombie, creeper, spider, skeleton, villager, golem, enderman, slime, ghast');
-          break;
-        }
-        const d = this.lookDir();
-        // Zawód mieszkańca można wybrać: /summon villager kowal
-        let profession = Math.random();
-        if (t === 'villager' && args[1]) {
-          const want = args[1].toLowerCase();
-          const idx = PROFESSIONS.findIndex((pr) => pr.id === want || pr.name.toLowerCase() === want);
-          if (idx < 0) {
-            this.message(`Zawody: ${PROFESSIONS.map((pr) => `${pr.id} (${pr.name})`).join(', ')}`);
-            break;
-          }
-          profession = (idx + 0.5) / PROFESSIONS.length;
-        }
-        const mob = this.spawnMob(t, this.body.pos.x + d.x * 3, this.body.pos.y + 1, this.body.pos.z + d.z * 3, profession);
-        if (t === 'golem') this.unlock('golem');
-        this.message('Przyzwano: ' + (t === 'villager' ? `mieszkańca (${villagerTitle(mob.trade ?? createVillagerState(professionFor(profession), this.nowSeconds()))})` : t));
-        break;
-      }
-      case 'village': case 'wioska': {
-        const near = this.world.nearestVillage(this.body.pos.x, this.body.pos.z, 4);
-        if (!near) { this.message('Nie znalazłem wioski w pobliżu – spróbuj w innym miejscu albo w nowym świecie.'); break; }
-        const v = near.village;
-        this.body.pos.set(v.x + 4.5, v.y + 1.4, v.z + 4.5);
-        this.body.vel.set(0, 0, 0);
-        this.fallStart = this.body.pos.y;
-        this.message(`Wioska ${Math.round(v.x)} ${Math.round(v.z)} – ${Math.round(near.dist)} bloków stąd, ${v.buildings.length} budynków.`);
-        break;
-      }
-      case 'kill':
-        this.damage(1000, true);
-        break;
-      case 'seed':
-        this.message('Ziarno świata: ' + this.world.seed);
-        break;
-      case 'spawn':
-        // W Netherze komenda najpierw odsyła gracza do nadświatu.
-        if (this.isInNether) this.switchDimension(this.homeWorld);
-        this.body.pos.copy(this.spawnPoint);
-        this.body.vel.set(0, 0, 0);
-        this.fallStart = this.body.pos.y;
-        break;
-      case 'clear':
-        this.inventory.slots.fill(null);
-        this.message('Wyczyszczono ekwipunek.');
-        break;
-      default: {
-        // 2.9: zamiast samego „nie znam” – najbliższe komendy do tapnięcia.
-        const near = searchCommands(cmd, 3).map((c) => `/${c.name}`);
-        this.message(
-          near.length
-            ? `Nie znam komendy /${cmd}. Może: ${near.join(', ')}? Pełna lista: /help`
-            : `Nie znam komendy /${cmd}. Wpisz /help`
-        );
-        break;
-      }
-    }
-    this.emitHud();
-  }
-
-  currentDimension(): Waypoint['dimension'] {
-    return this.isInNether ? 'nether' : 'overworld';
-  }
-
-  addWaypoint(name: string, kind: Waypoint['kind'] = 'custom', at: { x: number; y: number; z: number } = this.body.pos): Waypoint | null {
-    // Some embedders/tests create a lightweight Game-shaped object without
-    // running the constructor; keep this helper defensive as the rest of API.
-    if (!Array.isArray(this.waypoints)) this.waypoints = [];
-    const clean = name.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 32);
-    if (!clean) return null;
-    if (kind === 'death') {
-      this.waypoints = this.waypoints.filter((w) => w.kind !== 'death');
-      if (this.waypoints.length >= 12) this.waypoints.shift();
-    }
-    if (this.waypoints.length >= 12) return null;
-    const waypoint: Waypoint = {
-      id: `p${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      name: clean,
-      x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z),
-      dimension: this.currentDimension(), kind,
-    };
-    this.waypoints.push(waypoint);
-    this.activeWaypointId = waypoint.id;
-    if (kind === 'custom' && this.unlocked instanceof Set) this.unlock('cartographer');
-    this.emitHud();
-    return waypoint;
-  }
-
-  activateWaypoint(id: string | null) {
-    this.activeWaypointId = id && this.waypoints.some((w) => w.id === id) ? id : null;
-    this.emitHud();
-  }
-
-  removeWaypoint(id: string) {
-    this.waypoints = this.waypoints.filter((w) => w.id !== id);
-    if (this.activeWaypointId === id) this.activeWaypointId = null;
-    this.emitHud();
-  }
-
-  /** Toggle creative flight (used by F, double-space and the touch controls). */
-  toggleFly() {
-    if (this.mode !== 'creative') return;
-    this.flying = !this.flying;
-    this.body.vel.y = 0;
-    this.emitHud();
-  }
-
-  setMode(m: GameMode) {
-    this.mode = m;
-    if (m === 'survival') this.flying = false;
-    this.health = 20;
-    this.message(m === 'creative' ? 'Tryb gry: Kreatywny' : 'Tryb gry: Przetrwanie');
-    this.emitHud();
-  }
-
-  // ---------- Save ----------
-  save() {
-    // 2.10: sesje multiplayer nie zapisują się do slotów – świat należy do
-    // gospodarza, a każda rozgrywka miałaby inny identyfikator.
-    if (this.net) return;
-    try {
-      // homeWorld zawsze istnieje w pełnej grze; defensywny fallback
-      // przydaje się też testom, które budują obiekt przez Game.prototype.
-      const home = this.homeWorld ?? this.world;
-      const data: SaveData = {
-        id: this.worldId,
-        name: this.worldName,
-        worldType: this.worldType,
-        seed: home.seed,
-        mode: this.mode,
-        mods: home.serializeMods(),
-        // 1.8: Nether zapisywany jest osobno – stare zapisy bez netherMods
-        // po prostu dostają pusty (nowy) wymiar.
-        netherMods: this.netherWorld ? this.netherWorld.serializeMods() : {},
-        isInNether: !!this.isInNether,
-        portalExit: this.portalExit ?? undefined,
-        pos: [this.body.pos.x, this.body.pos.y, this.body.pos.z],
-        yaw: this.yaw,
-        pitch: this.pitch,
-        inv: this.inventory.slots.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
-        time: this.time,
-        health: this.health,
-        hunger: this.hunger,
-        day: this.day,
-        spawn: [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z],
-        furnaces: [...this.furnaces.values()],
-        chests: [...this.chests.values()],
-        anvils: this.anvils ? [...this.anvils.values()] : [],
-        brewings: this.brewings ? [...this.brewings.values()] : [],
-        potionsDrunk: this.potionsDrunk ? [...this.potionsDrunk] : [],
-        unlocked: [...this.unlocked],
-        weather: this.weather,
-        xp: this.xp.total,
-        trades: this.trades,
-        waypoints: (this.waypoints ?? []).map((w) => ({ ...w })),
-        activeWaypointId: this.activeWaypointId ?? null,
-        armor: this.armor.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
-        fishCaught: this.fishCaught,
-        updated: Date.now(),
-      };
-      upsertSave({ ...data, id: this.worldId });
-    } catch (e) {
-      console.warn('Save failed', e);
-    }
-  }
-
-  // ---------- Chunks ----------
-  buildChunk(cx: number, cz: number) {
-    const c = this.world.getChunk(cx, cz);
-    for (const m of c.meshes) {
-      this.scene.remove(m);
-      m.geometry.dispose();
-    }
-    c.meshes = [];
-    const geos = this.world.buildMesh(c);
-    geos.forEach((g, i) => {
-      if (!g.getAttribute('position')) { g.dispose(); return; }
-      const m = new THREE.Mesh(g, this.materials[i]);
-      m.matrixAutoUpdate = false;
-      m.renderOrder = i;
-      this.scene.add(m);
-      c.meshes.push(m);
-    });
-    c.built = true;
-  }
-
-  private updateChunks() {
-    const pcx = Math.floor(this.body.pos.x / CS), pcz = Math.floor(this.body.pos.z / CS);
-    // 2.8: przebudowy po zmianie bloku też mają budżet – wcześniej dziesięć
-    // dużych chunków naraz potrafiło zamrozić klatkę na kilkadziesiąt ms.
-    const t0 = performance.now();
-    // 2.8: na słabszym sprzęcie budujemy mniej na klatkę, żeby nie „szarpało”.
-    const adaptive = this.fps > 0 && this.fps < 28 ? 0.65 : 1;
-    let rebuilt = 0;
-    for (const k of this.world.dirty) {
-      const c = this.world.chunks.get(k);
-      this.world.dirty.delete(k);
-      if (c && c.built) {
-        this.buildChunk(c.cx, c.cz);
-        rebuilt++;
-      }
-      if (rebuilt >= 6 || performance.now() - t0 > this.gfx.chunkBudgetMs * 1.5 * adaptive) break;
-    }
-    let built = 0;
-    let total = 0, done = 0;
-    const loading = this.loadingProgress < 0.999;
-    // Podczas pierwszego wejścia do świata budżet jest hojniejszy, żeby horyzont
-    // pojawił się szybko; w trakcie gry liczy się przede wszystkim płynność.
-    const budget = this.gfx.chunkBudgetMs * adaptive * (loading ? 1.8 : 1);
-    const perFrame = this.gfx.chunksPerFrame * (loading ? 2 : 1);
-    for (const [dx, dz] of this.offsets) {
-      total++;
-      const c = this.world.chunks.get(World.key(pcx + dx, pcz + dz));
-      if (c && c.built) { done++; continue; }
-      // 2.0: budżet zależny od jakości (na słabych telefonach mniejszy).
-      if (built < perFrame && performance.now() - t0 < budget) {
-        this.buildChunk(pcx + dx, pcz + dz);
-        built++;
-        done++;
-      }
-    }
-    this.loadingProgress = done / Math.max(1, total);
-    this.unloadTimer -= 1 / 60;
-    if (this.unloadTimer <= 0) {
-      this.unloadTimer = 2;
-      const lim = this.renderDistance + this.gfx.unloadMargin;
-      for (const [k, c] of this.world.chunks) {
-        if (Math.abs(c.cx - pcx) > lim || Math.abs(c.cz - pcz) > lim) {
-          for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
-          // 2.8: releaseChunk czyści też jednowpisowy cache świata.
-          this.world.releaseChunk(c.cx, c.cz);
-          void k;
-        }
-      }
-    }
-  }
-
-  // ---------- Helpers ----------
-  lookDir() {
-    return new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
-  }
-
-  eyePos() {
-    return new THREE.Vector3(this.body.pos.x, this.body.pos.y + this.eyeHeight, this.body.pos.z);
-  }
-
-  selectedStack(): Stack | null {
-    return this.inventory.slots[this.selected];
-  }
-
-  /** Biome under the player, cached per chunk so noise runs once per chunk, not per frame. */
-  private biomeAt(): Biome {
-    const cx = Math.floor(this.body.pos.x / CS), cz = Math.floor(this.body.pos.z / CS);
-    const key = World.key(cx, cz);
-    let b = this.biomeCache.get(key);
-    if (b === undefined) {
-      b = this.world.surface(this.body.pos.x, this.body.pos.z).biome;
-      if (this.biomeCache.size > 64) this.biomeCache.clear();
-      this.biomeCache.set(key, b);
-    }
-    return b;
-  }
-
-  daylight(): number {
-    const s = Math.sin(this.time * Math.PI * 2);
-    return Math.max(0.16, Math.min(1, 0.55 + s * 1.6));
-  }
-
-  /** 2.8: wspólna pula cząstek – jeden InstancedMesh na kolor. */
-  private particlePool(key: string, make: () => THREE.MeshBasicMaterial, cap: number): ParticlePool | null {
-    let pool = this.particlePools.get(key);
-    if (pool) return pool;
-    if (this.particlePools.size >= 40) return null;
-    const mat = make();
-    const mesh = new THREE.InstancedMesh(this.particleGeo, mat, cap);
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    mesh.frustumCulled = false;
-    mesh.count = 0;
-    mesh.visible = false;
-    this.scene.add(mesh);
-    pool = { mesh, mat, list: [], cap };
-    this.particlePools.set(key, pool);
-    return pool;
-  }
-
-  spawnParticles(x: number, y: number, z: number, id: number, n = 12, spread = 0.5) {
-    // 2.0: budżet cząsteczek zależy od jakości (na „Niskich” leci ~35%).
-    const scale = this.gfx.particleScale;
-    if (scale <= 0.01) return;
-    n = Math.max(1, Math.round(n * scale));
-    const cap = Math.floor(420 * Math.max(0.35, scale));
-    const pool = this.particlePool('b' + id, () => {
-      const c = AVG_COLOR[id] || [128, 128, 128];
-      return new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(c[0] / 255, c[1] / 255, c[2] / 255, THREE.SRGBColorSpace) });
-    }, cap);
-    if (!pool) return;
-    for (let i = 0; i < n; i++) {
-      if (pool.list.length >= pool.cap) break;
-      pool.list.push({
-        p: new THREE.Vector3(x + (Math.random() - 0.5) * spread * 2, y + (Math.random() - 0.5) * spread * 2, z + (Math.random() - 0.5) * spread * 2),
-        v: new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 4 + 1, (Math.random() - 0.5) * 4),
-        size: 0.06 + Math.random() * 0.08,
-        life: 0,
-        max: 0.5 + Math.random() * 0.5,
-        gravity: 16,
-        grow: 0,
-      });
-    }
-  }
-
-  spawnSmoke(x: number, y: number, z: number, n: number, spread: number) {
-    const scale = this.gfx.particleScale;
-    if (scale <= 0.01) return;
-    n = Math.max(1, Math.round(n * scale));
-    const cap = Math.floor(240 * Math.max(0.35, scale));
-    const pool = this.particlePool('smoke', () => new THREE.MeshBasicMaterial({ color: 0xdddddd, transparent: true, opacity: 0.8 }), cap);
-    if (!pool) return;
-    for (let i = 0; i < n; i++) {
-      if (pool.list.length >= pool.cap) break;
-      pool.list.push({
-        p: new THREE.Vector3(x + (Math.random() - 0.5) * spread, y + (Math.random() - 0.5) * spread, z + (Math.random() - 0.5) * spread),
-        v: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3),
-        size: 0.3 + Math.random() * 0.4,
-        life: 0,
-        max: 0.8 + Math.random() * 0.8,
-        gravity: -1,
-        grow: 1.2,
-      });
-    }
-  }
-
-  /** Usuwa wszystkie cząstki (zmiana wymiaru, wyłączanie gry). */
-  private clearParticles() {
-    // 2.8: obiekty odtwarzane w testach (Object.create) mogą nie mieć pul.
-    if (!this.particlePools) return;
-    for (const pool of this.particlePools.values()) {
-      pool.list.length = 0;
-      pool.mesh.count = 0;
-      pool.mesh.visible = false;
-    }
-  }
-
-  /** 2.8: aktualizacja i rysowanie cząstek – jedno przejście po pulach. */
-  private updateParticles(dt: number) {
-    if (!this.particlePools?.size) return;
-    const dummy = this.particleDummy;
-    for (const pool of this.particlePools.values()) {
-      const list = pool.list;
-      if (!list.length) {
-        if (pool.mesh.count !== 0) { pool.mesh.count = 0; pool.mesh.visible = false; }
-        continue;
-      }
-      const world = this.world;
-      let w = 0;
-      for (let i = 0; i < list.length; i++) {
-        const pt = list[i];
-        pt.life += dt;
-        if (pt.life >= pt.max) continue;
-        pt.v.y -= pt.gravity * dt;
-        pt.p.x += pt.v.x * dt;
-        pt.p.y += pt.v.y * dt;
-        pt.p.z += pt.v.z * dt;
-        if (pt.grow) pt.size *= 1 + dt * pt.grow;
-        if (pt.gravity > 0) {
-          const bx = Math.floor(pt.p.x), by = Math.floor(pt.p.y), bz = Math.floor(pt.p.z);
-          if (world.isSolid(bx, by, bz)) {
-            pt.p.y = by + 1.02;
-            pt.v.set(pt.v.x * 0.5, 0, pt.v.z * 0.5);
-          }
-        }
-        list[w++] = pt;
-        dummy.position.copy(pt.p);
-        dummy.rotation.set(pt.life * 2.4, pt.life * 1.7, 0);
-        dummy.scale.setScalar(pt.size);
-        dummy.updateMatrix();
-        pool.mesh.setMatrixAt(w - 1, dummy.matrix);
-      }
-      list.length = w;
-      pool.mesh.count = w;
-      pool.mesh.visible = w > 0;
-      if (w > 0) pool.mesh.instanceMatrix.needsUpdate = true;
-    }
-  }
-
-  // ---------- Hand ----------
-  updateHand() {
-    const s = this.selectedStack();
-    const id = s ? s.id : -1;
-    if (id === this.handId) return;
-    this.handId = id;
-    if (this.handMesh) {
-      this.hand.remove(this.handMesh);
-      this.handMesh.geometry.dispose();
-      const mat = this.handMesh.material;
-      if (mat !== this.handMat && !Array.isArray(mat)) mat.dispose();
-    }
-    let mesh: THREE.Mesh;
-    if (isItem(id)) {
-      mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.42, 0.42),
-        new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, depthTest: false, alphaTest: 0.12, side: THREE.DoubleSide })
-      );
-      mesh.position.set(0.48, -0.36, -0.62);
-      mesh.rotation.set(0.15, -0.55, 0.2);
-    } else if (id < 0) {
-      mesh = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.7), new THREE.MeshBasicMaterial({ color: 0xc89a78, depthTest: false }));
-      mesh.position.set(0.5, -0.45, -0.55);
-      mesh.rotation.set(0.2, 0.15, 0);
-    } else {
-      mesh = new THREE.Mesh(blockGeometry(id), this.handMat);
-      const cross = RENDER[id] === 1;
-      mesh.scale.setScalar(cross ? 0.45 : 0.36);
-      mesh.position.set(0.5, -0.42, -0.72);
-      mesh.rotation.set(0.05, cross ? -0.3 : Math.PI / 4 + 0.1, 0);
-    }
-    mesh.renderOrder = 1000;
-    this.handMesh = mesh;
-    this.hand.add(mesh);
-  }
-
-  // ---------- Interaction ----------
-  private findMobTarget(maxDist: number) {
-    const o = this.eyePos();
-    // 2.5: na dotyku mobów szukamy wzdłuż kierunku PALCA (touchAim), nie
-    // środka ekranu – wcześniej tapnięcie w moba obok celownika atakowało
-    // w próżnię albo trafiało w coś zupełnie innego.
-    const d = this.aimDir ?? this.lookDir();
-    let best: Mob | null = null;
-    let bd = maxDist;
-    for (const m of this.mobs) {
-      if (m.dead) continue;
-      const t = m.rayHit(o, d, maxDist);
-      if (t !== null && t < bd) { bd = t; best = m; }
-    }
-    return { mob: best, dist: bd };
-  }
-
-  tryAttack() {
-    this.swingT = 0;
-    const blockDist = this.target ? this.target.dist : 99;
-    const { mob, dist } = this.findMobTarget(3.5);
-    if (mob && dist < blockDist && this.attackCooldown <= 0) {
-      this.attackMob(mob);
-      // 2.5: NIE zwalniamy LPM – trzymany przycisk bije dalej z cooldownem
-      // (updateInteraction). Wcześniej każde trafienie „zjadało” wciśnięcie,
-      // więc walka wymagała ręcznego klikania, a kopanie zamierało, gdy mob
-      // wejdzie w celownik.
-      return;
-    }
-    if (this.target && this.target.id === B.TNT) {
-      this.igniteTNT(this.target.x, this.target.y, this.target.z, 4);
-      this.unlock('boom');
-      this.mouseLeft = false; // podpalenie tylko na kliknięcie – bez trzymania
-      return;
-    }
-    if (this.mode === 'creative' && this.target) {
-      this.breakBlock(this.target.x, this.target.y, this.target.z);
-      this.breakCooldown = 0.25;
-    }
-  }
-
-  /**
-   * 2.14: jeden cios w moba – wspólny dla ręcznego ataku i auto-bicia.
-   * Wydzielone z tryAttack, żeby oba warianty zadawały dokładnie takie same
-   * obrażenia, zużywały narzędzie i respektowały cooldown.
-   */
-  private attackMob(mob: Mob) {
-    this.swingT = 0;
-    const toolId = this.selectedStack()?.id ?? 0;
-    if (ITEMS[toolId]?.tool === 'shears' && mob.type === 'sheep') {
-      this.attackCooldown = 0.35;
-      if (mob.shear()) {
-        const n = 1 + (Math.random() < 0.4 ? 1 : 0);
-        this.spawnDrop(B.WOOL_WHITE, n, mob.body.pos.x, mob.body.pos.y + 0.6, mob.body.pos.z, undefined, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2);
-        this.wearTool();
-        this.unlock('shear');
-        this.gainXp(1);
-        Sfx.playPlace('cloth');
-        this.message(n > 1 ? 'Ostrzyżono owcę. Dwie wełny.' : 'Ostrzyżono owcę.');
-        return;
-      }
-      // 2.5: już ostrzyżona owca dostaje zwykły cios – wcześniej
-      // przytrzymany LPM spamował komunikatem „już ostrzyżona”.
-    }
-    this.attackCooldown = attackCooldown(toolId);
-    const held = this.selectedStack();
-    let dmg = attackDamage(toolId, this.sprinting, sharpnessDamage(enchLevel(held, 'sharpness')));
-    // 2.4: napój siły dorzuca obrażenia do każdego trafienia
-    if (this.hasEffect('strength')) dmg += STRENGTH_DAMAGE;
-    const kb = knockbackFactor(enchLevel(held, 'knockback'));
-    if (mob.damage(dmg, this.body.pos.x, this.body.pos.z)) {
-      if (kb > 1) {
-        mob.body.vel.x *= kb;
-        mob.body.vel.z *= kb;
-        mob.body.vel.y = Math.max(mob.body.vel.y, 6 * kb);
-      }
-      Sfx.playHurt();
-      Sfx.playMob(mob.type);
-      this.wearTool();
-      if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
-      // Grabież: remember the level so mobLoot() can roll extras once
-      mob.bonusLoot = Math.max(mob.bonusLoot, enchLevel(held, 'looting'));
-      // 1.6: krzywda mieszkańca budzi okoliczne golemy
-      if (mob.type === 'villager') {
-        const n = this.provokeGolems(mob.body.pos.x, mob.body.pos.z, 26, 20);
-        if (n > 0) this.message(n === 1 ? 'Golem w okolicy to zauważył!' : 'Golemy w okolicy to zauważyły!');
-      }
-    }
-  }
-
-  /**
-   * 2.14: najbliższy wrogi mob w zasięgu ręki, którego nie zasłania blok.
-   * Bierzemy pełną odległość do środka ciała (mob ma szerokość), a wzrok
-   * sprawdzamy promieniem od oczu – dzięki temu nie bijemy przez ścianę.
-   */
-  findAutoAttackTarget(maxDist: number): Mob | null {
-    const p = this.body.pos;
-    const eye = this.eyePos();
-    const max = maxDist + 0.6;
-    let best: Mob | null = null;
-    let bd = max;
-    for (const m of this.mobs) {
-      if (m.dead || !isHostileMob(m.type)) continue;
-      const tx = m.body.pos.x - eye.x;
-      const ty = m.body.pos.y + m.body.h * 0.5 - eye.y;
-      const tz = m.body.pos.z - eye.z;
-      const len = Math.hypot(tx, ty, tz);
-      if (len > max || len < 0.001) continue;
-      // Inna kondygnacja (mob na dachu albo pod podłogą) – nie bijemy.
-      if (Math.abs(m.body.pos.y - p.y) > 2.6) continue;
-      // Blok po drodze = brak ciosu. Szyba, liście i rośliny nie zasłaniają.
-      if (!this.clearShot(eye.x, eye.y, eye.z, tx / len, ty / len, tz / len, Math.max(0.4, len - 0.45))) continue;
-      const d = Math.hypot(m.body.pos.x - p.x, m.body.pos.z - p.z);
-      if (d < bd) { bd = d; best = m; }
-    }
-    return best;
-  }
-
-  /**
-   * 2.14: czy od oczu do celu nic nie zasłania. Chodzimy po odcinku co 0,2
-   * klocka i sprawdzamy tylko bloki, które naprawdę kryją widok – dzięki temu
-   * auto-bicie działa przez szybę i wysoką trawę, a nie przez ścianę.
-   */
-  private clearShot(ex: number, ey: number, ez: number, dx: number, dy: number, dz: number, len: number): boolean {
-    const steps = Math.max(2, Math.ceil(len / 0.2));
-    for (let i = 1; i < steps; i++) {
-      const f = (i / steps) * len;
-      const id = this.world.peekBlock(Math.floor(ex + dx * f), Math.floor(ey + dy * f), Math.floor(ez + dz * f));
-      if (OCCLUDES[id] !== 0) return false;
-    }
-    return true;
-  }
-
-  /** 2.14: delikatne obracanie na dotyku w stronę celu auto-bicia. */
-  private faceMobAuto(mob: Mob, dt: number) {
-    const dx = mob.body.pos.x - this.body.pos.x;
-    const dz = mob.body.pos.z - this.body.pos.z;
-    if (Math.hypot(dx, dz) < 0.001) return;
-    const want = Math.atan2(-dx, -dz);
-    let diff = want - this.yaw;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    this.yaw += diff * Math.min(1, dt * 5);
-  }
-
-  /**
-   * 2.14: auto-bicie wrogich mobów. Działa w tle podczas gry: wybiera
-   * najbliższego potwora w zasięgu ręki i uderza go z normalnym cooldownem
-   * (te same obrażenia, zużycie narzędzia i dźwięki co ręczny atak).
-   */
-  autoAttackTick(dt: number) {
-    if (!this.autoAttack || this.ui !== 'playing') return;
-    const target = this.findAutoAttackTarget(AUTO_ATTACK_RANGE);
-    if (!target) return;
-    if (this.touchInput) this.faceMobAuto(target, dt);
-    if (this.attackCooldown > 0) return;
-    this.attackMob(target);
-  }
-
-  /** Fires an arrow when the player lets go of RMB while holding a bow. */
-  private releaseBow() {
-    const charge = Math.max(0.12, Math.min(1, this.bowDraw));
-    this.bowDraw = -1;
-    const bow = this.selectedStack();
-    const power = powerFactor(enchLevel(bow, 'power'));
-    const infinite = enchLevel(bow, 'infinity') > 0;
-    if (this.mode === 'survival' && this.inventory.countOf(I.ARROW) <= 0) {
-      this.message('Brak strzał. Wytwórz je z krzemienia, patyka i pióra.');
-      return;
-    }
-    // Nieskończoność: jedna strzała w ekwipunku wystarczy na wiele wystrzałów
-    if (this.mode === 'survival' && !infinite) this.inventory.remove(I.ARROW, 1);
-    const eye = this.eyePos();
-    // 2.5: na dotyku strzała leci tam, gdzie celuje palec (touchAim),
-    // a nie w środek ekranu – wcześniej naciąganie łuku celowało „obok”.
-    const d = this.aimDir ?? this.lookDir();
-    this.spawnArrow(eye.addScaledVector(d, 0.5), d, 22 + charge * 26, null, (4 + charge * 5) * power);
-    Sfx.playBow();
-    this.swingT = 0;
-    this.wearTool();
-    this.unlock('archer');
-  }
-
-  /** PPM z perłą Endu: rzut; gracz teleportuje się tam, gdzie perła spadnie (1.9). */
-  private throwPearl() {
-    if (this.pearlCd > 0 || this.ui === 'dead') return;
-    this.pearlCd = 0.9;
-    if (this.mode === 'survival') this.consumeSelected();
-    if (!this.pearlGeo) this.pearlGeo = new THREE.SphereGeometry(0.1, 8, 6);
-    if (!this.pearlMat) this.pearlMat = new THREE.MeshBasicMaterial({ color: 0x49d8c0 });
-    const mesh = new THREE.Mesh(this.pearlGeo, this.pearlMat);
-    const eye = this.eyePos();
-    const d = this.aimDir ?? this.lookDir(); // 2.5: cel dotyku, nie środek ekranu
-    mesh.position.copy(eye);
-    this.scene.add(mesh);
-    this.arrows.push({ mesh, pos: eye.clone(), vel: d.clone().multiplyScalar(24), life: 0, power: 0, from: null, pearl: true });
-    Sfx.playBow();
-    this.swingT = 0;
-  }
-
-  // ---------- 2.3: wędkarstwo ----------
-
-  /** PPM z wędką: rzuca przynętę albo zwina haczyk. */
-  useRod() {
-    if (this.bobber) {
-      this.reelRod();
-      return;
-    }
-    if (this.ui !== 'playing') return;
-    if (!this.bobberGeo) this.bobberGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
-    if (!this.bobberMat) this.bobberMat = new THREE.MeshBasicMaterial({ color: 0xd83a3a });
-    const mesh = new THREE.Mesh(this.bobberGeo, this.bobberMat);
-    const eye = this.eyePos();
-    const d = this.aimDir ?? this.lookDir(); // 2.5: spławik leci pod palcem
-    mesh.position.copy(eye);
-    this.scene.add(mesh);
-    this.bobber = {
-      mesh,
-      pos: eye.clone(),
-      vel: d.clone().multiplyScalar(16 + (this.sprinting ? 6 : 0)),
-      state: 'flying',
-      wait: 0,
-      biteAt: 0,
-      window: 0,
-    };
-    Sfx.playPop();
-    this.swingT = 0;
-    this.wearTool();
-    this.emitHud();
-  }
-
-  /** Druga wędkarstwo: branie, wyciągnięcie albo strata przynęty. */
-  private reelRod() {
-    const b = this.bobber;
-    if (!b) return;
-    if (b.state === 'bite') {
-      this.landFish();
-    } else if (b.state === 'water') {
-      this.message('Nic nie brało. Zostaw przynętę dłużej w wodzie.');
-    } else if (b.state === 'reeling') {
-      return;
-    } else {
-      this.message('Wciągasz wędkę.');
-    }
-    this.pullBobberBack();
-  }
-
-  /** Wynik zakończonego haczenia. */
-  private landFish() {
-    const haul = rollCatch();
-    if (this.mode === 'survival') this.giveOrDrop({ ...haul });
-    Sfx.playPop();
-    this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, isFishStack(haul) ? I.RAW_FISH : I.STRING, 8, 0.4);
-    const howmany = haul.count > 1 ? ` ×${haul.count}` : '';
-    this.message(`Złowiono: ${displayName(haul.id)}${howmany}.`);
-    if (isFishStack(haul)) {
-      this.fishCaught++;
-      this.gainXp(3);
-      this.unlock('fisher');
-      if (this.fishCaught >= 5) this.unlock('angler');
-    } else {
-      this.gainXp(1);
-    }
-    this.wearTool();
-  }
-
-  /** Spławik wraca do gracza i znika w ręce. */
-  private pullBobberBack() {
-    const b = this.bobber;
-    if (!b) return;
-    b.state = 'reeling';
-    this.wearTool();
-  }
-
-  private removeBobber() {
-    const b = this.bobber;
-    if (!b) return;
-    this.scene.remove(b.mesh);
-    this.bobber = null;
-    this.emitHud();
-  }
-
-  /** Stan wędkarstwa na HUD. */
-  fishingState(): 'idle' | 'cast' | 'waiting' | 'bite' {
-    const b = this.bobber;
-    if (!b) return 'idle';
-    if (b.state === 'bite') return 'bite';
-    if (b.state === 'water' || b.state === 'rest') return 'waiting';
-    return 'cast';
-  }
-
-  /** 2.3: lot, tonięcie, branie i zmywanie przynęty. */
-  private updateFishing(dt: number) {
-    const b = this.bobber;
-    if (!b || this.ui !== 'playing') return;
-    const eye = this.eyePos();
-    if (b.state === 'reeling') {
-      b.vel.subVectors(eye, b.pos).normalize().multiplyScalar(26);
-      b.pos.addScaledVector(b.vel, dt);
-      b.mesh.position.copy(b.pos);
-      if (b.pos.distanceTo(eye) < 0.7) this.removeBobber();
-      return;
-    }
-    if (b.state === 'flying' || b.state === 'rest') {
-      b.vel.y -= 20 * dt;
-      b.pos.addScaledVector(b.vel, dt);
-      b.mesh.position.copy(b.pos);
-      if (b.pos.y < 0) { this.removeBobber(); return; }
-      const x = Math.floor(b.pos.x), y = Math.floor(b.pos.y), z = Math.floor(b.pos.z);
-      const block = this.world.peekBlock(x, y, z);
-      if (block === B.LAVA) {
-        this.message('Przynęta spaliła się w lawie.');
-        this.removeBobber();
-        return;
-      }
-      if (block === B.WATER) {
-        b.state = 'water';
-        b.pos.y = y + 0.9;
-        b.vel.set(0, 0, 0);
-        b.wait = 0;
-        b.biteAt = biteDelay();
-        this.message('Przynęta w wodzie. Czekaj na brań…');
-        return;
-      }
-      if (b.state === 'flying' && this.world.isSolid(x, y, z)) {
-        b.state = 'rest';
-        b.pos.y = y + 1.05;
-        b.vel.set(0, 0, 0);
-      }
-    }
-    // spławik leży w wodzie, na ziemi albo właśnie bierze
-    const x = Math.floor(b.pos.x), y = Math.floor(b.pos.y), z = Math.floor(b.pos.z);
-    const inWater = this.world.peekBlock(x, y, z) === B.WATER;
-    b.wait += dt;
-    if (b.state === 'bite') {
-      b.window -= dt;
-      b.mesh.position.set(b.pos.x, b.pos.y + Math.abs(Math.sin(b.window * 9)) * -0.35 + 0.1, b.pos.z);
-      if (b.window <= 0) {
-        this.message('Ryba uciekła z przynęty.');
-        this.removeBobber();
-      }
-      return;
-    }
-    if (b.state === 'rest' && inWater) {
-      b.state = 'water';
-      b.pos.y = y + 0.9;
-      b.wait = 0;
-      b.biteAt = biteDelay();
-      this.message('Przynęta w wodzie. Czekaj na brań…');
-      return;
-    }
-    if (b.state === 'rest') {
-      b.mesh.position.set(b.pos.x, b.pos.y, b.pos.z);
-      if (b.wait > PATIENCE) {
-        this.message('Przynęta zgniła – wyrzuć wędkę dalej od brzegu.');
-        this.removeBobber();
-      }
-      return;
-    }
-    // water
-    b.pos.y = y + 0.9 - Math.sin(b.wait * 2.2) * 0.06;
-    b.mesh.position.set(b.pos.x, b.pos.y, b.pos.z);
-    if (this.bobberMat) this.bobberMat.color.setHex(0xd83a3a);
-    if (b.wait >= b.biteAt) {
-      b.state = 'bite';
-      b.window = BITE_WINDOW;
-      if (this.bobberMat) this.bobberMat.color.setHex(0xf2f2f2);
-      Sfx.playPop();
-      this.spawnParticles(b.pos.x, b.pos.y, b.pos.z, B.WATER, 6, 0.3);
-      this.message('Brań! PPM, aby zaciągnąć.');
-    } else if (b.wait > PATIENCE) {
-      this.message('Woda zmyła przynętę.');
-      this.removeBobber();
-    }
-  }
-
-  /** Perła wylądowała: gracz pojawia się w ostatnim wolnym punkcie lotu. */
-  private pearlTeleport(to: THREE.Vector3) {
-    if (this.ui === 'dead') return;
-    const b = this.body;
-    b.pos.set(to.x, to.y, to.z);
-    b.vel.set(0, 0, 0);
-    // podnieś pozycję, aż stopy i głowa będą w wolnych blokach
-    let guard = 0;
-    while (guard++ < CH && (this.world.isSolid(Math.floor(b.pos.x), Math.floor(b.pos.y), Math.floor(b.pos.z)) ||
-      this.world.isSolid(Math.floor(b.pos.x), Math.floor(b.pos.y + b.h - 0.1), Math.floor(b.pos.z)))) {
-      b.pos.y += 1;
-    }
-    this.damage(2);
-    Sfx.playPortal();
-    this.unlock('pearl');
-    this.swingT = 1;
-  }
-
-  /** Spawns a flying arrow. `from` is the mob that shot it (null = player). */
-  spawnArrow(origin: THREE.Vector3, dir: THREE.Vector3, speed: number, from: Mob | null, power: number) {
-    if (this.arrows.length > 48) return;
-    const mesh = new THREE.Mesh(this.arrowGeo, this.arrowMat);
-    mesh.position.copy(origin);
-    this.scene.add(mesh);
-    this.arrows.push({ mesh, pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), life: 0, power, from });
-  }
-
-  private updateArrows(dt: number) {
-    const keep: ArrowEntity[] = [];
-    for (const a of this.arrows) {
-      a.life += dt;
-      if (a.life > 20) { this.scene.remove(a.mesh); continue; }
-      a.vel.y -= 18 * dt;
-      const dir = a.vel.clone().normalize();
-      let travel = a.vel.length() * dt;
-      let spent = false;
-      let prev: THREE.Vector3 | null = null;
-      while (travel > 0 && !spent) {
-        const stepLen = Math.min(0.3, travel);
-        travel -= stepLen;
-        prev = a.pos.clone();
-        a.pos.addScaledVector(dir, stepLen);
-        const block = this.world.peekBlock(Math.floor(a.pos.x), Math.floor(a.pos.y), Math.floor(a.pos.z));
-        if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) { spent = true; break; }
-        if (a.from) {
-          // hostile arrow vs player – a shield in hand parries it
-          const p = this.body.pos;
-          if (
-            a.pos.x > p.x - 0.45 && a.pos.x < p.x + 0.45 &&
-            a.pos.y > p.y - 0.1 && a.pos.y < p.y + this.body.h + 0.1 &&
-            a.pos.z > p.z - 0.45 && a.pos.z < p.z + 0.45
-          ) {
-            if (this.holdingShield()) {
-              Sfx.playShield();
-              this.wearShield(12);
-              this.unlock('guardian');
-            } else {
-              this.damage(a.power);
-              this.body.vel.x += dir.x * 2.5;
-              this.body.vel.z += dir.z * 2.5;
-            }
-            spent = true;
-            break;
-          }
-        } else {
-          // player arrow vs mobs
-          for (const m of this.mobs) {
-            if (m.dead) continue;
-            const mb = m.body;
-            const r = mb.w / 2 + 0.12;
-            if (
-              a.pos.x > mb.pos.x - r && a.pos.x < mb.pos.x + r &&
-              a.pos.y > mb.pos.y - 0.1 && a.pos.y < mb.pos.y + mb.h + 0.1 &&
-              a.pos.z > mb.pos.z - r && a.pos.z < mb.pos.z + r
-            ) {
-              if (a.pearl) { spent = true; break; }
-              if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2)) {
-                mb.vel.x += dir.x * 4;
-                mb.vel.z += dir.z * 4;
-                mb.vel.y = Math.max(mb.vel.y, 2.5);
-                Sfx.playHurt();
-                Sfx.playMob(m.type);
-                this.wearTool();
-              }
-              spent = true;
-              break;
-            }
-          }
-        }
-      }
-      if (spent) {
-        this.scene.remove(a.mesh);
-        if (a.pearl) this.pearlTeleport(prev ?? a.pos);
-        else Sfx.playArrowHit();
-        continue;
-      }
-      a.mesh.position.copy(a.pos);
-      if (!a.pearl) a.mesh.lookAt(a.pos.clone().add(a.vel));
-      keep.push(a);
-    }
-    this.arrows = keep;
-  }
-
-  tryUse() {
-    const t = this.target;
-    this.placeCooldown = 0.22;
-    const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
-    // Mieszkaniec ma pierwszeństwo – PPM otwiera okno handlu.
-    const vt = this.findMobTarget(4.5);
-    if (vt.mob && vt.mob.type === 'villager' && !vt.mob.dead) {
-      this.openTrade(vt.mob);
-      return;
-    }
-    if (t && !sneaking) {
-      if (t.id === B.BELL) { this.ringBell(t.x, t.y, t.z); return; }
-      if (isDoor(t.id)) { this.toggleDoor(t.x, t.y, t.z); return; }
-      if (isTrap(t.id)) { this.toggleTrap(t.x, t.y, t.z, t.nx, t.nz); return; }
-      if (t.id === B.CHEST || t.id === B.LOOT_CHEST) { this.openChest(t.x, t.y, t.z); return; }
-      if (t.id === B.CRAFTING) { this.openInventory(true); return; }
-      if (t.id === B.FURNACE || t.id === B.FURNACE_ON) { this.openFurnace(t.x, t.y, t.z); return; }
-      if (t.id === B.ENCHANT) { this.openEnchant(t.x, t.y, t.z); return; }
-      if (t.id === B.BED) { this.trySleep(t.x, t.y, t.z); return; }
-      if (t.id === B.LEVER || t.id === B.LEVER_ON) { this.toggleLever(t.x, t.y, t.z); return; }
-      if (t.id === B.BUTTON || t.id === B.BUTTON_ON) { this.pressButton(t.x, t.y, t.z); return; }
-      if (t.id === B.NOTE_BLOCK) { this.playNoteBlock(t.x, t.y, t.z); return; }
-      if (t.id === B.NETHER_PORTAL) { this.enterPortal(); return; }
-      // 2.3: kowadło wreszcie działa – naprawa, scalanie i nazwy przedmiotów.
-      if (t.id === B.ANVIL) { this.openAnvil(t.x, t.y, t.z); return; }
-      // 2.4: statyw alchemiczny – PPM otwiera kocioł, a woda leci do fiolki.
-      if (t.id === B.BREWING) { this.openBrewing(t.x, t.y, t.z); return; }
-    }
-    const s = this.selectedStack();
-    if (!s) return;
-    // 2.4: fiolka nad wodą staje się fiolką z wodą (źródło wody zostaje).
-    if (s.id === I.BOTTLE && t && t.id === B.WATER) {
-      s.id = I.WATER_BOTTLE;
-      Sfx.playSplash();
-      this.message('Napełniono fiolkę wodą.');
-      this.updateHand();
-      this.emitHud();
-      this.swingT = 0;
-      return;
-    }
-    if (t && s.id === I.FLINT_STEEL) {
-      if (t.id === B.TNT) {
-        this.igniteTNT(t.x, t.y, t.z, 3.2);
-        this.unlock('boom');
-        this.wearTool();
-        this.swingT = 0;
-        return;
-      }
-      if (t.id === B.OBSIDIAN || t.id === B.CRYING_OBSIDIAN) {
-        if (tryCreatePortal(this.world, t.x, t.y, t.z)) {
-          this.message('Portal do Netheru został aktywowany!');
-          Sfx.playPlace('glass');
-          this.wearTool();
-          this.swingT = 0;
-          this.unlock('portal');
-          return;
-        }
-      }
-    }
-    if (t && t.id === B.CAMPFIRE && this.cookOnCampfire(s)) return;
-    // Taming: right-click a wild wolf while holding raw meat.
-    if (s.id === I.RAW_PORK || s.id === I.RAW_BEEF || s.id === I.RAW_CHICKEN) {
-      const wt = this.findMobTarget(4.5);
-      if (wt.mob && wt.mob.type === 'wolf' && !wt.mob.tamed) {
-        if (this.mode === 'survival') this.consumeSelected();
-        wt.mob.tame();
-        Sfx.playEat();
-        Sfx.playPop();
-        this.message('Wilk przyjął mięso i od tej pory jest posłuszny.');
-        this.unlock('wolf');
-        this.swingT = 0;
-        return;
-      }
-    }
-    if (s.id === I.BOW) {
-      // holding RMB keeps drawing; only a fresh press starts a new draw
-      if (this.bowDraw < 0) this.bowDraw = 0.0001;
-      this.swingT = 0;
-      return;
-    }
-    // 2.3: wędka rzuca lub zwina przynętę, lorneta przybliża (trzymana w PPM).
-    if (s.id === I.FISHING_ROD) { this.useRod(); return; }
-    // 2.3: bez przytrzymania (telefon) lorneta działa jak przełącznik.
-    if (s.id === I.SPYGLASS) { this.zooming = this.touchInput ? !this.zooming : true; return; }
-    if (s.id === I.ENDER_PEARL) {
-      this.throwPearl();
-      return;
-    }
-    if (isFood(s.id)) { this.tryEat(s); return; }
-    // 2.4: fiolki pije się dokładnie tak jak jedzenie – PPM w powietrzu.
-    if (isPotion(s.id)) { this.drinkPotion(s); return; }
-    if (!t) return;
-    if (isHoe(s.id) && this.tryTill(t)) return;
-    if (this.tryMakePath(t)) return;
-    if (s.id === I.SEEDS && this.tryPlant(t, s)) return;
-    if (s.id === I.BUCKET || s.id === I.WATER_BUCKET || s.id === I.LAVA_BUCKET) {
-      this.tryBucket(t, s);
-      return;
-    }
-    if (isItem(s.id) || !BLOCKS[s.id]) return;
-    // 2.3: schody i płyty potrafią zmienić to, co faktycznie zostanie postawione.
-    let placeId: number | undefined;
-    let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
-    if (RENDER[t.id] === 1) { px = t.x; py = t.y; pz = t.z; }
-    if (py < 0 || py >= CH) return;
-    const cur = this.world.getBlock(px, py, pz);
-    if (cur !== B.AIR && RENDER[cur] !== 2 && RENDER[cur] !== 1) return;
-    const id = s.id;
-    if (IS_SOLID[id]) {
-      const b = this.body;
-      if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, px, py, pz)) return;
-      for (const m of this.mobs) if (!m.dead && aabbIntersectsBlock(m.body.pos.x, m.body.pos.y, m.body.pos.z, m.body.w, m.body.h, px, py, pz)) return;
-    }
-    if (id === B.WATER || id === B.LAVA) {
-      const below = this.world.getBlock(px, py - 1, pz);
-      const around = [this.world.getBlock(px + 1, py, pz), this.world.getBlock(px - 1, py, pz), this.world.getBlock(px, py, pz + 1), this.world.getBlock(px, py, pz - 1)];
-      if (!IS_SOLID[below] && !around.some((n) => IS_SOLID[n])) return;
-    }
-    const below = this.world.getBlock(px, py - 1, pz);
-    if (id === B.SAPLING || id === B.BIRCH_SAPLING) {
-      if (below !== B.GRASS && below !== B.DIRT && below !== B.FARMLAND) return;
-    } else if (id === B.CROP0 || id === B.CROP1 || id === B.CROP2 || id === B.CROP3) {
-      if (below !== B.FARMLAND) return;
-    } else if (id === B.TORCH || id === B.REDSTONE_TORCH) {
-      const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
-      if (!IS_SOLID[attached] && !IS_SOLID[below]) return;
-    } else if (id === B.LEVER || id === B.BUTTON || id === B.REDSTONE_TORCH || id === B.REDSTONE_TORCH_OFF) {
-      const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
-      if (!IS_SOLID[attached]) { this.message('Dźwignia/przycisk musi być na solidnej ścianie.'); return; }
-    } else if (id === B.RAIL || id === B.POWERED_RAIL || id === B.DETECTOR_RAIL) {
-      if (!IS_SOLID[below]) { this.message('Tory kładzie się na solidnym podłożu.'); return; }
-    } else if (isStairs(id)) {
-      // schody stawiane tyłem do gracza
-      const dir = this.lookDir();
-      const placed = stairsBase(id) + facingFromNormal(-dir.x, -dir.z);
-      if (!BLOCKS[placed]) return;
-      placeId = placed;
-    } else if (isSlab(id)) {
-      // płyta górna / dolna, a dwie płyty tego samego typu łączą się w pełny blok
-      // (normal z raycastu wskazuje od klikniętego bloku w stronę gracza,
-      //  więc ny === -1 oznacza, że uderzono wierzch – stawiamy płytę górną)
-      const base = slabBase(id);
-      const isTop = t.ny === -1;
-      const existing = this.world.getBlock(px, py, pz);
-      if (existing === base || existing === base + 1) placeId = slabFullBlock(base);
-      else placeId = isTop ? base + 1 : base;
-    } else if (isPiston(id)) {
-      // piston facing toward player (place facing opposite to look)
-      // for simplicity store facing in block id? We use same id but remember direction via placement normal
-      // future: directional pistons – for now just place
-    } else if (id === B.SUGARCANE) {
-      if (below !== B.GRASS && below !== B.DIRT && below !== B.SAND && below !== B.SUGARCANE) {
-        this.message('Trzcina rośnie na trawie, ziemi lub piasku.');
-        return;
-      }
-      // only the base of a stack needs water, like in the classic game
-      if (below !== B.SUGARCANE && !this.waterNear(px, py, pz)) {
-        this.message('Trzcyna chce wody w pobliżu.');
-        return;
-      }
-    } else if (isDoor(id)) {
-      if (!this.placeDoor(px, py, pz, t.nx, t.ny, t.nz)) return;
-      Sfx.playPlace('wood');
-      this.swingT = 0;
-      this.consumeSelected();
-      this.unlock('home');
-      return;
-    } else if (isLadder(id)) {
-      if (t.ny !== 0) { this.message('Drabina musi wisieć na ścianie.'); return; }
-      const face = facingFromNormal(-t.nx, -t.nz);
-      this.world.setBlock(px, py, pz, B.LADDER_N + face);
-      Sfx.playPlace('wood');
-      this.swingT = 0;
-      this.consumeSelected();
-      return;
-    } else if (isTrap(id)) {
-      if (t.ny === 1) this.world.setBlock(px, py, pz, B.TRAP);
-      else if (t.ny === 0) this.world.setBlock(px, py, pz, B.TRAP_N + facingFromNormal(-t.nx, -t.nz));
-      else { this.message('Właz kładzie się na podłodze albo na ścianie.'); return; }
-      Sfx.playPlace('wood');
-      this.swingT = 0;
-      this.consumeSelected();
-      return;
-    } else if (id === B.CHEST) {
-      this.unlock('stash');
-    } else if (RENDER[id] === 1) {
-      if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && below !== B.FARMLAND) return;
-    }
-    const finalId = placeId ?? id;
-    this.world.setBlock(px, py, pz, finalId);
-    this.settle(px, py, pz);
-    // redstone update
-    this.onBlockChanged(px, py, pz);
-    if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
-    if (finalId === B.TORCH || finalId === B.REDSTONE_TORCH) this.unlock('torch');
-    if (finalId === B.NETHER_BRICKS || finalId === B.QUARTZ_BLOCK) this.unlock('nether');
-    Sfx.playPlace(BLOCKS[finalId].sound);
-    this.swingT = 0;
-    this.consumeSelected();
-  }
-
-  pickBlock() {
-    if (!this.target) return;
-    const id = this.target.id;
-    const hot = this.inventory.slots.findIndex((s, i) => i < 9 && s && s.id === id);
-    if (hot >= 0) { this.selected = hot; this.emitHud(); return; }
-    // 2.3: ŚPM działa też dla przedmiotu leżącego poza paskiem – przenosimy
-    // go w wybrany slot, zamiast cicho nic nie robić.
-    const any = this.inventory.slots.findIndex((s) => s && s.id === id);
-    if (any >= 0) {
-      const held = this.inventory.slots[this.selected];
-      this.inventory.slots[this.selected] = this.inventory.slots[any];
-      this.inventory.slots[any] = held;
-      this.updateHand();
-      this.emitHud();
-      return;
-    }
-    if (this.mode === 'creative') {
-      this.inventory.slots[this.selected] = { id, count: 64 };
-      this.updateHand();
-      this.emitHud();
-    }
-  }
-
-  /** 2.5: `whole` = wyrzuca cały stos (Ctrl+Q), domyślnie jeden przedmiot. */
-  dropItem(whole = false) {
-    const s = this.selectedStack();
-    if (!s) return;
-    const e = this.eyePos();
-    const d = this.lookDir();
-    const dur = s.dur;
-    const n = whole ? s.count : 1;
-    if (this.mode === 'survival') {
-      this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
-      s.count -= n;
-      if (s.count <= 0) this.inventory.slots[this.selected] = null;
-    } else {
-      this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
-      this.inventory.slots[this.selected] = null;
-    }
-    this.emitHud();
-  }
-
-  // Make sand/gravel fall
-  settle(x: number, y: number, z: number) {
-    const id = this.world.getBlock(x, y, z);
-    if (id !== B.SAND && id !== B.GRAVEL) return;
-    let ny = y;
-    while (ny > 0) {
-      const b = this.world.getBlock(x, ny - 1, z);
-      if (b === B.AIR || RENDER[b] === 2 || RENDER[b] === 1) ny--;
-      else break;
-    }
-    if (ny !== y) {
-      this.world.setBlock(x, y, z, B.AIR);
-      this.world.setBlock(x, ny, z, id);
-      this.settle(x, y + 1, z);
-    }
-  }
-
-  /**
-   * Sand and gravel fall. Close to the player they become a visible tumbling
-   * block; further away the column is resolved instantly (nobody can see it).
-   */
-  fallGravity(x: number, y: number, z: number) {
-    const id = this.world.getBlock(x, y, z);
-    if (id !== B.SAND && id !== B.GRAVEL) return;
-    const dx = x + 0.5 - this.body.pos.x, dz = z + 0.5 - this.body.pos.z;
-    const near = Math.hypot(dx, dz) < 40 && Math.abs(y - this.body.pos.y) < 22;
-    if (!near || this.falling.length >= 24) { this.settle(x, y, z); return; }
-    let ny = y;
-    while (ny > 0) {
-      const b = this.world.getBlock(x, ny - 1, z);
-      if (b === B.AIR || RENDER[b] === 2 || RENDER[b] === 1) ny--;
-      else break;
-    }
-    this.world.setBlock(x, y, z, B.AIR);
-    let geo = this.dropGeos.get(id);
-    if (!geo) { geo = blockGeometry(id); this.dropGeos.set(id, geo); }
-    const mesh = new THREE.Mesh(geo, this.dropMat);
-    mesh.position.set(x + 0.5, y, z + 0.5);
-    this.scene.add(mesh);
-    this.falling.push({ mesh, pos: new THREE.Vector3(x + 0.5, y, z + 0.5), vel: 0, id });
-    // the column above keeps falling too
-    this.fallGravity(x, y + 1, z);
-    if (ny !== y) this.settle(x, ny, z);
-  }
-
-  private updateFalling(dt: number) {
-    if (!this.falling.length) return;
-    const keep: FallingBlock[] = [];
-    for (const f of this.falling) {
-      f.vel = Math.min(26, f.vel + 24 * dt);
-      const step = f.vel * dt;
-      const ny = f.pos.y - step;
-      const bx = Math.floor(f.pos.x), bz = Math.floor(f.pos.z);
-      const below = Math.floor(ny - 0.5);
-      const hit = below < 0 || IS_SOLID[this.world.peekBlock(bx, below, bz)];
-      // a falling block hurts when it lands on the player's head
-      if (hit && this.ui !== 'dead' && this.mode === 'survival') {
-        const p = this.body.pos;
-        if (Math.abs(f.pos.x - (p.x + 0.5)) < 0.8 && Math.abs(f.pos.z - (p.z + 0.5)) < 0.8 && p.y < f.pos.y && p.y + this.body.h > f.pos.y - 0.5) {
-          this.damage(2);
-        }
-      }
-      if (hit) {
-        this.scene.remove(f.mesh);
-        this.world.setBlock(bx, below + 1, bz, f.id);
-        Sfx.playPlace(BLOCKS[f.id].sound);
-        continue;
-      }
-      f.pos.y = ny;
-      f.mesh.position.copy(f.pos);
-      keep.push(f);
-    }
-    this.falling = keep;
-  }
-
-  /**
-   * Minecraft-style leaf decay: after a log is gone, every leaf farther than
-   * four blocks from the nearest remaining log falls apart.
-   */
-  private decayLeaves(x: number, y: number, z: number) {
-    const seen = new Set<string>([`${x},${y},${z}`]);
-    let frontier: [number, number, number][] = [[x, y, z]];
-    for (let dist = 0; dist < 4 && frontier.length; dist++) {
-      const next: [number, number, number][] = [];
-      for (const [cx, cy, cz] of frontier) {
-        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
-          if (dx === 0 && dy === 0 && dz === 0) continue;
-          const nx = cx + dx, ny = cy + dy, nz = cz + dz;
-          const k = `${nx},${ny},${nz}`;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          const id = this.world.peekBlock(nx, ny, nz);
-          if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) next.push([nx, ny, nz]);
-          else if (id === B.LEAVES || id === B.BIRCH_LEAVES || id === B.ACACIA_LEAVES || id === B.JUNGLE_LEAVES) {
-            next.push([nx, ny, nz]);
-            this.leafDecay.push({ x: nx, y: ny, z: nz, t: 0.25 + Math.random() * 0.9 });
-          }
-        }
-      }
-      frontier = next;
-    }
-  }
-
-  private updateLeafDecay(dt: number) {
-    if (!this.leafDecay.length) return;
-    const keep: typeof this.leafDecay = [];
-    for (const l of this.leafDecay) {
-      l.t -= dt;
-      if (l.t > 0) { keep.push(l); continue; }
-      const id = this.world.peekBlock(l.x, l.y, l.z);
-      if (id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
-      this.world.setBlock(l.x, l.y, l.z, B.AIR);
-      this.spawnParticles(l.x + 0.5, l.y + 0.5, l.z + 0.5, id, 6, 0.2);
-      if (this.mode === 'survival') {
-        for (const drop of blockDrops(id, 0)) this.spawnDrop(drop.id, drop.count, l.x + 0.5, l.y + 0.4, l.z + 0.5);
-      }
-    }
-    this.leafDecay = keep;
-  }
-
-  breakBlock(x: number, y: number, z: number, silent = false) {
-    const id = this.world.getBlock(x, y, z);
-    if (id === B.AIR || BLOCKS[id].hardness < 0) return;
-    const def = BLOCKS[id];
-    // water fills in
-    let fill: number = B.AIR;
-    const nbs = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]];
-    for (const [dx, dy, dz] of nbs) {
-      const n = this.world.getBlock(x + dx, y + dy, z + dz);
-      if (n === B.WATER) { fill = B.WATER; break; }
-      if (n === B.LAVA) fill = B.LAVA;
-    }
-    if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
-    if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
-    if (id === B.ANVIL) this.spillAnvil(x, y, z);
-    if (id === B.BREWING) this.spillBrewing(x, y, z);
-    this.world.setBlock(x, y, z, fill);
-    if (isDoor(id)) {
-      const face = doorFacing(id);
-      const oy = isDoorTop(id) ? y - 1 : y + 1;
-      const other = this.world.getBlock(x, oy, z);
-      if (isDoor(other) && doorFacing(other) === face) this.world.setBlock(x, oy, z, B.AIR);
-    }
-    const attach: [number, number][] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-    for (let f = 0; f < 4; f++) {
-      const lx = x - attach[f][0], lz = z - attach[f][1];
-      const nid = this.world.getBlock(lx, y, lz);
-      if (ladderFacing(nid) === f || (isTrapOpen(nid) && nid - B.TRAP_N === f)) this.breakBlock(lx, y, lz, silent);
-    }
-    this.growables.delete(`${x},${y},${z}`);
-    if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) this.decayLeaves(x, y, z);
-    if (!silent) {
-      this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 14, 0.35);
-      Sfx.playBreak(def.sound);
-    }
-    if (this.mode === 'survival' && !silent) {
-      const toolId = this.selectedStack()?.id ?? 0;
-      if (isOre(id) && ITEMS[toolId]?.tool !== 'pick' && !this.toldPick) {
-        this.toldPick = true;
-        this.message('Ruda wymaga kilofa – inaczej nic nie wypadnie.');
-      }
-      const drops = blockDrops(id, toolId, {
-        fortune: enchLevel(this.selectedStack(), 'fortune'),
-        silk: enchLevel(this.selectedStack(), 'silktouch') > 0,
-      });
-      for (const drop of drops) this.spawnDrop(drop.id, drop.count, x + 0.5, y + 0.45, z + 0.5);
-      if (isDoorTop(id)) this.spawnDrop(B.DOOR_N, 1, x + 0.5, y + 0.2, z + 0.5);
-      // ores that actually yielded something also drop XP
-      const xp = oreXp(id);
-      if (drops.length > 0 && xp > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, xp);
-    }
-    // things above that need support
-    const above = this.world.getBlock(x, y + 1, z);
-    if (RENDER[above] === 1 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
-    this.fallGravity(x, y + 1, z);
-  }
-
-  igniteTNT(x: number, y: number, z: number, fuse: number) {
-    this.world.setBlock(x, y, z, B.AIR);
-    const mesh = new THREE.Mesh(this.tntGeo, new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true }));
-    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
-    this.scene.add(mesh);
-    this.tnts.push({
-      mesh,
-      body: { pos: new THREE.Vector3(x + 0.5, y, z + 0.5), vel: new THREE.Vector3((Math.random() - 0.5) * 1, 3, (Math.random() - 0.5) * 1), w: 0.98, h: 0.98, onGround: false, hitWall: false },
-      fuse,
-    });
-    Sfx.playFuse();
-  }
-
-  explode(cx: number, cy: number, cz: number, power: number) {
-    Sfx.playExplosion();
-    this.shake = 0.6;
-    const r = Math.ceil(power);
-    for (let dx = -r; dx <= r; dx++)
-      for (let dy = -r; dy <= r; dy++)
-        for (let dz = -r; dz <= r; dz++) {
-          const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          if (d > power * (0.7 + Math.random() * 0.35)) continue;
-          const x = Math.floor(cx + dx), y = Math.floor(cy + dy), z = Math.floor(cz + dz);
-          const id = this.world.getBlock(x, y, z);
-          if (id === B.AIR || id === B.BEDROCK || id === B.OBSIDIAN || id === B.WATER || id === B.LAVA) continue;
-          if (id === B.TNT) { this.igniteTNT(x, y, z, 0.3 + Math.random() * 0.6); continue; }
-          if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
-          if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
-          if (id === B.ANVIL) this.spillAnvil(x, y, z);
-          if (id === B.BREWING) this.spillBrewing(x, y, z);
-          this.world.setBlock(x, y, z, B.AIR);
-          if (Math.random() < 0.05) this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 3, 0.4);
-        }
-    this.spawnSmoke(cx, cy, cz, 40, power * 1.5);
-    const affect = (pos: THREE.Vector3, h: number, hit: (dmg: number, kb: THREE.Vector3) => void) => {
-      const dx = pos.x - cx, dy = pos.y + h / 2 - cy, dz = pos.z - cz;
-      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (d < power * 2) {
-        const f = 1 - d / (power * 2);
-        const kb = new THREE.Vector3(dx, dy + 0.5, dz).normalize().multiplyScalar(f * 18);
-        hit(Math.floor(f * 22), kb);
-      }
-    };
-    affect(this.body.pos, this.body.h, (dmg, kb) => {
-      this.body.vel.add(kb);
-      this.fallStart = this.body.pos.y;
-      this.damage(dmg);
-    });
-    for (const m of this.mobs) affect(m.body.pos, m.body.h, (dmg, kb) => {
-      m.hurtTime = 0;
-      m.damage(dmg, cx, cz);
-      m.body.vel.add(kb);
-    });
-  }
-
-  damage(amount: number, force = false) {
-    if (amount <= 0) return;
-    if (this.mode === 'creative' && !force) return;
-    if (this.ui === 'dead') return;
-    // Armor soaks damage; force kills (void, /kill) ignore it and don't break the gear.
-    // Zaklęcie Ochrona dodaje 3% redukcji za każdy poziom (do 90% łącznie).
-    const reduction = Math.min(0.9, damageReduction(armorPoints(this.armor)) + totalProtection(this.armor) * 0.03);
-    const dealt = force ? amount : Math.max(0, Math.round(amount * (1 - reduction)));
-    if (dealt > 0) {
-      if (!force) this.wearArmor(dealt);
-      this.health -= dealt;
-      this.hurtCount++;
-      this.lastHurt = performance.now();
-      this.shake = Math.max(this.shake, 0.25);
-      Sfx.playHurt();
-      this.buzz(35);
-    }
-    // 2.3: Totem Ratowania kupuje drugie życie – raz na 5 sekund.
-    if (this.health <= 0 && !force && this.tryTotem()) {
-      this.emitHud();
-      return;
-    }
-    if (this.health <= 0) {
-      this.health = 0;
-      const voidDeath = this.body.pos.y < 1;
-      const deathPos = voidDeath ? this.spawnPoint : this.body.pos;
-      this.addWaypoint('Ostatnia śmierć', 'death', deathPos);
-      this.message('Gracz zginął. Punkt ostatniej śmierci zaznaczono na mapie.');
-      if (this.mode === 'survival') {
-        const y = deathPos.y + 0.4;
-        const x = deathPos.x;
-        const z = deathPos.z;
-        for (const s of this.inventory.slots) {
-          if (s) this.spawnDrop(s.id, s.count, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench, s.name);
-        }
-        for (const s of this.armor) {
-          if (s) this.spawnDrop(s.id, 1, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench);
-        }
-        this.armor.fill(null);
-      }
-      this.inventory.slots.fill(null);
-      this.inventory.cursor = null;
-      this.setUI('dead');
-    }
-    this.emitHud();
-  }
-
-  /**
-   * 2.3: jeśli gracz ma totem ratowania, zużywa go zamiast umrzeć.
-   * Zwraca true, gdy śmierć została odwołana.
-   */
-  private tryTotem(): boolean {
-    if (this.mode !== 'survival' || this.totemHeal > 0) return false;
-    if (this.inventory.countOf(I.TOTEM) <= 0) return false;
-    this.inventory.remove(I.TOTEM, 1);
-    this.health = 6;
-    this.hunger = Math.min(20, this.hunger + 4);
-    this.totemHeal = 6;
-    this.lastHurt = performance.now() - 4000;
-    Sfx.playEnchant();
-    Sfx.playLevelUp();
-    this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, B.GLOWSTONE, 26, 0.9);
-    this.message('Totem Ratowania rozpadł się i ocalił cię!');
-    this.unlock('undying');
-    return true;
-  }
-
-  /** Regeneracja po uratowaniu przez totem. */
-  private updateTotem(dt: number) {
-    if (this.totemHeal <= 0) return;
-    this.totemHeal = Math.max(0, this.totemHeal - dt);
-    if (this.health >= 20) return;
-    this.regenAcc += dt;
-    if (this.regenAcc >= 0.4) {
-      this.regenAcc = 0;
-      this.health = Math.min(20, this.health + 1);
-    }
-  }
-
-  respawn() {
-    // Śmierć w Netherze odsyła do nadświatu (punkt odrodzenia jest zawsze tam).
-    if (this.isInNether) this.switchDimension(this.homeWorld);
-    this.health = 20;
-    this.hunger = 20;
-    this.air = this.maxAir;
-    this.body.pos.copy(this.spawnPoint);
-    this.body.vel.set(0, 0, 0);
-    this.fallStart = this.body.pos.y;
-    if (this.mode === 'creative') this.giveStarterItems();
-    this.setUI('playing');
-    this.emitHud();
-  }
-
-  spawnMob(type: MobType, x: number, y: number, z: number, profession = 0) {
-    const m = new Mob(type, x, y, z, profession);
-    this.mobs.push(m);
-    this.scene.add(m.group);
-    return m;
-  }
-
-  /** Czy prostokąt r×r wokół punktu i `hgt` bloków w górę to samo powietrze? */
-  private openAir(x: number, y: number, z: number, r: number, hgt: number): boolean {
-    const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dz = -r; dz <= r; dz++) {
-        for (let dy = 0; dy < hgt; dy++) {
-          if (this.world.peekBlock(bx + dx, by + dy, bz + dz) !== B.AIR) return false;
-        }
-      }
-    }
-    return true;
-  }
-
-  // ---------- Update ----------
-  private loop(now: number) {
-    this.raf = requestAnimationFrame(this.loop);
-    // 2.0: limit klatek – klatka jest po prostu pomijana, liczniki czasu
-    // ruszają dopiero przy realnym renderze (ruch zostaje prawidłowy).
-    if (this.fpsCap > 0 && now - this.lastTime < 1000 / this.fpsCap - 0.6) return;
-    let dt = (now - this.lastTime) / 1000;
-    this.lastTime = now;
-    if (dt > 0.1) dt = 0.1;
-    // 2.15: awaryjna kontrola rozmiaru (2 odczyty layoutu na ~0,5 s) – gdyby
-    // przeglądarka zgubiła zdarzenie resize, obraz i tak wróci do proporcji.
-    this.viewCheck = (this.viewCheck + 1) % 30;
-    if (this.viewCheck === 0) this.syncViewport();
-    this.fpsFrames++;
-    this.fpsTime += dt;
-    if (this.fpsTime >= 0.5) {
-      this.fps = Math.round(this.fpsFrames / this.fpsTime);
-      this.fpsFrames = 0;
-      this.fpsTime = 0;
-    }
-
-    // 2.0: dynamiczna rozdzielczość – trzyma płynność na słabszych GPU.
-    if (this.drEnabled && this.ui === 'playing') {
-      this.drCooldown -= dt;
-      if (this.drCooldown <= 0 && this.fps > 0) {
-        if (this.fps < 26 && this.resScale > 0.55) {
-          this.resScale = Math.max(0.55, this.resScale - 0.15);
-          this.applyResScale();
-          this.drCooldown = 1.4;
-        } else if (this.fps > 56 && this.resScale < 1) {
-          this.resScale = Math.min(1, this.resScale + 0.1);
-          this.applyResScale();
-          this.drCooldown = 2.4;
-        } else {
-          this.drCooldown = 0.4;
-        }
-      }
-    }
-
-    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
-    if (active) {
-      const sub = dt > 0.05 ? 2 : 1;
-      for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);
-      this.updateInteraction(dt);
-      this.updateMobs(dt);
-      // 2.14: po ruchu mobów – auto-bicie zawsze celuje w aktualną pozycję.
-      this.autoAttackTick(dt);
-      this.updateEntities(dt);
-      this.updateFalling(dt);
-      this.updateLeafDecay(dt);
-      this.updateArrows(dt);
-      this.updateDrops(dt);
-      this.updateOrbs(dt);
-      this.updateGrowth(dt);
-      this.updateFurnaces(dt);
-      this.updateAnvils(dt);
-      this.updateBrewings(dt);
-      this.updateEffects(dt);
-      this.updateFishing(dt);
-      this.updateRedstone(dt);
-      this.updateTotem(dt);
-      this.updateWeather(dt);
-      this.checkUnderground();
-      this.villageCheck -= dt;
-      if (this.villageCheck <= 0) {
-        this.villageCheck = 1.5;
-        this.checkVillage();
-      }
-      this.time = (this.time + dt / 600) % 1;
-      if (this.time < dt / 600) {
-        this.day++;
-        if (this.day >= 2) this.unlock('night');
-      }
-      this.saveTimer += dt;
-      if (this.saveTimer > 30) { this.saveTimer = 0; this.save(); }
-    }
-    this.updateChunks();
-    this.uTime.value += dt;
-    this.updateCamera(dt);
-    this.updateSky();
-    this.updateHeldLight();
-    this.tickNet(dt);
-
-    this.hudTimer += dt;
-    if (this.hudTimer > 0.1) { this.hudTimer = 0; this.emitHud(); }
-
-    this.renderer.render(this.scene, this.camera);
-  }
-
-  private blockAt(p: THREE.Vector3, yoff: number) {
-    return this.world.peekBlock(Math.floor(p.x), Math.floor(p.y + yoff), Math.floor(p.z));
-  }
-
-  /** 2.0: czy przed graczem stoi dokładnie 1 blok, na który można wejść? */
-  private canAutoStep(p: THREE.Vector3, dx: number, dz: number): boolean {
-    const x = Math.floor(p.x + dx * 0.7);
-    const z = Math.floor(p.z + dz * 0.7);
-    const y = Math.floor(p.y + 0.05);
-    const step = this.world.peekBlock(x, y, z);
-    const above = this.world.peekBlock(x, y + 1, z);
-    const head = this.world.peekBlock(x, y + 2, z);
-    return IS_SOLID[step] !== 0 && !IS_SOLID[above] && !IS_SOLID[head] && RENDER[above] !== 1;
-  }
-
-  private updatePlayer(dt: number) {
-    const b = this.body;
-    const k = this.keys;
-    const playing = this.ui === 'playing';
-    if (this.autoJumpCd > 0) this.autoJumpCd -= dt;
-    const feet = this.blockAt(b.pos, 0.1);
-    const mid = this.blockAt(b.pos, 0.8);
-    const inWater = feet === B.WATER || mid === B.WATER;
-    const inLava = feet === B.LAVA || mid === B.LAVA;
-    const onLadder = isLadder(feet) || isLadder(mid) || isLadder(this.blockAt(b.pos, 1.4));
-    const eyeBlock = this.blockAt(b.pos, this.eyeHeight);
-    const eyeInWater = eyeBlock === B.WATER;
-
-    let fx = 0, fz = 0;
-    if (playing) {
-      if (k.has('KeyW')) fz -= 1;
-      if (k.has('KeyS')) fz += 1;
-      if (k.has('KeyA')) fx -= 1;
-      if (k.has('KeyD')) fx += 1;
-    }
-    const forward = fz < 0;
-    // 2.5: sprint działa też na prawym Ctrl, skradanie na prawym Shifcie
-    // (wcześniej tylko lewe modyfikatory – niewygodne na niektórych klawiaturach).
-    if (playing && (k.has('ControlLeft') || k.has('ControlRight')) && forward) this.sprinting = true;
-    if (!forward || (b.hitWall && !this.flying)) this.sprinting = false;
-    const sneakHeld = k.has('ShiftLeft') || k.has('ShiftRight');
-    const sneaking = playing && sneakHeld && !this.flying;
-    if (sneaking) this.sprinting = false;
-
-    if (this.mode === 'survival' && this.hunger <= 6) this.sprinting = false;
-    let speed = this.flying ? (this.sprinting ? 22 : 11) : sneaking ? 1.3 : this.sprinting ? 5.6 : 4.3;
-    if (inWater && !this.flying) speed *= 0.55;
-    if (inLava && !this.flying) speed *= 0.35;
-    // 2.4: napój szybkości przyspiesza bieg (nie wpływa na latanie w trybie kreatywnym)
-    if (!this.flying && this.hasEffect('speed')) speed *= SPEED_FACTOR;
-
-    const len = Math.hypot(fx, fz) || 1;
-    fx /= len; fz /= len;
-    const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
-    const wx = fx * cos + fz * sin;
-    const wz = -fx * sin + fz * cos;
-    const tx = wx * speed, tz = wz * speed;
-    const hasInput = fx !== 0 || fz !== 0;
-    const feetBelow = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));
-    const onIce = feetBelow === B.ICE;
-    let accel = this.flying ? 8 : b.onGround ? 14 : inWater ? 6 : 2.5;
-    if (onIce && !this.flying) accel = hasInput ? 1.4 : 0.45;
-    const a = Math.min(1, accel * dt * (hasInput || b.onGround || this.flying ? 1 : 0.3));
-    b.vel.x += (tx - b.vel.x) * a;
-    b.vel.z += (tz - b.vel.z) * a;
-
-    const jump = playing && k.has('Space');
-    if (this.flying) {
-      const ty = jump ? 9 : playing && sneakHeld ? -9 : 0;
-      b.vel.y += (ty - b.vel.y) * Math.min(1, dt * 10);
-    } else if (onLadder && !this.flying) {
-      const climb = jump || (playing && k.has('KeyW'));
-      const descend = sneaking || (playing && k.has('KeyS'));
-      b.vel.y = climb ? 3.4 : descend ? -3.2 : 0;
-      this.fallStart = b.pos.y;
-      if (climb) this.unlock('climb');
-    } else if (inWater || inLava) {
-      b.vel.y -= 12 * dt;
-      if (b.vel.y < -3.5) b.vel.y = -3.5;
-      if (jump) b.vel.y = Math.min(b.vel.y + 40 * dt, 3.8);
-      // jump out of water at edges
-      if (jump && b.hitWall) b.vel.y = 6;
-      // 2.14: auto-skok z wody – na telefonie wyjście na brzeg było loterią.
-      if (this.autoJump && playing && hasInput && inWater && !inLava && b.hitWall && this.autoJumpCd <= 0) {
-        b.vel.y = 6;
-        this.autoJumpCd = 0.6;
-      }
-    } else {
-      b.vel.y -= 32 * dt;
-      if (b.vel.y < -78) b.vel.y = -78;
-      if (jump && b.onGround) {
-        b.vel.y = 9.1;
-        if (this.sprinting) { b.vel.x += -sin * 2; b.vel.z += -cos * 2; }
-      }
-    }
-
-    const wasGround = b.onGround;
-    stepBody(this.world, b, dt, sneaking);
-    if (this.flying && b.onGround && this.mode === 'creative' && b.vel.y <= 0 && !jump) {
-      this.flying = false;
-    }
-
-    // 2.0/2.14: automatyczne wskakiwanie na 1-blokowe schodki. Kierunek bierzemy
-    // z wciśniętych klawiszy, a nie z prędkości – stepBody zeruje prędkość
-    // dokładnie przy zderzeniu, przez co stara wersja (hitWall + znak prędkości)
-    // praktycznie nigdy nie skakała. Teraz postać sprawdza klocek PRZED sobą
-    // i wskakuje jeszcze przed dotknięciem przeszkody. Działa też na dotyku.
-    if (this.autoJump && playing && hasInput && b.onGround && !this.flying && !inWater && !inLava && !onLadder && !sneaking) {
-      const mvx = Math.sign(wx), mvz = Math.sign(wz);
-      if (this.autoJumpCd <= 0 && this.canAutoStep(b.pos, mvx, mvz)) {
-        b.vel.y = 8.6;
-        this.autoJumpCd = 0.35;
-      }
-    }
-
-    // fall damage
-    if (this.flying || inWater || b.vel.y > 0) this.fallStart = b.pos.y;
-    else if (!b.onGround) this.fallStart = Math.max(this.fallStart, b.pos.y);
-    if (b.onGround && !wasGround) {
-      const fall = this.fallStart - b.pos.y;
-      if (fall > 3.4 && this.mode === 'survival' && !inWater) {
-        // Lekki krok na butach tłumi upadek
-        const raw = Math.floor(fall - 3);
-        this.damage(Math.max(raw > 0 ? 1 : 0, Math.round(raw * fallDamageFactor(this.armor[3]))));
-      }
-      if (fall > 1) {
-        const below = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));
-        if (below) Sfx.playStep(BLOCKS[below].sound);
-      }
-      this.fallStart = b.pos.y;
-    }
-    if (b.onGround) this.fallStart = b.pos.y;
-
-    // void
-    if (b.pos.y < -30) {
-      if (this.mode === 'creative') { b.pos.y = CH; b.vel.y = 0; this.fallStart = b.pos.y; }
-      else this.damage(1000, true);
-    }
-
-    // drowning
-    if (eyeInWater && this.mode === 'survival') {
-      this.air -= dt;
-      if (this.air <= 0) {
-        this.air = 0;
-        this.drownAcc += dt;
-        if (this.drownAcc > 1) { this.drownAcc = 0; this.damage(2); }
-      }
-    } else {
-      this.air = Math.min(this.maxAir, this.air + dt * 4);
-    }
-    const under = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.05), Math.floor(b.pos.z));
-    // 1.7 special blocks effects
-    // 2.3: 2.0 pisało `wasGround === false`, co nigdy nie zachodzi – blok szlamu
-    // nie odbijał przy lądowaniu. Reguła żyje teraz w physics.slimeBounce().
-    const bounce = slimeBounce(wasGround, b.onGround, b.vel.y);
-    if (under === B.SLIME_BLOCK && bounce !== null && this.mode !== 'creative') {
-      b.vel.y = bounce;
-      this.fallStart = b.pos.y + bounce;
-      Sfx.playSlime();
-    }
-    if (under === B.HONEY_BLOCK) {
-      b.vel.x *= 0.4;
-      b.vel.z *= 0.4;
-      if (b.vel.y < 0) b.vel.y *= 0.4;
-    }
-    if (under === B.SOUL_SAND || under === B.SOUL_SOIL) {
-      b.vel.x *= 0.6;
-      b.vel.z *= 0.6;
-    }
-    // 2.4: ognioodporność – żar, lawa i ogniska nie ruszają odpornego gracza
-    const fireImmune = this.hasEffect('fire');
-    if (!fireImmune && under === B.MAGMA && b.onGround && this.mode === 'survival' && !this.flying) {
-      this.campfireHurt += dt;
-      if (this.campfireHurt > 0.6) { this.campfireHurt = 0; this.damage(1); this.message('Blok magmy parzy!'); }
-    }
-    if (!fireImmune && under === B.CAMPFIRE && b.onGround && this.mode === 'survival' && !this.flying) {
-      this.campfireHurt += dt;
-      if (this.campfireHurt > 0.45) { this.campfireHurt = 0; this.damage(1); }
-    }
-    // lava
-    if (fireImmune && inLava && this.mode === 'survival') {
-      // 2.4: osiągnięcie wymaga wejścia do lawy PODCZAS ognioodporności
-      this.unlock('fireproof');
-    } else if (inLava && this.mode === 'survival') {
-      this.lavaAcc += dt;
-      if (this.lavaAcc > 0.5) { this.lavaAcc = 0; this.damage(4); }
-    }
-    // cactus
-    if (this.mode === 'survival') {
-      const nearCactus = [[0.4, 0], [-0.4, 0], [0, 0.4], [0, -0.4]].some(([ox, oz]) =>
-        this.world.peekBlock(Math.floor(b.pos.x + ox), Math.floor(b.pos.y + 0.5), Math.floor(b.pos.z + oz)) === B.CACTUS);
-      if (nearCactus) {
-        this.lavaAcc += dt;
-        if (this.lavaAcc > 0.5) { this.lavaAcc = 0; this.damage(1); }
-      }
-    }
-    if (inWater && !this.wasInWater) Sfx.playSplash();
-    this.wasInWater = inWater;
-
-    // hunger – only survival, and only while actually doing something
-    if (this.mode === 'survival' && this.health > 0 && playing) {
-      let drain = 0;
-      if (hasInput && (b.onGround || inWater)) drain += this.sprinting ? 0.085 : 0.028;
-      if (jump && b.onGround) drain += 0.04;
-      this.hunger = Math.max(0, this.hunger - drain * dt);
-      if (this.hunger <= 0) {
-        this.starveAcc += dt;
-        if (this.starveAcc > 4 && this.health > 1) { this.starveAcc = 0; this.damage(1); this.message('Umierasz z głodu!'); }
-      } else this.starveAcc = 0;
-    }
-    if (b.pos.y < 36) this.unlock('cave');
-
-    // regen only when well fed
-    if (this.mode === 'survival' && this.health < 20 && this.health > 0 && this.hunger >= 17 && performance.now() - this.lastHurt > 4000) {
-      this.regenAcc += dt;
-      if (this.regenAcc > 3.2) {
-        this.regenAcc = 0;
-        this.health = Math.min(20, this.health + 1);
-        this.hunger = Math.max(0, this.hunger - 0.4);
-      }
-    } else if (this.mode === 'creative' && this.health < 20 && this.health > 0 && performance.now() - this.lastHurt > 4000) {
-      this.regenAcc += dt;
-      if (this.regenAcc > 2.5) { this.regenAcc = 0; this.health = Math.min(20, this.health + 1); }
-    }
-
-    // steps
-    const hs = Math.hypot(b.vel.x, b.vel.z);
-    if (b.onGround && hs > 0.5) {
-      this.stepDist += hs * dt;
-      this.bobPhase += hs * dt * 1.9;
-      if (this.stepDist > (this.sprinting ? 2.4 : 1.9)) {
-        this.stepDist = 0;
-        const below = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));
-        if (below && !sneaking) Sfx.playStep(BLOCKS[below].sound);
-      }
-    } else {
-      this.bobPhase *= 0.9;
-    }
-    const targetEye = sneaking ? 1.42 : 1.62;
-    this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 15);
-  }
-
-  private updateInteraction(dt: number) {
-    this.breakCooldown -= dt;
-    this.placeCooldown -= dt;
-    this.attackCooldown -= dt;
-    this.pearlCd = Math.max(0, this.pearlCd - dt);
-    this.eatCooldown = Math.max(0, this.eatCooldown - dt);
-    if (this.swingT < 1) this.swingT = Math.min(1, this.swingT + dt * 4);
-
-    const e = this.eyePos();
-    // 2.0: na dotyku celownik podąża za palcem (touchAim w NDC).
-    if (this.touchAim && this.ui === 'playing') {
-      const v = new THREE.Vector3(this.touchAim.x, this.touchAim.y, 0.5).unproject(this.camera);
-      const dir = v.sub(e).normalize();
-      this.aimDir = dir;
-    } else {
-      this.aimDir = null;
-    }
-    const d = this.aimDir ?? this.lookDir();
-    const reach = this.mode === 'creative' ? 7 : 5;
-    this.target = this.ui === 'playing' || this.ui === 'dead' ? this.world.raycast(e.x, e.y, e.z, d.x, d.y, d.z, reach) : null;
-    const t = this.target;
-    if (t) {
-      this.selection.visible = true;
-      const id = t.id;
-      if (RENDER[id] === 1) {
-        this.selection.scale.set(0.7, 0.95, 0.7);
-        this.selection.position.set(t.x + 0.5, t.y + 0.475, t.z + 0.5);
-      } else {
-        this.selection.scale.set(1, 1, 1);
-        this.selection.position.set(t.x + 0.5, t.y + 0.5, t.z + 0.5);
-      }
-    } else this.selection.visible = false;
-
-    if (this.ui !== 'playing') { this.crackMesh.visible = false; return; }
-
-    if (this.mouseLeft) {
-      // 2.5: trzymany LPM (albo palec w trybie kopania) najpierw sprawdza moba
-      // na celowniku i bije go z cooldownem. Wcześniej tryAttack zerował
-      // mouseLeft po każdym trafieniu, więc walka wymagała furkoczącego
-      // klikania, a mob wchodzący w celownik przerywał kopanie bloku.
-      const { mob, dist } = this.findMobTarget(3.5);
-      const blockDist = t ? t.dist : Infinity;
-      if (mob && dist < blockDist) {
-        this.breakProgress = 0;
-        this.breakKey = '';
-        if (this.attackCooldown <= 0) this.tryAttack();
-      } else if (t) {
-        const key = `${t.x},${t.y},${t.z}`;
-        if (this.mode === 'creative') {
-          if (this.breakCooldown <= 0) { this.breakBlock(t.x, t.y, t.z); this.breakCooldown = 0.25; this.swingT = 0; }
-        } else {
-          if (key !== this.breakKey) {
-            this.breakKey = key;
-            this.breakProgress = 0;
-            const hint = pickHint(t.id, this.selectedStack()?.id ?? 0);
-            if (hint && !Number.isFinite(mineSeconds(t.id, this.selectedStack()?.id ?? 0))) this.message(hint);
-          }
-          const def = BLOCKS[t.id];
-          const held = this.selectedStack();
-          const time = mineSeconds(t.id, held?.id ?? 0, enchLevel(held, 'efficiency'));
-          if (def.hardness >= 0 && Number.isFinite(time)) {
-            let mult = 1;
-            if (this.blockAt(this.body.pos, this.eyeHeight) === B.WATER) mult *= 0.25;
-            if (!this.body.onGround && !this.flying) mult *= 0.4;
-            this.breakProgress += (dt / time) * mult;
-            this.digSoundTimer -= dt;
-            if (this.swingT >= 1) this.swingT = 0;
-            if (this.digSoundTimer <= 0) {
-              this.digSoundTimer = 0.22;
-              Sfx.playDig(def.sound);
-              this.spawnParticles(t.x + 0.5 + t.nx * 0.52, t.y + 0.5 + t.ny * 0.52, t.z + 0.5 + t.nz * 0.52, t.id, 2, 0.3);
-            }
-            if (this.breakProgress >= 1) {
-              const broken = t.id;
-              this.breakBlock(t.x, t.y, t.z);
-              if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && toolHelps(broken, this.selectedStack()?.id ?? 0)) this.wearTool();
-              else if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && ITEMS[this.selectedStack()?.id ?? 0]?.tool) this.wearTool();
-              if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.015);
-              this.breakProgress = 0;
-              this.breakKey = '';
-            }
-          }
-        }
-      }
-    } else {
-      this.breakProgress = 0;
-    }
-    if (this.breakProgress > 0 && t) {
-      this.crackMesh.visible = true;
-      this.crackMesh.position.set(t.x + 0.5, t.y + 0.5, t.z + 0.5);
-      const stage = Math.min(9, Math.floor(this.breakProgress * 10));
-      const mat = this.crackMesh.material as THREE.MeshBasicMaterial;
-      if (mat.map !== this.crackTex[stage]) { mat.map = this.crackTex[stage]; mat.needsUpdate = true; }
-    } else this.crackMesh.visible = false;
-
-    if (this.mouseRight && this.placeCooldown <= 0) {
-      // 2.3: wędka i lorneta reagują wyłącznie na naciśnięcie (mousedown sam
-      // woła tryUse). Bez tego przytrzymane PPM wciągało świeżo zarzuconą
-      // przynętę, a lorneta stale restartowała przybliżenie.
-      const held = this.selectedStack();
-      if (!held || (held.id !== I.FISHING_ROD && held.id !== I.SPYGLASS)) this.tryUse();
-    }
-    // 2.3: lorneta działa, dopóki prawy przycisk jest wciśnięty.
-    if (!this.mouseRight && !this.touchInput) this.zooming = false;
-    if (this.bowDraw >= 0) {
-      if (this.selectedStack()?.id === I.BOW && this.ui === 'playing') {
-        if (this.mouseRight) {
-          this.bowDraw = Math.min(1, this.bowDraw + dt);
-          if (this.swingT >= 1) this.swingT = 0.55;
-        } else {
-          this.releaseBow();
-          // 2.5: cel dotyku czyścimy PO wystrzale – strzała leci pod palcem,
-          // a nie w środek ekranu.
-          this.touchAim = null;
-        }
-      } else {
-        this.bowDraw = -1;
-        this.touchAim = null;
-      }
-    }
-    this.updateHand();
-  }
-
-  /**
-   * 2.8: te trzy callbacki były tworzone od nowa dla KAŻDEGO moba w KAŻDEJ
-   * klatce (kilkadziesiąt alokacji na sekundę). Teraz są stałymi metodami.
-   */
-  private mobAttackPlayer = (dmg: number, mob: Mob) => {
-    if (this.ui === 'dead') return;
-    // A raised shield halves the hit and absorbs most of the knockback.
-    const shielded = this.holdingShield();
-    if (shielded) {
-      Sfx.playShield();
-      this.wearShield(8);
-      this.unlock('guardian');
-    }
-    this.damage(shielded ? Math.ceil(dmg / 2) : dmg);
-    if (this.mode === 'survival') {
-      const p = this.body.pos;
-      const dx = p.x - mob.body.pos.x, dz = p.z - mob.body.pos.z;
-      const l = Math.hypot(dx, dz) || 1;
-      this.body.vel.x += (dx / l) * (shielded ? 4 : 8);
-      this.body.vel.z += (dz / l) * (shielded ? 4 : 8);
-      this.body.vel.y = shielded ? 2 : 5;
-    }
+    if (e.code === 'KeyP' || e.code === 'Escape') this.togglePause();
   };
+  keyUp = (e: KeyboardEvent) => { this.keys.delete(e.code); };
+  resize = () => this.fitCanvas();
+  blur = () => { this.keys.clear(); };
 
-  private mobShootPlayer = (mob: Mob) => {
-    const p = this.body.pos;
-    // skeleton shot: aim slightly above the player's chest
-    const from = new THREE.Vector3(mob.body.pos.x, mob.body.pos.y + mob.body.h * 0.85, mob.body.pos.z);
-    const to = new THREE.Vector3(p.x, p.y + 1.0, p.z);
-    const dir = to.sub(from).normalize();
-    this.spawnArrow(from.addScaledVector(dir, 0.6), dir, 24, mob, 4);
-  };
+  constructor(canvas: HTMLCanvasElement, opts: EngineOpts) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d')!;
+    this.opts = opts;
+    this.language = opts.language ?? 'pl';
+    this.map = MAPS[opts.mapId];
+    this.timeLeft = opts.timeLimit;
+    this.ground = document.createElement('canvas');
+    this.ground.width = WORLD_W; this.ground.height = WORLD_H;
+    this.gctx = this.ground.getContext('2d')!;
+    this.lightCanvas = document.createElement('canvas');
+    this.lightCanvas.width = WORLD_W; this.lightCanvas.height = WORLD_H;
+    this.lctx = this.lightCanvas.getContext('2d')!;
+    this.paintGround();
+    this.initEntities();
+    for (let i = 0; i < 160; i++) this.rain.push({ x: rand(0, WORLD_W), y: rand(0, WORLD_H), s: rand(700, 1200) });
+    for (let i = 0; i < 40; i++) this.dust.push({ x: rand(0, WORLD_W), y: rand(0, WORLD_H), s: rand(60, 220), a: rand(0.03, 0.1), v: rand(40, 140) });
+  }
 
-  private wolfBite = (target: Mob, wolf: Mob) => {
-    target.damage(4, wolf.body.pos.x, wolf.body.pos.z);
-    Sfx.playHurt();
-  };
-
-  private updateMobs(dt: number) {
-    const p = this.body.pos;
-    const dl = this.daylight();
-    const peaceful = this.mode === 'creative';
-    for (const m of this.mobs) {
-      m.update(dt, this.world, p, this.mobAttackPlayer, this.mobShootPlayer, peaceful, this.mobs, this.wolfBite);
-      if (m.soundTimer <= 0) {
-        m.soundTimer = 6 + Math.random() * 12;
-        if (m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
-      }
-      // zombies burn in daylight (but never under the Nether roof)
-      if (m.type === 'zombie' && dl > 0.7 && !m.dead && !this.isInNether) {
-        const exposed = m.body.pos.y >= this.world.heightAt(Math.floor(m.body.pos.x), Math.floor(m.body.pos.z));
-        if (exposed) {
-          m.health -= dt * 2;
-          if (Math.random() < dt * 8) this.spawnSmoke(m.body.pos.x, m.body.pos.y + 1.5, m.body.pos.z, 1, 0.5);
-          if (m.health <= 0) { m.dead = true; m.deathTime = 0; }
-        }
-      }
+  /** Aktualizuje etykiety telefonów bez resetowania bieżącej rundy. */
+  setPlayerNames(names: Record<number, string>) {
+    for (const tank of this.tanks) {
+      const next = names[tank.id];
+      if (!next || tank.cfg.isBot) continue;
+      tank.cfg = { ...tank.cfg, name: next };
     }
-    // remove dead / far
-    for (const m of this.mobs) {
-      if (m.exploded && !m.looted) {
-        m.looted = true;
-        this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2);
-      } else if (m.dead && !m.looted) {
-        m.looted = true;
-        this.mobLoot(m);
-      }
-    }
-    this.mobs = this.mobs.filter((m) => {
-      // Mieszkańcy i golemy trzymają się osady – nie znikają tuż za jej granicą.
-      const far = m.body.pos.distanceTo(p) > (isVillageMob(m.type) ? 240 : 90);
-      const gone = (m.dead && m.deathTime > 0.9) || far || m.body.pos.y < -10;
-      if (gone) {
-        if (m.dead && !far) this.spawnSmoke(m.body.pos.x, m.body.pos.y + 0.5, m.body.pos.z, 10, 1);
-        this.scene.remove(m.group);
-        m.dispose();
-      }
-      return !gone;
+    this.opts.players = this.opts.players.map(player => {
+      const next = names[player.id];
+      return next && !player.isBot ? { ...player, name: next } : player;
     });
-
-    // spawn
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) {
-      this.spawnTimer = 1.5;
-      const alive = this.mobs.filter((m) => !m.dead);
-      const hostile = alive.filter((m) => HOSTILE_MOBS.has(m.type)).length;
-      const passive = alive.length - hostile;
-      const tryPos = (minD: number, maxD: number) => {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = minD + Math.random() * (maxD - minD);
-        const x = Math.floor(p.x + Math.cos(ang) * dist), z = Math.floor(p.z + Math.sin(ang) * dist);
-        if (!this.world.hasChunk(Math.floor(x / CS), Math.floor(z / CS))) return null;
-        const h = this.world.heightAt(x, z);
-        if (h < 12) return null; // studnia lawy albo dziura – nigdy nie spawnuj na dnie świata
-        const top = this.world.getBlock(x, h, z);
-        if (IS_SOLID[this.world.getBlock(x, h + 1, z)] || IS_SOLID[this.world.getBlock(x, h + 2, z)]) return null;
-        return { x: x + 0.5, y: h + 1, z: z + 0.5, top };
-      };
-      if (!this.isInNether && passive < 12 && dl > 0.5) {
-        const pos = tryPos(20, 48);
-        if (pos && pos.top === B.GRASS) {
-          const roll = Math.random();
-          const type: MobType = roll < 0.1 ? 'wolf' : roll < 0.4 ? 'cow' : roll < 0.65 ? 'chicken' : roll < 0.88 ? 'pig' : 'sheep';
-          const n = type === 'chicken' ? 1 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 3);
-          for (let i = 0; i < n; i++) this.spawnMob(type, pos.x + (Math.random() - 0.5) * 2, pos.y + 0.1, pos.z + (Math.random() - 0.5) * 2);
-        }
-      }
-      if (this.isInNether) {
-        // Nether: piwniczne bestie zawsze, a Ghasty tylko w otwartej przestrzeni.
-        if (hostile < 8) {
-          const pos = tryPos(16, 40);
-          if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES && pos.top !== B.LAVA) {
-            const roll = Math.random();
-            if (roll < 0.3 && this.openAir(pos.x, pos.y + 1, pos.z, 1, 5)) {
-              this.spawnMob('ghast', pos.x, pos.y + 3, pos.z);
-            } else {
-              const type: MobType = roll < 0.5 ? 'zombie' : roll < 0.75 ? 'creeper' : 'skeleton';
-              this.spawnMob(type, pos.x, pos.y + 0.1, pos.z);
-            }
-          }
-        }
-      } else if (hostile < 8 && dl < 0.4) {
-        const pos = tryPos(18, 40);
-        if (pos && IS_SOLID[pos.top] && pos.top !== B.LEAVES) {
-          const roll = Math.random();
-          const type: MobType = roll < 0.25 ? 'creeper' : roll < 0.6 ? 'zombie' : 'skeleton';
-          this.spawnMob(type, pos.x, pos.y + 0.1, pos.z);
-        }
-      }
-      this.spawnVillageFolk();
-      if (hostile < 6) {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = 14 + Math.random() * 22;
-        const x = Math.floor(p.x + Math.cos(ang) * dist);
-        const z = Math.floor(p.z + Math.sin(ang) * dist);
-        if (this.world.hasChunk(Math.floor(x / CS), Math.floor(z / CS))) {
-          const ceiling = this.world.heightAt(x, z) - 2; // hoisted out of the scan loop
-          for (let y = Math.floor(p.y) + 2; y > 8 && y > p.y - 18; y--) {
-            const here = this.world.peekBlock(x, y, z);
-            const below = this.world.peekBlock(x, y - 1, z);
-            if (here === B.AIR && this.world.peekBlock(x, y + 1, z) === B.AIR && IS_SOLID[below] && below !== B.LEAVES && y < ceiling) {
-              const roll = Math.random();
-              const type: MobType = roll < 0.3 ? 'creeper' : roll < 0.65 ? 'zombie' : 'spider';
-              this.spawnMob(type, x + 0.5, y, z + 0.5);
-              break;
-            }
-          }
-        }
-      }
-    }
   }
 
-  private updateEntities(dt: number) {
-    this.updateParticles(dt);
-    // TNT
-    const done: TNTEntity[] = [];
-    for (const t of this.tnts) {
-      t.fuse -= dt;
-      t.body.vel.y -= 25 * dt;
-      t.body.vel.x *= 0.95;
-      t.body.vel.z *= 0.95;
-      stepBody(this.world, t.body, dt);
-      t.mesh.position.set(t.body.pos.x, t.body.pos.y + 0.49, t.body.pos.z);
-      const flash = Math.floor(t.fuse * 5) % 2 === 0;
-      (t.mesh.material as THREE.MeshBasicMaterial).color.setScalar(flash ? 2.5 : 1);
-      const sc = t.fuse < 0.3 ? 1 + (0.3 - t.fuse) * 0.6 : 1;
-      t.mesh.scale.setScalar(sc);
-      if (t.fuse <= 0) done.push(t);
-    }
-    for (const t of done) {
-      this.tnts.splice(this.tnts.indexOf(t), 1);
-      this.scene.remove(t.mesh);
-      (t.mesh.material as THREE.Material).dispose();
-      this.explode(t.body.pos.x, t.body.pos.y + 0.5, t.body.pos.z, 4);
-    }
+  initEntities() {
+    this.walls = this.map.buildWalls();
+    const enabled = this.opts.players.filter(p => p.enabled);
+    this.tanks = enabled.map((cfg, i) => {
+      const s = this.map.spawns[i % this.map.spawns.length];
+      return {
+        id: cfg.id, cfg, x: s.x, y: s.y, vx: 0, vy: 0,
+        hullAngle: s.angle, turretAngle: s.angle,
+        barrelHeat: 0, recoil: 0, hp: 100, maxHp: 100,
+        alive: true, respawnTimer: 0, kills: 0, deaths: 0,
+        lives: this.opts.mode === 'survival' ? this.opts.lives : 999,
+        shield: 0, rapidUntil: 0, bigUntil: 0, speedUntil: 0,
+        trackPhase: 0, throttle: 0, lastShot: -9, spawnShield: 2,
+        aiState: cfg.isBot ? { targetAngle: s.angle, nextThink: 0, strafeDir: 1, wantFire: false, stuckTimer: 0, lastX: s.x, lastY: s.y, waypoint: { x: WORLD_W / 2, y: WORLD_H / 2 } } : undefined,
+        muzzle: 0, enginePitch: 0,
+      } as TankState;
+    });
   }
 
-  private updateCamera(dt: number) {
-    const b = this.body;
-    const cam = this.camera;
-    const bob = Math.sin(this.bobPhase * Math.PI) * 0.045;
-    const bobX = Math.cos(this.bobPhase * Math.PI * 0.5) * 0.03;
-    cam.position.set(b.pos.x, b.pos.y + this.eyeHeight + Math.abs(bob), b.pos.z);
-    cam.rotation.set(this.pitch, this.yaw, 0);
-    if (this.shake > 0) {
-      this.shake = Math.max(0, this.shake - dt);
-      cam.position.x += (Math.random() - 0.5) * this.shake * 0.3;
-      cam.position.y += (Math.random() - 0.5) * this.shake * 0.3;
-      cam.rotation.z = (Math.random() - 0.5) * this.shake * 0.1;
-    }
-    let targetFov = this.fovBase;
-    if (this.sprinting) targetFov += 10;
-    if (this.flying && this.sprinting) targetFov += 5;
-    // 2.3: lorneta zwęża pole widzenia do szpilkowatego „dalekiego oka”.
-    if (this.zooming && this.ui === 'playing') targetFov = Math.min(targetFov, 24);
-    cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 8);
-    cam.updateProjectionMatrix();
-
-    // hand
-    const sw = Math.sin(this.swingT * Math.PI);
-    this.hand.position.set(bobX - sw * 0.25, -Math.abs(bob) * 0.6 + sw * 0.12, -sw * 0.15);
-    this.hand.rotation.set(-sw * 0.9, sw * 0.4, 0);
-  }
-
-  /** 2.8: kolory nieba trzymane raz, bez alokacji w każdej klatce. */
-  private skyDay = new THREE.Color(0.47, 0.66, 1.0);
-  private skyNight = new THREE.Color(0.012, 0.015, 0.05);
-  private skySunset = new THREE.Color(1.0, 0.5, 0.25);
-  private skyStorm = new THREE.Color(0.85, 0.88, 1);
-  private skyColor = new THREE.Color();
-  private skySunDir = new THREE.Vector3();
-
-  /**
-   * 2.8.1: światło trzymanego przedmiotu. Pochodnia (albo latarnia,
-   * jasnogłaz, ognisko, grzyboświatło, zapalona lampa czerwonego kamienia)
-   * naprawdę oświetla najbliższe bloki – także w jaskini i w Netherze.
-   */
-  private updateHeldLight() {
-    const stack = this.selectedStack();
-    const power = stack && HELD_LIGHT_ITEMS.has(stack.id) ? HELD_POWER : 0;
-    if (power > 0) {
-      const t = performance.now();
-      const flicker = 0.93 + Math.sin(t * 0.006) * 0.045 + Math.sin(t * 0.017) * 0.025;
-      this.heldLight.strength = power * flicker;
+  // ---------- ground painting ----------
+  paintGround() {
+    const g = this.gctx;
+    const mapId = this.map.id;
+    // base
+    const grad = g.createLinearGradient(0, 0, WORLD_W, WORLD_H);
+    if (mapId === 'desert') {
+      grad.addColorStop(0, '#c2a468'); grad.addColorStop(0.5, '#b99a62'); grad.addColorStop(1, '#a98852');
+    } else if (mapId === 'nightcity') {
+      grad.addColorStop(0, '#26272e'); grad.addColorStop(0.5, '#23242a'); grad.addColorStop(1, '#1b1c21');
     } else {
-      this.heldLight.strength = 0;
+      grad.addColorStop(0, '#50663f'); grad.addColorStop(0.5, '#4a5d3a'); grad.addColorStop(1, '#3d4e32');
     }
-    // Pozycja: oczy gracza, lekko przed nim – blask pada na to, na co patrzy.
-    const cp = this.camera.position;
-    this.heldLight.pos.set(cp.x, cp.y, cp.z);
-    const unset = this.heldLight.strength === 0;
-    for (const m of this.materials) {
-      const u = m.userData.uHeldStrength as { value: number } | undefined;
-      if (u) u.value = unset ? 0 : this.heldLight.strength;
+    g.fillStyle = grad;
+    g.fillRect(0, 0, WORLD_W, WORLD_H);
+
+    // noise speckle
+    for (let i = 0; i < 9000; i++) {
+      const x = Math.random() * WORLD_W, y = Math.random() * WORLD_H;
+      const s = rand(1, 3.5);
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.06)';
+      g.fillRect(x, y, s, s);
     }
+
+    if (mapId === 'desert') {
+      // dunes: soft wavy bands
+      for (let i = 0; i < 14; i++) {
+        const y = rand(0, WORLD_H);
+        g.strokeStyle = `rgba(120,90,50,${rand(0.08, 0.2)})`;
+        g.lineWidth = rand(18, 60);
+        g.beginPath();
+        for (let x = 0; x <= WORLD_W; x += 40) g.lineTo(x, y + Math.sin(x * 0.008 + i) * 22);
+        g.stroke();
+      }
+      // stones
+      for (let i = 0; i < 120; i++) {
+        const x = rand(0, WORLD_W), y = rand(0, WORLD_H), r = rand(2, 7);
+        g.fillStyle = 'rgba(60,45,30,0.5)';
+        g.beginPath(); g.ellipse(x + 2, y + 2, r, r * 0.7, 0, 0, 7); g.fill();
+        g.fillStyle = '#8a734f';
+        g.beginPath(); g.ellipse(x, y, r, r * 0.7, 0, 0, 7); g.fill();
+      }
+      // dry cracks
+      g.strokeStyle = 'rgba(70,55,35,0.35)'; g.lineWidth = 1.5;
+      for (let i = 0; i < 40; i++) {
+        let x = rand(0, WORLD_W), y = rand(0, WORLD_H);
+        g.beginPath(); g.moveTo(x, y);
+        for (let s = 0; s < 5; s++) { x += rand(-30, 30); y += rand(-30, 30); g.lineTo(x, y); }
+        g.stroke();
+      }
+    } else if (mapId === 'nightcity') {
+      // roads
+      g.fillStyle = '#17181d';
+      g.fillRect(0, 440, WORLD_W, 120);
+      g.fillRect(640, 0, 120, WORLD_H);
+      // lane markings
+      g.fillStyle = 'rgba(250,204,21,0.55)';
+      for (let x = 20; x < WORLD_W; x += 70) { g.fillRect(x, 496, 36, 6); }
+      for (let y = 20; y < WORLD_H; y += 70) { if (y > 420 && y < 580) continue; g.fillRect(697, y, 6, 36); }
+      // sidewalks
+      g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 3;
+      for (let x = 0; x < WORLD_W; x += 60) { g.beginPath(); g.moveTo(x, 430); g.lineTo(x, 440); g.stroke(); g.beginPath(); g.moveTo(x, 560); g.lineTo(x, 570); g.stroke(); }
+      // crosswalks
+      g.fillStyle = 'rgba(255,255,255,0.28)';
+      for (let i = 0; i < 8; i++) { g.fillRect(600 - i * 0, 0, 0, 0); }
+      for (let x = 560; x < 760; x += 26) { g.fillRect(x, 445, 14, 30); g.fillRect(x, 525, 14, 30); }
+      for (let y = 360; y < 560; y += 26) { g.fillRect(645, y, 30, 14); g.fillRect(725, y, 30, 14); }
+      // wet puddles (reflective)
+      for (let i = 0; i < 26; i++) {
+        const x = rand(0, WORLD_W), y = rand(0, WORLD_H);
+        const pw = rand(40, 150), ph = rand(20, 60);
+        const pg = g.createRadialGradient(x, y, 4, x, y, pw / 2);
+        pg.addColorStop(0, 'rgba(120,160,220,0.28)');
+        pg.addColorStop(1, 'rgba(120,160,220,0)');
+        g.fillStyle = pg;
+        g.beginPath(); g.ellipse(x, y, pw / 2, ph / 2, 0, 0, 7); g.fill();
+      }
+      // neon stains
+      const neons = ['rgba(236,72,153,0.10)', 'rgba(34,211,238,0.10)', 'rgba(168,85,247,0.10)'];
+      for (let i = 0; i < 16; i++) {
+        const x = rand(0, WORLD_W), y = rand(0, WORLD_H), r = rand(80, 220);
+        const ng = g.createRadialGradient(x, y, 10, x, y, r);
+        ng.addColorStop(0, neons[i % 3]); ng.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = ng; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+      }
+    } else {
+      // forest: mud patches
+      for (let i = 0; i < 40; i++) {
+        const x = rand(0, WORLD_W), y = rand(0, WORLD_H), r = rand(40, 140);
+        const mg = g.createRadialGradient(x, y, 5, x, y, r);
+        mg.addColorStop(0, 'rgba(62,48,32,0.55)'); mg.addColorStop(1, 'rgba(62,48,32,0)');
+        g.fillStyle = mg; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+      }
+      // grass tufts
+      for (let i = 0; i < 700; i++) {
+        const x = rand(0, WORLD_W), y = rand(0, WORLD_H);
+        g.strokeStyle = `rgba(${Math.floor(rand(60, 110))},${Math.floor(rand(120, 170))},${Math.floor(rand(50, 90))},0.7)`;
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.moveTo(x, y); g.lineTo(x - 3, y - rand(4, 9));
+        g.moveTo(x, y); g.lineTo(x + 3, y - rand(4, 9));
+        g.moveTo(x, y); g.lineTo(x, y - rand(5, 11));
+        g.stroke();
+      }
+      // puddles
+      for (let i = 0; i < 14; i++) {
+        const x = rand(0, WORLD_W), y = rand(0, WORLD_H);
+        g.fillStyle = 'rgba(150,180,200,0.25)';
+        g.beginPath(); g.ellipse(x, y, rand(30, 90), rand(15, 40), rand(0, 3), 0, 7); g.fill();
+        g.strokeStyle = 'rgba(40,50,35,0.4)'; g.lineWidth = 3; g.stroke();
+      }
+      // dirt road cross
+      g.save();
+      g.strokeStyle = 'rgba(101,84,60,0.85)'; g.lineCap = 'round';
+      g.lineWidth = 90;
+      g.beginPath(); g.moveTo(0, 500); g.quadraticCurveTo(800, 440, 1600, 520); g.stroke();
+      g.lineWidth = 70;
+      g.beginPath(); g.moveTo(800, 0); g.quadraticCurveTo(760, 500, 830, 1000); g.stroke();
+      g.strokeStyle = 'rgba(80,66,46,0.5)'; g.lineWidth = 3;
+      g.restore();
+    }
+
+    // vignette border walls frame: dark edge
+    const eg = g.createLinearGradient(0, 0, 0, 26);
+    g.fillStyle = 'rgba(0,0,0,0.55)';
+    g.fillRect(0, 0, WORLD_W, 14); g.fillRect(0, WORLD_H - 14, WORLD_W, 14);
+    g.fillRect(0, 0, 14, WORLD_H); g.fillRect(WORLD_W - 14, 0, 14, WORLD_H);
+    void eg;
   }
 
-  private updateSky() {
-    const nether = this.isInNether;
-    const ang = this.time * Math.PI * 2;
-    const sunY = Math.sin(ang);
-    const dl = this.daylight();
-    const sky = this.skyColor.copy(this.skyNight).lerp(this.skyDay, Math.max(0, Math.min(1, (dl - 0.16) / 0.84)));
-    const sunset = Math.max(0, 1 - Math.abs(sunY) * 4) * (Math.cos(ang) > 0 || sunY > -0.2 ? 1 : 0);
-    sky.lerp(this.skySunset, sunset * 0.45);
-    const biome = this.biomeAt();
-    const raining = !nether && this.weather === 'rain' && biome !== 'Pustynia';
-    if (raining) sky.multiplyScalar(0.62);
-    if (this.lightning > 0) sky.lerp(this.skyStorm, Math.min(1, this.lightning));
+  fitCanvas() {
+    const parent = this.canvas.parentElement;
+    if (!parent) return;
+    const pw = parent.clientWidth, ph = parent.clientHeight;
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.canvas.width = pw * this.dpr;
+    this.canvas.height = ph * this.dpr;
+    this.canvas.style.width = pw + 'px';
+    this.canvas.style.height = ph + 'px';
+    const s = Math.min(pw / WORLD_W, ph / WORLD_H);
+    this.viewScale = s * this.dpr;
+    this.viewX = (pw * this.dpr - WORLD_W * this.viewScale) / 2;
+    this.viewY = (ph * this.dpr - WORLD_H * this.viewScale) / 2;
+  }
 
-    const fog = this.scene.fog as THREE.Fog;
-    const eyeBlock = this.world.peekBlock(Math.floor(this.camera.position.x), Math.floor(this.camera.position.y), Math.floor(this.camera.position.z));
-    if (nether) {
-      // Nether: stałe, czerwone mrok – bez słońca, chmur i cyklu dnia.
-      fog.color.setRGB(0.23, 0.055, 0.04);
-      fog.near = this.renderDistance * CS * 0.4;
-      fog.far = this.renderDistance * CS * 0.95;
-      this.scene.background = fog.color;
-    } else if (eyeBlock === B.WATER) {
-      fog.color.setRGB(0.05 * dl, 0.15 * dl, 0.5 * dl);
-      fog.near = 0.1;
-      fog.far = 18;
-      this.scene.background = fog.color;
-    } else if (eyeBlock === B.LAVA) {
-      fog.color.setRGB(0.8, 0.3, 0.05);
-      fog.near = 0.1;
-      fog.far = 2.5;
-      this.scene.background = fog.color;
-    } else {
-      fog.color.copy(sky);
-      // 2.8.1: w deszczu mgła ciemnieje i lekko sinieje, więc chmury i mgła
-      // opowiadają tę samą pogodę.
-      const fogMix = raining ? rainFogMix(dl, this.stormBlend) : 0;
-      if (fogMix > 0) {
-        fog.color.r *= 1 - 0.22 * fogMix;
-        fog.color.g *= 1 - 0.18 * fogMix;
-        fog.color.b *= 1 - 0.06 * fogMix;
+  start() {
+    if (this.running) return;
+    gameAudio.init();
+    if (this.map.weather === 'rain') gameAudio.startRain();
+    this.tanks.forEach(t => gameAudio.startEngine(t.id));
+    window.addEventListener('keydown', this.keyDown);
+    window.addEventListener('keyup', this.keyUp);
+    window.addEventListener('resize', this.resize);
+    window.addEventListener('blur', this.blur);
+    this.fitCanvas();
+    this.running = true;
+    this.lastT = performance.now();
+    let lastCount = 4;
+    const loop = (now: number) => {
+      if (!this.running) return;
+      const dt = Math.min((now - this.lastT) / 1000, 0.05);
+      this.lastT = now;
+      // countdown beeps
+      const c = Math.ceil(this.countdown);
+      if (c !== lastCount && c >= 1 && c <= 3 && !this.paused) { gameAudio.countdownBeep(false); lastCount = c; }
+      if (!this.paused && !this.gameOver) {
+        if (this.countdown > 0) {
+          this.countdown -= dt;
+          if (this.countdown <= 0) { this.countdown = 0; gameAudio.countdownBeep(true); this.addText(WORLD_W / 2, WORLD_H / 2 - 60, this.language === 'en' ? 'FIRE!' : 'OGNIA!', '#fbbf24', 64); }
+        } else {
+          // slow-mo
+          if (this.slowMo > 0) { this.slowMo -= dt; this.timeScale = lerp(this.timeScale, 0.35, 0.2); }
+          else this.timeScale = lerp(this.timeScale, 1, 0.12);
+          this.update(dt * this.timeScale, dt);
+        }
       }
-      fog.near = this.renderDistance * CS * (raining ? 0.28 : 0.45);
-      fog.far = this.renderDistance * CS * (raining ? 0.7 : 0.95);
-      this.scene.background = sky;
-    }
+      this.render(dt);
+      this.opts.onFrame?.(this.canvas);
+      // hud throttle
+      this.hudTimer -= dt;
+      if (this.hudTimer <= 0) { this.hudTimer = 0.08; this.emitHud(); }
+      this.raf = requestAnimationFrame(loop);
+    };
+    this.raf = requestAnimationFrame(loop);
+  }
 
-    // W Netherze oświetlenie jest stałe – bez dnia i nocy.
-    // 2.8.1: łagodniejsza krzywa – wieczorem światło spada razem z niebem,
-    // zamiast zniknąć w jednej klatce i zostawić czarne drzewa.
-    const lin = nether ? 0.78 : 0.16 + 0.84 * Math.pow(dl, 2.4);
-    // 2.4: nocne widzenie podnosi podłogę światła, więc jaskinie nie są już czarne.
-    const night = this.hasEffect('night');
-    const light = night ? Math.max(lin, 0.55) : lin;
-    this.uDay.value = light;
-    this.handMat.color.setScalar(Math.max(0.35, light));
-    this.ambient.intensity = nether ? 0.55 : night ? Math.max(0.3 + dl * 1.0, 0.72) : 0.3 + dl * 1.0;
-    this.dirLight.intensity = nether ? 0.12 : Math.max(0, sunY) * 1.2 + 0.1;
-    this.sun.visible = !nether;
-    this.moon.visible = !nether;
-    this.stars.visible = !nether;
-    this.clouds.visible = !nether && this.gfx.clouds;
+  destroy() {
+    this.finishTimers.forEach(clearTimeout);
+    this.finishTimers = [];
+    this.running = false;
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener('keydown', this.keyDown);
+    window.removeEventListener('keyup', this.keyUp);
+    window.removeEventListener('resize', this.resize);
+    window.removeEventListener('blur', this.blur);
+    gameAudio.stopAllEngines();
+    gameAudio.stopRain();
+  }
 
-    const cp = this.camera.position;
-    // 2.8: gradientowa kopuła nieba podąża za kamerą i dostaje kolor pory dnia.
-    if (this.skyDome) {
-      const domeMat = this.skyDome.material as THREE.MeshBasicMaterial;
-      const inLiquid = eyeBlock === B.WATER || eyeBlock === B.LAVA;
-      this.skyDome.visible = !nether && !inLiquid;
-      this.skyDome.position.copy(cp);
-      domeMat.color.copy(sky).multiplyScalar(1.06);
-    }
-    const sunDir = this.skySunDir.set(Math.cos(ang), Math.sin(ang), 0.25).normalize();
-    // 2.8.2: ta sama godzina, ale liczona w shaderze per ściana – dzięki temu
-    // światło naprawdę „chodzi” po świecie, zamiast być płaską plamą.
-    this.sunState.dir.copy(sunDir);
-    this.sunState.power = nether ? 0 : Math.max(0, sunY) * (0.35 + 0.65 * dl);
-    this.sun.position.copy(cp).addScaledVector(sunDir, 400);
-    this.sun.lookAt(cp);
-    this.moon.position.copy(cp).addScaledVector(sunDir, -400);
-    this.moon.lookAt(cp);
-    this.dirLight.position.copy(cp).addScaledVector(sunDir, 50);
-    this.dirLight.target.position.copy(cp);
-    this.stars.position.copy(cp);
-    this.stars.rotation.z = ang;
-    (this.stars.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - dl * 1.5);
-
-    // 2.8.1: chmury zależne od pogody i pory dnia (patrz `sky.ts`).
-    const look = cloudLook(this.weather, dl, this.stormBlend);
-    const cloudMat = this.clouds.material as THREE.MeshBasicMaterial;
-    const stormMat = this.stormClouds.material as THREE.MeshBasicMaterial;
-    const cloudVisible = !nether && this.gfx.clouds;
-    this.clouds.visible = cloudVisible;
-    this.stormClouds.visible = cloudVisible && look.stormOpacity > 0.01;
-    if (cloudVisible) {
-      // 2.8.2: wiatr w jednostkach ŚWIATA, nie „klatek tekstury”. Do 2.8.1
-      // licznik gnał chmury z prędkością ~31 j/s (a w burzy ~105 j/s), więc
-      // niebo wyglądało jak przewijana tapeta. Teraz to spokojne 3,4 j/s,
-      // a deszcz przyspiesza je tylko o kilkanaście procent.
-      const drift = performance.now() / 1000 * CLOUD_SPEED * look.drift;
-      // Każda warstwa ma własny rozmiar tekstury w świecie (plan / repeat).
-      const baseTile = 3200 / 3;
-      const stormTile = 3400 / 2.2;
-      this.clouds.position.set(cp.x, look.altitude, cp.z);
-      this.cloudTex.offset.set((cp.x + drift) / baseTile, (-cp.z + drift * 0.35) / baseTile);
-      cloudMat.color.setRGB(look.color[0], look.color[1], look.color[2]);
-      cloudMat.opacity = look.opacity;
-      if (this.stormClouds.visible) {
-        this.stormClouds.position.set(cp.x, look.stormAltitude, cp.z);
-        // Warstwa burzowa płynie odrobinę wolniej – silny wiatr „pcha” ją
-        // całą, ale nie zamienia w smugi.
-        this.stormTex.offset.set((cp.x + drift * 0.85) / stormTile, (-cp.z + drift * 0.3) / stormTile);
-        stormMat.color.setRGB(look.stormColor[0], look.stormColor[1], look.stormColor[2]);
-        stormMat.opacity = look.stormOpacity;
-      }
-    }
+  togglePause() {
+    if (this.gameOver || this.countdown > 0) return;
+    this.paused = !this.paused;
+    gameAudio.uiClick();
+    this.emitHud();
   }
 
   emitHud() {
-    const p = this.body.pos;
-    const f = ((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4;
-    const now = performance.now();
-    this.refreshMinimap();
-    this.onHud({
-      players: this.net ? this.netPlayers : [],
-      netRole: this.net?.role ?? null,
-      netPublic: this.net?.public ?? false,
-      netSaving: this.net?.public ? (this.net as { pendingEdits?: number }).pendingEdits ?? 0 : 0,
-      hotbar: this.inventory.slots.slice(0, 9).map((s) => (s ? { ...s } : null)),
-      selected: this.selected,
-      health: this.health,
-      air: this.air,
-      maxAir: this.maxAir,
-      mode: this.mode,
-      fps: this.fps,
-      pos: [p.x, p.y, p.z],
-      facing: FACING[f],
-      biome: this.biomeAt(),
-      chunks: this.world.chunks.size,
-      time: this.time,
-      target: this.target ? `${BLOCKS[this.target.id].name} (${this.target.x}, ${this.target.y}, ${this.target.z})` : '-',
-      underwater: this.blockAt(p, this.eyeHeight) === B.WATER,
-      inLava: this.blockAt(p, this.eyeHeight) === B.LAVA,
-      flying: this.flying,
-      debug: this.debug,
-      hurtCount: this.hurtCount,
-      mobs: this.mobs.length,
-      seed: this.world.seed,
-      messages: this.messages.filter((m) => now - m.t < 10000 || this.ui === 'chat').slice(-10),
-      loading: this.loadingProgress,
-      day: this.day,
-      locked: this.locked,
-      hunger: this.hunger,
-      weather: this.weather,
-      toast: this.toast && now - this.toast.at < 4600 ? { title: this.toast.title, text: this.toast.text } : null,
-      sprinting: this.sprinting,
-      worldName: this.worldName,
-      worldType: this.worldType,
-      minimap: this.showMinimap,
-      heldHint: this.heldHint(),
-      bow: this.bowDraw,
-      level: this.xp.info().level,
-      xpFrac: (() => { const i = this.xp.info(); return i.need > 0 ? i.inLevel / i.need : 0; })(),
-      armor: this.armor.map((s) => (s ? { ...s } : null)),
-      armorPoints: armorPoints(this.armor),
-      mobHint: this.mobHint(),
-      village: this.villageName,
-      trades: this.trades,
-      resScale: this.resScale,
-      showFps: this.showFps,
-      drawCalls: this.renderer.info.render.calls,
-      zoom: this.isZooming() && this.ui === 'playing',
-      // 2.5: HUD zna tryb sterowania (inna treść podpowiedzi na dotyku).
-      touch: this.touchInput,
-      // 2.5: świeże wyjście z blokady kursora – Chrome chwilę blokuje ponowny
-      // Pointer Lock, więc podpowiedź tłumaczy, czemu klik „nic nie robi”.
-      lockCooldown: !this.locked && !this.touchInput && this.lastLockExit > 0 && performance.now() - this.lastLockExit < 1600,
-      fishing: this.fishingState(),
-      // 2.4: aktywne wzmocnienia napojów (ikona + nazwa + sekundy)
-      effects: [...this.effects.entries()]
-        .filter(([id]) => id !== 'none')
-        .map(([id, ms]) => {
-          const def = EFFECT_META[id as Exclude<PotionEffectId, 'none'>];
-          return { id, icon: def.icon, name: def.name, left: ms / 1000 };
-        }),
-      waypoint: (() => {
-        const w = this.waypoints.find((point) => point.id === this.activeWaypointId);
-        if (!w || w.dimension !== this.currentDimension()) return null;
-        const dx = w.x + 0.5 - p.x, dz = w.z + 0.5 - p.z;
-        const distance = Math.hypot(dx, dz);
-        const worldAngle = Math.atan2(-dx, -dz);
-        const bearing = Math.atan2(Math.sin(worldAngle - this.yaw), Math.cos(worldAngle - this.yaw));
-        const directions = ['przed tobą', 'w prawo', 'za tobą', 'w lewo'];
-        const index = ((Math.round(bearing / (Math.PI / 2)) % 4) + 4) % 4;
-        return { name: w.name, distance, direction: directions[index], bearing };
-      })(),
-    });
+    const tanks: HudTank[] = this.tanks.map(t => ({
+      id: t.id, name: t.cfg.name + (t.cfg.isBot ? ' (BOT)' : ''), color: t.cfg.color,
+      hp: Math.max(0, Math.round(t.hp)), maxHp: t.maxHp, alive: t.alive,
+      kills: t.kills, deaths: t.deaths, lives: t.lives,
+      shield: t.shield, isBot: t.cfg.isBot, respawn: t.respawnTimer,
+      rapid: t.rapidUntil > this.elapsed, big: t.bigUntil > this.elapsed, speed: t.speedUntil > this.elapsed,
+    }));
+    const hud: HudState = { tanks, timeLeft: this.timeLeft, killLimit: this.opts.killLimit, mode: this.opts.mode, killFeed: [...this.killFeed].reverse().slice(0, 5), countdown: this.countdown, paused: this.paused };
+    this.opts.onHud(hud);
+    if (this.opts.onPadHud) for (const ht of tanks) if (!ht.isBot) this.opts.onPadHud(ht.id, ht, hud);
   }
 
-  private heldHint(): string | null {
-    const sel = this.selectedStack();
-    const id = sel?.id;
-    const ench = sel?.ench ? enchList(sel) : null;
-    // 2.4: fiolki i napoje mają krótką podpowiedź pod celownikiem
-    if (id === I.BOTTLE) return 'Fiolka: PPM nad wodą, aby napełnić';
-    if (id !== undefined && isPotion(id)) return 'Napój: PPM, aby wypić';
-    if (id === I.COMPASS) {
-      const dx = this.spawnPoint.x - this.body.pos.x;
-      const dz = this.spawnPoint.z - this.body.pos.z;
-      const dist = Math.hypot(dx, dz);
-      if (dist < 2) return 'Kompas: jesteś przy punkcie odrodzenia';
-      const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
-      const ahead = dx * -sin + dz * -cos;
-      const side = dx * cos + dz * -sin;
-      const rel = Math.atan2(side, ahead);
-      const names = ['przed tobą', 'w prawo', 'za tobą', 'w lewo'];
-      const idx = ((Math.round(rel / (Math.PI / 2)) % 4) + 4) % 4;
-      return `Kompas: odrodzenie ${names[idx]} · ${Math.round(dist)} m`;
+  // ================= UPDATE =================
+  update(sdt: number, rdt: number) {
+    this.elapsed += sdt;
+    this.timeLeft -= sdt;
+    if (this.timeLeft <= 0) { this.timeLeft = 0; this.endGame(null); return; }
+    this.trauma = Math.max(0, this.trauma - rdt * 1.6);
+
+    // powerup spawner
+    this.powerupTimer -= sdt;
+    if (this.powerupTimer <= 0) {
+      this.powerupTimer = rand(6, 10);
+      if (this.powerups.filter(p => !p.taken).length < 3) this.spawnPowerup();
     }
-    if (id === I.SPYGLASS) {
-      return this.zooming ? 'Lorneta: przybliżenie – puść PPM, aby wrócić' : 'Lorneta: przytrzymaj PPM, aby przyjrzeć się okolicy';
+
+    for (const t of this.tanks) this.updateTank(t, sdt);
+    this.updateShells(sdt);
+    this.updateParticles(sdt);
+    this.updatePowerups(sdt);
+    this.updateLights(rdt);
+    this.updateWeather(sdt);
+    for (const t of this.texts) { t.life -= sdt; t.y -= 40 * sdt; }
+    this.texts = this.texts.filter(t => t.life > 0);
+
+    // tank-tank collision
+    for (let i = 0; i < this.tanks.length; i++) for (let j = i + 1; j < this.tanks.length; j++) {
+      const a = this.tanks[i], b = this.tanks[j];
+      if (!a.alive || !b.alive) continue;
+      const d = dist(a.x, a.y, b.x, b.y);
+      const min = 52;
+      if (d < min && d > 0.01) {
+        const nx = (b.x - a.x) / d, ny = (b.y - a.y) / d;
+        const overlap = (min - d) / 2;
+        a.x -= nx * overlap; a.y -= ny * overlap;
+        b.x += nx * overlap; b.y += ny * overlap;
+        const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+        if (rel < 0) {
+          const imp = -rel * 0.6;
+          a.vx -= imp * nx; a.vy -= imp * ny;
+          b.vx += imp * nx; b.vy += imp * ny;
+          if (Math.abs(rel) > 120) { gameAudio.hitMetal(); this.sparks((a.x + b.x) / 2, (a.y + b.y) / 2, 6); }
+        }
+      }
     }
-    if (id === I.FISHING_ROD) {
-      const f = this.fishingState();
-      if (f === 'bite') return 'Wędka: brań! Kliknij, aby zaciągnąć';
-      if (f === 'waiting') return 'Wędka: przynęta czeka w wodzie…';
-      if (f === 'cast') return 'Wędka: przynęta leci…';
-      return 'Wędka: PPM, aby zarzucić';
+
+    // survival check
+    if (this.opts.mode === 'survival') {
+      const contenders = this.tanks.filter(t => t.lives > 0 || t.alive);
+      const aliveNow = this.tanks.filter(t => t.alive);
+      if (aliveNow.length <= 1 && this.tanks.length > 1 && this.elapsed > 2) {
+        // if only one alive and others dead with no lives -> that one wins; if all dead -> draw
+        const outOfLives = this.tanks.filter(t => !t.alive && t.lives <= 0);
+        if (outOfLives.length >= this.tanks.length - 1) {
+          const winner = aliveNow[0]?.id ?? null;
+          this.endGame(winner);
+        }
+      }
+      void contenders;
     }
-    if (id === I.CLOCK) {
-      const hour = (this.time * 24 + 6) % 24;
-      const label = hour < 5 || hour >= 20 ? 'noc' : hour < 7 ? 'świt' : hour < 17 ? 'dzień' : 'zmierzch';
-      const h = Math.floor(hour);
-      const m = Math.floor((hour * 60) % 60);
-      return `Zegar: ${label}, ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    }
-    if (ench && ench.length) return `Zaklęcia: ${ench.join(', ')}`;
-    return null;
   }
 
-  /** Nazwa i wskazówka dla istoty pod celownikiem (1.6). */
-  private mobHint(): string | null {
-    const { mob } = this.findMobTarget(4.5);
-    if (!mob || mob.dead) return null;
-    if (mob.type === 'villager') {
-      const st = mob.trade ?? null;
-      return st ? `${villagerTitle(st)} – PPM, aby handlować` : 'Mieszkaniec – PPM, aby handlować';
-    }
-    if (mob.type === 'golem') return mob.provoked > 0 ? 'Żelazny golem (rozgniewany!)' : 'Żelazny golem – stróż osady';
-    return `${MOB_NAMES[mob.type] ?? mob.type} · ${Math.max(0, Math.round(mob.health))}/${mob.maxHealth} HP`;
-  }
-
-  /** Rozgląda się, czy gracz stoi w wiosce; pierwsze wejście to osiągnięcie. */
-  private checkVillage() {
-    const p = this.body.pos;
-    const v = this.world.villageAt(Math.floor(p.x), Math.floor(p.z));
-    if (!v) {
-      this.villageName = null;
+  updateTank(t: TankState, dt: number) {
+    if (!t.alive) {
+      t.respawnTimer -= dt;
+      if (t.respawnTimer <= 0) {
+        if (this.opts.mode === 'deathmatch') this.respawn(t);
+        else if (t.lives > 0) this.respawn(t);
+      }
+      gameAudio.updateEngine(t.id, 0, false);
       return;
     }
-    const folk = this.mobs.filter((m) => !m.dead && m.type === 'villager' && Math.hypot(m.body.pos.x - v.x, m.body.pos.z - v.z) < 60).length;
-    this.villageName = `Wioska · ${v.buildings.length} budynków${folk ? ` · mieszkańcy: ${folk}` : ''}`;
-    if (this.villageSeen.has(v.key)) return;
-    this.villageSeen.add(v.key);
-    this.message('Trafiłeś na wioskę! Mieszkańcy handlują – kliknij na nich PPM.');
-    this.unlock('village');
-    this.emitHud();
-  }
+    t.spawnShield = Math.max(0, t.spawnShield - dt);
+    t.shield = Math.max(0, t.shield - dt);
+    t.barrelHeat = Math.max(0, t.barrelHeat - dt * 1.4);
+    t.recoil = Math.max(0, t.recoil - dt * 60);
+    t.muzzle = Math.max(0, t.muzzle - dt * 6);
 
-  /** Dzwon na placu: mieszkańcy wracają na środek osady. */
-  private ringBell(x: number, _y: number, z: number) {
-    Sfx.playBell();
-    let n = 0;
-    for (const m of this.mobs) {
-      if (m.type !== 'villager' || m.dead) continue;
-      if (Math.hypot(m.body.pos.x - x, m.body.pos.z - z) > 32) continue;
-      m.yaw = Math.atan2(x - m.body.pos.x, z - m.body.pos.z);
-      m.walking = true;
-      m.aiTimer = 3.5;
-      n++;
+    let fwd = 0, turn = 0, fire = false;
+    /**
+     * Telefon w trybie „KIERUNEK”: wektor w przestrzeni ekranu (x = prawo, y = DÓŁ).
+     * Czołg jedzie wtedy dokładnie tam, gdzie pchasz gałkę, a kadłub sam obraca się
+     * w stronę jazdy — koniec z „pcham w dół, a on cofa się w bok”.
+     */
+    let padDir: { x: number; y: number; mag: number } | null = null;
+    /** Kierunek wieży z joysticka celowania (kąt w świecie gry) albo null. */
+    let padAim: number | null = null;
+    if (t.cfg.isBot && t.aiState) {
+      const out = this.botControl(t, dt);
+      fwd = out.fwd; turn = out.turn; fire = out.fire;
+    } else {
+      const c = t.cfg.controls;
+      const down = (arr: string[]) => arr.some(k => this.keys.has(k));
+      const kbFwd = (down(c.forward) ? 1 : 0) - (down(c.back) ? 1 : 0);
+      const kbTurn = (down(c.right) ? 1 : 0) - (down(c.left) ? 1 : 0);
+      if (down(c.fire)) fire = true;
+
+      const pad = this.opts.padInputs?.[t.id];
+      if (pad?.fire) fire = true;
+      if (pad) {
+        const ax = pad.aimX ?? 0, ay = pad.aimY ?? 0;
+        if (Math.hypot(ax, ay) > PAD_AIM_DEAD) padAim = Math.atan2(ay, ax);
+      }
+
+      if (kbFwd !== 0 || kbTurn !== 0) {
+        // Klawiatura ma pierwszeństwo — ktoś przy komputerze przejął ten slot.
+        fwd = kbFwd;
+        turn = kbTurn;
+      } else if (pad) {
+        if (pad.steer === 'direct') {
+          const dx = pad.dirX ?? 0, dy = pad.dirY ?? 0;
+          const m = Math.hypot(dx, dy);
+          if (m > PAD_DIR_DEAD) padDir = { x: dx / m, y: dy / m, mag: Math.min(1, m) };
+        } else {
+          // Tryb „CZOŁG” oraz starsze telefony: góra = przód, dół = tył, lewo/prawo = obrót.
+          if (Math.abs(pad.fwd) > 0.08) fwd += pad.fwd;
+          if (Math.abs(pad.turn) > 0.08) turn += pad.turn;
+        }
+      }
+      fwd = clamp(fwd, -1, 1);
+      turn = clamp(turn, -1, 1);
     }
-    this.swingT = 0;
-    this.unlock('bell');
-    this.message(n > 0 ? `Dzwon bije – ${n} mieszkańców wraca na plac.` : 'Dzwon bije nad pustym placem.');
-  }
 
-  /** Łopata na trawie lub ziemi robi ścieżkę (jak w klasyku). */
-  private tryMakePath(t: NonNullable<ReturnType<World['raycast']>>): boolean {
-    const sel = this.selectedStack();
-    if (!sel || ITEMS[sel.id]?.tool !== 'shovel') return false;
-    if (t.ny !== 1) return false;
-    if (t.id !== B.GRASS && t.id !== B.DIRT) return false;
-    const above = this.world.getBlock(t.x, t.y + 1, t.z);
-    if (above !== B.AIR) return false;
-    this.world.setBlock(t.x, t.y, t.z, B.PATH);
-    Sfx.playDig('grass');
-    this.wearTool();
-    this.swingT = 0;
-    return true;
-  }
+    const speedy = t.speedUntil > this.elapsed;
+    const accel = (this.map.id === 'forest' ? 260 : 320) * (speedy ? 1.5 : 1);
+    const maxSp = (this.map.id === 'forest' ? 195 : 235) * (speedy ? 1.4 : 1);
+    const drag = this.map.id === 'desert' ? 1.6 : this.map.id === 'forest' ? 2.6 : 2.1;
 
-  /** Golemy w promieniu wpadają w gniew na podany czas. Zwraca ich liczbę. */
-  private provokeGolems(x: number, z: number, radius: number, seconds: number): number {
-    let n = 0;
-    for (const m of this.mobs) {
-      if (m.type !== 'golem' || m.dead) continue;
-      if (Math.hypot(m.body.pos.x - x, m.body.pos.z - z) > radius) continue;
-      m.provoked = Math.max(m.provoked, seconds);
-      n++;
+    if (padDir) {
+      /* ---- jazda „po gałce”: kierunek z telefonu = kierunek na mapie ---- */
+      const want = Math.atan2(padDir.y, padDir.x);
+      // kadłub dogania kierunek jazdy krótszą drogą (pivot w miejscu, jak prawdziwy czołg)
+      const d = angDiff(t.hullAngle, want);
+      const step = PAD_TURN_SPEED * dt;
+      t.hullAngle += Math.abs(d) > step ? Math.sign(d) * step : d;
+      // prędkość podąża za gałką z niewielką bezwładnością; `boost` kasuje opór powietrza,
+      // żeby pełne wychylenie dawało taką samą prędkość jak jazda na klawiaturze
+      const k = Math.min(1, dt * PAD_DIR_RESPONSE);
+      const target = maxSp * padDir.mag * (1 + drag / PAD_DIR_RESPONSE);
+      t.vx += (padDir.x * target - t.vx) * k;
+      t.vy += (padDir.y * target - t.vy) * k;
+      t.throttle = lerp(t.throttle, padDir.mag, Math.min(1, dt * 8));
+      this.skidDust(t, dt);
+    } else {
+      /* ---- sterowanie klasyczne: gaz (przód/tył) + obrót kadłuba ---- */
+      const turnSp = 2.6 * (fwd < 0 ? 0.8 : 1);
+      t.hullAngle += turn * turnSp * dt;
+      // throttle with inertia
+      t.throttle = lerp(t.throttle, fwd, Math.min(1, dt * (fwd !== 0 ? 3.2 : 5)));
+      const fx = Math.cos(t.hullAngle), fy = Math.sin(t.hullAngle);
+      t.vx += fx * t.throttle * accel * dt;
+      t.vy += fy * t.throttle * accel * dt;
     }
-    return n;
+    if (padAim !== null) {
+      // wieża celuje tam, gdzie wskazuje prawa gałka — niezależnie od jazdy
+      const d = angDiff(t.turretAngle, padAim);
+      const step = PAD_AIM_SPEED * dt;
+      t.turretAngle += Math.abs(d) > step ? Math.sign(d) * step : d;
+      t.aimHoldUntil = this.elapsed + PAD_AIM_HOLD;
+      t.aiming = true;
+    } else {
+      t.aiming = false;
+      // po puszczeniu gałki wieża chwilę trzyma cel, potem wraca nad kadłub
+      if (!(t.aimHoldUntil && this.elapsed < t.aimHoldUntil)) {
+        t.turretAngle += angDiff(t.turretAngle, t.hullAngle) * Math.min(1, dt * 4.5);
+      }
+    }
+    // friction / drag
+    t.vx -= t.vx * Math.min(1, drag * dt);
+    t.vy -= t.vy * Math.min(1, drag * dt);
+    const sp = Math.hypot(t.vx, t.vy);
+    if (sp > maxSp) { t.vx = t.vx / sp * maxSp; t.vy = t.vy / sp * maxSp; }
+
+    t.x += t.vx * dt;
+    t.y += t.vy * dt;
+    t.x = clamp(t.x, 30, WORLD_W - 30);
+    t.y = clamp(t.y, 30, WORLD_H - 30);
+
+    // wall collision (circle vs rect)
+    for (const wl of this.walls) {
+      if (wl.destroyed) continue;
+      const cx = clamp(t.x, wl.x, wl.x + wl.w), cy = clamp(t.y, wl.y, wl.y + wl.h);
+      const dx = t.x - cx, dy = t.y - cy;
+      const d = Math.hypot(dx, dy);
+      const r = 24;
+      if (d < r) {
+        if (d > 0.01) {
+          const nx = dx / d, ny = dy / d;
+          t.x = cx + nx * r; t.y = cy + ny * r;
+          const dot = t.vx * nx + t.vy * ny;
+          if (dot < 0) { t.vx -= dot * nx * 1.4; t.vy -= dot * ny * 1.4; }
+        } else {
+          t.x -= t.vx * dt * 2; t.y -= t.vy * dt * 2;
+          t.vx *= -0.3; t.vy *= -0.3;
+        }
+      }
+    }
+
+    // track animation + dust + track marks
+    const speed = Math.hypot(t.vx, t.vy);
+    t.trackPhase += speed * dt * 0.09;
+    if (speed > 40) {
+      if (Math.random() < speed / 240 * 0.5) {
+        const bx = t.x - Math.cos(t.hullAngle) * 26, by = t.y - Math.sin(t.hullAngle) * 26;
+        this.addParticle({
+          x: bx + rand(-6, 6), y: by + rand(-6, 6),
+          vx: rand(-30, 30) - t.vx * 0.15, vy: rand(-40, -5),
+          life: rand(0.5, 1.1), maxLife: 1.1, size: rand(5, 10), grow: 14,
+          color: this.map.id === 'desert' ? 'rgba(194,164,104,' : this.map.id === 'nightcity' ? 'rgba(120,120,130,' : 'rgba(110,125,85,',
+          alpha: 0.5, type: 'dust', rotation: rand(0, 6), rotSpeed: rand(-2, 2), gravity: -20, drag: 1.5, glow: false,
+        });
+      }
+      // engine exhaust
+      if (Math.random() < 0.25) {
+        const ex = t.x - Math.cos(t.hullAngle) * 30 + rand(-4, 4), ey = t.y - Math.sin(t.hullAngle) * 30 + rand(-4, 4);
+        this.addParticle({
+          x: ex, y: ey, vx: -t.vx * 0.1 + rand(-15, 15), vy: -30 + rand(-10, 10),
+          life: rand(0.4, 0.8), maxLife: 0.8, size: rand(3, 6), grow: 10,
+          color: 'rgba(60,60,65,', alpha: 0.4, type: 'smoke', rotation: 0, rotSpeed: 1, gravity: -30, drag: 1, glow: false,
+        });
+      }
+      this.drawTrackMarks(t);
+    }
+
+    // fire
+    const rapid = t.rapidUntil > this.elapsed;
+    const cooldown = rapid ? 0.32 : 0.85;
+    if (fire && this.elapsed - t.lastShot >= cooldown && t.barrelHeat < 1.6) {
+      this.fireShell(t);
+    }
+
+    // powerup pickup
+    for (const p of this.powerups) {
+      if (p.taken) continue;
+      if (dist(t.x, t.y, p.x, p.y) < 40) {
+        p.taken = true;
+        this.applyPowerup(t, p);
+      }
+    }
+
+    gameAudio.updateEngine(t.id, t.throttle, true);
   }
 
   /**
-   * Mieszkańcy i golem pojawiają się na terenie wioski, gdy gracz jest blisko.
-   * Bez tego osada byłaby tylko dekoracją.
+   * Kurz spod gąsienic przy ostrym skręcie „po gałce” (tryb KIERUNEK): pojawia się,
+   * gdy czołg jedzie wyraźnie bokiem do kadłuba. Czysto wizualne — daje wyczucie,
+   * że maszyna właśnie zawraca.
    */
-  private spawnVillageFolk() {
-    const p = this.body.pos;
-    const v = this.world.villageAt(Math.floor(p.x), Math.floor(p.z));
-    if (!v) return;
-    const near = this.mobs.filter((m) => !m.dead && isVillageMob(m.type) && Math.hypot(m.body.pos.x - v.x, m.body.pos.z - v.z) < 64);
-    const villagers = near.filter((m) => m.type === 'villager').length;
-    const golems = near.filter((m) => m.type === 'golem').length;
-    const spots = villageSpawnSpots(v);
-    const free = (x: number, y: number, z: number) => {
-      if (this.world.peekBlock(Math.floor(x), Math.floor(y), Math.floor(z)) !== B.AIR) return false;
-      if (this.world.peekBlock(Math.floor(x), Math.floor(y) + 1, Math.floor(z)) !== B.AIR) return false;
-      const below = this.world.peekBlock(Math.floor(x), Math.floor(y) - 1, Math.floor(z));
-      if (!IS_SOLID[below]) return false;
-      return !this.mobs.some((m) => !m.dead && Math.hypot(m.body.pos.x - x, m.body.pos.z - z) < 1.4);
-    };
-    if (villagers < 7) {
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const spot = spots[Math.floor(Math.random() * spots.length)];
-        const x = spot.x + 0.5;
-        const z = spot.z + 0.5;
-        const y = this.world.heightAt(Math.floor(x), Math.floor(z)) + 1;
-        if (!free(x, y, z)) continue;
-        const mob = this.spawnMob('villager', x, y, z, Math.random());
-        mob.trade = createVillagerState(mob.profession, this.nowSeconds());
-        break;
-      }
-    }
-    if (golems < 1 && Math.random() < 0.5) {
-      const spot = spots[Math.floor(Math.random() * spots.length)];
-      const x = spot.x + 0.5;
-      const z = spot.z + 0.5;
-      const y = this.world.heightAt(Math.floor(x), Math.floor(z)) + 1;
-      if (free(x, y, z)) {
-        this.spawnMob('golem', x, y, z);
-        this.unlock('golem');
-        this.message('Żelazny golem patroluje osadę.');
-      }
+  skidDust(t: TankState, dt: number) {
+    const speed = Math.hypot(t.vx, t.vy);
+    if (speed < 70) return;
+    const slip = Math.abs(angDiff(t.hullAngle, Math.atan2(t.vy, t.vx)));
+    if (slip < 0.5) return;
+    if (Math.random() > Math.min(0.85, slip * dt * 12)) return;
+    const sx = Math.cos(t.hullAngle + Math.PI / 2), sy = Math.sin(t.hullAngle + Math.PI / 2);
+    const color = this.map.id === 'desert' ? 'rgba(194,164,104,' : this.map.id === 'nightcity' ? 'rgba(120,120,130,' : 'rgba(110,125,85,';
+    for (const s of [-13, 13]) {
+      this.addParticle({
+        x: t.x + sx * s - Math.cos(t.hullAngle) * 10 + rand(-4, 4),
+        y: t.y + sy * s - Math.sin(t.hullAngle) * 10 + rand(-4, 4),
+        vx: -t.vx * 0.1 + rand(-30, 30), vy: -t.vy * 0.1 + rand(-30, 5),
+        life: rand(0.4, 0.9), maxLife: 0.9, size: rand(5, 10), grow: 16,
+        color, alpha: 0.45, type: 'dust', rotation: rand(0, 6), rotSpeed: rand(-2, 2),
+        gravity: -18, drag: 1.6, glow: false,
+      });
     }
   }
 
-  get recipes() {
-    return RECIPES;
-  }
-
-  private mobLoot(m: Mob) {
-    const x = m.body.pos.x, y = m.body.pos.y + 0.4, z = m.body.pos.z;
-    if (m.type === 'pig') this.spawnDrop(I.RAW_PORK, 1, x, y, z);
-    else if (m.type === 'cow') {
-      this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
-      const hide = Math.floor(Math.random() * 3);
-      for (let i = 0; i < hide; i++) this.spawnDrop(I.LEATHER, 1, x, y, z);
+  botControl(t: TankState, dt: number): { fwd: number; turn: number; fire: boolean } {
+    const ai = t.aiState!;
+    ai.nextThink -= dt;
+    // find nearest enemy
+    let best: TankState | null = null, bd = 1e9;
+    for (const o of this.tanks) {
+      if (o.id === t.id || !o.alive) continue;
+      const d = dist(t.x, t.y, o.x, o.y);
+      if (d < bd) { bd = d; best = o; }
     }
-    else if (m.type === 'chicken') {
-      this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
-      if (Math.random() < 0.4) this.spawnDrop(I.FEATHER, 1, x, y, z);
-    } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
-    else if (m.type === 'creeper') this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
-    else if (m.type === 'spider') this.spawnDrop(I.STRING, 1 + (Math.random() < 0.5 ? 1 : 0), x, y, z);
-    else if (m.type === 'skeleton') {
-      this.spawnDrop(I.BONE, 1 + (Math.random() < 0.5 ? 1 : 0), x, y, z);
-      if (Math.random() < 0.5) this.spawnDrop(I.ARROW, 1 + Math.floor(Math.random() * 3), x, y, z);
-      if (Math.random() < 0.08) this.spawnDrop(I.BOW, 1, x, y, z);
-    } else if (m.type === 'wolf') {
-      if (Math.random() < 0.6) this.spawnDrop(I.BONE, 1, x, y, z);
-    } else if (m.type === 'golem') {
-      const iron = 3 + Math.floor(Math.random() * 3);
-      for (let i = 0; i < iron; i++) this.spawnDrop(I.IRON, 1, x, y, z);
-      const poppies = 1 + Math.floor(Math.random() * 2);
-      for (let i = 0; i < poppies; i++) this.spawnDrop(B.FLOWER_RED, 1, x, y, z);
-    } else if (m.type === 'enderman') {
-      if (Math.random() < 0.5) this.spawnDrop(I.ENDER_PEARL, 1, x, y, z);
-      if (Math.random() < 0.3) this.spawnDrop(B.GRASS, 1, x, y, z);
-    } else if (m.type === 'slime') {
-      const balls = Math.floor(Math.random() * 3);
-      for (let i = 0; i < balls; i++) this.spawnDrop(I.SLIME_BALL, 1, x, y, z);
-    } else if (m.type === 'ghast') {
-      if (Math.random() < 0.6) this.spawnDrop(I.GHAST_TEAR, 1, x, y, z);
-      if (Math.random() < 0.8) this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
-      if (Math.random() < 0.3) this.spawnDrop(I.BLAZE_ROD, 1, x, y, z);
-      if (Math.random() < 0.35) this.spawnDrop(I.MAGMA_CREAM, 1, x, y, z);
-    } else if (m.type === 'villager') {
-      this.message('Mieszkańcy nie zostawiają po sobie niczego. Golem zapamięta ten cios.');
-    }
-    // Grabież: each level reruns one drop roll from the same table
-    if (m.bonusLoot > 0) {
-      const reroll = () => {
-        if (m.type === 'pig') this.spawnDrop(I.RAW_PORK, 1, x, y, z);
-        else if (m.type === 'cow') {
-          this.spawnDrop(I.RAW_BEEF, 1, x, y, z);
-          if (Math.random() < 0.6) this.spawnDrop(I.LEATHER, 1, x, y, z);
-        } else if (m.type === 'chicken') {
-          this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
-          if (Math.random() < 0.6) this.spawnDrop(I.FEATHER, 1, x, y, z);
-        } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
-        else if (m.type === 'creeper') this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
-        else if (m.type === 'spider') this.spawnDrop(I.STRING, 1, x, y, z);
-        else if (m.type === 'skeleton') {
-          this.spawnDrop(I.BONE, 1, x, y, z);
-          if (Math.random() < 0.5) this.spawnDrop(I.ARROW, 1, x, y, z);
-        } else if (m.type === 'wolf') this.spawnDrop(I.BONE, 1, x, y, z);
-      };
-      for (let i = 0; i < m.bonusLoot; i++) if (Math.random() < 0.6) reroll();
-      m.bonusLoot = 0;
-    }
-    if (m.type === 'zombie') this.unlock('zombie');
-    if (m.type === 'creeper') this.unlock('creeper');
-    if (m.type === 'spider') this.unlock('string');
-    if (m.type === 'skeleton') this.unlock('skeleton');
-    this.mobXp(m, x, y, z);
-  }
-
-  private updateDrops(dt: number) {
-    const p = this.body.pos;
-    this.drops = this.drops.filter((d) => {
-      d.age += dt;
-      if (d.age > 300) {
-        this.scene.remove(d.mesh);
-        return false;
+    if (ai.nextThink <= 0) {
+      ai.nextThink = 0.35;
+      if (best) {
+        const aimX = best.x + best.vx * (bd / 900) * 0.7;
+        const aimY = best.y + best.vy * (bd / 900) * 0.7;
+        ai.targetAngle = Math.atan2(aimY - t.y, aimX - t.x);
+        // waypoint: circle strafe around enemy at ~350px
+        if (Math.random() < 0.3) ai.strafeDir *= -1;
+        const orbit = ai.targetAngle + Math.PI / 2 * ai.strafeDir;
+        const wantDist = bd > 480 ? ai.targetAngle : bd < 220 ? ai.targetAngle + Math.PI : orbit;
+        ai.waypoint = { x: t.x + Math.cos(wantDist) * 200, y: t.y + Math.sin(wantDist) * 200 };
+        // fire decision with line of sight
+        const dd = Math.abs(angDiff(t.turretAngle, ai.targetAngle));
+        ai.wantFire = dd < 0.22 && bd < 950 && this.hasLineOfSight(t.x, t.y, best.x, best.y) && Math.random() < 0.85;
       }
-      d.vel.y -= 22 * dt;
-      d.pos.addScaledVector(d.vel, dt);
-      const bx = Math.floor(d.pos.x), by = Math.floor(d.pos.y), bz = Math.floor(d.pos.z);
-      if (this.world.isSolid(bx, by, bz)) {
-        d.pos.y = by + 1.02;
-        d.vel.y = Math.max(0, -d.vel.y * 0.25);
-        d.vel.x *= 0.82;
-        d.vel.z *= 0.82;
-      }
-      const dist = Math.hypot(d.pos.x - p.x, d.pos.z - p.z, d.pos.y - (p.y + 0.9));
-      if (d.age > 0.55 && dist < 3.4 && dist > 0.2) {
-        d.vel.x += ((p.x - d.pos.x) / dist) * dt * 14;
-        d.vel.z += ((p.z - d.pos.z) / dist) * dt * 14;
-        d.vel.y += ((p.y + 0.6 - d.pos.y) / dist) * dt * 10;
-      }
-      if (d.age > 0.4 && dist < 1.35 && this.ui !== 'dead') {
-        if (this.inventory.add(d.id, d.count, d.dur, d.ench, d.name)) {
-          Sfx.playPop();
-          this.notePickup(d.id);
-          this.scene.remove(d.mesh);
-          return false;
-        }
-      }
-      d.mesh.position.set(d.pos.x, d.pos.y + 0.12 + Math.sin(d.age * 3) * 0.06, d.pos.z);
-      d.mesh.rotation.y += dt * 2.2;
-      return true;
-    });
-  }
-
-  private updateGrowth(dt: number) {
-    // W Netherze nic nie rośnie – nasiona, sadzonki i trzcina potrzebują
-    // nadświatowego podłoża, a wskaźniki czasu należą do tamtego świata.
-    if (this.isInNether) return;
-    this.growAcc += dt;
-    if (this.growAcc < 0.45) return;
-    this.growAcc = 0;
-    const loaded = [...this.world.chunks.values()];
-    if (!loaded.length) return;
-    const c = loaded[this.growCursor % loaded.length];
-    this.growCursor++;
-    const pcx = Math.floor(this.body.pos.x / CS);
-    const pcz = Math.floor(this.body.pos.z / CS);
-    if (Math.abs(c.cx - pcx) > 4 || Math.abs(c.cz - pcz) > 4) return;
-    const ox = c.cx * CS, oz = c.cz * CS;
-    for (let i = 0; i < c.data.length; i++) {
-      const id = c.data[i];
-      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2)) continue;
-      const y = (i / (CS * CS)) | 0;
-      const rem = i % (CS * CS);
-      const z = (rem / CS) | 0;
-      const x = rem % CS;
-      const key = `${ox + x},${y},${oz + z}`;
-      if (!this.growables.has(key)) this.growables.set(key, performance.now());
-      const elapsed = (performance.now() - (this.growables.get(key) ?? 0)) / 1000;
-      if (id === B.SAPLING || id === B.BIRCH_SAPLING) {
-        if (elapsed < 28 + ((x * 5 + z) % 12)) continue;
-        const px = this.body.pos.x, pz = this.body.pos.z, py = this.body.pos.y;
-        if (Math.abs(px - (ox + x)) < 1.4 && Math.abs(pz - (oz + z)) < 1.4 && py > y - 1 && py < y + 6) continue;
-        if (plantTree(this.world, ox + x, y, oz + z, id === B.BIRCH_SAPLING)) {
-          this.growables.delete(key);
-          this.unlock('tree');
-          Sfx.playPlace('grass');
-        } else this.growables.set(key, performance.now());
-      } else if (id === B.SUGARCANE) {
-        // Trzcina: rośnie w górę, dopóki jest woda przy PODSTAWIE i miejsce nad nią.
-        if (elapsed < 16 + ((x * 7 + z) % 9)) continue;
-        this.growables.delete(key);
-        if (this.world.getBlock(ox + x, y + 1, oz + z) !== B.AIR) continue;
-        // find the ground-level base of this stalk
-        let base = y;
-        for (let k = 1; k <= 8 && this.world.getBlock(ox + x, base - 1, oz + z) === B.SUGARCANE; k++) base--;
-        const ground = this.world.getBlock(ox + x, base - 1, oz + z);
-        if (ground !== B.GRASS && ground !== B.DIRT && ground !== B.SAND) continue;
-        if (!this.waterNear(ox + x, base, oz + z)) continue;
-        // max 3 segments per stalk
-        let height = 0;
-        for (let k = 0; k <= 6 && this.world.getBlock(ox + x, base + k, oz + z) === B.SUGARCANE; k++) height++;
-        if (height >= 3) continue;
-        this.world.setBlock(ox + x, y + 1, oz + z, B.SUGARCANE);
-        this.growables.set(`${ox + x},${y + 1},${oz + z}`, performance.now());
-        Sfx.playPlace('grass');
-      } else if (elapsed > (this.cropWatered(ox + x, y, oz + z) ? 9 : 18)) {
-        this.world.setBlock(ox + x, y, oz + z, id + 1);
-        if (id + 1 >= B.CROP3) this.growables.delete(key);
-        else this.growables.set(key, performance.now());
+      // stuck detection
+      const moved = dist(t.x, t.y, ai.lastX, ai.lastY);
+      if (moved < 8) ai.stuckTimer += 0.35; else ai.stuckTimer = 0;
+      ai.lastX = t.x; ai.lastY = t.y;
+      if (ai.stuckTimer > 0.7) {
+        ai.waypoint = { x: rand(100, WORLD_W - 100), y: rand(100, WORLD_H - 100) };
+        ai.stuckTimer = -1.2; // reverse time
       }
     }
-    if (this.growables.size > 800) {
-      for (const k of this.growables.keys()) {
-        const [x, , z] = k.split(',').map(Number);
-        if (!this.world.hasChunk(Math.floor(x / CS), Math.floor(z / CS))) this.growables.delete(k);
-      }
+    // wall ahead check -> steer
+    const lookX = t.x + Math.cos(t.hullAngle) * 90, lookY = t.y + Math.sin(t.hullAngle) * 90;
+    let avoid = 0;
+    if (this.pointInWall(lookX, lookY) || lookX < 50 || lookX > WORLD_W - 50 || lookY < 50 || lookY > WORLD_H - 50) avoid = 1;
+
+    const desired = Math.atan2(ai.waypoint.y - t.y, ai.waypoint.x - t.x);
+    let diff = angDiff(t.hullAngle, desired);
+    if (ai.stuckTimer < 0) diff = angDiff(t.hullAngle, desired + Math.PI); // reversing handled below
+    let turn = 0, fwd: number;
+    if (avoid) { turn = ai.strafeDir; fwd = 0.4; }
+    else if (Math.abs(diff) > 0.25) { turn = diff > 0 ? 1 : -1; fwd = Math.abs(diff) < 1.1 ? 0.65 : 0.15; }
+    else { fwd = 1; }
+    if (ai.stuckTimer < 0 && ai.stuckTimer > -1.2 + 0.35) { fwd = -1; turn = -ai.strafeDir; }
+    // aim turret: hull turns toward enemy when close to firing
+    if (best && bd < 700) {
+      const aimDiff = angDiff(t.hullAngle, ai.targetAngle);
+      if (Math.abs(aimDiff) < 0.5) { turn = aimDiff > 0 ? 0.6 : -0.6; }
     }
+    return { fwd, turn, fire: ai.wantFire };
   }
 
-  /** Water within one block horizontally (used by sugar cane). */
-  private waterNear(x: number, y: number, z: number): boolean {
-    return (
-      this.world.peekBlock(x + 1, y, z) === B.WATER ||
-      this.world.peekBlock(x - 1, y, z) === B.WATER ||
-      this.world.peekBlock(x, y, z + 1) === B.WATER ||
-      this.world.peekBlock(x, y, z - 1) === B.WATER ||
-      this.world.peekBlock(x + 1, y - 1, z) === B.WATER ||
-      this.world.peekBlock(x - 1, y - 1, z) === B.WATER ||
-      this.world.peekBlock(x, y - 1, z + 1) === B.WATER ||
-      this.world.peekBlock(x, y - 1, z - 1) === B.WATER
-    );
+  hasLineOfSight(x1: number, y1: number, x2: number, y2: number): boolean {
+    const steps = 12;
+    for (let i = 1; i < steps; i++) {
+      const x = lerp(x1, x2, i / steps), y = lerp(y1, y2, i / steps);
+      if (this.pointInWall(x, y)) return false;
+    }
+    return true;
   }
-
-  private cropWatered(x: number, y: number, z: number): boolean {
-    for (let dx = -4; dx <= 4; dx++)
-      for (let dz = -4; dz <= 4; dz++) {
-        if (dx * dx + dz * dz > 18) continue;
-        if (this.world.peekBlock(x + dx, y, z + dz) === B.WATER || this.world.peekBlock(x + dx, y - 1, z + dz) === B.WATER) return true;
-      }
+  pointInWall(x: number, y: number): boolean {
+    for (const w of this.walls) {
+      if (w.destroyed) continue;
+      if (x > w.x && x < w.x + w.w && y > w.y && y < w.y + w.h) return true;
+    }
     return false;
   }
 
-  private updateFurnaces(dt: number) {
-    const dim = this.isInNether ? 1 : 0;
-    for (const [key, f] of this.furnaces) {
-      if ((f.dim ?? 0) !== dim) continue; // piec z drugiego wymiaru – nie ruszamy
-      // Najpierw chunk: peekBlock bez chunka zwracał kamień i kasował piec
-      // wraz z zawartością, gdy gracz oddalił się o kilkanaście bloków.
-      if (!this.world.hasChunk(Math.floor(f.x / CS), Math.floor(f.z / CS))) continue;
-      const id = this.world.peekBlock(f.x, f.y, f.z);
-      if (id !== B.FURNACE && id !== B.FURNACE_ON) {
-        this.furnaces.delete(key);
+  fireShell(t: TankState) {
+    t.lastShot = this.elapsed;
+    this.opts.onPadFx?.(t.id, 'fire');
+    t.barrelHeat += 0.55;
+    t.recoil = 14;
+    t.muzzle = 1;
+    const big = t.bigUntil > this.elapsed;
+    const mx = t.x + Math.cos(t.turretAngle) * 46, my = t.y + Math.sin(t.turretAngle) * 46;
+    const spd = big ? 780 : 920;
+    this.shells.push({
+      x: mx, y: my,
+      vx: Math.cos(t.turretAngle) * spd + t.vx * 0.3,
+      vy: Math.sin(t.turretAngle) * spd + t.vy * 0.3,
+      angle: t.turretAngle, owner: t.id, life: 2.2, bounces: 0, big, trail: [],
+    });
+    this.stats.shots++;
+    gameAudio.shoot(big);
+    // recoil kick
+    t.vx -= Math.cos(t.turretAngle) * (big ? 120 : 70);
+    t.vy -= Math.sin(t.turretAngle) * (big ? 120 : 70);
+    // muzzle flash
+    this.addLight(mx, my, big ? 260 : 190, big ? '255,180,80' : '255,220,150', 0.9, 0.12, true);
+    for (let i = 0; i < (big ? 14 : 8); i++) {
+      this.addParticle({
+        x: mx, y: my,
+        vx: Math.cos(t.turretAngle + rand(-0.3, 0.3)) * rand(200, 600),
+        vy: Math.sin(t.turretAngle + rand(-0.3, 0.3)) * rand(200, 600),
+        life: rand(0.08, 0.2), maxLife: 0.2, size: rand(4, 9), grow: -20,
+        color: 'rgba(255,220,150,', alpha: 1, type: 'flash', rotation: 0, rotSpeed: 0, gravity: 0, drag: 2, glow: true,
+      });
+    }
+    for (let i = 0; i < 6; i++) {
+      this.addParticle({
+        x: mx, y: my,
+        vx: Math.cos(t.turretAngle) * rand(60, 160) + rand(-40, 40),
+        vy: Math.sin(t.turretAngle) * rand(60, 160) + rand(-40, 40) - 20,
+        life: rand(0.6, 1.4), maxLife: 1.4, size: rand(6, 12), grow: 16,
+        color: 'rgba(200,200,205,', alpha: 0.55, type: 'smoke', rotation: rand(0, 6), rotSpeed: rand(-3, 3), gravity: -30, drag: 1.8, glow: false,
+      });
+    }
+    // shell casing eject
+    const cx = t.x - Math.cos(t.turretAngle) * 10 + Math.cos(t.turretAngle + Math.PI / 2) * 18;
+    const cy = t.y - Math.sin(t.turretAngle) * 10 + Math.sin(t.turretAngle + Math.PI / 2) * 18;
+    this.addParticle({
+      x: cx, y: cy, vx: Math.cos(t.turretAngle + Math.PI / 2) * rand(120, 200), vy: Math.sin(t.turretAngle + Math.PI / 2) * rand(120, 200) - 60,
+      life: 1.2, maxLife: 1.2, size: 3.5, grow: 0, color: 'rgba(212,175,55,', alpha: 1, type: 'casing',
+      rotation: rand(0, 6), rotSpeed: rand(-12, 12), gravity: 500, drag: 0.6, glow: false,
+    });
+    // ground scorch puff
+    this.trauma = Math.min(1, this.trauma + (big ? 0.25 : 0.12));
+  }
+
+  updateShells(dt: number) {
+    for (const s of this.shells) {
+      s.life -= dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.trail.push({ x: s.x, y: s.y, a: 1 });
+      if (s.trail.length > 10) s.trail.shift();
+      for (const tr of s.trail) tr.a -= dt * 3;
+      // tracer glow particle occasionally
+      if (Math.random() < 0.6) {
+        this.addParticle({
+          x: s.x, y: s.y, vx: rand(-20, 20), vy: rand(-20, 20),
+          life: 0.18, maxLife: 0.18, size: s.big ? 7 : 4.5, grow: -8,
+          color: s.big ? 'rgba(255,150,60,' : 'rgba(255,230,170,', alpha: 0.9, type: 'tracer',
+          rotation: 0, rotSpeed: 0, gravity: 0, drag: 0, glow: true,
+        });
+      }
+      // world bounds -> explode
+      if (s.x < 16 || s.x > WORLD_W - 16 || s.y < 16 || s.y > WORLD_H - 16) {
+        s.life = 0;
+        this.explode(s.x, s.y, s.owner, s.big ? 1.5 : 1);
         continue;
       }
-      const before = f.output?.count ?? 0;
-      const lit = tickFurnace(f, dt);
-      if ((f.output?.count ?? 0) > before && f.output?.id === I.IRON) this.unlock('iron');
-      if ((f.output?.count ?? 0) > before && (f.output?.id === I.COOKED_FISH || f.output?.id === I.COOKED_SALMON)) this.unlock('chef');
-      if (before === 0 && f.output) this.gainXp(1); // a finished smelt pays 1 XP
-      const want = lit ? B.FURNACE_ON : B.FURNACE;
-      if (id !== want) this.world.setBlock(f.x, f.y, f.z, want);
-    }
-  }
-
-  /**
-   * 2.3: kowadło trzyma zawartość tak długo, jak stoi blok. Zniknięte
-   * kowadło wypada na ziemię razem z przedmiotami (jak skrzynia i piec).
-   */
-  private updateAnvils(dt: number) {
-    for (const a of this.anvils.values()) {
-      if ((a.dim ?? 0) !== (this.isInNether ? 1 : 0)) continue;
-      if (a.burn > 0) a.burn = Math.max(0, a.burn - dt);
-      if (!this.world.hasChunk(Math.floor(a.x / CS), Math.floor(a.z / CS))) continue;
-      if (this.world.peekBlock(a.x, a.y, a.z) !== B.ANVIL) {
-        if (this.anvilPos && this.anvilPos.x === a.x && this.anvilPos.y === a.y && this.anvilPos.z === a.z) this.closeInventory();
-        this.spillAnvil(a.x, a.y, a.z);
+      // wall collision
+      let hitWall: WallState | null = null;
+      for (const wl of this.walls) {
+        if (wl.destroyed) continue;
+        if (s.x > wl.x - 3 && s.x < wl.x + wl.w + 3 && s.y > wl.y - 3 && s.y < wl.y + wl.h + 3) { hitWall = wl; break; }
       }
-    }
-  }
-
-  private updateRedstone(dt: number) {
-    if (this.portalCooldown > 0) this.portalCooldown -= dt;
-    // button timers
-    for (const [key, t] of this.buttonTimers) {
-      const nt = t - dt;
-      if (nt <= 0) {
-        const [x, y, z] = key.split(',').map(Number);
-        const id = this.world.getBlock(x, y, z);
-        if (id === B.BUTTON_ON) {
-          this.world.setBlock(x, y, z, B.BUTTON);
-          this.onBlockChanged(x, y, z);
+      if (hitWall) {
+        if (s.bounces < 1 && !s.big) {
+          // bounce: determine side
+          s.bounces++;
+          const wl = hitWall;
+          const left = Math.abs(s.x - wl.x), right = Math.abs(s.x - (wl.x + wl.w));
+          const top = Math.abs(s.y - wl.y), bot = Math.abs(s.y - (wl.y + wl.h));
+          const m = Math.min(left, right, top, bot);
+          if (m === left || m === right) s.vx *= -1; else s.vy *= -1;
+          s.x += (s.vx * 0.01); s.y += (s.vy * 0.01);
+          s.angle = Math.atan2(s.vy, s.vx);
+          s.vx *= 0.75; s.vy *= 0.75;
+          gameAudio.ricochet();
+          this.sparks(s.x, s.y, 10);
+          this.damageWall(wl, 1, s.owner);
+        } else {
+          s.life = 0;
+          this.damageWall(hitWall, s.big ? 3 : 2, s.owner);
+          this.explode(s.x, s.y, s.owner, s.big ? 1.5 : 1);
         }
-        this.buttonTimers.delete(key);
-      } else {
-        this.buttonTimers.set(key, nt);
+        continue;
+      }
+      // tank collision
+      for (const t of this.tanks) {
+        if (!t.alive) continue;
+        if (t.id === s.owner && s.life > 1.9) continue; // spawn grace vs self
+        const d = dist(s.x, s.y, t.x, t.y);
+        if (d < 27) {
+          s.life = 0;
+          this.explode(s.x, s.y, s.owner, s.big ? 1.5 : 1, t);
+          break;
+        }
       }
     }
-    if (this.redstoneDirty.size > 0) {
-      tickRedstone(this.world, this.redstoneDirty);
-      this.redstoneDirty.clear();
+    this.shells = this.shells.filter(s => s.life > 0);
+  }
+
+  damageWall(wl: WallState, dmg: number, _owner: number) {
+    void _owner;
+    wl.hp -= dmg;
+    wl.shake = 0.3;
+    // debris chips
+    for (let i = 0; i < 6; i++) {
+      this.addParticle({
+        x: clamp(rand(wl.x, wl.x + wl.w), 0, WORLD_W), y: clamp(rand(wl.y, wl.y + wl.h), 0, WORLD_H),
+        vx: rand(-160, 160), vy: rand(-220, -20),
+        life: rand(0.4, 0.9), maxLife: 0.9, size: rand(2, 5), grow: 0,
+        color: wl.type === 'crate' ? 'rgba(150,110,70,' : wl.type === 'brick' ? 'rgba(150,70,55,' : 'rgba(140,140,145,',
+        alpha: 1, type: 'debris', rotation: rand(0, 6), rotSpeed: rand(-10, 10), gravity: 600, drag: 0.5, glow: false,
+      });
     }
-    // check player standing on portal
-    const px = Math.floor(this.body.pos.x), py = Math.floor(this.body.pos.y), pz = Math.floor(this.body.pos.z);
-    const b = this.world.getBlock(px, py, pz);
-    const b2 = this.world.getBlock(px, py + 1, pz);
-    if ((b === B.NETHER_PORTAL || b2 === B.NETHER_PORTAL) && this.portalCooldown <= 0) {
-      this.enterPortal();
+    if (wl.hp <= 0 && !wl.destroyed) {
+      wl.destroyed = true;
+      gameAudio.wallBreak();
+      this.addText(wl.x + wl.w / 2, wl.y, this.language === 'en' ? '+Destroyed' : '+Zniszczono', '#e5e5e5', 15);
+      // rubble on ground
+      const g = this.gctx;
+      g.fillStyle = 'rgba(0,0,0,0.25)';
+      g.beginPath();
+      g.ellipse(wl.x + wl.w / 2, wl.y + wl.h / 2, wl.w / 2 + 8, wl.h / 2 + 8, 0, 0, 7);
+      g.fill();
+      for (let i = 0; i < 14; i++) {
+        g.fillStyle = wl.type === 'crate' ? '#7a5a38' : wl.type === 'brick' ? '#8a4a3c' : '#55555c';
+        g.save();
+        g.translate(rand(wl.x - 6, wl.x + wl.w + 6), rand(wl.y - 6, wl.y + wl.h + 6));
+        g.rotate(rand(0, 6));
+        g.fillRect(-rand(2, 7), -rand(2, 7), rand(4, 14), rand(4, 12));
+        g.restore();
+      }
+      this.trauma = Math.min(1, this.trauma + 0.15);
     }
   }
 
-  private setWeather(w: 'clear' | 'rain') {
-    this.weather = w;
-    // 2.10: gospodarz rozsyła pogodę od razu, a nie dopiero za 4 s.
-    if (this.net?.role === 'host') this.net.sendState?.({ time: this.time, day: this.day, weather: w });
-    this.weatherTimer = w === 'rain' ? 45 + Math.random() * 40 : 90 + Math.random() * 80;
-    Sfx.setRain(w === 'rain');
-    this.message(w === 'rain' ? 'Zaczyna padać.' : 'Niebo się przejaśnia.');
-  }
+  explode(x: number, y: number, owner: number, power = 1, directHit?: TankState) {
+    this.stats.explosions++;
+    const big = power > 1.2;
+    gameAudio.explosion(big);
+    this.trauma = Math.min(1, this.trauma + (big ? 0.5 : 0.3));
+    this.slowMo = Math.max(this.slowMo, 0.25);
+    this.addLight(x, y, (big ? 420 : 300) * power, '255,170,80', 1, 0.4, true);
+    this.addLight(x, y, 160 * power, '255,240,200', 1, 0.15, false);
 
-  private updateWeather(dt: number) {
-    // 2.8.1: pogoda przechodzi płynnie – chmury gęstnieją, zamiast „przeskoczyć”.
-    const target = this.weather === 'rain' && !this.isInNether ? 1 : 0;
-    this.stormBlend += (target - this.stormBlend) * Math.min(1, dt * 0.6);
-    if (this.stormBlend < 0.001) this.stormBlend = 0;
-    // Sparse ambient music – never during combat-ish menus, never on the title screen.
-    if (this.ui === 'playing' || this.ui === 'chat') {
-      this.musicTimer -= dt;
-      if (this.musicTimer <= 0) {
-        this.musicTimer = 110 + Math.random() * 190;
-        Sfx.playMusic();
+    // flash
+    this.addParticle({ x, y, vx: 0, vy: 0, life: 0.12, maxLife: 0.12, size: 60 * power, grow: 200, color: 'rgba(255,240,200,', alpha: 1, type: 'flash', rotation: 0, rotSpeed: 0, gravity: 0, drag: 0, glow: true });
+    // shockwave ring
+    this.addParticle({ x, y, vx: 0, vy: 0, life: 0.45, maxLife: 0.45, size: 20, grow: 700 * power, color: 'rgba(255,220,180,', alpha: 0.9, type: 'ring', rotation: 0, rotSpeed: 0, gravity: 0, drag: 0, glow: true });
+    // fire
+    const nFire = big ? 26 : 16;
+    for (let i = 0; i < nFire; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(40, 340) * power;
+      this.addParticle({
+        x: x + rand(-8, 8), y: y + rand(-8, 8),
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
+        life: rand(0.3, 0.9), maxLife: 0.9, size: rand(8, 20) * power, grow: -12,
+        color: Math.random() < 0.5 ? 'rgba(255,140,40,' : 'rgba(255,210,90,', color2: 'rgba(200,50,20,',
+        alpha: 1, type: 'fire', rotation: rand(0, 6), rotSpeed: rand(-6, 6), gravity: -60, drag: 2.2, glow: true,
+      });
+    }
+    // smoke column
+    for (let i = 0; i < (big ? 16 : 10); i++) {
+      this.addParticle({
+        x: x + rand(-16, 16), y: y + rand(-16, 16),
+        vx: rand(-60, 60), vy: rand(-140, -30),
+        life: rand(1.2, 2.6), maxLife: 2.6, size: rand(10, 22), grow: 22,
+        color: 'rgba(45,45,48,', alpha: 0.75, type: 'smoke', rotation: rand(0, 6), rotSpeed: rand(-2, 2), gravity: -40, drag: 1.2, glow: false,
+      });
+    }
+    // sparks
+    this.sparks(x, y, big ? 30 : 18);
+    // debris
+    for (let i = 0; i < (big ? 14 : 8); i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(150, 500);
+      this.addParticle({
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 200,
+        life: rand(0.6, 1.4), maxLife: 1.4, size: rand(2, 6), grow: 0,
+        color: 'rgba(40,38,35,', alpha: 1, type: 'debris', rotation: rand(0, 6), rotSpeed: rand(-14, 14), gravity: 700, drag: 0.4, glow: false,
+      });
+    }
+    // crater decal
+    const g = this.gctx;
+    const cr = rand(26, 38) * power;
+    const cg = g.createRadialGradient(x, y, 2, x, y, cr);
+    cg.addColorStop(0, 'rgba(10,8,6,0.85)');
+    cg.addColorStop(0.6, 'rgba(20,16,12,0.6)');
+    cg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = cg;
+    g.beginPath(); g.arc(x, y, cr, 0, 7); g.fill();
+    // scorch rim
+    g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 5;
+    g.beginPath(); g.arc(x, y, cr * 0.85, 0, 7); g.stroke();
+
+    // damage tanks (splash)
+    const radius = (big ? 150 : 110) * power;
+    for (const t of this.tanks) {
+      if (!t.alive) continue;
+      const d = dist(x, y, t.x, t.y);
+      if (d < radius) {
+        const isDirect = directHit?.id === t.id;
+        const dmg = isDirect ? (big ? 60 : 40) : lerp(big ? 45 : 30, 5, d / radius);
+        // knockback
+        const nx = (t.x - x) / (d || 1), ny = (t.y - y) / (d || 1);
+        t.vx += nx * (big ? 420 : 280) * (1 - d / radius + 0.3);
+        t.vy += ny * (big ? 420 : 280) * (1 - d / radius + 0.3);
+        this.damageTank(t, dmg, owner, isDirect);
       }
     }
-    // W Netherze nie pada, nie grzmi i nie ma cyklu pogody – tylko pusty szum.
-    if (this.isInNether) {
-      this.rain.visible = false;
-      Sfx.setRain(false);
-      this.lightning = 0;
-      this.weatherTimer = Math.max(this.weatherTimer, 40);
-      this.ambientTimer -= dt;
-      if (this.ambientTimer <= 0) {
-        this.ambientTimer = 16 + Math.random() * 26;
-        Sfx.playCave();
-      }
+    // damage walls
+    for (const wl of this.walls) {
+      if (wl.destroyed) continue;
+      const cx = clamp(x, wl.x, wl.x + wl.w), cy = clamp(y, wl.y, wl.y + wl.h);
+      if (dist(x, y, cx, cy) < radius * 0.9) this.damageWall(wl, big ? 2 : 1, owner);
+    }
+  }
+
+  sparks(x: number, y: number, n: number) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(150, 650);
+      this.addParticle({
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: rand(0.2, 0.6), maxLife: 0.6, size: rand(1.5, 3), grow: 0,
+        color: 'rgba(255,210,120,', alpha: 1, type: 'spark', rotation: 0, rotSpeed: 0, gravity: 300, drag: 1.2, glow: true,
+      });
+    }
+  }
+
+  damageTank(t: TankState, dmg: number, attackerId: number, direct: boolean) {
+    if (!t.alive || this.gameOver) return;
+    if (t.spawnShield > 0 || t.shield > 0) {
+      if (t.shield > 0) { gameAudio.shieldHit(); this.opts.onPadFx?.(t.id, 'shield'); }
+      this.addParticle({ x: t.x, y: t.y, vx: 0, vy: 0, life: 0.3, maxLife: 0.3, size: 30, grow: 200, color: 'rgba(100,200,255,', alpha: 0.8, type: 'ring', rotation: 0, rotSpeed: 0, gravity: 0, drag: 0, glow: true });
       return;
     }
-    // Ambient sound: wind and birds on the surface, drones in a cave.
-    this.ambientTimer -= dt;
-    if (this.ambientTimer <= 0) {
-      this.ambientTimer = this.underground ? 18 + Math.random() * 26 : 16 + Math.random() * 30;
-      const roll = Math.random();
-      if (this.underground) Sfx.playCave();
-      else if (this.weather === 'rain') { if (roll < 0.6) Sfx.playWind(); }
-      else if (this.daylight() > 0.55) { if (roll < 0.45) Sfx.playBird(); else if (roll < 0.8) Sfx.playWind(); }
-      else if (roll < 0.5) Sfx.playWind();
+    // friendly self damage reduced
+    if (attackerId === t.id) dmg *= 0.5;
+    t.hp -= dmg;
+    gameAudio.hitMetal();
+    this.opts.onPadFx?.(t.id, 'hit');
+    this.sparks(t.x + rand(-10, 10), t.y + rand(-10, 10), direct ? 14 : 6);
+    if (t.hp <= 0) {
+      t.hp = 0;
+      this.killTank(t, attackerId);
+    } else if (direct) {
+      this.addText(t.x, t.y - 44, `-${Math.round(dmg)}`, '#fca5a5', 18);
     }
-    this.weatherTimer -= dt;
-    // 2.10: w sesji pogodę ustala gospodarz – gość nie zmienia jej po swojemu.
-    if (this.weatherTimer <= 0 && (!this.net || this.net.role === 'host')) this.setWeather(this.weather === 'clear' ? 'rain' : 'clear');
-    this.lightning = Math.max(0, this.lightning - dt * 1.6);
-    const biome = this.biomeAt();
-    const raining = this.weather === 'rain' && biome !== 'Pustynia';
-    this.rain.visible = raining;
-    if (raining) {
-      const attr = this.rainGeo.getAttribute('position') as THREE.BufferAttribute;
-      const arr = attr.array as Float32Array;
-      const snow = biome === 'Tundra' || biome === 'Góry';
-      (this.rain.material as THREE.PointsMaterial).color.setHex(snow ? 0xf4f7ff : 0xb7d4ff);
-      (this.rain.material as THREE.PointsMaterial).size = snow ? 2.6 : 2.1;
-      const speed = snow ? 4.5 : 16;
-      const cam = this.camera.position;
-      for (let i = 0; i < arr.length; i += 3) {
-        arr[i + 1] -= speed * dt;
-        if (arr[i + 1] < -2) {
-          arr[i] = (Math.random() - 0.5) * 36;
-          arr[i + 1] = 12 + Math.random() * 10;
-          arr[i + 2] = (Math.random() - 0.5) * 36;
+  }
+
+  killTank(t: TankState, killerId: number) {
+    t.alive = false;
+    t.deaths++;
+    if (this.opts.mode === 'survival') t.lives = Math.max(0, t.lives - 1);
+    // big wreck explosion
+    this.stats.explosions++;
+    gameAudio.explosion(true);
+    this.trauma = Math.min(1, this.trauma + 0.6);
+    this.slowMo = Math.max(this.slowMo, 0.7);
+    this.addLight(t.x, t.y, 480, '255,150,60', 1, 0.6, true);
+    for (let i = 0; i < 30; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(60, 420);
+      this.addParticle({
+        x: t.x + rand(-12, 12), y: t.y + rand(-12, 12),
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 80,
+        life: rand(0.4, 1.2), maxLife: 1.2, size: rand(8, 22), grow: -10,
+        color: 'rgba(255,150,50,', color2: 'rgba(180,40,15,', alpha: 1, type: 'fire',
+        rotation: rand(0, 6), rotSpeed: rand(-6, 6), gravity: -50, drag: 2, glow: true,
+      });
+    }
+    for (let i = 0; i < 18; i++) {
+      this.addParticle({
+        x: t.x + rand(-14, 14), y: t.y + rand(-14, 14),
+        vx: rand(-80, 80), vy: rand(-180, -40),
+        life: rand(1.5, 3.2), maxLife: 3.2, size: rand(12, 26), grow: 18,
+        color: 'rgba(30,30,32,', alpha: 0.8, type: 'smoke', rotation: rand(0, 6), rotSpeed: rand(-2, 2), gravity: -35, drag: 1.1, glow: false,
+      });
+    }
+    this.sparks(t.x, t.y, 40);
+    this.addParticle({ x: t.x, y: t.y, vx: 0, vy: 0, life: 0.5, maxLife: 0.5, size: 24, grow: 900, color: 'rgba(255,220,180,', alpha: 1, type: 'ring', rotation: 0, rotSpeed: 0, gravity: 0, drag: 0, glow: true });
+    // wreck decal on ground
+    const g = this.gctx;
+    const cg = g.createRadialGradient(t.x, t.y, 4, t.x, t.y, 60);
+    cg.addColorStop(0, 'rgba(5,5,5,0.9)'); cg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = cg;
+    g.beginPath(); g.arc(t.x, t.y, 60, 0, 7); g.fill();
+    g.save();
+    g.translate(t.x, t.y); g.rotate(t.hullAngle);
+    g.fillStyle = 'rgba(20,18,16,0.85)';
+    g.fillRect(-26, -16, 52, 32);
+    g.fillStyle = 'rgba(60,50,40,0.6)';
+    g.fillRect(-20, -12, 40, 24);
+    g.restore();
+
+    const killer = this.tanks.find(k => k.id === killerId);
+    const suicide = killerId === t.id;
+    this.opts.onPadFx?.(t.id, 'dead');
+    if (killer && !suicide) {
+      killer.kills++;
+      this.opts.onPadFx?.(killer.id, 'kill');
+      this.addText(t.x, t.y - 70, `${killer.cfg.name} +1`, killer.cfg.color, 22);
+    } else if (suicide) {
+      this.addText(t.x, t.y - 70, this.language === 'en' ? 'SELF-DESTRUCTION!' : 'SAMOZNISZCZENIE!', '#f87171', 20);
+    }
+    const ev: KillEvent = {
+      killer: killerId, victim: t.id,
+      killerName: suicide ? '—' : (killer?.cfg.name ?? '?'),
+      victimName: t.cfg.name, time: this.elapsed, id: this.killId++,
+    };
+    this.killFeed.push(ev);
+    if (this.killFeed.length > 12) this.killFeed.shift();
+    this.opts.onKill(ev);
+
+    // deathmatch win check
+    if (this.opts.mode === 'deathmatch' && killer && !suicide && killer.kills >= this.opts.killLimit) {
+      this.endGame(killer.id);
+      return;
+    }
+    // respawn timer
+    if (this.opts.mode === 'deathmatch') t.respawnTimer = 3;
+    else if (t.lives > 0) t.respawnTimer = 3;
+
+    gameAudio.updateEngine(t.id, 0, false);
+  }
+
+  respawn(t: TankState) {
+    // pick spawn farthest from enemies
+    let bestSpawn = this.map.spawns[0], bd = -1;
+    for (const s of this.map.spawns) {
+      let md = 1e9;
+      for (const o of this.tanks) {
+        if (o.id === t.id || !o.alive) continue;
+        md = Math.min(md, dist(s.x, s.y, o.x, o.y));
+      }
+      if (md > bd) { bd = md; bestSpawn = s; }
+    }
+    t.x = bestSpawn.x + rand(-20, 20); t.y = bestSpawn.y + rand(-20, 20);
+    t.vx = 0; t.vy = 0;
+    t.hullAngle = bestSpawn.angle; t.turretAngle = bestSpawn.angle;
+    t.aimHoldUntil = 0; t.aiming = false;
+    t.hp = t.maxHp; t.alive = true; t.spawnShield = 2.5;
+    t.rapidUntil = 0; t.bigUntil = 0; t.speedUntil = 0; t.shield = 0;
+    this.addLight(t.x, t.y, 200, '150,220,255', 0.8, 0.5, false);
+    this.addText(t.x, t.y - 50, this.language === 'en' ? 'BACK IN ACTION' : 'POWRÓT DO WALKI', t.cfg.color, 18);
+    this.opts.onPadFx?.(t.id, 'respawn');
+  }
+
+  endGame(winnerByKill: number | null) {
+    if (this.gameOver) return;
+    // if time out -> highest kills
+    let winner = winnerByKill;
+    if (winner === null) {
+      let bk = -1;
+      for (const t of this.tanks) {
+        if (t.kills > bk) { bk = t.kills; winner = t.id; }
+        else if (t.kills === bk) winner = null; // draw stays null? keep first... actually draw
+      }
+      // survival timeout: most lives then kills
+      if (this.opts.mode === 'survival') {
+        let bl = -1; bk = -1; winner = null;
+        for (const t of this.tanks) {
+          const score = t.lives * 100 + t.kills;
+          if (score > bl * 100 + bk) { bl = t.lives; bk = t.kills; winner = t.id; }
         }
       }
-      attr.needsUpdate = true;
-      this.rain.position.set(cam.x, cam.y - 4, cam.z);
-      this.nextBolt -= dt;
-      if (this.nextBolt <= 0) {
-        this.nextBolt = 9 + Math.random() * 16;
-        this.lightning = 1;
-        Sfx.playThunder();
+    }
+    this.gameOver = true;
+    this.finished = true;
+    const tanks: HudTank[] = this.tanks.map(t => ({
+      id: t.id, name: t.cfg.name + (t.cfg.isBot ? ' (BOT)' : ''), color: t.cfg.color,
+      hp: Math.max(0, Math.round(t.hp)), maxHp: t.maxHp, alive: t.alive,
+      kills: t.kills, deaths: t.deaths, lives: t.lives, shield: 0, isBot: t.cfg.isBot, respawn: 0,
+      rapid: false, big: false, speed: false,
+    }));
+    // celebratory fireworks at winner
+    if (winner !== null) {
+      const w = this.tanks.find(t => t.id === winner);
+      if (w) for (let i = 0; i < 5; i++) {
+        this.finishTimers.push(setTimeout(() => {
+          this.addLight(w.x + rand(-100, 100), w.y + rand(-100, 100), 300, '255,220,150', 1, 0.4, true);
+          this.sparks(w.x + rand(-120, 120), w.y + rand(-120, 120), 24);
+          gameAudio.explosion(false);
+        }, i * 300));
       }
     }
-    Sfx.setRain(raining);
+    this.finishTimers.push(setTimeout(() => this.opts.onGameOver(winner, tanks), 1600));
   }
 
-  /** Called from the HUD tick so the map stays cheap. */
-  refreshMinimap() {
-    if (this.showMinimap) this.drawMinimap();
-  }
-
-  private drawMinimap() {
-    const ctx = this.minimapCtx;
-    if (!ctx) return;
-    const S = 96;
-    const scale = 1; // 1 pixel = 1 block
-    if (!this.minimapImg || this.minimapImg.width !== S) this.minimapImg = ctx.createImageData(S, S);
-    const img = this.minimapImg;
-    const px = this.body.pos.x, pz = this.body.pos.z;
-    const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
-    const fx = -sin, fz = -cos;
-    const rx = cos, rz = -sin;
-    // 2.8: indeks numeryczny zamiast 9 216 razy `World.key()` na każdą klatkę.
-    const index = this.miniChunks;
-    index.clear();
-    let rev = 0;
-    for (const c of this.world.chunks.values()) {
-      index.set((c.cx + 8192) * 16384 + (c.cz + 8192), c);
-      rev = (rev + c.revision * 31 + c.cx * 7 + c.cz * 13) | 0;
+  spawnPowerup() {
+    const kinds: PowerUpState['kind'][] = ['repair', 'shield', 'rapid', 'big', 'speed'];
+    const kind = kinds[Math.floor(Math.random() * kinds.length)];
+    for (let tries = 0; tries < 20; tries++) {
+      const x = rand(100, WORLD_W - 100), y = rand(100, WORLD_H - 100);
+      if (this.pointInWall(x, y)) continue;
+      let nearTank = false;
+      for (const t of this.tanks) if (t.alive && dist(x, y, t.x, t.y) < 60) nearTank = true;
+      if (nearTank) continue;
+      this.powerups.push({ x, y, kind, life: 25, bob: rand(0, 6), taken: false });
+      this.addLight(x, y, 120, '150,255,170', 0.7, 0.8, false);
+      return;
     }
-    const sig = `${Math.floor(px * 2)},${Math.floor(pz * 2)},${Math.round(this.yaw * 80)},${rev},${this.currentDimension()},${this.waypoints.length},${this.activeWaypointId ?? '-'}`;
-    if (sig === this.miniSig) return; // nic się nie zmieniło – zostaw stary obraz
-    this.miniSig = sig;
-    for (let sy = 0; sy < S; sy++) {
-      for (let sx = 0; sx < S; sx++) {
-        const ox = (sx - S / 2) * scale;
-        const oy = (sy - S / 2) * scale;
-        const wx = Math.floor(px + rx * ox + fx * -oy);
-        const wz = Math.floor(pz + rz * ox + fz * -oy);
-        const cx = Math.floor(wx / CS), cz = Math.floor(wz / CS);
-        const chunk = index.get((cx + 8192) * 16384 + (cz + 8192));
-        let r = 14, g = 14, b = 18;
-        if (chunk) {
-          const lx = wx - cx * CS, lz = wz - cz * CS;
-          const h = chunk.heightMap[lz * CS + lx];
-          const id = chunk.data[(h * CS + lz) * CS + lx];
-          const c = AVG_COLOR[id] ?? GREY;
-          const shade = 0.62 + (h / CH) * 0.55;
-          r = c[0] * shade; g = c[1] * shade; b = c[2] * shade;
+  }
+
+  applyPowerup(t: TankState, p: PowerUpState) {
+    gameAudio.pickup();
+    this.addLight(p.x, p.y, 200, '150,255,170', 1, 0.5, false);
+    const labels: Record<string, string> = this.language === 'en' ? {
+      repair: '+50 ARMOR', shield: 'SHIELD 10s', rapid: 'RAPID FIRE', big: 'HEAVY SHELL', speed: 'TURBO 12s',
+    } : {
+      repair: '+50 PANCERZ', shield: 'TARCZA 10s', rapid: 'SZYBKOSTRZELNOŚĆ', big: 'CIĘŻKI POCISK', speed: 'TURBO 12s',
+    };
+    this.addText(t.x, t.y - 56, labels[p.kind], '#86efac', 19);
+    this.opts.onPadFx?.(t.id, 'pickup');
+    for (let i = 0; i < 16; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({
+        x: p.x, y: p.y, vx: Math.cos(a) * rand(60, 200), vy: Math.sin(a) * rand(60, 200) - 60,
+        life: 0.6, maxLife: 0.6, size: rand(2, 5), grow: 0,
+        color: 'rgba(150,255,170,', alpha: 1, type: 'spark', rotation: 0, rotSpeed: 0, gravity: 100, drag: 1, glow: true,
+      });
+    }
+    if (p.kind === 'repair') t.hp = Math.min(t.maxHp, t.hp + 50);
+    if (p.kind === 'shield') t.shield = 10;
+    if (p.kind === 'rapid') t.rapidUntil = this.elapsed + 12;
+    if (p.kind === 'big') t.bigUntil = this.elapsed + 12;
+    if (p.kind === 'speed') t.speedUntil = this.elapsed + 12;
+  }
+
+  updatePowerups(dt: number) {
+    for (const p of this.powerups) { p.life -= dt; p.bob += dt * 3; }
+    this.powerups = this.powerups.filter(p => !p.taken && p.life > 0);
+  }
+
+  updateParticles(dt: number) {
+    for (const p of this.particles) {
+      p.life -= dt;
+      p.vx -= p.vx * Math.min(1, p.drag * dt);
+      p.vy -= p.vy * Math.min(1, p.drag * dt);
+      p.vy += p.gravity * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.size += p.grow * dt;
+      p.rotation += p.rotSpeed * dt;
+      if (p.size < 0) p.size = 0;
+    }
+    this.particles = this.particles.filter(p => p.life > 0 && p.size >= 0.2);
+    if (this.particles.length > 900) this.particles.splice(0, this.particles.length - 900);
+  }
+
+  updateLights(dt: number) {
+    for (const l of this.lights) l.life -= dt;
+    this.lights = this.lights.filter(l => l.life > 0);
+  }
+
+  updateWeather(dt: number) {
+    if (this.map.weather === 'rain') {
+      for (const r of this.rain) {
+        r.y += r.s * dt;
+        r.x += r.s * 0.18 * dt;
+        if (r.y > WORLD_H) { r.y = -20; r.x = rand(0, WORLD_W); }
+      }
+    } else if (this.map.weather === 'dust') {
+      for (const d of this.dust) {
+        d.x += d.v * dt;
+        if (d.x - d.s > WORLD_W) { d.x = -d.s; d.y = rand(0, WORLD_H); }
+      }
+    }
+  }
+
+  addParticle(p: Particle) { this.particles.push(p); }
+  addLight(x: number, y: number, radius: number, color: string, intensity: number, life: number, flicker: boolean) {
+    this.lights.push({ x, y, radius, color, intensity, life, maxLife: life, flicker });
+    if (this.lights.length > 60) this.lights.shift();
+  }
+  addText(x: number, y: number, text: string, color: string, size: number) {
+    this.texts.push({ x, y, text, life: 1.6, maxLife: 1.6, color, size });
+  }
+
+  drawTrackMarks(t: TankState) {
+    const g = this.gctx;
+    const px = Math.cos(t.hullAngle + Math.PI / 2), py = Math.sin(t.hullAngle + Math.PI / 2);
+    g.fillStyle = this.map.id === 'nightcity' ? 'rgba(0,0,0,0.22)' : 'rgba(30,22,14,0.20)';
+    for (const s of [-13, 13]) {
+      g.save();
+      g.translate(t.x + px * s, t.y + py * s);
+      g.rotate(t.hullAngle);
+      g.fillRect(-7, -3.5, 14, 7);
+      g.restore();
+    }
+  }
+
+  // ================= RENDER =================
+  render(rdt: number) {
+    void rdt;
+    const ctx = this.ctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    // shake
+    const sh = this.trauma * this.trauma * 22 * this.dpr;
+    const sx = rand(-sh, sh), sy = rand(-sh, sh);
+    ctx.setTransform(this.viewScale, 0, 0, this.viewScale, this.viewX + sx * this.viewScale / this.dpr, this.viewY + sy * this.viewScale / this.dpr);
+
+    // ground
+    ctx.drawImage(this.ground, 0, 0);
+
+    // powerups
+    for (const p of this.powerups) this.drawPowerup(p);
+
+    // walls
+    for (const wl of this.walls) if (!wl.destroyed) this.drawWall(wl);
+
+    // shells (under tanks? no, over)
+    for (const t of this.tanks) if (t.alive) this.drawTankShadow(t);
+    for (const t of this.tanks) if (t.alive && t.aiming) this.drawAimLine(t);
+    for (const t of this.tanks) if (t.alive) this.drawTank(t);
+
+    for (const s of this.shells) this.drawShell(s);
+
+    // particles (sorted: smoke under, fire over)
+    for (const p of this.particles) if (!p.glow) this.drawParticle(p);
+    for (const p of this.particles) if (p.glow) this.drawParticle(p);
+
+    // lighting
+    this.renderLighting();
+
+    // weather overlay
+    this.renderWeather();
+
+    // dust storm overlay
+    if (this.map.weather === 'dust') {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      for (const d of this.dust) {
+        const g = ctx.createRadialGradient(d.x, d.y, 4, d.x, d.y, d.s / 2);
+        g.addColorStop(0, `rgba(210,180,130,${d.a})`);
+        g.addColorStop(1, 'rgba(210,180,130,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(d.x, d.y, d.s / 2, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // texts
+    for (const t of this.texts) {
+      const a = clamp(t.life / t.maxLife, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.font = `700 ${t.size}px "Chakra Petch", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.strokeText(t.text, t.x, t.y);
+      ctx.fillStyle = t.color;
+      ctx.fillText(t.text, t.x, t.y);
+      ctx.restore();
+    }
+
+    // countdown big overlay
+    if (this.countdown > 0 && !this.gameOver) {
+      const n = Math.ceil(this.countdown - 0.6);
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '400 150px "Black Ops One", sans-serif';
+      ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      const label = n > 3 ? (this.language === 'en' ? 'READY?' : 'GOTOWI?') : n <= 0 ? 'START' : String(n);
+      ctx.strokeText(label, WORLD_W / 2, WORLD_H / 2 + 40);
+      const grad = ctx.createLinearGradient(0, WORLD_H / 2 - 100, 0, WORLD_H / 2 + 60);
+      grad.addColorStop(0, '#fde68a'); grad.addColorStop(1, '#f59e0b');
+      ctx.fillStyle = grad;
+      ctx.fillText(label, WORLD_W / 2, WORLD_H / 2 + 40);
+      ctx.restore();
+    }
+  }
+
+  renderLighting() {
+    const ctx = this.ctx;
+    if (this.map.night) {
+      // darkness layer
+      this.lctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.lctx.clearRect(0, 0, WORLD_W, WORLD_H);
+      this.lctx.fillStyle = 'rgba(4,6,18,0.78)';
+      this.lctx.fillRect(0, 0, WORLD_W, WORLD_H);
+      this.lctx.globalCompositeOperation = 'destination-out';
+      // ambient lights around arena (street lamps)
+      const lamps = [[200, 200], [1400, 200], [200, 800], [1400, 800], [800, 500], [420, 500], [1180, 500]];
+      for (const [lx, ly] of lamps) {
+        const g = this.lctx.createRadialGradient(lx, ly, 10, lx, ly, 190);
+        g.addColorStop(0, 'rgba(255,255,255,0.55)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        this.lctx.fillStyle = g;
+        this.lctx.beginPath(); this.lctx.arc(lx, ly, 190, 0, 7); this.lctx.fill();
+      }
+      // tank headlights (cones)
+      for (const t of this.tanks) {
+        if (!t.alive) continue;
+        this.lctx.save();
+        this.lctx.translate(t.x, t.y);
+        this.lctx.rotate(t.hullAngle);
+        const hg = this.lctx.createRadialGradient(0, 0, 20, 160, 0, 260);
+        hg.addColorStop(0, 'rgba(255,255,255,0.75)');
+        hg.addColorStop(1, 'rgba(255,255,255,0)');
+        this.lctx.fillStyle = hg;
+        this.lctx.beginPath();
+        this.lctx.moveTo(0, 0);
+        this.lctx.arc(0, 0, 260, -0.42, 0.42);
+        this.lctx.closePath();
+        this.lctx.fill();
+        // small radius around tank
+        const tg = this.lctx.createRadialGradient(0, 0, 5, 0, 0, 120);
+        tg.addColorStop(0, 'rgba(255,255,255,0.5)');
+        tg.addColorStop(1, 'rgba(255,255,255,0)');
+        this.lctx.fillStyle = tg;
+        this.lctx.beginPath(); this.lctx.arc(0, 0, 120, 0, 7); this.lctx.fill();
+        this.lctx.restore();
+      }
+      // dynamic lights (explosions etc.)
+      for (const l of this.lights) {
+        const k = l.life / l.maxLife;
+        let r = l.radius * (0.6 + 0.4 * k);
+        if (l.flicker) r *= 0.9 + Math.random() * 0.2;
+        const g = this.lctx.createRadialGradient(l.x, l.y, 8, l.x, l.y, r);
+        g.addColorStop(0, `rgba(255,255,255,${0.95 * l.intensity})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        this.lctx.fillStyle = g;
+        this.lctx.beginPath(); this.lctx.arc(l.x, l.y, r, 0, 7); this.lctx.fill();
+      }
+      // powerups glow
+      for (const p of this.powerups) {
+        const g = this.lctx.createRadialGradient(p.x, p.y, 5, p.x, p.y, 110);
+        g.addColorStop(0, 'rgba(255,255,255,0.5)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        this.lctx.fillStyle = g;
+        this.lctx.beginPath(); this.lctx.arc(p.x, p.y, 110, 0, 7); this.lctx.fill();
+      }
+      this.lctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(this.lightCanvas, 0, 0);
+      // additive warm glow on top
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const l of this.lights) {
+        const k = l.life / l.maxLife;
+        let r = l.radius * (0.6 + 0.4 * k);
+        if (l.flicker) r *= 0.9 + Math.random() * 0.2;
+        const g = ctx.createRadialGradient(l.x, l.y, 4, l.x, l.y, r);
+        g.addColorStop(0, `rgba(${l.color},${0.35 * k * l.intensity})`);
+        g.addColorStop(1, `rgba(${l.color},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(l.x, l.y, r, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    } else {
+      // day: subtle additive glows
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const l of this.lights) {
+        const k = l.life / l.maxLife;
+        const r = l.radius * (0.6 + 0.4 * k);
+        const g = ctx.createRadialGradient(l.x, l.y, 4, l.x, l.y, r);
+        g.addColorStop(0, `rgba(${l.color},${0.28 * k * l.intensity})`);
+        g.addColorStop(1, `rgba(${l.color},0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(l.x, l.y, r, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  renderWeather() {
+    const ctx = this.ctx;
+    if (this.map.weather === 'rain') {
+      ctx.save();
+      ctx.strokeStyle = this.map.night ? 'rgba(150,190,255,0.35)' : 'rgba(180,210,235,0.4)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (const r of this.rain) {
+        ctx.moveTo(r.x, r.y);
+        ctx.lineTo(r.x - 6, r.y - 22);
+      }
+      ctx.stroke();
+      ctx.restore();
+      // occasional splash
+      if (Math.random() < 0.3) {
+        const x = rand(0, WORLD_W), y = rand(0, WORLD_H);
+        this.addParticle({
+          x, y, vx: 0, vy: 0, life: 0.25, maxLife: 0.25, size: 2, grow: 40,
+          color: 'rgba(180,210,235,', alpha: 0.4, type: 'ring', rotation: 0, rotSpeed: 0, gravity: 0, drag: 0, glow: false,
+        });
+      }
+    }
+  }
+
+  drawParticle(p: Particle) {
+    const ctx = this.ctx;
+    const k = clamp(p.life / p.maxLife, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = clamp(p.alpha * (p.type === 'ring' ? k : p.type === 'flash' ? k : Math.min(1, k * 2)), 0, 1);
+    if (p.type === 'ring') {
+      ctx.strokeStyle = `${p.color}${(p.alpha * k).toFixed(3)})`;
+      ctx.lineWidth = 4 * k + 1;
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.size), 0, 7); ctx.stroke();
+    } else if (p.type === 'spark' || p.type === 'tracer' || p.type === 'casing') {
+      if (p.type === 'spark' || p.type === 'tracer') {
+        ctx.strokeStyle = `${p.color}1)`;
+        ctx.lineWidth = p.type === 'tracer' ? 3.5 : 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03);
+        ctx.stroke();
+        if (p.glow) {
+          ctx.fillStyle = `${p.color}0.9)`;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 0.6, 0, 7); ctx.fill();
         }
-        const i = (sy * S + sx) * 4;
-        img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
+      } else {
+        ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
+        ctx.fillStyle = '#d4af37';
+        ctx.fillRect(-4, -1.5, 8, 3);
+        ctx.fillStyle = '#8a7020';
+        ctx.fillRect(2, -1.5, 2, 3);
       }
+    } else if (p.type === 'debris') {
+      ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
+      ctx.fillStyle = `${p.color}1)`;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7);
+    } else if (p.type === 'fire' || p.type === 'flash') {
+      const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, Math.max(2, p.size));
+      g.addColorStop(0, 'rgba(255,245,210,0.95)');
+      g.addColorStop(0.35, `${p.color}0.85)`);
+      g.addColorStop(1, `${p.color2 ?? p.color}0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(2, p.size), 0, 7); ctx.fill();
+    } else {
+      // smoke / dust: soft blob
+      const g = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, Math.max(2, p.size));
+      g.addColorStop(0, `${p.color}${(p.alpha * k).toFixed(3)})`);
+      g.addColorStop(1, `${p.color}0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(2, p.size), 0, 7); ctx.fill();
     }
-    ctx.putImageData(img, 0, 0);
-    // 1.6: zielone znaczniki wiosek (obrócone razem z mapą)
-    const villages = this.world.villagesIn(px - S / 2 - 40, pz - S / 2 - 40, px + S / 2 + 40, pz + S / 2 + 40);
-    if (villages.length) {
-      ctx.fillStyle = '#2ed06a';
-      ctx.strokeStyle = '#0c3a1c';
-      for (const v of villages) {
-        const dx = v.x - px, dz = v.z - pz;
-        const ox = cos * dx - sin * dz;
-        const oy = sin * dx + cos * dz;
-        const sx = Math.round(ox + S / 2);
-        const sy = Math.round(oy + S / 2);
-        if (sx < 1 || sy < 1 || sx > S - 2 || sy > S - 2) continue;
-        ctx.fillRect(sx - 1, sy - 1, 3, 3);
-        ctx.strokeRect(sx - 1.5, sy - 1.5, 4, 4);
-      }
-    }
-    // 2.2: własne punkty; aktywny jest większy, punkt śmierci czerwony.
-    for (const w of this.waypoints) {
-      if (w.dimension !== this.currentDimension()) continue;
-      const dx = w.x - px, dz = w.z - pz;
-      const sx = Math.round(cos * dx - sin * dz + S / 2);
-      const sy = Math.round(sin * dx + cos * dz + S / 2);
-      if (sx < 2 || sy < 2 || sx > S - 3 || sy > S - 3) continue;
-      const active = w.id === this.activeWaypointId;
-      ctx.fillStyle = w.kind === 'death' ? '#ff4545' : active ? '#ffe45c' : '#ff9d35';
-      ctx.fillRect(sx - (active ? 2 : 1), sy - (active ? 2 : 1), active ? 5 : 3, active ? 5 : 3);
-      ctx.strokeStyle = '#281400';
-      ctx.strokeRect(sx - 2.5, sy - 2.5, 5, 5);
-    }
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(S / 2 - 1, S / 2 - 1, 3, 3);
-    ctx.fillStyle = '#ff5555';
-    ctx.fillRect(S / 2, S / 2 - 5, 1, 4);
+    ctx.restore();
   }
 
-  dispose() {
-    cancelAnimationFrame(this.raf);
-    this.viewRO?.disconnect();
-    this.viewRO = null;
-    for (const t of this.viewTimers) clearTimeout(t);
-    this.viewTimers = [];
-    Sfx.setRain(false);
-    for (const [t, type, fn, opts] of this.listeners) t.removeEventListener(type, fn, opts);
-    if (document.pointerLockElement) document.exitPointerLock();
-    // Oba wymiary – chunki netheru też trzymają geometrię.
-    for (const w of [this.homeWorld, this.netherWorld]) {
-      if (!w) continue;
-      for (const c of w.chunks.values()) for (const m of c.meshes) m.geometry.dispose();
+  drawWall(wl: WallState) {
+    const ctx = this.ctx;
+    const dmg = 1 - wl.hp / wl.maxHp;
+    ctx.save();
+    if (wl.shake > 0) {
+      wl.shake -= 0.016;
+      ctx.translate(rand(-2, 2), rand(-2, 2));
     }
-    for (const m of this.mobs) m.dispose();
-    for (const t of this.tnts) (t.mesh.material as THREE.Material).dispose();
-    this.tnts = [];
-    this.net?.close('Koniec gry');
-    this.net = null;
-    for (const a of this.arrows) this.scene.remove(a.mesh);
-    this.arrows = [];
-    for (const o of this.orbs) this.scene.remove(o.mesh);
-    this.orbs = [];
-    this.orbGeo.dispose();
-    this.orbMat.dispose();
-    for (const f of this.falling) this.scene.remove(f.mesh);
-    this.falling = [];
-    this.leafDecay = [];
-    for (const d of this.drops) this.scene.remove(d.mesh);
-    this.drops = [];
-    // obiekty odłożone w drugim wymiarze
-    for (const st of [this.dimStash.home, this.dimStash.nether]) {
-      for (const m of st.mobs) m.dispose();
-      for (const t of st.tnts) (t.mesh.material as THREE.Material).dispose();
-      for (const a of st.arrows) this.scene.remove(a.mesh);
-      for (const o of st.orbs) this.scene.remove(o.mesh);
-      for (const f of st.falling) this.scene.remove(f.mesh);
-      for (const d of st.drops) this.scene.remove(d.mesh);
-      st.mobs = [];
-      st.drops = [];
-      st.arrows = [];
-      st.tnts = [];
-      st.orbs = [];
-      st.falling = [];
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(wl.x + 5, wl.y + 7, wl.w, wl.h);
+    if (wl.type === 'concrete') {
+      const g = ctx.createLinearGradient(wl.x, wl.y, wl.x, wl.y + wl.h);
+      g.addColorStop(0, '#8f8f96'); g.addColorStop(0.5, '#73737a'); g.addColorStop(1, '#55555c');
+      ctx.fillStyle = g;
+      ctx.fillRect(wl.x, wl.y, wl.w, wl.h);
+      ctx.fillStyle = 'rgba(255,255,255,0.14)';
+      ctx.fillRect(wl.x, wl.y, wl.w, 4);
+      // panel lines
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 2;
+      if (wl.w > wl.h) {
+        const n = Math.floor(wl.w / 50);
+        for (let i = 1; i < n; i++) { ctx.beginPath(); ctx.moveTo(wl.x + i * wl.w / n, wl.y); ctx.lineTo(wl.x + i * wl.w / n, wl.y + wl.h); ctx.stroke(); }
+      } else {
+        const n = Math.floor(wl.h / 50);
+        for (let i = 1; i < n; i++) { ctx.beginPath(); ctx.moveTo(wl.x, wl.y + i * wl.h / n); ctx.lineTo(wl.x + wl.w, wl.y + i * wl.h / n); ctx.stroke(); }
+      }
+    } else if (wl.type === 'crate') {
+      const g = ctx.createLinearGradient(wl.x, wl.y, wl.x + wl.w, wl.y + wl.h);
+      g.addColorStop(0, '#a97e4c'); g.addColorStop(1, '#7a5a34');
+      ctx.fillStyle = g;
+      ctx.fillRect(wl.x, wl.y, wl.w, wl.h);
+      ctx.strokeStyle = '#5a4126'; ctx.lineWidth = 3;
+      ctx.strokeRect(wl.x + 1.5, wl.y + 1.5, wl.w - 3, wl.h - 3);
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(wl.x, wl.y); ctx.lineTo(wl.x + wl.w, wl.y + wl.h);
+      ctx.moveTo(wl.x + wl.w, wl.y); ctx.lineTo(wl.x, wl.y + wl.h);
+      ctx.stroke();
+      // planks
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1.5;
+      for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(wl.x, wl.y + wl.h * i / 4); ctx.lineTo(wl.x + wl.w, wl.y + wl.h * i / 4); ctx.stroke(); }
+    } else if (wl.type === 'metal') {
+      const g = ctx.createLinearGradient(wl.x, wl.y, wl.x, wl.y + wl.h);
+      if (this.map.night) { g.addColorStop(0, '#3b5a78'); g.addColorStop(1, '#22374d'); }
+      else { g.addColorStop(0, '#6b7d8c'); g.addColorStop(1, '#46525d'); }
+      ctx.fillStyle = g;
+      ctx.fillRect(wl.x, wl.y, wl.w, wl.h);
+      // ribs
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      const horiz = wl.w > wl.h;
+      const n = Math.floor((horiz ? wl.w : wl.h) / 18);
+      for (let i = 0; i < n; i++) {
+        if (horiz) ctx.fillRect(wl.x + i * 18 + 6, wl.y + 3, 5, wl.h - 6);
+        else ctx.fillRect(wl.x + 3, wl.y + i * 18 + 6, wl.w - 6, 5);
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(wl.x, wl.y, wl.w, 3);
+      // rust spots
+      ctx.fillStyle = 'rgba(120,60,30,0.4)';
+      ctx.beginPath(); ctx.arc(wl.x + wl.w * 0.2, wl.y + wl.h * 0.7, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(wl.x + wl.w * 0.75, wl.y + wl.h * 0.3, 7, 0, 7); ctx.fill();
+    } else if (wl.type === 'sandbag') {
+      ctx.fillStyle = '#9a8a66';
+      ctx.fillRect(wl.x, wl.y, wl.w, wl.h);
+      // bag rows
+      const rows = Math.max(2, Math.floor(wl.h / 16));
+      for (let r = 0; r < rows; r++) {
+        const y = wl.y + r * (wl.h / rows);
+        const off = r % 2 ? 14 : 0;
+        for (let x = wl.x - 28 + off; x < wl.x + wl.w; x += 28) {
+          const bx = clamp(x, wl.x, wl.x + wl.w - 26);
+          ctx.fillStyle = r % 2 ? '#a3906c' : '#93835f';
+          ctx.beginPath(); ctx.ellipse(bx + 13, y + wl.h / rows / 2, 14, wl.h / rows / 2 - 1, 0, 0, 7); ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1; ctx.stroke();
+        }
+      }
+    } else {
+      // brick
+      ctx.fillStyle = '#8a4a3c';
+      ctx.fillRect(wl.x, wl.y, wl.w, wl.h);
+      ctx.fillStyle = '#a05a48';
+      const bh = 12;
+      for (let y = wl.y; y < wl.y + wl.h; y += bh) {
+        const off = (Math.floor((y - wl.y) / bh) % 2) * 15;
+        for (let x = wl.x - 30 + off; x < wl.x + wl.w; x += 30) {
+          ctx.fillRect(x + 1, y + 1, 28, bh - 2);
+        }
+      }
     }
-    for (const pool of this.particlePools.values()) {
-      this.scene.remove(pool.mesh);
-      pool.mesh.dispose();
-      pool.mat.dispose();
+    // damage overlay: cracks
+    if (dmg > 0.05) {
+      ctx.strokeStyle = `rgba(0,0,0,${0.25 + dmg * 0.5})`;
+      ctx.lineWidth = 1 + dmg * 2;
+      ctx.beginPath();
+      ctx.moveTo(wl.x + wl.w * 0.3, wl.y);
+      ctx.lineTo(wl.x + wl.w * 0.45, wl.y + wl.h * 0.5);
+      ctx.lineTo(wl.x + wl.w * 0.35, wl.y + wl.h);
+      ctx.moveTo(wl.x + wl.w * 0.7, wl.y);
+      ctx.lineTo(wl.x + wl.w * 0.6, wl.y + wl.h);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(0,0,0,${dmg * 0.3})`;
+      ctx.fillRect(wl.x, wl.y, wl.w, wl.h);
     }
-    this.particlePools.clear();
-    this.dropIconGeo.dispose();
-    for (const mat of this.dropIconMats.values()) mat.dispose();
-    this.dropIconMats.clear();
-    if (this.stormClouds) {
-      this.scene.remove(this.stormClouds);
-      this.stormClouds.geometry.dispose();
-      (this.stormClouds.material as THREE.Material).dispose();
+    // hp pip for tough walls
+    if (wl.maxHp > 1 && wl.hp < wl.maxHp) {
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(wl.x, wl.y - 8, wl.w, 5);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(wl.x, wl.y - 8, wl.w * (wl.hp / wl.maxHp), 5);
     }
-    this.stormTex?.dispose();
-    this.cloudTex?.dispose();
-    this.cloudFadeTex?.dispose();
-    this.skyDomeTex?.dispose();
-    this.skyDome?.geometry.dispose();
-    if (this.skyDome) (this.skyDome.material as THREE.Material).dispose();
-    for (const mat of this.materials) mat.dispose();
-    this.materials = [];
-    this.handMat.dispose();
-    this.dropMat.dispose();
-    this.arrowMat.dispose();
-    this.arrowGeo.dispose();
-    this.tntGeo.dispose();
-    this.selection.geometry.dispose();
-    (this.selection.material as THREE.Material).dispose();
-    this.crackMesh.geometry.dispose();
-    (this.crackMesh.material as THREE.Material).dispose();
-    for (const t of this.crackTex) t.dispose();
-    for (const t of this.itemTex.values()) t.dispose();
-    this.itemTex.clear();
-    this.removeBobber();
-    this.bobberGeo?.dispose();
-    this.bobberMat?.dispose();
-    this.renderer.dispose();
-    // Browsers cap the number of live WebGL contexts – release this one for good.
-    try { this.renderer.forceContextLoss(); } catch { /* not supported everywhere */ }
-    this.renderer.domElement.remove();
+    ctx.restore();
+  }
+
+  drawTankShadow(t: TankState) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(t.x + 6, t.y + 9);
+    ctx.rotate(t.hullAngle);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    const w = 56, h = 40;
+    if (ctx.roundRect) ctx.roundRect(-w / 2, -h / 2, w, h, 8); else ctx.rect(-w / 2, -h / 2, w, h);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Przerywana linia celowania dla gracza, który celuje joystickiem na telefonie. */
+  drawAimLine(t: TankState) {
+    const ctx = this.ctx;
+    const a = t.turretAngle;
+    const x0 = t.x + Math.cos(a) * 52, y0 = t.y + Math.sin(a) * 52;
+    const len = 300;
+    ctx.save();
+    const g = ctx.createLinearGradient(x0, y0, x0 + Math.cos(a) * len, y0 + Math.sin(a) * len);
+    g.addColorStop(0, t.cfg.color + 'aa');
+    g.addColorStop(1, t.cfg.color + '00');
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 9]);
+    ctx.lineDashOffset = -this.elapsed * 40;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0 + Math.cos(a) * len, y0 + Math.sin(a) * len);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawTank(t: TankState) {
+    const ctx = this.ctx;
+    const C = t.cfg.color;
+    ctx.save();
+    ctx.translate(t.x, t.y);
+
+    // shield bubble
+    if (t.shield > 0 || t.spawnShield > 0) {
+      const pulse = 0.5 + Math.sin(this.elapsed * 8) * 0.15;
+      ctx.strokeStyle = t.shield > 0 ? `rgba(100,200,255,${0.7 * pulse + 0.3})` : `rgba(255,255,255,${0.5 * pulse + 0.2})`;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([10, 6]);
+      ctx.beginPath(); ctx.arc(0, 0, 40, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+      const g = ctx.createRadialGradient(0, 0, 10, 0, 0, 40);
+      g.addColorStop(0, 'rgba(100,200,255,0)');
+      g.addColorStop(1, `rgba(100,200,255,${0.18 * pulse})`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, 40, 0, 7); ctx.fill();
+    }
+
+    // ---- hull ----
+    ctx.save();
+    ctx.rotate(t.hullAngle);
+    // tracks
+    for (const s of [-1, 1]) {
+      const ty = s * 17;
+      // track base
+      const tg = ctx.createLinearGradient(0, ty - 8, 0, ty + 8);
+      tg.addColorStop(0, '#26262a'); tg.addColorStop(0.5, '#3a3a40'); tg.addColorStop(1, '#1c1c20');
+      ctx.fillStyle = tg;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-28, ty - 8, 56, 16, 7); else ctx.rect(-28, ty - 8, 56, 16);
+      ctx.fill();
+      // treads animated
+      ctx.save();
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-28, ty - 8, 56, 16, 7); else ctx.rect(-28, ty - 8, 56, 16);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 2.5;
+      const off = (t.trackPhase * 22) % 9;
+      for (let x = -30 - 9 + off; x < 30; x += 9) {
+        ctx.beginPath(); ctx.moveTo(x, ty - 8); ctx.lineTo(x, ty + 8); ctx.stroke();
+      }
+      // wheels
+      ctx.fillStyle = '#17171a';
+      for (let x = -20; x <= 20; x += 10) {
+        ctx.beginPath(); ctx.arc(x, ty, 4.6, 0, 7); ctx.fill();
+        ctx.fillStyle = '#4b4b52';
+        ctx.beginPath(); ctx.arc(x, ty, 2, 0, 7); ctx.fill();
+        ctx.fillStyle = '#17171a';
+      }
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-28, ty - 8, 56, 16, 7); else ctx.rect(-28, ty - 8, 56, 16);
+      ctx.stroke();
+    }
+    // hull body
+    const hullGrad = ctx.createLinearGradient(0, -14, 0, 14);
+    hullGrad.addColorStop(0, '#4a4a48');
+    hullGrad.addColorStop(0.4, '#3b3b39');
+    hullGrad.addColorStop(1, '#262624');
+    ctx.fillStyle = hullGrad;
+    ctx.beginPath();
+    // armored hull shape with sloped front
+    ctx.moveTo(-26, -13);
+    ctx.lineTo(14, -13);
+    ctx.lineTo(28, -8);
+    ctx.lineTo(28, 8);
+    ctx.lineTo(14, 13);
+    ctx.lineTo(-26, 13);
+    ctx.quadraticCurveTo(-30, 13, -30, 9);
+    ctx.lineTo(-30, -9);
+    ctx.quadraticCurveTo(-30, -13, -26, -13);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+    // top highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(-24, -12, 34, 4);
+    // camo blobs
+    ctx.fillStyle = 'rgba(60,70,50,0.55)';
+    ctx.beginPath(); ctx.ellipse(-10, -4, 12, 6, 0.4, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(80,75,60,0.5)';
+    ctx.beginPath(); ctx.ellipse(8, 5, 10, 5, -0.3, 0, 7); ctx.fill();
+    // front glacis plate + headlights
+    ctx.fillStyle = '#33332f';
+    ctx.fillRect(22, -9, 5, 18);
+    const lightOn = this.map.night;
+    for (const s of [-1, 1]) {
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(24, s * 10 - 2.5, 4, 5);
+      ctx.fillStyle = lightOn ? '#fef9c3' : '#57534e';
+      ctx.fillRect(24.5, s * 10 - 1.5, 2.5, 3);
+      if (lightOn) {
+        const hg = ctx.createRadialGradient(28, s * 10, 1, 28, s * 10, 26);
+        hg.addColorStop(0, 'rgba(254,249,195,0.7)');
+        hg.addColorStop(1, 'rgba(254,249,195,0)');
+        ctx.fillStyle = hg;
+        ctx.beginPath(); ctx.arc(28, s * 10, 26, 0, 7); ctx.fill();
+      }
+    }
+    // rear exhaust
+    ctx.fillStyle = '#1c1c1a';
+    ctx.fillRect(-30, -8, 4, 6);
+    ctx.fillRect(-30, 2, 4, 6);
+    // side skirts with player color stripe
+    ctx.fillStyle = C;
+    ctx.globalAlpha = 0.9;
+    ctx.fillRect(-24, -14.5, 36, 2.5);
+    ctx.fillRect(-24, 12, 36, 2.5);
+    ctx.globalAlpha = 1;
+    // tools / boxes on hull
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(-18, -10, 8, 3);
+    ctx.fillRect(-18, 7, 8, 3);
+    // hatches
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1;
+    ctx.strokeRect(-6, -9, 10, 18);
+    ctx.restore();
+
+    // ---- turret ----
+    ctx.save();
+    ctx.rotate(t.turretAngle);
+    const rec = t.recoil;
+    // barrel shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(8 - rec * 0.6 + 2, -3.5 + 3, 42, 7);
+    // barrel
+    const barrelW = t.bigUntil > this.elapsed ? 9 : 7;
+    const bg = ctx.createLinearGradient(0, -barrelW / 2, 0, barrelW / 2);
+    bg.addColorStop(0, '#55554f'); bg.addColorStop(0.5, '#33332f'); bg.addColorStop(1, '#1d1d1b');
+    ctx.fillStyle = bg;
+    ctx.fillRect(8 - rec * 0.6, -barrelW / 2, 42, barrelW);
+    // thermal sleeve rings
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(20 - rec * 0.6, -barrelW / 2 - 1, 3, barrelW + 2);
+    ctx.fillRect(32 - rec * 0.6, -barrelW / 2 - 1, 3, barrelW + 2);
+    // muzzle brake
+    ctx.fillStyle = '#262624';
+    ctx.fillRect(46 - rec * 0.6, -barrelW / 2 - 2.5, 9, barrelW + 5);
+    ctx.fillStyle = '#0c0c0b';
+    ctx.fillRect(53 - rec * 0.6, -barrelW / 2 + 0.5, 2.5, barrelW - 1);
+    // muzzle flash sprite
+    if (t.muzzle > 0) {
+      const m = t.muzzle;
+      const fg = ctx.createRadialGradient(58 - rec * 0.6, 0, 2, 58 - rec * 0.6, 0, 34 * m + 10);
+      fg.addColorStop(0, `rgba(255,250,220,${0.95 * m})`);
+      fg.addColorStop(0.4, `rgba(255,180,80,${0.8 * m})`);
+      fg.addColorStop(1, 'rgba(255,120,30,0)');
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      // star flash
+      ctx.save();
+      ctx.translate(60 - rec * 0.6, 0);
+      for (let i = 0; i < 6; i++) {
+        ctx.rotate(Math.PI / 3);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(34 * m + 8, -6);
+        ctx.lineTo(34 * m + 8, 6);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+      ctx.beginPath(); ctx.arc(58 - rec * 0.6, 0, 20 * m + 6, 0, 7); ctx.fill();
+    }
+    // turret body
+    const turGrad = ctx.createLinearGradient(0, -16, 0, 16);
+    turGrad.addColorStop(0, '#54544e');
+    turGrad.addColorStop(0.5, '#3f3f3b');
+    turGrad.addColorStop(1, '#2a2a28');
+    ctx.fillStyle = turGrad;
+    ctx.beginPath();
+    ctx.moveTo(-18, -14);
+    ctx.lineTo(6, -16);
+    ctx.lineTo(16, -10);
+    ctx.lineTo(16, 10);
+    ctx.lineTo(6, 16);
+    ctx.lineTo(-18, 14);
+    ctx.quadraticCurveTo(-24, 14, -24, 8);
+    ctx.lineTo(-24, -8);
+    ctx.quadraticCurveTo(-24, -14, -18, -14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+    // turret top detail
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath(); ctx.ellipse(-2, -6, 12, 5, 0, 0, 7); ctx.fill();
+    // hatch
+    ctx.fillStyle = '#2c2c2a';
+    ctx.beginPath(); ctx.ellipse(-10, 2, 6.5, 6.5, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = '#45453f';
+    ctx.beginPath(); ctx.ellipse(-10, 2, 3.5, 3.5, 0, 0, 7); ctx.fill();
+    // MG
+    ctx.strokeStyle = '#1a1a18'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-4, -10); ctx.lineTo(10, -13); ctx.stroke();
+    // player number + color chevron
+    ctx.fillStyle = C;
+    ctx.beginPath();
+    ctx.moveTo(-22, -4); ctx.lineTo(-14, 0); ctx.lineTo(-22, 4); ctx.closePath();
+    ctx.fill();
+    // antenna (wobble with speed)
+    const wob = Math.sin(this.elapsed * 9 + t.id * 2) * (2 + Math.hypot(t.vx, t.vy) * 0.02);
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-20, -8); ctx.quadraticCurveTo(-26, -22, -24 + wob, -34); ctx.stroke();
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath(); ctx.arc(-24 + wob, -34, 1.8, 0, 7); ctx.fill();
+    // barrel heat glow
+    if (t.barrelHeat > 0.8) {
+      ctx.fillStyle = `rgba(255,100,30,${(t.barrelHeat - 0.8) * 0.5})`;
+      ctx.fillRect(44 - rec * 0.6, -barrelW / 2 - 2.5, 11, barrelW + 5);
+    }
+    ctx.restore();
+
+    // name + hp bar (unrotated)
+    ctx.restore();
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    // hp bar
+    const bw = 56;
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(-bw / 2, -44, bw, 8, 4); else ctx.rect(-bw / 2, -44, bw, 8);
+    ctx.fill();
+    const hpk = clamp(t.hp / t.maxHp, 0, 1);
+    const hpg = ctx.createLinearGradient(-bw / 2, 0, bw / 2, 0);
+    if (hpk > 0.5) { hpg.addColorStop(0, '#22c55e'); hpg.addColorStop(1, '#4ade80'); }
+    else if (hpk > 0.25) { hpg.addColorStop(0, '#d97706'); hpg.addColorStop(1, '#fbbf24'); }
+    else { hpg.addColorStop(0, '#b91c1c'); hpg.addColorStop(1, '#ef4444'); }
+    ctx.fillStyle = hpg;
+    if (hpk > 0) {
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(-bw / 2 + 1.5, -42.5, (bw - 3) * hpk, 5, 2.5); else ctx.rect(-bw / 2 + 1.5, -42.5, (bw - 3) * hpk, 5);
+      ctx.fill();
+    }
+    // name
+    ctx.font = '700 13px "Chakra Petch", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    const label = `${t.cfg.name}${t.cfg.isBot ? ' • BOT' : ''}`;
+    ctx.strokeText(label, 0, -50);
+    ctx.fillStyle = C;
+    ctx.fillText(label, 0, -50);
+    // active effects pips
+    let px = -24;
+    const pip = (color: string, txt: string) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.beginPath(); ctx.arc(px, 30, 9, 0, 7); ctx.fill();
+      ctx.fillStyle = color;
+      ctx.font = '800 10px "JetBrains Mono", monospace';
+      ctx.fillText(txt, px, 33.5);
+      px += 20;
+    };
+    if (t.rapidUntil > this.elapsed) pip('#fbbf24', 'R');
+    if (t.bigUntil > this.elapsed) pip('#f87171', 'B');
+    if (t.speedUntil > this.elapsed) pip('#38bdf8', 'S');
+    if (t.shield > 0) pip('#67e8f9', '◈');
+    ctx.restore();
+  }
+
+  drawShell(s: ShellState) {
+    const ctx = this.ctx;
+    // tracer trail
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < s.trail.length; i++) {
+      const tr = s.trail[i];
+      const k = (i / s.trail.length) * clamp(tr.a, 0, 1);
+      ctx.fillStyle = s.big ? `rgba(255,140,50,${k * 0.5})` : `rgba(255,225,160,${k * 0.45})`;
+      ctx.beginPath(); ctx.arc(tr.x, tr.y, (s.big ? 7 : 4.5) * (0.4 + 0.6 * (i / s.trail.length)), 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.angle);
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(2, 3, s.big ? 9 : 7, s.big ? 4 : 3, 0, 0, 7); ctx.fill();
+    // body
+    const g = ctx.createLinearGradient(0, -3, 0, 3);
+    g.addColorStop(0, '#e7e5e4'); g.addColorStop(0.5, '#a8a29e'); g.addColorStop(1, '#57534e');
+    ctx.fillStyle = g;
+    const L = s.big ? 12 : 9, R = s.big ? 3.6 : 2.8;
+    ctx.beginPath();
+    ctx.moveTo(-L / 2, -R);
+    ctx.lineTo(L / 2 - 3, -R);
+    ctx.lineTo(L / 2, 0);
+    ctx.lineTo(L / 2 - 3, R);
+    ctx.lineTo(-L / 2, R);
+    ctx.closePath();
+    ctx.fill();
+    // glowing tip
+    ctx.fillStyle = s.big ? '#fb923c' : '#fef3c7';
+    ctx.beginPath(); ctx.arc(L / 2 - 1, 0, R * 0.8, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  drawPowerup(p: PowerUpState) {
+    const ctx = this.ctx;
+    const blink = p.life < 5 ? (Math.sin(p.bob * 6) > 0 ? 1 : 0.25) : 1;
+    ctx.save();
+    ctx.translate(p.x, p.y + Math.sin(p.bob) * 4);
+    ctx.globalAlpha = blink;
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(0, 18, 18, 6, 0, 0, 7); ctx.fill();
+    // glow ring
+    const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 30);
+    g.addColorStop(0, 'rgba(134,239,172,0.5)');
+    g.addColorStop(1, 'rgba(134,239,172,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 30, 0, 7); ctx.fill();
+    // crate
+    ctx.fillStyle = '#1f2937';
+    ctx.strokeStyle = '#86efac'; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(-15, -15, 30, 30, 7); else ctx.rect(-15, -15, 30, 30);
+    ctx.fill(); ctx.stroke();
+    // icon
+    ctx.fillStyle = '#86efac';
+    ctx.font = '800 17px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const icons: Record<string, string> = { repair: '+', shield: '◈', rapid: '≋', big: '●', speed: '»' };
+    ctx.fillText(icons[p.kind], 0, 1);
+    ctx.textBaseline = 'alphabetic';
+    // rotating dashed ring
+    ctx.strokeStyle = 'rgba(134,239,172,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 5]);
+    ctx.lineDashOffset = -p.bob * 12;
+    ctx.beginPath(); ctx.arc(0, 0, 22, 0, 7); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 }

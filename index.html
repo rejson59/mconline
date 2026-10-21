@@ -1,61 +1,25 @@
 <!doctype html>
 <html lang="pl">
   <head>
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%brand/joypad-mark.svg" />
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#3b2a1e" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>BlockCraft 2.16 – Minecraft w przeglądarce, na publicznym serwerze</title>
-    <meta
-      name="description"
-      content="BlockCraft 2.16 „Pikselowe tekstury” – darmowa gra sandboxowa w przeglądarce z publicznym serwerem: wielobarwne tekstury mobów i graczy, 155 przepisów i schody z każdego materiału, jeden wspólny świat, ekwipunek i crafting jak w Minecrafcie, skórki i tryb poziomy na telefonie. Bez instalacji i bez konta."
-    />
-    <meta name="author" content="mconline" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JoyPad — Wasza ekipa. Wasza konsola.</title>
+    <meta name="description" content="JoyPad zamienia duży ekran i telefony w domową konsolę. Wspólna biblioteka, osobiste pady, głos ekipy i Moments z Waszych rozgrywek." />
+    <meta name="theme-color" content="#09090b" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./images/joypad-touch-180.png" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="BlockCraft 2.16 – Minecraft w przeglądarce, na publicznym serwerze" />
-    <meta
-      property="og:description"
-      content="Wersja 2.16 „Pikselowe tekstury”: każdy mob i gracz ma wielobarwną teksturę jak w Minecrafcie, doszły schody, płyty, latarnie, dzwony i beton w nowych kolorach. Wejdź na publiczny serwer, buduj wspólny świat, a postać sama bije wrogie moby i wskakuje na schodki."
-    />
+    <meta property="og:title" content="JoyPad — Wasza ekipa. Wasza konsola." />
+    <meta property="og:description" content="JoyPad zamienia duży ekran i telefony w domową konsolę. Wspólna biblioteka, osobiste pady, głos ekipy i Moments z Waszych rozgrywek." />
+    <meta property="og:image" content="./images/og-cover.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%238b6240'/%3E%3Crect width='16' height='5' fill='%2364a83c'/%3E%3Crect y='5' width='16' height='1' fill='%23508a2e'/%3E%3C/svg%3E"
-    />
+    <meta name="twitter:title" content="JoyPad — Wasza ekipa. Wasza konsola." />
+    <meta name="twitter:description" content="Wspólny ekran, telefony jako pady i najlepsze akcje w Moments. Bez instalacji." />
+    <meta name="twitter:image" content="./images/og-cover.jpg" />
   </head>
   <body>
-    <div id="root">
-      <!-- Instant loading placeholder – replaced by React as soon as it mounts -->
-      <div
-        style="
-          position: fixed;
-          inset: 0;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 18px;
-          background: #000;
-          color: #e0e0e0;
-          font-family: monospace;
-          text-align: center;
-        "
-      >
-        <div style="font-size: 28px; letter-spacing: 2px; text-shadow: 2px 2px 0 #3f3f3f">BLOCKCRAFT</div>
-        <div style="width: 220px; height: 12px; background: #1f1f1f; border: 2px solid #000">
-          <div style="width: 40%; height: 100%; background: #64a83c"></div>
-        </div>
-        <div style="font-size: 14px; opacity: 0.8">Ładowanie gry…</div>
-      </div>
-    </div>
-    <noscript>
-      <div style="color: #fff; font-family: monospace; padding: 24px; text-align: center">
-        BlockCraft wymaga włączonego JavaScriptu. Włącz go i odśwież stronę.
-      </div>
-    </noscript>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>

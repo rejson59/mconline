@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <title>JoyPad — przekierowanie…</title>
+    <script>
+      // GitHub Pages nie zna tras SPA. Wróć do katalogu repozytorium, bez
+      // zakładania, że repo nazywa się StalowyFront lub JoyPad.
+      (function () {
+        var loc = window.location;
+        var segments = loc.pathname.split('/').filter(Boolean);
+        var base = segments.length ? '/' + segments[0] + '/' : '/';
+        var rest = loc.pathname.slice(base.length) + loc.search + loc.hash;
+        loc.replace(loc.origin + base + (rest ? '#' + rest : ''));
+      })();
+    </script>
+  </head>
+  <body><p>Przekierowanie do JoyPad…</p></body>
+</html>

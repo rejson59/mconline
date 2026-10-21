@@ -5,7 +5,7 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
-    "types": ["node", "vite/client"],
+    "types": ["node"],
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -27,5 +27,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vite.config.ts", ".harness/smoke.ts", ".harness/ui.tsx", ".harness/bench.ts", ".harness/jsdom.d.ts"]
+  "include": ["src", "vite.config.ts"]
 }

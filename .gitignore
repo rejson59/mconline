@@ -1,25 +1,8 @@
-# dependencies
-node_modules/
-.npm/
-
-# build output
-dist/
-dist-ssr/
-*.local
-
-# generated harness bundles (the runner itself is committed)
-.harness/*.mjs
-!.harness/run.mjs
-
-# editors / OS
-.vscode/*
-!.vscode/extensions.json
-.idea/
+node_modules
+dist
+.vite
+*.log
 .DS_Store
-*.swp
-
-# logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+*.zip
+.env.local
+.cache

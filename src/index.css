@@ -1,968 +1,349 @@
-@import "@fontsource/pixelify-sans/latin-400.css";
-@import "@fontsource/pixelify-sans/latin-ext-400.css";
-@import "@fontsource/pixelify-sans/latin-600.css";
-@import "@fontsource/pixelify-sans/latin-ext-600.css";
-@import "@fontsource/pixelify-sans/latin-700.css";
-@import "@fontsource/pixelify-sans/latin-ext-700.css";
 @import "tailwindcss";
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+:root {
+  --font-display: "Black Ops One", system-ui, sans-serif;
+  --font-tech: "Chakra Petch", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
 }
 
-html, body {
-  margin: 0;
-  width: 100%;
+html, body, #root {
   height: 100%;
-  overflow: hidden;
-  background: #000;
-  user-select: none;
-  overscroll-behavior: none;
-}
-
-/* 2.15: powłoka aplikacji jest przypięta do WIDOCZNEGO ekranu.
- * Wcześniej `#root` miał `height: 100dvh`, a po wejściu w pełny ekran (i po
- * wymuszonym obrocie) część telefonów raportowała jeszcze wysokość sprzed
- * obrotu. Skutki: dolne przyciski i drążek poza kadrem, przycięte płótno gry
- * wyglądające jak przybliżona kamera i panele, których nie da się doscrollować.
- * `position: fixed` zawsze trafia w realny viewport, a `--bc-app-height`
- * (ustawiane z `visualViewport` w JS) jest tylko zapasem. */
-#root {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: var(--bc-app-height, 100%);
-  min-height: 0;
-  overflow: hidden;
-  background: #000;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* Pełny ekran gry: powłoka wypełnia cały ekran, bez marginesów i przewijania. */
-#root:fullscreen,
-#root:-webkit-full-screen {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  margin: 0;
-  overflow: hidden;
-  background: #000;
+  background: #0a0a0b;
 }
 
 body {
-  font-family: 'Pixelify Sans', monospace;
-  color: #fff;
-  -webkit-tap-highlight-color: transparent;
+  font-family: var(--font-tech);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
+.font-display { font-family: var(--font-display); }
+.font-tech { font-family: var(--font-tech); }
+.font-mono2 { font-family: var(--font-mono); }
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.6; }
+  94% { opacity: 1; }
+  97% { opacity: 0.8; }
+  98% { opacity: 1; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(251, 191, 36, 0.3); }
+  50% { box-shadow: 0 0 45px rgba(251, 191, 36, 0.6); }
+}
+
+@keyframes tank-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(1px, -1px) rotate(0.3deg); }
+  50% { transform: translate(-1px, 1px) rotate(-0.3deg); }
+  75% { transform: translate(1px, 1px) rotate(0.2deg); }
+}
+
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.12) 3px,
+    rgba(0, 0, 0, 0.12) 4px
+  );
+}
+
+.crt-vignette::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.45) 100%);
+}
+
+.hazard-stripes {
+  background: repeating-linear-gradient(
+    -45deg,
+    #fbbf24 0px, #fbbf24 14px,
+    #111 14px, #111 28px
+  );
+}
+
+.metal-panel {
+  background: linear-gradient(180deg, #26262b 0%, #1a1a1e 50%, #131316 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.rivet {
+  position: relative;
+}
+.rivet::before, .rivet::after {
+  content: "";
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, #9ca3af, #3f3f46 70%);
+  box-shadow: inset 0 -1px 1px rgba(0,0,0,0.8);
+  top: 6px;
+}
+.rivet::before { left: 6px; }
+.rivet::after { right: 6px; }
+
+canvas {
+  image-rendering: auto;
+}
+
+.keycap {
+  font-family: var(--font-mono);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+
+/* ----------------------------- JOYPAD / DARK CONSOLE ----------------------------- */
+:root { --font-joy: "Outfit", "Chakra Petch", sans-serif; --font-joy-heading: "Space Grotesk", "Outfit", sans-serif; --joy-orange: #f97316; --joy-amber: #fbbf24; --joy-ink: #0a0c0d; }
+.joy-shell, .pad-joy, .arcade-page { font-family: var(--font-joy); }
+.joy-brand, .joy-heading, .arcade-title { font-family: var(--font-joy-heading); }
+.joy-kicker { font-family: var(--font-joy); font-size: 10px; font-weight: 800; letter-spacing: .2em; line-height: 1.45; }
+.joy-shell { background: #0a0c0d; }
+.joy-ambient {
+  background:
+    radial-gradient(ellipse at 8% 0%, rgba(249,115,22,.13), transparent 31%),
+    radial-gradient(ellipse at 93% 34%, rgba(251,191,36,.055), transparent 32%),
+    linear-gradient(180deg,#101313 0%,#090b0c 72%);
+}
+.joy-ambient::before { content: ""; position: absolute; inset: 0; opacity: .23; background-image: linear-gradient(rgba(255,206,140,.045) 1px,transparent 1px), linear-gradient(90deg,rgba(255,206,140,.045) 1px,transparent 1px); background-size: 64px 64px; mask-image: linear-gradient(transparent,#000 14%,#000 78%,transparent); }
+.joy-ambient::after { content: ""; position: absolute; inset: 0; opacity: .13; background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.018) 4px 5px); mix-blend-mode: screen; }
+.joy-gradient-text { color: #fed7aa; background: linear-gradient(105deg,#ffe8c2 0%,#fb923c 56%,#f59e0b 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.joy-logo { color: #17110b; background: linear-gradient(145deg,#ffd078,#f97316 58%,#9a3412); box-shadow: 0 8px 24px rgba(249,115,22,.22), inset 0 1px 0 #ffffff88; }
+.joy-room { background: linear-gradient(145deg,rgba(31,34,33,.93),rgba(15,18,18,.97)); border: 1px solid rgba(255,196,126,.16); box-shadow: 0 22px 70px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.06); }
+.joy-status { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #ba9d4a40; background: #ba9d4a19; color: #f4d488; border-radius: 999px; padding: 5px 8px; font-size: 9px; letter-spacing: .09em; font-weight: 800; white-space: nowrap; }
+.joy-status span { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.joy-status-live { border-color: #34d39955; background: #34d39916; color: #6ee7b7; }
+.joy-status-live span { box-shadow: 0 0 8px #34d399; }
+.joy-system-status { align-items: center; border: 1px solid rgba(52,211,153,.22); background: rgba(52,211,153,.06); color: #86efac; border-radius: 999px; padding: 8px 11px; font: 800 9px/1 var(--font-joy); letter-spacing: .12em; }
+.joy-room-code { border: 1px solid rgba(249,115,22,.35); background: rgba(249,115,22,.1); color: #fed7aa; }
+.joy-intro { animation: joy-rise .55s cubic-bezier(.2,.7,.2,1) both; }
+.joy-feature { animation: joy-rise .65s .08s cubic-bezier(.2,.7,.2,1) both; }
+.joy-feature::after { content: ""; position: absolute; left: -40%; top: 0; width: 22%; height: 100%; pointer-events: none; background: linear-gradient(90deg,transparent,rgba(255,221,173,.08),transparent); transform: skewX(-18deg); animation: joy-sweep 12s 1.2s ease-in-out infinite; }
+.joy-feature-image { transition: opacity .35s; }
+.joy-feature-shade { background: linear-gradient(90deg,rgba(7,10,10,.97) 0%,rgba(7,10,10,.82) 39%,rgba(7,10,10,.22) 100%), linear-gradient(0deg,rgba(7,10,10,.93),transparent 70%); }
+.joy-feature-number { font-family: var(--font-joy-heading); }
+.joy-arrow, .pad-nav, .pad-icon, .arcade-icon { display: inline-flex; justify-content: center; align-items: center; flex-shrink: 0; border: 1px solid rgba(255,255,255,.16); color: #e1e5e0; background: rgba(255,255,255,.055); transition: background .16s, border-color .16s, transform .16s; }
+.joy-arrow { width: 35px; height: 35px; border-radius: 11px; }
+.joy-arrow:hover, .pad-nav:hover, .pad-icon:hover, .arcade-icon:hover { background: rgba(249,115,22,.13); border-color: rgba(249,155,78,.58); }
+.joy-arrow:active, .pad-nav:active, .pad-icon:active, .arcade-icon:active, .pad-primary:active { transform: scale(.96); }
+.joy-game-card { animation: joy-card-in .5s both; }
+.joy-game-card:nth-child(2) { animation-delay: 35ms; } .joy-game-card:nth-child(3) { animation-delay: 70ms; } .joy-game-card:nth-child(4) { animation-delay: 105ms; } .joy-game-card:nth-child(5) { animation-delay: 140ms; } .joy-game-card:nth-child(6) { animation-delay: 175ms; } .joy-game-card:nth-child(7) { animation-delay: 210ms; }
+.joy-game-card-active { border-color: rgba(249,115,22,.8); background: rgba(249,115,22,.09); box-shadow: 0 0 0 1px rgba(249,115,22,.28), 0 16px 34px rgba(249,115,22,.10); }
+.joy-shell kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 23px; padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.06); color: #e2e8e0; font: 10px var(--font-mono); }
+.joy-status-stack { border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.025); border-radius: 15px; padding: 10px; }
+.joy-status-stack div { min-width: 57px; padding: 3px 8px; border-left: 1px solid rgba(255,255,255,.1); text-align: center; }
+.joy-status-stack div:first-child { border-left: 0; }
+.joy-status-stack b { display: block; color: #f8faf8; font: 800 18px/1 var(--font-mono); }
+.joy-status-stack span { display: block; margin-top: 5px; color: #69716c; font: 800 8px/1 var(--font-joy); letter-spacing: .12em; }
+.joy-howto { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.025); }
+.joy-performance-note { min-height: 30px; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 10px rgba(52,211,153,.8); }
+
+/* Każda gra ma odrębną paletę, ale ten sam spokojny język nawigacji. */
+.arcade-page { background: #0a0e0f; }
+.arcade-race { background: radial-gradient(ellipse at 20% 0%,#3a1c0d,#090e12 63%); }
+.arcade-orbit { background: radial-gradient(ellipse at 80% 5%,#24200f,#070b0d 68%); }
+.arcade-snake { background: radial-gradient(ellipse at 15% 0%,#263319,#091211 65%); }
+.arcade-league { background: radial-gradient(ellipse at 78% 0%,#352116,#090d10 68%); }
+.arcade-texture { background-image: linear-gradient(rgba(255,218,170,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,218,170,.025) 1px,transparent 1px); background-size: 50px 50px; }
+.arcade-hero { box-shadow: 0 26px 65px rgba(0,0,0,.42); }
+.arcade-panel { border: 1px solid rgba(255,255,255,.12); background: rgba(18,22,21,.72); box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.arcade-option { border: 1px solid rgba(255,255,255,.10); background: rgba(0,0,0,.22); }
+.arcade-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid rgba(255,255,255,.18); border-radius: 12px; background: rgba(255,255,255,.06); color: #e6e8e2; padding: 12px 18px; font-size: 13px; font-weight: 700; transition: background .18s; }
+.arcade-secondary:hover { background: rgba(249,115,22,.13); border-color: rgba(249,155,78,.45); }
+.arcade-icon { height: 33px; width: 33px; border-radius: 9px; }
+
+.pad-joy { background: #0b0e0f; }
+.pad-nav { width: 59px; height: 51px; border-radius: 12px; touch-action: manipulation; }
+.pad-remote-button { display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 56px; border: 1px solid rgba(255,255,255,.16); border-radius: 14px; color: #e1e5df; background: rgba(255,255,255,.07); box-shadow: 0 7px 16px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.06); touch-action: manipulation; transition: background .16s, border-color .16s, transform .12s; }
+.pad-remote-button:hover { background: rgba(249,115,22,.13); border-color: rgba(249,155,78,.55); }
+.pad-remote-button:active { transform: scale(.95); }
+.pad-remote-button:disabled { cursor: not-allowed; opacity: .38; }
+.pad-remote-primary { border-color: rgba(249,115,22,.65); background: rgba(234,88,12,.34); color: #ffedd5; }
+.pad-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 51px; border-radius: 12px; padding: 10px 12px; font-size: 13px; font-weight: 900; color: #17110b; box-shadow: 0 10px 23px rgba(0,0,0,.25); touch-action: manipulation; }
+.pad-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 41px; border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); color: #e2e8e0; font-size: 11px; font-weight: 800; touch-action: manipulation; }
+.pad-secondary:active { background: rgba(249,115,22,.14); }
+.pad-icon { height: 34px; width: 34px; border-radius: 9px; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #fb923c; outline-offset: 3px; }
+@keyframes joy-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+/* Boot splash + powitanie */
+@keyframes boot-glow { 0% { opacity: 0; transform: scale(.9); } 60% { opacity: 1; transform: scale(1.02); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes boot-scan { from { transform: translateY(-140%); } to { transform: translateY(560%); } }
+@keyframes boot-hello { from { opacity: 0; letter-spacing: .9em; } to { opacity: 1; letter-spacing: .5em; } }
+.joy-enter { animation: joy-rise .6s cubic-bezier(.2,.7,.2,1) both; }
+.joy-enter-1 { animation-delay: 60ms; }
+.joy-enter-2 { animation-delay: 130ms; }
+.joy-enter-3 { animation-delay: 210ms; }
+@keyframes joy-card-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes joy-sweep { from { transform: translateX(-120%); } to { transform: translateX(120%); } }
+
+/* ============================= SYSTEM RUCHU (motion tokens) ============================= */
+/* Jeden zestaw krzywych i czasów dla CAŁEGO interfejsu — animacje są choreografiowane,
+   nie przyklejane ad hoc. Nowe efekty muszą korzystać z tych tokenów. */
 :root {
-  color-scheme: dark;
-  scrollbar-color: #6c6c6c #202020;
-  scrollbar-width: thin;
+  --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 140ms;
+  --dur-base: 260ms;
+  --dur-slow: 480ms;
 }
 
-.pixelated {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+@layer base {
+  /* Tailwind v4 nie nadaje już przyciskom kursora — przywracamy go spójnie. */
+  button:not(:disabled), a, [role="button"]:not(:disabled), select { cursor: pointer; }
+  input, textarea { cursor: text; }
+  ::selection { background: #fb923c; color: #17110b; }
 }
 
-.mc-text {
-  text-shadow: 2px 2px 0 #3f3f3f;
-}
+/* Fizyczne „wciśnięcie” przycisku — podpinane klasą .press */
+.press { transition: transform var(--dur-fast) var(--ease-out-quart); }
+.press:active { transform: scale(0.96); }
 
-/* ------------------------------------------------------------------ 2.8
-   Odświeżony system przycisków: głębszy skos, delikatny blask przy najechaniu
-   i wyraźny stan aktywny. Wszystko nadal w duchu pikselowej grafiki. */
-.mc-btn {
-  position: relative;
-  display: block;
-  width: 100%;
-  padding: 11px 18px;
-  font-family: 'Pixelify Sans', monospace;
-  font-size: 18px;
-  line-height: 1.2;
-  color: #f0f0f0;
-  text-shadow: 2px 2px 0 #2d2d2d;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 42%),
-    linear-gradient(#8b8b8b, #6a6a6a);
-  border: 2px solid #0b0b0b;
-  box-shadow:
-    inset 2px 2px 0 rgba(255, 255, 255, 0.42),
-    inset -2px -3px 0 rgba(0, 0, 0, 0.42),
-    0 2px 0 #111,
-    0 6px 14px rgba(0, 0, 0, 0.28);
-  cursor: pointer;
-  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease, transform 90ms ease, letter-spacing 140ms ease;
-  -webkit-tap-highlight-color: transparent;
-  letter-spacing: 0.01em;
-}
-.mc-btn:hover:not(:disabled) {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0) 46%),
-    linear-gradient(#8f9ade, #656eb5);
-  color: #fff9b0;
-  letter-spacing: 0.03em;
-  box-shadow:
-    inset 2px 2px 0 rgba(255, 255, 255, 0.5),
-    inset -2px -3px 0 rgba(0, 0, 0, 0.38),
-    0 2px 0 #111,
-    0 8px 20px rgba(108, 117, 184, 0.45);
-}
-.mc-btn:disabled {
-  background: #2c2c2c;
-  color: #a0a0a0;
-  box-shadow: none;
-  cursor: default;
-}
+/* Wejścia treści (kaskada: rodzic nadaje delay inline) */
+@keyframes rise-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+.rise-in { animation: rise-in var(--dur-slow) var(--ease-out-quart) both; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fade-in var(--dur-base) ease-out both; }
 
-/* Główne wezwanie do działania – zielone, jak w klasycznym menu gry. */
-.mc-btn-primary {
-  color: #f4ffe9;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 45%),
-    linear-gradient(#5aa54a, #35762c);
-  box-shadow:
-    inset 2px 2px 0 rgba(255, 255, 255, 0.45),
-    inset -2px -3px 0 rgba(0, 0, 0, 0.45),
-    0 2px 0 #132010,
-    0 8px 20px rgba(52, 120, 44, 0.45);
-  font-size: 20px;
-}
-.mc-btn-primary:hover:not(:disabled) {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0) 48%),
-    linear-gradient(#6cbb59, #3f8a35);
-  color: #ffffff;
-  box-shadow:
-    inset 2px 2px 0 rgba(255, 255, 255, 0.5),
-    inset -2px -3px 0 rgba(0, 0, 0, 0.4),
-    0 2px 0 #132010,
-    0 10px 24px rgba(90, 180, 74, 0.5);
-}
+/* Kurtyna przejścia ekranów — akcent gry zasłania scenę, podmiana odbywa się pod nią. */
+@keyframes curtain-in { from { transform: translateY(103%); } to { transform: translateY(0); } }
+@keyframes curtain-out { from { transform: translateY(0); } to { transform: translateY(-103%); } }
+.screen-curtain { position: fixed; inset: 0; z-index: 130; pointer-events: none; overflow: hidden; will-change: transform; }
+.screen-curtain-cover { animation: curtain-in 210ms var(--ease-in-out-soft) both; }
+.screen-curtain-reveal { animation: curtain-out 400ms var(--ease-in-out-soft) 90ms both; }
+.screen-curtain-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.screen-curtain-face::after { content: ""; position: absolute; inset: 0; opacity: .35; background: repeating-linear-gradient(-45deg, transparent 0 26px, rgba(255,255,255,.05) 26px 52px); }
 
-.mc-panel {
-  background: linear-gradient(145deg, #d8d8d8 0%, #cacaca 45%, #b6b6b6 100%);
-  border: 3px solid #000;
-  box-shadow: inset 3px 3px 0 #ffffff, inset -3px -3px 0 #555555, 0 12px 32px rgba(0, 0, 0, 0.28);
-  color: #3f3f3f;
-}
+/* Hero w bibliotece: crossfade okładek, powolne Ken Burns, przewijanie numeru gry */
+@keyframes cover-in { from { opacity: 0; } to { opacity: 1; } }
+.cover-in { animation: cover-in 430ms ease-out both; }
+@keyframes ken-burns { from { transform: scale(1.03) translate3d(0.5%, 0, 0); } to { transform: scale(1.1) translate3d(-1.5%, -1.8%, 0); } }
+.ken-burns { animation: ken-burns 16s var(--ease-in-out-soft) infinite alternate; will-change: transform; }
+@keyframes number-roll { from { opacity: 0; transform: translateY(44px); } to { opacity: 1; transform: translateY(0); } }
+.number-roll { animation: number-roll 560ms var(--ease-out-expo) both; }
 
-/* 2.9: duży, zawsze widoczny przycisk zamykania okien (dotyk + mysz). */
-.mc-close-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 10px;
-  background: linear-gradient(#b7483c, #7c2a23);
-  border: 2px solid #1a0b09;
-  box-shadow:
-    inset 1px 1px 0 rgba(255, 255, 255, 0.35),
-    inset -2px -2px 0 rgba(0, 0, 0, 0.35),
-    2px 2px 0 rgba(0, 0, 0, 0.4);
-  color: #fff;
-  font-family: inherit;
-  touch-action: manipulation;
-  cursor: pointer;
-}
-.mc-close-btn:hover {
-  filter: brightness(1.12);
-}
-.mc-close-btn:active {
-  transform: translateY(1px);
-}
-.mc-close-btn-compact {
-  min-width: 38px;
-  min-height: 38px;
-  padding: 0;
-}
+/* Wymiana wartości (steppery, przełączniki) */
+@keyframes flip-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+.flip-in { animation: flip-in 220ms var(--ease-out-quart) both; }
 
-/* 2.9: dolny pasek akcji w oknach – kciuk ma zawsze coś do trafienia. */
-.mc-panel-actions {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
-  pointer-events: none;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
-}
-.mc-panel-actions > * {
-  pointer-events: auto;
-}
+/* Odliczanie 3·2·1 i START */
+@keyframes count-pop { 0% { opacity: 0; transform: scale(1.65); filter: blur(9px); } 55% { opacity: 1; filter: blur(0); } 100% { opacity: 1; transform: scale(1); filter: blur(0); } }
+.count-pop { animation: count-pop 430ms var(--ease-out-expo) both; }
+@keyframes start-flash { 0% { opacity: 0; transform: scale(0.85); letter-spacing: 0.08em; } 22% { opacity: 1; transform: scale(1.04); } 60% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.18); } }
+.start-flash { animation: start-flash 900ms var(--ease-out-expo) both; }
 
-/* 2.8: szklane karty menu – czytelne nad zdjęciem tła, bez utraty klimatu. */
-.mc-card {
-  position: relative;
-  background:
-    linear-gradient(180deg, rgba(28, 34, 44, 0.82), rgba(12, 16, 22, 0.88));
-  border: 2px solid rgba(255, 255, 255, 0.16);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 10px 28px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(6px);
-}
-.mc-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%);
-}
+/* Ekran wyników: korona spada, wiersze wchodzą kaskadą (delay inline) */
+@keyframes crown-drop { 0% { opacity: 0; transform: translateY(-30px) rotate(-14deg) scale(0.8); } 62% { opacity: 1; transform: translateY(4px) rotate(3deg) scale(1.05); } 100% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); } }
+.crown-drop { animation: crown-drop 700ms 250ms var(--ease-out-quart) both; }
 
-.mc-card-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: 15px;
-  color: #ffe680;
-  text-shadow: 2px 2px 0 #2b2308;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.mc-card-title::after {
-  content: '';
-  flex: 1;
-  height: 2px;
-  background: linear-gradient(90deg, rgba(255, 230, 128, 0.5), rgba(255, 230, 128, 0));
-}
+/* Kill feed Stalowego Frontu */
+@keyframes feed-in { from { opacity: 0; transform: translateX(16px) scale(0.95); } to { opacity: 1; transform: translateX(0) scale(1); } }
+.feed-in { animation: feed-in 240ms var(--ease-out-quart) both; }
 
-/* Pozioma listwa nad menu – informacje o wersji i skróty. */
-.mc-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #efffe4;
-  background: linear-gradient(#4e9a3f, #2f6b28);
-  border: 2px solid #12210e;
-  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.35), 2px 2px 0 rgba(0, 0, 0, 0.55);
-}
+/* Splash „NOWY GRACZ” — telewizor wita telefon w pokoju */
+@keyframes join-in { 0% { opacity: 0; transform: scale(0.78); } 16% { opacity: 1; transform: scale(1.035); } 26% { transform: scale(1); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.05); } }
+.join-splash { position: fixed; inset: 0; z-index: 118; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.join-splash-card { text-align: center; border-radius: 28px; padding: 34px 56px; border: 1px solid color-mix(in srgb, var(--pc, #f97316) 60%, transparent); background: color-mix(in srgb, #0a0d0f 86%, transparent); backdrop-filter: blur(14px); box-shadow: 0 0 110px color-mix(in srgb, var(--pc, #f97316) 32%, transparent), inset 0 1px 0 rgba(255,255,255,0.09); animation: join-in 2.3s var(--ease-out-expo) both; }
+.join-splash-num { font-family: var(--font-joy-heading); font-size: 92px; font-weight: 800; line-height: 1; color: var(--pc, #f97316); text-shadow: 0 0 44px color-mix(in srgb, var(--pc, #f97316) 65%, transparent); }
 
-.mc-slot {
-  width: 44px;
-  height: 44px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.12)),
-    #8b8b8b;
-  border-style: solid;
-  border-width: 2px;
-  border-color: #2f2f2f #f2f2f2 #f2f2f2 #2f2f2f;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 120ms ease, box-shadow 120ms ease;
-}
-.mc-slot:hover {
-  background: #b3b3b3;
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
-}
+/* QR w ramce skanera */
+@keyframes qr-scan { 0% { transform: translateY(-130%); opacity: 0; } 12% { opacity: 1; } 55% { opacity: 1; } 70%, 100% { transform: translateY(520%); opacity: 0; } }
+.qr-scanline { animation: qr-scan 2.6s var(--ease-in-out-soft) infinite; }
+.qr-frame { position: relative; overflow: hidden; border-radius: 18px; border: 1px solid rgba(255,255,255,.1); background: #0b0d0e; padding: 10px; }
+.qr-corner { position: absolute; width: 20px; height: 20px; border: 2.5px solid #f97316; pointer-events: none; z-index: 2; }
+.qr-corner-tl { left: 5px; top: 5px; border-right: 0; border-bottom: 0; border-top-left-radius: 7px; }
+.qr-corner-tr { right: 5px; top: 5px; border-left: 0; border-bottom: 0; border-top-right-radius: 7px; }
+.qr-corner-bl { left: 5px; bottom: 5px; border-right: 0; border-top: 0; border-bottom-left-radius: 7px; }
+.qr-corner-br { right: 5px; bottom: 5px; border-left: 0; border-top: 0; border-bottom-right-radius: 7px; }
 
-.mc-slot > img {
-  max-width: calc(100% - 8px);
-  max-height: calc(100% - 8px);
-  object-fit: contain;
-}
+/* Logo wita po bocie */
+@keyframes logo-pop { 0% { opacity: 0; transform: scale(0.8); } 60% { opacity: 1; transform: scale(1.06); } 100% { opacity: 1; transform: scale(1); } }
+.logo-pop { animation: logo-pop 700ms var(--ease-out-expo) both; }
 
-.hotbar-slot {
-  width: 48px;
-  height: 48px;
-  flex: 0 0 48px;
-  border-radius: 1px;
-  transition: transform 90ms ease, box-shadow 120ms ease, border-color 120ms ease;
-}
+/* Ambient w bibliotece: siatka powoli dryfuje */
+@keyframes grid-drift { to { background-position: 0 64px, 64px 0; } }
+.joy-ambient::before { animation: grid-drift 70s linear infinite; }
 
-/* 2.8: wybrany slot „unosi się” i świeci – łatwiej go znaleźć kątem oka. */
-.hotbar-slot.is-selected {
-  transform: translateY(-4px);
-  z-index: 3;
-  box-shadow: 0 0 0 2px #000, 0 0 12px rgba(255, 255, 255, 0.55), 0 6px 10px rgba(0, 0, 0, 0.5);
-}
+/* Timer w trybie alarmowym (<30 s) */
+@keyframes timer-urgent { 0%, 100% { box-shadow: 0 0 0 rgba(239,68,68,0); } 50% { box-shadow: 0 0 18px rgba(239,68,68,0.55); } }
+.timer-urgent { animation: timer-urgent 1s ease-in-out infinite; }
 
-/* Pasek życia/głodu na szklanym tle – czytelny na każdym biomie. */
-.hud-strip {
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.3));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
-  padding: 4px 6px;
-}
+/* Karty „w budowie” — język blueprinta zamiast szarych kostek z 🚧 */
+.blueprint-card { border: 1px dashed rgba(255,255,255,0.22); background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); }
+@keyframes rebuild-shimmer { from { transform: translateX(-130%); } to { transform: translateX(340%); } }
+.rebuild-shimmer { animation: rebuild-shimmer 2.8s ease-in-out infinite; }
 
-.hotbar-slot > img {
-  max-width: calc(100% - 10px);
-  max-height: calc(100% - 10px);
-  object-fit: contain;
-}
-
-@media (max-width: 460px) {
-  .hotbar-slot {
-    width: 36px;
-    height: 36px;
-    flex-basis: 36px;
-  }
-}
-
-@media (max-width: 460px) {
-  .inventory-main-panel {
-    padding: 10px;
-  }
-
-  .mc-slot {
-    width: 36px;
-    height: 36px;
-  }
-
-  .mc-slot > img {
-    max-width: 28px;
-    max-height: 28px;
-  }
-
-  .mc-count {
-    right: 1px;
-    bottom: -2px;
-    font-size: 12px;
-  }
-}
-
-@media (max-width: 380px) {
-  .hotbar-slot {
-    width: 32px;
-    height: 32px;
-    flex-basis: 32px;
-  }
-
-  .hotbar-slot > img {
-    max-width: 25px;
-    max-height: 25px;
-  }
-
-  .mc-slot {
-    width: 30px;
-    height: 30px;
-  }
-
-  .mc-slot > img {
-    max-width: 22px;
-    max-height: 22px;
-  }
-
-  .mc-count {
-    font-size: 10px;
-  }
-}
-
-.dur-bar {
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  bottom: 3px;
-  height: 3px;
-  background: #222;
-}
-.dur-bar > i {
-  display: block;
-  height: 100%;
-}
-
-.mc-count {
-  position: absolute;
-  right: 2px;
-  bottom: -2px;
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 2px 2px 0 #3f3f3f;
-  pointer-events: none;
-}
-
-.dirt-bg {
-  background-color: #3b2a1e;
-  background-size: 64px 64px;
-  image-rendering: pixelated;
-}
-
-.mc-input {
-  background: #000;
-  border: 2px solid #a0a0a0;
-  color: #fff;
-  padding: 8px 10px;
-  font-family: 'Pixelify Sans', monospace;
-  font-size: 18px;
-  outline: none;
-  width: 100%;
-}
-.mc-input:focus {
-  border-color: #fff;
-}
-
-/* Animated shimmer on enchanted items (slot overlay). */
-.ench-glint {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(115deg, transparent 30%, rgba(190, 120, 255, 0.75) 45%, rgba(120, 90, 255, 0.75) 55%, transparent 70%);
-  background-size: 260% 100%;
-  mix-blend-mode: screen;
-  animation: ench-glint 1.6s linear infinite;
-}
-@keyframes ench-glint {
-  0% { background-position: 180% 0; }
-  100% { background-position: -80% 0; }
-}
-
-/* Purple item name in tooltips when the stack carries enchantments. */
-.ench-name {
-  color: #c9a0ff;
-}
-
-/* 2.3: własna nazwa nadana w kowadle (złota, pochylona – jak w klasyku). */
-.item-name {
-  color: #f2d45a;
-  font-style: italic;
-}
-
-@keyframes splash {
-  0%, 100% { transform: rotate(-18deg) scale(1); }
-  50% { transform: rotate(-18deg) scale(1.08); }
-}
-.splash {
-  animation: splash 0.6s ease-in-out infinite;
-}
-
-@keyframes hurt {
-  0% { opacity: 0.55; }
-  100% { opacity: 0; }
-}
-.hurt-flash {
-  animation: hurt 0.45s ease-out forwards;
-}
-
-/* Red edges while the player is close to death – a classic danger cue. */
-.low-health {
-  animation: lowhp 1.1s ease-in-out infinite;
-}
-
-@keyframes lowhp {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 0.6; }
-}
-
-input[type=range].mc-range {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 36px;
-  background: #1f1f1f;
-  border: 2px solid #000;
-  box-shadow: inset 2px 2px 0 #3a3a3a;
-}
-input[type=range].mc-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px;
-  height: 36px;
-  background: linear-gradient(#b0b0b0, #7a7a7a);
-  border: 2px solid #000;
-  cursor: pointer;
-}
-input[type=range].mc-range::-moz-range-thumb {
-  width: 14px;
-  height: 32px;
-  background: linear-gradient(#b0b0b0, #7a7a7a);
-  border: 2px solid #000;
-  border-radius: 0;
-  cursor: pointer;
-}
-
-/* Clear keyboard focus without changing the pixel-art look. */
-.mc-btn:focus-visible,
-.mc-input:focus-visible,
-.mc-slot:focus-visible,
-select:focus-visible {
-  outline: 3px solid #ffff70;
-  outline-offset: 2px;
-  z-index: 2;
-}
-
-.mc-btn:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-/* 2.5: iOS ignoruje user-scalable=no – podwójne tapnięcie w przycisk albo
-   input nie może już zoomować widoku (psuło sterowanie dotykowe). */
-button,
-input,
-select,
-textarea {
-  touch-action: manipulation;
-}
+/* Kursor-światło (desktop, pointer: fine) — addytywny, nie ukrywa natywnego wskaźnika */
+.cursor-glow-anchor { position: fixed; left: 0; top: 0; z-index: 210; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
+.cursor-glow-anchor.is-on { opacity: 1; }
+.cursor-glow-ring { width: 34px; height: 34px; border: 1.5px solid rgba(249,115,22,0.75); border-radius: 9999px; transition: transform 0.28s var(--ease-out-quart), border-color 0.28s; }
+.cursor-glow-anchor.is-hover .cursor-glow-ring { transform: scale(1.55); border-color: rgba(255,255,255,0.9); }
+.cursor-glow-dot { width: 5px; height: 5px; border-radius: 9999px; background: #fb923c; box-shadow: 0 0 10px rgba(251,146,60,0.8); }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  .joy-intro, .joy-feature, .joy-feature::after, .joy-feature-image, .joy-game-card, .joy-arrow, .arcade-start, .joy-enter, .joy-enter-1, .joy-enter-2, .joy-enter-3,
+  .rise-in, .fade-in, .screen-curtain-cover, .screen-curtain-reveal, .cover-in, .ken-burns, .number-roll, .flip-in, .count-pop, .start-flash,
+  .crown-drop, .feed-in, .join-splash-card, .qr-scanline, .logo-pop, .joy-ambient::before, .timer-urgent, .rebuild-shimmer, .press, .cursor-glow-anchor {
+    transition-duration: 0s !important;
+    animation: none !important;
   }
+  .screen-curtain { display: none; }
 }
 
-/* 2.8: dolna krawędź menu – delikatna sylwetka trawiastych wzgórz. */
-.menu-terrain {
-  background:
-    linear-gradient(180deg, rgba(32, 58, 26, 0) 0%, rgba(34, 62, 28, 0.55) 55%, rgba(22, 42, 20, 0.92) 100%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 14px, transparent 14px 28px);
-  mask-image: linear-gradient(180deg, transparent, #000 45%);
-  -webkit-mask-image: linear-gradient(180deg, transparent, #000 45%);
-}
-
-/* Pasek postępu w stylu pikselowym (ekrany ładowania, warzenie, piec). */
-.mc-progress {
-  height: 10px;
-  background: linear-gradient(180deg, #0f120f, #1b211b);
-  border: 2px solid #000;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-.mc-progress > i {
-  display: block;
-  height: 100%;
-  background: linear-gradient(180deg, #a6e86a, #5cae3a);
-  transition: width 120ms linear;
-}
-
-/* Karty ekwipunku i okien – spójne z nowym menu. */
-.mc-window {
-  background: linear-gradient(180deg, rgba(30, 34, 40, 0.97), rgba(18, 21, 26, 0.98));
-  border: 2px solid #0a0a0a;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 18px 40px rgba(0, 0, 0, 0.55);
-}
-
-.mc-tab {
-  padding: 6px 12px;
-  font-size: 14px;
-  color: #d8d8d8;
-  background: rgba(0, 0, 0, 0.35);
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  border-bottom-color: transparent;
-  cursor: pointer;
-}
-.mc-tab[aria-selected='true'] {
-  color: #fff4a8;
-  background: linear-gradient(180deg, rgba(142, 152, 214, 0.55), rgba(108, 117, 184, 0.25));
-  border-color: rgba(255, 255, 255, 0.35);
-}
-
-/* ------------------------------------------------------------------ 2.9
- * Telefony w poziomie: o wygodzie decyduje WYSOKOŚĆ, nie szerokość.
- * Wcześniej sloty malały tylko poniżej 460 px szerokości, więc telefon
- * obrócony poziomo (np. 844 × 390) dostawał pełne 44-pikselowe sloty,
- * a okno ekwipunku nie mieściło się na ekranie. */
-@media (max-height: 560px) {
-  .mc-slot {
-    width: 36px;
-    height: 36px;
-  }
-  .mc-slot > img {
-    max-width: 28px;
-    max-height: 28px;
-  }
-  .hotbar-slot {
-    width: 36px;
-    height: 36px;
-    flex-basis: 36px;
-  }
-  .hotbar-slot > img {
-    max-width: 28px;
-    max-height: 28px;
-  }
-  .mc-count {
-    right: 1px;
-    bottom: -2px;
-    font-size: 12px;
-  }
-}
-
-@media (max-height: 450px) {
-  .mc-slot {
-    width: 30px;
-    height: 30px;
-  }
-  .mc-slot > img {
-    max-width: 23px;
-    max-height: 23px;
-  }
-  .hotbar-slot {
-    width: 30px;
-    height: 30px;
-    flex-basis: 30px;
-  }
-  .hotbar-slot > img {
-    max-width: 23px;
-    max-height: 23px;
-  }
-  .mc-count {
-    font-size: 10px;
-  }
-  .mc-close-btn {
-    min-width: 38px;
-    min-height: 38px;
-  }
-}
-
-/* ---------------------------------------------------------------- 2.12
- * Telefon w dłoni. Każde dotknięcie ma trafiać w element >= 44 px, pola
- * tekstowe mają 16 px (inaczej iOS sam przybliża stronę), a czat i paski
- * nie wchodzą pod hotbar ani pod pasek gestów systemu. */
-button,
-.mc-btn,
-.mc-tab {
-  touch-action: manipulation;
-  -webkit-touch-callout: none;
-}
-
-@media (pointer: coarse) {
-  .mc-btn {
-    min-height: 48px;
-  }
-  .mc-tab {
-    min-height: 42px;
-  }
-  .mc-input {
-    min-height: 44px;
-    font-size: 16px;
-  }
-}
-
-/* Czat tuż nad hotbarem – wcześniej na telefonie wchodził na serca.
- * Szerokość zostawia miejsce na przyciski akcji pod prawym kciukiem. */
-.hud-chat {
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
-  left: max(8px, env(safe-area-inset-left, 0px));
-  max-width: min(640px, 72vw);
-}
-
-@media (max-height: 560px) {
-  .hud-chat {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 126px);
-    max-width: min(520px, 62vw);
-  }
-  .touch-hint {
-    display: none;
-  }
-}
-
-@media (max-height: 450px) {
-  .hud-chat {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 110px);
-    font-size: 12px;
-  }
-  .hud-chat > div {
-    padding: 1px 6px;
-  }
-}
-
-@media (max-width: 380px) {
-  .touch-topbar {
-    gap: 4px !important;
-  }
-}
-
-/* 2.12: przycisk zamykania nie chowa się pod notchem ani pod paskiem gestów. */
-.mc-close-safe {
-  right: max(8px, env(safe-area-inset-right, 0px));
-  top: max(8px, env(safe-area-inset-top, 0px));
-}
-
-/* ---------------------------------------------------------------- 2.13
- * Telefon w pionie: wyraźna prośba o obrót (plus animowana ikonka) i
- * pasek w menu, który nie blokuje ekranu startowego. */
-.mc-orient-banner {
-  flex: 0 0 auto;
-  align-self: center;
-  width: calc(100% - 16px);
-  margin: max(6px, env(safe-area-inset-top, 0px)) auto 0;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
-}
-
-.mc-orient-guard {
-  padding-top: max(16px, env(safe-area-inset-top, 0px));
-  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
-}
-
-.rotate-phone {
-  display: inline-block;
-  transform-origin: 50% 50%;
-  animation: rotate-phone 2.4s ease-in-out infinite;
-}
-
-@keyframes rotate-phone {
-  0%, 20% { transform: rotate(0deg); }
-  55%, 80% { transform: rotate(90deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rotate-phone {
-    animation: none;
-  }
-}
-
-/* ---------------------------------------------------------------- 2.13
- * Ekwipunek w układzie z Minecrafta: zbroja i postać po lewej, siatka
- * rzemieślnicza na górze, 27 slotów + hotbar, a książka przepisów obok.
- * Panel jest jasnoszary jak w grze, więc sloty mają wyraźne ciemne ramki. */
-.mc-inv {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: fit-content;
-  max-width: calc(100vw - 8px);
-  padding: 10px 10px 8px;
-}
-.mc-inv-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 28px;
-}
-.mc-inv-title {
-  font-size: 19px;
-  font-weight: 700;
-  color: #2f2f2f;
-  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.45);
-}
-.mc-inv-mode {
-  font-size: 12px;
-  font-weight: 400;
-  opacity: 0.6;
-}
-.mc-inv-book-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 34px;
-  padding: 2px 8px;
-  border: 2px solid #4a4a4a;
-  background: linear-gradient(180deg, #d7d7d7, #b9b9b9);
-  color: #242424;
-  font-size: 13px;
-  font-weight: 700;
-}
-.mc-inv-book-btn[aria-pressed='true'] {
-  background: linear-gradient(180deg, #f3d98a, #d9b94f);
-  border-color: #3a2f0a;
-}
-.mc-inv-book-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: #2f6b25;
-  color: #eaf7e2;
-  font-size: 11px;
-}
-.mc-inv-body {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.mc-inv-side {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 6px;
-}
-.mc-inv-preview {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 5px 6px;
-  border: 2px solid #8a8a8a;
-  background: radial-gradient(circle at 50% 35%, #a9c7d8, #7e99a8);
-}
-.mc-inv-armor {
-  display: flex;
-  flex-direction: column;
-}
-.mc-inv-armor-pts {
-  font-size: 11px;
-  color: #333;
-}
-.mc-inv-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.mc-craft {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  margin-bottom: 6px;
-  padding: 4px;
-  border: 2px solid #9b9b9b;
-  background: rgba(255, 255, 255, 0.22);
-}
-.mc-craft.is-ready {
-  border-color: #3f7f33;
-  box-shadow: inset 0 0 0 2px rgba(110, 190, 90, 0.35);
-}
-.mc-craft-grid {
-  display: grid;
-}
-.mc-craft-grid.is-2 {
-  grid-template-columns: repeat(2, auto);
-}
-.mc-craft-grid.is-3 {
-  grid-template-columns: repeat(3, auto);
-}
-.mc-craft-arrow {
-  padding: 0 1px;
-  color: #4a4a4a;
-  font-size: 26px;
-  line-height: 1;
-}
-.mc-quick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 6px;
-  max-width: 430px;
-}
-.mc-quick-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 30px;
-  padding: 2px 7px;
-  border: 2px solid #4c7a3f;
-  background: #cfe9c2;
-  color: #22331c;
-  font-size: 12px;
-  font-weight: 700;
-}
-.mc-quick-btn:hover {
-  background: #dff4d2;
-}
-.mc-inv-storage {
-  display: grid;
-  grid-template-columns: repeat(9, auto);
-}
-.mc-inv-hotbar {
-  display: flex;
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 2px solid rgba(0, 0, 0, 0.16);
-}
-.mc-inv-hint {
-  max-width: 430px;
-  font-size: 11px;
-  line-height: 1.35;
-  color: #333;
-}
-.mc-inv-creative {
-  display: grid;
-  grid-template-columns: repeat(9, auto);
-  width: fit-content;
-  max-height: min(320px, 38vh);
-  overflow-y: auto;
-}
-.mc-inv-search {
-  width: 150px;
-  padding: 2px 6px !important;
-  font-size: 14px !important;
-}
-.mc-recipe-book {
-  display: flex;
-  flex-direction: column;
-  width: min(330px, calc(100vw - 12px));
-  padding: 10px;
-}
-.mc-recipe-count {
-  font-size: 11px;
-  color: #444;
-}
-.mc-recipe-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: min(430px, 52vh);
-  overflow-y: auto;
-  padding-right: 2px;
-}
-.mc-recipe-row {
-  display: flex;
-  width: 100%;
-  min-height: 40px;
-  align-items: center;
-  gap: 6px;
-  border: 2px solid #555;
-  padding: 2px 6px;
-  text-align: left;
-}
-
-/* Telefon w pionie: podgląd postaci i zbroja lądują nad siatką, żeby
- * dziewięć slotów zmieściło się bez poziomego przewijania. */
-@media (max-width: 560px) {
-  .mc-inv-body {
-    flex-direction: column;
-    gap: 6px;
-  }
-  .mc-inv-side {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-  }
-  .mc-inv-armor {
-    flex-direction: row;
-  }
-  .mc-inv-preview {
-    flex-direction: row;
-    gap: 6px;
-  }
-  .mc-inv-preview {
-    padding: 2px 4px;
-  }
-}
-
-@media (max-height: 460px) {
-  .mc-inv-hint {
-    display: none;
-  }
-  .mc-inv-preview {
-    display: none;
-  }
-  .mc-inv {
-    gap: 5px;
-    padding: 6px 8px;
-  }
-  .mc-inv-hotbar {
-    margin-top: 4px;
-    padding-top: 4px;
-  }
-  .mc-recipe-list {
-    max-height: 46vh;
-  }
-}
+/* Cinematic boot: a calm 3-beat console sequence, without a fake loading meter. */
+.boot-splash { isolation:isolate; background:radial-gradient(ellipse at 50% 42%,rgba(61,91,111,.2),transparent 43%),radial-gradient(ellipse at 50% 105%,rgba(249,115,22,.08),transparent 48%),#070a10; }
+.boot-splash::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:.42; background:linear-gradient(115deg,transparent 20%,rgba(143,213,244,.045) 50%,transparent 78%); animation:boot-sweep 2.8s ease-in-out infinite alternate; }
+.boot-grid { background-image:linear-gradient(rgba(255,255,255,.8) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.8) 1px,transparent 1px); background-size:44px 44px; mask-image:radial-gradient(ellipse at center,#000 15%,transparent 75%); }
+.boot-halo { display:grid; place-items:center; overflow:hidden; }
+.boot-halo::before,.boot-halo::after { content:""; position:absolute; left:50%; top:37%; width:min(64vw,620px); aspect-ratio:1; border:1px solid rgba(161,211,231,.08); border-radius:50%; transform:translate(-50%,-50%); }
+.boot-halo::after { width:min(46vw,450px); border-color:rgba(249,146,60,.09); box-shadow:0 0 80px rgba(249,146,60,.04),inset 0 0 55px rgba(145,213,255,.025); }
+.boot-halo>span { position:absolute; left:calc(50% + min(25vw,245px)); top:calc(37% - min(23vw,220px)); width:6px; height:6px; border-radius:50%; background:#f6ad55; box-shadow:0 0 18px #f6ad55; animation:boot-orbit 5s linear infinite; }
+.boot-halo>span+span { left:calc(50% - min(20vw,190px)); top:calc(37% + min(24vw,230px)); width:4px; height:4px; background:#8dcff3; box-shadow:0 0 15px #8dcff3; animation-duration:7s; animation-direction:reverse; }
+.boot-core { margin-top:-22px; text-align:center; }
+.boot-logo { filter:drop-shadow(0 0 28px rgba(145,213,255,.2)); }
+.boot-brand { color:#fff; text-shadow:0 0 42px rgba(145,213,255,.2); animation:boot-glow 820ms cubic-bezier(.2,.7,.2,1) both; }
+.boot-scan { animation:boot-scan 1.05s 180ms ease-in-out both; }
+.boot-kicker { animation:boot-hello 620ms 460ms ease-out both; }
+.boot-steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:11px; width:min(720px,calc(100vw - 40px)); margin-top:43px; }
+.boot-step { display:flex; align-items:center; gap:11px; min-width:0; padding:13px 14px; border:1px solid rgba(255,255,255,.1); border-radius:13px; background:linear-gradient(135deg,rgba(255,255,255,.045),rgba(255,255,255,.014)); box-shadow:inset 0 1px 0 rgba(255,255,255,.035); text-align:left; opacity:0; animation:boot-step-in 480ms var(--boot-delay) var(--ease-out-quart) both; }
+.boot-step-icon { display:grid; place-items:center; flex:0 0 34px; width:34px; height:34px; border:1px solid color-mix(in srgb,var(--boot-accent) 35%,transparent); border-radius:10px; color:var(--boot-accent); background:color-mix(in srgb,var(--boot-accent) 10%,transparent); }
+.boot-step>span:nth-child(2) { display:grid; gap:4px; min-width:0; }
+.boot-step b { overflow:hidden; color:#e9edf0; font:800 9px/1.15 var(--font-mono); letter-spacing:.075em; text-overflow:ellipsis; white-space:nowrap; }
+.boot-step small { overflow:hidden; color:rgba(203,213,225,.55); font:500 9px/1.3 var(--font-tech); text-overflow:ellipsis; white-space:nowrap; }
+.boot-step i { margin-left:auto; color:rgba(255,255,255,.22); font:700 9px var(--font-mono); font-style:normal; }
+.boot-skip { position:absolute; left:50%; bottom:max(22px,env(safe-area-inset-bottom)); display:flex; align-items:center; justify-content:center; gap:10px; padding:9px 13px; border:1px solid rgba(255,255,255,.13); border-radius:999px; background:rgba(255,255,255,.035); color:rgba(226,232,240,.55); font:600 10px var(--font-tech); letter-spacing:.035em; white-space:nowrap; transform:translateX(-50%); animation:boot-step-in 400ms 1.15s var(--ease-out-quart) both; transition:color 160ms,border-color 160ms,background 160ms; }
+.boot-skip:hover,.boot-skip:focus-visible { border-color:rgba(249,146,60,.55); background:rgba(249,146,60,.09); color:#fff; }
+.boot-skip kbd { padding:3px 5px; border:1px solid rgba(255,255,255,.17); border-radius:4px; color:#f6ad55; font:700 8px var(--font-mono); }
+.boot-splash-compact .boot-core { margin-top:-14px; }
+.boot-splash-compact .boot-logo { animation-duration:420ms; }
+.boot-splash-compact .boot-brand { animation-duration:470ms; }
+.boot-splash-compact .boot-scan { animation-duration:450ms; animation-delay:80ms; }
+.boot-splash-compact .boot-kicker { margin-top:7px; font-size:9px; letter-spacing:.25em; animation-duration:350ms; animation-delay:90ms; }
+.boot-splash-compact .boot-skip { bottom:max(18px,env(safe-area-inset-bottom)); padding:7px 10px; font-size:9px; animation-delay:140ms; }
+.boot-splash-reduced::before,.boot-splash-reduced .boot-halo>span,.boot-splash-reduced .plamek-orbit-run,.boot-splash-reduced .plamek-orbit-echo,.boot-splash-reduced .plamek-orbit-ball { animation:none!important; }
+.boot-splash-reduced .boot-logo,.boot-splash-reduced .boot-brand,.boot-splash-reduced .boot-scan,.boot-splash-reduced .boot-kicker,.boot-splash-reduced .boot-step,.boot-splash-reduced .boot-skip { animation:none!important; opacity:1; transform:none; }
+@keyframes boot-step-in { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:translateY(0); } }
+@keyframes boot-sweep { from { transform:translateX(-35%); opacity:.15; } to { transform:translateX(35%); opacity:.6; } }
+@keyframes boot-orbit { to { transform:rotate(360deg) translateX(5px); } }
+@media(max-width:640px) { .boot-steps { gap:7px; }.boot-step { gap:8px; padding:11px 9px; }.boot-step-icon { flex-basis:30px; width:30px; height:30px; }.boot-step b { font-size:8px; }.boot-step small { font-size:8px; } }
+@media(prefers-reduced-motion:reduce) { .boot-splash::before,.boot-halo>span,.boot-logo,.boot-brand,.boot-scan,.boot-kicker,.boot-step,.boot-skip { animation:none!important; transition:none!important; } }

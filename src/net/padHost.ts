@@ -1,0 +1,1001 @@
+import { normalizeProfile, type PlayerProfile } from '../platform/profile';
+import { DEFAULT_ROOM, type RoomAction, type RoomSettings } from './protocol';
+import Peer, { type DataConnection } from 'peerjs';
+import {
+  PROTOCOL_VERSION, REMOTE_COMMANDS, ZERO_INPUT, normalizeNick, randomCode, randomJoinToken, roomIdFromCode, isPadMessage,
+  type ArcadeHud, type HostMessage, type HostScreen, type PadFx, type PadInput, type PadMessage,
+  type PadSteer, type RemoteCommand, type SessionOptions, type SessionState,
+} from './protocol';
+import { buildPeerOptions, signalingFromLocation, type SignalingConfig } from './signaling';
+import { JOIN_TOKEN_TTL_MS, joinTokenAccepted, joinTokenExpired } from './joinToken';
+import { WebrtcLink, type PadLink } from './links';
+import { HostRelayLink, RELAY_BROKERS, RelayChannel, relayTopicFor, type RelayItem } from './relay';
+import type { GameId } from '../arcade/catalog';
+import { GAMES } from '../arcade/catalog';
+import { EMPTY_SUGGEST, judgeSuggest, type SuggestCounters } from './antiSpam';
+import { loadLanguage, t as translateMessage } from '../platform/i18n';
+
+const message = (key: string, values: Record<string, string | number> = {}) => translateMessage(loadLanguage(), key, values);
+
+export interface PadInfo {
+  profile?: PlayerProfile;
+  lastInputAt?: number;
+  inputStale?: boolean;
+  suggestedGame?: GameId;
+  /** Wyciszony: jego propozycje nie trafiają na ekran (łagodniejsza alternatywa dla kopnięcia). */
+  muted?: boolean;
+  /** Liczniki anty-spamu propozycji tego pada (patrz ./antiSpam). */
+  suggest?: SuggestCounters;
+  ready?: boolean;
+  rematch?: boolean;
+  connId: string;
+  slot: number;
+  nick: string;
+  connectedAt: number;
+  lastSeen: number;
+  latency: number;
+  /** Przez jaki transport leci ten pad. */
+  via: 'webrtc' | 'relay';
+  /** Stały identyfikator telefonu (localStorage na telefonie). */
+  pid?: string;
+  /** Tryb sterowania wybrany na tym telefonie (brak = stary pad: góra/dół = przód/tył). */
+  steer?: PadSteer;
+}
+
+export interface SlotMeta { name: string; color: string; darkColor: string }
+
+export type HostStatus = 'idle' | 'connecting' | 'ready' | 'error';
+
+/** Łączność z serwerem sygnalizacji (brokerem). */
+export type SignalState = 'offline' | 'connecting' | 'online' | 'lost';
+
+/** Łączność z awaryjnym przekaźnikiem (broker MQTT — łączność między sieciami). */
+export type RelayState = 'off' | 'connecting' | 'online';
+
+export interface PadHostState {
+  room: RoomSettings;
+  adminSlot: number | null;
+  screen: HostScreen;
+  status: HostStatus;
+  code: string;
+  error: string | null;
+  pads: PadInfo[];
+  signal: SignalState;
+  relay: RelayState;
+  /** Liczba nieudanych prób rejestracji w serwerze. */
+  attempts: number;
+  /** Ostatni problem techniczny (pokazywany w panelu). */
+  lastError: string | null;
+  /** Dodatkowa informacja dla graczy, np. że kod został odświeżony. */
+  note: string | null;
+  signaling: string;
+  /** Nie pokazujemy klucza w UI, ale używa go QR generowany przez hosta. */
+  joinToken: string;
+}
+
+type Listener = (s: PadHostState) => void;
+
+const MAX_SLOTS = 4;
+/* Publiczny serwer bywa wolny — pierwsza rejestracja potrafi zająć kilkanaście sekund. */
+const REGISTER_TIMEOUT = 20_000;
+const MAX_ATTEMPTS_BEFORE_NOTICE = 3;
+/** Jak często sprawdzamy, czy pokój nadal widnieje na serwerze (czy telefony go znajdą). */
+const PROBE_INTERVAL = 30_000;
+
+/** Ile razy próbujemy tego samego kodu, zanim go zmienimy (QR). */
+const MAX_CONFLICT_RETRIES = 4;
+/** Pad, który nic nie sygnalizuje dłużej niż to (telefon pinguje co 2 s), traktujemy jako rozłączony. */
+const STALE_PAD_MS = 10_000;
+/** Drugi „hello” z tego samego telefonu (inna ścieżka) ignorujemy, dopóki pierwsza jest świeża. */
+const PAD_SWITCH_GRACE_MS = 4_000;
+
+/** Walidacja trybu sterowania z telefonu (nic innego nie przechodzi — `undefined` = stary pad). */
+function normSteer(v: unknown): PadSteer | undefined {
+  return v === 'direct' || v === 'tank' ? v : undefined;
+}
+
+/**
+ * Host (komputer): tworzy pokój w sieci PeerJS i przyjmuje telefony-pady.
+ * Każdy telefon dostaje wolny slot gracza (0..3). Wejście z telefonu
+ * przechowywane jest w `inputs` i czytane przez silnik gry co klatkę.
+ *
+ * Rejestracja w serwerze sygnalizacji jest ponawiana automatycznie i po cichu —
+ * kod pokoju (QR) zostaje ten sam, więc gracze nie muszą nic robić.
+ *
+ * Dodatkowo host stale podsłuchuje awaryjny przekaźnik (broker MQTT): gdy
+ * łączenie bezpośrednie (WebRTC) nie przechodzi — np. telefon na LTE za
+ * trudnym NAT — telefon i tak się łączy przez przekaźnik.
+ */
+export class PadHost {
+  private peer: Peer | null = null;
+  private room: RoomSettings = { ...DEFAULT_ROOM };
+  private adminId: string | null = null;
+  private conns = new Map<string, PadLink>();
+  private pads = new Map<string, PadInfo>();
+  /** pid telefonu -> connId jego aktywnego pada (anti-duplicate slot). */
+  private returningSlots = new Map<string, { slot: number; until: number }>();
+  /** Wyciszenie przeżywa reset połączenia: reconnect nie może być czystą kartą dla spamera. */
+  private rememberedSilence = new Map<string, { muted: boolean; counters: SuggestCounters; until: number }>();
+  private lastReminder = 0;
+  private padsByPid = new Map<string, string>();
+  private listeners = new Set<Listener>();
+  private slotMeta: SlotMeta[] = [];
+  private screen: HostScreen = 'lobby';
+  private game: GameId | null = null;
+  /** QR carries this one-time room capability; input packets never carry it. */
+  private joinToken = '';
+  /** Poprzedni klucz przyjmujemy jeszcze przez chwilę po odświeżeniu (telefon w trakcie dołączania). */
+  private joinTokenPrev = '';
+  private joinTokenAt = 0;
+  private joinTokenTimer = 0;
+  private lastInputMessageAt = new Map<string, number>();
+  private selection = 0;
+  private menuOptions: SessionOptions | undefined;
+  private hudTimers = new Map<string, number>();
+
+  private registerTimer = 0;
+  private retryTimer = 0;
+  private probeTimer = 0;
+  private sweepTimer = 0;
+  private probing = false;
+  private lastPadChangeAt = 0;
+  private attempts = 0;
+  private conflictRetries = 0;
+  private running = false;
+  private signaling: SignalingConfig = signalingFromLocation();
+
+  /* Awaryjny przekaźnik (niezależny od serwera sygnalizacji). */
+  private relayChannel: RelayChannel | null = null;
+  /** Linki padów idących przez przekaźnik (cid -> link). */
+  private relayLinks = new Map<string, HostRelayLink>();
+  private relayTimer = 0;
+  private relayCursor = 0;
+  private relayToken = 0;
+
+  status: HostStatus = 'idle';
+  code = '';
+  error: string | null = null;
+  signal: SignalState = 'offline';
+  relay: RelayState = 'off';
+  lastError: string | null = null;
+  note: string | null = null;
+
+  /** Aktualne wejście dla każdego slotu gracza. */
+  readonly inputs: PadInput[] = Array.from({ length: MAX_SLOTS }, () => ({ ...ZERO_INPUT }));
+
+  /** Wywoływane, gdy zmienią się sloty albo nick jednego z telefonów. */
+  onSlotsChanged: ((slots: (PadInfo | null)[]) => void) | null = null;
+  onPauseRequest: (() => void) | null = null;
+  /** Komendy menu wykonuje aktualny administrator; domyślnie najstarszy aktywny telefon. */
+  onAdminCommand: ((command: RemoteCommand) => void) | null = null;
+  onGameChoice: ((index: number) => void) | null = null;
+
+  subscribe(fn: Listener) {
+    this.listeners.add(fn);
+    fn(this.snapshot());
+    return () => { this.listeners.delete(fn); };
+  }
+
+  snapshot(): PadHostState {
+    return {
+      room: { ...this.room }, adminSlot: this.admin()?.slot ?? null,
+      screen: this.screen,
+      status: this.status,
+      code: this.code,
+      error: this.error,
+      pads: [...this.pads.values()].sort((a, b) => a.slot - b.slot).map(p => ({ ...p })),
+      signal: this.signal,
+      relay: this.relay,
+      attempts: this.attempts,
+      lastError: this.lastError,
+      note: this.note,
+      signaling: this.signaling.label,
+      joinToken: this.joinToken,
+    };
+  }
+
+  private emit() { const s = this.snapshot(); this.listeners.forEach(l => l(s)); }
+
+  /** Starszeństwo wynika z kolejności połączenia, a nie numeru zwolnionego slotu. */
+  private admin(): PadInfo | null {
+    if (this.adminId && this.pads.has(this.adminId)) return this.pads.get(this.adminId)!;
+    let first: PadInfo | null = null;
+    for (const pad of this.pads.values()) if (!first || pad.connectedAt < first.connectedAt) first = pad;
+    return first;
+  }
+
+  session(): SessionState {
+    return {
+      room: { ...this.room },
+      game: this.game, screen: this.screen, selection: this.selection,
+      adminSlot: this.admin()?.slot ?? null,
+      roster: [...this.pads.values()].sort((a, b) => a.slot - b.slot).map(p => ({ slot: p.slot, nick: p.nick, ready: !!p.ready, rematch: !!p.rematch, suggestedGame: p.suggestedGame, muted: !!p.muted, profile: p.profile })),
+      options: this.menuOptions,
+    };
+  }
+
+  private broadcastSession() {
+    const msg: HostMessage = { t: 'session', session: this.session() };
+    for (const pad of this.pads.values()) this.send(pad.connId, msg);
+  }
+
+  private clearIntent() {
+    // Głosy znikają, liczniki anty-spamu zostają — inaczej start każdej rundy zerowałby
+    // limit i spam wracałby jak bumerang między kolejnymi planszami.
+    for (const p of this.pads.values()) { p.ready = false; p.rematch = false; p.suggestedGame = undefined; }
+    this.emit();
+  }
+
+  setGame(game: GameId | null) {
+    const changed = game !== this.game;
+    this.game = game;
+    this.menuOptions = undefined;
+    // „Brak gry” jest zawsze powrotem do biblioteki. Wcześniej między
+    // setGame(null) a setScreen('lobby') telefon mógł dostać krótką sesję
+    // z game=null i ekranem starego menu, przez co pilot blokował wybór.
+    if (game === null) this.screen = 'lobby';
+    if (changed) this.clearIntent(); else this.emit();
+    this.broadcastSession();
+  }
+  setSelection(index: number) { this.selection = index; this.broadcastSession(); }
+  setMenuOptions(options?: SessionOptions) { if (JSON.stringify(options) !== JSON.stringify(this.menuOptions)) this.clearIntent(); this.menuOptions = options; this.broadcastSession(); }
+
+  setSlotMeta(meta: SlotMeta[]) {
+    this.slotMeta = meta;
+    for (const p of this.pads.values()) {
+      const m = meta[p.slot];
+      if (m) this.send(p.connId, { t: 'slot', slot: p.slot, ...m });
+    }
+  }
+
+  setScreen(screen: HostScreen, extra?: { winnerSlot?: number | null; winnerName?: string; winnerColor?: string; allWon?: boolean }) {
+    const changed = this.screen !== screen;
+    this.screen = screen;
+    if (screen === 'game') this.room.dimmed = false;
+    if (changed) this.clearIntent();
+    for (const p of this.pads.values()) {
+      this.send(p.connId, {
+        t: 'screen', screen,
+        winnerName: extra?.winnerName, winnerColor: extra?.winnerColor,
+        youWon: extra?.allWon || (extra?.winnerSlot === undefined ? undefined : extra.winnerSlot === p.slot),
+      });
+    }
+    this.broadcastSession();
+  }
+
+  slotOf(connId: string) { return this.pads.get(connId)?.slot ?? -1; }
+  padForSlot(slot: number): PadInfo | null { for (const p of this.pads.values()) if (p.slot === slot) return p; return null; }
+  slots(): (PadInfo | null)[] { return Array.from({ length: MAX_SLOTS }, (_, i) => this.padForSlot(i)); }
+
+  sendHud(slot: number, hud: Extract<HostMessage, { t: 'hud' }>) {
+    const p = this.padForSlot(slot);
+    if (!p) return;
+    const now = performance.now();
+    const last = this.hudTimers.get(p.connId) ?? 0;
+    // Przekaźnik ma ograniczony przepustowością ruch — HUD leci tam rzadziej.
+    const minGap = this.conns.get(p.connId)?.kind === 'relay' ? 300 : 120;
+    if (now - last < minGap) return; // ~8 Hz (120 ms) / ~3 Hz (300 ms) wystarczy na telefon
+    this.hudTimers.set(p.connId, now);
+    this.send(p.connId, hud);
+  }
+
+  sendFx(slot: number, fx: PadFx) {
+    const p = this.padForSlot(slot);
+    if (p) this.send(p.connId, { t: 'fx', fx });
+  }
+
+  sendAchievement(slot: number, id: import('../platform/profile').AchievementId) {
+    const p = this.padForSlot(slot);
+    if (p) this.send(p.connId, { t: 'achievement', id });
+  }
+
+  sendRoundResult(slot: number, game: GameId, won: boolean) {
+    const p = this.padForSlot(slot);
+    if (p) this.send(p.connId, { t: 'roundResult', game, won });
+  }
+
+  sendArcadeHud(slot: number, hud: ArcadeHud) {
+    const p = this.padForSlot(slot);
+    if (!p) return;
+    const now = performance.now();
+    const gap = p.via === 'relay' ? 350 : 160;
+    if (now - (this.hudTimers.get(p.connId) ?? 0) < gap) return;
+    this.hudTimers.set(p.connId, now);
+    this.send(p.connId, { t: 'arcadeHud', hud });
+  }
+
+  start(preferredCode?: string) {
+    if (this.running) return;
+    this.running = true;
+    this.signaling = signalingFromLocation();
+    this.status = 'connecting';
+    this.error = null;
+    this.lastError = null;
+    this.note = null;
+    this.signal = 'connecting';
+    this.attempts = 0;
+    this.conflictRetries = 0;
+    this.code = preferredCode || randomCode();
+    this.joinToken = randomJoinToken();
+    this.joinTokenPrev = '';
+    this.joinTokenAt = Date.now();
+    this.startJoinTokenRotation();
+    this.lastPadChangeAt = Date.now();
+    this.lastInputMessageAt.clear();
+    this.startProbe();
+    this.startSweep();
+    this.startRelay();
+    this.emit();
+    this.openPeer();
+  }
+
+  private openPeer() {
+    const peer = new Peer(roomIdFromCode(this.code), buildPeerOptions(this.signaling));
+    this.peer = peer;
+    this.armRegisterTimeout(peer);
+
+    peer.on('open', () => {
+      if (this.peer !== peer) return;
+      // Powrót po awarii: stary kod QR mógł już krążyć po telefonach, więc
+      // pokazujemy świeży. Połączone pady zostają, dołączanie idzie od nowa.
+      const recovered = this.signal === 'lost' || this.attempts > 0;
+      clearTimeout(this.registerTimer);
+      this.registerTimer = 0;
+      this.signal = 'online';
+      this.status = 'ready';
+      this.error = null;
+      this.lastError = null;
+      this.attempts = 0;
+      this.conflictRetries = 0;
+      if (recovered) this.refreshJoinToken('recovered');
+      this.emit();
+    });
+
+    peer.on('connection', (conn) => this.handleConn(conn));
+
+    peer.on('disconnected', () => {
+      if (this.peer !== peer || peer.destroyed) return;
+      // Sygnalizacja padła (np. uśpienie komputera). Połączenia WebRTC z telefonami żyją dalej.
+      this.signal = 'lost';
+      this.emit();
+      this.scheduleRetry(message('host.error.signalLost'));
+    });
+
+    peer.on('error', (err) => {
+      if (this.peer !== peer) return;
+      this.handlePeerError(err);
+    });
+  }
+
+  private armRegisterTimeout(peer: Peer) {
+    clearTimeout(this.registerTimer);
+    // Publiczny serwer potrafi „myśleć” kilkanaście sekund — im więcej prób, tym dłużej czekamy.
+    const wait = Math.min(REGISTER_TIMEOUT + this.attempts * 5000, 35_000);
+    this.registerTimer = window.setTimeout(() => {
+      if (this.peer !== peer || peer.destroyed) return;
+      this.scheduleRetry(message('host.error.registerTimeout'));
+    }, wait);
+  }
+
+  private handlePeerError(err: unknown) {
+    const type = (err as { type?: string }).type;
+    if (type === 'peer-unavailable') return; // dotyczy tylko klientów, którzy nas szukali
+
+    if (type === 'browser-incompatible') {
+      this.running = false;
+      this.status = 'error';
+      this.signal = 'offline';
+      this.error = message('host.error.browserUnsupported');
+      this.emit();
+      this.destroyPeer();
+      return;
+    }
+
+    if (type === 'unavailable-id') {
+      // Ten kod jest już zarejestrowany — najczęściej przez nasze własne, „martwe” połączenie.
+      if (this.conflictRetries < MAX_CONFLICT_RETRIES) {
+        this.conflictRetries++;
+        this.scheduleRetry(message('host.error.codeBusy', { code: this.code }), 2500);
+        return;
+      }
+      // Po kilku próbach zmieniamy kod (QR odświeży się automatycznie).
+      this.conflictRetries = 0;
+      this.code = randomCode();
+      this.note = message('host.note.codeRefreshed');
+      // Temat przekaźnika zależy od kodu — przełączamy go razem z pokojem.
+      this.startRelay();
+      this.scheduleRetry(message('host.error.codeTaken'), 1200);
+      return;
+    }
+
+    const permanent = type === 'invalid-id' || type === 'invalid-key';
+    this.scheduleRetry(
+      type === 'network' || type === 'server-error' || type === 'socket-error' || type === 'socket-closed' || type === 'ssl-unavailable'
+        ? message('host.error.signalOffline')
+        : message('host.error.server', { type: type ? ` (${type})` : '' }),
+      undefined,
+      permanent,
+    );
+  }
+
+  private scheduleRetry(reason: string, minDelay?: number, permanent = false) {
+    if (!this.running) return;
+    const peer = this.peer;
+    this.attempts++;
+    this.lastError = reason;
+    this.signal = this.attempts === 1 ? 'connecting' : 'lost';
+    if (this.attempts >= MAX_ATTEMPTS_BEFORE_NOTICE) {
+      this.error = this.relay === 'online'
+        ? message('host.error.signalLostRelay')
+        : message('host.error.signalLostNoRelay');
+    }
+    this.emit();
+
+    if (permanent) {
+      this.running = false;
+      this.status = 'error';
+      this.signal = 'offline';
+      this.error = reason;
+      this.destroyPeer();
+      this.emit();
+      return;
+    }
+
+    const wait = minDelay ?? Math.min(1800 * Math.pow(2, Math.min(this.attempts, 3) - 1), 10_000);
+    clearTimeout(this.retryTimer);
+    this.retryTimer = window.setTimeout(() => {
+      if (!this.running) return;
+      const padsConnected = this.conns.size > 0;
+      // Telefony grają? Nie zrywamy ich połączeń — wystarczy podnieść sygnalizację.
+      if (peer && this.peer === peer && !peer.destroyed && padsConnected && peer.disconnected) {
+        try {
+          peer.reconnect();
+          this.armRegisterTimeout(peer);
+          return;
+        } catch { /* nie da się wrócić na tym obiekcie — budujemy pokój od nowa */ }
+      }
+      this.destroyPeer();
+      this.openPeer();
+    }, wait);
+  }
+
+  private startProbe() {
+    clearInterval(this.probeTimer);
+    this.probeTimer = window.setInterval(() => this.checkRegistration(), PROBE_INTERVAL);
+  }
+
+  /**
+ * Sprawdza, czy pokój nadal jest widoczny na serwerze sygnalizacji.
+ * Zdarza się, że socket „umiera” po cichu (serwer pada, zmienia się sieć) i wtedy
+ * komputer dalej pokazuje kod, którego żaden telefon nie znajdzie.
+ */
+  private checkRegistration() {
+    if (!this.running || this.probing || this.status !== 'ready') return;
+    if (Date.now() - this.lastPadChangeAt < 8000) return; // chwila po dołączeniu/odejściu telefonu
+    this.probing = true;
+
+    const roomId = roomIdFromCode(this.code);
+    let probe: Peer | null = null;
+    let timer = 0;
+
+    const finish = (verdict: 'alive' | 'dead' | 'unknown') => {
+      if (!probe) return;
+      const peer = probe;
+      probe = null;
+      this.probing = false;
+      clearTimeout(timer);
+      try { peer.destroy(); } catch { /* ignore */ }
+      if (verdict === 'dead' && this.running && this.status === 'ready') {
+        this.lastError = message('host.error.roomDisappeared');
+        this.signal = 'lost';
+        this.emit();
+        this.scheduleRetry(message('host.error.roomDisappeared'), 800);
+      }
+    };
+
+    try {
+      probe = new Peer(`sf-check-${randomTag()}`, buildPeerOptions(this.signaling));
+    } catch {
+      this.probing = false;
+      return;
+    }
+    timer = window.setTimeout(() => finish('unknown'), 12_000);
+
+    probe.on('open', () => {
+      if (!probe) return;
+      const conn = probe.connect(roomId, { reliable: true });
+      conn.on('open', () => finish('alive'));
+      conn.on('error', () => { /* czekamy na jednoznaczne peer-unavailable */ });
+    });
+    probe.on('error', (err) => {
+      const type = (err as { type?: string }).type;
+      if (type === 'peer-unavailable') finish('dead');
+      else if (type === 'unavailable-id') finish('unknown');
+    });
+  }
+
+  /* --------------------- awaryjny przekaźnik --------------------------- */
+
+  /**
+   * Przekaźnik jest aktywny cały czas, gdy pokój działa — niezależnie od tego,
+   * czy serwer sygnalizacji odpowiada. Dzięki temu telefon łączy się przez niego
+   * natychmiast, gdy tylko połączenie bezpośrednie nie przechodzi.
+   */
+  private startRelay() {
+    this.stopRelay();
+    if (!this.running) return;
+    this.relay = 'connecting';
+    this.relayCursor = 0;
+    this.emit();
+    this.tryRelayBroker();
+  }
+
+  private stopRelay() {
+    this.relayToken++;
+    clearTimeout(this.relayTimer);
+    this.relayTimer = 0;
+    const ch = this.relayChannel;
+    this.relayChannel = null;
+    this.relayLinks.clear();
+    this.relay = 'off';
+    ch?.close();
+  }
+
+  private tryRelayBroker() {
+    if (!this.running) return;
+    const token = ++this.relayToken;
+    const url = RELAY_BROKERS[this.relayCursor % RELAY_BROKERS.length];
+    const topic = relayTopicFor(this.code);
+    RelayChannel.connect(url, topic, 12_000).then((channel) => {
+      if (token !== this.relayToken || !this.running) { channel.close(); return; }
+      this.bindRelayChannel(channel);
+    }).catch(() => {
+      if (token !== this.relayToken || !this.running) return;
+      // Ten broker nie odpowiada — po chwili spróbujemy następnego.
+      this.relayCursor = (this.relayCursor + 1) % RELAY_BROKERS.length;
+      this.relayTimer = window.setTimeout(() => this.tryRelayBroker(), 5_000);
+    });
+  }
+
+  private bindRelayChannel(channel: RelayChannel) {
+    this.relayChannel = channel;
+    this.relay = 'online';
+    channel.onBatch((items) => this.onRelayBatch(items));
+    channel.addCloseListener(() => this.onRelayChannelClosed());
+    this.emit();
+  }
+
+  private onRelayBatch(items: RelayItem[]) {
+    for (const it of items) {
+      if (!it || typeof it.cid !== 'string' || !it.cid || it.cid.length > 64) continue;
+      let link = this.relayLinks.get(it.cid);
+      if (!link) {
+        const channel = this.relayChannel;
+        if (!channel) continue;
+        const fresh = new HostRelayLink(channel, it.cid);
+        fresh.onMessage((raw) => this.onMessage(fresh, raw as PadMessage));
+        fresh.onClosed(() => this.dropConn(fresh.id));
+        this.relayLinks.set(it.cid, fresh);
+        this.conns.set(it.cid, fresh);
+        link = fresh;
+      }
+      link.deliver(it.m);
+    }
+  }
+
+  private onRelayChannelClosed() {
+    const wasOnline = this.relayChannel !== null;
+    this.relayChannel = null;
+    // Wszystkie pady przez przekaźnik tracą łączność — zwalniają sloty.
+    for (const cid of [...this.relayLinks.keys()]) this.dropConn(cid);
+    this.relayLinks.clear();
+    if (!this.running) {
+      this.relay = 'off';
+      return;
+    }
+    this.relay = 'connecting';
+    if (wasOnline) this.lastError = message('host.error.relayLost');
+    this.emit();
+    this.relayCursor = (this.relayCursor + 1) % RELAY_BROKERS.length;
+    this.relayTimer = window.setTimeout(() => this.tryRelayBroker(), 4_000);
+  }
+
+  /* ------------------- sprzątanie „starych” padów ---------------------- */
+
+  /**
+   * Telefon nieaktywny dłużej niż STALE_PAD_MS (nie ma input/ping) traktujemy
+   * jako rozłączony — zwalnia slot, nawet jeśli gniazdo nie zgłosiło się o tym.
+   */
+  private sweepInputs(now = Date.now()) {
+    for (const [pid, saved] of this.returningSlots) if (saved.until < now) this.returningSlots.delete(pid);
+    for (const [pid, saved] of this.rememberedSilence) if (saved.until < now) this.rememberedSilence.delete(pid);
+    for (const p of [...this.pads.values()]) {
+      // Input heartbeats are independent of ping. Never keep driving on stale input.
+      if (now - (p.lastInputAt ?? p.connectedAt) > 800) {
+        this.inputs[p.slot] = { ...ZERO_INPUT };
+        if (!p.inputStale) { p.inputStale = true; this.emit(); }
+      }
+      if (now - p.lastSeen > STALE_PAD_MS) this.dropConn(p.connId);
+    }
+  }
+
+  remindReady() {
+    const now = Date.now();
+    if (!this.game || !['menu', 'setup'].includes(this.screen) || now - this.lastReminder < 8000) return;
+    this.lastReminder = now;
+    for (const p of this.pads.values()) if (!p.ready) this.send(p.connId, { t: 'readyReminder' });
+  }
+
+  private startSweep() {
+    clearInterval(this.sweepTimer);
+    this.sweepTimer = window.setInterval(() => {
+      if (!this.running) return;
+      this.sweepInputs();
+    }, 200);
+  }
+
+  /** Kasuje stan i próbuje jeszcze raz (np. po kliknięciu „Spróbuj ponownie”). */
+  restart() {
+    const code = this.code || undefined;
+    this.stop();
+    this.start(code);
+  }
+
+  stop() {
+    this.running = false;
+    clearTimeout(this.registerTimer);
+    clearTimeout(this.retryTimer);
+    clearInterval(this.probeTimer);
+    clearInterval(this.sweepTimer);
+    this.registerTimer = 0;
+    this.retryTimer = 0;
+    this.probeTimer = 0;
+    this.sweepTimer = 0;
+    this.probing = false;
+    this.stopRelay();
+    for (const c of this.conns.values()) { try { c.close(); } catch { /* ignore */ } }
+    this.conns.clear();
+    this.padsByPid.clear();
+    this.returningSlots.clear();
+    this.pads.clear();
+    this.adminId = null;
+    this.inputs.forEach((_, i) => { this.inputs[i] = { ...ZERO_INPUT }; });
+    this.destroyPeer();
+    this.status = 'idle';
+    this.signal = 'offline';
+    this.attempts = 0;
+    this.conflictRetries = 0;
+    this.error = null;
+    this.lastError = null;
+    this.note = null;
+    this.joinToken = '';
+    this.joinTokenPrev = '';
+    this.joinTokenAt = 0;
+    clearTimeout(this.joinTokenTimer);
+    this.joinTokenTimer = 0;
+    this.lastInputMessageAt.clear();
+    this.emit();
+    this.onSlotsChanged?.(this.slots());
+  }
+
+  private destroyPeer() {
+    const peer = this.peer;
+    this.peer = null;
+    if (!peer) return;
+    try { peer.destroy(); } catch { /* ignore */ }
+  }
+
+  /**
+   * Nowy klucz dołączania = nowy kod QR na ekranie. Połączone pady nic nie tracą
+   * (klucz jest potrzebny tylko przy dołączaniu), więc odświeżanie może działać
+   * w tle, dopóki na telewizorze leży kod zaproszenia.
+   */
+  refreshJoinToken(reason: 'ttl' | 'recovered' | 'manual' = 'manual') {
+    if (!this.running || this.status === 'error') return false;
+    this.joinTokenPrev = this.joinToken;
+    this.joinToken = randomJoinToken();
+    this.joinTokenAt = Date.now();
+    // Note jest po to, by administrator zobaczył, że zmiana zaszła bez jego kliknięcia.
+    this.note = message(reason === 'manual' ? 'host.note.qrManual' : 'host.note.qrRefreshed');
+    this.startJoinTokenRotation();
+    this.emit();
+    return true;
+  }
+
+  /** Klucz ważny jest TTL oraz chwilę dłużej — po to, by nie odrzucić telefonu w trakcie dołączania. */
+  private acceptsJoinToken(token: unknown) {
+    return joinTokenAccepted(token, this.joinToken, this.joinTokenPrev, this.joinTokenAt, Date.now());
+  }
+
+  /**
+   * Jednorazowy budzik na koniec ważności klucza; kolejna rotacja ustawia następny.
+   * Zegar zatrzymuje się, gdy telewizor śpi — po przebudzeniu sprawdzamy, ile czasu
+   * faktycznie minęło, żeby nie pokazywać kodu, który „odświeży się za minutę" od godziny.
+   */
+  private startJoinTokenRotation() {
+    clearTimeout(this.joinTokenTimer);
+    if (!this.running) return;
+    const arm = () => {
+      if (!this.running) return;
+      const left = Math.max(1000, JOIN_TOKEN_TTL_MS - (Date.now() - this.joinTokenAt));
+      this.joinTokenTimer = window.setTimeout(() => {
+        if (joinTokenExpired(this.joinTokenAt, Date.now())) this.refreshJoinToken('ttl');
+        else arm();
+      }, left);
+    };
+    arm();
+  }
+
+  /** Host-authoritative: callers on the wire are checked before reaching this method. */
+  manageRoom(action: RoomAction) {
+    if (!action || typeof action !== 'object') return;
+    if (action.kind === 'kick' || action.kind === 'transfer') {
+      if (!Number.isInteger(action.slot)) return;
+      const target = this.padForSlot(action.slot);
+      if (!target) return;
+      if (action.kind === 'kick') { this.kick(target.connId); return; }
+      this.adminId = target.connId;
+    } else if (action.kind === 'muted') {
+      if (!Number.isInteger(action.slot)) return;
+      const mutedTarget = this.padForSlot(action.slot);
+      if (!mutedTarget || mutedTarget.connId === this.adminId) return;
+      mutedTarget.muted = action.value;
+      // Kłódka zabiera to, co wisiało na ekranie; zdjęcie startuje od czystego licznika.
+      if (action.value) mutedTarget.suggestedGame = undefined; else mutedTarget.suggest = { ...EMPTY_SUGGEST };
+      if (mutedTarget.pid) this.rememberedSilence.set(mutedTarget.pid, { muted: action.value, counters: mutedTarget.suggest ?? EMPTY_SUGGEST, until: Date.now() + 60_000 });
+    } else if (['locked', 'suggestions', 'dimmed', 'pairing'].includes(action.kind) && 'value' in action && typeof action.value === 'boolean') {
+      // Never hide a live round. The screen is automatically restored on start.
+      if (action.kind === 'dimmed' && this.screen === 'game') return;
+      this.room = { ...this.room, [action.kind]: action.value };
+      if (action.kind === 'suggestions' && !action.value) for (const p of this.pads.values()) { p.suggestedGame = undefined; p.suggest = { ...EMPTY_SUGGEST }; }
+    } else return;
+    this.emit(); this.broadcastSession();
+  }
+
+  kick(connId: string) {
+    const c = this.conns.get(connId);
+    if (c) { this.send(connId, { t: 'rejected', reason: 'Odłączono przez hosta.' }); setTimeout(() => c.close(), 150); }
+    const pid = this.pads.get(connId)?.pid;
+    this.dropConn(connId);
+    if (pid) this.returningSlots.delete(pid);
+    if (pid) this.rememberedSilence.delete(pid);
+  }
+
+  private handleConn(conn: DataConnection) {
+    const link = new WebrtcLink(conn);
+    // Zarejestruj link zanim peer wyemituje 'open': telefon potrafi wysłać
+    // hello natychmiast, a odpowiedź musi już znać adres zwrotny.
+    this.conns.set(link.id, link);
+    link.onMessage((raw) => this.onMessage(link, raw as PadMessage));
+    link.onClosed(() => this.dropConn(link.id));
+  }
+
+  private freeSlot(): number {
+    const taken = new Set([...this.pads.values()].map(p => p.slot));
+    for (let i = 0; i < MAX_SLOTS; i++) if (!taken.has(i)) return i;
+    return -1;
+  }
+
+  private onMessage(link: PadLink, msg: PadMessage) {
+    if (!isPadMessage(msg)) return;
+    const id = link.id;
+    switch (msg.t) {
+      case 'hello': {
+        if (msg.v !== PROTOCOL_VERSION) {
+          this.send(id, { t: 'rejected', reason: 'Niezgodna wersja gry — odśwież stronę na telefonie.' });
+          setTimeout(() => link.close(), 200);
+          return;
+        }
+        // QR przekazuje token tylko po to, aby awaryjny publiczny relay nie
+        // przyjmował przypadkowych hello. Bez tokenu nadal działa ręczne,
+        // bezpośrednie łączenie po kodzie pokoju.
+        if (link.kind === 'relay' && !this.acceptsJoinToken(msg.token)) {
+          this.send(id, { t: 'rejected', reason: 'Ten link pada jest nieaktualny. Zeskanuj aktualny QR z ekranu.' });
+          setTimeout(() => link.close(), 200);
+          return;
+        }
+        if (this.pads.has(id)) {
+          // Welcome mogło zginąć przy przejściu DataChannel w stan OPEN albo
+          // na brokerze MQTT. Ponowne hello nie tworzy drugiego slotu.
+          const existing = this.pads.get(id)!;
+          existing.lastSeen = Date.now();
+          const m = this.slotMeta[existing.slot] ?? { name: message('host.slotName', { n: existing.slot + 1 }), color: '#fbbf24', darkColor: '#78350f' };
+          this.send(id, { t: 'welcome', slot: existing.slot, nick: existing.nick, ...m, screen: this.screen });
+          this.send(id, { t: 'session', session: this.session() });
+          return;
+        }
+        // Stały identyfikator telefonu: gdy ten sam telefon łączy się przez drugą
+        // ścieżkę (P2P + przekaźnik na raz), pierwsza aktywna wygrywa —
+        // nie zajmujemy dwóch slotów. Po rozłączeniu (lastSeen stale) nowa ścieżka przejmie slot.
+        const pid = typeof msg.pid === 'string' && msg.pid ? msg.pid.slice(0, 64) : undefined;
+        if (pid) {
+          const prevId = this.padsByPid.get(pid);
+          if (prevId && prevId !== id) {
+            const prev = this.pads.get(prevId);
+            if (prev) {
+              if (Date.now() - prev.lastSeen < PAD_SWITCH_GRACE_MS) return; // pierwszy pad jest wciąż aktywny
+              this.dropConn(prevId); // telefon wraca na nowej ścieżki — starą zamykamy
+            } else {
+              this.padsByPid.delete(pid);
+            }
+          }
+        }
+        const saved = pid ? this.returningSlots.get(pid) : undefined;
+        if (this.room.locked && !(saved && saved.until > Date.now())) {
+          this.send(id, { t: 'rejected', reason: 'Pokój jest zamknięty. Poproś administratora o otwarcie wejścia.' });
+          setTimeout(() => link.close(), 200);
+          return;
+        }
+        const slot = saved && saved.until > Date.now() && ![...this.pads.values()].some(p => p.slot === saved.slot) ? saved.slot : this.freeSlot();
+        if (pid) this.returningSlots.delete(pid);
+        if (slot < 0) {
+          this.send(id, { t: 'rejected', reason: 'Wszystkie 4 miejsca są zajęte.' });
+          setTimeout(() => link.close(), 200);
+          return;
+        }
+        const nick = normalizeNick(typeof msg.nick === 'string' ? msg.nick : '', message('host.defaultNick', { n: slot + 1 }));
+        const info: PadInfo = { connId: id, slot, nick, connectedAt: Date.now(), lastSeen: Date.now(), latency: 0, via: link.kind, pid, steer: normSteer(msg.steer) };
+        const silence = pid ? this.rememberedSilence.get(pid) : undefined;
+        if (silence && silence.until > Date.now()) { info.muted = silence.muted; info.suggest = silence.counters; }
+        if (pid) this.rememberedSilence.delete(pid);
+        this.pads.set(id, info);
+        if (pid) this.padsByPid.set(pid, id);
+        this.inputs[slot] = { ...ZERO_INPUT };
+        const meta = this.slotMeta[slot] ?? { name: message('host.slotName', { n: slot + 1 }), color: '#fbbf24', darkColor: '#78350f' };
+        this.send(id, { t: 'welcome', slot, ...meta, screen: this.screen });
+        this.lastPadChangeAt = Date.now();
+        this.emit();
+        this.broadcastSession();
+        this.onSlotsChanged?.(this.slots());
+        break;
+      }
+      case 'input': {
+        const p = this.pads.get(id);
+        if (!p) return;
+        const now = Date.now();
+        // Normalny pad wysyła ~30 razy/s. Odrzucamy zalew wiadomości, ale nie
+        // dotykamy zwykłego czasu reakcji.
+        const previousInput = this.lastInputMessageAt.get(id) ?? 0;
+        if (now - previousInput < 8) return;
+        this.lastInputMessageAt.set(id, now);
+        p.lastSeen = now;
+        p.lastInputAt = p.lastSeen;
+        if (p.inputStale) { p.inputStale = false; this.emit(); }
+        const clamp = (v: unknown) => Math.max(-1, Math.min(1, Number(v) || 0));
+        const steer = normSteer(msg.steer);
+        if (steer) p.steer = steer;
+        this.inputs[p.slot] = {
+          fwd: clamp(msg.fwd),
+          turn: clamp(msg.turn),
+          fire: !!msg.fire,
+          // Brak `steer` = starszy telefon: silnik użyje wtedy fwd/turn (klasyczne sterowanie).
+          steer,
+          dirX: clamp(msg.dirX),
+          dirY: clamp(msg.dirY),
+          aimX: clamp(msg.aimX),
+          aimY: clamp(msg.aimY),
+        };
+        break;
+      }
+      case 'nick': {
+        const p = this.pads.get(id);
+        if (!p) return;
+        p.lastSeen = Date.now();
+        p.nick = normalizeNick(typeof msg.nick === 'string' ? msg.nick : '', message('host.defaultNick', { n: p.slot + 1 }));
+        this.send(id, { t: 'nick', nick: p.nick });
+        this.emit();
+        this.broadcastSession();
+        this.onSlotsChanged?.(this.slots());
+        break;
+      }
+      case 'suggest': {
+        const p = this.pads.get(id);
+        // Telewizor jest autorytetem: telefon może chcieć bez liku, ale na ekran trafia
+        // tylko to, co przechodzi anty-spam (`./antiSpam`). Naprzód "czy w ogóle" (pokój,
+        // ekran, prawdziwy tytuł), potem liczby: wyciszenie, duplikat, cooldown, sufit w oknie.
+        if (!p || !this.room.suggestions || !['lobby', 'over'].includes(this.screen)) break;
+        if (msg.game !== null && !GAMES.some(g => g.id === msg.game && !g.wip && g.id !== this.game)) break;
+        const decision = judgeSuggest({ game: typeof msg.game === 'string' ? msg.game : undefined, now: Date.now(), muted: !!p.muted, counters: p.suggest ?? EMPTY_SUGGEST });
+        p.suggest = decision.counters;
+        if (!decision.accept) {
+          // Sama odmowa nie może stać się nowym spamem: telefon dostaje ją raz na `replyGapMs`.
+          if (decision.reply) this.send(id, { t: 'suggestAck', verdict: decision.verdict, retryInMs: decision.retryInMs });
+          // Upór (kilka bić w limit pod rząd) wycisza gracza bez pytania admina. Ten może
+          // decyzję zdjąć albo założyć ją sam; po autoMuteMs wszystko wraca do punktu wyjścia.
+          if (decision.autoMuted) { p.muted = true; this.emit(); this.broadcastSession(); }
+          break;
+        }
+        const next = typeof msg.game === 'string' ? (msg.game as GameId) : undefined;
+        // Ten sam głos co przed chwilą nie musi obiegać całego pokoju na nowo.
+        if (p.suggestedGame === next) break;
+        p.suggestedGame = next;
+        this.send(id, { t: 'suggestAck', verdict: 'accepted', retryInMs: 0 });
+        this.emit(); this.broadcastSession();
+        break;
+      }
+      case 'profile': {
+        const p = this.pads.get(id);
+        if (!p) break;
+        p.profile = normalizeProfile(msg.profile);
+        this.emit(); this.broadcastSession();
+        break;
+      }
+      case 'room': {
+        if (this.admin()?.connId === id) this.manageRoom(msg.action);
+        break;
+      }
+      case 'remind': {
+        if (this.admin()?.connId === id) this.remindReady();
+        break;
+      }
+      case 'intent': {
+        const p = this.pads.get(id);
+        if (!p || typeof msg.value !== 'boolean' || !this.game) break;
+        const allowed = msg.kind === 'ready' ? this.screen === 'menu' || this.screen === 'setup' : msg.kind === 'rematch' && this.screen === 'over';
+        if (!allowed || p[msg.kind] === msg.value) break;
+        p[msg.kind] = msg.value;
+        p.lastSeen = Date.now();
+        this.emit(); this.broadcastSession();
+        break;
+      }
+      case 'pause': {
+        if (this.admin()?.connId === id) this.onPauseRequest?.();
+        break;
+      }
+      case 'command': {
+        if (this.admin()?.connId === id && REMOTE_COMMANDS.includes(msg.command)) {
+          this.onAdminCommand?.(msg.command);
+        }
+        break;
+      }
+      case 'choose': {
+        if (this.admin()?.connId === id && Number.isInteger(msg.index) && msg.index >= 0 && msg.index < GAMES.length) {
+          this.onGameChoice?.(msg.index);
+        }
+        break;
+      }
+      case 'ping': {
+        const p = this.pads.get(id);
+        if (p) p.lastSeen = Date.now();
+        this.send(id, { t: 'pong', at: msg.at });
+        break;
+      }
+    }
+  }
+
+  private dropConn(connId: string) {
+    const p = this.pads.get(connId);
+    this.conns.delete(connId);
+    this.relayLinks.delete(connId);
+    this.hudTimers.delete(connId);
+    this.lastInputMessageAt.delete(connId);
+    if (p) {
+      this.pads.delete(connId);
+      if (this.adminId === connId) this.adminId = null;
+      if (p.pid) this.returningSlots.set(p.pid, { slot: p.slot, until: Date.now() + 60_000 });
+      if (p.pid) this.rememberedSilence.set(p.pid, { muted: !!p.muted, counters: p.suggest ?? EMPTY_SUGGEST, until: Date.now() + 60_000 });
+      if (p.pid) {
+        const holder = this.padsByPid.get(p.pid);
+        if (holder === connId) this.padsByPid.delete(p.pid);
+      }
+      this.inputs[p.slot] = { ...ZERO_INPUT };
+      this.lastPadChangeAt = Date.now();
+      this.emit();
+      this.broadcastSession();
+      this.onSlotsChanged?.(this.slots());
+    }
+  }
+
+  private send(connId: string, msg: HostMessage) {
+    const c = this.conns.get(connId);
+    if (c && c.open) { try { c.send(msg); } catch { /* ignore */ } }
+  }
+}
+
+function randomTag(): string {
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  return arr[0].toString(36);
+}
+
+export const padHost = new PadHost();
