@@ -23,3 +23,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# 2.17: podglądy atlasów i duże archiwa paczek (zip jest w repo)
+.art-preview/

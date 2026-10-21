@@ -3,7 +3,7 @@ import type { World } from './world';
 import { stepBody, type Body } from './physics';
 import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
-import { kindForColor, mobMaterial, type MobTexKind } from './mobTextures';
+import { kindForColor, mobMaterial, setMobPalette, snapToPalette, type MobTexKind } from './mobTextures';
 
 export type MobType = 'pig' | 'zombie' | 'sheep' | 'cow' | 'chicken' | 'creeper' | 'spider' | 'skeleton' | 'wolf' | 'villager' | 'golem' | 'enderman' | 'slime' | 'ghast';
 
@@ -23,15 +23,19 @@ export function isVillageMob(type: MobType): boolean {
  */
 function box(w: number, h: number, d: number, color: number, mats: Map<string, THREE.Material>, kind?: MobTexKind) {
   const textured = Math.max(w, h, d) >= 0.14 && Math.min(w, h, d) >= 0.095;
+  // 2.17: wzór dobieramy z oryginalnego koloru części (żeby np. slime dalej
+  // miał bąbelki), a sam odcień przesuwamy na paletę tekstury moba z paczki.
+  const base = snapToPalette(color);
   const texKind = kind ?? kindForColor(color);
-  const key = textured ? `t:${texKind}:${color}` : `c:${color}`;
+  const key = textured ? `t:${texKind}:${base}` : `c:${base}`;
   let m = mats.get(key);
   if (!m) {
-    m = textured ? mobMaterial(texKind, color) : new THREE.MeshLambertMaterial({ color });
+    m = textured ? mobMaterial(texKind, base) : new THREE.MeshLambertMaterial({ color: base });
     mats.set(key, m);
   }
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-  mesh.userData.mobColor = color;
+  mesh.userData.mobColor = color; // kolor logiczny części (do rozpoznania w grze)
+  mesh.userData.mobTint = base; // odcień z palety paczki (użyty w materiale)
   mesh.userData.mobKind = texKind;
   return mesh;
 }
@@ -133,10 +137,11 @@ export class Mob {
       if (base !== 0x7a8089 && base !== 0x5d626b) return;
       const next = base === 0x7a8089 ? 0xa05a48 : 0x7a4238; // coat turns rust-red
       const old = mesh.material as THREE.MeshLambertMaterial;
-      const mat = mobMaterial(kindForColor(next), next).clone();
+      const mat = mobMaterial('wolf-fur', next).clone();
       mat.emissive.copy(old.emissive);
       mesh.material = mat;
       mesh.userData.mobColor = next;
+      mesh.userData.mobTint = next;
     });
     return true;
   }
@@ -154,6 +159,8 @@ export class Mob {
   }
 
   private build() {
+    // 2.17: paleta kolorów z prawdziwej tekstury tego moba w paczce.
+    setMobPalette(this.type);
     const g = this.group;
     if (this.type === 'pig' || this.type === 'sheep' || this.type === 'cow') {
       const isSheep = this.type === 'sheep';
@@ -793,7 +800,10 @@ export class Mob {
   shear(): boolean {
     if (this.type !== 'sheep' || this.dead || this.sheared) return false;
     this.sheared = true;
-    if (this.woolMesh) this.woolMesh.material = mobMaterial('sheep-face', 0xd8c8b0).clone();
+    if (this.woolMesh) {
+      const skin = snapToPalette(0xd8c8b0);
+      this.woolMesh.material = mobMaterial('sheep-face', skin).clone();
+    }
     return true;
   }
 

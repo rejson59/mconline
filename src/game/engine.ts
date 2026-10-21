@@ -42,6 +42,7 @@ import {
 import { PUBLIC_POS_HZ } from './online';
 import { fallbackSkin, loadSkinId, skinById } from './skins';
 import { AVATAR_KINDS, avatarMaterial } from './mobTextures';
+import { hasPackSkin, playerSkinTexture, skinnedBox } from './skinArt';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
@@ -1368,35 +1369,58 @@ export class Game {
     // jednego płaskiego koloru na każdą część ciała.
     const mat = (color: number, kind: keyof typeof AVATAR_KINDS) => avatarMaterial(AVATAR_KINDS[kind], color);
 
+    // 2.17: dla skórek Steve i Alex używamy prawdziwej tekstury z paczki
+    // (układ UV jak w Minecrafcie), a nie kolorowych klocków. Pozostałe
+    // skórki zostają przy pikselowych teksturach z 2.16.
+    const packTex = hasPackSkin(skin.id) ? playerSkinTexture(skin.id) : null;
+    const slim = skin.id === 'alex';
+    const part = (size: [number, number, number], piece: 'body' | 'head' | 'rightArm' | 'rightLeg' | 'leftLeg' | 'leftArm', color: number, kind: 'shirt' | 'head' | 'sleeve' | 'pants') =>
+      packTex
+        ? skinnedBox(size, piece, packTex, slim)
+        : new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), mat(color, kind));
+
     // Grupa stoi na ziemi (stopy w y = 0), więc da się ją podstawić pod
     // `body.pos` bez korekty. Proporcje jak w Minecrafcie: ~1,8 bloku wzrostu.
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.28), mat(skin.shirt, 'shirt'));
+    const body = part([0.5, 0.62, 0.28], 'body', skin.shirt, 'shirt');
     body.position.y = 0.9;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), mat(skin.skin, 'head'));
+    const head = part([0.4, 0.4, 0.4], 'head', skin.skin, 'head');
     head.position.y = 1.42;
     // Włosy to cienka „czapka” na głowie – bez nich awatar wygląda jak lalka.
     const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.42), mat(skin.hair, 'hair'));
     hair.position.y = 1.66;
+    // Skórka z paczki ma włosy i oczy namalowane w teksturze – dodatkowe
+    // klocki tylko by je zasłoniły.
+    if (packTex) hair.visible = false;
     const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.08), mat(skin.hair, 'hair'));
     hairBack.position.set(0, 1.5, 0.19);
+    if (packTex) hairBack.visible = false;
     // Oczy na przedniej ścianie (przód awatara to -Z, tak jak trzymany blok).
     const eyeMat = new THREE.MeshBasicMaterial({ color: skin.eye ?? 0x2b2b2b });
     const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.02), eyeMat);
     eyeL.position.set(-0.09, 1.46, -0.205);
     const eyeR = eyeL.clone();
     eyeR.position.x = 0.09;
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.18), mat(skin.sleeve, 'sleeve'));
+    if (packTex) {
+      eyeL.visible = false;
+      eyeR.visible = false;
+    }
+    const armL = part([0.15, 0.6, 0.18], 'leftArm', skin.sleeve, 'sleeve');
     armL.position.set(-0.33, 0.9, 0);
-    const armR = armL.clone();
+    const armR = part([0.15, 0.6, 0.18], 'rightArm', skin.sleeve, 'sleeve');
     armR.position.x = 0.33;
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.22), mat(skin.pants, 'pants'));
+    const legL = part([0.2, 0.6, 0.22], 'leftLeg', skin.pants, 'pants');
     legL.position.set(-0.13, 0.3, 0);
-    const legR = legL.clone();
+    const legR = part([0.2, 0.6, 0.22], 'rightLeg', skin.pants, 'pants');
     legR.position.x = 0.13;
     const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.24), mat(skin.shoes, 'shoes'));
     shoeL.position.set(-0.13, 0.07, -0.01);
     const shoeR = shoeL.clone();
     shoeR.position.x = 0.13;
+    // Skórka maluje buty na dole nóg – osobne buty nie są potrzebne.
+    if (packTex) {
+      shoeL.visible = false;
+      shoeR.visible = false;
+    }
     const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), new THREE.MeshBasicMaterial({ color: 0xc9a227 }));
     hand.position.set(0.36, 0.62, -0.24);
     hand.visible = false;

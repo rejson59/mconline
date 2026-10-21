@@ -1,5 +1,6 @@
 import { T, BLOCKS, RENDER, tileFor } from './blocks';
 import { mulberry32 } from './noise';
+import { applyOfficialTiles, isOfficialTile } from './packArt';
 
 export const TILE = 16;
 export const ATLAS_TILES = 16; // tiles per row
@@ -1300,6 +1301,12 @@ export function buildAtlas(): AtlasResult {
     }
   }
 
+  // --------------------------------------------------------------- 2.17 „Grafika jak w Minecrafcie”
+  // Podmieniamy kafelki na prawdziwe tekstury z paczki Pixel Perfection CE.
+  // Robimy to **przed** zagęszczeniem liści, bo oficjalne liście mają
+  // dziury, a gra traktuje je jak pełny blok (inaczej byłyby czarne plamy).
+  applyOfficialTiles(img);
+
   // --------------------------------------------------------------- 2.8.1 „Światło i chmury”
   // Liście są teraz pełnymi blokami (opaque), więc dziury w ich teksturze
   // muszą zniknąć – inaczej w miejscu „przezroczystych” pikseli pojawiłaby
@@ -1439,6 +1446,9 @@ function polishTiles() {
   const buf = new Uint8ClampedArray(TILE * TILE * 4);
   for (const tile of Object.values(T)) {
     if (!isOpaqueTile(tile)) continue;
+    // 2.17: kafelki z paczki są już dopracowane przez autora – nie ruszamy
+    // ich krawędzi, bo „wygładzanie” zjadało drobny rysunek (cegły, deski).
+    if (isOfficialTile(tile)) continue;
     for (let y = 0; y < TILE; y++)
       for (let x = 0; x < TILE; x++) {
         const tx = (tile % ATLAS_TILES) * TILE + x;

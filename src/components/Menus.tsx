@@ -17,6 +17,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.17: bloki i przedmioty z paczki tekstur!',
+  '2.17: Steve i Alex w prawdziwych skórkach!',
+  '2.17: grafika jak w oryginalnym Minecrafcie!',
   '2.16: moby i gracze mają pikselowe tekstury!',
   '2.16: 155 przepisów – schody, płyty, latarnie!',
   '2.16: krowa w łaty, owca w runo, creeper w mech!',
