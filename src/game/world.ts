@@ -293,6 +293,10 @@ export class World {
   private nCave: SimplexNoise;
   private nCave2: SimplexNoise;
   private nTemp: SimplexNoise;
+  private nRiver: SimplexNoise;
+  /** 2.19: przesunięcie próbek szumu – (0,0) nie jest już płaskim środkiem mapy. */
+  private ox = 0;
+  private oz = 0;
   private vctx: VillageContext | null = null;
 
   constructor(seed: number, flat = false, nether = false) {
@@ -305,6 +309,9 @@ export class World {
     this.nCave = new SimplexNoise(seed + 3);
     this.nCave2 = new SimplexNoise(seed + 4);
     this.nTemp = new SimplexNoise(seed + 5);
+    this.nRiver = new SimplexNoise(seed + 7);
+    this.ox = ((seed >>> 0) % 4096) * 3.17 + 111;
+    this.oz = (((seed >>> 12) >>> 0) % 4096) * 2.71 + 37;
   }
 
   static key(cx: number, cz: number) {
@@ -336,31 +343,49 @@ export class World {
   private computeSurface(x: number, z: number): SurfaceInfo {
     if (this.isNether) return { h: this.netherFloorH(x, z), biome: 'Nether', temp: 0, forest: 0 };
     if (this.flat) return { h: FLAT_H, biome: 'Równiny', temp: 0, forest: 0 };
-    const cont = this.n1.fbm2D(x / 700, z / 700, 4);
-    const hills = this.n2.fbm2D(x / 160, z / 160, 4);
-    const ridge = 1 - Math.abs(this.n3.noise2D(x / 260, z / 260));
-    const mf = this.n3.fbm2D(x / 900 + 50, z / 900 - 50, 3);
-    const mountain = Math.max(0, Math.min(1, (mf - 0.05) * 3));
-    let h = 64 + cont * 22 + hills * 9 * (0.6 + Math.max(0, cont)) + mountain * ridge * ridge * 48;
+
+    // 2.19: kontynenty, pagórki i pasma górskie na TRZECH różnych skalach.
+    // Wcześniej kontynenty i pagórki miały zbliżony rozmiar, przez co morza
+    // i krainy tworzyły „kamuflaż” z drobnych łatek. Teraz ocean jest
+    // oceanem, a las lasem – granice biomów mają setki bloków.
+    const px = x + this.ox;
+    const pz = z + this.oz;
+    const cont = this.n1.fbm2D(px / 2600, pz / 2600, 5);
+    const hills = this.n2.fbm2D(px / 380, pz / 380, 4);
+    const ridge = 1 - Math.abs(this.n3.noise2D(px / 700, pz / 700));
+    const mf = this.n3.fbm2D(px / 1900 + 50, pz / 1900 - 50, 3);
+    const mountain = Math.max(0, Math.min(1, (mf - 0.18) * 2.6));
+    // Im dalej w głąb lądu, tym więcej pagórków – jak w grze.
+    const inland = Math.min(1, Math.max(0, (cont + 0.18) * 2.4));
+    let h = 66 + cont * 46 + hills * 8 * (0.35 + inland * 0.9) + mountain * ridge * ridge * 46;
+
+    // Rzeki: wąskie, kręte doliny tnące ląd, ale nie wysokie góry. Woda
+    // wypełnia je do poziomu morza, więc krainy rozdzielają się naturalnie.
+    const riverN = Math.abs(this.nRiver.noise2D(px / 1500 + 613, pz / 1500 - 419));
+    if (riverN < 0.06 && h < SEA + 34 && h > SEA - 6) {
+      const t = Math.min(1, Math.max(0, riverN / 0.06));
+      // 0 na środku rzeki, 1 na brzegu – wygładzone na całym przedziale.
+      const ease = t * t * (3 - 2 * t);
+      h = (SEA - 3) + (h - (SEA - 3)) * ease;
+    }
+
     h = Math.floor(Math.max(6, Math.min(CH - 12, h)));
-    const temp = this.nTemp.fbm2D(x / 600, z / 600, 3);
-    const forest = this.nTemp.fbm2D(x / 220 + 300, z / 220 - 300, 2);
+
+    // 2.19: klimat czytany na dużej skali – biom ma setki bloków szerokości.
+    const temp = this.nTemp.fbm2D(px / 2200, pz / 2200, 4);
+    const forest = this.nTemp.fbm2D(px / 1500 + 300, pz / 1500 - 300, 4);
     let biome: Biome;
-    if (h < SEA - 3) biome = 'Ocean';
-    else if (h <= SEA + 1 && temp > -0.3) biome = 'Plaża';
-    else if (h > 92) biome = 'Góry';
-    else if (temp > 0.3) biome = 'Pustynia';
-    else if (temp < -0.32) biome = 'Tundra';
-    // Climate bands add three distinct warm/wet regions without changing
-    // existing seed terrain or the save format. The low-frequency fields make
-    // biome borders broad enough to read during exploration.
-    else if (temp > 0.12 && forest < -0.12) biome = 'Sawanna';
-    else if (temp > 0.12 && forest > 0.42) biome = 'Dżungla';
-    else if (temp > -0.08 && temp < 0.12 && forest > 0.18 && forest < 0.42) biome = 'Bagno';
-    else if (forest > 0.15) biome = forest > 0.35 ? 'Brzozowy las' : 'Las';
+    if (h < SEA - 4) biome = 'Ocean';
+    else if (h <= SEA + 2) biome = temp < -0.42 ? 'Tundra' : 'Plaża';
+    else if (h > 102) biome = temp < -0.1 ? 'Tundra' : 'Góry';
+    else if (temp > 0.34 && forest < 0.02) biome = 'Pustynia';
+    else if (temp < -0.4) biome = 'Tundra';
+    else if (temp > 0.16 && forest > 0.34) biome = 'Dżungla';
+    else if (temp > 0.1 && forest < -0.16) biome = 'Sawanna';
+    else if (temp > -0.12 && forest > 0.36 && h < SEA + 9) biome = 'Bagno';
+    else if (forest > 0.28) biome = forest > 0.46 ? 'Brzozowy las' : 'Las';
     else biome = 'Równiny';
-    // Marshes sit close to sea level, so shallow pools naturally appear in
-    // their low spots and the existing water table creates a wetland feel.
+    // Bagno to nizina: teren nie może wystrzelić nad poziom morza.
     if (biome === 'Bagno') h = Math.min(h, SEA + 2);
     return { h, biome, temp, forest };
   }
@@ -481,10 +506,12 @@ export class World {
           // Caves
           if (id !== B.AIR && id !== B.WATER && id !== B.BEDROCK && id !== B.ICE && y > 4) {
             const underWater = h < SEA + 2 && y > h - 4;
-            if (!underWater && y < h + 1) {
-              const a = this.nCave.noise3D(wx / 45, y / 28, wz / 45);
-              const b2 = this.nCave2.noise3D(wx / 45, y / 28, wz / 45);
-              const cheese = y < 50 ? this.nCave.noise3D(wx / 90 + 100, y / 40, wz / 90) : 0;
+            // 2.19: jaskinie kończą się 3 bloki pod powierzchnią – dzięki
+            // temu nie wyrywają w ziemi wielkich dziur ani kraterów.
+            if (!underWater && y < h - 2) {
+              const a = this.nCave.noise3D((wx + this.ox) / 45, y / 28, (wz + this.oz) / 45);
+              const b2 = this.nCave2.noise3D((wx + this.ox) / 45, y / 28, (wz + this.oz) / 45);
+              const cheese = y < 50 ? this.nCave.noise3D((wx + this.ox) / 90 + 100, y / 40, (wz + this.oz) / 90) : 0;
               if (a * a + b2 * b2 < 0.011 || cheese > 0.62) {
                 id = y <= 10 ? B.LAVA : B.AIR;
               }

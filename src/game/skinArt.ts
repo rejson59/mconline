@@ -19,7 +19,7 @@
  */
 
 import * as THREE from 'three';
-import { PLAYER_SKIN_PNG } from './art/vanillaArt.generated';
+import { PLAYER_SKIN_PNG, PLAYER_SKIN_SLIM, PLAYER_FACE_PNG, PLAYER_PORTRAIT_PNG } from './art/vanillaArt.generated';
 import { decodePng } from './art/miniPng';
 
 export interface SkinRect {
@@ -82,6 +82,26 @@ export function hasPackSkin(id: string): boolean {
   return PLAYER_SKIN_PNG[id] != null;
 }
 
+/** 2.19: czy skórka używa smukłego modelu (Alex, Efe). */
+export function isSlimSkin(id: string): boolean {
+  return PLAYER_SKIN_SLIM[id] === true;
+}
+
+/** Twarz 8×8 (głowa + czapka) jako gotowy adres `data:` – lista graczy. */
+export function skinFace(id: string): string | null {
+  return PLAYER_FACE_PNG[id] ?? null;
+}
+
+/** Portret 16×32 (cała postać z ubraniem) – wybór skórki w menu. */
+export function skinPortrait(id: string): string | null {
+  return PLAYER_PORTRAIT_PNG[id] ?? null;
+}
+
+/** Ile skórek ma twarz i portret (diagnostyka i testy). */
+export function portraitCount(): number {
+  return Object.keys(PLAYER_PORTRAIT_PNG).length;
+}
+
 export interface SkinUvRect {
   x0: number;
   y0: number;
@@ -133,6 +153,20 @@ export function applySkinUv(geometry: THREE.BoxGeometry, rect: SkinRect, texW: n
     uv.setXY(base + 3, u1, v1);
   }
   uv.needsUpdate = true;
+}
+
+/**
+ * 2.19: druga warstwa głowy (czapka/włosy). W waniliowym układzie 64×64
+ * nakładka głowy leży pod (32, 0), więc jej przód to (40, 8)–(48, 16).
+ * Pudełko jest o milimetr większe, a przezroczyste piksele znikają przez
+ * `alphaTest` – dokładnie tak, jak robi to gra.
+ */
+export function skinnedHat(size: [number, number, number], tex: THREE.Texture): THREE.Mesh {
+  const geometry = new THREE.BoxGeometry(size[0] + 0.012, size[1] + 0.012, size[2] + 0.012);
+  const img = tex.image as { width: number; height: number };
+  applySkinUv(geometry, { u: 32, v: 0, w: 8, h: 8, d: 8 }, img.width, img.height);
+  const material = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5, depthWrite: false });
+  return new THREE.Mesh(geometry, material);
 }
 
 /**

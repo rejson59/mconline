@@ -569,9 +569,17 @@ const ITEM_ICONS = {
 // ---------------------------------------------------------------------------
 // skórki graczy i palety mobów (entity/)
 // ---------------------------------------------------------------------------
+/** 2.19: wszystkie 9 domyślnych skórek Minecrafta – klasyczne i smukłe. */
 const PLAYER_SKINS = {
-  steve: E + 'player/wide/steve.png',
-  alex: E + 'player/slim/alex.png',
+  steve: { file: E + 'player/wide/steve.png', slim: false },
+  alex: { file: E + 'player/slim/alex.png', slim: true },
+  ari: { file: E + 'player/wide/ari.png', slim: false },
+  efe: { file: E + 'player/slim/efe.png', slim: true },
+  kai: { file: E + 'player/wide/kai.png', slim: false },
+  makena: { file: E + 'player/wide/makena.png', slim: false },
+  noor: { file: E + 'player/wide/noor.png', slim: false },
+  sunny: { file: E + 'player/wide/sunny.png', slim: false },
+  zuri: { file: E + 'player/wide/zuri.png', slim: false },
 };
 
 /** Tekstury mobów – z nich bierzemy paletę kolorów (kolory jak w paczce). */
@@ -621,11 +629,79 @@ for (const [type, file] of Object.entries(MOB_TEXTURES)) {
   mobPalettes[type] = dominantColors(img, 14);
 }
 
+/**
+ * Prostokąt twarzy w skórce: przód głowy plus warstwa czapki (2.19).
+ * Kolejność: baza (8,8) i nakładka (40,8), obie 8×8.
+ */
+const FACE_RECTS = [
+  [8, 8], [40, 8],
+];
+
+/** Kopiuje piksel z jednego obrazka na drugi (z mieszaniem alfa). */
+function paste(dst, dw, dh, src, sx, sy, sw, sh, dx, dy) {
+  for (let y = 0; y < sh; y++)
+    for (let x = 0; x < sw; x++) {
+      const sx2 = sx + x, sy2 = sy + y, dx2 = dx + x, dy2 = dy + y;
+      if (sx2 < 0 || sy2 < 0 || sx2 >= src.w || sy2 >= src.h || dx2 < 0 || dy2 < 0 || dx2 >= dw || dy2 >= dh) continue;
+      const s = (sy2 * src.w + sx2) * 4, d = (dy2 * dw + dx2) * 4;
+      const a = src.data[s + 3] / 255;
+      if (a <= 0) continue;
+      for (let c = 0; c < 3; c++) dst[d + c] = Math.round(src.data[s + c] * a + dst[d + c] * (1 - a));
+      dst[d + 3] = Math.max(dst[d + 3], Math.round(a * 255));
+    }
+}
+
+/**
+ * Skórki graczy: PNG 64×64, twarz 8×8 (głowa + czapka) i portret 16×32
+ * (przód postaci z warstwami ubrań) – podglądy w menu wyglądają jak w grze.
+ */
 const playerSkins = {};
-for (const [id, file] of Object.entries(PLAYER_SKINS)) {
-  const img = loadTex(file);
+const playerSlim = {};
+const playerFaces = {};
+const playerPortraits = {};
+const PLAYER_LAYOUT = (slim) => ({
+  head: [8, 8, 8],
+  body: [20, 20, 8, 12],
+  rightArm: [slim ? 43 : 44, 20, slim ? 3 : 4, 12],
+  leftArm: [slim ? 35 : 36, 52, slim ? 3 : 4, 12],
+  rightLeg: [4, 20, 4, 12],
+  leftLeg: [20, 52, 4, 12],
+  hat: [40, 8, 8, 8],
+  jacket: [20, 36, 8, 12],
+  rightSleeve: [slim ? 43 : 44, 36, slim ? 3 : 4, 12],
+  leftSleeve: [slim ? 35 : 36, 52 + 0, slim ? 3 : 4, 12],
+  rightPant: [4, 36, 4, 12],
+  leftPant: [4, 52, 4, 12],
+});
+for (const [id, def] of Object.entries(PLAYER_SKINS)) {
+  const img = loadTex(def.file);
   if (!img) continue;
   playerSkins[id] = { png: encodePNG(img.w, img.h, img.data).toString('base64'), w: img.w, h: img.h };
+  playerSlim[id] = !!def.slim;
+
+  // Twarz: głowa + czapka (nakładka z alfa).
+  const face = new Uint8Array(8 * 8 * 4);
+  paste(face, 8, 8, img, FACE_RECTS[0][0], FACE_RECTS[0][1], 8, 8, 0, 0);
+  paste(face, 8, 8, img, FACE_RECTS[1][0], FACE_RECTS[1][1], 8, 8, 0, 0);
+  playerFaces[id] = encodePNG(8, 8, face).toString('base64');
+
+  // Portret 16×32: głowa, tułów, ręce i nogi z warstwami ubrań.
+  const L = PLAYER_LAYOUT(def.slim);
+  const p = new Uint8Array(16 * 32 * 4);
+  paste(p, 16, 32, img, L.head[0], L.head[1], 8, 8, 4, 0);
+  paste(p, 16, 32, img, L.hat[0], L.hat[1], 8, 8, 4, 0);
+  paste(p, 16, 32, img, L.body[0], L.body[1], 8, 12, 4, 8);
+  paste(p, 16, 32, img, L.jacket[0], L.jacket[1], 8, 12, 4, 8);
+  paste(p, 16, 32, img, L.rightArm[0], L.rightArm[1], L.rightArm[2], 12, 0, 8);
+  paste(p, 16, 32, img, L.leftArm[0], L.leftArm[1], L.leftArm[2], 12, 16 - L.leftArm[2], 8);
+  paste(p, 16, 32, img, L.rightSleeve[0], L.rightSleeve[1], L.rightSleeve[2], 12, 0, 8);
+  paste(p, 16, 32, img, L.leftSleeve[0], L.leftSleeve[1], L.leftSleeve[2], 12, 16 - L.leftSleeve[2], 8);
+  // Spodnie i buty to ta sama warstwa co nogi – rysujemy je dwa razy dla porządku.
+  paste(p, 16, 32, img, L.rightLeg[0], L.rightLeg[1], 4, 12, 4, 20);
+  paste(p, 16, 32, img, L.leftLeg[0], L.leftLeg[1], 4, 12, 8, 20);
+  paste(p, 16, 32, img, L.rightPant[0], L.rightPant[1], 4, 12, 4, 20);
+  paste(p, 16, 32, img, L.leftPant[0], L.leftPant[1], 4, 12, 8, 20);
+  playerPortraits[id] = encodePNG(16, 32, p).toString('base64');
 }
 
 // ---------------------------------------------------------------------------
@@ -907,6 +983,24 @@ export const ITEM_TILE: Readonly<Record<number, number>> = {${Object.entries(ite
 /** Skórki graczy wprost z paczki (64×64, układ waniliowy) jako PNG base64. */
 export const PLAYER_SKIN_PNG: Readonly<Record<string, string>> = {${Object.entries(playerSkins)
   .map(([id, s2]) => `\n  ${id}: 'data:image/png;base64,${s2.png}',`)
+  .join('')}
+};
+
+/** Smukłe skórki (Alex, Efe) – ręce mają 3 piksele szerokości. */
+export const PLAYER_SKIN_SLIM: Readonly<Record<string, boolean>> = {${Object.entries(playerSlim)
+  .map(([id, slim]) => `${id}: ${slim},`)
+  .join(' ')}
+};
+
+/** Twarz 8×8 (głowa + czapka) do listy graczy i podglądów. */
+export const PLAYER_FACE_PNG: Readonly<Record<string, string>> = {${Object.entries(playerFaces)
+  .map(([id, png]) => `\n  ${id}: 'data:image/png;base64,${png}',`)
+  .join('')}
+};
+
+/** Portret 16×32 – cała postać z ubraniem, do wyboru skórki. */
+export const PLAYER_PORTRAIT_PNG: Readonly<Record<string, string>> = {${Object.entries(playerPortraits)
+  .map(([id, png]) => `\n  ${id}: 'data:image/png;base64,${png}',`)
   .join('')}
 };
 

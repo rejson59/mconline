@@ -80,7 +80,7 @@ import { spriteTexture } from '../src/game/art/spriteTex';
 import { installPackTheme } from '../src/utils/packTheme';
 import { BLOCK_ATLAS_PNG, ITEM_ATLAS_PNG, OFFICIAL_TILES, MOB_PALETTES, PLAYER_SKIN_PNG } from '../src/game/art/vanillaArt.generated';
 import { officialBlockAtlas, officialItemAtlas, officialItemPixels, isOfficialTile, officialTileCount, officialItemCount, applyOfficialTiles } from '../src/game/packArt';
-import { WIDE_LAYOUT, SLIM_LAYOUT, faceRects, applySkinUv, hasPackSkin, packSkinCount, playerSkinTexture } from '../src/game/skinArt';
+import { WIDE_LAYOUT, SLIM_LAYOUT, faceRects, applySkinUv, hasPackSkin, isSlimSkin, packSkinCount, playerSkinTexture, portraitCount, skinFace, skinPortrait } from '../src/game/skinArt';
 import { setMobPalette, snapToPalette, activeMobPalette } from '../src/game/mobTextures';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
@@ -127,6 +127,7 @@ import { cloudLook, rainFogMix } from '../src/game/sky';
 import { treeShape, trunkHeight, treeKindForBiome, type TreeKind } from '../src/game/trees';
 import { densifyTileData, TILE as ATLAS_TILE, ATLAS_TILES, ATLAS_SIZE } from '../src/game/textures';
 import { COMMANDS, COMMAND_CATEGORIES, commandByName, searchCommands, applyCommandSuggestion } from '../src/game/commands';
+import { cleanStacks, isPlayerId, loadPlayerId, profileRow, sanitizeProfile, spreadSpawn, PROFILE_TABLE } from '../src/game/profile';
 import { filterRecipes } from '../src/utils/recipeSearch';
 import {
   hueFor,
@@ -248,8 +249,21 @@ section('world: determinism and terrain');
   check('ores stay underground', !oreTooHigh);
 
   // trees: trunk of logs with leaves around the top
+  // 2.19: lasy rosną tam, gdzie sprzyja klimat – szukamy skrawka lasu
+  // (przy nowym generatorze okolice 0,0 bywają oceanem).
+  let fx = 0, fz = 0;
+  outer: for (let r = 0; r <= 1200; r += 48) {
+    for (let i = 0; i < 24; i++) {
+      const ang = (i / 24) * Math.PI * 2;
+      const sx = Math.round(Math.cos(ang) * r), sz = Math.round(Math.sin(ang) * r);
+      const b = a.surface(sx, sz).biome;
+      if (b === 'Las' || b === 'Brzozowy las' || b === 'Dżungla') { fx = sx; fz = sz; break outer; }
+    }
+  }
+  const fcx = Math.floor(fx / CS), fcz = Math.floor(fz / CS);
   let trees = 0;
-  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) {
+  let bareTrunks = 0;
+  for (let cx = fcx - 1; cx <= fcx + 1; cx++) for (let cz = fcz - 1; cz <= fcz + 1; cz++) {
     const ch = a.getChunk(cx, cz);
     for (let x = 0; x < CS; x++) for (let z = 0; z < CS; z++) {
       for (let y = 40; y < CH - 8; y++) {
@@ -259,12 +273,21 @@ section('world: determinism and terrain');
           for (let dy = 1; dy <= 3; dy++) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
             if (a.getBlock(x + cx * CS + dx, y + dy, z + cz * CS + dz) === B.LEAVES) leaves++;
           }
-          check('tree trunk has leaves above it', leaves > 4, `${leaves} leaves`);
+          // Wysokie drzewa mają koronę wyżej niż 3 bloki – liczy się to,
+          // żeby pień nie stał nagi.
+          if (leaves <= 4) {
+            let higher = 0;
+            for (let dy = 1; dy <= 7; dy++) for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+              if (a.getBlock(x + cx * CS + dx, y + dy, z + cz * CS + dz) === B.LEAVES) higher++;
+            }
+            if (higher <= 4) bareTrunks++;
+          }
         }
       }
     }
   }
   check('world has trees', trees > 0, `${trees} trunks`);
+  check('tree trunk has leaves above it', bareTrunks === 0, `${bareTrunks}/${trees} nagich pni`);
 }
 
 // ============================================================== flat worlds
@@ -3114,8 +3137,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.18'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Moby jak w Minecrafcie');
+  check('release label is the current line', GAME_VERSION.startsWith('2.19'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Świat jak w Minecrafcie');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3146,6 +3169,15 @@ section('2.8/2.8.1: wersja wydania');
   check('2.18 highlights mention the HUD sprites', RELEASE_HIGHLIGHTS.some((h) => /serce|serdusz|hotbar/i.test(h.text)));
   check('2.18 highlights mention the sky from the pack', RELEASE_HIGHLIGHTS.some((h) => /chmur/i.test(h.title + h.text)));
   check('2.18 highlights mention block breaking stages', RELEASE_HIGHLIGHTS.some((h) => /pękan/i.test(h.text)));
+  // 2.19: nowe wydanie – konta, teleportacja, biomy, wioski i skórki 1:1.
+  check('2.19 highlights announce the invisible session', RELEASE_HIGHLIGHTS.some((h) => /sesj/i.test(h.title) && /nick|skórk/i.test(h.text)));
+  check('2.19 highlights explain that the position is remembered', RELEASE_HIGHLIGHTS.some((h) => /gdzie skończy|ostatni|zapis/i.test(h.title + h.text)));
+  check('2.19 highlights announce teleportation', RELEASE_HIGHLIGHTS.some((h) => /tpa|teleport/i.test(h.title)));
+  check('2.19 highlights mention the accept button', RELEASE_HIGHLIGHTS.some((h) => /Przyjmij|zgody|zgod/i.test(h.text)));
+  check('2.19 highlights announce the new biomes', RELEASE_HIGHLIGHTS.some((h) => /kontynent|rzek/i.test(h.title + h.text)));
+  check('2.19 highlights announce Minecraft-like villages', RELEASE_HIGHLIGHTS.some((h) => /wiosk/i.test(h.title) && /dziur|platform/i.test(h.text)));
+  check('2.19 highlights announce the nine 1:1 skins', RELEASE_HIGHLIGHTS.some((h) => /9 skórek|dziewięć|1:1/.test(h.title) && /Steve|Alex/.test(h.text)));
+  check('2.19 highlights mention the random spawn', RELEASE_HIGHLIGHTS.some((h) => /innym miejscu|losow/i.test(h.title + h.text)));
 }
 
 // ============================================ 2.13 „Jak w Minecrafcie”
@@ -3435,15 +3467,16 @@ section('2.12: deski z każdego pnia i stół rzemieślniczy');
 
 section('2.12: skórki graczy');
 {
-  check('jest osiem skórek', SKINS.length === 8, String(SKINS.length));
+  check('jest dziewięć skórek', SKINS.length === 9, String(SKINS.length));
   check('identyfikatory skórek są unikalne', new Set(SKINS.map((s) => s.id)).size === SKINS.length);
   check('każda skórka ma polską nazwę i opis', SKINS.every((s) => s.name.length > 2 && s.desc.length > 4));
   check('domyślna skórka istnieje', skinById(DEFAULT_SKIN_ID).id === DEFAULT_SKIN_ID);
   eq('nieznana skórka wraca do domyślnej', skinById('nie-ma-takiej').id, DEFAULT_SKIN_ID);
-  eq('zapis skórki zwraca jej id', saveSkinId('ninja'), 'ninja');
-  eq('skórka wczytuje się z localStorage', loadSkinId(), 'ninja');
-  eq('klucz localStorage jest zgodny z 2.12', localStorage.getItem(SKIN_KEY), 'ninja');
-  check('nextSkinId przechodzi na inną skórkę', nextSkinId('ninja') !== 'ninja');
+  eq('zapis skórki zwraca jej id', saveSkinId('zuri'), 'zuri');
+  eq('skórka wczytuje się z localStorage', loadSkinId(), 'zuri');
+  eq('klucz localStorage jest zgodny z 2.12', localStorage.getItem(SKIN_KEY), 'zuri');
+  check('nextSkinId przechodzi na inną skórkę', nextSkinId('zuri') !== 'zuri');
+  check('Alex i Efe mają smukłe ramiona', SKINS.filter((s) => s.slim).map((s) => s.id).join(',') === 'alex,efe');
   const fb = fallbackSkin(140);
   check('fallback dla starych klientów ma kolory', fb.skin > 0 && fb.hair > 0 && fb.shirt > 0);
   localStorage.removeItem(SKIN_KEY);
@@ -3736,6 +3769,28 @@ section('2.9: katalog komend');
     check(`/${must} is documented`, names.includes(must));
   }
   // …i odwrotnie: katalog nie może obiecywać komend, których nie ma.
+  // 2.19: prośba zaadresowana do kogoś innego nie może trafić do gracza.
+  {
+    const box: string[] = [];
+    const host = new NetSession({ role: 'host', name: 'Host', transport: 'local', id: 'phost' });
+    host.attach({ send: (raw: string) => box.push(raw), close() {}, connected: true } as never);
+    const got: string[] = [];
+    host.onMessage = (m) => got.push(m.t);
+    // Gość wysyła prośbę do `p2` – gospodarz przekazuje ją dalej bez zmiany adresata.
+    host.ingest(JSON.stringify({ t: 'tpa', from: 'p1', to: 'p2', name: 'Ala', kind: 'ask' }));
+    const relayed = box.map((raw) => JSON.parse(raw)).find((m) => m.t === 'tpa');
+    eq('relay zachowuje adresata prośby', relayed?.to, 'p2');
+    eq('gospodarz widzi tylko zaadresowane do siebie', got.length, 0);
+    host.close();
+  }
+
+  // 2.19: profil zapisuje się w bazie pod trwałym identyfikatorem, także
+  // gdy gracz zmieni nick – identyfikator jest osobnym polem wiersza.
+  const profileSource = readSource('src/game/profile.ts');
+  check('profil ma osobny identyfikator', /pid/.test(profileSource));
+  check('identyfikator nie zawiera nicku', /randomChars/.test(profileSource) && !/pid.*name/.test(profileSource));
+  check('wczytywanie profilu nie blokuje wejścia', /catch[\s\S]{0,120}return null/.test(profileSource));
+
   const src = readSource('src/game/engine.ts');
   for (const cmd of COMMANDS) {
     const known = src.includes(`case '${cmd.name}'`) ||
@@ -4014,16 +4069,16 @@ section('2.10: protokół sieciowy (bez serwera)');
   check('nextHue nie daje koloru sąsiada', nextHue([{ id: 'x', name: 'X', hue: 0, ping: 0 }]) !== 0);
 
   // --- 2.12: skórka w hello i w obsadzie
-  guest.skin = 'ninja';
+  guest.skin = 'zuri';
   guest.updatePresence();
   await Promise.resolve();
   await Promise.resolve();
-  eq('gospodarz zna skórkę gościa z hello', host.players.find((p) => p.id === 'guest-1')?.skin, 'ninja');
-  host.skin = 'gold';
+  eq('gospodarz zna skórkę gościa z hello', host.players.find((p) => p.id === 'guest-1')?.skin, 'zuri');
+  host.skin = 'sunny';
   host.updatePresence();
   await Promise.resolve();
   await Promise.resolve();
-  eq('gość dostaje skórkę gospodarza z obsady', guest.players.find((p) => p.id === 'host-1')?.skin, 'gold');
+  eq('gość dostaje skórkę gospodarza z obsady', guest.players.find((p) => p.id === 'host-1')?.skin, 'sunny');
   check('nieznana skórka nie psuje obsady', (() => { guest.skin = 'nie-ma-takiej'; guest.updatePresence(); return true; })());
 
   // --- transport lokalny na prawdziwym BroadcastChannel (Node 22 ma go w tle).
@@ -4569,10 +4624,15 @@ section('2.17: tekstury z paczki w całej grze');
   eq('oficjalny atlas ikon dekoduje się w grze', officialItemAtlas()?.width, 256);
 
   // --- skórki graczy
-  eq('dwie skórki graczy z paczki', packSkinCount(), 2);
+  eq('dziewięć skórek graczy z paczki', packSkinCount(), 9);
   check('Steve ma skórkę z paczki', hasPackSkin('steve') && PLAYER_SKIN_PNG.steve.startsWith('data:image/png;base64,'));
   check('Alex ma skórkę z paczki', hasPackSkin('alex'));
-  check('inne skórki zostają proceduralne', !hasPackSkin('creeper'));
+  check('każda skórka z listy ma prawdziwą teksturę 1:1', SKINS.every((s) => hasPackSkin(s.id)));
+  eq('każda skórka ma portret', portraitCount(), 9);
+  eq('smukłe skórki są oznaczone', isSlimSkin('alex') && isSlimSkin('efe') && !isSlimSkin('steve'), true);
+  check('twarz do listy graczy jest gotowa', (skinFace('zuri') ?? '').startsWith('data:image/png;base64,'));
+  check('portret ma 16×32', (() => { const p = decodePng(skinPortrait('zuri')!); return p.width === 16 && p.height === 32; })());
+  check('każda skórka ma 64×64', SKINS.every((s) => { const im = decodePng(PLAYER_SKIN_PNG[s.id]); return im.width === 64 && im.height === 64; }));
   const steve = decodePng(PLAYER_SKIN_PNG.steve);
   eq('skórka Steve ma 64×64', `${steve.width}×${steve.height}`, '64×64');
   // Twarz: prostokąt front głowy (8,8)-(16,16) musi mieć jasną skórę i ciemne oczy.
@@ -4757,6 +4817,27 @@ section('2.18: moby 1:1 z Minecrafta');
   }
   check('mob odwraca głowę do gracza', maxTurn > 0.1, `${maxTurn.toFixed(2)}`);
   check('obrót głowy jest ograniczony', maxTurn <= 0.95, `${maxTurn.toFixed(2)}`);
+  // 2.19: głowa musi patrzeć W STRONĘ gracza, a nie w przeciwną (golem).
+  // 2.19: głowa golema musi skręcać W STRONĘ gracza, a nie w przeciwną.
+  // Sprawdzamy znak kąta względem ciała – to dokładnie ta pomyłka, która
+  // wcześniej obracała głowę o 180°.
+  const golem = new Mob('golem', 4.5, gy + 2, 4.5);
+  // Gracz stoi 8 bloków dalej pod kątem +0,55 rad względem kierunku ciała.
+  const side = new THREE.Vector3(
+    4.5 + Math.sin(0.7 + 0.55) * 8,
+    gy + 1,
+    4.5 + Math.cos(0.7 + 0.55) * 8
+  );
+  for (let i = 0; i < 90; i++) {
+    // Ciało stoi w miejscu – sprawdzamy sam obrót głowy.
+    golem.body.pos.set(4.5, gy + 2, 4.5);
+    golem.yaw = 0.7;
+    golem.group.rotation.y = 0.7;
+    golem.update(1 / 30, w, side, () => {}, () => {}, true, []);
+  }
+  check('głowa golema patrzy w stronę gracza', Math.abs(golem.head.rotation.y - 0.55) < 0.2, `head=${golem.head.rotation.y.toFixed(2)}`);
+  check('obrót głowy golema jest ograniczony', Math.abs(golem.head.rotation.y) <= 0.95, `${golem.head.rotation.y.toFixed(2)}`);
+  golem.dispose();
 }
 
 section('2.18: interfejs i niebo z paczki');
@@ -4804,6 +4885,213 @@ section('2.18: interfejs i niebo z paczki');
   const mobsSrc = readSource('src/game/mobs.ts');
   check('moby budują model 1:1', /buildMobModel\(/.test(mobsSrc));
   check('mieszkaniec wybiera teksturę zawodu', /villager\$\{this\.profession % 5\}/.test(mobsSrc));
+}
+
+// ============================================ 2.19: sesja gracza i teleportacja
+section('2.19: niewidzialna sesja gracza');
+{
+  const store = new Map<string, string>();
+  const storage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+  };
+  const id1 = loadPlayerId(storage);
+  const id2 = loadPlayerId(storage);
+  eq('identyfikator gracza jest trwały', id1, id2);
+  check('identyfikator ma bezpieczny format', isPlayerId(id1), id1);
+  eq('identyfikator nie zależy od nicku ani skórki', loadPlayerId(storage), id1);
+  eq('identyfikator jest zapisany lokalnie', store.get('blockcraft-profile-v1'), id1);
+  check('biały identyfikator jest odrzucany', !isPlayerId('p123') && !isPlayerId('gracz') && !isPlayerId(null));
+
+  // 2.19: każdy gracz zaczyna gdzie indziej (rozrzut po świecie).
+  const spawnA = spreadSpawn(id1);
+  const spawnB = spreadSpawn('pabcdef0123456789abc');
+  check('spawn jest daleko od środka', spawnA.radius >= 320 && spawnA.radius <= 2600, `${Math.round(spawnA.radius)}`);
+  check('dwa konta mają różne miejsca startu', Math.abs(spawnA.angle - spawnB.angle) > 0.001 || Math.abs(spawnA.radius - spawnB.radius) > 1);
+  check('ten sam gracz zawsze startuje tak samo', spreadSpawn(id1).angle === spawnA.angle);
+
+  // profil: odtwarzanie ekwipunku, zbroi i pozycji
+  const row = {
+    pid: id1, name: 'Ziomek', skin: 'zuri', x: 12.5, y: 70, z: -31.25, dim: 'o',
+    yaw: 1.2, pitch: -0.3, health: 14, hunger: 9, xp: 120,
+    inv: JSON.stringify([{ id: 5, count: 12 }, null, { id: 9, count: 1, dur: 40 }]),
+    armor: JSON.stringify([{ id: 30, count: 1 }]),
+  };
+  const prof = sanitizeProfile(row);
+  check('profil wczytuje się z bazy', !!prof);
+  eq('pozycja z profilu jest zachowana', `${prof?.x},${prof?.y},${prof?.z}`, '12.5,70,-31.25');
+  eq('ekwipunek wraca z profilu', prof?.inv[0]?.count, 12);
+  eq('pusty slot zostaje pusty', prof?.inv[1], null);
+  eq('zbroja wraca z profilu', prof?.armor[0]?.id, 30);
+  eq('zdrowie z profilu', prof?.health, 14);
+  eq('doświadczenie z profilu', prof?.xp, 120);
+  check('profil bez pozycji jest odrzucany', sanitizeProfile({ pid: id1, x: NaN }) === null);
+  check('profil z obcym id jest odrzucany', sanitizeProfile({ pid: 'hakerski', x: 1, y: 2, z: 3 }) === null);
+  eq('ekwipunek jest przycinany do 36 slotów', cleanStacks(new Array(60).fill({ id: 1, count: 1 }), 36).length, 36);
+  eq('ujemne stosy są odrzucane', cleanStacks([{ id: 1, count: -5 }], 36)[0], null);
+  const saveRow = profileRow(prof!, 'public');
+  eq('zapis profilu trafia do właściwej tabeli', PROFILE_TABLE, 'blockcraft_players');
+  eq('wiersz zapisu ma identyfikator', saveRow.pid, id1);
+}
+
+section('2.19: serwer publiczny pamięta gracza');
+{
+  const written: { table: string; row: Record<string, unknown> }[] = [];
+  const pid = 'p0123456789abcdefabc';
+  const client = {
+    from(table: string) {
+      const q = {
+        select() { return q; },
+        eq() { return q; },
+        limit() { return Promise.resolve({ data: [], error: null }); },
+        upsert(payload: Record<string, unknown>) {
+          written.push({ table, row: payload });
+          return Promise.resolve({ error: null });
+        },
+      };
+      return q;
+    },
+  };
+  const srv = new PublicServer({ name: 'Ala', pid, client: client as never });
+  eq('sesja używa trwałego identyfikatora', srv.id, pid);
+  eq('identyfikator jest widoczny dla reszty', srv.pid, pid);
+  const profile = sanitizeProfile({
+    pid, name: 'Ala', skin: 'zuri', x: 4, y: 70, z: 9, dim: 'o', health: 18, hunger: 15, xp: 30,
+    inv: JSON.stringify([{ id: 3, count: 5 }]), armor: JSON.stringify([]),
+  })!;
+  srv.saveProfile(profile);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('postęp trafia do tabeli graczy', written[0]?.table, PROFILE_TABLE);
+  eq('zapisany wiersz ma pid', written[0]?.row.pid, pid);
+  eq('zapisany wiersz ma pozycję', written[0]?.row.x, 4);
+  check('ekwipunek jest zapisany jako JSON', typeof written[0]?.row.inv === 'string');
+  const before = written.length;
+  srv.saveProfile(profile);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('zapis jest dławiony (nie co klatkę)', written.length, before);
+}
+
+section('2.19: teleportacja między graczami');
+{
+  const sent: { to: string; t: Record<string, unknown> }[] = [];
+  const g = Object.create(Game.prototype) as Record<string, any>;
+  g.net = {
+    id: 'p1', name: 'Ala', public: true, role: 'guest', players: [],
+    sendTeleport: (to: string, t: Record<string, unknown>) => sent.push({ to, t }),
+  };
+  g.netPlayers = [{ id: 'p1', name: 'Ala', hue: 0, ping: 0, self: true }, { id: 'p2', name: 'Ziomek', hue: 40, ping: 0 }];
+  g.messages = [];
+  g.message = (t: string) => g.messages.push(t);
+  g.emitHud = () => {};
+  g.body = { pos: new THREE.Vector3(10, 70, 20), vel: new THREE.Vector3() };
+  g.isInNether = false;
+  g.world = { getChunk() {} };
+  g.tpaIn = null;
+  g.tpaOut = null;
+
+  check('prośba o teleportację trafia do gracza', g.requestTeleport('ziomek'));
+  eq('prośba leci do właściwego id', sent[0]?.to, 'p2');
+  eq('prośba ma typ „ask”', sent[0]?.t.kind, 'ask');
+  check('czekanie na zgodę jest widoczne w HUD', !!g.tpaOut);
+  eq('nieznany gracz nie dostaje prośby', g.requestTeleport('nie-ma-takiego'), false);
+
+  // Druga strona: dostaje prośbę i akceptuje.
+  g.tpaOut = null;
+  g.onTeleportReply({ kind: 'ask', name: 'Ziomek', from: 'p2' });
+  check('prośba czeka na decyzję', !!g.tpaIn);
+  check('zgoda wysyła pozycję', g.acceptTeleport());
+  eq('zgoda ma typ „ok”', sent[sent.length - 1]?.t.kind, 'ok');
+  eq('zgoda niesie współrzędne x', sent[sent.length - 1]?.t.x, 10);
+  eq('po zgodzie prośba znika', g.tpaIn, null);
+
+  // Odmowa.
+  g.onTeleportReply({ kind: 'ask', name: 'Ziomek', from: 'p2' });
+  check('odmowa działa', g.denyTeleport());
+  eq('odmowa ma typ „no”', sent[sent.length - 1]?.t.kind, 'no');
+
+  // Właściciel prośby dostaje zgodę i przeskakuje na miejsce.
+  g.tpaOut = { to: 'p2', name: 'Ziomek', at: Date.now() };
+  g.onTeleportReply({ kind: 'ok', name: 'Ziomek', x: 40, y: 80, z: -12, d: 'o' });
+  eq('teleportacja przenosi gracza', `${g.body.pos.x},${g.body.pos.y},${g.body.pos.z}`, '40,80,-12');
+  eq('po teleportacji nie czekamy już na zgodę', g.tpaOut, null);
+
+  const src = readSource('src/game/engine.ts');
+  check('komenda /tpa jest obsługiwana', /case 'tpa'/.test(src));
+  check('komenda /tpaccept jest obsługiwana', /case 'tpaccept'/.test(src));
+  check('komenda /tpdeny jest obsługiwana', /case 'tpdeny'/.test(src));
+  check('HUD pokazuje prośbę o teleportację', /hud\.tpa\b/.test(readSource('src/components/HUD.tsx')));
+  const cmd = commandByName('tpa');
+  check('komenda /tpa jest w katalogu', !!cmd && /nick/i.test(cmd.usage), cmd?.usage);
+  check('komenda /tpa jest w kategorii punktów', cmd?.category === 'punkty');
+  check('katalog zna zgodę na teleportację', !!commandByName('tpaccept'));
+  check('katalog zna odmowę teleportacji', !!commandByName('tpdeny'));
+
+  // 2.19: spawn nowego gracza zawsze na lądzie.
+  const world = new World(PUBLIC_SEED);
+  g.homeWorld = world;
+  const spot = g.findSpawnSpot(0, 0);
+  const info = world.surface(spot.x, spot.z);
+  check('nowy gracz nie startuje w oceanie', info.biome !== 'Ocean' && info.h > SEA + 1, `${spot.x},${spot.z} ${info.biome}`);
+  check('spawn jest blisko wybranego punktu', Math.hypot(spot.x, spot.z) < 600, `${spot.x},${spot.z}`);
+}
+
+section('2.19: naturalne biomy i wioski');
+{
+  // 2.19: biomy mają setki bloków – sprawdzamy, że sąsiednie kratki (32 bloki)
+  // prawie zawsze mają ten sam biom, a jednocześnie istnieją wszystkie krainy.
+  const w = new World(PUBLIC_SEED);
+  let same = 0, total = 0;
+  const seen = new Set<string>();
+  for (let x = -1600; x <= 1600; x += 32) for (let z = -1600; z <= 1600; z += 32) {
+    const a = w.surface(x, z).biome;
+    const b = w.surface(x + 32, z).biome;
+    seen.add(a);
+    total++;
+    if (a === b) same++;
+  }
+  check('granice biomów są szerokie', same / total > 0.82, `${Math.round((same / total) * 100)}%`);
+  check('świat ma wszystkie krainy', ['Równiny', 'Las', 'Pustynia', 'Tundra', 'Góry', 'Plaża', 'Ocean', 'Bagno', 'Sawanna', 'Dżungla'].every((b) => seen.has(b)), [...seen].join(','));
+
+  // Rzeki: woda na poziomie morza w środku lądu.
+  let rivers = 0;
+  for (let x = -1200; x <= 1200; x += 24) for (let z = -1200; z <= 1200; z += 24) {
+    const s = w.surface(x, z);
+    if (s.h === SEA - 3 && s.biome !== 'Ocean' && s.biome !== 'Plaża') rivers++;
+  }
+  check('świat ma rzeki', rivers > 20, `${rivers} próbek`);
+
+  // Wioski stoją na płaskim i nie robią urwisk: różnica wysokości między
+  // środkiem a skrajem platformy musi być mała.
+  const ctx = w.villageContext();
+  let found: Village | null = null;
+  for (let gx = -6; gx <= 6 && !found; gx++) for (let gz = -6; gz <= 6 && !found; gz++) found = villageInCell(gx, gz, ctx);
+  check('nowy świat ma wioskę', !!found);
+  if (found) {
+    const v = found;
+    const c = w.getChunk(Math.floor(v.x / CS), Math.floor(v.z / CS));
+    // Flatness mierzymy na gruncie (v.y), nie na dachach: każda kolumna
+    // placu musi mieć twardy blok pod stopami, a większość – grunt na v.y.
+    let solidGround = 0, sampled = 0, atLevel = 0;
+    for (let dx = -v.radius + 4; dx <= v.radius - 4; dx += 4) for (let dz = -v.radius + 4; dz <= v.radius - 4; dz += 4) {
+      const x = v.x + dx, z = v.z + dz;
+      sampled++;
+      if (IS_SOLID[w.getBlock(x, v.y - 1, z)]) solidGround++;
+      if (!IS_SOLID[w.getBlock(x, v.y + 1, z)] || w.getBlock(x, v.y, z) !== B.AIR) atLevel++;
+    }
+    check('pod placem wioski jest twardy grunt', solidGround / sampled > 0.97, `${solidGround}/${sampled}`);
+    check('plac wioski jest wyrównany', atLevel / sampled > 0.7, `${atLevel}/${sampled}`);
+    check('wioska ma ziemię pod sobą', c.heightMap[0] >= 0);
+    // Skos na obrzeżach: teren wraca do naturalnego, bez pionowej ściany.
+    const edge = w.heightAt(v.x + v.radius + 6, v.z);
+    const center = w.heightAt(v.x, v.z);
+    check('obrzeża wioski nie są urwiskiem', Math.abs(edge - center) <= 12, `${center} vs ${edge}`);
+  }
+
+  const villageSrc = readSource('src/game/village.ts');
+  check('wioska wygładza teren na obrzeżach', /ease/.test(villageSrc) && /natural/.test(villageSrc));
+  const worldSrc = readSource('src/game/world.ts');
+  check('generator ma osobny szum rzek', /nRiver/.test(worldSrc));
+  check('jaskinie nie otwierają dziur w powierzchni', /y < h - 2/.test(worldSrc));
 }
 
 // =================================================================== report

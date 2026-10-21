@@ -1125,7 +1125,11 @@ export class Mob {
       while (rel > Math.PI) rel -= Math.PI * 2;
       while (rel < -Math.PI) rel += Math.PI * 2;
       const dist = Math.hypot(player.x - b.pos.x, player.z - b.pos.z);
-      const want = dist < 12 ? Math.max(-0.9, Math.min(0.9, -rel)) : 0;
+      // Przód modelu to lokalne −Z, a korzeń jest obrócony o π, więc kąt
+      // głowy dodaje się do kąta ciała: głowa patrzy tam, gdzie `g + h`.
+      // Wcześniej stało tu `-rel`, przez co golem (i każdy mob) odwracał
+      // głowę dokładnie w drugą stronę.
+      const want = dist < 12 ? Math.max(-0.9, Math.min(0.9, rel)) : 0;
       const cur = this.head.rotation.y;
       this.head.rotation.y = cur + (want - cur) * Math.min(1, dt * 6);
     }
