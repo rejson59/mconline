@@ -1106,8 +1106,17 @@ export class Mob {
         this.arms[0].rotation.x = -1.15 + Math.sin(this.walkPhase * 0.5) * 0.05;
         this.arms[1].rotation.x = -1.15 - Math.sin(this.walkPhase * 0.5) * 0.05;
       } else if (this.arms.length) {
-        this.arms[0].rotation.x = -Math.PI / 2 + Math.sin(this.walkPhase * 0.5) * 0.08;
-        this.arms[1].rotation.x = -Math.PI / 2 - Math.sin(this.walkPhase * 0.5) * 0.08;
+        // 2.20: tylko zombie trzyma ręce wyciągnięte do przodu.
+        // Golem, enderman i inni dwunożni mają ręce opuszczone i lekko
+        // kołyszące się w chodzie – wcześniej każdy z nich „szedł jak zombie”.
+        if (this.type === 'zombie') {
+          this.arms[0].rotation.x = -Math.PI / 2 + Math.sin(this.walkPhase * 0.5) * 0.08;
+          this.arms[1].rotation.x = -Math.PI / 2 - Math.sin(this.walkPhase * 0.5) * 0.08;
+        } else {
+          const armSwing = swing * 0.55;
+          this.arms[0].rotation.x = -armSwing;
+          this.arms[1].rotation.x = armSwing;
+        }
       }
     }
     this.group.position.copy(b.pos);

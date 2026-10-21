@@ -1,13 +1,38 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.19.0';
-export const GAME_RELEASE_NAME = 'Świat jak w Minecrafcie';
+export const GAME_VERSION = '2.20.0';
+export const GAME_RELEASE_NAME = 'Poprawki grafiki';
 
 /**
- * 2.19: prawdziwe kontynenty i rzeki zamiast łatek biomów, wioski wtopione
- * w teren, 9 skórek gracza 1:1 z Minecrafta, niewidzialna sesja konta na
- * serwerze publicznym (pozycja i bloki po wyjściu) oraz teleportacja za zgodą.
+ * 2.20: wydanie naprawcze grafiki – wszystko, co na zrzutach ekranu wyglądało
+ * źle: czarne słońce, kaktusy-billboardy, czarne latarnie i drzwi, płaskie
+ * dachy wiosek, ręce golema jak u zombie i za duży blok w dłoni.
+ * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Słońce i księżyc bez czarnych kwadratów',
+    text: 'Tekstury ciał niebieskich w paczce nie mają kanału alfa – tło jest po prostu czarne, więc w grze rysował się czarny kwadrat wokół tarczy. Teraz czerń jest kluczowana na przezroczystość przy kompilacji atlasu, a słońce i księżyc świecą addytywnie, jak w oryginale: poświata rozjaśnia niebo, a czarne piksele znikają całkowicie.',
+  },
+  {
+    title: 'Latarnie, dzwon i drzwi przestały być czarne',
+    text: 'Latarnia i dzwon były pełnymi sześcianami z tekstury, która w paczce jest atlasem UV modelu – na ścianach zostawały czarne piksele. Teraz to sprite’y z ikon przedmiotów na warstwie z wycinaniem alfa. Drzwi są cienką płytą 3/16 przy ościeżnicy (zamiast sześcianu z drzwiami na każdej ścianie), a górna połowa ma prawdziwe szyby zamiast czarnych kwadratów.',
+  },
+  {
+    title: 'Kaktusy i łóżka z własną bryłą',
+    text: 'Kaktus to teraz bryła 14/16 z kafelkiem przyciętym o przezroczysty margines – wcześniej pełny sześcian z wycinaną alfą wyglądał jak cztery krzyżujące się billboardy. Łóżko ma wysokość 9/16 i kołdrę tylko na górze, więc nie przypomina już skrzyni z czerwonym wiekiem.',
+  },
+  {
+    title: 'Domy w wioskach jak w Minecrafcie',
+    text: 'Dachy są dwuspadowe i składają się ze stopniowanych schodów z okapem, kalenicą i szczytami z desek – zamiast płaskiej płyty nad ścianami. Domy dostały podmurówkę z bruku, słupki z bali w narożnikach i przy drzwiach, okna z prawdziwego szkła, lampkę pod sufitem i latarnię na słupku przy wejściu. Studnia ma piramidalny daszek, a wnętrza są umeblowane (łóżko, skrzynia, stół, piec, kowadło).',
+  },
+  {
+    title: 'Golem nie chodzi już jak zombie',
+    text: 'Ręce wyciągnięte do przodu dostawał każdy mob z dwiema rękami – teraz tylko zombie. Żelazny golem i enderman trzymają ręce opuszczone i kołyszą nimi w chodzie. Blok trzymany w dłoni jest mniejszy (ok. 1/4 wysokości ekranu) i nie ucina się o krawędź, a woda ma waniliowy błękit oceanu zamiast szarej mgły.',
+  },
+  {
+    title: 'Testy i build',
+    text: 'Nowa sekcja testów 2.20 sprawdza przezroczyste tło słońca i księżyca, niebieski kafelek wody, warstwy i kształty latarni, dzwonu, kaktusa, łóżka i drzwi (grubość płyty 3/16, bryła kaktusa 14/16), dwuspadowy dach domu w prawdziwej wiosce oraz opuszczone ręce golema. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.',
+  },
   {
     title: 'Twoja własna, niewidzialna sesja konta',
     text: 'Gracz nie jest już tylko nickiem przy wejściu: przeglądarka dostaje losowy identyfikator, zapisany lokalnie i wysyłany razem z postępem. Dzięki temu serwer pamięta, gdzie skończyłeś i co miałeś w ekwipunku – nawet jeśli zmienisz nick albo skórkę. Po powrocie wracasz dokładnie tam, gdzie wyszedłeś, z blokami, zbroją i doświadczeniem; zapis w chmurze leci co kilka sekund i jeszcze raz przy wyjściu.',

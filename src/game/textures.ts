@@ -1530,10 +1530,23 @@ export function getAtlas(): AtlasResult {
 }
 
 export function tileUV(tile: number, u: number, v: number): [number, number] {
+  return tileUVInset(tile, u, v, 0);
+}
+
+/**
+ * Jak `tileUV`, ale z marginesem liczonym w pikselach tekstury (16 px kafelka).
+ *
+ * 2.20: kaktus ma w paczce 1 px przezroczystej ramki; wanilia rysuje go jako
+ * bryłę 14/16, więc obcinamy ramkę, żeby na krawędziach nie było dziur.
+ */
+export function tileUVInset(tile: number, u: number, v: number, inset = 0): [number, number] {
   const col = tile % ATLAS_TILES;
   const row = Math.floor(tile / ATLAS_TILES);
   const e = 0.0004;
-  const U = (col + u) / ATLAS_TILES + (u === 0 ? e : -e);
-  const V = 1 - (row + 1 - v) / ATLAS_TILES + (v === 0 ? e : -e);
+  const span = 16 - inset * 2;
+  const a = (inset + u * span) / 16;
+  const b = (inset + v * span) / 16;
+  const U = (col + a) / ATLAS_TILES + (u === 0 ? e : -e);
+  const V = 1 - (row + 1 - b) / ATLAS_TILES + (v === 0 ? e : -e);
   return [U, V];
 }

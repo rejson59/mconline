@@ -59,7 +59,7 @@ function readSource(rel: string): string {
 
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
-import { B, BLOCKS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
+import { B, BLOCKS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
@@ -3137,8 +3137,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.19'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Świat jak w Minecrafcie');
+  check('release label is the current line', GAME_VERSION.startsWith('2.20'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Poprawki grafiki');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3178,6 +3178,15 @@ section('2.8/2.8.1: wersja wydania');
   check('2.19 highlights announce Minecraft-like villages', RELEASE_HIGHLIGHTS.some((h) => /wiosk/i.test(h.title) && /dziur|platform/i.test(h.text)));
   check('2.19 highlights announce the nine 1:1 skins', RELEASE_HIGHLIGHTS.some((h) => /9 skórek|dziewięć|1:1/.test(h.title) && /Steve|Alex/.test(h.text)));
   check('2.19 highlights mention the random spawn', RELEASE_HIGHLIGHTS.some((h) => /innym miejscu|losow/i.test(h.title + h.text)));
+  // 2.20: poprawki grafiki ze zrzutów ekranu.
+  check('2.20 highlights announce the sun and moon fix', RELEASE_HIGHLIGHTS.some((h) => /słońc|księżyc/i.test(h.title) && /czarn/i.test(h.text)));
+  check('2.20 highlights mention transparent sprite keys', RELEASE_HIGHLIGHTS.some((h) => /alfa|przezrocz/i.test(h.text)));
+  check('2.20 highlights mention lanterns and doors', RELEASE_HIGHLIGHTS.some((h) => /latarn/i.test(h.title) && /drzwi/i.test(h.title + h.text)));
+  check('2.20 highlights announce the cactus shape', RELEASE_HIGHLIGHTS.some((h) => /kaktus/i.test(h.title + h.text) && /14\/16/.test(h.text)));
+  check('2.20 highlights announce the bed shape', RELEASE_HIGHLIGHTS.some((h) => /łóżk|łóżek/i.test(h.text) && /9\/16/.test(h.text)));
+  check('2.20 highlights announce gable village roofs', RELEASE_HIGHLIGHTS.some((h) => /dach/i.test(h.title + h.text) && /dwuspadow/i.test(h.text)));
+  check('2.20 highlights announce the golem arms fix', RELEASE_HIGHLIGHTS.some((h) => /golem/i.test(h.title) && /ręc|rąk/i.test(h.text)));
+  check('2.20 highlights mention the smaller held block', RELEASE_HIGHLIGHTS.some((h) => /w dłoni|w ręce/i.test(h.text) && /mniejsz/i.test(h.text)));
 }
 
 // ============================================ 2.13 „Jak w Minecrafcie”
@@ -4837,6 +4846,13 @@ section('2.18: moby 1:1 z Minecrafta');
   }
   check('głowa golema patrzy w stronę gracza', Math.abs(golem.head.rotation.y - 0.55) < 0.2, `head=${golem.head.rotation.y.toFixed(2)}`);
   check('obrót głowy golema jest ograniczony', Math.abs(golem.head.rotation.y) <= 0.95, `${golem.head.rotation.y.toFixed(2)}`);
+  // 2.20: golem (i enderman) trzyma ręce opuszczone – wcześniej każdy mob z
+  // dwiema rękami dostawał pozę zombie z rękami wyciągniętymi do przodu.
+  check(
+    'golem trzyma ręce opuszczone',
+    golem.arms.length === 2 && golem.arms.every((a) => Math.abs(a.rotation.x) < 0.4),
+    golem.arms.map((a) => a.rotation.x.toFixed(2)).join(',')
+  );
   golem.dispose();
 }
 
@@ -5092,6 +5108,128 @@ section('2.19: naturalne biomy i wioski');
   const worldSrc = readSource('src/game/world.ts');
   check('generator ma osobny szum rzek', /nRiver/.test(worldSrc));
   check('jaskinie nie otwierają dziur w powierzchni', /y < h - 2/.test(worldSrc));
+}
+
+// ============================================ 2.20: poprawki grafiki
+section('2.20: słońce, kaktus, drzwi i dachy wiosek');
+{
+  // --- słońce i księżyc: czarne tło musi być przezroczyste
+  const alphaAt = (img: { width: number; data: Uint8Array }, x: number, y: number) =>
+    img.data[(y * img.width + x) * 4 + 3];
+  const sunImg = decodePng(GUI_SPRITES.sun);
+  check('słońce nie ma czarnego tła', alphaAt(sunImg, 0, 0) === 0 && alphaAt(sunImg, 31, 31) === 0);
+  check('tarcza słońca jest widoczna', alphaAt(sunImg, 16, 16) === 255);
+  const moonImg = decodePng(GUI_SPRITES.moon);
+  check('księżyc nie ma czarnego tła', alphaAt(moonImg, 0, 0) === 0 && alphaAt(moonImg, 31, 0) === 0);
+  const engineSrc = readSource('src/game/engine.ts');
+  check('słońce i księżyc świecą addytywnie', (engineSrc.match(/AdditiveBlending/g) ?? []).length >= 2);
+
+  // --- woda: kafelek musi być niebieski (wcześniej był szary jak mgła)
+  const atl = decodePng(BLOCK_ATLAS_PNG);
+  const waterTile = tileFor(B.WATER, 0);
+  const wox = (waterTile % 16) * 16;
+  const woy = Math.floor(waterTile / 16) * 16;
+  let wr = 0, wg = 0, wb = 0, wn = 0;
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      const i = ((woy + y) * atl.width + wox + x) * 4;
+      wr += atl.data[i]; wg += atl.data[i + 1]; wb += atl.data[i + 2]; wn++;
+    }
+  wr = Math.round(wr / wn); wg = Math.round(wg / wn); wb = Math.round(wb / wn);
+  check('woda ma niebieski odcień', wb > wr + 60 && wg > wr, `${wr},${wg},${wb}`);
+
+  // --- bloki-sprite'y i własne bryły
+  eq('latarnia to sprite (cross)', RENDER[B.LANTERN], 1);
+  eq('latarnia tnie alfę', LAYER[B.LANTERN], 1);
+  check('latarnia nie blokuje ruchu', IS_SOLID[B.LANTERN] === 0);
+  eq('dzwon to sprite (cross)', RENDER[B.BELL], 1);
+  eq('kaktus ma własną bryłę', RENDER[B.CACTUS], 7);
+  eq('łóżko ma własną bryłę', RENDER[B.BED], 8);
+  eq('górne drzwi tną alfę (szyby)', LAYER[B.DOOR_UN], 1);
+  eq('dolne drzwi tną alfę', LAYER[B.DOOR_N], 1);
+  const atlasSrc = readSource('scripts/compile-vanilla-art.mjs');
+  check('latarnia i dzwon z ikon przedmiotów', /lantern: I_ \+ 'lantern\.png'/.test(atlasSrc) && /bell: I_ \+ 'bell\.png'/.test(atlasSrc));
+
+  // --- meshing: drzwi to cienka płyta, kaktus 14/16
+  const w2 = new World(4242, true);
+  const gy = FLAT_H + 1;
+  // Warstwa 1 (wycinana alfa) zawiera tylko drzwi/kaktusa – dzięki temu nie
+  // łapiemy ścian sąsiednich bloków, które dotykają komórki krawędzią.
+  const cellVerts = (box: { x: number; y: number; z: number }) => {
+    const out: { x: number; y: number; z: number }[] = [];
+    const cut = w2.buildMesh(w2.getChunk(0, 0))[1];
+    const pos = cut.attributes.position as THREE.BufferAttribute | undefined;
+    if (pos) {
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        if (x >= box.x - 0.01 && x <= box.x + 1.01 && y >= box.y - 0.01 && y <= box.y + 1.01 && z >= box.z - 0.01 && z <= box.z + 1.01) {
+          out.push({ x, y, z });
+        }
+      }
+    }
+    return out;
+  };
+  w2.setBlock(4, gy, 4, B.DOOR_N);
+  const doorVerts = cellVerts({ x: 4, y: gy, z: 4 });
+  const span = (v: { x: number; y: number; z: number }[], k: 'x' | 'y' | 'z') => {
+    const vals = v.map((p) => p[k]);
+    return Math.max(...vals) - Math.min(...vals);
+  };
+  check('drzwi to cienka płyta (3/16)', doorVerts.length > 0 && Math.abs(span(doorVerts, 'z') - 0.1875) < 0.01 && span(doorVerts, 'x') > 0.98, `z=${span(doorVerts, 'z').toFixed(3)}`);
+  w2.setBlock(4, gy, 4, B.AIR);
+
+  w2.setBlock(6, gy, 6, B.CACTUS);
+  const cactusVerts = cellVerts({ x: 6, y: gy, z: 6 });
+  check(
+    'kaktus to bryła 14/16',
+    cactusVerts.length > 0 && Math.abs(span(cactusVerts, 'x') - 0.875) < 0.01 && Math.abs(span(cactusVerts, 'z') - 0.875) < 0.01,
+    `${span(cactusVerts, 'x').toFixed(3)}×${span(cactusVerts, 'z').toFixed(3)}`
+  );
+
+  // --- dachy wiosek: dwuspadowe, ze schodów, wyżej niż ściany
+  const w3 = new World(2020);
+  const ctx3 = w3.villageContext();
+  let vil: Village | null = null;
+  for (let gx = -6; gx <= 6 && !vil; gx++) for (let gz = -6; gz <= 6 && !vil; gz++) vil = villageInCell(gx, gz, ctx3);
+  check('świat 2.20 ma wioskę', !!vil);
+  if (vil) {
+    const house = vil.buildings.find((b2) => b2.kind === 'house');
+    check('wioska ma dom', !!house);
+    if (house) {
+      const stairId = (id: number) =>
+        (id >= B.OAK_STAIRS_N && id <= B.OAK_STAIRS_W) ||
+        (id >= B.COBBLE_STAIRS_N && id <= B.COBBLE_STAIRS_W) ||
+        (id >= B.SANDSTONE_STAIRS_N && id <= B.SANDSTONE_STAIRS_W);
+      const dirs = new Set<number>();
+      let roofTop = 0;
+      let stairs = 0;
+      for (let x = house.x - 1; x <= house.x + house.w; x++)
+        for (let z = house.z - 1; z <= house.z + house.d; z++)
+          for (let y = vil.y + 4; y <= vil.y + 10; y++) {
+            const id = w3.getBlock(x, y, z);
+            if (!stairId(id)) continue;
+            stairs++;
+            dirs.add((id - (id >= B.OAK_STAIRS_N && id <= B.OAK_STAIRS_W ? B.OAK_STAIRS_N : id >= B.COBBLE_STAIRS_N && id <= B.COBBLE_STAIRS_W ? B.COBBLE_STAIRS_N : B.SANDSTONE_STAIRS_N)) % 4);
+            if (y > roofTop) roofTop = y;
+          }
+      check('dach domu jest ze schodów', stairs > 20, `${stairs} bloków`);
+      check('dach ma dwie połacie', dirs.size >= 2, [...dirs].join(','));
+      check('dach jest wyżej niż ściany', roofTop >= vil.y + 6, `szczyt=${roofTop - vil.y}`);
+      check('dom ma podmurówkę z bruku', w3.getBlock(house.x, vil.y, house.z) === B.COBBLE || w3.getBlock(house.x, vil.y, house.z) === B.SANDSTONE);
+      check('w środku domu stoi łóżko', (() => {
+        for (let x = house.x + 1; x < house.x + house.w - 1; x++)
+          for (let z = house.z + 1; z < house.z + house.d - 1; z++)
+            if (w3.getBlock(x, vil.y + 1, z) === B.BED) return true;
+        return false;
+      })());
+    }
+  }
+  const villageSrc = readSource('src/game/village.ts');
+  check('wioska buduje dwuspadowy dach', /gableRoof/.test(villageSrc) && /toRidge/.test(villageSrc));
+  check('wioska nie stawia już płaskiej płyty', !/Dach: okap \+ coraz węższe warstwy/.test(villageSrc));
+
+  // --- ręka: blok nie może zasłaniać pół ekranu
+  check('blok w ręce jest mniejszy niż 0,3', /mesh\.scale\.setScalar\(cross \? 0\.3 : 0\.2\)/.test(engineSrc));
 }
 
 // =================================================================== report

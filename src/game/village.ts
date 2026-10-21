@@ -336,56 +336,130 @@ export interface VillageApplyResult {
 
 type SetBlock = (x: number, y: number, z: number, id: number) => void;
 
+/** Rodzaj dachu zależny od biomu i funkcji budynku. */
+interface RoofStyle {
+  deck: number; // pełne bloki połaci
+  stair: number; // ID schodów w kierunku północnym (baza)
+  ridge: number; // najwyższy blok kalenicy
+}
+
+function roofStyleFor(v: Village, style: 'planks' | 'library' | 'smith'): RoofStyle {
+  if (v.desert) return { deck: B.SANDSTONE, stair: B.SANDSTONE_STAIRS_N, ridge: B.SANDSTONE_SLAB };
+  if (style === 'smith') return { deck: B.COBBLE, stair: B.COBBLE_STAIRS_N, ridge: B.STONE_SLAB };
+  if (style === 'library') return { deck: B.PLANKS, stair: B.OAK_STAIRS_N, ridge: B.OAK_SLAB };
+  return { deck: B.PLANKS, stair: B.OAK_STAIRS_N, ridge: B.OAK_SLAB };
+}
+
+/**
+ * Dwuspadowy dach z okapem.
+ *
+ * 2.20: wcześniej był to płaski „naleśnik” z desek nad ścianami – domy
+ * wyglądały jak betonowe bunkry. Teraz kalenica biegnie wzdłuż dłuższej
+ * ściany, a połać schodzi stopniami ze schodów (jak w Minecrafcie).
+ */
+function gableRoof(b: VillageBuilding, set: SetBlock, baseY: number, st: RoofStyle) {
+  const alongX = b.w >= b.d;
+  const stair = (facing: number) => st.stair + (facing & 3);
+  if (alongX) {
+    for (let x = -1; x <= b.w; x++)
+      for (let z = -1; z <= b.d; z++) {
+        const rise = Math.ceil(Math.min(z + 1, b.d - z) * 0.6);
+        for (let lv = 0; lv < rise; lv++) set(b.x + x, baseY + lv, b.z + z, st.deck);
+        // Wyższa połowa stopnia zawsze po stronie kalenicy.
+        const toRidge = z + 1 <= b.d - z ? 2 : 0;
+        set(b.x + x, baseY + rise, b.z + z, stair(toRidge));
+      }
+  } else {
+    for (let z = -1; z <= b.d; z++)
+      for (let x = -1; x <= b.w; x++) {
+        const rise = Math.ceil(Math.min(x + 1, b.w - x) * 0.6);
+        for (let lv = 0; lv < rise; lv++) set(b.x + x, baseY + lv, b.z + z, st.deck);
+        const toRidge = x + 1 <= b.w - x ? 1 : 3;
+        set(b.x + x, baseY + rise, b.z + z, stair(toRidge));
+      }
+  }
+  // Kalenica – najwyższa linia, żeby grzbiet nie był zębaty.
+  if (alongX) {
+    const zA = Math.floor((b.d - 1) / 2);
+    for (let x = -1; x <= b.w; x++) for (const z of [zA, b.d - 1 - zA]) {
+      const y = baseY + Math.ceil(Math.min(z + 1, b.d - z) * 0.6);
+      set(b.x + x, y, b.z + z, st.deck);
+    }
+  } else {
+    const xA = Math.floor((b.w - 1) / 2);
+    for (let z = -1; z <= b.d; z++) for (const x of [xA, b.w - 1 - xA]) {
+      const y = baseY + Math.ceil(Math.min(x + 1, b.w - x) * 0.6);
+      set(b.x + x, y, b.z + z, st.deck);
+    }
+  }
+}
+
 function house(v: Village, b: VillageBuilding, set: SetBlock, style: 'planks' | 'library' | 'smith') {
   const floor = v.y;
   const wall = v.desert ? B.SANDSTONE : B.PLANKS;
-  const roof = v.desert ? B.SANDSTONE : B.PLANKS;
   const corner = v.desert ? B.SANDSTONE : B.LOG;
+  const plinth = v.desert ? B.SANDSTONE : B.COBBLE;
   const h = 3;
   const door = doorCell(b);
+  const st = roofStyleFor(v, style);
   for (let x = 0; x < b.w; x++)
     for (let z = 0; z < b.d; z++) {
-      set(b.x + x, floor, b.z + z, wall);
       const edge = x === 0 || z === 0 || x === b.w - 1 || z === b.d - 1;
+      // Podmurówka z bruku wokół domu (w środku – podłoga z desek).
+      set(b.x + x, floor, b.z + z, edge ? plinth : v.desert ? B.SANDSTONE : B.PLANKS);
       if (!edge) continue;
       const isCorner = (x === 0 || x === b.w - 1) && (z === 0 || z === b.d - 1);
       const isDoor = b.x + x === door.x && b.z + z === door.z;
-      for (let y = floor + 1; y <= floor + h; y++) set(b.x + x, y, b.z + z, isCorner ? corner : wall);
+      // Ościeżnica: słupki z bali po bokach drzwi.
+      const besideDoor =
+        (b.face === 0 || b.face === 2 ? Math.abs(b.x + x - door.x) : Math.abs(b.z + z - door.z)) === 1 &&
+        (b.face === 0 ? z === 0 : b.face === 2 ? z === b.d - 1 : b.face === 1 ? x === b.w - 1 : x === 0);
+      for (let y = floor + 1; y <= floor + h; y++) {
+        set(b.x + x, y, b.z + z, isCorner || besideDoor ? corner : wall);
+      }
       if (isDoor) {
         set(door.x, floor + 1, door.z, doorPair(b.face, false, false));
         set(door.x, floor + 2, door.z, doorPair(b.face, false, true));
       } else if (wallMid(b, x, z) && style !== 'smith') {
         set(b.x + x, floor + 2, b.z + z, B.GLASS); // okno
       }
-      if (style === 'library' && !isCorner && (x === 0 || x === b.w - 1 || z === 0 || z === b.d - 1)) {
+      if (style === 'library' && !isCorner && !besideDoor && (x === 0 || x === b.w - 1 || z === 0 || z === b.d - 1)) {
         if (!isDoor && (x + z) % 3 !== 0) set(b.x + x, floor + 1, b.z + z, B.BOOKSHELF);
       }
     }
-  // Dach: okap + coraz węższe warstwy.
-  for (let x = -1; x <= b.w; x++) for (let z = -1; z <= b.d; z++) set(b.x + x, floor + h + 1, b.z + z, roof);
-  for (let x = 0; x < b.w; x++) for (let z = 0; z < b.d; z++) if (x === 0 || z === 0 || x === b.w - 1 || z === b.d - 1) set(b.x + x, floor + h + 2, b.z + z, roof);
-  if (b.w >= 9) for (let x = 2; x < b.w - 2; x++) for (let z = 2; z < b.d - 2; z++) set(b.x + x, floor + h + 2, b.z + z, roof);
-  else for (let x = 1; x < b.w - 1; x++) for (let z = 1; z < b.d - 1; z++) set(b.x + x, floor + h + 2, b.z + z, roof);
+  // Płaski strop pod dachem – wnętrze ma sufit, a nie widok na krokwie.
+  for (let x = 0; x < b.w; x++) for (let z = 0; z < b.d; z++) set(b.x + x, floor + h + 1, b.z + z, st.deck);
+  gableRoof(b, set, floor + h + 1, st);
 
   // Wnętrze
+  const mx = b.x + Math.floor(b.w / 2);
+  const mz = b.z + Math.floor(b.d / 2);
   if (style === 'smith') {
     set(b.x + 1, floor + 1, b.z + 1, B.FURNACE);
-    set(b.x + 2, floor + 1, b.z + 1, B.FURNACE);
+    set(b.x + 2, floor + 1, b.z + 1, B.FURNACE_ON);
     set(b.x + b.w - 2, floor + 1, b.z + 1, B.LOOT_CHEST);
     set(b.x + 1, floor + 1, b.z + b.d - 2, B.CRAFTING);
     set(b.x + b.w - 2, floor + 1, b.z + b.d - 2, B.IRON_BLOCK); // kowadło
-    set(b.x + Math.floor(b.w / 2), floor + h, b.z + Math.floor(b.d / 2), B.LANTERN);
   } else {
     set(b.x + 1, floor + 1, b.z + 1, B.BED);
     set(b.x + b.w - 2, floor + 1, b.z + b.d - 2, B.CHEST);
     if (b.variant % 3 === 0) set(b.x + b.w - 2, floor + 1, b.z + 1, B.FURNACE);
     else if (b.variant % 3 === 1) set(b.x + b.w - 2, floor + 1, b.z + 1, B.CRAFTING);
-    set(b.x + 2, floor + h - 1, b.z + Math.floor(b.d / 2), B.TORCH);
+    else set(b.x + 1, floor + 1, b.z + b.d - 2, B.CRAFTING);
   }
-  // Latarnia przy wejściu – na zewnątrz, po stronie drzwi.
+  // Lampka pod sufitem – wcześniej stała w powietrzu pochodnia na wysokości
+  // ściany, która wyglądała jak błąd.
+  set(mx, floor + h, mz, B.LANTERN);
+  // Latarnia przy wejściu: słupek z płotu + latarnia, ukośnie od drzwi, żeby
+  // nie zastawiać przejścia.
   const outX = door.x + (b.face === 1 ? 1 : b.face === 3 ? -1 : 0);
   const outZ = door.z + (b.face === 2 ? 1 : b.face === 0 ? -1 : 0);
-  set(outX, floor + 1, outZ, B.LANTERN);
+  const latX = door.x + (b.face === 0 || b.face === 2 ? 1 : 0) + (outX !== door.x ? outX - door.x : 0);
+  const latZ = door.z + (b.face === 1 || b.face === 3 ? 1 : 0) + (outZ !== door.z ? outZ - door.z : 0);
+  set(latX, floor, latZ, B.COBBLE);
+  set(latX, floor + 1, latZ, B.FENCE);
+  set(latX, floor + 2, latZ, B.FENCE);
+  set(latX, floor + 3, latZ, B.LANTERN);
 }
 
 /** Czy ściana w tym miejscu jest w połowie długości (miejsce na okno). */
@@ -452,8 +526,16 @@ function well(v: Village, b: VillageBuilding, set: SetBlock) {
     set(cx + dx, floor + 2, cz + dz, B.FENCE);
     set(cx + dx, floor + 3, cz + dz, B.FENCE);
   }
+  // 2.20: daszek studni – cztery coraz mniejsze warstwy desek (piramida),
+  // a nie jedna płaska płyta wisząca na słupkach.
   for (let x = -3; x <= 3; x++)
-    for (let z = -3; z <= 3; z++) if (Math.max(Math.abs(x), Math.abs(z)) === 3) set(cx + x, floor + 4, cz + z, B.PLANKS);
+    for (let z = -3; z <= 3; z++) {
+      const ring = Math.max(Math.abs(x), Math.abs(z));
+      if (ring === 3) set(cx + x, floor + 4, cz + z, B.PLANKS);
+      if (ring <= 2) set(cx + x, floor + 5, cz + z, B.PLANKS);
+      if (ring <= 1) set(cx + x, floor + 6, cz + z, B.OAK_SLAB);
+    }
+  set(cx, floor + 6, cz, B.OAK_SLAB);
   set(cx, floor + 4, cz, B.LANTERN);
 }
 

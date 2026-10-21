@@ -9,7 +9,7 @@ import {
   brewingKey, emptyBrewing, tickBrewing,
   type BrewingState, type PotionEffectId,
 } from './brewing';
-import { getAtlas, tileUV, AVG_COLOR } from './textures';
+import { getAtlas, tileUV, tileUVInset, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { Mob, isHostileMob, type MobType } from './mobs';
 
@@ -390,16 +390,35 @@ function blockGeometry(id: number): THREE.BufferGeometry {
     g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(uv.count * 3).fill(1), 3));
     return g;
   }
-  const g = new THREE.BoxGeometry(1, 1, 1);
   const faceMap = [1, 0, 3, 2, 5, 4];
   const shades = [0.62, 0.62, 1, 0.5, 0.8, 0.8];
+  // 2.20: kaktus (14/16) i łóżko (9/16) trzymają w ręce ten sam kształt co
+  // w świecie – wcześniej w ekwipunku były pełnymi sześcianami.
+  const shape = RENDER[id] === 7
+    ? [1 / 16, 1 / 16, 15 / 16, 15 / 16, 0, 1]
+    : RENDER[id] === 8
+      ? [0, 0, 1, 1, 0, 0.5625]
+      : null;
+  const inset = RENDER[id] === 7 ? 1 : 0;
+  const g = new THREE.BoxGeometry(
+    shape ? shape[2] - shape[0] : 1,
+    shape ? shape[5] - shape[4] : 1,
+    shape ? shape[3] - shape[1] : 1,
+  );
+  if (shape) {
+    g.translate(
+      (shape[0] + shape[2]) / 2 - 0.5,
+      (shape[4] + shape[5]) / 2 - 0.5,
+      (shape[1] + shape[3]) / 2 - 0.5,
+    );
+  }
   const uv = g.attributes.uv as THREE.BufferAttribute;
   const cols = new Float32Array(uv.count * 3);
   for (let f = 0; f < 6; f++) {
     const tile = tileFor(id, faceMap[f]);
     for (let v = 0; v < 4; v++) {
       const i = f * 4 + v;
-      const [U, V] = tileUV(tile, Math.round(uv.getX(i)), Math.round(uv.getY(i)));
+      const [U, V] = tileUVInset(tile, Math.round(uv.getX(i)), Math.round(uv.getY(i)), inset);
       uv.setXY(i, U, V);
       const s = shades[f] * shades[f];
       cols[i * 3] = cols[i * 3 + 1] = cols[i * 3 + 2] = s;
@@ -896,7 +915,9 @@ export class Game {
       c.fillStyle = '#ffffff';
       c.fillRect(9, 9, 14, 14);
     });
-    this.sun = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshBasicMaterial({ map: sunTex, transparent: true, fog: false, depthWrite: false }));
+    // 2.20: tarcze świecą addytywnie – czerń w teksturze znika całkowicie
+    // (wcześniej rysował się czarny kwadrat wokół słońca i księżyca).
+    this.sun = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshBasicMaterial({ map: sunTex, transparent: true, blending: THREE.AdditiveBlending, fog: false, depthWrite: false }));
     const moonTex = spriteTexture('moon') ?? makeCanvasTex(32, (c) => {
       c.fillStyle = '#dde2ee';
       c.fillRect(8, 8, 16, 16);
@@ -905,7 +926,7 @@ export class Game {
       c.fillRect(18, 16, 3, 3);
       c.fillRect(13, 19, 2, 2);
     });
-    this.moon = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshBasicMaterial({ map: moonTex, transparent: true, fog: false, depthWrite: false }));
+    this.moon = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.MeshBasicMaterial({ map: moonTex, transparent: true, blending: THREE.AdditiveBlending, fog: false, depthWrite: false }));
     this.sun.renderOrder = -1;
     this.moon.renderOrder = -1;
     this.scene.add(this.sun, this.moon);
@@ -4039,21 +4060,23 @@ export class Game {
     let mesh: THREE.Mesh;
     if (isItem(id)) {
       mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.42, 0.42),
+        new THREE.PlaneGeometry(0.3, 0.3),
         new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, depthTest: false, alphaTest: 0.12, side: THREE.DoubleSide })
       );
-      mesh.position.set(0.48, -0.36, -0.62);
+      mesh.position.set(0.42, -0.3, -0.62);
       mesh.rotation.set(0.15, -0.55, 0.2);
     } else if (id < 0) {
-      mesh = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.7), new THREE.MeshBasicMaterial({ color: 0xc89a78, depthTest: false }));
-      mesh.position.set(0.5, -0.45, -0.55);
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.58), new THREE.MeshBasicMaterial({ color: 0xc89a78, depthTest: false }));
+      mesh.position.set(0.46, -0.36, -0.55);
       mesh.rotation.set(0.2, 0.15, 0);
     } else {
       mesh = new THREE.Mesh(blockGeometry(id), this.handMat);
       const cross = RENDER[id] === 1;
-      mesh.scale.setScalar(cross ? 0.45 : 0.36);
-      mesh.position.set(0.5, -0.42, -0.72);
-      mesh.rotation.set(0.05, cross ? -0.3 : Math.PI / 4 + 0.1, 0);
+      // 2.20: blok w ręce był za duży (0,36 przy kamerze 0,72) i ucinał się
+      // o krawędź ekranu. Teraz zajmuje ~1/4 wysokości, jak w Minecrafcie.
+      mesh.scale.setScalar(cross ? 0.3 : 0.2);
+      mesh.position.set(0.42, -0.32, -0.62);
+      mesh.rotation.set(0.1, cross ? -0.3 : Math.PI / 4 + 0.12, 0);
     }
     mesh.renderOrder = 1000;
     this.handMesh = mesh;
