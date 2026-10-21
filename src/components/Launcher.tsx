@@ -125,7 +125,7 @@ export default function Launcher({
     return stored || loadSkinId() || DEFAULT_SKIN_ID;
   });
   const [log, setLog] = useState<LogEntry[]>([]);
-  const [launching, setLaunching] = useState<{ step: number; progress: number } | null>(null);
+  const [launching, setLaunching] = useState<{ step: number; progress: number; world: string } | null>(null);
   const [showNewWorld, setShowNewWorld] = useState(false);
   const timers = useRef<number[]>([]);
 
@@ -183,13 +183,13 @@ export default function Launcher({
   const launch = useCallback(
     (world: WorldCard | null) => {
       if (launching) return;
-      setLaunching({ step: 0, progress: 0 });
+      setLaunching({ step: 0, progress: 0, world: world?.name ?? 'Nowy świat' });
       pushLog(`Uruchamianie: ${world ? (world.name ?? 'świat') : 'nowy świat'}`, 'info');
       let elapsed = 0;
       LAUNCH_STEPS.forEach((step, index) => {
         elapsed += step.ms;
         const id = window.setTimeout(() => {
-          setLaunching({ step: index, progress: step.progress });
+          setLaunching({ step: index, progress: step.progress, world: world?.name ?? 'Nowy świat' });
           pushLog(`${step.title} – ${step.detail}`, index === LAUNCH_STEPS.length - 1 ? 'ok' : 'info');
         }, elapsed);
         timers.current.push(id);
@@ -353,6 +353,15 @@ export default function Launcher({
               {t.short}
             </button>
           ))}
+          {onClassicMenu && (
+            <button
+              type="button"
+              onClick={onClassicMenu}
+              className="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-[12px] font-semibold text-white/55"
+            >
+              Menu gry
+            </button>
+          )}
         </div>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
@@ -452,7 +461,7 @@ export default function Launcher({
         </main>
       </div>
 
-      {launching && <LaunchOverlay step={launching.step} progress={launching.progress} worldName={lastWorld?.name ?? 'Nowy świat'} />}
+      {launching && <LaunchOverlay step={launching.step} progress={launching.progress} worldName={launching.world} />}
     </div>
   );
 }
