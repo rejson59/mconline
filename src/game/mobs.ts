@@ -5,6 +5,7 @@ import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 import { kindForColor, mobMaterial, setMobPalette, snapToPalette, type MobTexKind } from './mobTextures';
 import { MOB_MODELS, buildMobModel, type BuiltMob } from './mobModels';
+import { MOB_SKINS } from './art/vanillaArt.generated';
 
 /** 2.18: 16 kolorów wełny, dokładnie jak paleta barwników w grze. */
 export const SHEEP_WOOL_COLORS = [
@@ -67,8 +68,27 @@ function box(w: number, h: number, d: number, color: number, mats: Map<string, T
 
 const sharedMats = new Map<string, THREE.Material>();
 
+/**
+ * 2.23: warianty biomowe zwierząt gospodarskich z 1.21.5+ (nadal w 26.2).
+ * Krowa, świnia i kura mają po trzy tekstury: umiarkowaną, ciepłą i zimną.
+ */
+export type MobVariant = 'temperate' | 'warm' | 'cold';
+
+const WARM_BIOMES = new Set(['Pustynia', 'Sawanna', 'Dżungla']);
+const COLD_BIOMES = new Set(['Tundra', 'Góry']);
+
+/** Wariant, który w Minecrafcie wynika z biomu w chwili narodzin moba. */
+export function mobVariantForBiome(type: MobType, biome: string): MobVariant {
+  if (type !== 'cow' && type !== 'pig' && type !== 'chicken') return 'temperate';
+  if (COLD_BIOMES.has(biome)) return 'cold';
+  if (WARM_BIOMES.has(biome)) return 'warm';
+  return 'temperate';
+}
+
 export class Mob {
   type: MobType;
+  /** 2.23: wariant biomowy (tekstura + model, np. `cow_cold`). */
+  readonly variant: MobVariant;
   group = new THREE.Group();
   body: Body;
   yaw = Math.random() * Math.PI * 2;
@@ -122,8 +142,9 @@ export class Mob {
   head!: THREE.Object3D;
   meshes: THREE.Mesh[] = [];
 
-  constructor(type: MobType, x: number, y: number, z: number, profession = 0) {
+  constructor(type: MobType, x: number, y: number, z: number, profession = 0, variant: MobVariant = 'temperate') {
     this.type = type;
+    this.variant = variant;
     this.home.set(x, y, z);
     // 2.21.1: dokładny rozkład z `SheepEntity`: 83,6% białych, 5% czarnych,
     // 5% szarych, 5% jasnoszarych, 3% brązowych i 2% różowych.
@@ -232,9 +253,14 @@ export class Mob {
     setMobPalette(this.type);
     // 2.18: najpierw próbujemy prawdziwego modelu z paczki. Gdyby tekstury
     // brakowało, zostaje stary, kolorowy model – gra nigdy nie zostaje bez moba.
-    const model = MOB_MODELS[this.type];
+    // 2.23: wariant biomowy ma własny model (krowa zimowa/ciepła) albo tylko
+    // teksturę (świnia i kura ciepła) – wtedy zostaje model podstawowy.
+    const variantKey = `${this.type}_${this.variant}`;
+    const model = MOB_MODELS[variantKey] ?? MOB_MODELS[this.type];
     if (model) {
-      const skin = this.type === 'villager' ? `villager${this.profession % 5}` : model.skin;
+      const skin = this.type === 'villager'
+        ? `villager${this.profession % 5}`
+        : MOB_SKINS[variantKey] ? variantKey : model.skin;
       const built = buildMobModel(model, skin);
       if (built) {
         this.mountBuiltModel(built);

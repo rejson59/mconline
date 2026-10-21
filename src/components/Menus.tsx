@@ -3,7 +3,7 @@ import type { GameMode } from '../game/engine';
 import { ACHIEVEMENTS } from '../game/achievements';
 import { exportSave, exportSaves, importSaves, MAX_SAVES } from '../game/saves';
 import { loadSettings, saveSettings, type Settings } from '../utils/settings';
-import { GAME_RELEASE_NAME, GAME_VERSION, RELEASE_HIGHLIGHTS } from '../utils/version';
+import { GAME_RELEASE_NAME, GAME_VERSION, MINECRAFT_TARGET, RELEASE_HIGHLIGHTS } from '../utils/version';
 import SettingsScreen from './SettingsScreen';
 import { SkinHead } from './SkinPicker';
 import { toggleFullscreenLandscape } from '../utils/screen';
@@ -122,6 +122,9 @@ export function Title() {
         <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/60 sm:text-[11px]">
           {GAME_RELEASE_NAME}
         </span>
+      </div>
+      <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300/70">
+        Minecraft {MINECRAFT_TARGET}
       </div>
       <div
         className="splash mt-2 max-w-full text-center text-[13px] font-semibold leading-tight sm:text-lg"

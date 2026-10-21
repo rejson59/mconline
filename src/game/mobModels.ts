@@ -46,6 +46,8 @@ export interface MobBox {
 export interface MobPart {
   name: string;
   pivot: Vec3;
+  /** Nazwa części nadrzędnej – jak `PartDefinition` zagnieżdżony w wanilii. */
+  parent?: string;
   /** Obrót w radianach: [pitch (X), yaw (Y), roll (Z)] – jak w wanilii. */
   rot?: Vec3;
   boxes: MobBox[];
@@ -68,41 +70,13 @@ export interface MobModel {
 // ---------------------------------------------------------------------------
 const box = (uv: readonly [number, number], at: Vec3, size: Vec3, extra: Partial<MobBox> = {}): MobBox => ({ uv, at, size, ...extra });
 const mir = (uv: readonly [number, number], at: Vec3, size: Vec3, extra: Partial<MobBox> = {}): MobBox => ({ uv, at, size, mirror: true, ...extra });
-const part = (name: string, pivot: Vec3, boxes: MobBox[], rot?: Vec3): MobPart => ({ name, pivot, rot, boxes });
+const part = (name: string, pivot: Vec3, boxes: MobBox[], rot?: Vec3, parent?: string): MobPart => ({ name, pivot, rot, boxes, parent });
 
 const PI = Math.PI;
 
 // ---------------------------------------------------------------------------
 // modele
 // ---------------------------------------------------------------------------
-
-/**
- * Czteronożne – szkielet z `QuadrupedEntityModel` (świnia). `stance` to
- * rozstaw nóg w pikselach (im większy, tym niższy tułów).
- */
-function quadruped(opts: {
-  stance: number;
-  head: MobBox[];
-  body: MobBox;
-  legUv: readonly [number, number];
-  leg: Vec3;
-  legX: number;
-  frontZ: number;
-  hindZ: number;
-}): MobPart[] {
-  const leg = (name: string, x: number, z: number) =>
-    part(name, [x, 24 - opts.stance, z], [
-      box(opts.legUv, [-opts.leg[0] / 2, 0, -opts.leg[2] / 2], opts.leg),
-    ]);
-  return [
-    part('head', [0, 18 - opts.stance, -6], opts.head),
-    part('body', [0, 17 - opts.stance, 2], [opts.body], [PI / 2, 0, 0]),
-    leg('rightHindLeg', -opts.legX, opts.hindZ),
-    leg('leftHindLeg', opts.legX, opts.hindZ),
-    leg('rightFrontLeg', -opts.legX, opts.frontZ),
-    leg('leftFrontLeg', opts.legX, opts.frontZ),
-  ];
-}
 
 /**
  * Mieszkańcy: 5 zawodów z gry, każdy z własną teksturą (baza + biom + zawód).
@@ -116,6 +90,8 @@ function villagerModel(): MobPart[] {
       box([32, 0], [-4, -10, -4], [8, 10, 8], { inflate: 0.51 }),
       box([24, 0], [-1, -3, -6], [2, 4, 2]),
     ]),
+    // 2.23: płaski rond kapelusza (w wanilii osobne pudełko obrócone o 90°).
+    part('hat_rim', [0, -0.5, 0], [box([30, 47], [-8, -8, -6], [16, 16, 1])], [-PI / 2, 0, 0], 'head'),
     part('body', [0, 0, 0], [
       box([16, 20], [-4, 0, -3], [8, 12, 6]),
       box([0, 38], [-4, 0, -3], [8, 20, 6], { inflate: 0.5 }),
@@ -133,36 +109,122 @@ function villagerModel(): MobPart[] {
 export const MOB_MODELS: Readonly<Record<string, MobModel>> = {
   pig: {
     skin: 'pig',
-    parts: quadruped({
-      stance: 6,
-      head: [
+    // 2.23: dokładnie `PigModel` z 26.2 – tułów na zawiasie y=11, głowa
+    // y=12, ryjek [16,16], a lewe nogi mają lustrzane UV (tak jak w grze).
+    parts: [
+      part('head', [0, 12, -6], [
         box([0, 0], [-4, -4, -8], [8, 8, 8]),
         box([16, 16], [-2, 0, -9], [4, 3, 1]),
-      ],
-      body: box([28, 8], [-5, -10, -7], [10, 16, 8]),
-      legUv: [0, 16],
-      leg: [4, 6, 4],
-      legX: 3,
-      hindZ: 7,
-      frontZ: -5,
-    }),
+      ]),
+      part('body', [0, 11, 2], [box([28, 8], [-5, -10, -7], [10, 16, 8])], [PI / 2, 0, 0]),
+      part('rightHindLeg', [-3, 18, 7], [box([0, 16], [-2, 0, -2], [4, 6, 4])]),
+      part('leftHindLeg', [3, 18, 7], [mir([0, 16], [-2, 0, -2], [4, 6, 4])]),
+      part('rightFrontLeg', [-3, 18, -5], [box([0, 16], [-2, 0, -2], [4, 6, 4])]),
+      part('leftFrontLeg', [3, 18, -5], [mir([0, 16], [-2, 0, -2], [4, 6, 4])]),
+    ],
   },
   cow: {
     skin: 'cow',
     parts: [
       part('head', [0, 4, -8], [
         box([0, 0], [-4, -4, -6], [8, 8, 6]),
-        box([22, 0], [-5, -5, -4], [1, 3, 1]),
-        box([22, 0], [4, -5, -4], [1, 3, 1]),
+        // 2.23: 1.21.5+ (a więc i 26.2) dokłada krowie wystający pysk – bez
+        // tego pudełka tekstura `cow_temperate` miała nozdrza na płaskiej twarzy.
+        box([1, 33], [-3, 1, -7], [6, 3, 1]),
+        box([22, 0], [-5, -5, -5], [1, 3, 1]),
+        box([22, 0], [4, -5, -5], [1, 3, 1]),
+      ]),
+      part('body', [0, 5, 2], [
+        box([18, 4], [-6, -10, -7], [12, 18, 10]),
+        box([52, 0], [-2, 2, -8], [4, 6, 1]),
+      ], [PI / 2, 0, 0]),
+      // 2.23: wanilia od 1.21.5 lustrzy UV lewych nóg krowy (tekstura nóg jest
+      // teraz symetryczna) – bez tego „łatki” na nogach nie pasowały do ciała.
+      part('rightHindLeg', [-4, 12, 7], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('leftHindLeg', [4, 12, 7], [mir([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('rightFrontLeg', [-4, 12, -5], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('leftFrontLeg', [4, 12, -5], [mir([0, 16], [-2, 0, -2], [4, 12, 4])]),
+    ],
+  },
+  /** 2.23: krowa ciepła (sawanna, dżungla, pustynia) – inne rogi niż zwykła. */
+  cow_warm: {
+    skin: 'cow_warm',
+    parts: [
+      part('head', [0, 4, -8], [
+        box([0, 0], [-4, -4, -6], [8, 8, 6]),
+        box([1, 33], [-3, 1, -7], [6, 3, 1]),
+        box([27, 0], [-8, -3, -5], [4, 2, 2]),
+        box([39, 0], [-8, -5, -5], [2, 2, 2]),
+        mir([27, 0], [4, -3, -5], [4, 2, 2]),
+        mir([39, 0], [6, -5, -5], [2, 2, 2]),
       ]),
       part('body', [0, 5, 2], [
         box([18, 4], [-6, -10, -7], [12, 18, 10]),
         box([52, 0], [-2, 2, -8], [4, 6, 1]),
       ], [PI / 2, 0, 0]),
       part('rightHindLeg', [-4, 12, 7], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
-      part('leftHindLeg', [4, 12, 7], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
-      part('rightFrontLeg', [-4, 12, -6], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
-      part('leftFrontLeg', [4, 12, -6], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('leftHindLeg', [4, 12, 7], [mir([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('rightFrontLeg', [-4, 12, -5], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('leftFrontLeg', [4, 12, -5], [mir([0, 16], [-2, 0, -2], [4, 12, 4])]),
+    ],
+  },
+  /** 2.23: krowa zimowa (tundra, góry) – kudłaty tułów i grube rogi. */
+  cow_cold: {
+    skin: 'cow_cold',
+    parts: [
+      part('head', [0, 4, -8], [
+        box([0, 0], [-4, -4, -6], [8, 8, 6]),
+        box([9, 33], [-3, 1, -7], [6, 3, 1]),
+      ]),
+      part('leftHorn', [5.5, 1.5, -13], [box([0, 32], [-1.5, -3, -0.5], [2, 6, 2])], [PI / 2, 0, 0], 'head'),
+      part('rightHorn', [-4.5, 1.5, -11.5], [box([0, 40], [-1.5, -4.5, -0.5], [2, 6, 2])], [PI / 2, 0, 0], 'head'),
+      part('body', [0, 5, 2], [
+        box([20, 32], [-6, -10, -7], [12, 18, 10], { inflate: 0.5 }),
+        box([18, 4], [-6, -10, -7], [12, 18, 10]),
+        box([52, 0], [-2, 2, -8], [4, 6, 1]),
+      ], [PI / 2, 0, 0]),
+      part('rightHindLeg', [-4, 12, 7], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('leftHindLeg', [4, 12, 7], [mir([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('rightFrontLeg', [-4, 12, -5], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('leftFrontLeg', [4, 12, -5], [mir([0, 16], [-2, 0, -2], [4, 12, 4])]),
+    ],
+  },
+  /** 2.23: zimowa świnia ma dodatkową warstwę futra (ten sam szkielet). */
+  pig_cold: {
+    skin: 'pig_cold',
+    parts: [
+      part('head', [0, 12, -6], [
+        box([0, 0], [-4, -4, -8], [8, 8, 8]),
+        box([16, 16], [-2, 0, -9], [4, 3, 1]),
+      ]),
+      part('body', [0, 11, 2], [
+        box([28, 8], [-5, -10, -7], [10, 16, 8]),
+        box([28, 32], [-5, -10, -7], [10, 16, 8], { inflate: 0.5 }),
+      ], [PI / 2, 0, 0]),
+      part('rightHindLeg', [-3, 18, 7], [box([0, 16], [-2, 0, -2], [4, 6, 4])]),
+      part('leftHindLeg', [3, 18, 7], [mir([0, 16], [-2, 0, -2], [4, 6, 4])]),
+      part('rightFrontLeg', [-3, 18, -5], [box([0, 16], [-2, 0, -2], [4, 6, 4])]),
+      part('leftFrontLeg', [3, 18, -5], [mir([0, 16], [-2, 0, -2], [4, 6, 4])]),
+    ],
+  },
+  /** 2.23: zimowa kura – czapka z piór i dodatkowe pióra ogona. */
+  chicken_cold: {
+    skin: 'chicken_cold',
+    parts: [
+      part('body', [0, 16, 0], [
+        box([0, 9], [-3, -4, -3], [6, 8, 6]),
+        box([38, 9], [0, 3, -1], [0, 3, 5]),
+      ], [PI / 2, 0, 0]),
+      part('head', [0, 15, -4], [
+        box([0, 0], [-2, -6, -2], [4, 6, 3]),
+        box([44, 0], [-3, -7, -2.015], [6, 3, 4]),
+      ]),
+      part('beak', [0, 15, -4], [box([14, 0], [-2, -4, -4], [4, 2, 2])], undefined, 'head'),
+      part('red_thing', [0, 15, -4], [box([14, 4], [-1, -2, -3], [2, 2, 2])], undefined, 'head'),
+      part('rightLeg', [-2, 19, 1], [box([26, 0], [-1, 0, -3], [3, 5, 3])]),
+      part('leftLeg', [1, 19, 1], [box([26, 0], [-1, 0, -3], [3, 5, 3])]),
+      part('rightWing', [-4, 13, 0], [box([24, 13], [0, 0, -3], [1, 4, 6])]),
+      part('leftWing', [4, 13, 0], [box([24, 13], [-1, 0, -3], [1, 4, 6])]),
     ],
   },
   sheep: {
@@ -173,9 +235,10 @@ export const MOB_MODELS: Readonly<Record<string, MobModel>> = {
     parts: [
       part('head', [0, 6, -8], [box([0, 0], [-3, -4, -6], [6, 6, 8])]),
       part('body', [0, 5, 2], [box([28, 8], [-4, -10, -7], [8, 16, 6])], [PI / 2, 0, 0]),
-      part('rightHindLeg', [-3, 12, 7], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      // prawa strona w wanilii ma lustrzane UV (lewa nie)
+      part('rightHindLeg', [-3, 12, 7], [mir([0, 16], [-2, 0, -2], [4, 12, 4])]),
       part('leftHindLeg', [3, 12, 7], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
-      part('rightFrontLeg', [-3, 12, -5], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('rightFrontLeg', [-3, 12, -5], [mir([0, 16], [-2, 0, -2], [4, 12, 4])]),
       part('leftFrontLeg', [3, 12, -5], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
     ],
   },
@@ -223,6 +286,9 @@ export const MOB_MODELS: Readonly<Record<string, MobModel>> = {
     scale: 0.9375,
     parts: [
       part('head', [0, 0, 0], [box([0, 0], [-4, -8, -4], [8, 8, 8])]),
+      // 2.23: zewnętrzna warstwa głowy („czapka”) – w wanilii to osobne
+      // pudełko o 0,5 px większe, z tekstury [32,0].
+      part('hat', [0, 0, 0], [box([32, 0], [-4, -8, -4], [8, 8, 8], { inflate: 0.5 })], undefined, 'head'),
       part('body', [0, 0, 0], [box([16, 16], [-4, 0, -2], [8, 12, 4])]),
       part('rightArm', [-5, 2, 0], [box([40, 16], [-3, -2, -2], [4, 12, 4])], [-PI / 2, 0, 0]),
       part('leftArm', [5, 2, 0], [mir([40, 16], [-1, -2, -2], [4, 12, 4])], [-PI / 2, 0, 0]),
@@ -316,8 +382,10 @@ export const MOB_MODELS: Readonly<Record<string, MobModel>> = {
     scale: 1.8,
     parts: [
       part('body', [0, 24, 0], [
-        // zewnętrzny „żel” – półprzezroczysty, jak w grze
-        box([0, 0], [-4, -8, -4], [8, 8, 8], { alpha: 0.7 }),
+        // 2.23: warstwa `outer` z modelu slime'a (8×8×8, UV [0,0]) – w tej
+        // paczce to na niej narysowana jest twarz, więc nie może być w pełni
+        // przezroczysta.
+        box([0, 0], [-4, -8, -4], [8, 8, 8], { alpha: 0.92 }),
         box([0, 16], [-3, -7, -3], [6, 6, 6]),
         box([32, 0], [-3.25, -6, -3.5], [2, 2, 2]),
         box([32, 4], [1.25, -6, -3.5], [2, 2, 2]),
@@ -332,12 +400,14 @@ export const MOB_MODELS: Readonly<Record<string, MobModel>> = {
     uvScale: 2,
     parts: [
       part('body', [0, 17.6, 0], [box([0, 0], [-8, -8, -8], [16, 16, 16])]),
-      ...Array.from({ length: 9 }, (_, i) => {
-        const f = (((i % 3) - Math.floor(i / 3) % 2 * 0.5 + 0.25) / 2) * 2 - 1;
-        const g = (Math.floor(i / 3) / 2) * 2 - 1;
-        const len = 8 + ((i * 37 + 11) % 7);
-        return part(`tentacle${i}`, [f * 5, 24.6, g * 5], [box([0, 0], [-1, 0, -1], [2, len, 2])], [0.4, 0, 0]);
-      }),
+      // 2.23: dokładne macki z `GhastModel` (x = ±3,75 / ±1,25 / ±6,25,
+      // długości 8–13 px). Wcześniej były losowane i nie trafiały w teksturę.
+      ...[
+        [-3.75, -5, 8], [1.25, -5, 13], [6.25, -5, 9],
+        [-6.25, 0, 11], [-1.25, 0, 11], [3.75, 0, 10],
+        [-3.75, 5, 12], [1.25, 5, 9], [6.25, 5, 12],
+      ].map(([tx, tz, len], i) =>
+        part(`tentacle${i}`, [tx, 24.6, tz], [box([0, 0], [-1, 0, -1], [2, len, 2])], [0.4, 0, 0])),
     ],
   },
 };
@@ -451,7 +521,18 @@ export function buildMobModel(model: MobModel, skinKey = model.skin, opts: { alp
   for (const p of model.parts) {
     const group = new THREE.Group();
     const pivot = toWorld(p.pivot);
-    group.position.set(pivot[0], pivot[1], pivot[2]);
+    // 2.23: części mogą być zagnieżdżone (`parent`) – tak jak
+    // `PartDefinition` w wanilii. Dziecko dostaje pozycję względem zawiasu
+    // rodzica, więc obrót rodzica (np. głowy) pociąga za sobą czapkę czy rond
+    // kapelusza, dokładnie jak w grze.
+    const parent = p.parent ? parts[p.parent] : undefined;
+    if (parent) {
+      const pp = model.parts.find((q) => q.name === p.parent)!;
+      const parentPivot = toWorld(pp.pivot);
+      group.position.set(pivot[0] - parentPivot[0], pivot[1] - parentPivot[1], pivot[2] - parentPivot[2]);
+    } else {
+      group.position.set(pivot[0], pivot[1], pivot[2]);
+    }
     if (p.rot) {
       // Waniliowy model ma oś Y skierowaną w dół, a Three – w górę. Odbicie
       // osi Y zmienia znak obrotów wokół X i Z, a yaw (wokół Y) zostaje bez
@@ -460,9 +541,11 @@ export function buildMobModel(model: MobModel, skinKey = model.skin, opts: { alp
     }
     for (const b of p.boxes) {
       const dil = b.inflate ?? 0;
-      const w = b.size[0] + dil * 2;
-      const h = b.size[1] + dil * 2;
-      const d = b.size[2] + dil * 2;
+      // Płaskie pudełka (np. pióra zimowej kury mają szerokość 0) muszą mieć
+      // minimalną grubość, inaczej geometria BoxGeometry jest zdegenerowana.
+      const w = Math.max(0.02, b.size[0] + dil * 2);
+      const h = Math.max(0.02, b.size[1] + dil * 2);
+      const d = Math.max(0.02, b.size[2] + dil * 2);
       const geometry = new THREE.BoxGeometry(w / 16, h / 16, d / 16);
       applyBoxUv(geometry, boxFaces(b.uv, b.size[0], b.size[1], b.size[2], b.mirror, model.uvScale ?? 1), img.width, img.height);
       // `at` jest względem zawiasu, więc środek pudełka liczymy w układzie
@@ -486,7 +569,7 @@ export function buildMobModel(model: MobModel, skinKey = model.skin, opts: { alp
       group.add(mesh);
       meshes.push(mesh);
     }
-    root.add(group);
+    (parent ?? root).add(group);
     parts[p.name] = group;
   }
   return { root, parts, meshes };

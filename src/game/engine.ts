@@ -11,7 +11,7 @@ import {
 } from './brewing';
 import { getAtlas, tileUV, tileUVInset, tileUVRect, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { Mob, isHostileMob, type MobType } from './mobs';
+import { Mob, mobVariantForBiome, isHostileMob, type MobType } from './mobs';
 
 const GREY: readonly number[] = [90, 90, 90];
 
@@ -5189,7 +5189,10 @@ export class Game {
   }
 
   spawnMob(type: MobType, x: number, y: number, z: number, profession = 0) {
-    const m = new Mob(type, x, y, z, profession);
+    // 2.23: jak w 26.2 – krowa/świnia/kura dostaje wariant biomu, w którym
+    // się rodzi (ciepły, umiarkowany albo zimny).
+    const biome = this.world.surface(Math.floor(x), Math.floor(z)).biome;
+    const m = new Mob(type, x, y, z, profession, mobVariantForBiome(type, biome));
     this.mobs.push(m);
     this.scene.add(m.group);
     return m;

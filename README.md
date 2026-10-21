@@ -1,6 +1,17 @@
-# BlockCraft 2.22 🐑
+# BlockCraft 2.23 🐄
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 2.23 „Minecraft 26.2: moby i tekstury 1:1” 🐄
+
+Punkt odniesienia to **Minecraft Java Edition 26.2 „Chaos Cubed”** (resource pack format 88.0) – dokładnie ta wersja, dla której zrobiona jest paczka `26.2.x-Template.zip`. Geometria mobów pochodzi z waniliowych modeli encji (najnowszy dostępny zrzut: 26.1.2, te same modele są w 26.2), a każdy piksel tekstury trafia na właściwą ścianę.
+
+* **Modele prosto z gry, z zagnieżdżonymi częściami.** `MobPart` ma pole `parent`, więc czapka zombie, rond kapelusza mieszkańca oraz rogi zimowej krowy siedzą w zawiasie głowy – obrót głowy pociąga je za sobą, tak jak `PartDefinition` w Minecrafcie. Krowa ma wystający **pysk** (`[1,33]`, 6 × 3 × 1 px) i rogi (`[22,0]` na z = −5), a ghast – **dziewięć macek** o waniliowych długościach 8–13 px i pozycjach ±3,75 / ±1,25 / ±6,25 px (wcześniej losowanych). Mieszkaniec dostał **rond kapelusza** (`[30,47]`, 16 × 16 × 1 px pod głową, pivot −0,5 px).
+* **Lustrzane UV nóg.** Tak jak `Mirror` w wanilii: lewe nogi krowy i świni oraz prawe nogi owcy mają odbite UV. Bez tego „łatki” na nogach nie pasowały do tułowia i mob wyglądał, jakby miał obce kończyny.
+* **Warianty biomowe.** Krowa ma **trzy modele** (zwykły, ciepły z innymi rogami, zimny z kudłatym futrem i grubymi rogami skierowanymi w tył), a świnia i kura – zimowe warstwy futra i piór (`cold_pig`, `cold_chicken`). Wariant wynika z biomu, w którym mob się rodzi: zimny w tundrze i górach, ciepły w sawannie, dżungli i na pustyni. Do tego 25 skórek z paczki, w tym wszystkie trzy warianty każdego zwierzęcia.
+* **Tarcza i wszystkie 100 ikon.** W paczce nie ma `item/shield.png`, bo tarcza jest modelem 3D (`minecraft:special`) renderowanym z tekstury encji. Ikona powstaje z jej przedniej płyty (wycinek 12 × 22 px, `crop` + `mask`): ramka, deski i zaokrąglony dół, a rogi kafelka zostają przezroczyste. Teraz **każdy** przedmiot ma ikonę z paczki (100/100, wcześniej 99).
+* **Kolory dokładnie jak w paczce.** Barwienie biomem dostają wyłącznie tekstury **szare**, tak jak w wanilii – kolorowa trzcina cukrowa nie jest już przyciemniana zielenią (różnica wobec pliku z paczki: 0).
+* **Testy.** `npm test` to **1859 kontroli silnika + 222 testy UI**. Sekcja 2.23 sprawdza pysk i rogi krowy, lustrzane UV nóg, warstwy głów i rond kapelusza, dziewięć macek ghasta, warianty biomowe (model + tekstura), sylwetkę ikony tarczy oraz to, że skrzynia nie używa tekstury desek. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą.
 
 **Wersja 2.22 „Moby i świat 1:1 jak w grze”** – owca i moby dokładnie jak w Minecrafcie:
 
