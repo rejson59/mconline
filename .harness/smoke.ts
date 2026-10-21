@@ -75,7 +75,7 @@ import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial,
 import { decodePng } from '../src/game/art/miniPng';
 import { BLOCK_ATLAS_PNG, ITEM_ATLAS_PNG, OFFICIAL_TILES, MOB_PALETTES, PLAYER_SKIN_PNG } from '../src/game/art/vanillaArt.generated';
 import { officialBlockAtlas, officialItemAtlas, officialItemPixels, isOfficialTile, officialTileCount, officialItemCount, applyOfficialTiles } from '../src/game/packArt';
-import { WIDE_LAYOUT, SLIM_LAYOUT, faceRects, hasPackSkin, packSkinCount, playerSkinTexture } from '../src/game/skinArt';
+import { WIDE_LAYOUT, SLIM_LAYOUT, faceRects, applySkinUv, hasPackSkin, packSkinCount, playerSkinTexture } from '../src/game/skinArt';
 import { setMobPalette, snapToPalette, activeMobPalette } from '../src/game/mobTextures';
 import { emptyChest, chestLoot, lootChest, CHEST_SLOTS, chestKey } from '../src/game/chest';
 import { emptyFurnace, tickFurnace, COOK_TIME, furnaceKey } from '../src/game/furnace';
@@ -4574,7 +4574,22 @@ section('2.17: tekstury z paczki w całej grze');
   eq('góra głowy to (8,0)-(16,8)', `${head[2].x0},${head[2].y0},${head[2].x1},${head[2].y1}`, '8,0,16,8');
   eq('prawa ręka Alexa jest węższa', SLIM_LAYOUT.rightArm.w, 3);
   eq('prawa ręka Steve’a ma 4 piksele', WIDE_LAYOUT.rightArm.w, 4);
-  check('tekstura skórki tworzy się w grze', playerSkinTexture('steve') != null);
+  const skinTex = playerSkinTexture('steve');
+  check('tekstura skórki tworzy się w grze', skinTex != null);
+  eq('skórka nie jest odwrócona (DataTexture ma flipY = false)', skinTex?.flipY, false);
+  // Góra ściany (wierzchołki 0 i 1) musi wskazywać górny wiersz tekstury.
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  applySkinUv(box, WIDE_LAYOUT.head, 64, 64);
+  const uvAttr = box.attributes.uv as THREE.BufferAttribute;
+  const frontTopV = uvAttr.getY(5 * 4 + 0);
+  const frontBottomV = uvAttr.getY(5 * 4 + 2);
+  const backTopV = uvAttr.getY(4 * 4 + 0);
+  eq('góra twarzy to wiersz 8 tekstury', Math.round(frontTopV * 64), 8);
+  eq('dół twarzy to wiersz 16 tekstury', Math.round(frontBottomV * 64), 16);
+  check('góra ściany ma mniejsze V niż dół', frontTopV < frontBottomV);
+  eq('plecy głowy to wiersz 8', Math.round(backTopV * 64), 8);
+  // Ściana +X (wierzchołek 0) to prawa strona głowy: kolumna 0 tekstury.
+  eq('prawa strona głowy zaczyna się w kolumnie 0', Math.round(uvAttr.getX(0) * 64), 0);
 
   // --- palety mobów
   eq('palety wszystkich 14 mobów', Object.keys(MOB_PALETTES).length, 14);

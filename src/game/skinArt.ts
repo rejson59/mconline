@@ -119,9 +119,13 @@ export function applySkinUv(geometry: THREE.BoxGeometry, rect: SkinRect, texW: n
     const { x0, y0, x1, y1 } = faces[f];
     const u0 = x0 / texW;
     const u1 = x1 / texW;
-    // Tekstura w Three ma początek w lewym dolnym rogu, a skórka – w lewym górnym.
-    const v0 = 1 - y0 / texH;
-    const v1 = 1 - y1 / texH;
+    // `DataTexture` ma `flipY = false`, więc wiersz 0 danych trafia do v = 0.
+    // Innymi słowy v = 0 to góra obrazka (a nie dół, jak przy zwykłej
+    // teksturze z `Image`). Wierzchołki BoxGeometry są w kolejności
+    // lewy-górny, prawy-górny, lewy-dolny, prawy-dolny, więc góra ściany
+    // dostaje y0, a dół y1.
+    const v0 = y0 / texH;
+    const v1 = y1 / texH;
     const base = f * 4;
     uv.setXY(base + 0, u0, v0);
     uv.setXY(base + 1, u1, v0);
