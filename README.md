@@ -1,10 +1,18 @@
-# BlockCraft 2.24 🚀
+# BlockCraft 2.24.1 🚀
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
 
+## Wersja 2.24.1 „Klasyczne menu wraca” 🔙
+
+Pierwszym ekranem jest znów **klasyczne menu gry** – tło z paczki, wielkie BLOCKCRAFT, podpis wersji i te same przyciski co przed 2.24. Nic w rozgrywce, zapisach ani grafice się nie zmieniło. Launcher z 2.24 nie zniknął: otwiera się tylko pod adresem **`#launcher`** (albo `#client`), a „Klasyczne menu” w nim czyści hash i wraca do poprzedniego widoku. Dzięki temu klient nie zmienia pierwszego wrażenia ani nie zabiera miejsca na telefonie.
+
+* **Co wróciło.** Kolejność ekranów, tło menu, przyciski (Graj, Nowy świat, Światy, Multiplayer, Ustawienia), podpis wersji i splashe – bez nowych pasków ani nawigacji. Usunięty został też zdublowany podpis „Minecraft 26.2”, który w 2.24 pojawiał się dwa razy.
+* **Co zostało.** Cały launcher z 2.24 (profil i skórki, instancje światów z wyszukiwarką, serwery, paczki i mody, konsola) jest dostępny pod `#launcher` – dokładnie ten sam kod, bez zmian w grze.
+* **Testy.** `npm test` to **1874 kontrole silnika + 222 testy UI** (246 z jsdom). Test jsdom sprawdza teraz, że pierwszy ekran to klasyczne menu, launcher otwiera się wyłącznie z `#launcher`, a wyjście z niego czyści adres. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą.
+
 ## Wersja 2.24 „Launcher w przeglądarce” 🚀
 
-Gra startuje teraz z **launchera** w stylu Lunar Client / Prism Launcher: zamiast od razu wrzucać gracza do menu, pokazujemy klienta z profilem, światami-instancjami, serwerem, paczkami, skórkami, ustawieniami i konsolą. Kliknięcie **GRAJ** uruchamia tę samą grę co wcześniej – z wybranym światem i profilem.
+W 2.24 gra startowała z **launchera** w stylu Lunar Client / Prism Launcher: klient z profilem, światami-instancjami, serwerem, paczkami, skórkami, ustawieniami i konsolą, a **GRAJ** uruchamiał tę samą grę co wcześniej – z wybranym światem i profilem. Od 2.24.1 ten ekran jest dostępny pod `#launcher`, a domyślnie pokazuje się klasyczne menu.
 
 * **Ekran Start.** Karta powitalna z wersją i celem zgodności (Minecraft 26.2 „Chaos Cubed”), obracający się blok trawy z prawdziwych tekstur paczki (CSS 3D, bez canvasu), statystyki paczki (167 kafelków, 100 ikon, 25 skórek), karta „Kontynuuj grę” z ostatnim światem i nowości z historii wydań – każdą można otworzyć w okienku z pełnym opisem.
 * **Światy jako instancje.** Tworzenie świata z nazwą, seedem (liczba albo dowolny tekst), trybem (przetrwanie/kreatywny) i typem (normalny/płaski); karty światów mają grę, zmianę nazwy, duplikowanie, ulubione i usuwanie z potwierdzeniem. Listę można filtrować (nazwa, seed, tryb) i sortować po dacie, nazwie albo dniu w grze. Ostatnio używany świat jest podświetlony.
@@ -12,8 +20,8 @@ Gra startuje teraz z **launchera** w stylu Lunar Client / Prism Launcher: zamias
 * **Paczki i mody.** Wbudowana paczka 26.2 z listą zawartości, realne ustawienia wydajności (presety Niskie/Średnie/Wysokie/Ultra, zasięg renderowania, cząsteczki, chmury, dynamiczna rozdzielczość) oraz sekcja „Mody i ułatwienia” z przełącznikami rozgrywki: auto-skok, auto-bicie, licznik FPS, kołysanie kamery, minimapa i wibracje.
 * **Skórki i profil.** 9 postaci z paczki z podglądem portretu 16×32, edycja nicku (ten sam nick co w multi) i licznik uruchomień zapisany lokalnie.
 * **Konsola.** Dziennik klienta z etapami uruchamiania (sprawdzanie plików → atlas → świat → scena), wykrytym sprzętem, zmianami ustawień i zdarzeniami świata.
-* **Bez pieca w tle.** Launcher nie pobiera niczego z sieci i nie potrzebuje konta: profil, ustawienia i dziennik siedzą w `localStorage`, a grafika jest wbudowana w build. Klasyczne menu gry zostało pod przyciskiem „Klasyczne menu” (i pod `#menu`).
-* **Testy.** `npm test` to **1870 kontroli silnika + 222 testy UI**. Nowa sekcja 2.24 sprawdza model launchera (nowości, zakładki, etapy postępu, etykiety czasu, metadane światów) i renderuje cały ekran startowy. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą.
+* **Bez pieca w tle.** Launcher nie pobiera niczego z sieci i nie potrzebuje konta: profil, ustawienia i dziennik siedzą w `localStorage`, a grafika jest wbudowana w build. Klasyczne menu gry jest domyślnym ekranem, a samo okno klienta otwiera się pod `#launcher`.
+* **Testy.** `npm test` to **1872 kontrole silnika + 222 testy UI**. Sekcja 2.24 sprawdza model launchera (nowości, zakładki, etapy postępu, etykiety czasu, metadane światów) i renderuje cały ekran klienta. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą.
 
 ## Wersja 2.23 „Minecraft 26.2: moby i tekstury 1:1” 🐄
 

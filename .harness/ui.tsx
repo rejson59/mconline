@@ -674,7 +674,7 @@ async function mountWithJsdom(): Promise<boolean> {
   const App = (await import('../src/App')).default;
 
   const container = w.document.getElementById('root')!;
-  const root = createRoot(container);
+  let root = createRoot(container);
   await React.act(async () => { root.render(<App />); });
 
   const text = () => container.textContent ?? '';
@@ -683,8 +683,16 @@ async function mountWithJsdom(): Promise<boolean> {
 
   check('app renders the title screen', text().includes('BLOCKCRAFT'));
 
-  // 2.24: pierwszy ekran to launcher – przechodzimy po zakładkach.
-  check('launcher is the first screen', text().includes('GRAJ') && text().includes('Co nowego'));
+  // 2.24.1: pierwszy ekran to znów klasyczne menu – launcher nie wychodzi na wierzch.
+  check('classic menu is the first screen', text().includes('BLOCKCRAFT') && !text().includes('Co nowego'));
+  check('classic menu still names the release', text().includes('WERSJA ' + GAME_VERSION));
+
+  // Launcher jest dostępny tylko pod #launcher – remount, bo adres czytamy raz.
+  dom.window.location.hash = '#launcher';
+  await React.act(async () => { root.unmount(); });
+  root = createRoot(container);
+  await React.act(async () => { root.render(<App />); });
+  check('launcher opens from #launcher', text().includes('GRAJ') && text().includes('Co nowego'));
   await React.act(async () => {
     byText('Światy')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
   });
@@ -708,7 +716,8 @@ async function mountWithJsdom(): Promise<boolean> {
   await React.act(async () => {
     byText('Klasyczne menu')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
   });
-  check('classic menu is reachable from the launcher', text().includes('BLOCKCRAFT'));
+  check('classic menu is reachable from the launcher', text().includes('BLOCKCRAFT') && !text().includes('Co nowego'));
+  check('leaving the launcher clears the hash', dom.window.location.hash === '');
 
   // 2.10: wejście do poczekalni multiplayer i powrót bez uruchamiania świata.
   await React.act(async () => {

@@ -72,18 +72,28 @@ export default function App() {
   const [saves, setSaves] = useState<WorldCard[]>(cards);
   const [shared, setShared] = useState(readSharedWorld);
   const [multiplayer, setMultiplayer] = useState(false);
-  // 2.24: launcher jest teraz pierwszym ekranem – klasyczne menu gry zostaje
-  // pod przyciskiem „Klasyczne menu” (i pod adresem #menu).
+  // 2.24.1: pierwszym ekranem znów jest klasyczne menu gry. Launcher został
+  // w projekcie, ale domyślnie się nie pokazuje – wchodzi się do niego tylko
+  // pod adresem #launcher (i wychodzi „Klasycznym menu”).
   const [screen, setScreen] = useState<'launcher' | 'menu'>(() => {
     try {
       const hash = window.location.hash.replace(/^#/, '');
-      // Link do świata (`#seed=…&mode=…`) otwiera od razu kreator w klasycznym
-      // menu – launcher nie ma sensu, skoro gracz przyszedł na konkretny seed.
-      return hash === 'menu' || /(^|&)(seed|mode)=/.test(hash) ? 'menu' : 'launcher';
+      return hash === 'launcher' || hash === 'client' ? 'launcher' : 'menu';
     } catch {
-      return 'launcher';
+      return 'menu';
     }
   });
+
+  // Zamknięcie launchera przywraca adres bez hasha, żeby odświeżenie strony
+  // nie wrzucało gracza z powrotem do klienta.
+  const leaveLauncher = () => {
+    setScreen('menu');
+    try {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const startMultiplayer = (s: NetStart) => {
     setMultiplayer(false);
@@ -193,7 +203,7 @@ export default function App() {
               refresh();
             }}
             onMultiplayer={() => setMultiplayer(true)}
-            onClassicMenu={() => setScreen('menu')}
+            onClassicMenu={leaveLauncher}
           />
         </div>
       </div>

@@ -17,9 +17,9 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  '2.24: launcher jak Lunar Client!',
-  '2.24: światy jako instancje!',
-  '2.24: profil, skórki i konsola!',
+  '2.24.1: klasyczne menu wróciło!',
+  '2.24.1: launcher czeka pod #launcher!',
+  '2.24.1: zero zmian w grze!',
   '2.22: owca pasie się i odrasta!',
   '2.22: 16 kolorów wełny jak w grze!',
   '2.22: moby mają prawdziwe hitboxy!',
@@ -125,9 +125,6 @@ export function Title() {
         <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/60 sm:text-[11px]">
           {GAME_RELEASE_NAME}
         </span>
-      </div>
-      <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300/70">
-        tekstury i modele: Minecraft {MINECRAFT_TARGET}
       </div>
       <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300/70">
         Minecraft {MINECRAFT_TARGET}
