@@ -4168,13 +4168,15 @@ export class Game {
     if (ITEMS[toolId]?.tool === 'shears' && mob.type === 'sheep') {
       this.attackCooldown = 0.35;
       if (mob.shear()) {
-        const n = 1 + (Math.random() < 0.4 ? 1 : 0);
-        this.spawnDrop(B.WOOL_WHITE, n, mob.body.pos.x, mob.body.pos.y + 0.6, mob.body.pos.z, undefined, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2);
+        // 2.21.1: wanilia daje 1–3 wełny w kolorze runa tej owcy.
+        const n = 1 + Math.floor(Math.random() * 3);
+        const wool = mob.woolBlock;
+        this.spawnDrop(wool, n, mob.body.pos.x, mob.body.pos.y + 0.6, mob.body.pos.z, undefined, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2);
         this.wearTool();
         this.unlock('shear');
         this.gainXp(1);
         Sfx.playPlace('cloth');
-        this.message(n > 1 ? 'Ostrzyżono owcę. Dwie wełny.' : 'Ostrzyżono owcę.');
+        this.message(n > 1 ? `Ostrzyżono owcę. ${n} wełny.` : 'Ostrzyżono owcę.');
         return;
       }
       // 2.5: już ostrzyżona owca dostaje zwykły cios – wcześniej
@@ -6271,7 +6273,7 @@ export class Game {
     else if (m.type === 'chicken') {
       this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
       if (Math.random() < 0.4) this.spawnDrop(I.FEATHER, 1, x, y, z);
-    } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
+    } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(m.woolBlock, 1, x, y, z);
     else if (m.type === 'creeper') this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
     else if (m.type === 'spider') this.spawnDrop(I.STRING, 1 + (Math.random() < 0.5 ? 1 : 0), x, y, z);
     else if (m.type === 'skeleton') {
@@ -6309,7 +6311,7 @@ export class Game {
         } else if (m.type === 'chicken') {
           this.spawnDrop(I.RAW_CHICKEN, 1, x, y, z);
           if (Math.random() < 0.6) this.spawnDrop(I.FEATHER, 1, x, y, z);
-        } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(B.WOOL_WHITE, 1, x, y, z);
+        } else if (m.type === 'sheep' && !m.sheared) this.spawnDrop(m.woolBlock, 1, x, y, z);
         else if (m.type === 'creeper') this.spawnDrop(I.GUNPOWDER, 1, x, y, z);
         else if (m.type === 'spider') this.spawnDrop(I.STRING, 1, x, y, z);
         else if (m.type === 'skeleton') {

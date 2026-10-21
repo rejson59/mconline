@@ -167,13 +167,16 @@ export const MOB_MODELS: Readonly<Record<string, MobModel>> = {
   },
   sheep: {
     skin: 'sheep',
+    // 2.21.1: `QuadrupedEntityModel.getModelData(12)` – owca ma 12-pikselowe
+    // nogi (uv 0,16 → 4×12×4), a nie 6-pikselowe. Wcześniej stała na krótkich
+    // nóżkach, a tułów wisiał tuż nad ziemią.
     parts: [
       part('head', [0, 6, -8], [box([0, 0], [-3, -4, -6], [6, 6, 8])]),
       part('body', [0, 5, 2], [box([28, 8], [-4, -10, -7], [8, 16, 6])], [PI / 2, 0, 0]),
-      part('rightHindLeg', [-3, 12, 7], [box([0, 16], [-2, 0, -2], [4, 6, 4])]),
-      part('leftHindLeg', [3, 12, 7], [box([0, 16], [-2, 0, -2], [4, 6, 4])]),
-      part('rightFrontLeg', [-3, 12, -5], [box([0, 16], [-2, 0, -2], [4, 6, 4])]),
-      part('leftFrontLeg', [3, 12, -5], [box([0, 16], [-2, 0, -2], [4, 6, 4])]),
+      part('rightHindLeg', [-3, 12, 7], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('leftHindLeg', [3, 12, 7], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('rightFrontLeg', [-3, 12, -5], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
+      part('leftFrontLeg', [3, 12, -5], [box([0, 16], [-2, 0, -2], [4, 12, 4])]),
     ],
   },
   /** Wełna owcy – osobny model, „spuchnięty” o 1.75 px na torsie. */
@@ -197,8 +200,8 @@ export const MOB_MODELS: Readonly<Record<string, MobModel>> = {
         box([14, 4], [-1, -2, -3], [2, 2, 2]),
       ]),
       part('body', [0, 16, 0], [box([0, 9], [-3, -4, -3], [6, 8, 6])], [PI / 2, 0, 0]),
-      part('rightLeg', [-2, 19, 1], [box([26, 0], [-1, 0, -3], [3, 5, 3], { color: 0xe8a63c })]),
-      part('leftLeg', [1, 19, 1], [box([26, 0], [-2, 0, -3], [3, 5, 3], { color: 0xe8a63c })]),
+      part('rightLeg', [-2, 19, 1], [box([26, 0], [-1, 0, -3], [3, 5, 3])]),
+      part('leftLeg', [1, 19, 1], [box([26, 0], [-1, 0, -3], [3, 5, 3])]),
       part('rightWing', [-4, 13, 0], [box([24, 13], [0, 0, -3], [1, 4, 6])]),
       part('leftWing', [4, 13, 0], [box([24, 13], [-1, 0, -3], [1, 4, 6])]),
     ],
@@ -233,8 +236,10 @@ export const MOB_MODELS: Readonly<Record<string, MobModel>> = {
     parts: [
       part('head', [0, 0, 0], [box([0, 0], [-4, -8, -4], [8, 8, 8])]),
       part('body', [0, 0, 0], [box([16, 16], [-4, 0, -2], [8, 12, 4])]),
-      part('rightArm', [-5, 2, 0], [box([40, 16], [-1, -2, -1], [2, 12, 2])], [-1.15, 0, 0]),
-      part('leftArm', [5, 2, 0], [mir([40, 16], [-1, -2, -1], [2, 12, 2])], [-1.15, 0, 0]),
+      // 2.21.1: w wanilii ręce szkieletu zwisają wzdłuż tułowia (BipedEntityModel
+      // ustawia tylko kołysanie w chodzie) – wcześniej były uniesione jak u zombie.
+      part('rightArm', [-5, 2, 0], [box([40, 16], [-1, -2, -1], [2, 12, 2])]),
+      part('leftArm', [5, 2, 0], [mir([40, 16], [-1, -2, -1], [2, 12, 2])]),
       part('rightLeg', [-2, 12, 0], [box([0, 16], [-1, 0, -1], [2, 12, 2])]),
       part('leftLeg', [2, 12, 0], [mir([0, 16], [-1, 0, -1], [2, 12, 2])]),
     ],
@@ -243,10 +248,10 @@ export const MOB_MODELS: Readonly<Record<string, MobModel>> = {
     skin: 'spider',
     parts: [
       part('head', [0, 15, -3], [box([32, 4], [-4, -4, -8], [8, 8, 8])]),
-      part('body', [0, 15, 0], [
-        box([0, 0], [-3, -3, -3], [6, 6, 6]),
-        box([0, 12], [-5, -4, -6], [10, 8, 12]),
-      ]),
+      // 2.21.1: głowotułów i odwłok to dwa osobne zawiasy – w wanilii odwłok
+      // (`body1`) siedzi na z = 9, więc pająk ma tułów z przodu, a nie w środku.
+      part('body', [0, 15, 0], [box([0, 0], [-3, -3, -3], [6, 6, 6])]),
+      part('body1', [0, 15, 9], [box([0, 12], [-5, -4, -6], [10, 8, 12])]),
       // osiem nóg: prawa strona zwykła, lewa lustrzana; roll/yaw jak w grze
       part('rightHindLeg', [-4, 15, 2], [box([18, 0], [-15, -1, -1], [16, 2, 2])], [0, PI / 4, -PI / 4]),
       part('rightMiddleHindLeg', [-4, 15, 1], [box([18, 0], [-15, -1, -1], [16, 2, 2])], [0, PI / 8, -0.58]),

@@ -1,8 +1,11 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.21.0';
-export const GAME_RELEASE_NAME = 'Bloki i przedmioty jak w grze';
+export const GAME_VERSION = '2.22.0';
+export const GAME_RELEASE_NAME = 'Moby i świat 1:1 jak w grze';
 
 /**
+ * 2.22: moby 1:1 z Minecraftem – poprawiona owca, pudełka kolizji prosto
+ * z waniliowych `EntityDimensions`, pełna paleta 16 kolorów wełny, wypas
+ * i odrastanie runa, modele pająka, szkieletu i kury bez błędów.
  * 2.21: bryły i zachowanie bloków oraz przedmiotów 1:1 z Minecraftem –
  * własne modele płotu, pochodni, skrzyni, kowadła, ogniska, ścieżki, lilii,
  * latarni, dzwonu i statywu alchemicznego,
@@ -11,6 +14,22 @@ export const GAME_RELEASE_NAME = 'Bloki i przedmioty jak w grze';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Owca wygląda jak w grze',
+    text: 'Owca stała na 6-pikselowych nóżkach, a w wanilii ma 12-pikselowe (`QuadrupedEntityModel.getModelData(12)`) – teraz tułów jest na właściwej wysokości, a runo układa się w znany „puchaty” kształt z krótkimi skarpetkami na nogach. Owca co kilkanaście sekund opuszcza głowę i skubie trawę, a ostrzyżona po wypasie odrasta, zamieniając klocek trawy w ziemię, dokładnie jak `SheepEntity.eatGrass`.',
+  },
+  {
+    title: 'Pełna paleta 16 kolorów wełny',
+    text: 'Doszło 10 brakujących kolorów wełny (pomarańczowa, karmazynowa, jasnoniebieska, jasnozielona, różowa, szara, jasnoszara, turkusowa, fioletowa i brązowa) – teraz owca strzyżona i zabita oddaje wełnę dokładnie swojego koloru, a nie zawsze białą. Rozkład kolorów runa jest jak w wanilii: 83,6% białych, po 5% czarnych, szarych i jasnoszarych, 3% brązowych i 2% różowych.',
+  },
+  {
+    title: 'Pudełka kolizji mobów 1:1',
+    text: 'Każdy mob ma wymiary z waniliowych `EntityDimensions`: szkielet 0,6 × 1,99 bloku (wcześniej 0,9 × 0,9 – nie dało się trafić go w głowę), krowa 0,9 × 1,4, golem 1,4 × 2,7, pająk 1,4 × 0,9, ghast 4 × 4, a creeper ma 20 punktów zdrowia jak w grze.',
+  },
+  {
+    title: 'Poprawione modele: pająk, szkielet, kura',
+    text: 'Pająk ma odwłok na własnym zawiasie (`body1` z = 9), więc tułów siedzi z przodu, a nie w środku. Szkielet trzyma ręce wzdłuż tułowia zamiast uniesionych jak zombie, a kura ma obie nogi z prawdziwej tekstury zamiast jednej żółtej kostki.',
+  },
   {
     title: 'Koniec billboardów: latarnia, dzwon i statyw',
     text: 'Latarnia to teraz waniliowy model z paczki: korpus 6×7 px, czapka 4×2 px i uchwyt z prętów (wcześniej dwie skrzyżowane ikony). Dzwon dostał kamienne słupki i drewnianą belkę z `bell_floor.json`, a samo serce dzwonu – trzy zwężające się bryły z tekstury `entity/bell/bell_body`. Statyw alchemiczny ma słupek 2×14 px i trzy ramiona podstawy z `brewing_stand.json`. Wszystkie trzy trzymają w ręce ten sam kształt co w świecie.',

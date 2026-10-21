@@ -642,7 +642,8 @@ export function fuelSeconds(id: number): number {
   if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || id === B.CHEST || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
   if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || isLadder(id)) return 2;
   if (id === B.HAY) return 6;
-  if (id === B.WOOL_WHITE || id === B.WOOL_RED || id === B.WOOL_BLUE || id === B.WOOL_GREEN || id === B.WOOL_YELLOW || id === B.WOOL_BLACK) return 3;
+  if (id >= B.WOOL_WHITE && id <= B.WOOL_BLACK) return 3;
+  if (id >= B.WOOL_ORANGE && id <= B.WOOL_BROWN) return 3;
   const it = ITEMS[id];
   if (it?.tool && it.tier === 1) return 4;
   return 0;

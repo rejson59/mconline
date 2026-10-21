@@ -1,6 +1,15 @@
-# BlockCraft 2.21 🧱
+# BlockCraft 2.22 🐑
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+**Wersja 2.22 „Moby i świat 1:1 jak w grze”** – owca i moby dokładnie jak w Minecrafcie:
+
+* **Owca wygląda jak w grze.** Model owcy powstał z `QuadrupedEntityModel.getModelData(12)`: nogi mają **12 px** (wcześniej 6), więc tułów siedzi na właściwej wysokości, a runo (`sheep_wool`, dylatacja 1,75 px na torsie i 0,5 px na nogach) tworzy znany puchaty kształt z „skarpetkami”. Owca co 10–24 s opuszcza głowę i skubie trawę (`getNeckAngle`/`getHeadAngle`), a ostrzyżona po wypasie **odrasta** – klocek trawy zamienia się w ziemię, dokładnie jak `SheepEntity.eatGrass`.
+* **Pełna paleta 16 kolorów wełny.** Doszło 10 brakujących bloków (pomarańczowa, karmazynowa, jasnoniebieska, jasnozielona, różowa, szara, jasnoszara, turkusowa, fioletowa, brązowa) – razem 16 barwników jak w grze. Owca strzyżona i zabita oddaje wełnę **swojego koloru** (`SHEEP_WOOL_BLOCKS`), a nie zawsze białą. Rozkład runa jest waniliowy: 83,6% białych, po 5% czarnych/szarych/jasnoszarych, 3% brązowych i 2% różowych.
+* **Pudełka kolizji z wanilii.** Każdy mob ma wymiary z `EntityDimensions`: szkielet **0,6 × 1,99** (wcześniej 0,9 × 0,9, więc nie dało się trafić go w głowę), krowa 0,9 × 1,4, owca 0,9 × 1,3, golem 1,4 × 2,7, pająk 1,4 × 0,9, enderman 0,6 × 2,9, ghast 4 × 4. Creeper ma **20 HP** jak w grze.
+* **Poprawione modele mobów.** Pająk ma odwłok na własnym zawiasie (`body1`, z = 9) – wcześniej cały tułów siedział w jednym miejscu i pająk wyglądał na „zgniecionego”. Szkielet trzyma ręce wzdłuż tułowia (wcześniej uniesione jak u zombie), a kura ma **obie nogi** z prawdziwej tekstury zamiast jednej żółtej kostki.
+* **Pająk naprawdę się wspina.** Sonda ściany liczy się od krawędzi pudełka (`b.w / 2 + 0,35`), a nie od środka – przy szerokości 1,4 bloku pająk stał tuż przy ścianie i wcześniej nigdy nie zaczynał wspinaczki.
+* **Testy.** `npm test` to **1833 kontrole silnika + 222 testy UI**. Nowa sekcja 2.22 sprawdza 12-pikselowe nogi owcy, pudełka kolizji sześciu mobów, 16 kolorów wełny, wypas z zamianą trawy w ziemię i odrastanie runa. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą.
 
 **Wersja 2.21 „Bloki i przedmioty jak w grze”** – bryły, kolizje i statystyki 1:1:
 
@@ -45,7 +54,7 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **
 
 **Wersja 2.17 „Grafika jak w Minecrafcie”** – prawdziwa paczka tekstur w całej grze:
 
-* **Wszystkie bloki z paczki.** Świat rysuje się teraz teksturami z dołączonej paczki w stylu waniliowego Minecrafta – **157 kafelków**, od trawy, bruku i desek, przez rudy, beton i terakotę, po kwarc, nether, błoto i lilię wodną. Trawa i liście są barwione kolorami z `colormap` paczki (`grass 124,189,108`, `foliage 91,171,71`), a animacje (woda, lawa, magma, portal) biorą pierwszą klatkę. Kafelki z paczki nie przechodzą już przez „wygładzanie” proceduralne, więc drobny rysunek (cegły, deski, sęki) zostaje ostry.
+* **Wszystkie bloki z paczki.** Świat rysuje się teraz teksturami z dołączonej paczki w stylu waniliowego Minecrafta – **167 kafelków**, od trawy, bruku i desek, przez rudy, beton i terakotę, po kwarc, nether, błoto i lilię wodną. Trawa i liście są barwione kolorami z `colormap` paczki (`grass 124,189,108`, `foliage 91,171,71`), a animacje (woda, lawa, magma, portal) biorą pierwszą klatkę. Kafelki z paczki nie przechodzą już przez „wygładzanie” proceduralne, więc drobny rysunek (cegły, deski, sęki) zostaje ostry.
 * **Ikony przedmiotów jak w oryginale.** **99 z 100** przedmiotów ma prawdziwe ikony 16×16: kilofy, siekiery, miecze, zbroje, jedzenie, sztabki, klejnoty, mikstury z kolorowym płynem (warstwa `potion_overlay` zabarwiona jak w grze), wiadra, pochodnie i wędka. Są powiększane do 48 px bez wygładzania, więc wyglądają ostro także na telefonie.
 * **Steve i Alex w prawdziwych skórkach.** Skórki 64×64 z paczki są rozłożone na ciało według **waniliowego układu UV** (twarz, koszulka, spodnie, buty – każda ściana z właściwego miejsca tekstury). Pozostałe skórki zachowują pikselowe tekstury z 2.16, więc wybór wyglądu nadal działa.
 * **Moby w kolorach z paczki.** Każdy z **14 mobów** dostaje paletę wyliczoną z własnej tekstury encji (najczęstsze kolory), a odcień każdej części ciała trafia na najbliższy kolor z tej palety. Dzięki temu krowa ma brązy i kremowe łaty, creeper soczyste zielenie, a zombie zieleń i turkus – bez ryzykownego mapowania UV na uproszczonych modelach.
