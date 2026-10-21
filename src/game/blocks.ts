@@ -36,6 +36,9 @@ export const T = {
   mud: 149, acacia_side: 150, acacia_top: 151, jungle_leaves: 152, lily_pad: 153,
   // 2.8.2: akacja ma własne, oliwkowe liście (wcześniej dzieliła kafelek z dżunglą).
   acacia_leaves: 154,
+  // 2.21: prawdziwe tekstury modeli latarni i dzwonu z paczki 26.2
+  // (dotąd były tam ikony przedmiotów, bo blok był billboardem).
+  lantern_block: 155, bell_body: 156,
 } as const;
 
 export const B = {
@@ -96,7 +99,10 @@ export const B = {
   MUD: 400, ACACIA_LOG: 401, ACACIA_LEAVES: 402, JUNGLE_LEAVES: 403, LILY_PAD: 404,
 } as const;
 
-export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail' | 'cactus' | 'bed';
+export type RenderType =
+  | 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail'
+  | 'cactus' | 'bed' | 'fence' | 'torch' | 'lily' | 'chest'
+  | 'lantern' | 'bell' | 'brewing';
 
 export interface BlockDef {
   id: number;
@@ -161,7 +167,7 @@ def(B.IRON_ORE, 'Ruda żelaza', T.iron_ore, { hardness: 3 });
 def(B.GOLD_ORE, 'Ruda złota', T.gold_ore, { hardness: 3 });
 def(B.DIAMOND_ORE, 'Ruda diamentu', T.diamond_ore, { hardness: 3 });
 def(B.BRICK, 'Cegły', T.brick, { hardness: 2 });
-def(B.SNOW, 'Blok śniegu', [T.snow, T.dirt, T.snow_side], { hardness: 0.5, drop: B.DIRT, sound: 'cloth' });
+def(B.SNOW, 'Blok śniegu', [T.snow, T.dirt, T.snow_side], { hardness: 0.2, drop: B.DIRT, sound: 'cloth' });
 // 2.20: wanilia rysuje kaktusa jako bryłę 14/16 (bez 1 px marginesu). Pełny
 // sześcian z wycinaną alfą wyglądał jak cztery krzyżujące się billboardy.
 def(B.CACTUS, 'Kaktus', [T.cactus_top, T.cactus_top, T.cactus_side], { opaque: false, layer: 1, hardness: 0.4, sound: 'cloth', render: 'cactus' });
@@ -174,7 +180,8 @@ def(B.WOOL_WHITE, 'Biała wełna', T.wool_white, { hardness: 0.8, sound: 'cloth'
 def(B.WOOL_RED, 'Czerwona wełna', T.wool_red, { hardness: 0.8, sound: 'cloth' });
 def(B.CRAFTING, 'Stół rzemieślniczy', [T.crafting_top, T.planks, T.crafting_side], { hardness: 2.5, sound: 'wood' });
 def(B.FURNACE, 'Piec', [T.furnace_side, T.furnace_side, T.furnace_side, T.furnace_front], { hardness: 3.5 });
-def(B.OBSIDIAN, 'Obsydian', T.obsidian, { hardness: 10 });
+def(B.OBSIDIAN, 'Obsydian', T.obsidian, { hardness: 50 });
+def(B.CRYING_OBSIDIAN, 'Płaczący obsydian', T.crying_obsidian, { hardness: 50 });
 def(B.STONE_BRICKS, 'Kamienne cegły', T.stone_bricks, { hardness: 1.5 });
 def(B.ICE, 'Lód', T.ice, { opaque: false, layer: 2, hardness: 0.5, drop: -1, sound: 'glass' });
 def(B.TALLGRASS, 'Wysoka trawa', T.tallgrass, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, drop: -1, sound: 'grass' });
@@ -189,7 +196,7 @@ def(B.SANDSTONE, 'Piaskowiec', [T.sandstone_top, T.sandstone_top, T.sandstone_si
 def(B.PUMPKIN, 'Dynia', [T.pumpkin_top, T.pumpkin_top, T.pumpkin_side, T.pumpkin_face], { hardness: 1, sound: 'wood' });
 def(B.MOSSY, 'Zamszony bruk', T.mossy, { hardness: 2 });
 def(B.CLAY, 'Glina', T.clay, { hardness: 0.6, sound: 'sand' });
-def(B.TORCH, 'Pochodnia', T.torch, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'wood' });
+def(B.TORCH, 'Pochodnia', T.torch, { solid: false, opaque: false, layer: 1, render: 'torch', hardness: 0, sound: 'wood' });
 def(B.SAPLING, 'Sadzonka dębu', T.sapling, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
 def(B.BIRCH_SAPLING, 'Sadzonka brzozy', T.birch_sapling, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
 def(B.FARMLAND, 'Grządka', [T.farmland, T.dirt, T.dirt], { hardness: 0.6, drop: B.DIRT, sound: 'grass' });
@@ -201,19 +208,19 @@ def(B.CROP3, 'Dojrzała pszenica', T.wheat3, { solid: false, opaque: false, laye
 // wyglądało jak skrzynia z czerwonym wiekiem.
 def(B.BED, 'Łóżko', [T.bed_top, T.planks, T.bed_side], { hardness: 0.2, sound: 'cloth', render: 'bed', opaque: false });
 def(B.FURNACE_ON, 'Rozpalony piec', [T.furnace_side, T.furnace_side, T.furnace_side, T.furnace_lit], { hardness: 3.5, drop: B.FURNACE });
-def(B.CHEST, 'Skrzynia', [T.chest_top, T.planks, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood' });
-def(B.LOOT_CHEST, 'Stara skrzynia', [T.chest_top, T.planks, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', drop: B.CHEST });
+def(B.CHEST, 'Skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', render: 'chest' });
+def(B.LOOT_CHEST, 'Stara skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', drop: B.CHEST, render: 'chest' });
 const FACE_PL = ['północ', 'wschód', 'południe', 'zachód'];
 for (let i = 0; i < 4; i++) {
-  def(B.DOOR_N + i, i === 0 ? 'Drzwi' : `Drzwi (${FACE_PL[i]})`, T.door, { hardness: 2, sound: 'wood', drop: B.DOOR_N, opaque: false, layer: 1 });
-  def(B.DOOR_ON + i, `Otwarte drzwi (${FACE_PL[i]})`, T.door, { hardness: 2, sound: 'wood', drop: B.DOOR_N, solid: false, opaque: false });
-  def(B.DOOR_UN + i, i === 0 ? 'Górne drzwi' : `Górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 2, sound: 'wood', drop: -1, opaque: false, layer: 1 });
-  def(B.DOOR_UON + i, `Otwarte górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 2, sound: 'wood', drop: -1, solid: false, opaque: false });
+  def(B.DOOR_N + i, i === 0 ? 'Drzwi' : `Drzwi (${FACE_PL[i]})`, T.door, { hardness: 3, sound: 'wood', drop: B.DOOR_N, opaque: false, layer: 1 });
+  def(B.DOOR_ON + i, `Otwarte drzwi (${FACE_PL[i]})`, T.door, { hardness: 3, sound: 'wood', drop: B.DOOR_N, solid: false, opaque: false });
+  def(B.DOOR_UN + i, i === 0 ? 'Górne drzwi' : `Górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, opaque: false, layer: 1 });
+  def(B.DOOR_UON + i, `Otwarte górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, solid: false, opaque: false });
   def(B.LADDER_N + i, i === 0 ? 'Drabina' : `Drabina (${FACE_PL[i]})`, T.ladder, { solid: false, opaque: false, layer: 1, hardness: 0.4, sound: 'wood', drop: B.LADDER_N });
-  def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 2, sound: 'wood', drop: B.TRAP, solid: false, opaque: false });
+  def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 3, sound: 'wood', drop: B.TRAP, solid: false, opaque: false });
 }
-def(B.TRAP, 'Właz', T.trapdoor, { hardness: 2, sound: 'wood', opaque: false });
-def(B.FENCE, 'Płot', T.fence, { opaque: false, layer: 1, hardness: 2, sound: 'wood' });
+def(B.TRAP, 'Właz', T.trapdoor, { hardness: 3, sound: 'wood', opaque: false });
+def(B.FENCE, 'Płot', T.fence, { opaque: false, layer: 1, hardness: 2, sound: 'wood', render: 'fence' });
 def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { hardness: 2, sound: 'wood', opaque: false, layer: 1 });
 def(B.IRON_BLOCK, 'Blok żelaza', T.iron_block, { hardness: 5, sound: 'stone' });
 def(B.GOLD_BLOCK, 'Blok złota', T.gold_block, { hardness: 3, sound: 'stone' });
@@ -228,15 +235,15 @@ def(B.PATH, 'Ścieżka', [T.path_top, T.dirt, T.path_side], { hardness: 0.65, dr
 def(B.HAY, 'Bela siana', [T.hay_top, T.hay_top, T.hay_side], { hardness: 0.5, sound: 'grass' });
 // 2.20: latarnia i dzwon to sprite'y z ikon przedmiotów – jako pełne
 // sześciany dawały czarne kostki z żółtym środkiem.
-def(B.LANTERN, 'Latarnia', T.lantern, { hardness: 3.5, solid: false, opaque: false, layer: 1, render: 'cross', sound: 'glass', drop: B.LANTERN });
+def(B.LANTERN, 'Latarnia', T.lantern_block, { hardness: 3.5, solid: false, opaque: false, layer: 1, render: 'lantern', sound: 'glass', drop: B.LANTERN });
 def(B.EMERALD_ORE, 'Ruda szmaragdu', T.emerald_ore, { hardness: 3 });
 def(B.EMERALD_BLOCK, 'Blok szmaragdu', T.emerald_block, { hardness: 5 });
-def(B.BELL, 'Dzwon', T.bell, { hardness: 4, solid: false, opaque: false, layer: 1, render: 'cross', sound: 'stone' });
+def(B.BELL, 'Dzwon', T.bell, { hardness: 5, solid: false, opaque: false, layer: 1, render: 'bell', sound: 'stone' });
 // 1.7 „Nether & Redstone“
 def(B.REDSTONE_ORE, 'Ruda czerwonego kamienia', T.redstone_ore, { hardness: 3, drop: -1 });
-def(B.REDSTONE_BLOCK, 'Blok czerwonego kamienia', T.redstone_block, { hardness: 3 });
-def(B.REDSTONE_TORCH, 'Pochodnia redstone', T.redstone_torch, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'wood' });
-def(B.REDSTONE_TORCH_OFF, 'Zgaszona pochodnia redstone', T.redstone_torch_off, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'wood', drop: B.REDSTONE_TORCH });
+def(B.REDSTONE_BLOCK, 'Blok czerwonego kamienia', T.redstone_block, { hardness: 5 });
+def(B.REDSTONE_TORCH, 'Pochodnia redstone', T.redstone_torch, { solid: false, opaque: false, layer: 1, render: 'torch', hardness: 0, sound: 'wood' });
+def(B.REDSTONE_TORCH_OFF, 'Zgaszona pochodnia redstone', T.redstone_torch_off, { solid: false, opaque: false, layer: 1, render: 'torch', hardness: 0, sound: 'wood', drop: B.REDSTONE_TORCH });
 def(B.REDSTONE_LAMP, 'Lampa redstone', T.redstone_lamp, { hardness: 0.3, sound: 'glass' });
 def(B.REDSTONE_LAMP_ON, 'Zapalona lampa redstone', T.redstone_lamp_on, { hardness: 0.3, sound: 'glass', drop: B.REDSTONE_LAMP });
 def(B.LEVER, 'Dźwignia (wył)', T.lever, { solid: false, opaque: false, layer: 1, hardness: 0.5, sound: 'stone' });
@@ -299,12 +306,11 @@ def(B.RAIL, 'Tory', T.rail, { solid: false, opaque: false, layer: 1, render: 'ra
 def(B.POWERED_RAIL, 'Zasilane tory', T.powered_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'stone' });
 def(B.DETECTOR_RAIL, 'Tory detekcyjne', T.detector_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'stone' });
 def(B.ANVIL, 'Kowadło', T.anvil, { hardness: 5, sound: 'stone' });
-def(B.BREWING, 'Statyw alchemiczny', T.brewing_top, { hardness: 0.5, sound: 'stone', solid: false, opaque: false, layer: 1, render: 'cross' as any });
+def(B.BREWING, 'Statyw alchemiczny', T.brewing_top, { hardness: 0.5, sound: 'stone', solid: false, opaque: false, layer: 1, render: 'brewing' });
 def(B.SHROOMLIGHT, 'Shroomlight', T.shroomlight, { hardness: 1, sound: 'wood' });
 def(B.BASALT, 'Bazalt', [T.basalt_top, T.basalt_top, T.basalt_side], { hardness: 1.25 });
 def(B.BLACKSTONE, 'Czernit', T.blackstone, { hardness: 1.5 });
 def(B.SOUL_SOIL, 'Gleba dusz', T.soul_soil, { hardness: 0.5, sound: 'sand' });
-def(B.CRYING_OBSIDIAN, 'Płaczący obsydian', T.crying_obsidian, { hardness: 10 });
 def(B.TARGET, 'Tarcza strzelnicza', [T.target_top, T.target_top, T.target_side], { hardness: 0.5, sound: 'grass' });
 def(B.HONEY_BLOCK, 'Blok miodu', T.honey_block, { hardness: 0, sound: 'slime', opaque: false, layer: 2 });
 def(B.HONEYCOMB_BLOCK, 'Blok plastra miodu', T.honeycomb_block, { hardness: 0.6, sound: 'grass' });
@@ -313,7 +319,7 @@ def(B.MUD, 'Błoto', T.mud, { hardness: 0.45, sound: 'sand' });
 def(B.ACACIA_LOG, 'Pień akacji', [T.acacia_top, T.acacia_top, T.acacia_side], { hardness: 2, sound: 'wood' });
 def(B.ACACIA_LEAVES, 'Liście akacji', T.acacia_leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.JUNGLE_LEAVES, 'Gęste liście tropikalne', T.jungle_leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
-def(B.LILY_PAD, 'Lilia wodna', T.lily_pad, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0.1, sound: 'grass' });
+def(B.LILY_PAD, 'Lilia wodna', T.lily_pad, { solid: false, opaque: false, layer: 1, render: 'lily', hardness: 0, sound: 'grass' });
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;
@@ -327,7 +333,9 @@ export const IS_LEAFY = new Uint8Array(512);
 // Pełny okluder dla AO: liście cieniują, ale nie odcinają światła do zera.
 export const OCCLUDES = new Uint8Array(512);
 export const LAYER = new Uint8Array(512);
-export const RENDER = new Uint8Array(512); // 0 cube, 1 cross, 2 liquid, 3 slab, 4 stairs, 5 portal, 6 rail
+// 0 cube, 1 cross, 2 liquid, 3 slab, 4 stairs, 5 portal, 6 rail,
+// 7 cactus, 8 bed, 9 fence, 10 torch, 11 lily pad, 12 chest
+export const RENDER = new Uint8Array(512);
 for (const d of defs) {
   if (!d) continue;
   IS_SOLID[d.id] = d.solid ? 1 : 0;
@@ -344,6 +352,13 @@ for (const d of defs) {
   else if ((d.render as any) === 'rail') RENDER[d.id] = 6;
   else if (d.render === 'cactus') RENDER[d.id] = 7;
   else if (d.render === 'bed') RENDER[d.id] = 8;
+  else if (d.render === 'fence') RENDER[d.id] = 9;
+  else if (d.render === 'torch') RENDER[d.id] = 10;
+  else if (d.render === 'lily') RENDER[d.id] = 11;
+  else if (d.render === 'chest') RENDER[d.id] = 12;
+  else if (d.render === 'lantern') RENDER[d.id] = 13;
+  else if (d.render === 'bell') RENDER[d.id] = 14;
+  else if (d.render === 'brewing') RENDER[d.id] = 15;
   else RENDER[d.id] = 0;
 }
 
@@ -362,6 +377,81 @@ EMIT[B.SHROOMLIGHT] = 15;
 EMIT[B.MAGMA] = 3;
 EMIT[B.NETHER_PORTAL] = 11;
 EMIT[B.REDSTONE_ORE] = 9;
+
+// ---------------------------------------------------------------- collision
+/**
+ * Bryły kolizji w przestrzeni 0–1 (`x0,y0,z0,x1,y1,z1`).
+ *
+ * 2.21: wcześniej fizyka znała tylko pełny sześcian (`IS_SOLID`), więc płyta
+ * blokowała jak cały blok, płot miał wysokość 1, a właz – całego sześcianu.
+ * Teraz każda bryła ma własne pudełko, a gracz wchodzi na pół bloku bez skoku
+ * (step-up 0,55 w `physics.ts`), jak w Minecrafcie.
+ */
+export const COLLISION: (Float32Array | null)[] = [];
+const FULL_BOX = new Float32Array([0, 0, 0, 1, 1, 1]);
+
+function collisionFor(d: BlockDef): Float32Array | null {
+  if (!d.solid) return null;
+  if (d.render === 'slab') {
+    return isSlabTop(d.id)
+      ? new Float32Array([0, 0.5, 0, 1, 1, 1])
+      : new Float32Array([0, 0, 0, 1, 0.5, 1]);
+  }
+  if (d.render === 'stairs') {
+    const f = stairsFacing(d.id);
+    const q = new Float32Array(12);
+    q.set([0, 0, 0, 1, 0.5, 1]);
+    if (f === 0) q.set([0, 0.5, 0, 1, 1, 0.5], 6);
+    else if (f === 1) q.set([0.5, 0.5, 0, 1, 1, 1], 6);
+    else if (f === 2) q.set([0, 0.5, 0.5, 1, 1, 1], 6);
+    else q.set([0, 0.5, 0, 0.5, 1, 1], 6);
+    return q;
+  }
+  if (d.render === 'fence') return new Float32Array([0, 0, 0, 1, 1.5, 1]);
+  if (d.render === 'cactus') return new Float32Array([1 / 16, 0, 1 / 16, 15 / 16, 1, 15 / 16]);
+  if (d.render === 'bed') return new Float32Array([0, 0, 0, 1, 0.5625, 1]);
+  if (d.render === 'chest') return new Float32Array([1 / 16, 0, 1 / 16, 15 / 16, 0.875, 15 / 16]);
+  if (d.id === B.PATH) return new Float32Array([0, 0, 0, 1, 0.9375, 1]);
+  if (d.id === B.TRAP) return new Float32Array([0, 0.8125, 0, 1, 1, 1]);
+  if (isLadder(d.id)) {
+    const f = ladderFacing(d.id);
+    const lt = 0.3125 / 16;
+    if (f === 0) return new Float32Array([0, 0, 0, 1, 1, lt]);
+    if (f === 1) return new Float32Array([1 - lt, 0, 0, 1, 1, 1]);
+    if (f === 2) return new Float32Array([0, 0, 1 - lt, 1, 1, 1]);
+    return new Float32Array([0, 0, 0, lt, 1, 1]);
+  }
+  if (d.id === B.FARMLAND) return new Float32Array([0, 0, 0, 1, 0.9375, 1]);
+  if (d.id === B.CAMPFIRE) return new Float32Array([0, 0, 0, 1, 0.4375, 1]);
+  if (isDoor(d.id)) {
+    const f = doorFacing(d.id);
+    const t = 0.1875;
+    if (f === 0) return new Float32Array([0, 0, 0, 1, 1, t]);
+    if (f === 1) return new Float32Array([1 - t, 0, 0, 1, 1, 1]);
+    if (f === 2) return new Float32Array([0, 0, 1 - t, 1, 1, 1]);
+    return new Float32Array([0, 0, 0, t, 1, 1]);
+  }
+  return FULL_BOX;
+}
+
+for (const d of defs) if (d) COLLISION[d.id] = collisionFor(d);
+
+/** Pudełka kolizji bloku albo `null`, gdy da się przez niego przejść. */
+export function collisionBoxes(id: number): Float32Array | null {
+  return COLLISION[id] ?? null;
+}
+
+export function isFence(id: number): boolean {
+  return RENDER[id] === 9;
+}
+
+export function isTorch(id: number): boolean {
+  return RENDER[id] === 10;
+}
+
+export function isChest(id: number): boolean {
+  return RENDER[id] === 12;
+}
 
 // Face order: -x, +x, -y, +y, -z, +z
 export function tileFor(id: number, face: number): number {

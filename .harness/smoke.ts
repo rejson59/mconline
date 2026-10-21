@@ -59,17 +59,17 @@ function readSource(rel: string): string {
 
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
-import { B, BLOCKS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
+import { B, BLOCKS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, collisionBoxes, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
-  pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId,
+  pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId, canHarvest,
   displayName,
 } from '../src/game/items';
 import { Inventory, RECIPES, LOG_IDS, MAX_STACK, type Stack } from '../src/game/inventory';
 import {
   SKINS, DEFAULT_SKIN_ID, SKIN_KEY, skinById, loadSkinId, saveSkinId, nextSkinId, fallbackSkin,
 } from '../src/game/skins';
-import { aabbIntersectsBlock, stepBody, type Body } from '../src/game/physics';
+import { aabbIntersectsBlock, stepBody, STEP_HEIGHT, type Body } from '../src/game/physics';
 import { Mob, isHostileMob, isVillageMob, type MobType } from '../src/game/mobs';
 import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial, type MobTexKind } from '../src/game/mobTextures';
 import { decodePng } from '../src/game/art/miniPng';
@@ -340,10 +340,10 @@ section('blocks: definitions and helpers');
   check('every block has a name, hardness and sound', defsOk);
   check('storage blocks exist', [B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK].every((id) => !!BLOCKS[id]));
   check('3.0 wetland and biome blocks have valid definitions', [B.MUD, B.ACACIA_LOG, B.ACACIA_LEAVES, B.JUNGLE_LEAVES, B.LILY_PAD].every((id) => !!BLOCKS[id] && !!BLOCKS[id]?.name));
-  check('3.0 lilies are non-solid plants', !IS_SOLID[B.LILY_PAD] && RENDER[B.LILY_PAD] === 1);
+  check('3.0 lilies are non-solid plants', !IS_SOLID[B.LILY_PAD] && RENDER[B.LILY_PAD] === 11);
   check('air is not solid', !IS_SOLID[B.AIR]);
   check('water renders as liquid', RENDER[B.WATER] === 2);
-  check('torch is a cross', RENDER[B.TORCH] === 1);
+  check('torch has its own slim model', RENDER[B.TORCH] === 10);
   check('grass is a cube', RENDER[B.GRASS] === 0);
   check('tiles are inside the atlas', (() => {
     for (const d of BLOCKS) if (d && tileFor(d.id, 0) >= 256) return false;
@@ -1019,7 +1019,7 @@ section('armor: stats, recipes, equipping');
   check('all 16 armor pieces registered', ids.every((id) => isArmor(id)));
   eq('diamond chest gives 8 points', ARMOR[I.DIAMOND_CHEST]?.points, 8);
   eq('leather boots give 1 point', ARMOR[I.LEATHER_BOOTS]?.points, 1);
-  eq('gold and iron share points', ARMOR[I.GOLD_CHEST]?.points, ARMOR[I.IRON_CHEST]?.points);
+  check('iron armour protects more than gold (vanilla)', (ARMOR[I.IRON_CHEST]?.points ?? 0) > (ARMOR[I.GOLD_CHEST]?.points ?? 0));
   eq('armor is unstackable', stackLimit(I.IRON_HELMET), 1);
   eq('shield is unstackable', stackLimit(I.SHIELD), 1);
   eq('boots occupy slot 3', armorSlotOf(I.IRON_BOOTS), 3);
@@ -2526,7 +2526,7 @@ section('2.3: fishing tables and timing');
   check('a spyglass cannot be enchanted', !canEnchant(I.SPYGLASS, 'unbreaking'));
   check('a pick still can be enchanted', canEnchant(I.IRON_PICK, 'efficiency'));
   eq('the spyglass is not a weapon', attackDamage(I.SPYGLASS, false), 1);
-  eq('a sword still hits hard', attackDamage(I.DIAMOND_SWORD, false) >= 9, true);
+  eq('a diamond sword hits for 7 like in vanilla', attackDamage(I.DIAMOND_SWORD, false), 7);
   // receptury 2.3
   const rod = new Inventory();
   for (const i of [0, 1, 2]) rod.grid[i] = { id: I.STICK, count: 1 };
@@ -2784,7 +2784,7 @@ section('2.3: bug fixes');
   check('redstone ore gives experience', oreXp(B.REDSTONE_ORE) > 0, String(oreXp(B.REDSTONE_ORE)));
   check('quartz ore gives experience', oreXp(B.QUARTZ_ORE) > 0, String(oreXp(B.QUARTZ_ORE)));
   eq('emerald ore is the richest of the three', oreXp(B.EMERALD_ORE) > oreXp(B.REDSTONE_ORE), true);
-  eq('quartz ore needs a stone pick at least', requiredPickTier(B.QUARTZ_ORE), 2);
+  eq('quartz ore only needs a wooden pick', requiredPickTier(B.QUARTZ_ORE), 1);
   check('and it is still an ore', isOre(B.QUARTZ_ORE) && isOre(B.EMERALD_ORE));
 }
 
@@ -3137,8 +3137,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.20'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Poprawki grafiki');
+  check('release label is the current line', GAME_VERSION.startsWith('2.21'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Bloki i przedmioty jak w grze');
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -3187,6 +3187,15 @@ section('2.8/2.8.1: wersja wydania');
   check('2.20 highlights announce gable village roofs', RELEASE_HIGHLIGHTS.some((h) => /dach/i.test(h.title + h.text) && /dwuspadow/i.test(h.text)));
   check('2.20 highlights announce the golem arms fix', RELEASE_HIGHLIGHTS.some((h) => /golem/i.test(h.title) && /ręc|rąk/i.test(h.text)));
   check('2.20 highlights mention the smaller held block', RELEASE_HIGHLIGHTS.some((h) => /w dłoni|w ręce/i.test(h.text) && /mniejsz/i.test(h.text)));
+  // 2.21: bloki, kolizje i przedmioty 1:1.
+  check('2.21 highlights announce the block models', RELEASE_HIGHLIGHTS.some((h) => /brył|model/i.test(h.title) && /płot|pochodni/i.test(h.text)));
+  check('2.21 highlights announce the chest texture', RELEASE_HIGHLIGHTS.some((h) => /skrzyni/i.test(h.text) && /encji|tekstur/i.test(h.text)));
+  check('2.21 highlights mention collisions', RELEASE_HIGHLIGHTS.some((h) => /kolizj/i.test(h.title) && /płyt|schod/i.test(h.text)));
+  check('2.21 highlights mention the step-up', RELEASE_HIGHLIGHTS.some((h) => /bez skoku/i.test(h.text)));
+  check('2.21 highlights list vanilla durability', RELEASE_HIGHLIGHTS.some((h) => /1561/.test(h.text) && /59/.test(h.text)));
+  check('2.21 highlights describe the drop rule', RELEASE_HIGHLIGHTS.some((h) => /poziomu kilofa/i.test(h.text) && /drop/i.test(h.text)));
+  check('2.21 highlights mention the cactus growth', RELEASE_HIGHLIGHTS.some((h) => /kaktus/i.test(h.text) && /trzech bloków/i.test(h.text)));
+  check('2.21 highlights mention stack sizes', RELEASE_HIGHLIGHTS.some((h) => /wiadro|mikstur/i.test(h.text)));
 }
 
 // ============================================ 2.13 „Jak w Minecrafcie”
@@ -4583,8 +4592,8 @@ section('2.17: tekstury z paczki w całej grze');
     colors.add((blocks.data[i] << 16) | (blocks.data[i + 1] << 8) | blocks.data[i + 2]);
   }
   check('atlas bloków jest wielobarwny', colors.size > 800, `${colors.size} kolorów`);
-  eq('wszystkie 155 kafelków pochodzi z paczki', officialTileCount(), 155);
-  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 155 && OFFICIAL_TILES[154] === 154);
+  eq('wszystkie 157 kafelków pochodzi z paczki', officialTileCount(), 157);
+  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 157 && OFFICIAL_TILES[156] === 156);
   check('kafelek spoza listy nie jest oficjalny', !isOfficialTile(999) && isOfficialTile(0));
   const cached = officialBlockAtlas();
   check('atlas bloków dekoduje się w grze', cached != null && cached.width === 256);
@@ -4592,7 +4601,7 @@ section('2.17: tekstury z paczki w całej grze');
   // --- podmiana kafelków w atlasie gry
   const fake = { data: new Uint8ClampedArray(256 * 256 * 4) };
   const copied = applyOfficialTiles(fake as unknown as ImageData);
-  eq('applyOfficialTiles podmienia 155 kafelków', copied, 155);
+  eq('applyOfficialTiles podmienia 157 kafelków', copied, 157);
   let nonZero = 0;
   for (let i = 0; i < fake.data.length; i += 4) if (fake.data[i + 3] > 0) nonZero++;
   check('po podmianie atlas ma niepuste piksele', nonZero > 155 * 16 * 16 * 0.5, `${nonZero} px`);
@@ -5139,16 +5148,18 @@ section('2.20: słońce, kaktus, drzwi i dachy wiosek');
   check('woda ma niebieski odcień', wb > wr + 60 && wg > wr, `${wr},${wg},${wb}`);
 
   // --- bloki-sprite'y i własne bryły
-  eq('latarnia to sprite (cross)', RENDER[B.LANTERN], 1);
+  eq('latarnia ma model 3D', RENDER[B.LANTERN], 13);
+  eq('statyw alchemiczny ma model 3D', RENDER[B.BREWING], 15);
   eq('latarnia tnie alfę', LAYER[B.LANTERN], 1);
   check('latarnia nie blokuje ruchu', IS_SOLID[B.LANTERN] === 0);
-  eq('dzwon to sprite (cross)', RENDER[B.BELL], 1);
+  eq('dzwon ma model 3D', RENDER[B.BELL], 14);
   eq('kaktus ma własną bryłę', RENDER[B.CACTUS], 7);
   eq('łóżko ma własną bryłę', RENDER[B.BED], 8);
   eq('górne drzwi tną alfę (szyby)', LAYER[B.DOOR_UN], 1);
   eq('dolne drzwi tną alfę', LAYER[B.DOOR_N], 1);
   const atlasSrc = readSource('scripts/compile-vanilla-art.mjs');
   check('latarnia i dzwon z ikon przedmiotów', /lantern: I_ \+ 'lantern\.png'/.test(atlasSrc) && /bell: I_ \+ 'bell\.png'/.test(atlasSrc));
+  check('modele latarni i dzwonu mają tekstury z paczki', /lantern_block: B \+ 'lantern\.png'/.test(atlasSrc) && /bell_body: E \+ 'bell\/bell_body\.png'/.test(atlasSrc));
 
   // --- meshing: drzwi to cienka płyta, kaktus 14/16
   const w2 = new World(4242, true);
@@ -5232,6 +5243,127 @@ section('2.20: słońce, kaktus, drzwi i dachy wiosek');
   check('blok w ręce jest mniejszy niż 0,3', /mesh\.scale\.setScalar\(cross \? 0\.3 : 0\.2\)/.test(engineSrc));
   check('teksturowany deszcz nie puchnie do 2 bloków', /textured \? \(snow \? 1\.5 : 1\.1\)/.test(engineSrc));
   check('śnieg ma większe płatki niż deszcz', /snow \? 1\.5 : 1\.1/.test(engineSrc));
+}
+
+// ============================================ 2.21: bloki i przedmioty 1:1
+section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
+{
+  // --- typy renderu
+  eq('płot ma własny model', RENDER[B.FENCE], 9);
+  eq('pochodnia ma smukły model', RENDER[B.TORCH], 10);
+  eq('lilia to płaski liść', RENDER[B.LILY_PAD], 11);
+  eq('skrzynia ma korpus i wieko', RENDER[B.CHEST], 12);
+
+  // --- kolizje: płyty, schody, płot, drabina, ścieżka, skrzynia
+  const box = (id: number) => collisionBoxes(id)!;
+  eq('płyta dolna ma pół bloku', box(B.OAK_SLAB)[4], 0.5);
+  eq('płyta górna zajmuje górną połowę', box(B.OAK_SLAB_TOP)[1], 0.5);
+  eq('płot jest wyższy niż blok', box(B.FENCE)[4], 1.5);
+  check('płot blokuje na pełną szerokość (skrzyżowane szczeble)', box(B.FENCE)[3] - box(B.FENCE)[0] === 1);
+  check('drabina nie blokuje ruchu (się po niej wchodzi)', collisionBoxes(B.LADDER_N) === null);
+  eq('ścieżka ma 15/16 wysokości', box(B.PATH)[4], 0.9375);
+  eq('grządka ma 15/16 wysokości', box(B.FARMLAND)[4], 0.9375);
+  eq('skrzynia ma 14/16 szerokości', box(B.CHEST)[3] - box(B.CHEST)[0], 0.875);
+  eq('kaktus ma 14/16 szerokości', box(B.CACTUS)[3] - box(B.CACTUS)[0], 0.875);
+  eq('łóżko ma 9/16 wysokości', box(B.BED)[4], 0.5625);
+  eq('właz (zamknięty) to płyta pod sufitem', box(B.TRAP)[1], 0.8125);
+  check('schody mają dwie bryły', box(B.OAK_STAIRS_N).length === 12);
+  check('górna połowa schodów zajmuje pół klocka', box(B.OAK_STAIRS_N)[4] === 0.5 && box(B.OAK_STAIRS_N)[11] === 0.5);
+  check('ściany (kamień) blokują cały sześcian', box(B.STONE).length === 6);
+  check('rośliny nie mają kolizji', collisionBoxes(B.TALLGRASS) === null && collisionBoxes(B.TORCH) === null);
+
+  // --- fizyka: wejście na pół bloku bez skoku (step-up 0,55)
+  eq('krok to 0,55 bloku', STEP_HEIGHT, 0.55);
+  const w4 = new World(4242, true);
+  const gy4 = FLAT_H + 1;
+  w4.setBlock(4, gy4, 4, B.OAK_SLAB);
+  const body = { pos: new THREE.Vector3(4.5, gy4, 2.5), vel: new THREE.Vector3(0, 0, 0), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+  body.vel.z = 3;
+  for (let i = 0; i < 60; i++) { stepBody(w4, body, 1 / 60); body.vel.z = 3; }
+  check('gracz wchodzi na płytę bez skoku', body.pos.y >= gy4 + 0.49, `y=${body.pos.y.toFixed(2)}`);
+  const w4b = new World(4242, true);
+  w4b.setBlock(4, gy4, 4, B.STONE);
+  const body2 = { pos: new THREE.Vector3(4.5, gy4, 2.5), vel: new THREE.Vector3(0, 0, 0), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+  body2.vel.z = 3;
+  for (let i = 0; i < 80; i++) { stepBody(w4b, body2, 1 / 60); body2.vel.z = 3; }
+  check('pełny blok nadal zatrzymuje gracza', body2.pos.y < gy4 + 0.5, `y=${body2.pos.y.toFixed(2)}`);
+
+  // --- siatka: rośliny mają pełną wysokość, szyna leży płasko
+  const w5 = new World(4242, true);
+  const gy5 = FLAT_H + 1;
+  const verts = (bx: number, bz: number) => {
+    const out: number[] = [];
+    for (const g of w5.buildMesh(w5.getChunk(0, 0))) {
+      const p = g.getAttribute('position') as THREE.BufferAttribute | undefined;
+      if (!p) continue;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+        if (x >= bx && x <= bx + 1 && z >= bz && z <= bz + 1) out.push(y);
+      }
+    }
+    return out;
+  };
+  w5.setBlock(2, gy5, 2, B.TALLGRASS);
+  const gh = verts(2, 2);
+  check('wysoka trawa sięga pełnej wysokości', gh.length > 0 && Math.max(...gh) - Math.min(...gh) > 0.99, `${(Math.max(...gh) - Math.min(...gh)).toFixed(2)}`);
+  w5.setBlock(4, gy5, 4, B.RAIL);
+  const rv = verts(4, 4).filter((v) => v > gy5 + 0.02);
+  check('szyna leży płasko na 1/16', rv.length > 0 && Math.max(...rv) - Math.min(...rv) < 0.01 && Math.min(...rv) - gy5 < 0.08);
+  w5.setBlock(6, gy5, 6, B.PATH);
+  const pv = verts(6, 6);
+  check('ścieżka ma 15/16 wysokości w siatce', Math.max(...pv) - gy5 > 0.93 && Math.max(...pv) - gy5 < 0.94);
+  w5.setBlock(8, gy5, 8, B.FENCE);
+  const fv = verts(8, 8);
+  check('płot ma model wysokości bloku', Math.abs(Math.max(...fv) - gy5 - 1) < 0.01, `${(Math.max(...fv) - gy5).toFixed(2)}`);
+  w5.setBlock(10, gy5, 10, B.CHEST);
+  const cv = verts(10, 10);
+  check('skrzynia jest niższa niż blok', Math.max(...cv) - gy5 < 0.94 && Math.max(...cv) - gy5 > 0.9);
+  w5.setBlock(12, gy5, 12, B.LANTERN);
+  const lv = verts(12, 12);
+  check('latarnia ma model 11/16 wysokości', Math.abs(Math.max(...lv) - gy5 - 11 / 16) < 0.02, `${(Math.max(...lv) - gy5).toFixed(2)}`);
+  w5.setBlock(14, gy5, 14, B.BREWING);
+  const bv = verts(14, 14);
+  check('statyw alchemiczny sięga 14/16', Math.abs(Math.max(...bv) - gy5 - 14 / 16) < 0.02, `${(Math.max(...bv) - gy5).toFixed(2)}`);
+  w5.setBlock(2, gy5, 14, B.BELL);
+  const ev = verts(2, 14);
+  check('dzwon stoi na słupkach do pełnej wysokości', Math.abs(Math.max(...ev) - gy5 - 1) < 0.01);
+  check('dzwon ma serce zawieszone pod belką', ev.some((v) => Math.abs(v - gy5 - 0.25) < 0.01));
+
+  // --- narzędzia 1:1: trwałość, obrażenia, wymagane poziomy kilofa
+  eq('drewniany kilof ma 59 użyć', durabilityMax(I.WOOD_PICK), 59);
+  eq('kamienny kilof ma 131 użyć', durabilityMax(I.STONE_PICK), 131);
+  eq('żelazny kilof ma 250 użyć', durabilityMax(I.IRON_PICK), 250);
+  eq('diamentowy kilof ma 1561 użyć', durabilityMax(I.DIAMOND_PICK), 1561);
+  eq('pięść zadaje 1', attackDamage(0, false), 1);
+  eq('drewniany miecz zadaje 4', attackDamage(I.WOOD_SWORD, false), 4);
+  eq('diamentowy miecz zadaje 7', attackDamage(I.DIAMOND_SWORD, false), 7);
+  eq('żelazny topór zadaje 9', attackDamage(I.IRON_AXE, false), 9);
+  eq('kamienny kilof zadaje 3', attackDamage(I.STONE_PICK, false), 3);
+  eq('złoto wymaga żelaznego kilofa', requiredPickTier(B.GOLD_ORE), 3);
+  eq('czerwony kamień wymaga żelaznego kilofa', requiredPickTier(B.REDSTONE_ORE), 3);
+  check('kamień gołą ręką nie daje dropu', !canHarvest(B.STONE, 0) && blockDrops(B.STONE, 0).length === 0);
+  check('drewniany kilof wydobywa kamień', canHarvest(B.STONE, I.WOOD_PICK) && blockDrops(B.STONE, I.WOOD_PICK)[0]?.id === B.COBBLE);
+  check('złoto kamiennym kilofem nie daje dropu', blockDrops(B.GOLD_ORE, I.STONE_PICK).length === 0);
+  eq('kamień drewnianym kilofem: 1,5 × twardość / 2', Math.round(mineSeconds(B.STONE, I.WOOD_PICK) * 100) / 100, 1.13);
+  check('gołą ręką kopie się 5 × twardość', mineSeconds(B.DIRT, 0) > mineSeconds(B.DIRT, I.WOOD_SHOVEL));
+  check('obsydian diamentowym kilofem ~9,4 s', Math.abs(mineSeconds(B.OBSIDIAN, I.DIAMOND_PICK) - 9.4) < 0.1);
+
+  // --- jedzenie i dropy 1:1
+  eq('chleb daje 5 punktów głodu', ITEMS[I.BREAD]?.hunger, 5);
+  eq('pieczona ryba daje 5 punktów', ITEMS[I.COOKED_FISH]?.hunger, 5);
+  eq('butelka miodu daje 6 punktów', ITEMS[I.HONEY_BOTTLE]?.hunger, 6);
+  eq('półka na książki daje 3 książki', blockDrops(B.BOOKSHELF, 0)[0]?.id, I.BOOK);
+  eq('półka daje 3 książki', blockDrops(B.BOOKSHELF, 0)[0]?.count, 3);
+  check('trawa nie daje już nasion', blockDrops(B.GRASS, 0).every((s) => s.id === B.DIRT));
+  eq('żwir daje żwir albo krzemień', blockDrops(B.GRAVEL, 0).length, 1);
+
+  // --- kolizja w praktyce: przez płot się nie przechodzi, na płytę tak
+  const w6 = new World(4242, true);
+  const gy6 = FLAT_H + 1;
+  w6.setBlock(8, gy6, 2, B.FENCE);
+  const b6 = { pos: new THREE.Vector3(8.5, gy6, 0.5), vel: new THREE.Vector3(0, 0, 4), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+  for (let i = 0; i < 90; i++) { stepBody(w6, b6, 1 / 60); b6.vel.z = 4; }
+  check('płot zatrzymuje gracza', b6.pos.z < 2, `z=${b6.pos.z.toFixed(2)}`);
 }
 
 // =================================================================== report

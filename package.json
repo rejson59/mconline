@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.20.0",
-  "description": "BlockCraft 2.20 „Poprawki grafiki” – polska gra sandboxowa w przeglądarce: słońce i księżyc bez czarnych kwadratów, drzwi i latarnie jak w oryginale, kaktusy i łóżka z własną bryłą, dwuspadowe dachy wiosek, golem z opuszczonymi rękami oraz 155 przepisów.",
+  "version": "2.21.0",
+  "description": "BlockCraft 2.21 „Bloki i przedmioty jak w grze” – polska gra sandboxowa w przeglądarce: własne modele płotu, pochodni, skrzyni, kowadła i ogniska, kolizje płyt i schodów, step-up, waniliowe trwałości, obrażenia i dropy oraz 155 przepisów.",
   "type": "module",
   "license": "MIT",
   "keywords": [

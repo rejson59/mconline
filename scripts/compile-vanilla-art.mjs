@@ -433,6 +433,10 @@ const BLOCK_TILES = {
   emerald_block: B + 'emerald_block.png',
   // 2.20: to samo co latarnia – ikona przedmiotu zamiast UV modelu.
   bell: I_ + 'bell.png',
+  // 2.21: tekstury prawdziwych modeli (latarnia i dzwon przestały być
+  // billboardami) – korpus latarni oraz złoty korpus dzwonu z tekstury encji.
+  lantern_block: B + 'lantern.png',
+  bell_body: E + 'bell/bell_body.png',
   redstone_ore: B + 'redstone_ore.png',
   redstone_block: B + 'redstone_block.png',
   redstone_torch: B + 'redstone_torch.png',
@@ -945,6 +949,76 @@ for (const [name, spec] of Object.entries(BLOCK_TILES)) {
   officialTiles.push(index);
 }
 officialTiles.sort((a, b) => a - b);
+
+const CHEST_TILES = chestTiles();
+if (CHEST_TILES) {
+  for (const [name, tile] of Object.entries({ chest_front: CHEST_TILES.front, chest_side: CHEST_TILES.side, chest_top: CHEST_TILES.top })) {
+    const index = T_IDS[name];
+    if (index === undefined) {
+      missingBlocks.push(`${name} (brak w T)`);
+      continue;
+    }
+    stamp(blockAtlas, index, tile);
+    if (!officialTiles.includes(index)) officialTiles.push(index);
+  }
+  officialTiles.sort((a, b) => a - b);
+} else {
+  missingBlocks.push('chest (brak tekstury encji)');
+}
+
+// ---------------------------------------------------------------------------
+// 2.21: skrzynia – trzy kafelki z prawdziwej tekstury encji (64×64).
+//
+// W paczce skrzynia nie jest blokiem z modelem JSON, tylko encją: tekstura
+// `entity/chest/normal.png` ma rozłożone UV korpusu (0,19) i wieka (0,0).
+// Składamy z niej widok przód/bok/góra w kafelki 16×16, a siatka bierze
+// odpowiednie wycinki dla korpusu (10/16) i wieka (4/16).
+// ---------------------------------------------------------------------------
+function subImage(img, x, y, w, h) {
+  const out = new Uint8Array(w * h * 4);
+  for (let yy = 0; yy < h; yy++)
+    for (let xx = 0; xx < w; xx++) {
+      const s = ((y + yy) * img.w + x + xx) * 4;
+      const d = (yy * w + xx) * 4;
+      for (let c = 0; c < 4; c++) out[d + c] = img.data[s + c];
+    }
+  return { w, h, data: out };
+}
+
+function blitScaled(dst, dstW, src, dx, dy, dw, dh) {
+  for (let y = 0; y < dh; y++)
+    for (let x = 0; x < dw; x++) {
+      const sx = Math.min(src.w - 1, Math.floor((x * src.w) / dw));
+      const sy = Math.min(src.h - 1, Math.floor((y * src.h) / dh));
+      const s = (sy * src.w + sx) * 4;
+      const d = ((dy + y) * dstW + dx + x) * 4;
+      for (let c = 0; c < 4; c++) dst[d + c] = src.data[s + c];
+    }
+}
+
+function chestTiles() {
+  const img = loadTex(E + 'chest/normal.png');
+  if (!img) return null;
+  const bodyFront = subImage(img, 14, 33, 14, 10);
+  const lidFront = subImage(img, 14, 14, 14, 5);
+  const bodySide = subImage(img, 0, 33, 14, 10);
+  const lidSide = subImage(img, 0, 14, 14, 5);
+  // UV encji: (28,0) to ZEWNĘTRZNA góra wieka, (14,0) to jej spód (ciemne
+  // wnętrze). Wcześniej braliśmy wnętrze i skrzynia miała czarny „otwór”.
+  const lidTop = subImage(img, 28, 0, 14, 14);
+  const latch = subImage(img, 1, 1, 2, 4);
+  const front = new Uint8Array(TILE * TILE * 4);
+  const side = new Uint8Array(TILE * TILE * 4);
+  const top = new Uint8Array(TILE * TILE * 4);
+  blitScaled(front, TILE, bodyFront, 0, 5, 16, 11);
+  blitScaled(front, TILE, lidFront, 0, 0, 16, 5);
+  blitScaled(side, TILE, bodySide, 0, 5, 16, 11);
+  blitScaled(side, TILE, lidSide, 0, 0, 16, 5);
+  blitScaled(top, TILE, lidTop, 0, 0, 16, 16);
+  // klamra na przodzie, na styku wieka i korpusu
+  blitScaled(front, TILE, latch, 7, 3, 2, 3);
+  return { front, side, top };
+}
 
 const itemAtlas = new Uint8Array(ATLAS * ATLAS * 4);
 const itemTiles = {};

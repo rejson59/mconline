@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, isDoor, isDoorOpen, doorFacing, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
-import { tileUV, tileUVInset } from './textures';
+import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, isDoor, isDoorOpen, isFence, doorFacing, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
+import { tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
 import {
@@ -229,7 +229,7 @@ function addBox(
   x1: number,
   y1: number,
   z1: number,
-  tile: number,
+  tile: number | number[],
   sky: number,
   blk: number,
   /** Kafelek górnej ściany (np. kołdra łóżka) – domyślnie ten sam co bok. */
@@ -238,6 +238,8 @@ function addBox(
   bottomTile?: number,
   /** Odetnij tyle pikseli tekstury z każdej krawędzi (kaktus). */
   inset = 0,
+  /** Wycinki UV per ściana (0 -x, 1 +x, 2 -y, 3 +y, 4 -z, 5 +z), w pikselach. */
+  crops?: (readonly [number, number, number, number] | null)[],
 ) {
   const map = (v: number, a: number, b: number) => a + v * (b - a);
   for (let f = 0; f < 6; f++) {
@@ -249,10 +251,57 @@ function addBox(
     const bl = bb * bb;
     // 2.20: kafelki per ściana – łóżko ma kołdrę tylko na górze, kaktus
     // chowa 1 px przezroczystego marginesu (waniliowa bryła 14/16).
-    const faceTile = f === 3 ? topTile ?? tile : f === 2 ? bottomTile ?? tile : tile;
+    const faceTile = Array.isArray(tile)
+      ? tile[f]
+      : f === 3 ? topTile ?? tile : f === 2 ? bottomTile ?? tile : tile;
+    const crop = crops?.[f] ?? null;
     for (let k = 0; k < 4; k++) {
       const cr = F.c[k];
-      const uv = tileUVInset(faceTile, cr[3], cr[4], inset);
+      const uv = crop ? tileUVRect(faceTile, crop, cr[3], cr[4]) : tileUVInset(faceTile, cr[3], cr[4], inset);
+      buf.vertex(ox + map(cr[0], x0, x1), oy + map(cr[1], y0, y1), oz + map(cr[2], z0, z1), uv[0], uv[1], br, br, br, bl, 0, f);
+    }
+    buf.quad(base);
+  }
+}
+
+/**
+ * Bryła z UV dopasowanym do rozmiaru (płot, pochodnia) – zamiast rozciągać
+ * cały kafelek na 2–4 px ścianki, bierzemy jego wyśrodkowany wycinek.
+ *
+ * 2.21: dzięki temu płot ma proporcje desek, a pochodnia – 2×10 px patyczka
+ * dokładnie tam, gdzie w waniliowej teksturze.
+ */
+function addBoxPx(
+  buf: MeshBuffer,
+  ox: number,
+  oy: number,
+  oz: number,
+  x0: number,
+  y0: number,
+  z0: number,
+  x1: number,
+  y1: number,
+  z1: number,
+  tile: number,
+  sky: number,
+  blk: number,
+  crop?: [number, number, number, number],
+) {
+  const dx = (x1 - x0) * 16, dy = (y1 - y0) * 16, dz = (z1 - z0) * 16;
+  const map = (v: number, a: number, b: number) => a + v * (b - a);
+  for (let f = 0; f < 6; f++) {
+    const F = FACES[f];
+    const base = buf.count;
+    const skyB = F.shade * sky;
+    const br = skyB * skyB;
+    const bb = F.shade * blk;
+    const bl = bb * bb;
+    const fw = f < 2 ? dz : dx;
+    const fh = f < 2 ? dy : f < 4 ? dz : dy;
+    const rect = crop ?? [(16 - fw) / 2, (16 - fh) / 2, (16 + fw) / 2, (16 + fh) / 2];
+    for (let k = 0; k < 4; k++) {
+      const cr = F.c[k];
+      const uv = tileUVRect(tile, rect, cr[3], cr[4]);
       buf.vertex(ox + map(cr[0], x0, x1), oy + map(cr[1], y0, y1), oz + map(cr[2], z0, z1), uv[0], uv[1], br, br, br, bl, 0, f);
     }
     buf.quad(base);
@@ -266,7 +315,15 @@ export interface SpecialBox {
   top?: number;
   bottom?: number;
   inset?: number;
+  /** Wycinek UV per ściana (0 -x, 1 +x, 2 -y, 3 +y, 4 -z, 5 +z), w pikselach 16×16. */
+  crops?: (readonly [number, number, number, number] | null)[];
+  /** Kafelek per ściana – gdy blok ma różne tekstury na każdej ścianie. */
+  tiles?: number[];
 }
+
+/** Konwersja waniliowego UV (v od góry) na nasz układ (v od dołu kafelka). */
+const uvPx = (u0: number, v0: number, u1: number, v1: number): [number, number, number, number] =>
+  [Math.min(u0, u1), 16 - Math.max(v0, v1), Math.max(u0, u1), 16 - Math.min(v0, v1)];
 
 /**
  * Kształty „cienkich” i „niskich” bloków.
@@ -279,13 +336,80 @@ export interface SpecialBox {
 function specialBoxes(id: number): SpecialBox[] | null {
   const t = 0.1875;
   const face = ladderFacing(id);
-  if (face === 0 || id === B.TRAP_N) return [{ b: [0, 0, 0, 1, 1, t] }];
-  if (face === 1 || id === B.TRAP_E) return [{ b: [1 - t, 0, 0, 1, 1, 1] }];
-  if (face === 2 || id === B.TRAP_S) return [{ b: [0, 0, 1 - t, 1, 1, 1] }];
-  if (face === 3 || id === B.TRAP_W) return [{ b: [0, 0, 0, t, 1, 1] }];
+  // 2.21: drabina to płaska deska 0,3 px od ściany (wanilia: z = 15,2/16),
+  // a nie blok o grubości 3 px jak właz.
+  const lt = 0.3125 / 16;
+  if (face === 0) return [{ b: [0, 0, 0, 1, 1, lt] }];
+  if (face === 1) return [{ b: [1 - lt, 0, 0, 1, 1, 1] }];
+  if (face === 2) return [{ b: [0, 0, 1 - lt, 1, 1, 1] }];
+  if (face === 3) return [{ b: [0, 0, 0, lt, 1, 1] }];
+  if (id === B.TRAP_N) return [{ b: [0, 0, 0, 1, 1, t] }];
+  if (id === B.TRAP_E) return [{ b: [1 - t, 0, 0, 1, 1, 1] }];
+  if (id === B.TRAP_S) return [{ b: [0, 0, 1 - t, 1, 1, 1] }];
+  if (id === B.TRAP_W) return [{ b: [0, 0, 0, t, 1, 1] }];
   if (id === B.TRAP) return [{ b: [0, 1 - t, 0, 1, 1, 1] }];
   if (id === B.BED) {
     return [{ b: [0, 0, 0, 1, 0.5625, 1], side: tileFor(id, 0), top: tileFor(id, 3), bottom: tileFor(id, 2) }];
+  }
+  if (id === B.PATH) {
+    // 2.21: waniliowa ścieżka ma 15/16 wysokości, a boki zaczynają się 1 px
+    // od góry (górny rząd kafelka jest przezroczysty – bez tego była szpara).
+    const side = uvPx(0, 1, 16, 16);
+    return [{
+      b: [0, 0, 0, 1, 0.9375, 1],
+      tiles: [tileFor(id, 4), tileFor(id, 5), tileFor(id, 2), tileFor(id, 3), tileFor(id, 4), tileFor(id, 5)],
+      crops: [side, side, null, null, side, side],
+    }];
+  }
+  if (id === B.FARMLAND) {
+    const side = uvPx(0, 1, 16, 16);
+    return [{
+      b: [0, 0, 0, 1, 0.9375, 1],
+      tiles: [tileFor(id, 4), tileFor(id, 5), tileFor(id, 2), tileFor(id, 3), tileFor(id, 4), tileFor(id, 5)],
+      crops: [side, side, null, null, side, side],
+    }];
+  }
+  if (id === B.ANVIL) {
+    // 2.21: dokładne waniliowe elementy kowadła (template_anvil.json) –
+    // podstawa, zwężenie, korpus i blat, z UV każdej ściany z osobna.
+    const t = tileFor(id, 0);
+    const body = (u0: number, v0: number, u1: number, v1: number) => uvPx(u0, v0, u1, v1);
+    return [
+      {
+        b: [2 / 16, 0, 2 / 16, 14 / 16, 4 / 16, 14 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [body(0, 2, 4, 14), body(4, 2, 0, 14), body(2, 2, 14, 14), body(2, 2, 14, 14), body(2, 12, 14, 16), body(2, 12, 14, 16)],
+      },
+      {
+        b: [4 / 16, 4 / 16, 3 / 16, 12 / 16, 5 / 16, 13 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [body(4, 3, 5, 13), body(5, 3, 4, 13), null, body(4, 3, 12, 13), body(4, 11, 12, 12), body(4, 11, 12, 12)],
+      },
+      {
+        b: [6 / 16, 5 / 16, 4 / 16, 10 / 16, 10 / 16, 12 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [body(5, 4, 10, 12), body(10, 4, 5, 12), null, null, body(6, 6, 10, 11), body(6, 6, 10, 11)],
+      },
+      {
+        b: [3 / 16, 10 / 16, 0, 13 / 16, 1, 1],
+        tiles: [t, t, t, t, t, t],
+        crops: [body(10, 0, 16, 16), body(16, 0, 10, 16), body(3, 0, 13, 16), body(3, 0, 13, 16), body(3, 0, 13, 6), body(3, 0, 13, 6)],
+      },
+    ];
+  }
+  if (id === B.CAMPFIRE) {
+    // 2.21: waniliowe ognisko – cztery bale w dwóch warstwach, zamiast
+    // jednego niskiego sześcianu z płomieniem na górze.
+    const log = tileFor(id, 4);
+    const lit = tileFor(id, 3);
+    const logSide = (u0: number, v0: number, u1: number, v1: number) => uvPx(u0, v0, u1, v1);
+    return [
+      { b: [1 / 16, 0, 0, 5 / 16, 4 / 16, 1], tiles: [log, lit, log, lit, log, log], crops: [null, logSide(0, 1, 16, 5), null, logSide(0, 0, 16, 4), logSide(0, 4, 4, 8), logSide(0, 4, 4, 8)] },
+      { b: [11 / 16, 0, 0, 15 / 16, 4 / 16, 1], tiles: [lit, log, log, lit, log, log], crops: [logSide(0, 0, 16, 4), logSide(16, 1, 0, 5), null, logSide(0, 0, 16, 4), logSide(0, 4, 4, 8), logSide(0, 4, 4, 8)] },
+      { b: [0, 3 / 16, 11 / 16, 1, 7 / 16, 15 / 16], tiles: [log, log, lit, log, lit, lit], crops: [logSide(0, 4, 4, 8), logSide(0, 4, 4, 8), logSide(0, 4, 16, 8), logSide(0, 0, 16, 4), logSide(0, 0, 16, 4), logSide(16, 0, 0, 4)] },
+      { b: [0, 3 / 16, 1 / 16, 1, 7 / 16, 5 / 16], tiles: [log, log, lit, log, lit, lit], crops: [logSide(0, 4, 4, 8), logSide(0, 4, 4, 8), logSide(0, 4, 16, 8), logSide(0, 0, 16, 4), logSide(0, 0, 16, 4), logSide(16, 0, 0, 4)] },
+      { b: [5 / 16, 0, 0, 11 / 16, 1 / 16, 1], tiles: [log, log, log, lit, log, log], crops: [null, null, null, logSide(0, 8, 16, 14), logSide(0, 15, 6, 16), logSide(10, 15, 16, 16)] },
+    ];
   }
   if (id === B.CACTUS) {
     const e = 1 / 16;
@@ -296,6 +420,99 @@ function specialBoxes(id: number): SpecialBox[] | null {
       bottom: tileFor(id, 2),
       inset: 1,
     }];
+  }
+  if (id === B.LANTERN) {
+    // 2.21: waniliowy model latarni (template_lantern.json) – korpus 6×7 px
+    // i czapka 4×2 px z dokładnymi wycinkami tekstury z paczki, plus uchwyt
+    // z dwóch cienkich prętów. Wcześniej był to billboard z ikony przedmiotu.
+    const t = tileFor(id, 0);
+    const l = (u0: number, v0: number, u1: number, v1: number) => uvPx(u0, v0, u1, v1);
+    return [
+      {
+        b: [5 / 16, 0, 5 / 16, 11 / 16, 7 / 16, 11 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [l(0, 2, 6, 9), l(0, 2, 6, 9), l(0, 9, 6, 15), l(0, 9, 6, 15), l(0, 2, 6, 9), l(0, 2, 6, 9)],
+      },
+      {
+        b: [6 / 16, 7 / 16, 6 / 16, 10 / 16, 9 / 16, 10 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [l(1, 0, 5, 2), l(1, 0, 5, 2), null, l(1, 10, 5, 14), l(1, 0, 5, 2), l(1, 0, 5, 2)],
+      },
+      {
+        b: [6.5 / 16, 9 / 16, 7.9 / 16, 9.5 / 16, 11 / 16, 8.1 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [null, null, null, null, l(11, 1, 14, 3), l(11, 1, 14, 3)],
+      },
+      {
+        b: [7.9 / 16, 9 / 16, 6.5 / 16, 8.1 / 16, 11 / 16, 9.5 / 16],
+        tiles: [t, t, t, t, t, t],
+        crops: [l(11, 10, 14, 12), l(11, 10, 14, 12), null, null, null, null],
+      },
+    ];
+  }
+  if (id === B.BELL) {
+    // 2.21: waniliowy dzwon (bell_floor.json) – drewniana belka na dwóch
+    // kamiennych słupkach. Sam dzwon jest w wanilii rendererem encji, więc
+    // dokładamy go z tekstury `entity/bell/bell_body` jako trzy zwężające się
+    // bryły (kark, korpus i dolna krawędź).
+    const bar = T.planks;
+    const post = T.stone;
+    const gold = T.bell_body;
+    const b = (u0: number, v0: number, u1: number, v1: number) => uvPx(u0, v0, u1, v1);
+    const bell = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, crop: readonly [number, number, number, number]): SpecialBox => ({
+      b: [x0 / 16, y0 / 16, z0 / 16, x1 / 16, y1 / 16, z1 / 16],
+      tiles: [gold, gold, gold, gold, gold, gold],
+      crops: [crop, crop, crop, crop, crop, crop],
+    });
+    return [
+      {
+        b: [2 / 16, 13 / 16, 7 / 16, 14 / 16, 15 / 16, 9 / 16],
+        tiles: [bar, bar, bar, bar, bar, bar],
+        crops: [b(2, 2, 14, 4), b(2, 3, 14, 5), b(2, 3, 14, 5), b(2, 3, 14, 5), b(2, 2, 14, 4), b(2, 3, 14, 5)],
+      },
+      {
+        b: [14 / 16, 0, 6 / 16, 1, 1, 10 / 16],
+        tiles: [post, post, post, post, post, post],
+        crops: [b(0, 1, 2, 16), b(0, 1, 4, 16), b(0, 0, 2, 4), b(0, 0, 2, 4), b(0, 1, 2, 16), b(0, 1, 2, 16)],
+      },
+      {
+        b: [0, 0, 6 / 16, 2 / 16, 1, 10 / 16],
+        tiles: [post, post, post, post, post, post],
+        crops: [b(0, 1, 2, 16), b(0, 1, 4, 16), b(0, 0, 2, 4), b(0, 0, 2, 4), b(0, 1, 2, 16), b(0, 1, 2, 16)],
+      },
+      bell(4, 4, 4, 12, 8, 12, [4, 5.5, 12, 9.5]),
+      bell(5.5, 8, 5.5, 10.5, 12, 10.5, [0, 9.5, 12, 13]),
+      bell(6.5, 12, 6.5, 9.5, 14, 9.5, [3, 13, 9, 16]),
+    ];
+  }
+  if (id === B.BREWING) {
+    // 2.21: waniliowy statyw alchemiczny (brewing_stand.json) – słupek 2×14 px
+    // i trzy ramiona podstawy z tekstury `brewing_stand(_base)`.
+    const stand = T.brewing_top;
+    const base = T.brewing_side;
+    const b = (u0: number, v0: number, u1: number, v1: number) => uvPx(u0, v0, u1, v1);
+    return [
+      {
+        b: [7 / 16, 0, 7 / 16, 9 / 16, 14 / 16, 9 / 16],
+        tiles: [stand, stand, stand, stand, stand, stand],
+        crops: [b(7, 2, 9, 16), b(7, 2, 9, 16), b(7, 7, 9, 9), b(7, 7, 9, 9), b(7, 2, 9, 16), b(7, 2, 9, 16)],
+      },
+      {
+        b: [9 / 16, 0, 5 / 16, 15 / 16, 2 / 16, 11 / 16],
+        tiles: [base, base, base, base, base, base],
+        crops: [b(5, 14, 11, 16), b(5, 14, 11, 16), b(9, 5, 15, 11), b(9, 5, 15, 11), b(9, 14, 15, 16), b(9, 14, 15, 16)],
+      },
+      {
+        b: [1 / 16, 0, 1 / 16, 7 / 16, 2 / 16, 7 / 16],
+        tiles: [base, base, base, base, base, base],
+        crops: [b(1, 14, 7, 16), b(1, 14, 7, 16), b(1, 1, 7, 7), b(1, 1, 7, 7), b(1, 14, 7, 16), b(1, 14, 7, 16)],
+      },
+      {
+        b: [1 / 16, 0, 9 / 16, 7 / 16, 2 / 16, 15 / 16],
+        tiles: [base, base, base, base, base, base],
+        crops: [b(9, 14, 15, 16), b(9, 14, 15, 16), b(1, 9, 7, 15), b(1, 9, 7, 15), b(1, 14, 7, 16), b(1, 14, 7, 16)],
+      },
+    ];
   }
   if (!isDoor(id)) return null;
   const f = doorFacing(id);
@@ -1195,7 +1412,7 @@ export class World {
               addBox(
                 buf, ox + x, y, oz + z,
                 sb.b[0], sb.b[1], sb.b[2], sb.b[3], sb.b[4], sb.b[5],
-                sb.side ?? tileFor(id, 0), sky, blk, sb.top, sb.bottom, sb.inset ?? 0
+                sb.tiles ?? sb.side ?? tileFor(id, 0), sky, blk, sb.top, sb.bottom, sb.inset ?? 0, sb.crops
               );
             }
             continue;
@@ -1208,16 +1425,18 @@ export class World {
             const skyB = sky * sky * 0.85;
             const blkB = blk * blk * 0.85;
             const wx = ox + x, wz = oz + z;
+            // 2.21: waniliowy model „cross” sięga 0,05–0,95 kratki i pełnej
+            // wysokości – wcześniej rośliny były o 30% mniejsze i pływały.
             const quads = [
-              [[0.15, 0, 0.15], [0.85, 0, 0.85], [0.15, 1, 0.15], [0.85, 1, 0.85]],
-              [[0.15, 0, 0.85], [0.85, 0, 0.15], [0.15, 1, 0.85], [0.85, 1, 0.15]],
+              [[0.05, 0, 0.05], [0.95, 0, 0.95], [0.05, 1, 0.05], [0.95, 1, 0.95]],
+              [[0.05, 0, 0.95], [0.95, 0, 0.05], [0.05, 1, 0.95], [0.95, 1, 0.05]],
             ];
             const uvs = [[0, 0], [1, 0], [0, 1], [1, 1]];
             for (const q of quads) {
               const n = buf.count;
               for (let k = 0; k < 4; k++) {
                 const uv = tileUV(t, uvs[k][0], uvs[k][1]);
-                buf.vertex(wx + q[k][0], y + q[k][1] * 0.95, wz + q[k][2], uv[0], uv[1], skyB, skyB, skyB, blkB, 0, 3);
+                buf.vertex(wx + q[k][0], y + q[k][1], wz + q[k][2], uv[0], uv[1], skyB, skyB, skyB, blkB, 0, 3);
               }
               buf.quad(n);
             }
@@ -1265,10 +1484,114 @@ export class World {
             continue;
           }
           if (rt === 6) {
-            // rail – flat on ground
+            // 2.21: waniliowa szyna to płaski model na wysokości 1/16 bloku –
+            // wcześniej była bryłą 0,1 z rozciągniętym kafelkiem.
             const sky = skyLight(x, y, z);
             const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
-            addBox(buf, ox + x, y, oz + z, 0, 0, 0, 1, 0.1, 1, tileFor(id, 0), sky, blk);
+            const sh = sky * sky;
+            const t = tileFor(id, 0);
+            const base = buf.count;
+            const yy = y + 1 / 16;
+            const quadUV: [number, number][] = [[0, 1], [1, 1], [0, 0], [1, 0]];
+            const xs = [ox + x, ox + x + 1, ox + x, ox + x + 1];
+            const zs = [oz + z + 1, oz + z + 1, oz + z, oz + z];
+            for (let k = 0; k < 4; k++) {
+              const uv = tileUV(t, quadUV[k][0], quadUV[k][1]);
+              buf.vertex(xs[k], yy, zs[k], uv[0], uv[1], sh, sh, sh, blk * blk, 0, 3);
+            }
+            buf.quad(base);
+            continue;
+          }
+          if (rt === 9) {
+            // Płot: słupek 4×16×4 + po dwa poziome szczeble w stronę każdego
+            // płotu lub pełnego bloku (waniliowe 1,5 bloku wysokości).
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const t = tileFor(id, 0);
+            const wx = ox + x, wz = oz + z;
+            addBoxPx(buf, wx, y, wz, 6 / 16, 0, 6 / 16, 10 / 16, 1, 10 / 16, t, sky, blk);
+            const linked = (dx: number, dz: number) => {
+              const n = get(x + dx, y, z + dz);
+              return isFence(n) || IS_OPAQUE[n] === 1;
+            };
+            const rail = (dx: number, dz: number) => {
+              if (dx < 0) {
+                addBoxPx(buf, wx, y, wz, 0, 6 / 16, 7 / 16, 6 / 16, 9 / 16, 9 / 16, t, sky, blk);
+                addBoxPx(buf, wx, y, wz, 0, 12 / 16, 7 / 16, 6 / 16, 15 / 16, 9 / 16, t, sky, blk);
+              } else if (dx > 0) {
+                addBoxPx(buf, wx, y, wz, 10 / 16, 6 / 16, 7 / 16, 1, 9 / 16, 9 / 16, t, sky, blk);
+                addBoxPx(buf, wx, y, wz, 10 / 16, 12 / 16, 7 / 16, 1, 15 / 16, 9 / 16, t, sky, blk);
+              } else if (dz < 0) {
+                addBoxPx(buf, wx, y, wz, 7 / 16, 6 / 16, 0, 9 / 16, 9 / 16, 6 / 16, t, sky, blk);
+                addBoxPx(buf, wx, y, wz, 7 / 16, 12 / 16, 0, 9 / 16, 15 / 16, 6 / 16, t, sky, blk);
+              } else {
+                addBoxPx(buf, wx, y, wz, 7 / 16, 6 / 16, 10 / 16, 9 / 16, 9 / 16, 1, t, sky, blk);
+                addBoxPx(buf, wx, y, wz, 7 / 16, 12 / 16, 10 / 16, 9 / 16, 15 / 16, 1, t, sky, blk);
+              }
+            };
+            if (linked(-1, 0)) rail(-1, 0);
+            if (linked(1, 0)) rail(1, 0);
+            if (linked(0, -1)) rail(0, -1);
+            if (linked(0, 1)) rail(0, 1);
+            continue;
+          }
+          if (rt === 10) {
+            // Pochodnia: dokładnie 2×10 px patyczka z kafelka. Na ścianie
+            // (brak podłoża) przesuwamy ją do ściany, w którą jest wbita.
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const t = tileFor(id, 0);
+            const crop: [number, number, number, number] = [7, 0, 9, 10];
+            const wx = ox + x, wz = oz + z;
+            if (!IS_SOLID[get(x, y - 1, z)]) {
+              const sides: [number, number][] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+              let dx = 0, dz = 0;
+              for (const [sx, sz] of sides) if (IS_SOLID[get(x + sx, y, z + sz)]) { dx = sx; dz = sz; break; }
+              const bx = dx < 0 ? 1 / 16 : dx > 0 ? 13 / 16 : 7 / 16;
+              const bz = dz < 0 ? 1 / 16 : dz > 0 ? 13 / 16 : 7 / 16;
+              addBoxPx(buf, wx, y, wz, bx, 1 / 16, bz, bx + 2 / 16, 11 / 16, bz + 2 / 16, t, sky, blk, crop);
+            } else {
+              addBoxPx(buf, wx, y, wz, 7 / 16, 0, 7 / 16, 9 / 16, 10 / 16, 9 / 16, t, sky, blk, crop);
+            }
+            continue;
+          }
+          if (rt === 11) {
+            // Lilia wodna: płaski liść tuż nad taflą wody (jak w wanilii).
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sh = sky * sky * 0.95;
+            const t = tileFor(id, 0);
+            const base = buf.count;
+            const yy = y + 0.02;
+            const quadUV: [number, number][] = [[1, 1], [0, 1], [1, 0], [0, 0]];
+            const xs = [ox + x, ox + x + 1, ox + x, ox + x + 1];
+            const zs = [oz + z + 1, oz + z + 1, oz + z, oz + z];
+            for (let k = 0; k < 4; k++) {
+              const uv = tileUV(t, quadUV[k][0], quadUV[k][1]);
+              buf.vertex(xs[k], yy, zs[k], uv[0], uv[1], sh, sh, sh, blk * blk, 0, 3);
+            }
+            buf.quad(base);
+            continue;
+          }
+          if (rt === 12) {
+            // 2.21: waniliowa skrzynia – korpus (0–10 px) i wieko (10–15 px)
+            // z tekstury encji. Kafelki mają korpus w dolnych 11 i wieko
+            // w górnych 5 wierszach, więc każda bryła bierze swój wycinek.
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const side = tileFor(id, 4);
+            const top = tileFor(id, 3);
+            const bottom = tileFor(id, 2);
+            const front = tileFor(id, 5);
+            const body: [number, number, number, number] = [0, 0, 16, 11];
+            const lid: [number, number, number, number] = [0, 11, 16, 16];
+            const wx = ox + x, wz = oz + z;
+            addBox(buf, wx, y, wz, 1 / 16, 0, 1 / 16, 15 / 16, 10 / 16, 15 / 16,
+              [side, side, bottom, side, side, front], sky, blk, undefined, undefined, 0,
+              [body, body, null, null, body, body]);
+            addBox(buf, wx, y, wz, 1 / 16, 10 / 16, 1 / 16, 15 / 16, 15 / 16, 15 / 16,
+              [side, side, bottom, top, side, front], sky, blk, undefined, undefined, 0,
+              [lid, lid, null, null, lid, lid]);
             continue;
           }
           const isLiquid = rt === 2;

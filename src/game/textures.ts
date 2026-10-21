@@ -1539,6 +1539,24 @@ export function tileUV(tile: number, u: number, v: number): [number, number] {
  * 2.20: kaktus ma w paczce 1 px przezroczystej ramki; wanilia rysuje go jako
  * bryłę 14/16, więc obcinamy ramkę, żeby na krawędziach nie było dziur.
  */
+/**
+ * Wycinek kafelka w pikselach 16×16. `v` liczone OD DOŁU kafelka
+ * (tak jak UV siatki), więc np. patyczek pochodni to `[7, 0, 9, 10]`.
+ *
+ * 2.21: pochodnia w paczce ma 2×10 px patyczka w 16×16 kafelku – rysujemy
+ * dokładnie ten wycinek na smukłej bryle, zamiast rozciągać cały kafelek.
+ */
+export function tileUVRect(tile: number, rect: readonly [number, number, number, number], u: number, v: number): [number, number] {
+  const col = tile % ATLAS_TILES;
+  const row = Math.floor(tile / ATLAS_TILES);
+  const e = 0.0004;
+  const a = (rect[0] + u * (rect[2] - rect[0])) / 16;
+  const b = (rect[1] + v * (rect[3] - rect[1])) / 16;
+  const U = (col + a) / ATLAS_TILES + (u === 0 ? e : -e);
+  const V = 1 - (row + 1 - b) / ATLAS_TILES + (v === 0 ? e : -e);
+  return [U, V];
+}
+
 export function tileUVInset(tile: number, u: number, v: number, inset = 0): [number, number] {
   const col = tile % ATLAS_TILES;
   const row = Math.floor(tile / ATLAS_TILES);

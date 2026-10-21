@@ -1,14 +1,44 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.20.0';
-export const GAME_RELEASE_NAME = 'Poprawki grafiki';
+export const GAME_VERSION = '2.21.0';
+export const GAME_RELEASE_NAME = 'Bloki i przedmioty jak w grze';
 
 /**
- * 2.20: wydanie naprawcze grafiki – wszystko, co na zrzutach ekranu wyglądało
- * źle: czarne słońce, kaktusy-billboardy, czarne latarnie i drzwi, płaskie
- * dachy wiosek, ręce golema jak u zombie i za duży blok w dłoni.
+ * 2.21: bryły i zachowanie bloków oraz przedmiotów 1:1 z Minecraftem –
+ * własne modele płotu, pochodni, skrzyni, kowadła, ogniska, ścieżki, lilii,
+ * latarni, dzwonu i statywu alchemicznego,
+ * kolizje płyty/schodów/płotu, step-up, waniliowe trwałości, obrażenia,
+ * poziomy kilofów, dropy, jedzenie i stosy.
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Koniec billboardów: latarnia, dzwon i statyw',
+    text: 'Latarnia to teraz waniliowy model z paczki: korpus 6×7 px, czapka 4×2 px i uchwyt z prętów (wcześniej dwie skrzyżowane ikony). Dzwon dostał kamienne słupki i drewnianą belkę z `bell_floor.json`, a samo serce dzwonu – trzy zwężające się bryły z tekstury `entity/bell/bell_body`. Statyw alchemiczny ma słupek 2×14 px i trzy ramiona podstawy z `brewing_stand.json`. Wszystkie trzy trzymają w ręce ten sam kształt co w świecie.',
+  },
+  {
+    title: 'Bryły bloków 1:1 z Minecraftem',
+    text: 'Płot ma słupek 4×16 px i dwa szczeble w stronę sąsiadów, pochodnia to dokładnie 2×10 px patyczka (na ziemi i na ścianie), skrzynia dostała prawdziwą teksturę encji z korpusem 14/16 i wiekiem, kowadło – cztery waniliowe elementy z własnym UV każdej ściany, ognisko – cztery bale w dwóch warstwach, ścieżka i grządka – 15/16 wysokości z przyciętym bokiem, a lilia to płaski liść tuż nad wodą. Szyna leży płasko na 1/16, rośliny sięgają pełnej wysokości kratki, a drabina to deska 0,3 px od ściany.',
+  },
+  {
+    title: 'Kolizje i wchodzenie na bloki',
+    text: 'Fizyka zna teraz prawdziwe pudełka: płyta to pół bloku (górna i dolna), schody – dwie bryły, płot ma 1,5 bloku wysokości, kaktus i skrzynia są węższe od kratki, łóżko ma 9/16, właz 3/16, a ścieżka 15/16. Gracz wchodzi na płytę i schodek bez skoku (krok 0,55 bloku), ale pełny blok nadal zatrzymuje – tak jak w grze.',
+  },
+  {
+    title: 'Narzędzia, trwałości i obrażenia z wanilii',
+    text: 'Drewno ma 59 użyć, kamień 131, żelazo 250, diament 1561; miecze zadają 4–7, topory 7–9, kilofy 2–5, łopaty 2,5–5,5, pięść 1. Czas kopania to 1,5 × twardość z właściwym narzędziem i 5 × bez niego (obsydian diamentowym kilofem 9,4 s). Poziomy kilofów są jak w grze: złoto, diament, szmaragd i czerwony kamień wymagają żelaza, kwarcowi wystarczy drewno.',
+  },
+  {
+    title: 'Dropy, jedzenie i stosy',
+    text: 'Bez wymaganego poziomu kilofa blok znika bez dropu (kamień gołą ręką, złoto kamiennym kilofem). Trawa daje tylko ziemię, półka – trzy książki, liście – 5% sadzonki i 0,5% jabłka, żwir – 10% krzemienia, dojrzała pszenica – 1–3 nasion. Chleb i pieczona ryba dają po 5 punktów głodu, miód 6. Puste wiadro stackuje się do 16, pełne i mikstury zajmują slot, a skórny, żelazny, złoty i diamentowy pancerz mają punkty i trwałość jak w oryginale.',
+  },
+  {
+    title: 'Rośliny i sadzenie',
+    text: 'Kaktus rośnie tylko na piasku, nie lubi sąsiadów i wyrasta do trzech bloków; lilię kładzie się wyłącznie na wodzie; pochodnia, sadzonka i lilia tracą podparcie razem z blokiem, na którym stały. Kaktus nadal rani za dotknięcie, a trzcina potrzebuje wody przy podstawie.',
+  },
+  {
+    title: 'Testy i build',
+    text: 'Nowa sekcja testów 2.21 sprawdza typy renderu, pudełka kolizji (płyty, schody, płot, ścieżka, skrzynia, kaktus, łóżko, właz), step-up na płytę, zatrzymanie przez płot i pełny blok, pełną wysokość roślin, płaską szynę, trwałości i obrażenia narzędzi, poziomy kilofów, dropy, jedzenie oraz stackowanie wiader i mikstur. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.',
+  },
   {
     title: 'Słońce i księżyc bez czarnych kwadratów',
     text: 'Tekstury ciał niebieskich w paczce nie mają kanału alfa – tło jest po prostu czarne, więc w grze rysował się czarny kwadrat wokół tarczy. Teraz czerń jest kluczowana na przezroczystość przy kompilacji atlasu, a słońce i księżyc świecą addytywnie, jak w oryginale: poświata rozjaśnia niebo, a czarne piksele znikają całkowicie.',
