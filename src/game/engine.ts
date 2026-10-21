@@ -9,7 +9,7 @@ import {
   brewingKey, emptyBrewing, tickBrewing,
   type BrewingState, type PotionEffectId,
 } from './brewing';
-import { getAtlas, tileUV, tileUVInset, AVG_COLOR } from './textures';
+import { getAtlas, tileUV, tileUVInset, tileUVRect, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { Mob, isHostileMob, type MobType } from './mobs';
 
@@ -57,7 +57,7 @@ import { spriteTexture } from './art/spriteTex';
 import { buildItemIcons } from './itemIcons';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
-  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, mineSeconds, attackDamage, attackCooldown,
+  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, canHarvest, mineSeconds, attackDamage, attackCooldown,
   blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
@@ -394,12 +394,33 @@ function blockGeometry(id: number): THREE.BufferGeometry {
   const shades = [0.62, 0.62, 1, 0.5, 0.8, 0.8];
   // 2.20: kaktus (14/16) i łóżko (9/16) trzymają w ręce ten sam kształt co
   // w świecie – wcześniej w ekwipunku były pełnymi sześcianami.
-  const shape = RENDER[id] === 7
+  // 2.21: w ręce trzymamy ten sam kształt, co w świecie – płot to słupek,
+  // pochodnia patyczek, skrzynia korpus 14/16, a lilia to płaski liść.
+  const rt = RENDER[id];
+  const shape = rt === 7
     ? [1 / 16, 1 / 16, 15 / 16, 15 / 16, 0, 1]
-    : RENDER[id] === 8
+    : rt === 8
       ? [0, 0, 1, 1, 0, 0.5625]
-      : null;
-  const inset = RENDER[id] === 7 ? 1 : 0;
+      : rt === 9
+        ? [6 / 16, 6 / 16, 10 / 16, 10 / 16, 0, 1]
+        : rt === 10
+          ? [7 / 16, 7 / 16, 9 / 16, 9 / 16, 0, 10 / 16]
+          : rt === 12
+            ? [1 / 16, 1 / 16, 15 / 16, 15 / 16, 0, 15 / 16]
+            : null;
+  const inset = rt === 7 ? 1 : 0;
+  if (rt === 11) {
+    const g = new THREE.PlaneGeometry(1, 1);
+    g.rotateX(-Math.PI / 2);
+    const planeUv = g.attributes.uv as THREE.BufferAttribute;
+    const t = tileFor(id, 0);
+    for (let i = 0; i < planeUv.count; i++) {
+      const [U, V] = tileUV(t, Math.round(planeUv.getX(i)), Math.round(planeUv.getY(i)));
+      planeUv.setXY(i, U, V);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(planeUv.count * 3).fill(1), 3));
+    return g;
+  }
   const g = new THREE.BoxGeometry(
     shape ? shape[2] - shape[0] : 1,
     shape ? shape[5] - shape[4] : 1,
@@ -418,7 +439,9 @@ function blockGeometry(id: number): THREE.BufferGeometry {
     const tile = tileFor(id, faceMap[f]);
     for (let v = 0; v < 4; v++) {
       const i = f * 4 + v;
-      const [U, V] = tileUVInset(tile, Math.round(uv.getX(i)), Math.round(uv.getY(i)), inset);
+      const [U, V] = rt === 10
+        ? tileUVRect(tile, [7, 0, 9, 10], Math.round(uv.getX(i)), Math.round(uv.getY(i)))
+        : tileUVInset(tile, Math.round(uv.getX(i)), Math.round(uv.getY(i)), inset);
       uv.setXY(i, U, V);
       const s = shades[f] * shades[f];
       cols[i * 3] = cols[i * 3 + 1] = cols[i * 3 + 2] = s;
@@ -4712,6 +4735,19 @@ export class Game {
       // piston facing toward player (place facing opposite to look)
       // for simplicity store facing in block id? We use same id but remember direction via placement normal
       // future: directional pistons – for now just place
+    } else if (id === B.CACTUS) {
+      // 2.21: waniliowy kaktus rośnie tylko na piasku i nie lubi sąsiadów.
+      if (below !== B.SAND && below !== B.CACTUS) {
+        this.message('Kaktus rośnie tylko na piasku.');
+        return;
+      }
+      if (below === B.SAND) {
+        const around = [this.world.getBlock(px + 1, py, pz), this.world.getBlock(px - 1, py, pz), this.world.getBlock(px, py, pz + 1), this.world.getBlock(px, py, pz - 1)];
+        if (around.some((n) => IS_SOLID[n] || RENDER[n] === 1)) {
+          this.message('Kaktus nie może stać tuż przy innym bloku.');
+          return;
+        }
+      }
     } else if (id === B.SUGARCANE) {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.SAND && below !== B.SUGARCANE) {
         this.message('Trzcina rośnie na trawie, ziemi lub piasku.');
@@ -4722,6 +4758,9 @@ export class Game {
         this.message('Trzcyna chce wody w pobliżu.');
         return;
       }
+    } else if (id === B.LILY_PAD) {
+      // 2.21: lilia rośnie tylko na tafli wody, jak w wanilii.
+      if (below !== B.WATER && below !== B.ICE) { this.message('Lilię kładzie się na wodzie.'); return; }
     } else if (isDoor(id)) {
       if (!this.placeDoor(px, py, pz, t.nx, t.ny, t.nz)) return;
       Sfx.playPlace('wood');
@@ -4953,6 +4992,13 @@ export class Game {
       const lx = x - attach[f][0], lz = z - attach[f][1];
       const nid = this.world.getBlock(lx, y, lz);
       if (ladderFacing(nid) === f || (isTrapOpen(nid) && nid - B.TRAP_N === f)) this.breakBlock(lx, y, lz, silent);
+    }
+    // 2.21: jak w wanilii – pochodnia, lilia i sadzonka tracą podparcie razem
+    // z blokiem pod nimi (wcześniej wisiały w powietrzu).
+    const supported = this.world.getBlock(x, y + 1, z);
+    if (supported === B.TORCH || supported === B.REDSTONE_TORCH || supported === B.REDSTONE_TORCH_OFF ||
+        supported === B.SAPLING || supported === B.BIRCH_SAPLING) {
+      this.breakBlock(x, y + 1, z, silent);
     }
     this.growables.delete(`${x},${y},${z}`);
     if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) this.decayLeaves(x, y, z);
@@ -5536,7 +5582,7 @@ export class Game {
             this.breakKey = key;
             this.breakProgress = 0;
             const hint = pickHint(t.id, this.selectedStack()?.id ?? 0);
-            if (hint && !Number.isFinite(mineSeconds(t.id, this.selectedStack()?.id ?? 0))) this.message(hint);
+            if (hint && !canHarvest(t.id, this.selectedStack()?.id ?? 0)) this.message(hint);
           }
           const def = BLOCKS[t.id];
           const held = this.selectedStack();
@@ -6325,7 +6371,7 @@ export class Game {
     const ox = c.cx * CS, oz = c.cz * CS;
     for (let i = 0; i < c.data.length; i++) {
       const id = c.data[i];
-      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SUGARCANE && (id < B.CROP0 || id > B.CROP2)) continue;
+      if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SUGARCANE && id !== B.CACTUS && (id < B.CROP0 || id > B.CROP2)) continue;
       const y = (i / (CS * CS)) | 0;
       const rem = i % (CS * CS);
       const z = (rem / CS) | 0;
@@ -6342,6 +6388,20 @@ export class Game {
           this.unlock('tree');
           Sfx.playPlace('grass');
         } else this.growables.set(key, performance.now());
+      } else if (id === B.CACTUS) {
+        // 2.21: kaktus rośnie w górę do trzech bloków, jak w wanilii.
+        if (elapsed < 20 + ((x * 3 + z) % 10)) continue;
+        this.growables.delete(key);
+        if (this.world.getBlock(ox + x, y + 1, oz + z) !== B.AIR) continue;
+        let base = y;
+        for (let k = 1; k <= 4 && this.world.getBlock(ox + x, base - 1, oz + z) === B.CACTUS; k++) base--;
+        const ground = this.world.getBlock(ox + x, base - 1, oz + z);
+        if (ground !== B.SAND) continue;
+        let height = 0;
+        for (let k = 0; k <= 4 && this.world.getBlock(ox + x, base + k, oz + z) === B.CACTUS; k++) height++;
+        if (height >= 3) continue;
+        this.world.setBlock(ox + x, y + 1, oz + z, B.CACTUS);
+        this.growables.set(`${ox + x},${y + 1},${oz + z}`, performance.now());
       } else if (id === B.SUGARCANE) {
         // Trzcina: rośnie w górę, dopóki jest woda przy PODSTAWIE i miejsce nad nią.
         if (elapsed < 16 + ((x * 7 + z) % 9)) continue;
