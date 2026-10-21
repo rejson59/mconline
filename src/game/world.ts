@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, isDoorOpen, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
-import { tileUV } from './textures';
+import { B, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, isDoor, isDoorOpen, doorFacing, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
+import { tileUV, tileUVInset } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
 import {
@@ -232,6 +232,12 @@ function addBox(
   tile: number,
   sky: number,
   blk: number,
+  /** Kafelek górnej ściany (np. kołdra łóżka) – domyślnie ten sam co bok. */
+  topTile?: number,
+  /** Kafelek dolnej ściany – domyślnie ten sam co bok. */
+  bottomTile?: number,
+  /** Odetnij tyle pikseli tekstury z każdej krawędzi (kaktus). */
+  inset = 0,
 ) {
   const map = (v: number, a: number, b: number) => a + v * (b - a);
   for (let f = 0; f < 6; f++) {
@@ -241,31 +247,71 @@ function addBox(
     const br = skyB * skyB;
     const bb = F.shade * blk;
     const bl = bb * bb;
+    // 2.20: kafelki per ściana – łóżko ma kołdrę tylko na górze, kaktus
+    // chowa 1 px przezroczystego marginesu (waniliowa bryła 14/16).
+    const faceTile = f === 3 ? topTile ?? tile : f === 2 ? bottomTile ?? tile : tile;
     for (let k = 0; k < 4; k++) {
       const cr = F.c[k];
-      const uv = tileUV(tile, cr[3], cr[4]);
+      const uv = tileUVInset(faceTile, cr[3], cr[4], inset);
       buf.vertex(ox + map(cr[0], x0, x1), oy + map(cr[1], y0, y1), oz + map(cr[2], z0, z1), uv[0], uv[1], br, br, br, bl, 0, f);
     }
     buf.quad(base);
   }
 }
 
-/** Local bounds of a thin panel. null = draw a normal cube. */
-function panelBounds(id: number): [number, number, number, number, number, number] | null {
+/** Bryła inna niż pełny sześcian: kształt + kafelki poszczególnych ścian. */
+export interface SpecialBox {
+  b: [number, number, number, number, number, number];
+  side?: number;
+  top?: number;
+  bottom?: number;
+  inset?: number;
+}
+
+/**
+ * Kształty „cienkich” i „niskich” bloków.
+ *
+ * 2.20: drzwi były pełnymi sześcianami – każda połowa rysowała całą płaszczyznę
+ * drzwi na wszystkich ścianach, więc w ścianie domu było widać siatkę 2×2
+ * mini-drzwi (a górna połowa miała czarne szyby na warstwie bez alfy).
+ * Teraz drzwi to płyta 3/16 przy krawędzi, a łóżko – bryła 9/16 wysokości.
+ */
+function specialBoxes(id: number): SpecialBox[] | null {
   const t = 0.1875;
   const face = ladderFacing(id);
-  if (face === 0 || id === B.TRAP_N) return [0, 0, 0, 1, 1, t];
-  if (face === 1 || id === B.TRAP_E) return [1 - t, 0, 0, 1, 1, 1];
-  if (face === 2 || id === B.TRAP_S) return [0, 0, 1 - t, 1, 1, 1];
-  if (face === 3 || id === B.TRAP_W) return [0, 0, 0, t, 1, 1];
-  if (id === B.TRAP) return [0, 1 - t, 0, 1, 1, 1];
-  if (!isDoorOpen(id)) return null;
-  // Open door swings flat against the left jamb.
-  if (id === B.DOOR_ON || id === B.DOOR_UON) return [0, 0, 0, t, 1, 1];
-  if (id === B.DOOR_OE || id === B.DOOR_UOE) return [0, 0, 0, 1, 1, t];
-  if (id === B.DOOR_OS || id === B.DOOR_UOS) return [1 - t, 0, 0, 1, 1, 1];
-  if (id === B.DOOR_OW || id === B.DOOR_UOW) return [0, 0, 1 - t, 1, 1, 1];
-  return null;
+  if (face === 0 || id === B.TRAP_N) return [{ b: [0, 0, 0, 1, 1, t] }];
+  if (face === 1 || id === B.TRAP_E) return [{ b: [1 - t, 0, 0, 1, 1, 1] }];
+  if (face === 2 || id === B.TRAP_S) return [{ b: [0, 0, 1 - t, 1, 1, 1] }];
+  if (face === 3 || id === B.TRAP_W) return [{ b: [0, 0, 0, t, 1, 1] }];
+  if (id === B.TRAP) return [{ b: [0, 1 - t, 0, 1, 1, 1] }];
+  if (id === B.BED) {
+    return [{ b: [0, 0, 0, 1, 0.5625, 1], side: tileFor(id, 0), top: tileFor(id, 3), bottom: tileFor(id, 2) }];
+  }
+  if (id === B.CACTUS) {
+    const e = 1 / 16;
+    return [{
+      b: [e, 0, e, 1 - e, 1, 1 - e],
+      side: tileFor(id, 0),
+      top: tileFor(id, 3),
+      bottom: tileFor(id, 2),
+      inset: 1,
+    }];
+  }
+  if (!isDoor(id)) return null;
+  const f = doorFacing(id);
+  const side = tileFor(id, 0);
+  if (isDoorOpen(id)) {
+    // Otwarte drzwi leżą płasko przy ościeżnicy.
+    if (f === 0) return [{ b: [0, 0, 0, t, 1, 1], side }];
+    if (f === 1) return [{ b: [0, 0, 0, 1, 1, t], side }];
+    if (f === 2) return [{ b: [1 - t, 0, 0, 1, 1, 1], side }];
+    return [{ b: [0, 0, 1 - t, 1, 1, 1], side }];
+  }
+  // Zamknięte drzwi stoją przy krawędzi, w którą patrzą.
+  if (f === 0) return [{ b: [0, 0, 0, 1, 1, t], side }];
+  if (f === 1) return [{ b: [1 - t, 0, 0, 1, 1, 1], side }];
+  if (f === 2) return [{ b: [0, 0, 1 - t, 1, 1, 1], side }];
+  return [{ b: [0, 0, 0, t, 1, 1], side }];
 }
 
 export class World {
@@ -1138,16 +1184,22 @@ export class World {
         for (let x = 0; x < CS; x++) {
           const id = c.data[idx(x, y, z)];
           if (id === 0) continue;
-          const panel = panelBounds(id);
-          if (panel) {
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
-            addBox(bufs[LAYER[id]], ox + x, y, oz + z, panel[0], panel[1], panel[2], panel[3], panel[4], panel[5], tileFor(id, 0), sky, blk);
-            continue;
-          }
           const layer = LAYER[id];
           const rt = RENDER[id];
           const buf = bufs[layer];
+          const special = specialBoxes(id);
+          if (special) {
+            const sky = skyLight(x, y, z);
+            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            for (const sb of special) {
+              addBox(
+                buf, ox + x, y, oz + z,
+                sb.b[0], sb.b[1], sb.b[2], sb.b[3], sb.b[4], sb.b[5],
+                sb.side ?? tileFor(id, 0), sky, blk, sb.top, sb.bottom, sb.inset ?? 0
+              );
+            }
+            continue;
+          }
           if (rt === 1) {
             // cross plant
             const t = tileFor(id, 0);
@@ -1259,10 +1311,6 @@ export class World {
               ao[k] = aoF;
               let vy = y + py;
               if (liquidTopLow && py === 1) vy -= 0.12;
-              if (id === B.CACTUS) {
-                if (f === 0) px = 0.0625; else if (f === 1) px = 0.9375;
-                if (f === 4) pz = 0.0625; else if (f === 5) pz = 0.9375;
-              }
               const uv = tileUV(t, cr[3], cr[4]);
               const shadeAo = F.shade * aoF;
               const skyB = shadeAo * sky;

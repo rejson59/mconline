@@ -1,6 +1,16 @@
-# BlockCraft 2.19 🧱
+# BlockCraft 2.20 🧱
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+**Wersja 2.20 „Poprawki grafiki”** – wszystko, co na zrzutach ekranu wyglądało źle:
+
+* **Słońce i księżyc bez czarnych kwadratów.** Tekstury `sun.png` i `moon_phases.png` nie mają kanału alfa – ich tłem jest zwykła czerń. Kompilator atlasu zamienia teraz czerń na przezroczystość (`keyBlackSprite`), a w grze słońce i księżyc rysują się z `AdditiveBlending`, więc świecą jak w oryginale, bez czarnej ramki na niebie.
+* **Latarnie, dzwon i pochodnia.** Latarnia i dzwon w paczce to **atlasy UV modelu**, a nie zwykłe tekstury – na sześcianie zostawiały czarne plamy. Teraz są sprite’ami z ikon przedmiotów (`item/lantern.png`, `item/bell.png`) na warstwie z wycinaniem alfa, nie blokują ruchu i stoją jak w grze. Pochodnia w dłoni i na ścianie używa tego samego mechanizmu.
+* **Drzwi to naprawdę drzwi.** Zamiast sześcianu z drzwiami na każdej ścianie – cienka płyta **3/16** przy ościeżnicy (otwarte: przy zawiasie), górna połowa z szybą i ościeżnicą z bali. `specialBoxes()` w `src/game/world.ts` decyduje o kształcie, `tileUVInset()` przycina kafelek do widocznej części.
+* **Kaktus i łóżko z własną bryłą.** Kaktus to prostopadłościan **14/16** (render type 7) z kafelkiem przyciętym o przezroczysty margines – koniec z „billboardami”. Łóżko ma wysokość **9/16** (render type 8), więc kołdra leży tylko na górze, a nie na wszystkich ścianach.
+* **Dachy wiosek jak w Minecrafcie.** Nowy `gableRoof()` buduje dwuspadowy dach z okapem i kalenicą wzdłuż dłuższej ściany, ze schodów w stylu każdej osady (`roofStyleFor`: dąb, bruk, piaskowiec). Dom ma podmurówkę, słupki z bali, strop, okna z szyby, latarnię pod sufitem i ogrodową przy wejściu; wysokość dachu liczona jest z szerokości domu (`ceil(min(w, d) * 0.6)`), więc nie ma już „pagód”. Studnia dostała piramidalny daszek z latarnią.
+* **Golem bez pozy zombie.** Ręce wyciągnięte do przodu dostawał każdy mob z dwiema rękami – teraz tylko zombie; golem i enderman machają rękami w chodzie. Blok trzymany w dłoni jest mniejszy (0,20–0,30 zamiast 0,45), a woda ma barwę oceanu (`59,111,213`, alfa 180) zamiast szarej mgły.
+* **Testy.** `npm test` to **1747 kontroli silnika + 222 testy UI**. Nowa sekcja 2.20 sprawdza: przezroczyste tło słońca i księżyca oraz addytywne świecenie, niebieski kafelek wody, warstwy i kształty latarni, dzwonu, kaktusa (14/16), łóżka i drzwi (płyta 3/16), dwuspadowy dach domu w prawdziwej wiosce (schody, kalenica, dwie połacie), podmurówkę i łóżko w środku, a także opuszczone ręce golema i mniejszy model trzymanego bloku. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą.
 
 **Wersja 2.19 „Świat jak w Minecrafcie”** – trwała sesja gracza, teleportacja i nowy generator:
 

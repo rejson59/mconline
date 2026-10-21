@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.19.0",
-  "description": "BlockCraft 2.19 „Świat jak w Minecrafcie” – polska gra sandboxowa w przeglądarce: kontynenty i rzeki, wioski jak w oryginale, 9 skórek 1:1, trwała sesja gracza na publicznym serwerze, teleportacja za zgodą i 155 przepisów.",
+  "version": "2.20.0",
+  "description": "BlockCraft 2.20 „Poprawki grafiki” – polska gra sandboxowa w przeglądarce: słońce i księżyc bez czarnych kwadratów, drzwi i latarnie jak w oryginale, kaktusy i łóżka z własną bryłą, dwuspadowe dachy wiosek, golem z opuszczonymi rękami oraz 155 przepisów.",
   "type": "module",
   "license": "MIT",
   "keywords": [

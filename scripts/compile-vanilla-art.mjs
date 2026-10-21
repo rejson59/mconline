@@ -278,8 +278,41 @@ function colormapColor(name) {
 
 const GRASS_TINT = colormapColor('grass') ?? [124, 189, 107];
 const FOLIAGE_TINT = colormapColor('foliage') ?? [91, 171, 70];
+// 2.20: woda w paczce jest szara (kanał barwny dodaje gra). Bez tego morze
+// wyglądało jak biała mgła – barwimy je waniliowym błękitem oceanu.
+const WATER_TINT = colormapColor('water') ?? [63, 118, 228];
 
-/** Źródło kafelka: ścieżka albo { file, tint, overlay, color }. */
+/** Rozjaśnia kafelek (mnoży RGB, alfa bez zmian). */
+function brightenTile(tile, gain) {
+  if (!gain || gain === 1) return tile;
+  const out = new Uint8Array(tile);
+  for (let i = 0; i < TILE * TILE; i++) {
+    for (let c = 0; c < 3; c++) {
+      out[i * 4 + c] = Math.min(255, Math.round(tile[i * 4 + c] * gain));
+    }
+  }
+  return out;
+}
+
+/**
+ * 2.20: „czarne tło na przezroczyste”.
+ *
+ * Niektóre sprite'y w paczce (słońce, księżyc) są zapisane jako PNG bez kanału
+ * alfa – tło jest po prostu czarne. W grze wychodził z tego czarny kwadrat
+ * wokół tarczy. Kluczujemy więc czerń na alfę 0, zostawiając jaśniejsze
+ * piksele (tarcza i poświata) bez zmian.
+ */
+function keyBlackSprite(data, w, h, limit = 18) {
+  const out = new Uint8Array(data);
+  for (let i = 0; i < w * h; i++) {
+    const r = out[i * 4], g = out[i * 4 + 1], b = out[i * 4 + 2];
+    const lum = Math.max(r, g, b);
+    if (lum <= limit) out[i * 4 + 3] = 0;
+  }
+  return out;
+}
+
+/** Źródło kafelka: ścieżka albo { file, tint, overlay, color, gain }. */
 function renderTile(spec) {
   if (!spec) return null;
   const s = typeof spec === 'string' ? { file: spec } : spec;
@@ -291,6 +324,7 @@ function renderTile(spec) {
     if (ov) tile = overlayTile(tile, tile16(ov), s.overlay.color);
   }
   if (s.tint) tile = tintTile(tile, s.tint);
+  if (s.gain) tile = brightenTile(tile, s.gain);
   return { tile };
 }
 
@@ -312,7 +346,7 @@ const BLOCK_TILES = {
   leaves: { file: B + 'oak_leaves.png', tint: FOLIAGE_TINT },
   planks: B + 'oak_planks.png',
   sand: B + 'sand.png',
-  water: B + 'water_still.png',
+  water: { file: B + 'water_still.png', tint: WATER_TINT, gain: 1.35 },
   glass: B + 'glass.png',
   bedrock: B + 'bedrock.png',
   gravel: B + 'gravel.png',
@@ -391,10 +425,14 @@ const BLOCK_TILES = {
   path_side: B + 'dirt_path_side.png',
   hay_top: B + 'hay_block_top.png',
   hay_side: B + 'hay_block_side.png',
-  lantern: B + 'lantern.png',
+  // 2.20: `block/lantern.png` to atlas UV modelu (korpus + ramki), a nie
+  // obrazek latarni – na sześcianie dawał czarną kostkę z żółtym środkiem.
+  // Bierzemy ikonę z `item/`, która jest normalnym sprite'em.
+  lantern: I_ + 'lantern.png',
   emerald_ore: B + 'emerald_ore.png',
   emerald_block: B + 'emerald_block.png',
-  bell: B + 'bell_side.png',
+  // 2.20: to samo co latarnia – ikona przedmiotu zamiast UV modelu.
+  bell: I_ + 'bell.png',
   redstone_ore: B + 'redstone_ore.png',
   redstone_block: B + 'redstone_block.png',
   redstone_torch: B + 'redstone_torch.png',
@@ -825,6 +863,13 @@ for (const [name, file] of Object.entries(GUI_FILES)) {
     guiSprites[name] = encodePNG(w, h, out).toString('base64');
     continue;
   }
+  if (name === 'sun') {
+    // 2.20: `sun.png` nie ma kanału alfa – tło jest czarne i w grze rysowało
+    // się jako czarny kwadrat wokół tarczy. Kluczujemy czerń na przezroczystość.
+    const out = keyBlackSprite(img.data, img.w, img.h);
+    guiSprites[name] = encodePNG(img.w, img.h, out).toString('base64');
+    continue;
+  }
   if (name === 'clouds') {
     // `clouds.png` w paczce to maska 1-bitowa (czarne/tło i białe kłęby).
     // Do gry potrzebujemy białych chmur z przezroczystym tłem.
@@ -842,7 +887,10 @@ for (const [name, file] of Object.entries(GUI_FILES)) {
 
 // księżyc: paczka trzyma fazy w katalogu `environment/celestial/moon/`.
 const moonImg = loadTex(G + 'environment/celestial/moon/full_moon.png');
-if (moonImg) guiSprites.moon = encodePNG(moonImg.w, moonImg.h, moonImg.data).toString('base64');
+if (moonImg) {
+  const out = keyBlackSprite(moonImg.data, moonImg.w, moonImg.h);
+  guiSprites.moon = encodePNG(moonImg.w, moonImg.h, out).toString('base64');
+}
 else missingGui.push('moon');
 
 // ---------------------------------------------------------------------------

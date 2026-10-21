@@ -96,7 +96,7 @@ export const B = {
   MUD: 400, ACACIA_LOG: 401, ACACIA_LEAVES: 402, JUNGLE_LEAVES: 403, LILY_PAD: 404,
 } as const;
 
-export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail';
+export type RenderType = 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail' | 'cactus' | 'bed';
 
 export interface BlockDef {
   id: number;
@@ -162,7 +162,9 @@ def(B.GOLD_ORE, 'Ruda złota', T.gold_ore, { hardness: 3 });
 def(B.DIAMOND_ORE, 'Ruda diamentu', T.diamond_ore, { hardness: 3 });
 def(B.BRICK, 'Cegły', T.brick, { hardness: 2 });
 def(B.SNOW, 'Blok śniegu', [T.snow, T.dirt, T.snow_side], { hardness: 0.5, drop: B.DIRT, sound: 'cloth' });
-def(B.CACTUS, 'Kaktus', [T.cactus_top, T.cactus_top, T.cactus_side], { opaque: false, layer: 1, hardness: 0.4, sound: 'cloth' });
+// 2.20: wanilia rysuje kaktusa jako bryłę 14/16 (bez 1 px marginesu). Pełny
+// sześcian z wycinaną alfą wyglądał jak cztery krzyżujące się billboardy.
+def(B.CACTUS, 'Kaktus', [T.cactus_top, T.cactus_top, T.cactus_side], { opaque: false, layer: 1, hardness: 0.4, sound: 'cloth', render: 'cactus' });
 def(B.BIRCH_LOG, 'Pień brzozy', [T.birch_top, T.birch_top, T.birch_side], { hardness: 2, sound: 'wood' });
 def(B.BIRCH_LEAVES, 'Liście brzozy', T.birch_leaves, { opaque: true, layer: 1, hardness: 0.2, drop: -1, sound: 'grass' });
 def(B.TNT, 'TNT', [T.tnt_top, T.tnt_bottom, T.tnt_side], { hardness: 0, sound: 'grass' });
@@ -195,37 +197,41 @@ def(B.CROP0, 'Kiełki pszenicy', T.wheat0, { solid: false, opaque: false, layer:
 def(B.CROP1, 'Młoda pszenica', T.wheat1, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, drop: -1, sound: 'grass' });
 def(B.CROP2, 'Pszenica', T.wheat2, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, drop: -1, sound: 'grass' });
 def(B.CROP3, 'Dojrzała pszenica', T.wheat3, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, drop: -1, sound: 'grass' });
-def(B.BED, 'Łóżko', [T.bed_top, T.planks, T.bed_side], { hardness: 0.2, sound: 'cloth' });
+// 2.20: łóżko to niska bryła (9/16), a nie pełny sześcian – wcześniej
+// wyglądało jak skrzynia z czerwonym wiekiem.
+def(B.BED, 'Łóżko', [T.bed_top, T.planks, T.bed_side], { hardness: 0.2, sound: 'cloth', render: 'bed', opaque: false });
 def(B.FURNACE_ON, 'Rozpalony piec', [T.furnace_side, T.furnace_side, T.furnace_side, T.furnace_lit], { hardness: 3.5, drop: B.FURNACE });
 def(B.CHEST, 'Skrzynia', [T.chest_top, T.planks, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood' });
 def(B.LOOT_CHEST, 'Stara skrzynia', [T.chest_top, T.planks, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', drop: B.CHEST });
 const FACE_PL = ['północ', 'wschód', 'południe', 'zachód'];
 for (let i = 0; i < 4; i++) {
-  def(B.DOOR_N + i, i === 0 ? 'Drzwi' : `Drzwi (${FACE_PL[i]})`, T.door, { hardness: 2, sound: 'wood', drop: B.DOOR_N });
+  def(B.DOOR_N + i, i === 0 ? 'Drzwi' : `Drzwi (${FACE_PL[i]})`, T.door, { hardness: 2, sound: 'wood', drop: B.DOOR_N, opaque: false, layer: 1 });
   def(B.DOOR_ON + i, `Otwarte drzwi (${FACE_PL[i]})`, T.door, { hardness: 2, sound: 'wood', drop: B.DOOR_N, solid: false, opaque: false });
-  def(B.DOOR_UN + i, i === 0 ? 'Górne drzwi' : `Górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 2, sound: 'wood', drop: -1 });
+  def(B.DOOR_UN + i, i === 0 ? 'Górne drzwi' : `Górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 2, sound: 'wood', drop: -1, opaque: false, layer: 1 });
   def(B.DOOR_UON + i, `Otwarte górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 2, sound: 'wood', drop: -1, solid: false, opaque: false });
   def(B.LADDER_N + i, i === 0 ? 'Drabina' : `Drabina (${FACE_PL[i]})`, T.ladder, { solid: false, opaque: false, layer: 1, hardness: 0.4, sound: 'wood', drop: B.LADDER_N });
   def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 2, sound: 'wood', drop: B.TRAP, solid: false, opaque: false });
 }
 def(B.TRAP, 'Właz', T.trapdoor, { hardness: 2, sound: 'wood', opaque: false });
 def(B.FENCE, 'Płot', T.fence, { opaque: false, layer: 1, hardness: 2, sound: 'wood' });
-def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { hardness: 2, sound: 'wood' });
+def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { hardness: 2, sound: 'wood', opaque: false, layer: 1 });
 def(B.IRON_BLOCK, 'Blok żelaza', T.iron_block, { hardness: 5, sound: 'stone' });
 def(B.GOLD_BLOCK, 'Blok złota', T.gold_block, { hardness: 3, sound: 'stone' });
 def(B.DIAMOND_BLOCK, 'Blok diamentu', T.diamond_block, { hardness: 5, sound: 'stone' });
 // 1.5 „Zaklęcia“: lapis, enchanting table, sugar cane
 def(B.LAPIS_ORE, 'Ruda lazurytu', T.lapis_ore, { hardness: 3, drop: -1 });
 def(B.LAPIS_BLOCK, 'Blok lazurytu', T.lapis_block, { hardness: 3, sound: 'stone' });
-def(B.ENCHANT, 'Stół zaklęć', [T.enchant_top, T.enchant_bottom, T.enchant_side], { hardness: 5, sound: 'stone' });
+def(B.ENCHANT, 'Stół zaklęć', [T.enchant_top, T.enchant_bottom, T.enchant_side], { hardness: 5, sound: 'stone', opaque: false, layer: 1 });
 def(B.SUGARCANE, 'Trzcina cukrowa', T.sugarcane, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
 // 1.6 „Wioska“: ścieżki, siano, latarnie, szmaragd i dzwon
 def(B.PATH, 'Ścieżka', [T.path_top, T.dirt, T.path_side], { hardness: 0.65, drop: B.DIRT, sound: 'grass' });
 def(B.HAY, 'Bela siana', [T.hay_top, T.hay_top, T.hay_side], { hardness: 0.5, sound: 'grass' });
-def(B.LANTERN, 'Latarnia', T.lantern, { hardness: 3.5, opaque: false, sound: 'glass' });
+// 2.20: latarnia i dzwon to sprite'y z ikon przedmiotów – jako pełne
+// sześciany dawały czarne kostki z żółtym środkiem.
+def(B.LANTERN, 'Latarnia', T.lantern, { hardness: 3.5, solid: false, opaque: false, layer: 1, render: 'cross', sound: 'glass', drop: B.LANTERN });
 def(B.EMERALD_ORE, 'Ruda szmaragdu', T.emerald_ore, { hardness: 3 });
 def(B.EMERALD_BLOCK, 'Blok szmaragdu', T.emerald_block, { hardness: 5 });
-def(B.BELL, 'Dzwon', T.bell, { hardness: 4, sound: 'stone' });
+def(B.BELL, 'Dzwon', T.bell, { hardness: 4, solid: false, opaque: false, layer: 1, render: 'cross', sound: 'stone' });
 // 1.7 „Nether & Redstone“
 def(B.REDSTONE_ORE, 'Ruda czerwonego kamienia', T.redstone_ore, { hardness: 3, drop: -1 });
 def(B.REDSTONE_BLOCK, 'Blok czerwonego kamienia', T.redstone_block, { hardness: 3 });
@@ -336,6 +342,8 @@ for (const d of defs) {
   else if ((d.render as any) === 'stairs') RENDER[d.id] = 4;
   else if ((d.render as any) === 'portal') RENDER[d.id] = 5;
   else if ((d.render as any) === 'rail') RENDER[d.id] = 6;
+  else if (d.render === 'cactus') RENDER[d.id] = 7;
+  else if (d.render === 'bed') RENDER[d.id] = 8;
   else RENDER[d.id] = 0;
 }
 

@@ -17,6 +17,12 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.20: słońce bez czarnego kwadratu!',
+  '2.20: drzwi i latarnie jak w grze!',
+  '2.20: dwuspadowe dachy wiosek!',
+  '2.20: kaktusy i łóżka z własną bryłą!',
+  '2.20: golem trzyma ręce opuszczone!',
+  '2.20: blok w ręce już nie zasłania ekranu!',
   '2.19: Twoja sesja pamięta, gdzie skończyłeś!',
   '2.19: /tpa – teleportacja za zgodą!',
   '2.19: kontynenty, rzeki i prawdziwe biomy!',
