@@ -1,10 +1,14 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.24.1';
-export const GAME_RELEASE_NAME = 'Klasyczne menu wraca';
+export const GAME_VERSION = '2.25.0';
+export const GAME_RELEASE_NAME = 'Ręce do przodu, piasek w dół';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.25: ręce mobów i fizyka bloków. Animacja kończyn dokłada się teraz do
+ * pozy z modelu (zombie nie chowa już rąk za plecami), a piasek i żwir
+ * spadają całą kolumną: z przyspieszeniem, kurzem, wypieraniem wody,
+ * niszczeniem drobiazgów po drodze i osypywaniem się po wybuchu.
  * 2.24.1: powrót do poprzedniego wyglądu – pierwszym ekranem jest znowu
  * klasyczne menu gry (tło z paczki, duże BLOCKCRAFT, przyciski jak wcześniej).
  * Launcher został w kodzie i wchodzi się do niego tylko pod adresem
@@ -32,6 +36,26 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Koniec z rękami do tyłu',
+    text: 'Animacja kończyn dokłada się teraz do pozy zapisanej w modelu, a nie ją nadpisuje. Zombie znów trzyma ręce wyciągnięte do przodu: waniliowa poza zostaje, a chód tylko lekko ją kołysze. Wcześniej wpis −90° z animacji kasował ją w pierwszej klatce i ręce wędrowały za plecy.',
+  },
+  {
+    title: 'Audyt wszystkich mobów',
+    text: 'Test przechodzi po wszystkich 19 modelach i sprawdza, że głowa każdego moba patrzy w stronę ruchu, a animacja nie psuje pozy z modelu: mieszkaniec nie opuszcza złożonych rąk, pająk nie prostuje nóg, kura nie chowa skrzydeł, a golem i enderman nie dostają pozy zombie.',
+  },
+  {
+    title: 'Piasek naprawdę spada',
+    text: 'Piasek i żwir spadają całą kolumną naraz, z przyspieszeniem, chmurą kurzu i dźwiękiem. Blisko gracza widać lecące klocki, dalej materiał osiada od razu, żeby nie marnować klatek – wcześniej blok potrafił zniknąć albo przeskoczyć o kilka kratek.',
+  },
+  {
+    title: 'Fizyka, która sprząta po sobie',
+    text: 'Spadający blok niszczy po drodze pochodnie, rośliny, szyny i lilie (wypadają jako przedmioty), wypiera wodę i rani, jeśli spadnie na głowę. Wybuch uruchamia osypywanie się piasku nad wyrwą, a kolumna nad wybitym blokiem spada razem.',
+  },
+  {
+    title: 'Przedmioty toną powoli',
+    text: 'W wodzie przedmioty wyhamowują i opadają wolniej zamiast spadać jak kamień – łatwiej je złapać, gdy wpadną do jeziora albo rzeki.',
+  },
   {
     title: 'Klasyczne menu wraca',
     text: 'Po 2.24 pierwszym ekranem znów jest stare, dobre menu gry: tło z paczki, wielkie BLOCKCRAFT, podpis wersji i te same przyciski co wcześniej. Nic nie zostało przeprojektowane – wrócił dokładnie poprzedni wygląd.',

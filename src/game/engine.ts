@@ -11,6 +11,7 @@ import {
 } from './brewing';
 import { getAtlas, tileUV, tileUVInset, tileUVRect, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
+import { fallPath, isFallingBlock, isPassableForFall } from './gravity';
 import { Mob, mobVariantForBiome, isHostileMob, type MobType } from './mobs';
 
 const GREY: readonly number[] = [90, 90, 90];
@@ -289,6 +290,11 @@ interface FallingBlock {
   pos: THREE.Vector3;
   vel: number;
   id: number;
+  /** 2.25: kratka, z której blok wypadł. */
+  x: number;
+  z: number;
+  /** 2.25: kratka, w której ma wylądować (wyliczona w chwili startu). */
+  landY: number;
 }
 
 /**
@@ -4803,7 +4809,8 @@ export class Game {
     }
     const finalId = placeId ?? id;
     this.world.setBlock(px, py, pz, finalId);
-    this.settle(px, py, pz);
+    // 2.25: sypki blok postawiony w powietrzu od razu zaczyna spadać.
+    this.fallGravity(px, py, pz);
     // redstone update
     this.onBlockChanged(px, py, pz);
     if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
@@ -4857,78 +4864,112 @@ export class Game {
   }
 
   // Make sand/gravel fall
-  settle(x: number, y: number, z: number) {
-    const id = this.world.getBlock(x, y, z);
-    if (id !== B.SAND && id !== B.GRAVEL) return;
-    let ny = y;
-    while (ny > 0) {
-      const b = this.world.getBlock(x, ny - 1, z);
-      if (b === B.AIR || RENDER[b] === 2 || RENDER[b] === 1) ny--;
-      else break;
-    }
-    if (ny !== y) {
-      this.world.setBlock(x, y, z, B.AIR);
-      this.world.setBlock(x, ny, z, id);
-      this.settle(x, y + 1, z);
-    }
+  /**
+   * 2.25: natychmiastowe osiadanie kolumny. Używane dla bloków daleko od
+   * gracza (nikt tego nie widzi) i przez stare wywołania `settle`.
+   * Zwraca liczbę przesuniętych bloków.
+   */
+  settle(x: number, y: number, z: number): number {
+    return this.fallColumn(x, y, z, false);
   }
 
   /**
-   * Sand and gravel fall. Close to the player they become a visible tumbling
-   * block; further away the column is resolved instantly (nobody can see it).
+   * 2.25: opada cała kolumna sypkiego materiału naraz – piasek na piasku
+   * spada razem, a nie po jednym bloku na klatkę. `animate` włącza widoczne
+   * klocki (blisko gracza); bez niego bloki przeskakują od razu.
    */
-  fallGravity(x: number, y: number, z: number) {
-    const id = this.world.getBlock(x, y, z);
-    if (id !== B.SAND && id !== B.GRAVEL) return;
-    const dx = x + 0.5 - this.body.pos.x, dz = z + 0.5 - this.body.pos.z;
-    const near = Math.hypot(dx, dz) < 40 && Math.abs(y - this.body.pos.y) < 22;
-    if (!near || this.falling.length >= 24) { this.settle(x, y, z); return; }
-    let ny = y;
-    while (ny > 0) {
-      const b = this.world.getBlock(x, ny - 1, z);
-      if (b === B.AIR || RENDER[b] === 2 || RENDER[b] === 1) ny--;
-      else break;
+  private fallColumn(x: number, y: number, z: number, animate: boolean): number {
+    const ids: number[] = [];
+    let top = y;
+    while (ids.length < 384 && isFallingBlock(this.world.getBlock(x, top, z))) {
+      ids.push(this.world.getBlock(x, top, z));
+      top++;
     }
+    if (!ids.length) return 0;
+    const path = fallPath(this.world, x, y, z);
+    if (path.to === y) return 0; // ma podparcie
+    for (const [cx, cy, cz] of path.crush) this.crushBlock(cx, cy, cz);
+    for (let i = 0; i < ids.length; i++) this.world.setBlock(x, y + i, z, B.AIR);
+    for (let i = 0; i < ids.length; i++) {
+      const target = path.to + i;
+      if (animate && this.falling.length < 64) this.spawnFalling(x, y + i, z, ids[i], target);
+      else this.world.setBlock(x, target, z, ids[i]);
+    }
+    return ids.length;
+  }
+
+  /** Drobiazg zmiażdżony przez spadający blok – znika i wypada jako przedmiot. */
+  private crushBlock(x: number, y: number, z: number) {
+    const id = this.world.getBlock(x, y, z);
+    if (id === B.AIR) return;
     this.world.setBlock(x, y, z, B.AIR);
+    this.spawnParticles(x + 0.5, y + 0.4, z + 0.5, id, 4, 0.2);
+    if (this.mode !== 'survival') return;
+    for (const d of blockDrops(id, this.selectedStack()?.id ?? 0, {})) {
+      this.spawnDrop(d.id, d.count, x + 0.5, y + 0.3, z + 0.5);
+    }
+  }
+
+  /** Widoczny spadający klocek (blisko gracza). */
+  private spawnFalling(x: number, y: number, z: number, id: number, landY: number) {
     let geo = this.dropGeos.get(id);
     if (!geo) { geo = blockGeometry(id); this.dropGeos.set(id, geo); }
     const mesh = new THREE.Mesh(geo, this.dropMat);
-    mesh.position.set(x + 0.5, y, z + 0.5);
+    // `pos` to DOLNA krawędź klocka, a siatka jest wyśrodkowana – bez +0,5
+    // klocek leciałby pół bloku pod docelowym miejscem.
+    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
     this.scene.add(mesh);
-    this.falling.push({ mesh, pos: new THREE.Vector3(x + 0.5, y, z + 0.5), vel: 0, id });
-    // the column above keeps falling too
-    this.fallGravity(x, y + 1, z);
-    if (ny !== y) this.settle(x, ny, z);
+    this.falling.push({ mesh, pos: new THREE.Vector3(x + 0.5, y, z + 0.5), vel: 0, id, x, z, landY });
+  }
+
+  /**
+   * Sand and gravel fall. Close to the player the column becomes visible
+   * tumbling blocks; further away it is resolved instantly (nobody can see it).
+   */
+  fallGravity(x: number, y: number, z: number) {
+    if (!isFallingBlock(this.world.getBlock(x, y, z))) return;
+    const dx = x + 0.5 - this.body.pos.x, dz = z + 0.5 - this.body.pos.z;
+    const near = Math.hypot(dx, dz) < 40 && Math.abs(y - this.body.pos.y) < 22;
+    this.fallColumn(x, y, z, near);
   }
 
   private updateFalling(dt: number) {
     if (!this.falling.length) return;
     const keep: FallingBlock[] = [];
     for (const f of this.falling) {
-      f.vel = Math.min(26, f.vel + 24 * dt);
-      const step = f.vel * dt;
-      const ny = f.pos.y - step;
-      const bx = Math.floor(f.pos.x), bz = Math.floor(f.pos.z);
-      const below = Math.floor(ny - 0.5);
-      const hit = below < 0 || IS_SOLID[this.world.peekBlock(bx, below, bz)];
-      // a falling block hurts when it lands on the player's head
-      if (hit && this.ui !== 'dead' && this.mode === 'survival') {
-        const p = this.body.pos;
-        if (Math.abs(f.pos.x - (p.x + 0.5)) < 0.8 && Math.abs(f.pos.z - (p.z + 0.5)) < 0.8 && p.y < f.pos.y && p.y + this.body.h > f.pos.y - 0.5) {
-          this.damage(2);
-        }
-      }
-      if (hit) {
+      f.vel = Math.min(30, f.vel + 26 * dt);
+      const ny = f.pos.y - f.vel * dt;
+      if (ny <= f.landY) {
         this.scene.remove(f.mesh);
-        this.world.setBlock(bx, below + 1, bz, f.id);
-        Sfx.playPlace(BLOCKS[f.id].sound);
+        this.landFalling(f);
         continue;
       }
       f.pos.y = ny;
-      f.mesh.position.copy(f.pos);
+      f.mesh.position.set(f.pos.x, f.pos.y + 0.5, f.pos.z);
       keep.push(f);
     }
     this.falling = keep;
+  }
+
+  /** Osiadanie klocka: postawienie bloku, kurz, obrażenia i kaskada wyżej. */
+  private landFalling(f: FallingBlock) {
+    const { x, z, id } = f;
+    // Kratka docelowa mogła zostać zajęta, gdy blok leciał (np. gracz coś
+    // postawił) – wtedy blok osypuje się na pierwszą wolną kratkę wyżej.
+    let target = f.landY;
+    while (target < CH - 1 && !isPassableForFall(this.world.getBlock(x, target, z))) target++;
+    this.world.setBlock(x, target, z, id);
+    Sfx.playPlace(BLOCKS[id].sound);
+    this.spawnParticles(x + 0.5, target + 0.1, z + 0.5, id, 8, 0.25);
+    // blok spadający na głowę boli (jak w wanilii)
+    if (this.mode === 'survival' && this.ui !== 'dead') {
+      const p = this.body.pos;
+      const overlap = Math.abs(x + 0.5 - p.x) < 0.9 && Math.abs(z + 0.5 - p.z) < 0.9 &&
+        p.y < target + 1 && p.y + this.body.h > target;
+      if (overlap) this.damage(2);
+    }
+    // to, co leżało na spadającym bloku, też mogło stracić podparcie
+    this.fallGravity(x, target + 1, z);
   }
 
   /**
@@ -5056,6 +5097,7 @@ export class Game {
   explode(cx: number, cy: number, cz: number, power: number) {
     Sfx.playExplosion();
     this.shake = 0.6;
+    const disturbed = new Set<string>();
     const r = Math.ceil(power);
     for (let dx = -r; dx <= r; dx++)
       for (let dy = -r; dy <= r; dy++)
@@ -5071,8 +5113,14 @@ export class Game {
           if (id === B.ANVIL) this.spillAnvil(x, y, z);
           if (id === B.BREWING) this.spillBrewing(x, y, z);
           this.world.setBlock(x, y, z, B.AIR);
+          disturbed.add(`${x},${y + 1},${z}`);
           if (Math.random() < 0.05) this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 3, 0.4);
         }
+    // 2.25: po wybuchu sypkie bloki nad wyrwą spadają (wcześniej wisiały).
+    for (const key of disturbed) {
+      const [dx2, dy2, dz2] = key.split(',').map(Number);
+      this.fallGravity(dx2, dy2, dz2);
+    }
     this.spawnSmoke(cx, cy, cz, 40, power * 1.5);
     const affect = (pos: THREE.Vector3, h: number, hit: (dmg: number, kb: THREE.Vector3) => void) => {
       const dx = pos.x - cx, dy = pos.y + h / 2 - cy, dz = pos.z - cz;
@@ -6340,7 +6388,18 @@ export class Game {
         this.scene.remove(d.mesh);
         return false;
       }
-      d.vel.y -= 22 * dt;
+      // 2.25: przedmioty w wodzie toną powoli i wyhamowują (wcześniej spadały
+      // jak kamień, mimo że w grze unoszą się na wodzie).
+      const fluid = this.world.peekBlock(Math.floor(d.pos.x), Math.floor(d.pos.y + 0.1), Math.floor(d.pos.z)) === B.WATER;
+      if (fluid) {
+        d.vel.y -= 4 * dt;
+        if (d.vel.y < -2.2) d.vel.y = -2.2;
+        const drag = Math.max(0, 1 - dt * 3.5);
+        d.vel.x *= drag;
+        d.vel.z *= drag;
+      } else {
+        d.vel.y -= 22 * dt;
+      }
       d.pos.addScaledVector(d.vel, dt);
       const bx = Math.floor(d.pos.x), by = Math.floor(d.pos.y), bz = Math.floor(d.pos.z);
       if (this.world.isSolid(bx, by, bz)) {

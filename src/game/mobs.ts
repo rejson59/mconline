@@ -135,6 +135,15 @@ export class Mob {
   private collar: THREE.Object3D | null = null;
   /** 2.18: czy model ma osobną głowę (można nią obracać w stronę gracza). */
   private headCanTurn = false;
+  /**
+   * 2.25: obrót każdej części w chwili zbudowania modelu. Animacja dokłada
+   * się do tej pozy zamiast ją nadpisywać – wcześniej zombie „odwracał ręce
+   * do tyłu”, bo wpis `-PI/2` z animacji kasował waniliową pozę `+PI/2`
+   * zapisaną w modelu (ręce wyciągnięte do przodu).
+   */
+  private baseRot = new Map<THREE.Object3D, THREE.Euler>();
+  /** 2.25: wygładzony obrót głowy względem tułowia (bez bazy z modelu). */
+  private headYaw = 0;
   /** 2.18: kolor runa owcy – z pozycji, więc każda owca ma swój (jak w grze). */
   readonly woolColor: number;
   legs: THREE.Object3D[] = [];
@@ -298,6 +307,10 @@ export class Mob {
       mesh.userData.mobTint = 0xffffff;
       mesh.userData.mobKind = this.type;
     }
+    // 2.25: zapamiętujemy pozę modelu (zombie: ręce do przodu, mieszkaniec:
+    // złożone ręce, pająk: rozstaw nóg), żeby animacja ją szanowała.
+    this.baseRot.clear();
+    for (const grp of Object.values(P)) this.baseRot.set(grp, grp.rotation.clone());
     // Owca: wełna to osobny, „spuchnięty” model – po strzyżeniu po prostu go chowamy.
     if (this.type === 'sheep') {
       const wool = buildMobModel(MOB_MODELS.sheep_wool, 'sheep_wool');
@@ -1112,6 +1125,52 @@ export class Mob {
     this.moveAndAnimate(dt, world, player, this.walking && this.hurtTime < 0.3 ? speed : 0);
   }
 
+  /** 2.25: obrót części = poza z modelu + to, co dokłada animacja. */
+  private pose(o: THREE.Object3D, x: number, y: number, z: number): void {
+    const b = this.baseRot.get(o);
+    if (b) o.rotation.set(b.x + x, b.y + y, b.z + z);
+    else o.rotation.set(x, y, z);
+  }
+
+  /**
+   * 2.25: animacja kończyn. Publiczna, bo testy sprawdzają nią, czy każdy mob
+   * zachowuje pozę z modelu (zombie nie chowa rąk za plecami, pająk nie
+   * prostuje nóg, mieszkaniec nie opuszcza złożonych dłoni).
+   */
+  animateLimbs(swing: number): void {
+    if (this.legs.length === 4) {
+      this.pose(this.legs[0], swing, 0, 0);
+      this.pose(this.legs[3], swing, 0, 0);
+      this.pose(this.legs[1], -swing, 0, 0);
+      this.pose(this.legs[2], -swing, 0, 0);
+    } else if (this.legs.length === 8) {
+      for (let i = 0; i < 8; i++) {
+        this.pose(this.legs[i], Math.sin(this.walkPhase + (i % 2 ? Math.PI : 0) + Math.floor(i / 4) * 0.6) * swing, 0, 0);
+      }
+    } else if (this.legs.length === 2) {
+      this.pose(this.legs[0], swing, 0, 0);
+      this.pose(this.legs[1], -swing, 0, 0);
+      if (this.type === 'chicken' && this.arms.length) {
+        const flap = Math.sin(this.walkPhase * 2) * 0.45;
+        this.pose(this.arms[0], 0, 0, 0.4 + flap);
+        this.pose(this.arms[1], 0, 0, -0.4 - flap);
+      } else if (this.arms.length) {
+        // 2.20: tylko zombie trzyma ręce wyciągnięte do przodu.
+        // 2.25: pozycja „do przodu” siedzi w modelu (baza), a animacja dokłada
+        // tylko lekkie kołysanie – wcześniej nadpisywała bazę i ręce zombie
+        // wychodziły do tyłu.
+        if (this.type === 'zombie') {
+          this.pose(this.arms[0], Math.sin(this.walkPhase * 0.5) * 0.08, 0, 0);
+          this.pose(this.arms[1], -Math.sin(this.walkPhase * 0.5) * 0.08, 0, 0);
+        } else {
+          const armSwing = swing * 0.55;
+          this.pose(this.arms[0], -armSwing, 0, 0);
+          this.pose(this.arms[1], armSwing, 0, 0);
+        }
+      }
+    }
+  }
+
   /**
    * Shared movement + physics (gravity, water, collisions, wall hops) and
    * walking animation. `speed` > 0 steers the body toward `this.yaw` at that
@@ -1182,36 +1241,7 @@ export class Mob {
     const gait = this.type === 'spider' ? (this.climbing ? 6.5 : 4.4) : 3.2;
     this.walkPhase += hs * dt * gait;
     const swing = Math.sin(this.walkPhase) * Math.min(1, hs / 1.5) * 0.7;
-    if (this.legs.length === 4) {
-      this.legs[0].rotation.x = swing;
-      this.legs[3].rotation.x = swing;
-      this.legs[1].rotation.x = -swing;
-      this.legs[2].rotation.x = -swing;
-    } else if (this.legs.length === 8) {
-      for (let i = 0; i < 8; i++) {
-        this.legs[i].rotation.x = Math.sin(this.walkPhase + (i % 2 ? Math.PI : 0) + Math.floor(i / 4) * 0.6) * swing;
-      }
-    } else if (this.legs.length === 2) {
-      this.legs[0].rotation.x = swing;
-      this.legs[1].rotation.x = -swing;
-      if (this.type === 'chicken' && this.arms.length) {
-        const flap = Math.sin(this.walkPhase * 2) * 0.45;
-        this.arms[0].rotation.z = 0.4 + flap;
-        this.arms[1].rotation.z = -0.4 - flap;
-      } else if (this.arms.length) {
-        // 2.20: tylko zombie trzyma ręce wyciągnięte do przodu.
-        // Golem, enderman i inni dwunożni mają ręce opuszczone i lekko
-        // kołyszące się w chodzie – wcześniej każdy z nich „szedł jak zombie”.
-        if (this.type === 'zombie') {
-          this.arms[0].rotation.x = -Math.PI / 2 + Math.sin(this.walkPhase * 0.5) * 0.08;
-          this.arms[1].rotation.x = -Math.PI / 2 - Math.sin(this.walkPhase * 0.5) * 0.08;
-        } else {
-          const armSwing = swing * 0.55;
-          this.arms[0].rotation.x = -armSwing;
-          this.arms[1].rotation.x = armSwing;
-        }
-      }
-    }
+    this.animateLimbs(swing);
     this.group.position.copy(b.pos);
     // smooth rotation
     let diff = this.yaw - this.group.rotation.y;
@@ -1221,6 +1251,7 @@ export class Mob {
 
     // 2.18: głowa odwraca się w stronę gracza, gdy ten jest blisko – tak jak
     // w grze. Kąt jest ograniczony, żeby mob nie skręcał karku na plecy.
+    let dip = 0;
     if (this.headCanTurn && !this.dead && this.head) {
       const toPlayer = Math.atan2(player.x - b.pos.x, player.z - b.pos.z);
       let rel = toPlayer - this.group.rotation.y;
@@ -1232,17 +1263,20 @@ export class Mob {
       // Wcześniej stało tu `-rel`, przez co golem (i każdy mob) odwracał
       // głowę dokładnie w drugą stronę.
       const want = dist < 12 ? Math.max(-0.9, Math.min(0.9, rel)) : 0;
-      const cur = this.head.rotation.y;
-      this.head.rotation.y = cur + (want - cur) * Math.min(1, dt * 6);
+      this.headYaw += (want - this.headYaw) * Math.min(1, dt * 6);
+    } else {
+      this.headYaw += (0 - this.headYaw) * Math.min(1, dt * 6);
     }
 
     // 2.21.1: wypas – głowa zjeżdża w dół i przechyla się do trawy
     // (waniliowe `getNeckAngle`/`getHeadAngle`), a potem wraca do góry.
     if (this.type === 'sheep' && this.head) {
-      const dip = this.grazing > 0 ? Math.sin(Math.PI * (1 - this.grazing)) : 0;
+      dip = this.grazing > 0 ? Math.sin(Math.PI * (1 - this.grazing)) : 0;
       this.head.position.y = this.headBaseY - dip * (9 / 16);
-      this.head.rotation.x = dip * 0.62;
     }
+    // 2.25: obrót głowy to baza z modelu + (wygładzony obrót w stronę gracza,
+    // przechył przy wypasie) – żadna z tych wartości nie kasuje drugiej.
+    if (this.head) this.pose(this.head, dip * 0.62, this.headYaw, 0);
   }
 
   /** Cheap visibility test used by the skeleton before it shoots. */
