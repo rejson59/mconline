@@ -19,7 +19,7 @@ import { skinFace, skinPortrait } from '../game/skinArt';
 import { officialItemCount, officialTileCount } from '../game/packArt';
 import { mobModelCount } from '../game/mobModels';
 import { MOB_SKINS } from '../game/art/vanillaArt.generated';
-import type { WorldCard, WorldType } from './Menus';
+import { filterAndSortWorlds, type WorldCard, type WorldSort, type WorldType } from './Menus';
 import SettingsScreen from './SettingsScreen';
 import { SkinAvatar, SkinPicker } from './SkinPicker';
 import BlockCube from './launcher/BlockCube';
@@ -487,6 +487,7 @@ function HomeTab({
   playerFace: string | null;
 }) {
   const news = useMemo(() => launcherNews(4), []);
+  const [openNews, setOpenNews] = useState<number | null>(null);
   const stats = useMemo(
     () => [
       { label: 'kafelków bloków', value: officialTileCount(), hint: 'z paczki 26.2' },
@@ -610,14 +611,20 @@ function HomeTab({
             </button>
           </div>
           <ul className="space-y-2.5">
-            {news.slice(0, 2).map((n) => (
-              <li key={n.title} className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
+            {news.slice(0, 2).map((n, i) => (
+              <li key={n.title}>
+                <button
+                  type="button"
+                  onClick={() => setOpenNews(i)}
+                  className="w-full rounded-xl border border-white/[0.06] bg-black/20 p-3 text-left transition-colors hover:border-white/20 hover:bg-white/[0.05]"
+                >
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: n.accent }} />
                   <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: n.accent }}>{n.tag}</span>
                 </div>
                 <div className="mt-1 text-[13px] font-bold leading-snug">{n.title}</div>
                 <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-white/50">{n.text}</p>
+                </button>
               </li>
             ))}
           </ul>
@@ -626,17 +633,54 @@ function HomeTab({
 
       {/* pozostałe nowości */}
       <section className="grid gap-3 sm:grid-cols-2">
-        {news.slice(2).map((n) => (
-          <article key={n.title} className={`${PANEL} p-4`}>
+        {news.slice(2).map((n, i) => (
+          <button key={n.title} type="button" onClick={() => setOpenNews(i + 2)} className={`${PANEL} p-4 text-left transition-colors hover:border-white/20`}>
             <div className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: n.accent }} />
               <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: n.accent }}>{n.tag}</span>
             </div>
             <h3 className="mt-1 text-[13.5px] font-bold">{n.title}</h3>
             <p className="mt-1 text-[11.5px] leading-relaxed text-white/50">{n.text}</p>
-          </article>
+          </button>
         ))}
       </section>
+
+      {openNews !== null && news[openNews] && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={news[openNews].title}
+          onClick={() => setOpenNews(null)}
+        >
+          <div
+            className={`${PANEL} w-full max-w-lg bg-[#0d1117] p-5`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: news[openNews].accent }} />
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: news[openNews].accent }}>
+                {news[openNews].tag}
+              </span>
+              <button
+                type="button"
+                onClick={() => setOpenNews(null)}
+                className="ml-auto rounded-lg border border-white/10 px-2 py-1 text-[11px] font-semibold text-white/50 hover:text-white"
+              >
+                Zamknij
+              </button>
+            </div>
+            <h2 className="mt-2 text-[16px] font-extrabold leading-snug">{news[openNews].title}</h2>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{news[openNews].text}</p>
+            <div className="mt-4 flex justify-end">
+              <button type="button" onClick={() => setOpenNews(null)} className={BTN_PRIMARY}>
+                <Icon name="check" size={14} />
+                Rozumiem
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -672,6 +716,9 @@ function WorldsTab({
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState('');
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<WorldSort>('recent');
+  const visible = filterAndSortWorlds(saves, query, sort);
 
   const create = () => {
     let value: number;
@@ -700,6 +747,42 @@ function WorldsTab({
           Nowy świat
         </button>
       </div>
+
+      {saves.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Szukaj świata, seeda albo trybu…"
+              className="w-full rounded-xl border border-white/10 bg-black/35 px-3 py-2 pl-9 text-[12.5px] font-medium text-white outline-none placeholder:text-white/25 focus:border-emerald-400/50"
+            />
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/30">
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+            </span>
+          </div>
+          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-black/30 p-1">
+            {([
+              ['recent', 'Ostatnie'],
+              ['name', 'Nazwa'],
+              ['day', 'Dzień'],
+            ] as [WorldSort, string][]).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSort(id)}
+                className={`rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold ${sort === id ? 'bg-emerald-500/90 text-emerald-950' : 'text-white/55 hover:text-white'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-white/35">{visible.length} z {saves.length}</span>
+        </div>
+      )}
 
       {showNew && (
         <section className={`${PANEL} p-4`}>
@@ -774,8 +857,14 @@ function WorldsTab({
         </div>
       )}
 
+      {saves.length > 0 && visible.length === 0 && (
+        <div className={`${PANEL} p-8 text-center text-[12.5px] text-white/45`}>
+          Nic nie pasuje do „{query}”. <button type="button" onClick={() => setQuery('')} className="font-semibold text-emerald-300">Wyczyść filtr</button>
+        </div>
+      )}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {saves.map((w) => (
+        {visible.map((w) => (
           <article
             key={w.id}
             className={`${PANEL} group relative flex flex-col gap-3 p-4 transition-colors hover:border-white/20 ${
@@ -1072,8 +1161,21 @@ function PacksTab({
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {toggle('Chmury', 'clouds', 'wolne chmury jak w grze')}
           {toggle('Dynamiczna rozdzielczość', 'dynamicResolution', 'automatycznie trzyma płynność')}
+        </div>
+      </section>
+
+      <section className={`${PANEL} p-4`}>
+        <h2 className="text-[12px] font-bold uppercase tracking-[0.18em] text-white/45">Mody i ułatwienia</h2>
+        <p className="mt-1 text-[11.5px] text-white/40">
+          Zachowanie gry – te same przełączniki co w pauzie, więc zmiana działa od razu w świecie.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {toggle('Auto-skok', 'autoJump', 'wchodzi na blok bez skoku')}
+          {toggle('Auto-bicie', 'autoAttack', 'atakuje wrogie moby w zasięgu')}
+          {toggle('Licznik FPS', 'showFps')}
           {toggle('Kołysanie kamery', 'viewBobbing')}
           {toggle('Minimapa', 'minimap')}
+          {toggle('Wibracje', 'haptics', 'telefon wibruje przy kopaniu')}
         </div>
       </section>
     </div>
