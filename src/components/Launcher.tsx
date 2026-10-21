@@ -523,6 +523,10 @@ function HomeTab({
                 <Icon name="play" size={16} />
                 GRAJ
               </button>
+              <button type="button" onClick={() => onLaunch(null)} className={BTN_GHOST}>
+                <Icon name="plus" size={15} />
+                Nowy świat
+              </button>
               <button type="button" onClick={onOpenWorlds} className={BTN_GHOST}>
                 <Icon name="worlds" size={15} />
                 Światy ({saves.length})
