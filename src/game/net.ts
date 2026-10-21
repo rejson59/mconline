@@ -27,6 +27,8 @@
  * świata (`World.serializeMods`).
  */
 
+import type { PlayerProfile } from './profile';
+
 export type NetRole = 'host' | 'guest';
 export type NetTransport = 'local' | 'p2p' | 'online';
 export type NetStatus = 'connecting' | 'connected' | 'closed' | 'error';
@@ -71,6 +73,18 @@ export interface WorldHandshake {
   started?: boolean;
   /** Pozycja gospodarza – gość pojawia się obok, a nie na środku spawnu. */
   spawn?: { x: number; y: number; z: number; d: 'o' | 'n' };
+  /** 2.19: zapisany postęp gracza (serwer publiczny, „niewidzialna sesja”). */
+  profile?: PlayerProfile;
+}
+
+/** 2.19: prośba o teleportację między graczami. */
+export interface NetTeleport {
+  kind: 'ask' | 'ok' | 'no';
+  name: string;
+  x?: number;
+  y?: number;
+  z?: number;
+  d?: 'o' | 'n';
 }
 
 type Envelope = { from: string; to?: string; /** Gospodarz przekazuje dalej. */ relay?: boolean };
@@ -100,6 +114,7 @@ export type NetMessage =
   | ({ t: 'start' } & Envelope)
   | ({ t: 'bye' } & Envelope)
   | ({ t: 'ping'; ts: number } & Envelope)
+  | ({ t: 'tpa'; kind: 'ask' | 'ok' | 'no'; name: string; x?: number; y?: number; z?: number; d?: 'o' | 'n' } & Envelope)
   | ({ t: 'pong'; ts: number } & Envelope);
 
 /** Transport tylko dostarcza tekst; cała logika siedzi w `NetSession`. */
@@ -240,6 +255,10 @@ export interface NetLike {
   say(text: string): void;
   tick(): void;
   close(reason?: string): void;
+  /** 2.19: zapis postępu gracza (tylko serwer publiczny). */
+  saveProfile?(profile: PlayerProfile): void;
+  /** 2.19: prośba o teleportację do innego gracza (id odbiorcy). */
+  sendTeleport?(to: string, t: NetTeleport): void;
 }
 
 // ------------------------------------------------ zegar serwera publicznego
@@ -456,7 +475,17 @@ export class NetSession implements NetLike {
   private handle(m: NetMessage, local: boolean) {
     // Wiadomości zaadresowane do kogoś innego nas nie dotyczą. Własnej
     // wiadomości nie filtrujemy – `send()` stosuje ją u siebie od razu.
-    if (!local && m.to && m.to !== '*' && m.to !== this.id && !(m.to === 'host' && this.role === 'host')) return;
+    // 2.19: gospodarz musi zobaczyć cudzą prośbę o teleportację, żeby ją
+    // przekazać adresatowi (sam jej u siebie nie pokaże).
+    if (
+      !local &&
+      m.to &&
+      m.to !== '*' &&
+      m.to !== this.id &&
+      !(m.to === 'host' && this.role === 'host') &&
+      !(m.t === 'tpa' && this.role === 'host')
+    )
+      return;
     if (m.from === this.id && !local && m.t !== 'hello') return;
 
     switch (m.t) {
@@ -533,6 +562,16 @@ export class NetSession implements NetLike {
           if (this.role === 'host') this.relay(m, m.from);
           this.onChat?.((m.name || 'Gracz').slice(0, 20), String(m.text ?? '').slice(0, 240));
         }
+        this.onMessage?.(m);
+        return;
+      }
+      case 'tpa': {
+        // 2.19: prośby o teleportację przekazuje gospodarz. Adresat siedzi
+        // w `to`, więc relay nie może go nadpisać gwiazdką – inaczej każdy
+        // gość dostawałby cudze prośby.
+        if (!local && this.role === 'host') this.raw({ ...m, from: m.from });
+        if (local) return;
+        if (m.to && m.to !== '*' && m.to !== this.id) return;
         this.onMessage?.(m);
         return;
       }
@@ -760,6 +799,12 @@ export class NetSession implements NetLike {
   }
 
   /** Wysyła wiadomość czatu do wszystkich. */
+  /** 2.19: prośba o teleportację – leci tylko do wybranego gracza. */
+  sendTeleport(to: string, t: NetTeleport) {
+    if (!to) return;
+    this.send({ t: 'tpa', from: this.id, to, ...t, name: this.name }, false);
+  }
+
   say(text: string) {
     const clean = String(text ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 240);
     if (!clean) return;

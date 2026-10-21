@@ -41,8 +41,9 @@ import {
 } from './net';
 import { PUBLIC_POS_HZ } from './online';
 import { fallbackSkin, loadSkinId, skinById } from './skins';
+import { loadPlayerId, spreadSpawn, type PlayerProfile } from './profile';
 import { AVATAR_KINDS, avatarMaterial } from './mobTextures';
-import { hasPackSkin, playerSkinTexture, skinnedBox } from './skinArt';
+import { hasPackSkin, isSlimSkin, playerSkinTexture, skinnedBox, skinnedHat } from './skinArt';
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
@@ -192,6 +193,10 @@ export interface HUDState {
   fishing: 'idle' | 'cast' | 'waiting' | 'bite';
   /** 2.4: aktywne efekty napojów (ikona, nazwa, sekundy pozostałe). */
   effects: { id: string; icon: string; name: string; left: number }[];
+  /** 2.19: oczekująca prośba o teleportację (przycisk „Przyjmij”). */
+  tpa: { from: string; name: string } | null;
+  /** 2.19: wysłana prośba – czekamy na odpowiedź. */
+  tpaSent: { name: string } | null;
 }
 
 export interface TradeRow {
@@ -633,6 +638,12 @@ export class Game {
   private netHue = 0;
   /** 2.12: skórka gracza wysyłana w pozycjach (i widoczna u innych). */
   private netSkin = '';
+  /** 2.19: trwały identyfikator gracza – ten sam po zmianie nicku i skórki. */
+  private readonly playerId = loadPlayerId();
+  /** 2.19: prośby o teleportację między graczami. */
+  private tpaIn: { from: string; name: string; at: number } | null = null;
+  private tpaOut: { to: string; name: string; at: number } | null = null;
+  private profileTimer = 0;
   /** 2.8.2: kierunkowe słońce – shader liczy nim `dot(ściana, słońce)`. */
   private sunState: SunState = { dir: new THREE.Vector3(0.35, 1, 0.2).normalize(), power: 0.8 };
   ambient: THREE.HemisphereLight;
@@ -1145,15 +1156,27 @@ export class Game {
         this.day = net.world.day;
         this.applyNetWeather(net.world.weather);
       }
-      // Na serwerze publicznym wszyscy są równi – punkt startu bierzemy
-      // z generatora, a nie od „gospodarza”.
-      const spawnX = Math.round(this.body.pos.x) + (this.netHue % 7) - 3;
-      const spawnZ = Math.round(this.body.pos.z) + (this.netHue % 5) - 2;
-      const ground = this.homeWorld.heightAt(spawnX, spawnZ) + 1;
-      this.body.pos.set(spawnX + 0.5, ground, spawnZ + 0.5);
-      this.spawnPoint.copy(this.body.pos);
-      this.fallStart = this.body.pos.y;
-      this.message('Witaj na serwerze publicznym! Wszyscy budujecie jeden wspólny świat. T – czat, /help – komendy.');
+      // 2.19: każdy nowy gracz zaczyna w innym miejscu świata (losowo, ale
+      // zawsze na lądzie), żeby ludzie nie rodzili się jeden na drugim.
+      const profile = net.world?.profile;
+      if (profile) {
+        this.applyProfile(profile);
+        this.message(`Witaj ponownie, ${profile.name}! Wracasz tam, gdzie skończyłeś – ekwipunek też czeka.`);
+      } else {
+        const spread = spreadSpawn(this.playerId);
+        const spot = this.findSpawnSpot(
+          Math.round(Math.cos(spread.angle) * spread.radius),
+          Math.round(Math.sin(spread.angle) * spread.radius)
+        );
+        const ground = this.homeWorld.heightAt(spot.x, spot.z) + 1;
+        this.body.pos.set(spot.x + 0.5, ground, spot.z + 0.5);
+        this.spawnPoint.copy(this.body.pos);
+        this.fallStart = this.body.pos.y;
+        this.message(
+          `Witaj na serwerze publicznym! Zaczynasz w nowym miejscu (${spot.x}, ${spot.z}) – świat jest duży, więc łatwiej znaleźć własny kąt. ` +
+            'T – czat, /tpa nick – zaproś kogoś do siebie, /help – komendy.'
+        );
+      }
       this.emitHud();
       return;
     }
@@ -1191,6 +1214,204 @@ export class Game {
     );
   }
 
+  /**
+   * 2.19: wraca do zapisanego stanu gracza („niewidzialna sesja”). Odtwarzamy
+   * pozycję, wymiar, ekwipunek, zbroję, zdrowie i doświadczenie – wszystko to,
+   * co gracz zostawił po wyjściu.
+   */
+  private applyProfile(p: PlayerProfile) {
+    const nether = p.dim === 'n';
+    if (nether !== this.isInNether) this.switchDimension(nether ? this.netherWorld : this.homeWorld);
+    this.body.pos.set(p.x, p.y, p.z);
+    this.body.vel.set(0, 0, 0);
+    // Gdyby świat zdążył się zmienić (albo zapis był z innej wersji generatora),
+    // nie zostawiamy gracza w środku bloku – podnosimy go na powierzchnię.
+    for (let i = 0; i < 8; i++) {
+      const under = this.world.getBlock(
+        Math.floor(this.body.pos.x),
+        Math.floor(this.body.pos.y + 0.2),
+        Math.floor(this.body.pos.z)
+      );
+      if (under === B.AIR || under === B.WATER) break;
+      this.body.pos.y += 1;
+    }
+    this.yaw = Number.isFinite(p.yaw) ? p.yaw : 0;
+    this.pitch = Number.isFinite(p.pitch) ? p.pitch : 0;
+    this.spawnPoint.copy(this.body.pos);
+    this.fallStart = p.y;
+    if (Array.isArray(p.inv)) for (let i = 0; i < this.inventory.slots.length; i++) this.inventory.slots[i] = p.inv[i] ?? null;
+    if (Array.isArray(p.armor)) for (let i = 0; i < this.armor.length; i++) this.armor[i] = p.armor[i] ?? null;
+    if (Number.isFinite(p.health)) this.health = Math.max(1, Math.min(20, p.health));
+    if (Number.isFinite(p.hunger)) this.hunger = Math.max(0, Math.min(20, p.hunger));
+    if (Number.isFinite(p.xp)) this.xp = new Xp(Math.max(0, p.xp));
+    this.world.getChunk(Math.floor(p.x / CS), Math.floor(p.z / CS));
+  }
+
+  /**
+   * 2.19: szuka suchego miejsca na spawn w okolicy podanych współrzędnych.
+   * Pierścienie wokół punktu (co 16 bloków, do 512) – pierwszy kawałek lądu
+   * wygrywa, więc gracz nigdy nie startuje w oceanie ani na urwisku.
+   */
+  findSpawnSpot(x: number, z: number): { x: number; z: number } {
+    const ok = (sx: number, sz: number) => {
+      const s = this.homeWorld.surface(sx, sz);
+      if (s.biome === 'Ocean' || s.h <= SEA + 1) return false;
+      if (this.homeWorld.getBlock(sx, s.h, sz) === B.WATER) return false;
+      return true;
+    };
+    if (ok(x, z)) return { x, z };
+    for (let r = 16; r <= 512; r += 16) {
+      const steps = Math.max(8, Math.round((Math.PI * 2 * r) / 24));
+      for (let i = 0; i < steps; i++) {
+        const a = (i / steps) * Math.PI * 2;
+        const sx = Math.round(x + Math.cos(a) * r);
+        const sz = Math.round(z + Math.sin(a) * r);
+        if (ok(sx, sz)) return { x: sx, z: sz };
+      }
+    }
+    // Awaryjnie: punkt na lądzie w promieniu 800 bloków od środka.
+    for (let r = 32; r <= 800; r += 32) {
+      const a = r * 0.7;
+      const sx = Math.round(Math.cos(a) * r);
+      const sz = Math.round(Math.sin(a) * r);
+      if (ok(sx, sz)) return { x: sx, z: sz };
+    }
+    return { x: 0, z: 0 };
+  }
+
+  /** 2.19: bieżący stan gracza do zapisu na serwerze. */
+  buildProfile(): PlayerProfile {
+    const p = this.body.pos;
+    return {
+      pid: this.playerId,
+      name: this.netName,
+      skin: this.netSkin,
+      updated: Date.now(),
+      x: p.x,
+      y: p.y,
+      z: p.z,
+      dim: this.isInNether ? 'n' : 'o',
+      yaw: this.yaw,
+      pitch: this.pitch,
+      health: this.health,
+      hunger: this.hunger,
+      xp: this.xp.total,
+      inv: this.inventory.slots.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
+      armor: this.armor.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
+    };
+  }
+
+  /** 2.19: zapis postępu bez czekania na koniec (np. przed wyjściem). */
+  saveProfileNow() {
+    if (this.net?.public && this.net.saveProfile) this.net.saveProfile(this.buildProfile());
+  }
+
+  /** 2.19: prośba o teleportację do gracza o podanym nicku (lub id). */
+  requestTeleport(who: string): boolean {
+    const net = this.net;
+    if (!net) {
+      this.message('Teleportacja działa w grze wieloosobowej.');
+      return false;
+    }
+    const q = who.trim().toLowerCase();
+    if (!q) {
+      this.message('Użycie: /tpa <nick>  (np. /tpa Ziomek)');
+      return false;
+    }
+    const target =
+      this.netPlayers.find((p) => !p.self && p.name.toLowerCase() === q) ??
+      this.netPlayers.find((p) => !p.self && p.name.toLowerCase().startsWith(q)) ??
+      this.netPlayers.find((p) => !p.self && p.id === who.trim());
+    if (!target) {
+      const names = this.netPlayers.filter((p) => !p.self).map((p) => p.name);
+      this.message(names.length ? `Nie widzę takiego gracza. W grze: ${names.join(', ')}` : 'Nikogo innego nie ma teraz na serwerze.');
+      return false;
+    }
+    if (this.tpaOut && Date.now() - this.tpaOut.at < 60_000) {
+      this.message(`Już czekasz na odpowiedź od ${this.tpaOut.name}.`);
+      return false;
+    }
+    if (!net.sendTeleport) {
+      this.message('Ta sesja nie obsługuje teleportacji.');
+      return false;
+    }
+    this.tpaOut = { to: target.id, name: target.name, at: Date.now() };
+    net.sendTeleport(target.id, { kind: 'ask', name: this.netName });
+    this.message(`Wysłano prośbę o teleportację do ${target.name}. Poczekaj na zgodę.`);
+    this.emitHud();
+    return true;
+  }
+
+  /** 2.19: zgoda na teleportację – nadawca przeskoczy do nas. */
+  acceptTeleport(): boolean {
+    const req = this.tpaIn;
+    const net = this.net;
+    if (!req || !net) return false;
+    const p = this.body.pos;
+    net.sendTeleport?.(req.from, {
+      kind: 'ok',
+      name: this.netName,
+      x: p.x,
+      y: p.y,
+      z: p.z,
+      d: this.isInNether ? 'n' : 'o',
+    });
+    const who = req.name;
+    this.tpaIn = null;
+    this.message(`Wpuszczasz ${who} na swoją pozycję.`);
+    this.emitHud();
+    return true;
+  }
+
+  /** 2.19: odmowa teleportacji. */
+  denyTeleport(): boolean {
+    const req = this.tpaIn;
+    const net = this.net;
+    if (!req || !net) return false;
+    net.sendTeleport?.(req.from, { kind: 'no', name: this.netName });
+    this.tpaIn = null;
+    this.message(`Odmówiono teleportacji dla ${req.name}.`);
+    this.emitHud();
+    return true;
+  }
+
+  /** 2.19: reakcja na odpowiedź na własną prośbę (`ok` teleportuje). */
+  private onTeleportReply(m: { kind: 'ask' | 'ok' | 'no'; name: string; x?: number; y?: number; z?: number; d?: 'o' | 'n' }) {
+    if (m.kind === 'ask') {
+      if (this.tpaIn && Date.now() - this.tpaIn.at < 60_000) {
+        this.message(`${m.name} też prosi o teleportację – najpierw odpowiedz na pierwszą prośbę.`);
+        return;
+      }
+      this.tpaIn = { from: (m as { from?: string }).from ?? '', name: m.name, at: Date.now() };
+      this.message(`${m.name} prosi o teleportację do Ciebie. Wpisz /tpaccept albo /tpdeny (albo użyj przycisku).`);
+      this.emitHud();
+      return;
+    }
+    if (m.kind === 'ok') {
+      const out = this.tpaOut;
+      this.tpaOut = null;
+      if (!Number.isFinite(m.x) || !Number.isFinite(m.y) || !Number.isFinite(m.z)) {
+        this.message('Teleportacja nie powiodła się (brak pozycji).');
+        return;
+      }
+      const nether = m.d === 'n';
+      if (nether !== this.isInNether) this.switchDimension(nether ? this.netherWorld : this.homeWorld);
+      this.body.pos.set(m.x as number, m.y as number, m.z as number);
+      this.body.vel.set(0, 0, 0);
+      this.fallStart = this.body.pos.y;
+      this.world.getChunk(Math.floor(this.body.pos.x / CS), Math.floor(this.body.pos.z / CS));
+      this.message(out ? `Teleportowano do ${out.name}.` : `Teleportacja do ${m.name} gotowa.`);
+      this.emitHud();
+      return;
+    }
+    if (m.kind === 'no') {
+      const out = this.tpaOut;
+      this.tpaOut = null;
+      this.message(`${out?.name ?? m.name} nie zgodził się na teleportację.`);
+      this.emitHud();
+    }
+  }
+
   private onNetMessage(m: NetMessage) {
     switch (m.t) {
       case 'edits':
@@ -1219,6 +1440,9 @@ export class Game {
         if (m.skin && m.skin !== avatar.skinId) this.setRemoteSkin(m.from, m.skin);
         break;
       }
+      case 'tpa':
+        this.onTeleportReply(m);
+        break;
       case 'state':
         if (this.net?.role !== 'guest') break;
         if (Number.isFinite(m.time)) this.time = m.time;
@@ -1279,6 +1503,15 @@ export class Game {
     const now = performance.now();
     net.tick();
     this.syncPublicClock();
+    // 2.19: „niewidzialna sesja” – co kilka sekund zapisujemy pozycję
+    // i ekwipunek, żeby po wyjściu gracz wrócił dokładnie tutaj.
+    if (net.public && net.saveProfile) {
+      this.profileTimer += dt;
+      if (this.profileTimer >= 6) {
+        this.profileTimer = 0;
+        net.saveProfile(this.buildProfile());
+      }
+    }
     this.netEditTimer += dt;
     if (this.netEditTimer >= 0.12) {
       this.netEditTimer = 0;
@@ -1385,62 +1618,67 @@ export class Game {
     // jednego płaskiego koloru na każdą część ciała.
     const mat = (color: number, kind: keyof typeof AVATAR_KINDS) => avatarMaterial(AVATAR_KINDS[kind], color);
 
-    // 2.17: dla skórek Steve i Alex używamy prawdziwej tekstury z paczki
-    // (układ UV jak w Minecrafcie), a nie kolorowych klocków. Pozostałe
-    // skórki zostają przy pikselowych teksturach z 2.16.
+    // 2.19: KAŻDA skórka to prawdziwy plik 64×64 z paczki (9 domyślnych
+    // postaci Minecrafta) rozłożony na waniliowy układ UV.
     const packTex = hasPackSkin(skin.id) ? playerSkinTexture(skin.id) : null;
-    const slim = skin.id === 'alex';
+    const slim = skin.slim === true || isSlimSkin(skin.id);
     const part = (size: [number, number, number], piece: 'body' | 'head' | 'rightArm' | 'rightLeg' | 'leftLeg' | 'leftArm', color: number, kind: 'shirt' | 'head' | 'sleeve' | 'pants') =>
       packTex
         ? skinnedBox(size, piece, packTex, slim)
         : new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), mat(color, kind));
 
-    // Grupa stoi na ziemi (stopy w y = 0), więc da się ją podstawić pod
-    // `body.pos` bez korekty. Proporcje jak w Minecrafcie: ~1,8 bloku wzrostu.
-    const body = part([0.5, 0.62, 0.28], 'body', skin.shirt, 'shirt');
-    body.position.y = 0.9;
-    const head = part([0.4, 0.4, 0.4], 'head', skin.skin, 'head');
-    head.position.y = 1.42;
-    // Włosy to cienka „czapka” na głowie – bez nich awatar wygląda jak lalka.
-    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.42), mat(skin.hair, 'hair'));
-    hair.position.y = 1.66;
-    // Skórka z paczki ma włosy i oczy namalowane w teksturze – dodatkowe
-    // klocki tylko by je zasłoniły.
-    if (packTex) hair.visible = false;
-    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.08), mat(skin.hair, 'hair'));
-    hairBack.position.set(0, 1.5, 0.19);
-    if (packTex) hairBack.visible = false;
-    // Oczy na przedniej ścianie (przód awatara to -Z, tak jak trzymany blok).
+    // Proporcje 1:1 z gry: głowa 8 px, tułów 12 px, nogi 12 px (32 px = 2 bloki),
+    // a cała postać ma 15/16 skali, czyli 1,875 bloku – jak w Minecrafcie.
+    const AVATAR_SCALE = 0.9375;
+    const armW = slim ? 0.1875 : 0.25;
+    const body = part([0.5, 0.75, 0.25], 'body', skin.shirt, 'shirt');
+    body.position.y = 1.125;
+    const head = part([0.5, 0.5, 0.5], 'head', skin.skin, 'head');
+    head.position.y = 1.75;
+    // 2.19: czapka/włosy to druga warstwa skórki (jak w grze).
+    const hat = packTex ? skinnedHat([0.5, 0.5, 0.5], packTex) : null;
+    if (hat) hat.position.y = 1.75;
+    // Włosy i oczy rysujemy tylko dla starych, kolorowych skórek.
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.1, 0.52), mat(skin.hair, 'hair'));
+    hair.position.y = 1.98;
+    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.34, 0.08), mat(skin.hair, 'hair'));
+    hairBack.position.set(0, 1.8, 0.24);
     const eyeMat = new THREE.MeshBasicMaterial({ color: skin.eye ?? 0x2b2b2b });
-    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.02), eyeMat);
-    eyeL.position.set(-0.09, 1.46, -0.205);
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), eyeMat);
+    eyeL.position.set(-0.11, 1.8, -0.255);
     const eyeR = eyeL.clone();
-    eyeR.position.x = 0.09;
+    eyeR.position.x = 0.11;
     if (packTex) {
+      hair.visible = false;
+      hairBack.visible = false;
       eyeL.visible = false;
       eyeR.visible = false;
     }
-    const armL = part([0.15, 0.6, 0.18], 'leftArm', skin.sleeve, 'sleeve');
-    armL.position.set(-0.33, 0.9, 0);
-    const armR = part([0.15, 0.6, 0.18], 'rightArm', skin.sleeve, 'sleeve');
-    armR.position.x = 0.33;
-    const legL = part([0.2, 0.6, 0.22], 'leftLeg', skin.pants, 'pants');
-    legL.position.set(-0.13, 0.3, 0);
-    const legR = part([0.2, 0.6, 0.22], 'rightLeg', skin.pants, 'pants');
-    legR.position.x = 0.13;
-    const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 0.24), mat(skin.shoes, 'shoes'));
-    shoeL.position.set(-0.13, 0.07, -0.01);
+    const armL = part([armW, 0.75, 0.25], 'leftArm', skin.sleeve, 'sleeve');
+    armL.position.set(-(0.25 + armW / 2), 1.125, 0);
+    const armR = part([armW, 0.75, 0.25], 'rightArm', skin.sleeve, 'sleeve');
+    armR.position.set(0.25 + armW / 2, 1.125, 0);
+    const legL = part([0.25, 0.75, 0.25], 'leftLeg', skin.pants, 'pants');
+    legL.position.set(-0.125, 0.375, 0);
+    const legR = part([0.25, 0.75, 0.25], 'rightLeg', skin.pants, 'pants');
+    legR.position.set(0.125, 0.375, 0);
+    const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.16, 0.27), mat(skin.shoes, 'shoes'));
+    shoeL.position.set(-0.125, 0.08, -0.01);
     const shoeR = shoeL.clone();
-    shoeR.position.x = 0.13;
-    // Skórka maluje buty na dole nóg – osobne buty nie są potrzebne.
+    shoeR.position.x = 0.125;
     if (packTex) {
       shoeL.visible = false;
       shoeR.visible = false;
     }
     const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), new THREE.MeshBasicMaterial({ color: 0xc9a227 }));
-    hand.position.set(0.36, 0.62, -0.24);
+    hand.position.set(0.25 + armW / 2, 0.82, -0.26);
     hand.visible = false;
-    group.add(body, head, hair, hairBack, eyeL, eyeR, armL, armR, legL, legR, shoeL, shoeR, hand);
+    // Skóra całej postaci jest skalowana jak w wanilii (15/16), ale stopy
+    // zostają na y = 0, żeby `body.pos` dalej oznaczał ziemię.
+    const figure = new THREE.Group();
+    figure.scale.setScalar(AVATAR_SCALE);
+    figure.add(body, head, ...(hat ? [hat] : []), hair, hairBack, eyeL, eyeR, armL, armR, legL, legR, shoeL, shoeR, hand);
+    group.add(figure);
 
     // Etykieta z nazwą.
     const canvas = document.createElement('canvas');
@@ -1459,7 +1697,7 @@ export class Game {
     texture.minFilter = THREE.NearestFilter;
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
     sprite.scale.set(1.7, 0.42, 1);
-    sprite.position.y = 2.05;
+    sprite.position.y = 2.12;
     group.add(sprite);
 
     return {
@@ -3333,6 +3571,19 @@ export class Game {
         this.body.vel.set(0, 0, 0);
         this.fallStart = y;
         this.message(`Teleportowano do ${x} ${y} ${z}`);
+        break;
+      }
+      case 'tpa': case 'teleport': {
+        // 2.19: prośba o teleportację do innego gracza (bezpieczna – wymaga zgody).
+        this.requestTeleport(args.join(' '));
+        break;
+      }
+      case 'tpaccept': case 'tpayes': case 'tpaaccept': {
+        if (!this.acceptTeleport()) this.message('Nie masz teraz żadnej prośby o teleportację.');
+        break;
+      }
+      case 'tpdeny': case 'tpano': case 'tpadeny': {
+        if (!this.denyTeleport()) this.message('Nie masz teraz żadnej prośby o teleportację.');
         break;
       }
       case 'give': {
@@ -5762,6 +6013,9 @@ export class Game {
         const index = ((Math.round(bearing / (Math.PI / 2)) % 4) + 4) % 4;
         return { name: w.name, distance, direction: directions[index], bearing };
       })(),
+      // 2.19: prośby o teleportację tracą ważność po minucie.
+      tpa: this.tpaIn && now - this.tpaIn.at < 60_000 ? { from: this.tpaIn.from, name: this.tpaIn.name } : null,
+      tpaSent: this.tpaOut && now - this.tpaOut.at < 60_000 ? { name: this.tpaOut.name } : null,
     });
   }
 
@@ -6369,6 +6623,8 @@ export class Game {
     for (const m of this.mobs) m.dispose();
     for (const t of this.tnts) (t.mesh.material as THREE.Material).dispose();
     this.tnts = [];
+    // 2.19: ostatni zapis postępu, zanim zamkniemy kanał.
+    this.saveProfileNow();
     this.net?.close('Koniec gry');
     this.net = null;
     for (const a of this.arrows) this.scene.remove(a.mesh);

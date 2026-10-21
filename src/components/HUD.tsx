@@ -139,7 +139,16 @@ export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<
   );
 }
 
-export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }: { hud: HUDState; icons: Record<number, string>; minimap?: HTMLCanvasElement | null; touchControls?: boolean; onSelectSlot?: (i: number) => void }) {
+export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, onTpaAccept, onTpaDeny }: {
+  hud: HUDState;
+  icons: Record<number, string>;
+  minimap?: HTMLCanvasElement | null;
+  touchControls?: boolean;
+  onSelectSlot?: (i: number) => void;
+  /** 2.19: przyciski zgody na teleportację (działają też na telefonie). */
+  onTpaAccept?: () => void;
+  onTpaDeny?: () => void;
+}) {
   const [label, setLabel] = useState<{ text: string; key: number } | null>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
   const sel = hud.hotbar[hud.selected];
@@ -196,6 +205,28 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot }
       {/* 2.3: przy lornetcie celownik znika, a ramka zasłania kąty widzenia */}
       {hud.zoom && (
         <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 34%, rgba(0,0,0,0.85) 72%)' }} />
+      )}
+
+      {/* 2.19: prośba o teleportację – duże przyciski, żeby dało się zgodzić
+          jednym dotknięciem także na telefonie. */}
+      {hud.tpa && (
+        <div className="pointer-events-auto absolute left-1/2 top-[22%] z-40 w-[min(420px,calc(100vw-24px))] -translate-x-1/2 border-2 border-black bg-[#2b2b2b]/95 p-3 text-center shadow-[0_8px_24px_rgba(0,0,0,0.55)]">
+          <div className="mc-text text-sm text-yellow-200">{hud.tpa.name} prosi o teleportację do Ciebie</div>
+          <div className="mt-1 text-[11px] leading-snug text-white/60">Po zgodzie pojawi się obok Ciebie tam, gdzie właśnie stoisz.</div>
+          <div className="mt-2 flex justify-center gap-2">
+            <button type="button" className="mc-btn mc-btn-primary !w-auto !px-4 !py-2 !text-[14px]" onClick={onTpaAccept}>
+              ✔ Przyjmij
+            </button>
+            <button type="button" className="mc-btn !w-auto !px-4 !py-2 !text-[14px]" onClick={onTpaDeny}>
+              ✖ Odmów
+            </button>
+          </div>
+        </div>
+      )}
+      {hud.tpaSent && (
+        <div className="absolute left-1/2 top-[16%] -translate-x-1/2 border border-white/10 bg-black/55 px-3 py-1 text-[12px] text-white/80">
+          Czekam na zgodę: {hud.tpaSent.name}… <span className="opacity-60">(/tpaccept u niego)</span>
+        </div>
       )}
 
       {/* crosshair – 2.18: obrazek z paczki, z pikselowym fallbackiem */}

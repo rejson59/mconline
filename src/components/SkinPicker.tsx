@@ -1,4 +1,5 @@
 import { SKINS, skinById, type Skin } from '../game/skins';
+import { skinFace, skinPortrait } from '../game/skinArt';
 
 /**
  * 2.12: podgląd skórki i wybór wyglądu postaci.
@@ -11,6 +12,21 @@ import { SKINS, skinById, type Skin } from '../game/skins';
 
 export function SkinAvatar({ skin, size = 56, label }: { skin: Skin | string; size?: number; label?: string }) {
   const s = typeof skin === 'string' ? skinById(skin) : skin;
+  // 2.19: prawdziwy portret 16×32 ze skórki 64×64 – wygląda jak w grze.
+  const portrait = skinPortrait(s.id);
+  if (portrait) {
+    return (
+      <img
+        src={portrait}
+        width={size}
+        height={size * 2}
+        className="pixelated shrink-0"
+        style={{ imageRendering: 'pixelated', objectFit: 'contain' }}
+        alt={label ?? `Podgląd skórki ${s.name}`}
+        draggable={false}
+      />
+    );
+  }
   const px = (n: number) => `${(size * n) / 100}px`;
   return (
     <div
@@ -60,6 +76,21 @@ export function SkinAvatar({ skin, size = 56, label }: { skin: Skin | string; si
 /** 2.12: sama głowa – do listy graczy w HUD i w pauzie (mała, czytelna). */
 export function SkinHead({ skin, size = 16 }: { skin: Skin | string; size?: number }) {
   const s = typeof skin === 'string' ? skinById(skin) : skin;
+  const face = skinFace(s.id);
+  if (face) {
+    return (
+      <img
+        src={face}
+        width={size}
+        height={size}
+        className="pixelated shrink-0"
+        style={{ imageRendering: 'pixelated', border: '1px solid #000' }}
+        alt=""
+        draggable={false}
+        aria-hidden="true"
+      />
+    );
+  }
   const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
   return (
     <div
@@ -102,7 +133,9 @@ export function SkinPicker({
               background: s.id === current.id ? 'rgba(244,208,63,0.18)' : 'rgba(0,0,0,0.35)',
             }}
           >
-            <span style={{ width: 10, height: 10, background: `#${s.shirt.toString(16).padStart(6, '0')}`, border: '1px solid #000' }} />
+            {skinFace(s.id)
+              ? <img src={skinFace(s.id)!} width={12} height={12} className="pixelated" style={{ imageRendering: 'pixelated', border: '1px solid #000' }} alt="" draggable={false} />
+              : <span style={{ width: 10, height: 10, background: `#${s.shirt.toString(16).padStart(6, '0')}`, border: '1px solid #000' }} />}
             {s.name}
           </button>
         ))}

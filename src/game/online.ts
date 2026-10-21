@@ -20,6 +20,7 @@
  */
 
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
+import { loadPlayerId, profileRow, sanitizeProfile, type PlayerProfile } from './profile';
 import {
   MAX_SNAPSHOT_EDITS,
   publicDay,
@@ -34,6 +35,7 @@ import {
   type NetPos,
   type NetRole,
   type NetStatus,
+  type NetTeleport,
   type NetTransport,
   type NetWeather,
   type WorldHandshake,
@@ -54,6 +56,10 @@ export const PUBLIC_NAME = 'Serwer publiczny';
 export const PUBLIC_WORLD_ID = 'public';
 export const PUBLIC_CHANNEL = 'blockcraft-public-v1';
 export const PUBLIC_TABLE = 'blockcraft_blocks';
+/** 2.19: zapis postępu graczy (pozycja i ekwipunek po wyjściu). */
+export const PROFILE_TABLE = 'blockcraft_players';
+/** Co ile ms zapisujemy postęp gracza. */
+export const PROFILE_SAVE_MS = 6000;
 /** Kanał zdarzeń wewnątrz pokoju (broadcast). */
 export const PUBLIC_EVENT = 'msg';
 /** Ile zmian wczytujemy maksymalnie przy wejściu. */
@@ -131,6 +137,8 @@ export class PublicServer implements NetLike {
   readonly transport: NetTransport = 'online';
   readonly public = true;
   name: string;
+  /** 2.19: trwały identyfikator gracza – ten sam po zmianie nicku i skórki. */
+  readonly pid: string;
   /** 2.12: skórka gracza wysyłana w Presence i w pozycjach. */
   skin = '';
   world: WorldHandshake;
@@ -156,12 +164,17 @@ export class PublicServer implements NetLike {
   private lastFlush = 0;
   private lastCatchup = 0;
   private lastSyncIso = new Date().toISOString();
+  private lastProfile: PlayerProfile | null = null;
+  private lastProfileSave = 0;
   private flushing = false;
   private catchingUp = false;
   private hue: number;
 
-  constructor(opts: { name: string; id?: string; client?: SupabaseClient }) {
-    this.id = opts.id ?? randomId();
+  constructor(opts: { name: string; id?: string; pid?: string; client?: SupabaseClient }) {
+    // „Niewidzialna sesja”: id w sieci to trwały pid, więc pozostali gracze
+    // widzą tę samą postać nawet po zmianie nicku czy skórki.
+    this.pid = opts.pid ?? loadPlayerId();
+    this.id = opts.id ?? this.pid ?? randomId();
     this.name = (opts.name || 'Gracz').slice(0, 20);
     this.hue = hueFor(this.id);
     // Klient jest wstrzykiwany w testach (atrapa bez sieci); w grze zawsze
@@ -193,13 +206,15 @@ export class PublicServer implements NetLike {
     this.setStatus('connecting');
     this.onProgress?.('Łączę z serwerem publicznym…');
     try {
-      const edits = await this.loadBlocks();
+      const [edits, profile] = await Promise.all([this.loadBlocks(), this.loadProfile()]);
       if (this.closed) return;
-      this.world = { ...this.baseWorld(), edits };
+      this.world = { ...this.baseWorld(), edits, profile: profile ?? undefined };
       this.onProgress?.(
-        edits.length
-          ? `Wczytano świat: ${edits.length.toLocaleString('pl-PL')} zmian bloków.`
-          : 'Świeży świat – możesz zbudować pierwszy.'
+        profile
+          ? `Witaj ponownie, ${profile.name}! Wracasz tam, gdzie skończyłeś.`
+          : edits.length
+            ? `Wczytano świat: ${edits.length.toLocaleString('pl-PL')} zmian bloków.`
+            : 'Świeży świat – możesz zbudować pierwszy.'
       );
       await this.subscribe();
     } catch (e) {
@@ -226,6 +241,50 @@ export class PublicServer implements NetLike {
       if (rows.length < PAGE) break;
     }
     return out;
+  }
+
+  /** 2.19: postęp tego gracza z bazy (albo `null` przy pierwszej wizycie). */
+  private async loadProfile(): Promise<PlayerProfile | null> {
+    try {
+      const { data, error } = await this.client
+        .from(PROFILE_TABLE)
+        .select('*')
+        .eq('world', PUBLIC_WORLD_ID)
+        .eq('pid', this.pid)
+        .limit(1);
+      if (error || !data?.length) return null;
+      const row = { ...(data[0] as Record<string, unknown>), pid: this.pid };
+      return sanitizeProfile(row);
+    } catch {
+      // Brak tabeli albo chwilowy błąd sieci nie może blokować wejścia.
+      return null;
+    }
+  }
+
+  /** 2.19: zapis postępu (pozycja + ekwipunek). Wywołuje silnik co kilka sekund. */
+  saveProfile(profile: PlayerProfile) {
+    if (this.closed || !profile) return;
+    this.lastProfile = profile;
+    const now = Date.now();
+    if (now - this.lastProfileSave < PROFILE_SAVE_MS) return;
+    this.lastProfileSave = now;
+    void this.writeProfile(profile);
+  }
+
+  private async writeProfile(profile: PlayerProfile) {
+    try {
+      const { error } = await this.client
+        .from(PROFILE_TABLE)
+        .upsert(profileRow(profile, PUBLIC_WORLD_ID), { onConflict: 'world,pid' });
+      if (error) throw new Error(error.message);
+    } catch {
+      // Tabela może jeszcze nie istnieć – świat bloków działa dalej.
+    }
+  }
+
+  /** 2.19: prośba o teleportację do wskazanego gracza. */
+  sendTeleport(to: string, t: NetTeleport) {
+    this.send({ t: 'tpa', from: this.id, to, ...t, name: this.name });
   }
 
   private subscribe(): Promise<void> {
@@ -293,6 +352,9 @@ export class PublicServer implements NetLike {
         break;
       case 'chat':
         this.onChat?.(String(m.name || 'Gracz').slice(0, 20), String(m.text || '').slice(0, 240));
+        break;
+      case 'tpa':
+        this.onMessage?.(m);
         break;
       case 'bye':
         this.syncRoster();
@@ -486,6 +548,8 @@ export class PublicServer implements NetLike {
     if (this.closed) return;
     this.closed = true;
     void this.flush();
+    // 2.19: ostatni zapis postępu – gracz wraca tu, gdzie wyszedł.
+    if (this.lastProfile) void this.writeProfile({ ...this.lastProfile, updated: Date.now() });
     const ch = this.channel;
     this.channel = null;
     if (ch) {

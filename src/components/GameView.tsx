@@ -248,6 +248,8 @@ export default function GameView({
           minimap={game.minimapCanvas}
           touchControls={touch}
           onSelectSlot={touch ? (i) => { game.selected = i; game.emitHud(); } : undefined}
+          onTpaAccept={() => { game.acceptTeleport(); }}
+          onTpaDeny={() => { game.denyTeleport(); }}
         />
       )}
       {hud && ui === 'playing' && !hud.locked && !touch && (

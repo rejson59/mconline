@@ -235,7 +235,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.18') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.19') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -347,9 +347,9 @@ section('menus: static render');
   const picker = renderToStaticMarkup(<SkinPicker value={DEFAULT_SKIN_ID} onChange={noop} />);
   check('2.12 skin picker lists every skin', SKINS.every((s) => picker.includes(`Skórka ${s.name}`)));
   check('2.12 skin picker marks the current skin', picker.includes('aria-pressed="true"'));
-  const compact = renderToStaticMarkup(<SkinPicker value="ninja" onChange={noop} compact />);
-  check('2.12 compact skin picker also works', compact.includes('Skórka Ninja') && compact.includes('aria-pressed="true"'));
-  const head = renderToStaticMarkup(<SkinHead skin="creeper" size={16} />);
+  const compact = renderToStaticMarkup(<SkinPicker value="zuri" onChange={noop} compact />);
+  check('2.12 compact skin picker also works', compact.includes('Skórka Zuri') && compact.includes('aria-pressed="true"'));
+  const head = renderToStaticMarkup(<SkinHead skin="zuri" size={16} />);
   check('2.12 skin head renders a face', head.includes('#'));
   const avatar = renderToStaticMarkup(<SkinAvatar skin={DEFAULT_SKIN_ID} size={40} />);
   check('2.12 skin avatar renders a full body', avatar.includes('Podgląd skórki'));
@@ -529,7 +529,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces the public server', menu.includes('Serwer publiczny'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.18'));
+  check('the menu names the current release', menu.includes('WERSJA 2.19'));
 }
 
 section('2.4: brewing rules');
@@ -756,6 +756,34 @@ section('2.18: HUD rysuje grafiki z paczki');
   check('pasek doświadczenia ma tło i postęp', (html.match(/url\(data:image\/png/g) ?? []).length >= 2);
   check('celownik jest obrazkiem, nie divem', /translate\(-50%,\s?-50%\)/.test(html));
   check('poziom życia nadal jest wypisany', html.includes('14/20'), html.slice(-400));
+}
+
+section('2.19: teleportacja i skórki 1:1 w interfejsie');
+{
+  const state = {
+    mode: 'survival', health: 20, maxHealth: 20, hunger: 20, armor: [null, null, null, null],
+    air: 10, maxAir: 10, xp: 0, level: 0, hotbar: Array(9).fill(null), selected: 0,
+    effects: [], messages: [], holdItem: null, sprinting: false, flying: false, underwater: false, sneaking: false,
+    time: 0.4, hurtCount: 0, zoom: false, minimap: false, bow: -1, tpa: null, tpaSent: null,
+  } as unknown as Parameters<typeof HUD>[0]['hud'];
+  const plain = renderToStaticMarkup(<HUD hud={state} icons={{}} />);
+  check('bez prośby nie ma okna teleportacji', !plain.includes('Przyjmij'));
+
+  const asked = renderToStaticMarkup(<HUD hud={{ ...state, tpa: { from: 'p2', name: 'Ziomek' } }} icons={{}} />);
+  check('HUD pokazuje kto prosi o teleportację', asked.includes('Ziomek') && asked.includes('prosi o teleportację'));
+  check('HUD ma przycisk zgody', asked.includes('Przyjmij'));
+  check('HUD ma przycisk odmowy', asked.includes('Odmów'));
+
+  const waiting = renderToStaticMarkup(<HUD hud={{ ...state, tpaSent: { name: 'Ziomek' } }} icons={{}} />);
+  check('HUD pokazuje oczekiwanie na zgodę', waiting.includes('Czekam na zgodę'));
+
+  // 2.19: skórki w podglądzie to prawdziwe pliki 64×64 z paczki.
+  const avatar = renderToStaticMarkup(<SkinAvatar skin="zuri" size={40} />);
+  check('podgląd skórki to prawdziwy portret', avatar.startsWith('<img') && avatar.includes('data:image/png;base64,'));
+  const face = renderToStaticMarkup(<SkinHead skin="steve" size={16} />);
+  check('twarz w liście graczy to obrazek z paczki', face.startsWith('<img') && face.includes('data:image/png;base64,'));
+  const picker = renderToStaticMarkup(<SkinPicker value="efe" onChange={noop} />);
+  check('wybór skórki pokazuje 9 portretów', (picker.match(/data:image\/png;base64,/g) ?? []).length >= 9);
 }
 
 try {

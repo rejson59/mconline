@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.18.0",
-  "description": "BlockCraft 2.18 „Moby jak w Minecrafcie” – polska gra sandboxowa w przeglądarce: moby z prawdziwymi modelami i teksturami 1:1, pikselowy interfejs z paczki, 155 przepisów, publiczny serwer i crafting jak w oryginale.",
+  "version": "2.19.0",
+  "description": "BlockCraft 2.19 „Świat jak w Minecrafcie” – polska gra sandboxowa w przeglądarce: kontynenty i rzeki, wioski jak w oryginale, 9 skórek 1:1, trwała sesja gracza na publicznym serwerze, teleportacja za zgodą i 155 przepisów.",
   "type": "module",
   "license": "MIT",
   "keywords": [

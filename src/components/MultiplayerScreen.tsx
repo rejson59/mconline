@@ -334,6 +334,12 @@ export default function MultiplayerScreen({
           Wskakuj do <b className="text-yellow-200">wspólnego świata</b> na serwerze publicznym – bez kodów, bez
           gospodarza. Wszyscy budują to samo i widzą się nawzajem.
         </p>
+        <p className="mb-4 border-l-2 border-yellow-300/50 pl-3 text-xs leading-relaxed text-white/60">
+          Twoja postać ma <b className="text-white/80">własną sesję w tej przeglądarce</b>: po powrocie wracasz tam,
+          gdzie skończyłeś, z tym samym ekwipunkiem – nawet jeśli zmienisz nick albo skórkę. Zgubiłeś się?
+          Wpisz na czacie <b className="text-white/80">/tpa nick</b>, a kolega zatwierdzi teleportację jednym
+          przyciskiem.
+        </p>
 
         <label className="mb-1 block text-xs uppercase tracking-widest text-white/50">Twoja nazwa</label>
         <input

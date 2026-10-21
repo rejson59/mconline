@@ -1,43 +1,43 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.18.0';
-export const GAME_RELEASE_NAME = 'Moby jak w Minecrafcie';
+export const GAME_VERSION = '2.19.0';
+export const GAME_RELEASE_NAME = 'Świat jak w Minecrafcie';
 
 /**
- * 2.18: prawdziwe modele mobów 1:1 z Minecrafta (waniliowe pudełka i UV),
- * pikselowy interfejs HUD z paczki (serca, głód, hotbar, celownik), chmury,
- * słońce, księżyc, deszcz i pęknięcia bloków wprost z tekstur paczki.
+ * 2.19: prawdziwe kontynenty i rzeki zamiast łatek biomów, wioski wtopione
+ * w teren, 9 skórek gracza 1:1 z Minecrafta, niewidzialna sesja konta na
+ * serwerze publicznym (pozycja i bloki po wyjściu) oraz teleportacja za zgodą.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
   {
-    title: 'Moby 1:1 jak w Minecrafcie',
-    text: 'Każdy z 14 mobów ma teraz prawdziwy model z gry: te same pudełka, te same punkty zawiasów i ten sam układ UV, więc tekstura z paczki trafia dokładnie na swoją ścianę. Krowa ma łaty i różowy ryjek, świnia oczy i chrapkę, creeper twarz z charakterystycznym grymasem, owca wełnę (osobny, „spuchnięty” model chowany po strzyżeniu), a mieszkaniec szatę zależną od zawodu. Wilk po oswojeniu dostaje czerwoną obrożę, a każdy mob odwraca głowę w stronę gracza.',
+    title: 'Twoja własna, niewidzialna sesja konta',
+    text: 'Gracz nie jest już tylko nickiem przy wejściu: przeglądarka dostaje losowy identyfikator, zapisany lokalnie i wysyłany razem z postępem. Dzięki temu serwer pamięta, gdzie skończyłeś i co miałeś w ekwipunku – nawet jeśli zmienisz nick albo skórkę. Po powrocie wracasz dokładnie tam, gdzie wyszedłeś, z blokami, zbroją i doświadczeniem; zapis w chmurze leci co kilka sekund i jeszcze raz przy wyjściu.',
   },
   {
-    title: 'Pikselowy interfejs z paczki',
-    text: 'Serca, drumsticki głodu, pancerz i pęcherzyki powietrza to teraz grafiki z paczki – z konturem pustego serca, półsercami i pełnym paskiem doświadczenia. Hotbar ma tło i ramkę wybranego slotu jak w grze, celownik jest pikselowy, a sloty ekwipunku dostały teksturę z paczki.',
+    title: 'Teleportacja za zgodą – /tpa',
+    text: 'Gdy ktoś się zgubi, wystarczy /tpa nick. Zaproszony dostaje prośbę z dużymi przyciskami „Przyjmij” i „Odmów” (działa też dotykiem na telefonie), a po zgodzie teleportujesz się do niego – nawet do Netheru. Prośba wygasa po minucie, więc nikt nie wciągnie cię na drugi koniec świata bez twojej wiedzy.',
   },
   {
-    title: 'Niebo, deszcz i pęknięcia bloków z paczki',
-    text: 'Chmury mają kształty z paczki (maska kłębów z przezroczystym tłem, sterowana pogodą), słońce i księżyc są pikselowe, deszcz pada w postaci kropli z tekstury, a przy kopaniu bloku widać dziesięć prawdziwych faz pękania.',
+    title: 'Nowe biomy: kontynenty, góry i rzeki',
+    text: 'Generowanie świata zostało przepisane od zera: kontynenty mają teraz tysiące bloków, w środku rosną góry z grzbietami, a klimat i lasy zmieniają się falami – obok siebie leżą duże, spójne krainy, a nie pojedyncze łatki. Między nimi płyną rzeki na poziomie morza, jaskinie nie otwierają już dziur na powierzchni, a każdy świat startuje z innego zakątka mapy.',
   },
   {
-    title: 'Wszystkie bloki proszą się o paczkę tekstur',
-    text: 'Cały świat – 155 kafelków od trawy i bruku po kwarc, beton, błoto i owoce morza – rysuje się teraz teksturami z paczki w stylu waniliowego Minecrafta. Trawa i liście są zabarwione kolorami biomu z colormapy paczki, więc wyglądają dokładnie jak w oryginale.',
+    title: 'Wioski jak w Minecrafcie – bez dziur i platform',
+    text: 'Osady powstają tam, gdzie w oryginale: na równinach, sawannie, pustyni i tundrze, na w miarę płaskim terenie. Środek placu jest równy, a na obrzeżach grunt łagodnie wraca do naturalnego – bez wiszących platform, pionowych ścian i dziur pod domami. Wioska ma drogi, studnię, dzwon, latarnie, farmy, kuźnię, bibliotekę i pełne wyposażenie wnętrz.',
   },
   {
-    title: 'Ekwipunek jak w prawdziwej grze',
-    text: '99 z 100 przedmiotów ma oryginalne ikony: kilofy, miecze, zbroje, jedzenie, sztabki, mikstury z kolorowymi płynami, wiadra i pochodnie. Ikony są powiększane bez wygładzania, więc zostają ostre piksele – także na telefonie.',
+    title: '9 skórek gracza 1:1 jak w Minecrafcie',
+    text: 'Steve, Alex, Ari, Efe, Kai, Makena, Noor, Sunny i Zuri mają prawdziwe skórki 64×64 rozłożone na ciało według waniliowego układu UV. Alex i Efe mają smukłe ręce, każda postać dostała twarz i portret do wyboru skórki, a w grze widzisz te same piksele, co w oryginale – przodem, z czapką i rękawami na swoim miejscu.',
   },
   {
-    title: 'Skórki Steve’a i Alexa wprost z paczki',
-    text: 'Postacie Steve i Alex używają prawdziwych skórek 64×64 rozłożonych na ciało według waniliowego układu UV (twarz, koszulka, spodnie i buty na swoim miejscu). Pozostałe skórki zachowują pikselowe tekstury z 2.16.',
+    title: 'Każdy zaczyna w innym miejscu świata',
+    text: 'Nowy gracz nie rodzi się na plecach kolegi: start jest losowy, ale zawsze na suchym lądzie – w promieniu od 320 do 2600 bloków od środka mapy. Świat jest duży, więc każdy może znaleźć własny kąt, a gdy ktoś się zgubi, jest /tpa i wspólne budowanie.',
   },
   {
-    title: 'Moby w kolorach z paczki',
-    text: 'Każdy z 14 mobów dostaje paletę wyliczoną z własnej tekstury encji: krowa brązy i kremowe łaty, creeper soczyste zielenie, szkielet chłodne szarości, świnia róż, a zombie zieleń i turkus. Odcień każdej części ciała jest dopasowany do najbliższego koloru z tej palety.',
+    title: 'Moby 1:1, tekstury, bloki i ekwipunek jak w grze',
+    text: 'Krowa ma łaty i różowy ryjek, owca runo, świnia plamy, creeper grymas, a 15 modeli używa waniliowych pudełek, zawiasów i układu UV – w tym golem, któremu głowa patrzy teraz tam, gdzie powinna. Serca, hotbar i głód to grafiki z paczki, chmury i deszcz mają kształty z tekstur, a kopany blok pęka w dziesięciu prawdziwych fazach pękania. Postacie graczy noszą pikselowe ubrania: tkaninę, jeans i skórę.',
   },
   {
-    title: 'Nadal: publiczny serwer, pełny ekran, poziom i tekstury graczy',
-    text: 'Pełny ekran bez zoomu kamery i z widocznymi przyciskami – panele ekwipunku i czatu dają się przewijać (scroll) także po obrocie telefonu. Auto-bicie wrogich mobów i auto-skok na każdy schodek. Ekwipunek jak w Minecrafcie: siatka 2×2, stół 3×3, książka receptur i 155 przepisów – schody i płyty z każdego materiału, latarnie, dzwony, beton i wełna. Wszystkie moby mają wielobarwne tekstury (łaty krowy, runo owcy, plamy creepera, pancerz pająka), a postacie graczy pikselowe ubrania: tkanina, jeans i skóra. Do tego publiczny serwer z jednym wspólnym światem i zapisem w chmurze, skórki postaci, lista komend w czacie, pochodnia w dłoni i naprawione kody zaproszeń („wrong state”). Jeden pień daje cztery deski, a cztery deski – stół rzemieślniczy.',
+    title: 'Serwer publiczny, pełny ekran i poziom na telefonie',
+    text: 'Jeden wspólny świat z zapisem bloków w chmurze i listą komend w czacie (od /help po /tpa) – bez kodów pokoi i bez „wrong state”. Pochodnia w dłoni oświetla okolicę, pełny ekran nie przybliża kamery ani nie zasłania przycisków, panele ekwipunku i czatu przewijają się palcem (scroll), a dotykowy drążek, przyciski i auto-skok na każdy schodek działają też w poziomie. Auto-bicie wrogich mobów, ekwipunek jak w Minecrafcie (siatka 2×2, stół 3×3, 155 przepisów ze schodami, płytami, latarniami), jeden pień daje cztery deski, a cztery deski – stół rzemieślniczy.',
   },
 ];

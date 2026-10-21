@@ -17,6 +17,12 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
+  '2.19: Twoja sesja pamięta, gdzie skończyłeś!',
+  '2.19: /tpa – teleportacja za zgodą!',
+  '2.19: kontynenty, rzeki i prawdziwe biomy!',
+  '2.19: wioski bez dziur i platform!',
+  '2.19: 9 skórek 1:1 jak w Minecrafcie!',
+  '2.19: każdy startuje w innym miejscu!',
   '2.18: moby 1:1 jak w Minecrafcie!',
   '2.18: serca i hotbar z paczki tekstur!',
   '2.18: krowa, świnia i creeper jak w grze!',

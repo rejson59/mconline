@@ -69,7 +69,10 @@ function hash(x: number, y: number, z: number, s: number): number {
   return (h >>> 0) / 4294967296;
 }
 
-const OK_BIOMES = new Set(['Równiny', 'Las', 'Pustynia', 'Brzozowy las']);
+// 2.19: wioski stają tam, gdzie w Minecraftcie – na otwartych równinach,
+// sawannie, pustyni i tundrze. W środku gęstego lasu wyglądałyby jak
+// wycięty plac, a nie osada.
+const OK_BIOMES = new Set(['Równiny', 'Sawanna', 'Pustynia', 'Tundra']);
 
 // Memoizacja: ten sam świat pyta o te same komórki bardzo często (generator,
 // minimapa, spawn mobów).
@@ -216,17 +219,23 @@ export function villageInCell(gx: number, gz: number, ctx: VillageContext): Vill
     if (!ctx.flat) {
       if (!OK_BIOMES.has(info.biome)) return null;
       if (info.h <= ctx.sea + 2 || info.h > 98) return null;
-      // Osada staje tylko na w miarę równym terenie.
+      // 2.19: osada staje tylko na w miarę równym terenie – próbki z całego
+      // placu (nie tylko okręgu), żeby nie wybrać zbocza ani urwiska.
       let min = 1e9;
       let max = -1e9;
-      for (let i = 0; i < 16; i++) {
-        const a = (i / 16) * Math.PI * 2;
-        const s = ctx.surface(Math.round(x + Math.cos(a) * 18), Math.round(z + Math.sin(a) * 18)).h;
-        min = Math.min(min, s);
-        max = Math.max(max, s);
-      }
-      if (max - min > 7) return null;
-      y = min + Math.min(3, Math.round((max - min) / 2));
+      let sum = 0;
+      let n = 0;
+      for (let dz = -2; dz <= 2; dz++)
+        for (let dx = -2; dx <= 2; dx++) {
+          const s = ctx.surface(x + dx * 9, z + dz * 9).h;
+          min = Math.min(min, s);
+          max = Math.max(max, s);
+          sum += s;
+          n++;
+        }
+      if (max - min > 9) return null;
+      y = Math.round(sum / n);
+      if (y <= ctx.sea + 2 || y > 96) return null;
     }
     const radius = 20 + Math.floor(hash(gx, 15, gz, ctx.seed) * 8);
     const desert = info.biome === 'Pustynia';
@@ -240,10 +249,10 @@ export function villageInCell(gx: number, gz: number, ctx: VillageContext): Vill
 /** Wioski, których obszar obejmuje podany prostokąt (włącznie z marginesem). */
 export function villagesOverlapping(x0: number, z0: number, x1: number, z1: number, ctx: VillageContext): Village[] {
   const out: Village[] = [];
-  const gx0 = Math.floor((x0 - 40) / VILLAGE_CELL);
-  const gx1 = Math.floor((x1 + 40) / VILLAGE_CELL);
-  const gz0 = Math.floor((z0 - 40) / VILLAGE_CELL);
-  const gz1 = Math.floor((z1 + 40) / VILLAGE_CELL);
+  const gx0 = Math.floor((x0 - 48) / VILLAGE_CELL);
+  const gx1 = Math.floor((x1 + 48) / VILLAGE_CELL);
+  const gz0 = Math.floor((z0 - 48) / VILLAGE_CELL);
+  const gz1 = Math.floor((z1 + 48) / VILLAGE_CELL);
   for (let gz = gz0; gz <= gz1; gz++)
     for (let gx = gx0; gx <= gx1; gx++) {
       const v = villageInCell(gx, gz, ctx);
@@ -531,7 +540,10 @@ export function applyVillages(data: Uint16Array | Uint8Array, ccx: number, ccz: 
   };
 
   for (const v of villages) {
-    const reach = v.radius + 3;
+    // 2.19: osada nie jest już betonową płytą na palach. Środek jest płaski,
+    // a na obrzeżach teren łagodnie wraca do naturalnego (5 bloków skosu),
+    // więc nie ma ani wiszących platform, ani pionowych ścian w ziemi.
+    const reach = v.radius + 14;
     const x0 = Math.max(ox, v.x - reach);
     const x1 = Math.min(ox + CS - 1, v.x + reach);
     const z0 = Math.max(oz, v.z - reach);
@@ -543,21 +555,33 @@ export function applyVillages(data: Uint16Array | Uint8Array, ccx: number, ccz: 
         const lz = z - oz;
         const mi = lz * CS + lx;
         if (mask[mi]) continue;
+        const dist = Math.hypot(x - v.x, z - v.z);
+        if (dist > reach) continue;
         mask[mi] = 1;
         const base = v.y;
-        // Najwyższy istniejący blok – wszystko nad poziomem wioski zniknie.
-        let cur = base;
-        for (let y = CH - 1; y > base; y--) {
+        // 0 w środku osady, 1 na końcu skosu – gładkie przejście do terenu.
+        // 2.19: skos ma 16 bloków, więc zbocze wygląda jak naturalne
+        // wzniesienie, a nie jak ściana wykopu.
+        const tRaw = Math.min(1, Math.max(0, (dist - (v.radius - 2)) / 16));
+        const ease = tRaw * tRaw * (3 - 2 * tRaw);
+        const natural = ctx.surface(x, z).h;
+        const target = Math.round(base + (natural - base) * ease);
+        // Najwyższy istniejący blok (drzewa, wzgórki) – nad `target` zniknie.
+        let cur = target;
+        for (let y = CH - 1; y > target; y--) {
           if (data[(y * CS + lz) * CS + lx] !== B.AIR) {
             cur = y;
             break;
           }
         }
-        for (let y = Math.max(1, base - 3); y < base; y++) put(lx, y, lz, fill);
-        put(lx, base, lz, groundBlock(v, x, z));
-        ground[mi] = Math.max(1, base);
-        for (let y = base + 1; y <= Math.min(CH - 1, cur); y++) put(lx, y, lz, B.AIR);
-        if (base + 7 > top) top = base + 7; // dachy, latarnie i dzwon sięgają wyżej
+        // Zasypujemy dziurę pod platformą aż do naturalnego gruntu.
+        for (let y = Math.max(1, Math.min(natural, target) + 1); y < target; y++) {
+          if (data[(y * CS + lz) * CS + lx] === B.AIR) put(lx, y, lz, fill);
+        }
+        put(lx, target, lz, ease < 0.35 ? groundBlock(v, x, z) : v.desert ? B.SAND : B.GRASS);
+        ground[mi] = Math.max(1, Math.min(CH - 1, target));
+        for (let y = target + 1; y <= Math.min(CH - 1, cur); y++) put(lx, y, lz, B.AIR);
+        if (target + 7 > top) top = target + 7; // dachy, latarnie i dzwon sięgają wyżej
       }
 
     const set: SetBlock = (x, y, z, id) => {
