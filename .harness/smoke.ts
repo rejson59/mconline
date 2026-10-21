@@ -59,7 +59,7 @@ function readSource(rel: string): string {
 
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
-import { B, BLOCKS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, collisionBoxes, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
+import { B, BLOCKS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, T, collisionBoxes, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId, canHarvest,
@@ -70,7 +70,7 @@ import {
   SKINS, DEFAULT_SKIN_ID, SKIN_KEY, skinById, loadSkinId, saveSkinId, nextSkinId, fallbackSkin,
 } from '../src/game/skins';
 import { aabbIntersectsBlock, stepBody, STEP_HEIGHT, type Body } from '../src/game/physics';
-import { Mob, isHostileMob, isVillageMob, SHEEP_WOOL_COLORS, woolBlockFor, type MobType } from '../src/game/mobs';
+import { Mob, isHostileMob, isVillageMob, mobVariantForBiome, SHEEP_WOOL_COLORS, woolBlockFor, type MobType } from '../src/game/mobs';
 import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial, type MobTexKind } from '../src/game/mobTextures';
 import { decodePng } from '../src/game/art/miniPng';
 import { MOB_MODELS, boxFaces, buildMobModel, mobSkinTexture, mobModelCount } from '../src/game/mobModels';
@@ -78,7 +78,7 @@ import { MOB_SKINS, GUI_SPRITES } from '../src/game/art/vanillaArt.generated';
 import { guiSprite, hasGuiSprite, heartSprite, foodSprite, armorSprite, airSprite, guiSpriteCount } from '../src/game/art/uiSprites';
 import { spriteTexture } from '../src/game/art/spriteTex';
 import { installPackTheme } from '../src/utils/packTheme';
-import { BLOCK_ATLAS_PNG, ITEM_ATLAS_PNG, OFFICIAL_TILES, MOB_PALETTES, PLAYER_SKIN_PNG } from '../src/game/art/vanillaArt.generated';
+import { BLOCK_ATLAS_PNG, ITEM_ATLAS_PNG, ITEM_TILE, OFFICIAL_TILES, MOB_PALETTES, PLAYER_SKIN_PNG } from '../src/game/art/vanillaArt.generated';
 import { officialBlockAtlas, officialItemAtlas, officialItemPixels, isOfficialTile, officialTileCount, officialItemCount, applyOfficialTiles } from '../src/game/packArt';
 import { WIDE_LAYOUT, SLIM_LAYOUT, faceRects, applySkinUv, hasPackSkin, isSlimSkin, packSkinCount, playerSkinTexture, portraitCount, skinFace, skinPortrait } from '../src/game/skinArt';
 import { setMobPalette, snapToPalette, activeMobPalette } from '../src/game/mobTextures';
@@ -117,7 +117,7 @@ import { slabFullBlock } from '../src/game/blocks';
 import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
-import { GAME_VERSION, GAME_RELEASE_NAME, RELEASE_HIGHLIGHTS } from '../src/utils/version';
+import { GAME_VERSION, GAME_RELEASE_NAME, MINECRAFT_TARGET, RELEASE_HIGHLIGHTS } from '../src/utils/version';
 import {
   isPortraitSize, isPhoneScreen, isTouchScreen, canLockOrientation, inFullscreen,
   toggleFullscreenLandscape, PORTRAIT_DISMISS_KEY, watchLandscape,
@@ -3139,8 +3139,11 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.22'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Moby i świat 1:1 jak w grze');
+  check('release label is the current line', GAME_VERSION.startsWith('2.23'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Minecraft 26.2: moby i tekstury 1:1');
+  check('gra celuje w konkretną wersję Minecrafta', MINECRAFT_TARGET.startsWith('26.2'), MINECRAFT_TARGET);
+  check('2.23 highlights mention the 26.2 models', RELEASE_HIGHLIGHTS.some((h) => /26\.2/.test(h.title)));
+  check('2.23 highlights mention biome variants', RELEASE_HIGHLIGHTS.some((h) => /wariant/i.test(h.title)));
   check('release highlights are listed', RELEASE_HIGHLIGHTS.length >= 4);
   check('2.8.1 highlights mention held light', RELEASE_HIGHLIGHTS.some((h) => /pochodni/i.test(h.title + h.text)));
   check('2.9 highlights mention textures', RELEASE_HIGHLIGHTS.some((h) => /tekstur/i.test(h.title + h.text)));
@@ -4717,10 +4720,11 @@ section('2.17: tekstury z paczki w całej grze');
 section('2.18: moby 1:1 z Minecrafta');
 {
   // --- modele
-  eq('15 modeli mobów (14 typów + wełna owcy)', mobModelCount(), 15);
+  // 2.23: doszły modele wariantów biomowych (krowa ciepła/zimna, zimna świnia, zimowa kura)
+  eq('19 modeli mobów (14 typów + wełna + 4 warianty)', mobModelCount(), 19);
   const required = ['pig', 'cow', 'sheep', 'sheep_wool', 'chicken', 'creeper', 'zombie', 'skeleton', 'spider', 'wolf', 'villager', 'golem', 'enderman', 'slime', 'ghast'];
   eq('wszystkie modele są na liście', required.filter((t) => MOB_MODELS[t]).length, required.length);
-  eq('skórki mobów 1:1 z paczki', Object.keys(MOB_SKINS).length, 19);
+  eq('skórki mobów 1:1 z paczki', Object.keys(MOB_SKINS).length, 25);
   check('każdy model ma skórkę', required.every((t) => MOB_SKINS[MOB_MODELS[t].skin] != null));
 
   // --- rozmiary tekstur (tak jak w paczce)
@@ -4827,6 +4831,65 @@ section('2.18: moby 1:1 z Minecrafta');
   eq('pająk jest szeroki (1,4 × 0,9)', (() => { const m = new Mob('spider', 8.5, gy + 2, 8.5); const d = `${m.body.w},${m.body.h}`; m.dispose(); return d; })(), '1.4,0.9');
   eq('krowa ma 0,9 szerokości', (() => { const m = new Mob('cow', 8.5, gy + 2, 8.5); const d = `${m.body.w},${m.body.h}`; m.dispose(); return d; })(), '0.9,1.4');
   eq('creeper ma 20 HP', (() => { const m = new Mob('creeper', 8.5, gy + 2, 8.5); const hp = m.maxHealth; m.dispose(); return hp; })(), 20);
+
+  // --- 2.23: zgodność z Minecraftem 26.2 (modele i warianty biomowe)
+  const cowHead = MOB_MODELS.cow.parts.find((p) => p.name === 'head')!;
+  check('krowa ma wystający pysk (1.21.5+)', cowHead.boxes.some((b) => b.uv[0] === 1 && b.uv[1] === 33));
+  const cowLeftLeg = MOB_MODELS.cow.parts.find((p) => p.name === 'leftFrontLeg')!;
+  check('lewe nogi krowy mają lustrzane UV', cowLeftLeg.boxes[0].mirror === true);
+  check('prawa noga owcy ma lustrzane UV', MOB_MODELS.sheep.parts.find((p) => p.name === 'rightHindLeg')!.boxes[0].mirror === true);
+  const zombieHat = MOB_MODELS.zombie.parts.find((p) => p.name === 'hat')!;
+  check('zombie ma zewnętrzną warstwę głowy', zombieHat.parent === 'head' && zombieHat.boxes[0].inflate === 0.5);
+  check('mieszkaniec ma rond kapelusza', MOB_MODELS.villager.parts.some((p) => p.name === 'hat_rim' && p.parent === 'head'));
+  const ghastTentacles = MOB_MODELS.ghast.parts.filter((p) => p.name.startsWith('tentacle'));
+  eq('ghast ma 9 macek', ghastTentacles.length, 9);
+  eq('macki ghasta mają waniliowe długości', ghastTentacles.map((p) => p.boxes[0].size[1]).join(','), '8,13,9,11,11,10,12,9,12');
+  eq('krowa ciepła ma własny model', MOB_MODELS.cow_warm?.skin, 'cow_warm');
+  eq('krowa zimna ma warstwę futra', MOB_MODELS.cow_cold.parts.find((p) => p.name === 'body')!.boxes.filter((b) => b.inflate === 0.5).length, 1);
+  eq('zimowa świnia ma futro', MOB_MODELS.pig_cold.parts.find((p) => p.name === 'body')!.boxes.length, 2);
+  eq('zimowa kura ma czapkę z piór', MOB_MODELS.chicken_cold.parts.find((p) => p.name === 'head')!.boxes.length, 2);
+  eq('tekstury wariantów są 1:1', ['cow_warm', 'cow_cold', 'pig_warm', 'pig_cold', 'chicken_warm', 'chicken_cold'].map((k) => dims(k)).join(','), '64×64,64×64,64×64,64×64,64×32,64×32');
+  eq('wariant z biomu: tundra → zimna krowa', mobVariantForBiome('cow', 'Tundra'), 'cold');
+  eq('wariant z biomu: sawanna → ciepła świnia', mobVariantForBiome('pig', 'Sawanna'), 'warm');
+  eq('wariant z biomu: las → zwykła kura', mobVariantForBiome('chicken', 'Las'), 'temperate');
+  eq('warianty tylko dla zwierząt gospodarskich', mobVariantForBiome('zombie', 'Pustynia'), 'temperate');
+  const coldCow = new Mob('cow', 8.5, gy + 2, 8.5, 0, 'cold');
+  check('zimna krowa używa modelu z futrem', coldCow.hasVanillaModel() && coldCow.meshes.length === 11, `${coldCow.meshes.length}`);
+  coldCow.dispose();
+  const warmPig = new Mob('pig', 8.5, gy + 2, 8.5, 0, 'warm');
+  eq('ciepła świnia ma teksturę wariantu', (warmPig.meshes[0].material as THREE.MeshLambertMaterial).map?.image != null, true);
+  warmPig.dispose();
+
+  // --- 2.23: ikona tarczy (w paczce nie ma `item/shield.png`) i skrzynia
+  {
+    const atlas = decodePng(ITEM_ATLAS_PNG);
+    const tile = ITEM_TILE[I.SHIELD];
+    check('tarcza ma własny kafelek ikony', tile !== undefined, `${tile}`);
+    if (tile !== undefined) {
+      const tx = (tile % 16) * 16, ty = Math.floor(tile / 16) * 16;
+      const alpha = (x: number, y: number) => atlas.data[((ty + y) * atlas.width + tx + x) * 4 + 3];
+      check('ikona tarczy ma przezroczyste rogi', alpha(0, 0) === 0 && alpha(15, 0) === 0);
+      check('ikona tarczy ma zaczepiony dół', alpha(7, 15) > 0 && alpha(1, 15) === 0);
+      check('ikona tarczy jest w środku kafelka', alpha(7, 4) > 0 && alpha(3, 10) > 0);
+    }
+    const chest = BLOCK_ATLAS_PNG ? decodePng(BLOCK_ATLAS_PNG) : null;
+    if (chest) {
+      const sample = (t: number) => {
+        const tx = (t % 16) * 16, ty = Math.floor(t / 16) * 16;
+        let sum = 0, n = 0;
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+          const i = ((ty + y) * chest.width + tx + x) * 4;
+          sum += chest.data[i] + chest.data[i + 1] + chest.data[i + 2];
+          n += 3;
+        }
+        return Math.round(sum / n);
+      };
+      check('skrzynia nie używa tekstury desek', Math.abs(sample(T.chest_front) - sample(T.planks)) > 6,
+        `${sample(T.chest_front)} vs ${sample(T.planks)}`);
+    } else {
+      check('atlas bloków jest dostępny', false);
+    }
+  }
 
   // pełna paleta wełny: 16 kolorów runa → 16 różnych bloków
   const woolBlocks = new Set<number>();

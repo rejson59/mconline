@@ -1,8 +1,16 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.22.0';
-export const GAME_RELEASE_NAME = 'Moby i świat 1:1 jak w grze';
+export const GAME_VERSION = '2.23.0';
+export const GAME_RELEASE_NAME = 'Minecraft 26.2: moby i tekstury 1:1';
+/** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
+export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.23: zgodność z Minecraftem 26.2 – modele mobów z waniliowej geometrii tej
+ * wersji (pysk i rogi krowy, lustrzane UV nóg, czapka zombie,
+ * rond kapelusza mieszkańca, macki ghasta), warianty biomowe krowy, świni
+ * i kury (ciepły/zimny/umiarkowany), ikona tarczy z tekstury paczki i 100/100
+ * ikon przedmiotów, barwienie tylko szarych tekstur (trzcina cukrowa i inne
+ * kolorowe pliki nie są już przyciemniane zielenią biomu).
  * 2.22: moby 1:1 z Minecraftem – poprawiona owca, pudełka kolizji prosto
  * z waniliowych `EntityDimensions`, pełna paleta 16 kolorów wełny, wypas
  * i odrastanie runa, modele pająka, szkieletu i kury bez błędów.
@@ -14,6 +22,26 @@ export const GAME_RELEASE_NAME = 'Moby i świat 1:1 jak w grze';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Moby z modeli Minecrafta 26.2',
+    text: 'Modele zwierząt pochodzą teraz z waniliowej geometrii wersji 26.2: krowa ma wystający pysk i rogi w miejscu z gry, nogi krowy, świni i owcy mają lustrzane UV, zombie nosi zewnętrzną warstwę głowy, mieszkaniec dostał rond kapelusza, a ghast – dziewięć macek o prawdziwych długościach. Dzięki temu każdy piksel tekstury z paczki trafia dokładnie tam, gdzie w grze.',
+  },
+  {
+    title: 'Warianty biomowe zwierząt',
+    text: 'Krowa, świnia i kura mają po trzy wersje – umiarkowaną, ciepłą i zimną – i dostają ją przy narodzinach z biomu, jak w Minecrafcie: zimna krowa z kudłatym futrem i grubymi rogami w tundrze i górach, ciepła w sawannie, dżungli i na pustyni, a zimowa świnia i kura mają dodatkowe warstwy futra i piór.',
+  },
+  {
+    title: 'Tarcza i wszystkie 100 ikon',
+    text: 'W paczce nie ma osobnego obrazka tarczy, więc ikona powstała z przedniej ściany prawdziwej tekstury tarczy (12 × 22 px) – teraz każdy przedmiot w grze ma ikonę z paczki (100/100), a nie tylko 99.',
+  },
+  {
+    title: 'Kolory dokładnie jak w paczce',
+    text: 'Barwienie biomem dostają tylko tekstury szare, tak jak w wanilii. Kolorowe pliki – trzcina cukrowa, kwiaty i inne – pokazują teraz oryginalne barwy z paczki zamiast przyciemnionej zieleni biomu.',
+  },
+  {
+    title: 'Testy i build',
+    text: 'Nowa sekcja testów 2.23 sprawdza pysk i rogi krowy, lustrzane UV nóg, warstwy głów, rond kapelusza, dziewięć macek ghasta, warianty biomowe (model i tekstura) oraz 25 skórek mobów. `npx tsc --noEmit`, `npm test` (1859 kontroli silnika + 222 UI) i `npm run build` przechodzą w całości.',
+  },
   {
     title: 'Owca wygląda jak w grze',
     text: 'Owca stała na 6-pikselowych nóżkach, a w wanilii ma 12-pikselowe (`QuadrupedEntityModel.getModelData(12)`) – teraz tułów jest na właściwej wysokości, a runo układa się w znany „puchaty” kształt z krótkimi skarpetkami na nogach. Owca co kilkanaście sekund opuszcza głowę i skubie trawę, a ostrzyżona po wypasie odrasta, zamieniając klocek trawy w ziemię, dokładnie jak `SheepEntity.eatGrass`.',

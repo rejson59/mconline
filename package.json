@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.22.0",
-  "description": "BlockCraft 2.22 „Moby i świat 1:1 jak w grze” – polska gra sandboxowa w przeglądarce: poprawiona owca z wypasem, pełna paleta 16 kolorów wełny, pudełka kolizji mobów z wanilii, modele pająka, szkieletu i kury oraz 155 przepisów.",
+  "version": "2.23.0",
+  "description": "BlockCraft 2.23 „Minecraft 26.2: moby i tekstury 1:1” – polska gra sandboxowa w przeglądarce: modele mobów z waniliowej geometrii 26.2, warianty biomowe krowy, świni i kury, wszystkie 100 ikon z paczki, 16 kolorów wełny i 155 przepisów.",
   "type": "module",
   "license": "MIT",
   "keywords": [

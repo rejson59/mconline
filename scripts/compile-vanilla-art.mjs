@@ -214,6 +214,42 @@ function encodePNG(w, h, rgba) {
 // ---------------------------------------------------------------------------
 const TILE = 16;
 
+/** Wycina prostokąt [x, y, w, h] i wpasowuje go w kafelek 16×16. */
+function cropToTile(img, [cx, cy, cw, ch], mask, fit) {
+  const out = new Uint8Array(TILE * TILE * 4);
+  const scale = fit ? undefined : Math.min(TILE / cw, TILE / ch);
+  const dw = fit ? fit[0] : Math.max(1, Math.round(cw * scale));
+  const dh = fit ? fit[1] : Math.max(1, Math.round(ch * scale));
+  const ox = Math.floor((TILE - dw) / 2), oy = Math.floor((TILE - dh) / 2);
+  for (let y = 0; y < dh; y++) {
+    for (let x = 0; x < dw; x++) {
+      // 2.23: tarcza w Minecrafcie jest prostokątną płytą, a jej kształt
+      // (zaokrąglony dół) nadaje tekstura. Gdy źródło jest w pełni kryjące,
+      // wycinamy sylwetkę, żeby ikona nie wyglądała jak deska.
+      if (mask === 'shield' && !insideShield(x + 0.5, y + 0.5, dw, dh)) continue;
+      const sx = Math.min(img.w - 1, cx + Math.floor((x * cw) / dw));
+      const sy = Math.min(img.h - 1, cy + Math.floor((y * ch) / dh));
+      const s = (sy * img.w + sx) * 4;
+      const d = ((oy + y) * TILE + ox + x) * 4;
+      out[d] = img.data[s]; out[d + 1] = img.data[s + 1];
+      out[d + 2] = img.data[s + 2]; out[d + 3] = img.data[s + 3];
+    }
+  }
+  return out;
+}
+
+/** Sylwetka tarczy: prostokąt z zaokrąglonymi górnymi rogami i ostrzem u dołu. */
+function insideShield(x, y, w, h) {
+  const nx = (x / w) * 2 - 1; // -1..1
+  const ny = y / h; // 0..1
+  if (ny > 0.8) {
+    const t = (ny - 0.8) / 0.2;
+    return Math.abs(nx) <= 1 - t * 0.72;
+  }
+  if (ny < 0.06) return Math.abs(nx) <= 0.86;
+  return Math.abs(nx) <= 1;
+}
+
 /** Wycina 16×16 (pierwsza klatka animacji – górny wiersz atlasu pionowego). */
 function tile16(img) {
   const out = new Uint8Array(TILE * TILE * 4);
@@ -232,6 +268,18 @@ function tile16(img) {
  * Barwienie jak w Minecrafcie: `kolor_piksela * kolor_biomu / 255`.
  * Działa na teksturach szarych (trawa, liście), zachowując rysunek i kontrast.
  */
+/** Czy kafelek jest (prawie) szary – tylko takie barwi wanilia. */
+function isGrayTile(tile, threshold = 0.8) {
+  let opaque = 0, gray = 0;
+  for (let i = 0; i < TILE * TILE; i++) {
+    if (tile[i * 4 + 3] < 24) continue;
+    opaque++;
+    const r = tile[i * 4], g = tile[i * 4 + 1], b = tile[i * 4 + 2];
+    if (Math.abs(r - g) <= 10 && Math.abs(g - b) <= 10 && Math.abs(r - b) <= 10) gray++;
+  }
+  return opaque === 0 || gray / opaque >= threshold;
+}
+
 function tintTile(tile, color) {
   const out = new Uint8Array(tile);
   for (let i = 0; i < TILE * TILE; i++) {
@@ -318,12 +366,17 @@ function renderTile(spec) {
   const s = typeof spec === 'string' ? { file: spec } : spec;
   const img = loadTex(s.file);
   if (!img) return { missing: s.file };
-  let tile = tile16(img);
+  // 2.23: `crop` wycina fragment tekstury (np. przednią ścianę tarczy) i
+  // wpasowuje go w kafelek 16×16 z zachowaniem proporcji.
+  let tile = s.crop ? cropToTile(img, s.crop, s.mask, s.fit) : tile16(img);
   if (s.overlay) {
     const ov = loadTex(s.overlay.file);
     if (ov) tile = overlayTile(tile, tile16(ov), s.overlay.color);
   }
-  if (s.tint) tile = tintTile(tile, s.tint);
+  // 2.23: barwimy tylko tekstury szare. Część plików paczki (np. trzcina
+  // cukrowa) jest już kolorowa – wanilia ich nie barwi, a my nakładaliśmy na
+  // nie zieleń biomu i kolory wychodziły ciemniejsze niż w paczce.
+  if (s.tint && isGrayTile(tile)) tile = tintTile(tile, s.tint);
   if (s.gain) tile = brightenTile(tile, s.gain);
   return { tile };
 }
@@ -430,7 +483,10 @@ const BLOCK_TILES = {
   enchant_top: B + 'enchanting_table_top.png',
   enchant_side: B + 'enchanting_table_side.png',
   enchant_bottom: B + 'enchanting_table_bottom.png',
-  sugarcane: { file: B + 'sugar_cane.png', tint: GRASS_TINT },
+  // 2.23: trzcina cukrowa w wanilii NIE jest barwiona biomem – plik w paczce
+  // jest już zielony. Wcześniej nakładaliśmy na niego `GRASS_TINT` i w grze
+  // była ciemniejsza niż w paczce.
+  sugarcane: B + 'sugar_cane.png',
   path_top: B + 'dirt_path_top.png',
   path_side: B + 'dirt_path_side.png',
   hay_top: B + 'hay_block_top.png',
@@ -609,6 +665,9 @@ const ITEM_ICONS = {
   bottle: I_ + 'glass_bottle.png',
   honey_bottle: I_ + 'honey_bottle.png',
   water_bottle: I_ + 'potion.png',
+  // 2.23: w paczce nie ma `item/shield.png` – tarcza jest modelem 3D.
+  // Bierzemy przednią ścianę tekstury tarczy (12×22 px) i wpasowujemy w ikonę.
+  shield: { file: E + 'shield/shield_base_nopattern.png', crop: [1, 1, 12, 22], mask: 'shield', fit: [10, 16] },
   potion_awkward: potion([118, 142, 214]),
   potion_heal: potion([248, 36, 35]),
   potion_fire: potion([255, 153, 0]),
@@ -790,6 +849,14 @@ const MOB_SKIN_FILES = {
   sheep: [E + 'sheep/sheep.png'],
   sheep_wool: [E + 'sheep/sheep_wool.png'],
   chicken: [E + 'chicken/chicken_temperate.png'],
+  // 2.23: warianty biomowe z 1.21.5+ (w 26.2 nadal aktualne) – krowa, świnia
+  // i kura mają po trzy tekstury: umiarkowaną, ciepłą i zimną.
+  cow_warm: [E + 'cow/cow_warm.png'],
+  cow_cold: [E + 'cow/cow_cold.png'],
+  pig_warm: [E + 'pig/pig_warm.png'],
+  pig_cold: [E + 'pig/pig_cold.png'],
+  chicken_warm: [E + 'chicken/chicken_warm.png'],
+  chicken_cold: [E + 'chicken/chicken_cold.png'],
   creeper: [E + 'creeper/creeper.png'],
   zombie: [E + 'zombie/zombie.png'],
   skeleton: [E + 'skeleton/skeleton.png'],
@@ -1041,8 +1108,10 @@ for (const [name, spec] of Object.entries(ITEM_ICONS)) {
     continue;
   }
   const s = typeof spec === 'string' ? { file: spec } : spec;
+  // 2.23: ikony też mogą korzystać z `crop` i `mask` (tarcza jest wycinkiem
+  // tekstury encji), więc przekazujemy cały opis zamiast tylko nazwy pliku.
   const res = renderTile({
-    file: s.file,
+    ...s,
     overlay: s.overlay ? { file: s.overlay, color: s.color ?? [255, 255, 255] } : undefined,
   });
   if (!res || res.missing) {
