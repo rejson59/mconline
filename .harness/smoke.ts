@@ -4975,19 +4975,24 @@ section('2.18: moby 1:1 z Minecrafta');
   check('oswojony wilk ma obrożę', collar);
 
   // --- głowa odwraca się w stronę gracza
-  // 2.27: ciało jest przypięte do miejsca (jak w teście golema niżej) – bez
-  // tego losowy spacer krowy zmieniał wynik zależnie od strumienia RNG.
+  // 2.27: ciało przypięte do miejsca, a gracz stoi pod kątem 0,5 rad względem
+  // kierunku ciała. Wcześniej wynik zależał od losowego spaceru krowy.
   const cow = new Mob('cow', 4.5, gy + 2, 4.5);
-  const player = new THREE.Vector3(4.5, gy + 1, 10.5);
+  const player = new THREE.Vector3(
+    4.5 + Math.sin(0.5) * 6,
+    gy + 1,
+    4.5 + Math.cos(0.5) * 6
+  );
   let maxTurn = 0;
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 120; i++) {
     cow.body.pos.set(4.5, gy + 2, 4.5);
     cow.yaw = 0;
     cow.group.rotation.y = 0;
     cow.update(1 / 30, w, player, () => {}, () => {}, true, []);
     maxTurn = Math.max(maxTurn, Math.abs(cow.head.rotation.y));
   }
-  check('mob odwraca głowę do gracza', maxTurn > 0.1, `${maxTurn.toFixed(2)}`);
+  check('mob odwraca głowę do gracza', Math.abs(cow.head.rotation.y - 0.5) < 0.2, `${cow.head.rotation.y.toFixed(2)}`);
+  check('głowa odwraca się w tę stronę co gracz', cow.head.rotation.y > 0, `${cow.head.rotation.y.toFixed(2)}`);
   check('obrót głowy jest ograniczony', maxTurn <= 0.95, `${maxTurn.toFixed(2)}`);
   // 2.19: głowa musi patrzeć W STRONĘ gracza, a nie w przeciwną (golem).
   // 2.19: głowa golema musi skręcać W STRONĘ gracza, a nie w przeciwną.
