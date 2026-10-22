@@ -1,10 +1,18 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.25.0';
-export const GAME_RELEASE_NAME = 'Ręce do przodu, piasek w dół';
+export const GAME_VERSION = '2.26.0';
+export const GAME_RELEASE_NAME = 'Koniec prześwitów, golem na posterunku';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.26: koniec prześwitów w wioskach, nawadniane grządki, odrzut i golem.
+ * Siatka bloku culluje ścianę sąsiada tylko wtedy, gdy ten naprawdę wypełnia
+ * całą kratkę (`CULLS`), więc ścieżka i grządka (15/16) nie robią już
+ * 1-pikselowej szpary, przez którą było widać świat. Grządka ma dwa warianty
+ * jak `moisture` w wanilii: suchy i nawodniony (woda w promieniu 4 bloków,
+ * także poziom wyżej), a nawodniona rośnie szybciej i ma ciemniejszą teksturę.
+ * Cios gracza naprawdę odrzuca moby (~1,5 bloku w pół sekundy), żelazny golem
+ * jest na to odporny i staje w obronie mieszkańców oraz oddaje napastnikowi.
  * 2.25: ręce mobów i fizyka bloków. Animacja kończyn dokłada się teraz do
  * pozy z modelu (zombie nie chowa już rąk za plecami), a piasek i żwir
  * spadają całą kolumną: z przyspieszeniem, kurzem, wypieraniem wody,
@@ -36,6 +44,22 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Koniec prześwitów w wioskach',
+    text: 'Ściana sąsiada znika teraz tylko wtedy, gdy ten sąsiad naprawdę wypełnia całą kratkę. Wcześniej siatka patrzyła na samą flagę „nieprzezroczysty”, więc ścieżka i grządka o wysokości 15/16 chowały sąsiadowi pełną ścianę – nad ich krawędzią zostawała 1-pikselowa szpara i przez podłogę wioski było widać świat. Nowa tablica `CULLS` liczy faktyczny kształt bryły, a kowadło (pełna kolizja, model 12/16) też przestało zasłaniać ściany.',
+  },
+  {
+    title: 'Grządka wie, gdzie jest woda',
+    text: 'Grządka ma teraz dwa warianty jak `moisture` w Minecrafcie: suchy i nawodniony. Wystarczy woda w promieniu czterech bloków – także na skos i o poziom wyżej – żeby blok zrobił się ciemniejszy, a rośliny rosły dwa razy szybciej (9 s zamiast 18 s). Po zabraniu wody grządka wraca do suchej wersji, dokładnie jak w waniliowym `FarmBlock`.',
+  },
+  {
+    title: 'Cios naprawdę odrzuca',
+    text: 'Zombie po trafieniu odlatuje o jakieś półtora bloku i dopiero po pół sekundy wraca do pościgu – wcześniej cios tylko ujmował mu zdrowie, a mob biegł dalej, jakby nic się nie stało. Prędkość pościgu zombie spadła do 2,15 bloku/s (wanilia ~2,1–2,3), więc nie dogania gracza w pół kroku, a odrzut ma własny czas, w którym AI nie steruje ruchem.',
+  },
+  {
+    title: 'Golem staje w obronie wioski',
+    text: 'Żelazny golem reaguje teraz na potwory, które atakują mieszkańca, nawet jeśli same są od niego daleko: leci do napastnika (do 32 bloków), a nie do najbliższego zombie. Gdy ktoś go uderzy, zapamiętuje napastnika i oddaje mu ciosy. Gracz, który go sprowokuje, dostaje kontratak, a odrzucić go nie można – tak jak w wanilii (odporność na odrzut 100%).',
+  },
   {
     title: 'Koniec z rękami do tyłu',
     text: 'Animacja kończyn dokłada się teraz do pozy zapisanej w modelu, a nie ją nadpisuje. Zombie znów trzyma ręce wyciągnięte do przodu: waniliowa poza zostaje, a chód tylko lekko ją kołysze. Wcześniej wpis −90° z animacji kasował ją w pierwszej klatce i ręce wędrowały za plecy.',
@@ -70,7 +94,7 @@ export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
   },
   {
     title: 'Paczki, wydajność i skórki',
-    text: 'Zakładka „Paczki i mody” pokazuje wbudowaną paczkę 26.2 (167 kafelków, 100 ikon, 25 skórek) i pozwala przełączać presety graficzne oraz suwaki cząsteczek i zasięgu. W „Skórkach” wybierasz jedną z 9 postaci z paczki i ustawiasz nick, a profil pamięta liczbę uruchomień.',
+    text: 'Zakładka „Paczki i mody” pokazuje wbudowaną paczkę 26.2 (168 kafelków, 100 ikon, 25 skórek) i pozwala przełączać presety graficzne oraz suwaki cząsteczek i zasięgu. W „Skórkach” wybierasz jedną z 9 postaci z paczki i ustawiasz nick, a profil pamięta liczbę uruchomień.',
   },
   {
     title: 'Serwer i konsola',
