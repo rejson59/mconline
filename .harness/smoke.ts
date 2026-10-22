@@ -59,7 +59,7 @@ function readSource(rel: string): string {
 
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
-import { B, BLOCKS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, T, collisionBoxes, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
+import { B, BLOCKS, CULLS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, T, collisionBoxes, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId, canHarvest,
@@ -115,6 +115,7 @@ import {
 } from '../src/game/anvil';
 import { mergeable } from '../src/game/inventory';
 import { slabFullBlock } from '../src/game/blocks';
+import { HYDRATION_RADIUS, isFarmland, isHydrated, updateFarmland } from '../src/game/farmland';
 import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
@@ -3143,8 +3144,12 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.25'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Ręce do przodu, piasek w dół');
+  check('release label is the current line', GAME_VERSION.startsWith('2.26'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Koniec prześwitów, golem na posterunku');
+  // 2.26: brak prześwitów, nawadnianie grządek, odrzut i golem.
+  check('2.26 highlights mention the light leak', RELEASE_HIGHLIGHTS.some((h) => /prześwit/i.test(h.title)));
+  check('2.26 highlights mention the golem', RELEASE_HIGHLIGHTS.some((h) => /golem/i.test(h.title)));
+  check('2.26 highlights mention watering the farmland', RELEASE_HIGHLIGHTS.some((h) => /grządka/i.test(h.title)));
   // 2.25: ręce mobów i fizyka spadających bloków.
   check('2.25 highlights mention the mob arms', RELEASE_HIGHLIGHTS.some((h) => /ręk/i.test(h.title)));
   check('2.25 highlights mention the falling sand', RELEASE_HIGHLIGHTS.some((h) => /piasek/i.test(h.title)));
@@ -4614,8 +4619,8 @@ section('2.17: tekstury z paczki w całej grze');
     colors.add((blocks.data[i] << 16) | (blocks.data[i + 1] << 8) | blocks.data[i + 2]);
   }
   check('atlas bloków jest wielobarwny', colors.size > 800, `${colors.size} kolorów`);
-  eq('wszystkie 167 kafelków pochodzi z paczki', officialTileCount(), 167);
-  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 167 && OFFICIAL_TILES[166] === 166);
+  eq('wszystkie 168 kafelków pochodzi z paczki', officialTileCount(), 168);
+  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 168 && OFFICIAL_TILES[167] === 167);
   check('kafelek spoza listy nie jest oficjalny', !isOfficialTile(999) && isOfficialTile(0));
   const cached = officialBlockAtlas();
   check('atlas bloków dekoduje się w grze', cached != null && cached.width === 256);
@@ -4623,7 +4628,7 @@ section('2.17: tekstury z paczki w całej grze');
   // --- podmiana kafelków w atlasie gry
   const fake = { data: new Uint8ClampedArray(256 * 256 * 4) };
   const copied = applyOfficialTiles(fake as unknown as ImageData);
-  eq('applyOfficialTiles podmienia 167 kafelków', copied, 167);
+  eq('applyOfficialTiles podmienia 168 kafelków', copied, 168);
   let nonZero = 0;
   for (let i = 0; i < fake.data.length; i += 4) if (fake.data[i + 3] > 0) nonZero++;
   check('po podmianie atlas ma niepuste piksele', nonZero > 155 * 16 * 16 * 0.5, `${nonZero} px`);
@@ -5653,6 +5658,165 @@ section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
   const b6 = { pos: new THREE.Vector3(8.5, gy6, 0.5), vel: new THREE.Vector3(0, 0, 4), w: 0.6, h: 1.8, onGround: true, hitWall: false };
   for (let i = 0; i < 90; i++) { stepBody(w6, b6, 1 / 60); b6.vel.z = 4; }
   check('płot zatrzymuje gracza', b6.pos.z < 2, `z=${b6.pos.z.toFixed(2)}`);
+}
+
+// ============================================ 2.26: prześwity, grządki i odrzut
+section('2.26: culling ścian nie robi prześwitów (x-ray)');
+{
+  // 2.26: ściana sąsiada może zniknąć tylko wtedy, gdy ten sąsiad naprawdę
+  // wypełnia całą kratkę. Wcześniej culling patrzył na `IS_OPAQUE`, więc przy
+  // ścieżce (15/16) i grządce (15/16) nad krawędzią zostawała 1-pikselowa
+  // szpara i przez podłogę wioski było widać świat.
+  check('pełny sześcian zasłania ścianę', CULLS[B.STONE] === 1 && CULLS[B.DIRT] === 1 && CULLS[B.GRASS] === 1);
+  const notFull = [
+    ['ścieżka', B.PATH], ['grządka', B.FARMLAND], ['grządka mokra', B.FARMLAND_WET],
+    ['skrzynia', B.CHEST], ['kowadło', B.ANVIL], ['płyta', B.STONE_SLAB], ['schody', B.COBBLE_STAIRS_N],
+    ['właz', B.TRAP], ['kaktus', B.CACTUS],
+  ] as [string, number][];
+  const leaking = notFull.filter(([, id]) => CULLS[id] === 1).map(([name]) => name);
+  check('bloki niższe niż sześcian nie zasłaniają ściany', leaking.length === 0, leaking.join(', '));
+  check('szyba nie zasłania ściany', CULLS[B.GLASS] === 0);
+  check('liście (pełny sześcian) zasłaniają ścianę', CULLS[B.LEAVES] === 1);
+
+  // Meshing: podłoga z dirtu obok ścieżki musi narysować pełną ścianę.
+  // Mierzymy różnicę wierzchołków między siatką z dirta przy sąsiedzie (5,5)
+  // i identyczną siatką z dirta trzy kratki dalej (5,8) – środowisko się nie
+  // zmienia, więc różnica to wyłącznie status ściany na styku x = 6.
+  const meshDelta = (neighbour: number) => {
+    const vertsOf = (dirtZ: number) => {
+      const w = new World(4242, true);
+      const c = w.getChunk(0, 0);
+      const y = FLAT_H;
+      for (let x = 2; x <= 8; x++) for (let z = 2; z <= 10; z++) {
+        for (let yy = y; yy <= y + 3; yy++) w.setBlock(x, yy, z, B.AIR);
+        w.setBlock(x, y - 1, z, B.STONE);
+      }
+      w.setBlock(5, y, dirtZ, B.DIRT);
+      w.setBlock(6, y, 5, neighbour);
+      let n = 0;
+      for (const g of w.buildMesh(c)) { n += g.attributes.position?.count ?? 0; g.dispose(); }
+      return n;
+    };
+    return vertsOf(5) - vertsOf(8);
+  };
+  const dirtDelta = meshDelta(B.DIRT);
+  const pathDelta = meshDelta(B.PATH);
+  const farmDelta = meshDelta(B.FARMLAND);
+  check('przy pełnym bloku obie ściany na styku są wycięte', dirtDelta === -8, `${dirtDelta}`);
+  check('przy ścieżce ściana sąsiada jednak się rysuje', pathDelta === 0, `${pathDelta}`);
+  check('przy grządce ściana sąsiada też się rysuje', farmDelta === 0, `${farmDelta}`);
+  check('ścieżka i grządka nie chowają ściany jak pełny blok', pathDelta > dirtDelta && farmDelta > dirtDelta);
+}
+
+section('2.26: nawadnianie grządki i jej tekstura');
+{
+  eq('mokra grządka ma własne id bloku', B.FARMLAND_WET, 352);
+  check('mokra grządka ma własny kafelek', Number(T.farmland_moist) === 167 && Number(T.farmland_moist) !== Number(T.farmland));
+  eq('promień nawadniania to 4 bloki', HYDRATION_RADIUS, 4);
+  check('sucha i mokra grządka to grządki', isFarmland(B.FARMLAND) && isFarmland(B.FARMLAND_WET) && !isFarmland(B.DIRT));
+
+  const w = new World(4242, true);
+  const y = 70;
+  for (let x = 20; x <= 36; x++) for (let z = 20; z <= 36; z++) {
+    w.setBlock(x, y - 1, z, B.STONE);
+    w.setBlock(x, y, z, B.AIR);
+    w.setBlock(x, y + 1, z, B.AIR);
+  }
+  w.setBlock(30, y, 30, B.FARMLAND);
+  check('grządka bez wody jest sucha', !isHydrated(w, 30, y, 30));
+  w.setBlock(26, y, 30, B.WATER);
+  check('woda 4 bloki dalej nawadnia', isHydrated(w, 30, y, 30));
+  check('updateFarmland podmienia blok na mokry', updateFarmland(w, 30, y, 30) && w.getBlock(30, y, 30) === B.FARMLAND_WET);
+  w.setBlock(26, y, 30, B.AIR);
+  check('po zabraniu wody grządka wraca do suchej', updateFarmland(w, 30, y, 30) && w.getBlock(30, y, 30) === B.FARMLAND);
+  w.setBlock(25, y, 30, B.WATER);
+  check('woda 5 bloków dalej już nie nawadnia', !isHydrated(w, 30, y, 30));
+  w.setBlock(25, y, 30, B.AIR);
+  w.setBlock(26, y + 1, 30, B.WATER);
+  check('woda poziom wyżej nawadnia (jak w wanilii)', isHydrated(w, 30, y, 30));
+
+  // Tekstura: mokra grządka jest wyraźnie ciemniejsza, jak `moisture=7`.
+  const atlas = decodePng(BLOCK_ATLAS_PNG);
+  const avg = (tile: number) => {
+    const tx = (tile % 16) * 16, ty = Math.floor(tile / 16) * 16;
+    let sum = 0;
+    for (let py = 0; py < 16; py++) for (let px = 0; px < 16; px++) {
+      const i = ((ty + py) * atlas.width + tx + px) * 4;
+      sum += atlas.data[i] + atlas.data[i + 1] + atlas.data[i + 2];
+    }
+    return sum / (16 * 16 * 3);
+  };
+  const dry = avg(T.farmland), wet = avg(T.farmland_moist);
+  check('mokra grządka jest ciemniejsza od suchej', wet < dry - 20, `sucha=${dry.toFixed(0)}, mokra=${wet.toFixed(0)}`);
+}
+
+section('2.26: odrzut po ciosie i golem, który broni wioski');
+{
+  const w = new World(4242, true);
+  w.getChunk(0, 0);
+  w.getChunk(1, 0);
+  const gy = w.heightAt(2, 2);
+  const y = gy + 1;
+  const player = new THREE.Vector3(2.5, y, 2.5);
+
+  const knock = (type: MobType) => {
+    const m = new Mob(type, 4.5, y, 4.5);
+    const before = m.body.pos.clone();
+    m.damage(4, 4.5, 2.5, 'player');
+    let after = 0;
+    for (let i = 0; i < 30; i++) {
+      m.update(1 / 60, w, new THREE.Vector3(4.5, y, 2.5), () => {}, () => {}, false, [m]);
+      if (i === 29) after = Math.hypot(m.body.pos.x - before.x, m.body.pos.z - before.z);
+    }
+    m.dispose();
+    return after;
+  };
+  const zombiePush = knock('zombie');
+  check('cios odrzuca zombie o ~1,5 bloku', zombiePush > 1.2 && zombiePush < 2, `${zombiePush.toFixed(2)} bloku`);
+  check('golem nie da się odepchnąć', knock('golem') < 0.5);
+  const plain = new Mob('zombie', 4.5, y, 4.5);
+  eq('zombie nie ma odporności na odrzut', plain.kbResistance, 0);
+  plain.dispose();
+  const tough = new Mob('golem', 4.5, y, 4.5);
+  eq('golem ma pełną odporność na odrzut', tough.kbResistance, 1);
+  tough.dispose();
+
+  const sim = (mobs: Mob[], seconds: number, cb: () => void = () => {}) => {
+    for (let i = 0; i < seconds * 60; i++) {
+      for (const m of mobs) m.update(1 / 60, w, player, cb, () => {}, false, mobs);
+    }
+  };
+
+  // Golem broni mieszkańca, nawet jeśli potwór jest daleko od samego golema.
+  const golem = new Mob('golem', 2.5, y, 2.5);
+  const villager = new Mob('villager', 20.5, y, 2.5);
+  const zombie = new Mob('zombie', 22.5, y, 2.5);
+  const start = golem.body.pos.clone();
+  sim([golem, villager, zombie], 8);
+  check('golem rusza bronić mieszkańca', golem.body.pos.distanceTo(start) > 6,
+    `${golem.body.pos.distanceTo(start).toFixed(2)} bloku`);
+  check('golem zabija napastnika', zombie.health <= 0, `zombie hp=${zombie.health}`);
+  check('mieszkaniec przeżywa', villager.health > 0, `hp=${villager.health}`);
+  golem.dispose(); villager.dispose(); zombie.dispose();
+
+  // Zemsta: golem atakuje tego, kto go uderzył, a nie bliższego zombie.
+  const g2 = new Mob('golem', 2.5, y, 2.5);
+  const near = new Mob('zombie', 6.5, y, 2.5);
+  const biter = new Mob('zombie', 14.5, y, 2.5);
+  g2.damage(1, biter.body.pos.x, biter.body.pos.z, biter);
+  check('cios moba ustawia golema na napastnika', g2.retaliate === biter);
+  sim([g2, near, biter], 8);
+  check('golem dopada napastnika', biter.health <= 0, `biter hp=${biter.health}`);
+  check('golem nie przechodzi obojętnie obok drugiego zombie', near.health < 20, `near hp=${near.health}`);
+  g2.dispose(); near.dispose(); biter.dispose();
+
+  // Gracz, który bije golema, dostaje kontratak.
+  const g3 = new Mob('golem', 2.5, y, 2.5);
+  g3.damage(1, 2.5, 2.5, 'player');
+  let hits = 0;
+  for (let i = 0; i < 240; i++) g3.update(1 / 60, w, new THREE.Vector3(2.5, y, 3.5), () => { hits++; }, () => {}, false, [g3]);
+  check('sprowokowany golem bije gracza', hits >= 2, `${hits} ciosów`);
+  g3.dispose();
 }
 
 // =================================================================== report

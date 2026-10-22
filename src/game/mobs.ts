@@ -144,6 +144,16 @@ export class Mob {
   private baseRot = new Map<THREE.Object3D, THREE.Euler>();
   /** 2.25: wygładzony obrót głowy względem tułowia (bez bazy z modelu). */
   private headYaw = 0;
+  /**
+   * 2.26: czas odrzutu po trafieniu. Przez ten czas mob nie steruje ruchem –
+   * leci tam, gdzie go odepchnięto. Wcześniej `moveAndAnimate` natychmiast
+   * wracało do pościgu (16% prędkości na klatkę), więc cios ledwo go ruszał.
+   */
+  kbTime = 0;
+  /** 2.26: opór na odrzut – waniliowy golem w ogóle go nie odczuwa. */
+  readonly kbResistance: number;
+  /** 2.26: golem pamięta moba, który go uderzył, i oddaje mu. */
+  retaliate: Mob | null = null;
   /** 2.18: kolor runa owcy – z pozycji, więc każda owca ma swój (jak w grze). */
   readonly woolColor: number;
   legs: THREE.Object3D[] = [];
@@ -154,6 +164,9 @@ export class Mob {
   constructor(type: MobType, x: number, y: number, z: number, profession = 0, variant: MobVariant = 'temperate') {
     this.type = type;
     this.variant = variant;
+    // Waniliowe `knockbackResistance`: golem 1.0 (nie da się go odepchnąć),
+    // slime 0.0 – resztę mobów odrzuca pełna siła.
+    this.kbResistance = type === 'golem' ? 1 : 0;
     this.home.set(x, y, z);
     // 2.21.1: dokładny rozkład z `SheepEntity`: 83,6% białych, 5% czarnych,
     // 5% szarych, 5% jasnoszarych, 3% brązowych i 2% różowych.
@@ -783,20 +796,31 @@ export class Mob {
     });
   }
 
-  damage(amount: number, fromX: number, fromZ: number) {
+  damage(amount: number, fromX: number, fromZ: number, attacker: Mob | 'player' | null = null) {
     if (this.dead || this.hurtTime > 0) return false;
     this.health -= amount;
     this.hurtTime = 0.5;
     const dx = this.body.pos.x - fromX, dz = this.body.pos.z - fromZ;
     const l = Math.hypot(dx, dz) || 1;
-    this.body.vel.x = (dx / l) * 7;
-    this.body.vel.z = (dz / l) * 7;
-    this.body.vel.y = 6;
+    // 2.26: pełny odrzut tylko dla mobów, które go odczuwają (golem ma 1.0).
+    const kb = 1 - this.kbResistance;
+    this.body.vel.x = (dx / l) * 7 * kb;
+    this.body.vel.z = (dz / l) * 7 * kb;
+    this.body.vel.y = Math.max(this.body.vel.y, 6 * kb);
+    if (kb > 0) this.kbTime = 0.45;
     this.setTint(true);
     if (this.health <= 0) {
       this.dead = true;
       this.deathTime = 0;
       this.fuse = -1;
+    }
+    if (this.type === 'golem') {
+      // 2.26: golem nie ucieka – odwraca się do napastnika. Gracz budzi go
+      // na 20 s (jak w wanilii), a mob trafia do listy „oddaj mu”.
+      if (attacker === 'player') this.provoked = 20;
+      else if (attacker && attacker !== this) this.retaliate = attacker;
+      this.walking = true;
+      return true;
     }
     if (this.type !== 'zombie' && !this.tamed) {
       // panic
@@ -885,7 +909,27 @@ export class Mob {
       return;
     }
 
-    const target = this.nearestHostile(allies, 22);
+    // 2.26: golem najpierw oddaje temu, kto go uderzył, a potem szuka
+    // najgroźniejszego potwora – także takiego, który atakuje mieszkańca
+    // dalej od golema (wcześniej „nie reagował”, bo liczył tylko odległość
+    // od siebie i gubił wrogów zajętych wioską).
+    let target: Mob | null = this.retaliate && !this.retaliate.dead ? this.retaliate : null;
+    if (target && target.body.pos.distanceTo(b.pos) > 40) target = null;
+    if (!target) {
+      let bestScore = Infinity;
+      for (const o of allies) {
+        if (o === this || o.dead || !isHostileMob(o.type)) continue;
+        const d = o.body.pos.distanceTo(b.pos);
+        if (d > 32) continue;
+        let defends = false;
+        for (const v of allies) {
+          if (v.type !== 'villager' || v.dead) continue;
+          if (v.body.pos.distanceTo(o.body.pos) < 9) { defends = true; break; }
+        }
+        const score = d - (defends ? 18 : 0);
+        if (score < bestScore) { bestScore = score; target = o; }
+      }
+    }
     if (target) {
       const dx = target.body.pos.x - b.pos.x;
       const dz = target.body.pos.z - b.pos.z;
@@ -895,11 +939,16 @@ export class Mob {
       this.walking = d > stop;
       if (d <= stop + 0.7 && this.attackCooldown <= 0) {
         this.attackCooldown = 1.35;
-        if (target.damage(7, b.pos.x, b.pos.z)) {
-          // ciężki cios odrzuca cel
-          target.body.vel.x *= 1.7;
-          target.body.vel.z *= 1.7;
-          target.body.vel.y = Math.max(target.body.vel.y, 6);
+        if (target.damage(7, b.pos.x, b.pos.z, this)) {
+          // ciężki cios odrzuca cel (o ile nie ma pełnego oporu)
+          if (target.kbResistance < 1) {
+            target.body.vel.x *= 1.7;
+            target.body.vel.z *= 1.7;
+            target.body.vel.y = Math.max(target.body.vel.y, 6);
+            target.kbTime = Math.max(target.kbTime, 0.5);
+          }
+          // raz trafiony – koniec zemsty, wracamy do patrolu
+          this.retaliate = null;
         }
       }
       this.moveAndAnimate(dt, world, player, this.walking ? 3.3 : 0);
@@ -1030,7 +1079,7 @@ export class Mob {
       return;
     }
 
-    let speed = this.type === 'zombie' ? 2.3 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : this.type === 'wolf' ? 1.6 : this.type === 'enderman' ? 3.2 : this.type === 'slime' ? 2.0 : this.type === 'ghast' ? 1.5 : 1.2;
+    let speed = this.type === 'zombie' ? 2.15 : this.type === 'creeper' ? 2.05 : this.type === 'spider' ? 2.7 : this.type === 'skeleton' ? 2.0 : this.type === 'chicken' ? 1.35 : this.type === 'wolf' ? 1.6 : this.type === 'enderman' ? 3.2 : this.type === 'slime' ? 2.0 : this.type === 'ghast' ? 1.5 : 1.2;
     const dx = player.x - b.pos.x, dz = player.z - b.pos.z;
     const dist = Math.hypot(dx, dz);
     const hostile = this.type === 'zombie' || this.type === 'creeper' || this.type === 'spider' || this.type === 'skeleton' || this.type === 'enderman' || this.type === 'slime' || this.type === 'ghast';
@@ -1178,7 +1227,15 @@ export class Mob {
    */
   private moveAndAnimate(dt: number, world: World, player: THREE.Vector3, speed = 0): void {
     const b = this.body;
-    if (speed > 0) {
+    // 2.26: odrzut. Przez ~0,45 s mob leci i NIE steruje ruchem – inaczej
+    // pościg natychmiast zjadał prędkość ciosu i „odepchnięcie” było
+    // ledwo widoczne (zombie wracał na gracza w kilku klatkach).
+    if (this.kbTime > 0) {
+      this.kbTime = Math.max(0, this.kbTime - dt);
+      const drag = Math.max(0, 1 - dt * (b.onGround ? 4.5 : 3.5));
+      b.vel.x *= drag;
+      b.vel.z *= drag;
+    } else if (speed > 0) {
       const tx = Math.sin(this.yaw) * speed, tz = Math.cos(this.yaw) * speed;
       b.vel.x += (tx - b.vel.x) * Math.min(1, dt * 10);
       b.vel.z += (tz - b.vel.z) * Math.min(1, dt * 10);

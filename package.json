@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.25.0",
-  "description": "BlockCraft 2.25 „Ręce do przodu, piasek w dół” – polska gra sandboxowa w przeglądarce: modele mobów z paczki 26.2 z poprawną animacją kończyn, spadający piasek i żwir, publiczny serwer, bez instalacji i bez konta.",
+  "version": "2.26.0",
+  "description": "BlockCraft 2.26 „Koniec prześwitów, golem na posterunku” – polska gra sandboxowa w przeglądarce: modele mobów z paczki 26.2 z poprawną animacją kończyn, spadający piasek i żwir, publiczny serwer, bez instalacji i bez konta.",
   "type": "module",
   "license": "MIT",
   "keywords": [

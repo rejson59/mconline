@@ -44,6 +44,8 @@ export const T = {
   wool_orange: 157, wool_magenta: 158, wool_light_blue: 159, wool_lime: 160,
   wool_pink: 161, wool_gray: 162, wool_light_gray: 163, wool_cyan: 164,
   wool_purple: 165, wool_brown: 166,
+  // 2.26: `farmland_moist.png` – grządka z wodą w promieniu 4 bloków.
+  farmland_moist: 167,
 } as const;
 
 export const B = {
@@ -106,6 +108,9 @@ export const B = {
   WOOL_ORANGE: 405, WOOL_MAGENTA: 406, WOOL_LIGHT_BLUE: 407, WOOL_LIME: 408,
   WOOL_PINK: 409, WOOL_GRAY: 410, WOOL_LIGHT_GRAY: 411, WOOL_CYAN: 412,
   WOOL_PURPLE: 413, WOOL_BROWN: 414,
+  // 2.26: nawodniona grządka ma własną teksturę (jak `moisture=7` w wanilii).
+  // Uwaga: 341–351 to id przedmiotów (cukier, butelki…), dlatego blok dostaje 352.
+  FARMLAND_WET: 352,
 } as const;
 
 export type RenderType =
@@ -220,6 +225,9 @@ def(B.TORCH, 'Pochodnia', T.torch, { solid: false, opaque: false, layer: 1, rend
 def(B.SAPLING, 'Sadzonka dębu', T.sapling, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
 def(B.BIRCH_SAPLING, 'Sadzonka brzozy', T.birch_sapling, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, sound: 'grass' });
 def(B.FARMLAND, 'Grządka', [T.farmland, T.dirt, T.dirt], { hardness: 0.6, drop: B.DIRT, sound: 'grass' });
+// 2.26: grządka nawodniona (woda w promieniu 4 bloków) – własna tekstura i
+// szybszy wzrost roślin, tak jak `moisture=7` w Minecrafcie.
+def(B.FARMLAND_WET, 'Grządka (nawodniona)', [T.farmland_moist, T.dirt, T.dirt], { hardness: 0.6, drop: B.DIRT, sound: 'grass' });
 def(B.CROP0, 'Kiełki pszenicy', T.wheat0, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, drop: -1, sound: 'grass' });
 def(B.CROP1, 'Młoda pszenica', T.wheat1, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, drop: -1, sound: 'grass' });
 def(B.CROP2, 'Pszenica', T.wheat2, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, drop: -1, sound: 'grass' });
@@ -352,6 +360,16 @@ export const IS_OPAQUE = new Uint8Array(512);
 export const IS_LEAFY = new Uint8Array(512);
 // Pełny okluder dla AO: liście cieniują, ale nie odcinają światła do zera.
 export const OCCLUDES = new Uint8Array(512);
+/**
+ * 2.26: bloki, które zasłaniają CAŁĄ ścianę sąsiada (culling siatki).
+ *
+ * Wcześniej siatka cullowała po `opaque`, więc ścieżka i grządka (15/16
+ * wysokości) chowały sąsiadowi pełną ścianę – nad ich górną krawędzią
+ * zostawała 1-pikselowa szpara i przez świat było widać „na wylot”
+ * (efekt x-ray w wioskach). Teraz cullujemy tylko wtedy, gdy kształt bloku
+ * to naprawdę pełny sześcian.
+ */
+export const CULLS = new Uint8Array(512);
 export const LAYER = new Uint8Array(512);
 // 0 cube, 1 cross, 2 liquid, 3 slab, 4 stairs, 5 portal, 6 rail,
 // 7 cactus, 8 bed, 9 fence, 10 torch, 11 lily pad, 12 chest
@@ -441,7 +459,7 @@ function collisionFor(d: BlockDef): Float32Array | null {
     if (f === 2) return new Float32Array([0, 0, 1 - lt, 1, 1, 1]);
     return new Float32Array([0, 0, 0, lt, 1, 1]);
   }
-  if (d.id === B.FARMLAND) return new Float32Array([0, 0, 0, 1, 0.9375, 1]);
+  if (d.id === B.FARMLAND || d.id === B.FARMLAND_WET) return new Float32Array([0, 0, 0, 1, 0.9375, 1]);
   if (d.id === B.CAMPFIRE) return new Float32Array([0, 0, 0, 1, 0.4375, 1]);
   if (isDoor(d.id)) {
     const f = doorFacing(d.id);
@@ -455,6 +473,20 @@ function collisionFor(d: BlockDef): Float32Array | null {
 }
 
 for (const d of defs) if (d) COLLISION[d.id] = collisionFor(d);
+
+// 2.26: pełny sześcian = blok zasłania całą ścianę sąsiada. Liczy się
+// FAKTYCZNY kształt bryły (pudełko kolizji), a nie sama flaga `opaque`.
+//
+// Kowadło ma pełną kolizję 1×1×1 (żeby się po nim chodziło jak w wanilii),
+// ale jego model jest zwężony do 12/16 – gdyby zasłaniało ścianę sąsiada,
+// nad krawędzią blatu powstałby prześwit. Dlatego jest tu jawnie wyłączone.
+const NOT_FULL_MODEL = new Set<number>([B.ANVIL]);
+for (const d of defs) {
+  if (!d) continue;
+  const c = COLLISION[d.id];
+  const full = !!c && c.length === 6 && c[0] === 0 && c[1] === 0 && c[2] === 0 && c[3] === 1 && c[4] === 1 && c[5] === 1;
+  CULLS[d.id] = d.opaque && full && !NOT_FULL_MODEL.has(d.id) ? 1 : 0;
+}
 
 /** Pudełka kolizji bloku albo `null`, gdy da się przez niego przejść. */
 export function collisionBoxes(id: number): Float32Array | null {
@@ -486,6 +518,8 @@ export function tileFor(id: number, face: number): number {
 // Blocks available in creative inventory
 function creativeVisible(id: number): boolean {
   if (id === B.AIR || id === B.WATER || id === B.LAVA || id === B.FURNACE_ON || id === B.CROP1 || id === B.CROP2 || id === B.LOOT_CHEST) return false;
+  // 2.26: wariant hydracji zmienia się sam – nie jest osobnym blokiem do postawienia.
+  if (id === B.FARMLAND_WET) return false;
   if (id === B.REDSTONE_LAMP_ON || id === B.REDSTONE_TORCH_OFF || id === B.LEVER_ON || id === B.BUTTON_ON) return false;
   if (id === B.PISTON_HEAD) return false;
   if (id === B.OAK_SLAB_TOP || id === B.STONE_SLAB_TOP || id === B.COBBLE_SLAB_TOP || id === B.BRICK_SLAB_TOP || id === B.SANDSTONE_SLAB_TOP || id === B.NETHER_BRICK_SLAB_TOP || id === B.QUARTZ_SLAB_TOP) return false;

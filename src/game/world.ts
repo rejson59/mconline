@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, isDoor, isDoorOpen, isFence, doorFacing, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
+import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, isDoor, isDoorOpen, isFence, doorFacing, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
 import { tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
@@ -361,7 +361,7 @@ function specialBoxes(id: number): SpecialBox[] | null {
       crops: [side, side, null, null, side, side],
     }];
   }
-  if (id === B.FARMLAND) {
+  if (id === B.FARMLAND || id === B.FARMLAND_WET) {
     const side = uvPx(0, 1, 16, 16);
     return [{
       b: [0, 0, 0, 1, 0.9375, 1],
@@ -1600,7 +1600,10 @@ export class World {
             const F = FACES[f];
             const nx = x + F.dir[0], ny = y + F.dir[1], nz = z + F.dir[2];
             const nb = get(nx, ny, nz);
-            if (IS_OPAQUE[nb]) continue;
+            // 2.26: cullujemy tylko względem PEŁNYCH sześcianów. Dzięki temu
+            // sąsiad 15/16-bloku (ścieżka, grządka, skrzynia) rysuje swoją
+            // ścianę i znika 1-pikselowa szpara „x-ray” nad jego krawędzią.
+            if (CULLS[nb]) continue;
             if (nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
             if (isLiquid && (RENDER[nb] === 2)) continue;
             const t = tileFor(id, f);

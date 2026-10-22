@@ -112,7 +112,7 @@ export function logEntry(text: string, kind: LogEntry['kind'] = 'info'): LogEntr
 /** Etapy uruchamiania – prawdziwa kolejność pracy silnika (atlas → świat → scena). */
 export const LAUNCH_STEPS: { title: string; detail: string; ms: number; progress: number }[] = [
   { title: 'Sprawdzanie plików', detail: 'Paczka 26.2.x Template, wbudowana w grę', ms: 260, progress: 22 },
-  { title: 'Składanie atlasu', detail: '167 kafelków bloków, 100 ikon, 25 skórek mobów', ms: 240, progress: 54 },
+  { title: 'Składanie atlasu', detail: '168 kafelków bloków, 100 ikon, 25 skórek mobów', ms: 240, progress: 54 },
   { title: 'Przygotowanie świata', detail: 'Bloki, biomy, wioski i moby', ms: 300, progress: 82 },
   { title: 'Uruchamianie sceny', detail: 'Sterowanie, HUD i dźwięk', ms: 220, progress: 100 },
 ];

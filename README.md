@@ -1,6 +1,16 @@
-# BlockCraft 2.25 🚀
+# BlockCraft 2.26 🚀
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 2.26 „Koniec prześwitów, golem na posterunku” 🧱 🤖
+
+Trzy zgłoszone błędy z rzędu: **chodnik w wiosce przestał działać jak rentgen**, **cios naprawdę odrzuca zombie**, a **żelazny golem wreszcie reaguje na potwory**. Do tego grządka dostała waniliowe nawadnianie i własną, ciemniejszą teksturę.
+
+* **Koniec prześwitu przy ścieżce (x-ray).** Siatka chowała ścianę sąsiada, gdy ten miał flagę „nieprzezroczysty” – a ścieżka i grządka mają tylko 15/16 wysokości, więc nad ich górną krawędzią zostawała 1-pikselowa szpara i przez podłogę wioski było widać świat. Nowa tablica `CULLS` liczy **faktyczny kształt bryły** (pełne pudełko kolizji, a nie samą flagę), więc 15/16 bloki nie zasłaniają już niczego, a kowadło (pełna kolizja, model 12/16) też przestało chować ściany. Testy mierzą to na siatce: przy pełnym bloku na styku znikają dwie ściany, przy ścieżce i grządce zostaje ściana sąsiada.
+* **Grządka jak `FarmBlock` z wanilii.** Dwa warianty: sucha i nawodniona (`moisture=7`). Woda w promieniu czterech bloków – także na skos (`dx² + dz² ≤ 18`) i o poziom wyżej – zmienia blok na ciemniejszy kafelek `farmland_moist` (168. kafelek paczki), a rośliny rosną na nim dwa razy szybciej (9 s zamiast 18 s). Po zabraniu wody grządka wraca do suchej wersji, a stan liczy ten sam moduł `farmland.ts`, co wzrost roślin, więc tekstura i tempo nigdy się nie rozjeżdżają. Sadzenie i zamiana ziemi w grządkę (`tryTill`) od razu wybierają właściwy wariant.
+* **Cios naprawdę odrzuca.** Trafiony zombie leci ~1,5 bloku w pół sekundy, dostaje lekkie podbicie i przez 0,45 s nie steruje ruchem, więc odepchnięcie jest widoczne, a nie tylko kosmetyczne. Prędkość pościgu zombie spadła przy tym do 2,15 bloku/s (wanilia ~2,1–2,3), więc nie dogania gracza w pół kroku. Odrzut jest liczony od pozycji gracza, a moby z paniką (np. krowa) i tak uciekają dalej.
+* **Golem na posterunku.** Żelazny golem dostaje cel, gdy potwór atakuje mieszkańca, nawet jeśli sam golem stoi daleko (do 32 bloków) – wcześniej patrzył wyłącznie na odległość od siebie. Gdy ktoś go uderzy, zapamiętuje napastnika na 40 s i oddaje mu ciosy, nawet jeśli obok stoi bliższy zombie. Gracz, który go sprowokuje, dostaje kontratak, a odrzucić go nie można (`kbResistance = 1`, jak odporność na odrzut w wanilii).
+* **Testy.** `npm test` to **1934 kontrole silnika + 246 testów UI**. Nowa sekcja 2.26 sprawdza culling (`CULLS` dla ścieżki, grządki, skrzyni, kowadła, płyt, schodów, szyby i liści), różnicę wierzchołków siatki na styku z pełnym blokiem i z 15/16 blokiem, nawadnianie w promieniu 4 (także po skosie, o poziom wyżej i po zabraniu wody), ciemniejszy kafelek mokrej grządki, odrzut zombie ~1,5 bloku, odporność golema, obronę mieszkańca, zemstę na napastniku i kontratak na gracza. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
 
 ## Wersja 2.25 „Ręce do przodu, piasek w dół” 🧟 🏖️
 

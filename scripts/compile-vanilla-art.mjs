@@ -458,6 +458,8 @@ const BLOCK_TILES = {
   sapling: B + 'oak_sapling.png',
   birch_sapling: B + 'birch_sapling.png',
   farmland: B + 'farmland.png',
+  // 2.26: grządka nawodniona (`moisture=7`) ma w paczce własną teksturę.
+  farmland_moist: B + 'farmland_moist.png',
   wheat0: B + 'wheat_stage0.png',
   wheat1: B + 'wheat_stage2.png',
   wheat2: B + 'wheat_stage4.png',

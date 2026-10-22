@@ -12,6 +12,7 @@ import {
 import { getAtlas, tileUV, tileUVInset, tileUVRect, AVG_COLOR } from './textures';
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { fallPath, isFallingBlock, isPassableForFall } from './gravity';
+import { isFarmland, isHydrated, updateFarmland } from './farmland';
 import { Mob, mobVariantForBiome, isHostileMob, type MobType } from './mobs';
 
 const GREY: readonly number[] = [90, 90, 90];
@@ -3115,7 +3116,8 @@ export class Game {
     const above = this.world.getBlock(t.x, t.y + 1, t.z);
     if (above !== B.AIR && RENDER[above] !== 1) return false;
     if (RENDER[above] === 1) this.breakBlock(t.x, t.y + 1, t.z);
-    this.world.setBlock(t.x, t.y, t.z, B.FARMLAND);
+    // 2.26: grządka od razu wie, czy jest przy wodzie (inna tekstura).
+    this.world.setBlock(t.x, t.y, t.z, isHydrated(this.world, t.x, t.y, t.z) ? B.FARMLAND_WET : B.FARMLAND);
     Sfx.playDig('grass');
     this.swingT = 0;
     this.wearTool();
@@ -3124,12 +3126,12 @@ export class Game {
 
   private tryPlant(t: NonNullable<ReturnType<World['raycast']>>, s: Stack): boolean {
     let x = t.x, y = t.y, z = t.z;
-    if (this.world.getBlock(x, y, z) === B.FARMLAND) y += 1;
-    else if (t.ny === 1 && this.world.getBlock(x, y, z) === B.FARMLAND) y += 1;
+    if (isFarmland(this.world.getBlock(x, y, z))) y += 1;
+    else if (t.ny === 1 && isFarmland(this.world.getBlock(x, y, z))) y += 1;
     else {
       x = t.x + t.nx; y = t.y + t.ny; z = t.z + t.nz;
     }
-    if (this.world.getBlock(x, y - 1, z) !== B.FARMLAND) return false;
+    if (!isFarmland(this.world.getBlock(x, y - 1, z))) return false;
     if (this.world.getBlock(x, y, z) !== B.AIR) return false;
     this.world.setBlock(x, y, z, B.CROP0);
     this.growables.set(`${x},${y},${z}`, performance.now());
@@ -4194,7 +4196,8 @@ export class Game {
     // 2.4: napój siły dorzuca obrażenia do każdego trafienia
     if (this.hasEffect('strength')) dmg += STRENGTH_DAMAGE;
     const kb = knockbackFactor(enchLevel(held, 'knockback'));
-    if (mob.damage(dmg, this.body.pos.x, this.body.pos.z)) {
+    // 2.26: przekazujemy, kto bije – golem wie, że to gracz, i odpowiada.
+    if (mob.damage(dmg, this.body.pos.x, this.body.pos.z, 'player')) {
       if (kb > 1) {
         mob.body.vel.x *= kb;
         mob.body.vel.z *= kb;
@@ -4723,9 +4726,9 @@ export class Game {
     }
     const below = this.world.getBlock(px, py - 1, pz);
     if (id === B.SAPLING || id === B.BIRCH_SAPLING) {
-      if (below !== B.GRASS && below !== B.DIRT && below !== B.FARMLAND) return;
+      if (below !== B.GRASS && below !== B.DIRT && !isFarmland(below)) return;
     } else if (id === B.CROP0 || id === B.CROP1 || id === B.CROP2 || id === B.CROP3) {
-      if (below !== B.FARMLAND) return;
+      if (!isFarmland(below)) return;
     } else if (id === B.TORCH || id === B.REDSTONE_TORCH) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
       if (!IS_SOLID[attached] && !IS_SOLID[below]) return;
@@ -4805,7 +4808,7 @@ export class Game {
     } else if (id === B.CHEST) {
       this.unlock('stash');
     } else if (RENDER[id] === 1) {
-      if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && below !== B.FARMLAND) return;
+      if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && !isFarmland(below)) return;
     }
     const finalId = placeId ?? id;
     this.world.setBlock(px, py, pz, finalId);
@@ -5747,7 +5750,7 @@ export class Game {
   };
 
   private wolfBite = (target: Mob, wolf: Mob) => {
-    target.damage(4, wolf.body.pos.x, wolf.body.pos.z);
+    target.damage(4, wolf.body.pos.x, wolf.body.pos.z, wolf);
     Sfx.playHurt();
   };
 
@@ -6445,6 +6448,15 @@ export class Game {
     const ox = c.cx * CS, oz = c.cz * CS;
     for (let i = 0; i < c.data.length; i++) {
       const id = c.data[i];
+      // 2.26: przy okazji skanu chunka grządka dostaje wariant suchy/mokry.
+      if (id === B.FARMLAND || id === B.FARMLAND_WET) {
+        const ly = (i / (CS * CS)) | 0;
+        const lrem = i % (CS * CS);
+        const lz = (lrem / CS) | 0;
+        const lx = lrem % CS;
+        updateFarmland(this.world, ox + lx, ly, oz + lz);
+        continue;
+      }
       if (id !== B.SAPLING && id !== B.BIRCH_SAPLING && id !== B.SUGARCANE && id !== B.CACTUS && (id < B.CROP0 || id > B.CROP2)) continue;
       const y = (i / (CS * CS)) | 0;
       const rem = i % (CS * CS);
@@ -6523,12 +6535,9 @@ export class Game {
   }
 
   private cropWatered(x: number, y: number, z: number): boolean {
-    for (let dx = -4; dx <= 4; dx++)
-      for (let dz = -4; dz <= 4; dz++) {
-        if (dx * dx + dz * dz > 18) continue;
-        if (this.world.peekBlock(x + dx, y, z + dz) === B.WATER || this.world.peekBlock(x + dx, y - 1, z + dz) === B.WATER) return true;
-      }
-    return false;
+    // 2.26: ta sama reguła co przy teksturze grządki (`farmland.ts`),
+    // więc nawodniona grządka i szybszy wzrost zawsze idą w parze.
+    return isHydrated(this.world, x, y - 1, z);
   }
 
   private updateFurnaces(dt: number) {
