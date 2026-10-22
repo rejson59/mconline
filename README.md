@@ -2,6 +2,10 @@
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
 
+## Wersja 2.28.1 – skrzynia 1:1 📦
+
+Domknięcie okien: **skrzynia** rysuje prawdziwy panel `generic_54.png`, sklejony przy kompilacji z dwóch fragmentów – górnej części 176 × 71 i paska ekwipunku 176 × 96 – dokładnie tak, jak robi to waniliowe `GenericContainerScreen`. Siatka 9 × 3 leży na (8, 18), wiersz co 18 px, ekwipunek gracza na (8, 84), pasek skrótów na (8, 142), a panel ma 176 × 167 pikseli GUI. Zniknął `mc-panel` z własnymi ramkami – sloty są już w teksturze. Testy: **2045 kontroli silnika + 234 testy UI**.
+
 ## Wersja 2.28 „Więcej FPS i okna jak w grze” ⚡ 🖥️
 
 Wbudowane odpowiedniki modów wydajnościowych – **Distant Horizons, Sodium, Entity Culling, ImmediatelyFast i Nvidium** – plus **kowadło, stół zaklęć, statyw alchemiczny i piec 1:1** z Minecrafta.
@@ -14,7 +18,7 @@ Wbudowane odpowiedniki modów wydajnościowych – **Distant Horizons, Sodium, E
 * **Stół zaklęć 1:1.** Slot przedmiotu (15, 47) i lazurytu (35, 47), trzy przyciski ofert `enchantment_slot` (108 × 19) na wysokościach 13 / 32 / 51, warianty `_disabled` i `_highlighted` z paczki.
 * **Statyw alchemiczny 1:1.** Trzy fiolki w literę V – (56, 51), (79, 58), (102, 51), składnik (79, 17), różdżka (17, 17), pęcherzyki `bubbles` (12 × 29) rosnące od dołu, postęp `brew_progress` (9 × 28) i pasek paliwa `fuel_length` (18 × 4) na (60, 44).
 * **Piec 1:1.** Surowiec (56, 17), paliwo (56, 53), wynik (116, 31), płomień `lit_progress` (14 × 14) na (56, 36) i strzałka `burn_progress` (24 × 16) na (79, 34).
-* **Testy.** `npm test` to **2033 kontrole silnika + 229 testów UI**. Nowa sekcja 2.28 sprawdza budżet klatki, kolejność budowy, interwały ticków, progi automatu, siatkę i pierścień LOD (17 × 17 wierzchołków kafla, wysokości z generatora, sortowanie po dystansie) oraz każdą współrzędną czterech nowych okien i obecność 17 widżetów w paczce. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
+* **Testy.** `npm test` to **2045 kontroli silnika + 234 testy UI**. Nowa sekcja 2.28 sprawdza budżet klatki, kolejność budowy, interwały ticków, progi automatu, siatkę i pierścień LOD (17 × 17 wierzchołków kafla, wysokości z generatora, sortowanie po dystansie) oraz każdą współrzędną czterech nowych okien i obecność 17 widżetów w paczce. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
 
 ## Wersja 2.27 „Handel jak w grze, mieszkańcy bez drżenia” 🧑‍🌾 🤝
 

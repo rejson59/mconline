@@ -1,28 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Game } from '../game/engine';
-import { TooltipBody } from '../utils/tooltip';
-import Slot from './Slot';
-import CloseButton from './CloseButton';
+import { CHEST, chestSlot, containerInvSlot } from '../game/containerLayout';
+import { GuiInventory, GuiOverlay, GuiSlot, GuiWindow, useCursorPos, useGuiScale } from './GuiContainer';
 
+/**
+ * 2.28.1: skrzynia 1:1 jak `GenericContainerScreen` z Minecrafta.
+ *
+ * Wanilia skleja panel z dwóch fragmentów `generic_54.png`: górną część
+ * 176 × 71 i pasek ekwipunku 176 × 96 (kompilator robi z tego jeden obrazek).
+ * Siatka 9 × 3 leży na (8, 18), wiersz co 18 px, a ekwipunek gracza wraca
+ * na swoje miejsce (8, 84) + pasek skrótów (8, 142).
+ */
 export default function ChestScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
   const [, setTick] = useState(0);
-  const [mouse, setMouse] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<string | null>(null);
-  const inv = game.inventory;
+  const mouse = useCursorPos();
+  const scale = useGuiScale(2, 84, CHEST.height);
   const chest = game.currentChest();
-
-  useEffect(() => {
-    const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    // 2.9: na dotyku nie ma „mousemove” – ikona trzymanego przedmiotu
-    // zostawała w lewym górnym rogu. Tapnięcie też ustawia jej pozycję.
-    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    window.addEventListener('mousemove', mm);
-    window.addEventListener('pointerdown', pt, true);
-    return () => {
-      window.removeEventListener('mousemove', mm);
-      window.removeEventListener('pointerdown', pt, true);
-    };
-  }, []);
 
   const refresh = () => {
     setTick((t) => t + 1);
@@ -30,51 +24,34 @@ export default function ChestScreen({ game, icons, onChange }: { game: Game; ico
   };
   if (!chest) return null;
 
+  const slots = Array.from({ length: 36 }, (_, i) => containerInvSlot(i));
+
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.55)' }}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) game.closeInventory();
-      }}
-    >
-      <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
-      <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
-        <div className="text-lg font-semibold">Skrzynia</div>
-        <div className="grid grid-cols-9">
-          {chest.slots.map((s, i) => (
-            <Slot key={i} stack={s} icons={icons} onHover={setHover} onClick={(r) => { game.clickChest(i, r); refresh(); }} />
-          ))}
-        </div>
-        <div className="text-sm font-semibold">Ekwipunek</div>
-        <div className="grid grid-cols-9">
-          {inv.slots.map((s, i) => (
-            <Slot
+    <>
+      <GuiWindow
+        sprite={CHEST.sprite}
+        title={CHEST.title}
+        scale={scale}
+        height={CHEST.height}
+        onClose={() => game.closeInventory()}
+      >
+        {chest.slots.map((s, i) => {
+          const p = chestSlot(i);
+          return (
+            <GuiSlot
               key={i}
+              x={p.x}
+              y={p.y}
               stack={s}
               icons={icons}
               onHover={setHover}
-              onClick={(r) => {
-                inv.clickSlot(i, r);
-                refresh();
-              }}
+              onClick={(r) => { game.clickChest(i, r); refresh(); }}
             />
-          ))}
-        </div>
-      </div>
-      {hover && !inv.cursor && (
-        <div className="pointer-events-none fixed z-50 max-w-[320px] px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', whiteSpace: 'pre-line' }}>
-          <TooltipBody text={hover} />
-        </div>
-      )}
-      {inv.cursor && (
-        <div className="pointer-events-none fixed z-50" style={{ left: mouse.x - 17, top: mouse.y - 17 }}>
-          <img src={icons[inv.cursor.id]} width={34} height={34} className="pixelated" />
-          {inv.cursor.count > 1 && <span className="mc-count">{inv.cursor.count}</span>}
-        </div>
-      )}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm mc-text opacity-80">E / Esc – zamknij</div>
-    </div>
+          );
+        })}
+        <GuiInventory game={game} icons={icons} slots={slots} onHover={setHover} onChange={refresh} />
+      </GuiWindow>
+      <GuiOverlay game={game} icons={icons} hover={hover} mouse={mouse} />
+    </>
   );
 }

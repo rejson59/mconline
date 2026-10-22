@@ -138,18 +138,18 @@ export function guiText(color = '#3f3f3f'): CSSProperties {
 }
 
 /** Skala okna zależna od ekranu (na telefonie panel maleje, nie ucieka). */
-export function useGuiScale(maxScale: number, fitH = 84): number {
+export function useGuiScale(maxScale: number, fitH = 84, height = 166): number {
   const [scale, setScale] = useState(2);
   useEffect(() => {
     const fit = () => {
       const byW = (window.innerWidth - 24) / 176;
-      const byH = (window.innerHeight - fitH) / 166;
+      const byH = (window.innerHeight - fitH) / height;
       setScale(Math.max(0.75, Math.min(maxScale, byW, byH)));
     };
     fit();
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
-  }, [maxScale, fitH]);
+  }, [maxScale, fitH, height]);
   return scale;
 }
 
@@ -160,6 +160,7 @@ export function useGuiScale(maxScale: number, fitH = 84): number {
  */
 export function GuiWindow({
   sprite, title, scale, onClose, children, footer = 'E / Esc – zamknij', titleX = 8, titleY = 6,
+  width = 176, height = 166,
 }: {
   sprite: string;
   title: string;
@@ -169,6 +170,9 @@ export function GuiWindow({
   footer?: string;
   titleX?: number;
   titleY?: number;
+  /** Skrzynia jest o piksel niższa (176 × 167), pozostałe okna 176 × 166. */
+  width?: number;
+  height?: number;
 }) {
   const panel = guiSprite(sprite);
   return (
@@ -181,10 +185,10 @@ export function GuiWindow({
       }}
     >
       <CloseButton onClose={onClose} className="mc-close-safe absolute z-50" />
-      <div style={{ width: 176 * scale, height: 166 * scale, position: 'relative' }}>
+      <div style={{ width: width * scale, height: height * scale, position: 'relative' }}>
         <div
           style={{
-            position: 'absolute', left: 0, top: 0, width: 176, height: 166,
+            position: 'absolute', left: 0, top: 0, width, height,
             transform: `scale(${scale})`, transformOrigin: 'top left',
             backgroundImage: panel ? `url(${panel})` : undefined,
             backgroundSize: '100% 100%',

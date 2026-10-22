@@ -941,6 +941,9 @@ const GUI_FILES = {
   brewing_progress: 'gui/sprites/container/brewing_stand/brew_progress.png',
   brewing_fuel: 'gui/sprites/container/brewing_stand/fuel_length.png',
   furnace_gui: 'gui/container/furnace.png',
+  // 2.28.1: skrzynia 27 slotów – wanilia skleja górną część i pasek
+  // ekwipunku z `generic_54.png` (patrz specjalny przypadek niżej).
+  chest_gui: 'gui/container/generic_54.png',
   furnace_lit: 'gui/sprites/container/furnace/lit_progress.png',
   furnace_burn: 'gui/sprites/container/furnace/burn_progress.png',
   sun: 'environment/celestial/sun.png',
@@ -998,6 +1001,26 @@ for (const [name, file] of Object.entries(GUI_FILES)) {
       out[d] = img.data[s]; out[d + 1] = img.data[s + 1];
       out[d + 2] = img.data[s + 2]; out[d + 3] = img.data[s + 3];
     }
+    guiSprites[name] = encodePNG(cw, ch, out).toString('base64');
+    continue;
+  }
+  if (name === 'chest_gui') {
+    // 2.28.1: `GenericContainerScreen` rysuje górną część (0,0,176,71)
+    // i dokleja pod nią ekwipunek gracza z (0,126,176,96) – dopiero razem
+    // dają panel 176 × 167 dla trzech wierszy. Sklejamy je przy kompilacji,
+    // żeby w CSS wystarczył jeden obrazek.
+    const cw = 176, ch = 71 + 96;
+    const out = new Uint8Array(cw * ch * 4);
+    const copy = (dy, sy, rows) => {
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cw; x++) {
+        const s0 = ((sy + y) * img.w + x) * 4;
+        const d0 = ((dy + y) * cw + x) * 4;
+        out[d0] = img.data[s0]; out[d0 + 1] = img.data[s0 + 1];
+        out[d0 + 2] = img.data[s0 + 2]; out[d0 + 3] = img.data[s0 + 3];
+      }
+    };
+    copy(0, 0, 71);
+    copy(71, 126, 96);
     guiSprites[name] = encodePNG(cw, ch, out).toString('base64');
     continue;
   }
