@@ -17,10 +17,10 @@ const MENU_BG = `${import.meta.env?.BASE_URL ?? './'}menu-bg.jpg`;
 export type { Settings } from '../utils/settings';
 
 const SPLASHES = [
-  '2.26: koniec prześwitów w wioskach!',
-  '2.26: cios naprawdę odrzuca!',
-  '2.26: golem broni mieszkańców!',
-  '2.26: grządka wie, gdzie jest woda!',
+  '2.27: mieszkańcy przestali drżeć!',
+  '2.27: handel wygląda jak w Minecrafcie!',
+  '2.27: klikasz ofertę, bierzesz towar!',
+  '2.27: przewijana lista ofert!',
   '2.22: owca pasie się i odrasta!',
   '2.22: 16 kolorów wełny jak w grze!',
   '2.22: moby mają prawdziwe hitboxy!',

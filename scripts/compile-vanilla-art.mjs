@@ -911,6 +911,16 @@ const GUI_FILES = {
   button: 'gui/sprites/widget/button.png',
   button_highlighted: 'gui/sprites/widget/button_highlighted.png',
   button_disabled: 'gui/sprites/widget/button_disabled.png',
+  // 2.27: okno handlu z mieszkańcem (`MerchantScreen`) – panel i wszystkie
+  // jego widżety prosto z paczki 26.2.
+  villager_gui: 'gui/container/villager.png',
+  merchant_scroller: 'gui/sprites/container/villager/scroller.png',
+  merchant_scroller_disabled: 'gui/sprites/container/villager/scroller_disabled.png',
+  merchant_xp_bg: 'gui/sprites/container/villager/experience_bar_background.png',
+  merchant_xp_current: 'gui/sprites/container/villager/experience_bar_current.png',
+  merchant_out_of_stock: 'gui/sprites/container/villager/out_of_stock.png',
+  merchant_arrow: 'gui/sprites/container/villager/trade_arrow.png',
+  merchant_arrow_out: 'gui/sprites/container/villager/trade_arrow_out_of_stock.png',
   sun: 'environment/celestial/sun.png',
   clouds: 'environment/clouds.png',
   rain: 'environment/rain.png',
@@ -944,6 +954,20 @@ for (const [name, file] of Object.entries(GUI_FILES)) {
       out[d + 2] = img.data[s + 2]; out[d + 3] = img.data[s + 3];
     }
     guiSprites[name] = encodePNG(w, h, out).toString('base64');
+    continue;
+  }
+  if (name === 'villager_gui') {
+    // 2.27: przycinamy 512×256 do samego panelu 276×166 (reszta to czarny
+    // margines). Dzięki temu w CSS obrazek rozciąga się dokładnie na panel.
+    const cw = 276, ch = 166;
+    const out = new Uint8Array(cw * ch * 4);
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+      const s = (y * img.w + x) * 4;
+      const d = (y * cw + x) * 4;
+      out[d] = img.data[s]; out[d + 1] = img.data[s + 1];
+      out[d + 2] = img.data[s + 2]; out[d + 3] = img.data[s + 3];
+    }
+    guiSprites[name] = encodePNG(cw, ch, out).toString('base64');
     continue;
   }
   if (name === 'sun') {

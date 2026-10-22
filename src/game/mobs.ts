@@ -154,6 +154,19 @@ export class Mob {
   readonly kbResistance: number;
   /** 2.26: golem pamięta moba, który go uderzył, i oddaje mu. */
   retaliate: Mob | null = null;
+  /**
+   * 2.27: stabilność chodu mieszkańców.
+   *
+   * `jumpCooldown` blokuje dokładanie kolejnego skoku w każdej klatce (mob
+   * pod ścianą podskakiwał kilka razy na sekundę), a `turnCooldown` pozwala
+   * zawrócić tylko raz na chwilę – wcześniej `yaw += π/2` oraz losowy obrót
+   * przy wodzie wykonywały się co klatkę i model dosłownie się trząsł.
+   */
+  jumpCooldown = 0;
+  turnCooldown = 0;
+  /** 2.27: kierunek ucieczki mieszkańca (stały, wygładzany sinusem). */
+  private fleeYaw = 0;
+  private wiggle = 0;
   /** 2.18: kolor runa owcy – z pozycji, więc każda owca ma swój (jak w grze). */
   readonly woolColor: number;
   legs: THREE.Object3D[] = [];
@@ -827,7 +840,13 @@ export class Mob {
       this.aiTimer = 3;
       this.walking = true;
       this.yaw = Math.atan2(dx, dz);
-      if (this.type === 'villager') this.panic = 4;
+      if (this.type === 'villager') {
+        this.panic = 4;
+        // 2.27: mieszkaniec ucieka w jednym kierunku (z dala od napastnika),
+        // a nie losowo co klatkę – to właśnie trzęsło modelem.
+        this.fleeYaw = this.yaw;
+        this.wiggle = 0;
+      }
     }
     return true;
   }
@@ -857,10 +876,13 @@ export class Mob {
    */
   private updateVillager(dt: number, world: World, player: THREE.Vector3, allies: Mob[]): void {
     const b = this.body;
-    // Świeżo uderzony mieszkaniec po prostu zwiewa (yaw ustawia damage()).
+    // Świeżo uderzony mieszkaniec po prostu zwiewa. 2.27: kierunek jest
+    // stały (zapisany w `damage()`), a tylko lekko faluje – wcześniej losowy
+    // obrót dokładał się w każdej klatce i mieszkaniec trząsł się w miejscu.
     if (this.panic > 0) {
       this.panic -= dt;
-      this.yaw += (Math.random() - 0.5) * 0.25;
+      this.wiggle += dt * 3.2;
+      this.yaw = this.fleeYaw + Math.sin(this.wiggle) * 0.35;
       this.walking = true;
       this.moveAndAnimate(dt, world, player, 3.2);
       return;
@@ -1043,6 +1065,49 @@ export class Mob {
     return true;
   }
 
+  /**
+   * 2.27: lekkie rozsuwanie mobów, jak waniliowe `pushEntities`.
+   *
+   * Mieszkańcy kręcą się wokół tej samej studni i potrafili wejść sobie
+   * w model – dwa nachodzące na siebie modele wyglądają jak drżenie.
+   * Zamiast przesuwać pozycję (co mogło wepchnąć moba w ścianę) dokładamy
+   * delikatny impuls prędkości, który `stepBody` normalnie rozwiązuje
+   * z kolizjami. Odrzut (`kbTime`) ma pierwszeństwo – wtedy nie ruszamy.
+   */
+  pushAway(allies: Mob[], dt: number): void {
+    if (this.dead || this.kbTime > 0) return;
+    const b = this.body;
+    let px = 0, pz = 0;
+    for (const o of allies) {
+      if (o === this || o.dead) continue;
+      // Tylko moby na podobnej wysokości – pająk pod nogami nie popycha.
+      if (o.body.pos.y + o.body.h < b.pos.y + 0.2 || o.body.pos.y > b.pos.y + b.h - 0.2) continue;
+      const dx = b.pos.x - o.body.pos.x;
+      const dz = b.pos.z - o.body.pos.z;
+      const min = (b.w + o.body.w) * 0.45;
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= min * min) continue;
+      const d = Math.sqrt(d2) || 0.001;
+      // Im głębiej wchodzą w siebie, tym mocniejszy impuls – ale ograniczony.
+      const k = Math.min(1, (min - d) / Math.max(0.2, min));
+      px += (dx / d) * k;
+      pz += (dz / d) * k;
+    }
+    const len = Math.hypot(px, pz);
+    if (len < 1e-4) return;
+    const cap = Math.min(1, len);
+    // Przyspieszenie do ~5 bloku/s² – wystarczy, żeby się rozeszli, ale nie
+    // szarpie modelem (wcześniej próba pozycyjna wpychała moby w ściany).
+    b.vel.x += (px / len) * cap * 5 * dt;
+    b.vel.z += (pz / len) * cap * 5 * dt;
+    // Rozsuwanie nie może rozkręcić moba na boki – prędkość zostaje mała.
+    const sp = Math.hypot(b.vel.x, b.vel.z);
+    if (sp > 2.2) {
+      b.vel.x = (b.vel.x / sp) * 2.2;
+      b.vel.z = (b.vel.z / sp) * 2.2;
+    }
+  }
+
   update(
     dt: number,
     world: World,
@@ -1054,6 +1119,7 @@ export class Mob {
     onBite: (mob: Mob, wolf: Mob) => void = () => {}
   ) {
     const b = this.body;
+    this.pushAway(allies, dt);
     if (this.hurtTime > 0) {
       this.hurtTime -= dt;
       if (this.hurtTime <= 0 && !this.dead) this.setTint(false);
@@ -1274,23 +1340,58 @@ export class Mob {
         this.climbing = false;
       }
     }
+    // 2.27: stabilny chód przy przeszkodzie.
+    //
+    // Sonda sięga teraz od KRAWĘDZI ciała, a nie od środka. Przy szerokim
+    // mieszkańcu (0,6 bloku) stary promień 0,8 bloku od środka przeskakiwał
+    // płot, o który się opierał, więc kod „widział” powietrze i wykonywał
+    // skok w miejscu. Skok i obrót mają też własny czas odnowienia: wcześniej
+    // `vel.y = 8.2` oraz obrót o π/2 dokładały się w KAŻDEJ klatce, przez co
+    // mieszkaniec podskakiwał i trząsł się przy ścianie.
+    this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
+    this.turnCooldown = Math.max(0, this.turnCooldown - dt);
+    const reach = b.w / 2 + 0.3;
+    const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * reach);
+    const fz = Math.floor(b.pos.z + Math.cos(this.yaw) * reach);
+    const hy = Math.floor(b.pos.y);
+    const front = world.peekBlock(fx, hy, fz);
+    // Wanilia: mieszkaniec i żelazny golem nie skaczą – omijają przeszkodę.
+    const canHop = this.type !== 'villager' && this.type !== 'golem';
     // A climbing spider keeps its heading: it must not turn away mid-wall.
     if ((b.hitWall || wasWall) && b.onGround && this.walking && !(this.type === 'spider' && this.climbing)) {
-      // jump over obstacle if space above — but not onto a fence or a closed door
-      const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.8), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.8);
-      const hy = Math.floor(b.pos.y);
-      const front = world.peekBlock(fx, hy, fz);
-      if (front === B.FENCE || isDoor(front)) this.yaw += Math.PI * (0.45 + Math.random() * 0.3);
-      else if (!IS_SOLID[world.peekBlock(fx, hy + 1, fz)] && !IS_SOLID[world.peekBlock(fx, hy + 2, fz)]) b.vel.y = 8.2;
-      else if (this.type !== 'zombie') this.yaw += Math.PI / 2;
+      if (!canHop) {
+        // Mieszkaniec i golem nie skaczą – po prostu zawracają, i to łagodnie
+        // (ok. 90–110°), żeby obrót nie wyglądał jak szarpnięcie.
+        if (this.turnCooldown <= 0) {
+          this.yaw += (Math.random() < 0.5 ? -1 : 1) * (Math.PI / 2 + Math.random() * 0.35);
+          this.turnCooldown = 0.7;
+        }
+      } else if (front === B.FENCE || isDoor(front)) {
+        if (this.turnCooldown <= 0) {
+          this.yaw += Math.PI * (0.45 + Math.random() * 0.3);
+          this.turnCooldown = 0.7;
+        }
+      } else if (IS_SOLID[front] && !IS_SOLID[world.peekBlock(fx, hy + 1, fz)] && !IS_SOLID[world.peekBlock(fx, hy + 2, fz)] && this.jumpCooldown <= 0) {
+        // Tylko niski stopień (jeden blok) – i najwyżej raz na pół sekundy.
+        b.vel.y = 8.2;
+        this.jumpCooldown = 0.55;
+      } else if (this.type !== 'zombie' && this.turnCooldown <= 0) {
+        this.yaw += Math.PI / 2;
+        this.turnCooldown = 0.7;
+      }
     }
-    // avoid walking into water / cliffs (passive mobs)
-    if (this.type !== 'zombie' && this.type !== 'creeper' && this.type !== 'skeleton' && this.walking && b.onGround) {
-      const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * 0.9), fz = Math.floor(b.pos.z + Math.cos(this.yaw) * 0.9);
-      const fy = Math.floor(b.pos.y);
-      const below = world.peekBlock(fx, fy - 1, fz);
-      const below2 = world.peekBlock(fx, fy - 2, fz);
-      if (below === B.WATER || below === B.LAVA || (!IS_SOLID[below] && !IS_SOLID[below2])) this.yaw += Math.PI * (0.5 + Math.random());
+    // avoid walking into water / cliffs (passive mobs) – najwyżej raz na 0,8 s,
+    // inaczej losowy obrót co klatkę wyglądał jak drżenie modelu.
+    if (this.type !== 'zombie' && this.type !== 'creeper' && this.type !== 'skeleton' && this.walking && b.onGround && this.turnCooldown <= 0) {
+      const cfx = Math.floor(b.pos.x + Math.sin(this.yaw) * (b.w / 2 + 0.4));
+      const cfz = Math.floor(b.pos.z + Math.cos(this.yaw) * (b.w / 2 + 0.4));
+      const cfy = Math.floor(b.pos.y);
+      const below = world.peekBlock(cfx, cfy - 1, cfz);
+      const below2 = world.peekBlock(cfx, cfy - 2, cfz);
+      if (below === B.WATER || below === B.LAVA || (!IS_SOLID[below] && !IS_SOLID[below2])) {
+        this.yaw += (Math.random() < 0.5 ? -1 : 1) * (Math.PI / 2 + Math.random() * 0.5);
+        this.turnCooldown = 0.8;
+      }
     }
 
     // animation (spiders scuttle faster, and fastest while climbing)

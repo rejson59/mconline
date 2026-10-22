@@ -19,6 +19,7 @@ import SettingsScreen from '../src/components/SettingsScreen';
 import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/components/JournalScreen';
 import EnchantScreen from '../src/components/EnchantScreen';
 import TradeScreen from '../src/components/TradeScreen';
+import { guiSprite } from '../src/game/art/uiSprites';
 import WaypointsScreen from '../src/components/WaypointsScreen';
 import AnvilScreen from '../src/components/AnvilScreen';
 import BrewingScreen from '../src/components/BrewingScreen';
@@ -118,7 +119,13 @@ section('trade screen: static render');
   check('offer row shows a wheat price', html.includes('20'));
   check('offer row shows emeralds', html.includes('Szmaragd') || html.includes('szmaragd'));
   check('close hint is shown', html.includes('Esc'));
-  check('player inventory is rendered', html.includes('Ekwipunek'));
+  // 2.27: okno handlu to waniliowy panel `MerchantScreen` z paczki, a nie
+  // lista zielonych przycisków – zamiast nagłówka „Ekwipunek” jest siatka
+  // 9 × 3 + pasek skrótów (36 slotów) na teksturze `villager.png`.
+  check('trade screen uses the vanilla merchant panel', html.includes(guiSprite('villager_gui') ?? 'NO-PANEL'));
+  check('trade screen draws the player inventory grid', html.includes('width:16px') || (html.match(/width:16px/g) ?? []).length >= 30);
+  check('trade screen has the vanilla title', html.includes('Handel'));
+  check('trade screen shows the villager level', html.includes('poziom 1'));
 }
 
 section('inventory screen: recipe finder');
@@ -265,7 +272,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.26') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.27') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -559,7 +566,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces the public server', menu.includes('Serwer publiczny'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.26'));
+  check('the menu names the current release', menu.includes('WERSJA 2.27'));
 }
 
 section('2.4: brewing rules');
