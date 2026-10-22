@@ -441,7 +441,10 @@ function house(v: Village, b: VillageBuilding, set: SetBlock, style: 'planks' | 
     set(b.x + 1, floor + 1, b.z + b.d - 2, B.CRAFTING);
     set(b.x + b.w - 2, floor + 1, b.z + b.d - 2, B.IRON_BLOCK); // kowadło
   } else {
-    set(b.x + 1, floor + 1, b.z + 1, B.BED);
+    // 2.29: łóżko to dwa bloki – w chacie stawiamy stopę przy ścianie i
+    // wezgłowie w głąb izby, jak w waniliowej wiosce.
+    set(b.x + 1, floor + 1, b.z + 1, B.BED_S);
+    set(b.x + 1, floor + 1, b.z + 2, B.BED_HEAD_S);
     set(b.x + b.w - 2, floor + 1, b.z + b.d - 2, B.CHEST);
     if (b.variant % 3 === 0) set(b.x + b.w - 2, floor + 1, b.z + 1, B.FURNACE);
     else if (b.variant % 3 === 1) set(b.x + b.w - 2, floor + 1, b.z + 1, B.CRAFTING);

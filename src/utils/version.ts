@@ -1,10 +1,19 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.28.1';
-export const GAME_RELEASE_NAME = 'Więcej FPS i okna jak w grze';
+export const GAME_VERSION = '2.29.0';
+export const GAME_RELEASE_NAME = 'Drzwi, łóżko i dźwięki jak w grze';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.29: drzwi i łóżko wreszcie działają jak w Minecrafcie, a dźwięki
+ * brzmią jak wanilia. Drzwi mają prawdziwe modele z zawiasem (lewy i prawy),
+ * skrzydło stoi po przeciwnej stronie niż patrzył gracz, otwarte obraca się
+ * o 90° wokół zawiasu i nadal blokuje, a krawędzie dostają własne wycinki
+ * tekstury. Łóżko to dwa bloki (stopa + wezgłowie) w czterech kierunkach,
+ * z materacem 6 px na nogach 3 px, własnymi teksturami głowy i stopy oraz
+ * respawnem przy stopie. Dźwięki zyskały proceduralny pogłos małego
+ * pomieszczenia, barwy materiałów (rezonans + korpus) i nowe efekty:
+ * drzwi, łóżko, plusk, ból, chrupanie, wybuch i cięciwa łuku.
  * 2.28: wbudowane „mody wydajności” i pozostałe okna 1:1 z Minecraftem.
  * Teren w oddali (odpowiednik Distant Horizons) rysuje tanie pasmo kafli
  * za horyzontem – widać góry i morza setki bloków dalej bez budowania
@@ -61,6 +70,18 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Drzwi z prawdziwym zawiasem',
+    text: 'Drzwi mają teraz dwa modele z paczki – zawias z lewej i z prawej – i stoją po przeciwnej stronie kratki niż patrzył gracz, dokładnie jak w `DoorBlock`. Zamknięte to płyta 3/16 przy ościeżnicy, otwarte obracają się o 90° wokół zawiasu, a krawędzie dostają własne 3-pikselowe wycinki tekstury, więc nie widać już ściśniętych drzwi na boku. Otwarte skrzydło wreszcie blokuje ruch, a nie jest dziurą w ścianie.',
+  },
+  {
+    title: 'Łóżko z dwóch bloków',
+    text: 'Łóżko to stopa i wezgłowie – dwa bloki w czterech kierunkach, jak w 26.2. Materac ma 6 px grubości i wisi 3 px nad podłogą na czterech nogach 3×3 px, a każda ściana bierze własną teksturę z paczki (`red_bed_head_east`, `red_bed_foot_up`…). Stawiasz je jednym kliknięciem, głowa ląduje dalej od ciebie, a punkt odrodzenia ustawia się przy stopie.',
+  },
+  {
+    title: 'Dźwięki jak w grze',
+    text: 'Każdy efekt przechodzi teraz przez proceduralny pogłos małego pomieszczenia, a materiały mają własne barwy: rezonans i niskie „korpus” pod dłonią. Drzwi skrzypią i kłapią, łóżko szeleści po przespanej nocy, woda pluska bąbelkami, ból to dwa opadające tony, jedzenie chrupie trzy razy, a wybuch ma niski „bum” i spadający gruz. Wszystko syntezowane na bieżąco – zero plików z gry.',
+  },
   {
     title: 'Skrzynia jak w Minecrafcie',
     text: 'Ostatnie duże okno bez waniliowego wyglądu: skrzynia ma teraz prawdziwy panel z `generic_54.png`, sklejony dokładnie tak, jak robi to `GenericContainerScreen` – górna część 176 × 71 i pasek ekwipunku 176 × 96. Siatka 9 × 3 leży na (8, 18), ekwipunek wraca na (8, 84), a pasek skrótów na (8, 142).',

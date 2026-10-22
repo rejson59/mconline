@@ -59,7 +59,7 @@ function readSource(rel: string): string {
 
 // ------------------------------------------------------------------ imports
 import { World, CS, CH, SEA, FLAT_H, plantTree } from '../src/game/world';
-import { B, BLOCKS, CULLS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, T, collisionBoxes, tileFor, isDoorTop, isLadder, isTrap, doorFacing } from '../src/game/blocks';
+import { B, BLOCKS, CULLS, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, RENDER, T, collisionBoxes, tileFor, isDoorTop, isLadder, isTrap, doorFacing, doorHinge, doorPair, isDoorOpen, doorPlate, isBed, isBedHead, bedFacing, bedPart } from '../src/game/blocks';
 import {
   ITEMS, I, itemDef, isItem, stackLimit, durabilityMax, isOre, oreXp, pickTier, requiredPickTier,
   pickHint, mineSeconds, toolHelps, attackDamage, blockDrops, smeltResult, fuelSeconds, resolveId, canHarvest,
@@ -3153,8 +3153,12 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.28'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Więcej FPS i okna jak w grze');
+  check('release label is the current line', GAME_VERSION.startsWith('2.29'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Drzwi, łóżko i dźwięki jak w grze', GAME_RELEASE_NAME);
+  // 2.29: drzwi, łóżko i dźwięki.
+  check('2.29 highlights mention the door hinge', RELEASE_HIGHLIGHTS.some((h) => /zawias/i.test(h.title)));
+  check('2.29 highlights mention the two-part bed', RELEASE_HIGHLIGHTS.some((h) => /łóżko z dwóch/i.test(h.title)));
+  check('2.29 highlights mention the original sounds', RELEASE_HIGHLIGHTS.some((h) => /dźwięki jak w grze/i.test(h.title)));
   // 2.27: stabilni mieszkańcy i okno handlu 1:1.
   check('2.27 highlights mention the steady villager', RELEASE_HIGHLIGHTS.some((h) => /drż/i.test(h.title)));
   check('2.27 highlights mention the merchant screen', RELEASE_HIGHLIGHTS.some((h) => /handl/i.test(h.title)));
@@ -4635,8 +4639,8 @@ section('2.17: tekstury z paczki w całej grze');
     colors.add((blocks.data[i] << 16) | (blocks.data[i + 1] << 8) | blocks.data[i + 2]);
   }
   check('atlas bloków jest wielobarwny', colors.size > 800, `${colors.size} kolorów`);
-  eq('wszystkie 168 kafelków pochodzi z paczki', officialTileCount(), 168);
-  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 168 && OFFICIAL_TILES[167] === 167);
+  eq('wszystkie 175 kafelków pochodzi z paczki', officialTileCount(), 175);
+  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 175 && OFFICIAL_TILES[174] === 174);
   check('kafelek spoza listy nie jest oficjalny', !isOfficialTile(999) && isOfficialTile(0));
   const cached = officialBlockAtlas();
   check('atlas bloków dekoduje się w grze', cached != null && cached.width === 256);
@@ -4644,7 +4648,7 @@ section('2.17: tekstury z paczki w całej grze');
   // --- podmiana kafelków w atlasie gry
   const fake = { data: new Uint8ClampedArray(256 * 256 * 4) };
   const copied = applyOfficialTiles(fake as unknown as ImageData);
-  eq('applyOfficialTiles podmienia 168 kafelków', copied, 168);
+  eq('applyOfficialTiles podmienia 175 kafelków', copied, 175);
   let nonZero = 0;
   for (let i = 0; i < fake.data.length; i += 4) if (fake.data[i + 3] > 0) nonZero++;
   check('po podmianie atlas ma niepuste piksele', nonZero > 155 * 16 * 16 * 0.5, `${nonZero} px`);
@@ -5547,11 +5551,16 @@ section('2.20: słońce, kaktus, drzwi i dachy wiosek');
       check('dach ma dwie połacie', dirs.size >= 2, [...dirs].join(','));
       check('dach jest wyżej niż ściany', roofTop >= vil.y + 6, `szczyt=${roofTop - vil.y}`);
       check('dom ma podmurówkę z bruku', w3.getBlock(house.x, vil.y, house.z) === B.COBBLE || w3.getBlock(house.x, vil.y, house.z) === B.SANDSTONE);
-      check('w środku domu stoi łóżko', (() => {
+      // 2.29: łóżko to stopa + wezgłowie, więc w chacie muszą stać obie części.
+      check('w środku domu stoi łóżko (stopa i wezgłowie)', (() => {
+        let foot = false, head = false;
         for (let x = house.x + 1; x < house.x + house.w - 1; x++)
-          for (let z = house.z + 1; z < house.z + house.d - 1; z++)
-            if (w3.getBlock(x, vil.y + 1, z) === B.BED) return true;
-        return false;
+          for (let z = house.z + 1; z < house.z + house.d - 1; z++) {
+            const b = w3.getBlock(x, vil.y + 1, z);
+            if (isBed(b) && !isBedHead(b)) foot = true;
+            if (isBedHead(b)) head = true;
+          }
+        return foot && head;
       })());
     }
   }
@@ -6124,6 +6133,88 @@ section('2.28.1: skrzynia 1:1 z GenericContainerScreen');
   eq('pasek skrótów pod ekwipunkiem', `${containerInvSlot(27).x},${containerInvSlot(27).y}`, '8,142');
   check('skrzynia ma widżet z paczki', hasGuiSprite('chest_gui'));
   check('grafik GUI jest teraz 71', guiSpriteCount() >= 71, `${guiSpriteCount()}`);
+}
+
+// ============================================ 2.29: drzwi, łóżko i dźwięki
+section('2.29: drzwi i łóżko jak w Minecraftcie');
+{
+  // --- drzwi: zamknięte to płyta przy krawędzi, otwarte – ta sama płyta
+  // obrócona o 90° wokół zawiasu. Wcześniej otwarte drzwi nie miały kolizji.
+  const shut = collisionBoxes(B.DOOR_N)!;
+  const wide = collisionBoxes(B.DOOR_ON)!;
+  // 2.29: `facing` znaczy „kierunek patrzenia gracza”, więc skrzydło stoi po
+  // przeciwnej stronie kratki – dokładnie jak `DoorBlock#getShape`.
+  eq('zamknięte drzwi stoją po przeciwnej stronie niż facing', `${shut[2]},${shut[5]}`, '0.8125,1');
+  eq('otwarte drzwi (zawias z lewej) idą na zachód', `${wide[0]},${wide[3]}`, '0,0.1875');
+  eq('otwarte drzwi są tej samej grubości', wide[3] - wide[0], 0.1875);
+  check('otwarte drzwi nadal blokują skrzydło', wide[5] - wide[2] === 1);
+  eq('drzwi wschodnie zamykają się przy zachodniej krawędzi', collisionBoxes(B.DOOR_E)![0], 0);
+  eq('otwarte drzwi wschodnie leżą wzdłuż północy', collisionBoxes(B.DOOR_OE)![5], 0.1875);
+  eq('otwarte drzwi z prawym zawiasem idą na wschód', collisionBoxes(B.DOOR_ORN)![3], 1);
+  eq('lewy zawias trzyma zachodnią krawędź', doorPlate(B.DOOR_ON)[0], 0);
+  eq('prawy zawias trzyma wschodnią krawędź', doorPlate(B.DOOR_ORN)[3], 1);
+  eq('drzwi z prawym zawiasem rozpoznają kierunek', doorFacing(B.DOOR_ORN + 2), 2);
+  eq('zawias lewy', doorHinge(B.DOOR_N), 0);
+  eq('zawias prawy', doorHinge(B.DOOR_URN), 1);
+  eq('górne drzwi z prawym zawiasem to nadal góra', isDoorTop(B.DOOR_UORN), true);
+  eq('górne otwarte drzwi tną alfę (szyby)', LAYER[B.DOOR_UON], 1);
+  eq('górne zamknięte drzwi tną alfę', LAYER[B.DOOR_UN], 1);
+  eq('dolna połowa drzwi to ta sama deska', doorFacing(B.DOOR_UON), 0);
+  eq('nowe drzwi nie są otwarte w stanie domyślnym', isDoorOpen(B.DOOR_RN), false);
+  check('para drzwi zachowuje zawias', doorHinge(doorPair(2, true, false, 1)) === 1 && doorFacing(doorPair(2, true, false, 1)) === 2);
+
+  // --- łóżko: dwa bloki (stopa + wezgłowie) i cztery kierunki
+  check('B.BED to stopa zwrócona na północ', isBed(B.BED) && !isBedHead(B.BED));
+  eq('kierunek stopy', bedFacing(B.BED), 0);
+  eq('kierunek stopy (wschód)', bedFacing(B.BED_E), 1);
+  eq('kierunek stopy (południe)', bedFacing(B.BED_S), 2);
+  eq('kierunek stopy (zachód)', bedFacing(B.BED_W), 3);
+  eq('kierunek wezgłowia', bedFacing(B.BED_HEAD_W), 3);
+  check('wezgłowie rozpoznawalne', isBedHead(B.BED_HEAD_N) && !isBedHead(B.BED_S));
+  eq('stopa dla kierunku E', bedPart(1, false), B.BED_E);
+  eq('stopa dla kierunku S', bedPart(2, false), B.BED_S);
+  eq('stopa dla kierunku N jest starym id', bedPart(0, false), B.BED);
+  eq('wezgłowie dla kierunku W', bedPart(3, true), B.BED_HEAD_W);
+  eq('łóżko ma 9/16 wysokości', collisionBoxes(B.BED)![4], 0.5625);
+  eq('wezgłowie ma 9/16 wysokości', collisionBoxes(B.BED_HEAD_E)![4], 0.5625);
+  eq('łóżko ma model 3D', RENDER[B.BED_HEAD_S], 8);
+  eq('łóżko tnie alfę', LAYER[B.BED], 1);
+  check('łóżko wypada jako jeden przedmiot', BLOCKS[B.BED_HEAD_N].drop === B.BED && BLOCKS[B.BED_W].drop === B.BED);
+  check('łóżko nie zaśmieca kreatywnego', !BLOCKS[B.BED_HEAD_S] || BLOCKS[B.BED_HEAD_S].name.includes('wezgłowie'));
+
+  // --- model: materac + dwie nogi = trzy bryły na blok
+  const w5 = new World(9191, true);
+  const gy5 = FLAT_H + 1;
+  w5.setBlock(2, gy5, 2, B.BED);
+  w5.setBlock(2, gy5, 3, B.BED_HEAD_S);
+  const bedCut = w5.buildMesh(w5.getChunk(0, 0))[1];
+  const bp = bedCut.attributes.position as THREE.BufferAttribute | undefined;
+  let inBed = 0;
+  if (bp) {
+    for (let i = 0; i < bp.count; i++) {
+      const bx = bp.getX(i), by = bp.getY(i), bz = bp.getZ(i);
+      if (bx >= 1.99 && bx <= 3.01 && bz >= 1.99 && bz <= 4.01 && by >= gy5 - 0.01 && by <= gy5 + 0.7) inBed++;
+    }
+  }
+  check('łóżko rysuje materac i cztery nogi', inBed >= 72, `${inBed} wierzchołków`);
+
+  // --- tekstury łóżka pochodzą z paczki
+  const atlasSrc = readSource('scripts/compile-vanilla-art.mjs');
+  check('tekstury łóżka z paczki', /bed_head_north: B \+ 'bed_head_north\.png'/.test(atlasSrc) &&
+    /bed_foot_up: B \+ 'red_bed_foot_up\.png'/.test(atlasSrc) &&
+    /bed_head_west: B \+ 'red_bed_head_west\.png'/.test(atlasSrc));
+  check('siedem nowych kafelków łóżka jest oficjalnych', [T.bed_head_north, T.bed_head_east, T.bed_head_west, T.bed_foot_up, T.bed_foot_east, T.bed_foot_west, T.bed_foot_south].every((t) => isOfficialTile(t)));
+
+  // --- dźwięki: drzwi i łóżko mają własne, oryginalne barwy (synteza)
+  const audioSrc = readSource('src/game/audio.ts');
+  check('drzwi mają osobny dźwięk otwierania i zamykania', /export function playDoor\(open: boolean\)/.test(audioSrc) && /playDoor\(open\)/.test(readSource('src/game/engine.ts')));
+  check('łóżko ma własny dźwięk', /export function playBed\(\)/.test(audioSrc));
+  check('materiały mają własne barwy (korpus + rezonans)', /const MAT: Record<Kind/.test(audioSrc) && /bodyThump/.test(audioSrc));
+  check('dźwięki nadal są w pełni syntezowane', !/new Audio\(|\.mp3|\.ogg/.test(audioSrc));
+  check('każdy efekt idzie przez wspólne wyjście', /function out\(node: AudioNode\)/.test(audioSrc) && (audioSrc.match(/out\(/g)?.length ?? 0) > 25);
+  check('efekty mają proceduralny pogłos (mały pokój)', /function buildRoom\(c: AudioContext, dest: GainNode\)/.test(audioSrc) && /createConvolver/.test(audioSrc) && /dest\.connect\(conv\)/.test(audioSrc));
+  check('splash, ból i wybuch mają nową, cieplejszą barwę', /bąbelków o rosnącej wysokości/.test(audioSrc) && /dwa tony: krótkie/.test(audioSrc) && /niski „bum” pod szumem/.test(audioSrc));
+  check('jedzenie chrupie trzy razy', /chrupnięcie: trzy krótkie/.test(audioSrc));
 }
 
 // =================================================================== report
