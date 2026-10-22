@@ -921,6 +921,28 @@ const GUI_FILES = {
   merchant_out_of_stock: 'gui/sprites/container/villager/out_of_stock.png',
   merchant_arrow: 'gui/sprites/container/villager/trade_arrow.png',
   merchant_arrow_out: 'gui/sprites/container/villager/trade_arrow_out_of_stock.png',
+  // 2.28: pozostałe okna 1:1 – kowadło, stół zaklęć, statyw alchemiczny, piec.
+  anvil_gui: 'gui/container/anvil.png',
+  anvil_error: 'gui/sprites/container/anvil/error.png',
+  anvil_text_field: 'gui/sprites/container/anvil/text_field.png',
+  anvil_text_field_disabled: 'gui/sprites/container/anvil/text_field_disabled.png',
+  enchanting_gui: 'gui/container/enchanting_table.png',
+  enchant_slot: 'gui/sprites/container/enchanting_table/enchantment_slot.png',
+  enchant_slot_disabled: 'gui/sprites/container/enchanting_table/enchantment_slot_disabled.png',
+  enchant_slot_highlighted: 'gui/sprites/container/enchanting_table/enchantment_slot_highlighted.png',
+  enchant_level_1: 'gui/sprites/container/enchanting_table/level_1.png',
+  enchant_level_1_disabled: 'gui/sprites/container/enchanting_table/level_1_disabled.png',
+  enchant_level_2: 'gui/sprites/container/enchanting_table/level_2.png',
+  enchant_level_2_disabled: 'gui/sprites/container/enchanting_table/level_2_disabled.png',
+  enchant_level_3: 'gui/sprites/container/enchanting_table/level_3.png',
+  enchant_level_3_disabled: 'gui/sprites/container/enchanting_table/level_3_disabled.png',
+  brewing_gui: 'gui/container/brewing_stand.png',
+  brewing_bubbles: 'gui/sprites/container/brewing_stand/bubbles.png',
+  brewing_progress: 'gui/sprites/container/brewing_stand/brew_progress.png',
+  brewing_fuel: 'gui/sprites/container/brewing_stand/fuel_length.png',
+  furnace_gui: 'gui/container/furnace.png',
+  furnace_lit: 'gui/sprites/container/furnace/lit_progress.png',
+  furnace_burn: 'gui/sprites/container/furnace/burn_progress.png',
   sun: 'environment/celestial/sun.png',
   clouds: 'environment/clouds.png',
   rain: 'environment/rain.png',
@@ -933,6 +955,14 @@ const GUI_FILES = {
   ...Object.fromEntries(
     Array.from({ length: 10 }, (_, i) => [`destroy_${i}`, `block/destroy_stage_${i}.png`])
   ),
+};
+/** Panele okien: faktyczny rozmiar panelu w lewym górnym rogu tekstury. */
+const GUI_CROP = {
+  villager_gui: [276, 166],
+  anvil_gui: [176, 166],
+  enchanting_gui: [176, 166],
+  brewing_gui: [176, 166],
+  furnace_gui: [176, 166],
 };
 const G = 'assets/minecraft/textures/';
 const guiSprites = {};
@@ -956,10 +986,11 @@ for (const [name, file] of Object.entries(GUI_FILES)) {
     guiSprites[name] = encodePNG(w, h, out).toString('base64');
     continue;
   }
-  if (name === 'villager_gui') {
-    // 2.27: przycinamy 512×256 do samego panelu 276×166 (reszta to czarny
-    // margines). Dzięki temu w CSS obrazek rozciąga się dokładnie na panel.
-    const cw = 276, ch = 166;
+  if (GUI_CROP[name]) {
+    // 2.27/2.28: panele z paczki mają 256×256 (albo 512×256) z czarnym
+    // marginesem – przycinamy do samego panelu, żeby w CSS obrazek
+    // rozciągał się dokładnie na jego powierzchnię.
+    const [cw, ch] = GUI_CROP[name];
     const out = new Uint8Array(cw * ch * 4);
     for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
       const s = (y * img.w + x) * 4;

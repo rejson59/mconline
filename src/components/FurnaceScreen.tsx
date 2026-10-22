@@ -1,51 +1,26 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
-import { TooltipBody } from '../utils/tooltip';
-import { stackTooltip } from '../utils/tooltip';
-import type { Stack } from '../game/inventory';
-import Slot from './Slot';
-import CloseButton from './CloseButton';
+import { CONTAINER, FURNACE, containerInvSlot } from '../game/containerLayout';
+import { guiSprite } from '../game/art/uiSprites';
+import { GuiInventory, GuiOverlay, GuiSlot, GuiWindow, useCursorPos, useGuiScale } from './GuiContainer';
 
-/** Slot pieca z podpisem (Surowiec / Paliwo / Wynik). */
-function LabeledSlot({
-  stack,
-  icons,
-  onClick,
-  onHover,
-  label,
-}: {
-  stack: Stack | null;
-  icons: Record<number, string>;
-  onClick?: (right: boolean) => void;
-  onHover?: (name: string | null) => void;
-  label?: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <Slot stack={stack} icons={icons} onClick={onClick} onHover={() => onHover?.(stackTooltip(stack, label ?? ''))} imgSize={34} showCount />
-      {label && <div className="text-[11px] text-[#333]">{label}</div>}
-    </div>
-  );
-}
-
+/**
+ * 2.28: piec 1:1 jak `FurnaceScreen` z Minecrafta.
+ *
+ * Panel `gui/container/furnace.png` (176 × 166): surowiec u góry, paliwo pod
+ * nim, wynik po prawej. Płomień `lit_progress.png` (14 × 14) rośnie od dołu,
+ * a strzałka `burn_progress.png` (24 × 16) zapełnia się od lewej – obie
+ * na waniliowych współrzędnych (56, 36) i (79, 34).
+ */
 export default function FurnaceScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
   const [, setTick] = useState(0);
-  const [mouse, setMouse] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<string | null>(null);
-  const inv = game.inventory;
+  const mouse = useCursorPos();
+  const scale = useGuiScale(CONTAINER.maxScale);
 
   useEffect(() => {
-    const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
     const id = window.setInterval(() => setTick((t) => t + 1), 200);
-    // 2.9: dotyk nie wysyła „mousemove” – pozycję ikony ustawia tapnięcie.
-    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    window.addEventListener('mousemove', mm);
-    window.addEventListener('pointerdown', pt, true);
-    return () => {
-      window.removeEventListener('mousemove', mm);
-      window.removeEventListener('pointerdown', pt, true);
-      window.clearInterval(id);
-    };
+    return () => window.clearInterval(id);
   }, []);
 
   const refresh = () => {
@@ -54,64 +29,78 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
   };
   const f = game.currentFurnace();
   if (!f) return null;
-  const burn = f.burnMax > 0 ? f.burn / f.burnMax : 0;
+  const burn = f.burnMax > 0 ? Math.max(0, Math.min(1, f.burn / f.burnMax)) : 0;
+  const cook = Math.max(0, Math.min(1, f.cook));
+  const slots = Array.from({ length: 36 }, (_, i) => containerInvSlot(i));
+  const lit = guiSprite('furnace_lit');
+  const arrow = guiSprite('furnace_burn');
+  const litH = Math.round(FURNACE.lit.h * burn);
+  const cookW = Math.round(FURNACE.burn.w * cook);
 
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.55)' }}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) game.closeInventory();
-      }}
-    >
-      <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
-      <div className="mc-panel flex max-h-[94vh] flex-col gap-3 overflow-y-auto p-4">
-        <div className="text-lg font-semibold">Piec</div>
-        <div className="flex items-end justify-center gap-4">
-          <LabeledSlot stack={f.input} icons={icons} label="Surowiec" onHover={setHover} onClick={(r) => { game.clickFurnace('input', r); refresh(); }} />
-          <div className="mb-5 flex flex-col items-center gap-1">
-            <div className="h-10 w-3 border-2 border-[#373737] bg-[#2a2a2a]">
-              <div className="w-full bg-orange-500" style={{ height: `${burn * 100}%`, marginTop: `${(1 - burn) * 100}%` }} />
-            </div>
-            <div className="h-2 w-16 border border-[#373737] bg-[#555]">
-              <div className="h-full bg-[#e8c15a]" style={{ width: `${Math.min(1, f.cook) * 100}%` }} />
-            </div>
-          </div>
-          <LabeledSlot stack={f.fuel} icons={icons} label="Paliwo" onHover={setHover} onClick={(r) => { game.clickFurnace('fuel', r); refresh(); }} />
-          <div className="mb-4 text-2xl text-[#333]">→</div>
-          <LabeledSlot stack={f.output} icons={icons} label="Wynik" onHover={setHover} onClick={(r) => { game.clickFurnace('output', r); refresh(); }} />
-        </div>
-        <div className="max-w-[360px] text-xs text-[#333]">
-          Przetapia rudę żelaza i złota, piasek na szkło, bruk na kamień, mięso oraz pnie na węgiel drzewny. Paliwo: węgiel, deski, patyki, pnie.
-        </div>
-        <div className="grid grid-cols-9">
-          {inv.slots.map((s, i) => (
-            <Slot
-              key={i}
-              stack={s}
-              icons={icons}
-              onHover={setHover}
-              onClick={(r) => {
-                inv.clickSlot(i, r);
-                refresh();
-              }}
-            />
-          ))}
-        </div>
-      </div>
-      {hover && !inv.cursor && (
-        <div className="pointer-events-none fixed z-50 max-w-[320px] px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', whiteSpace: 'pre-line' }}>
-          <TooltipBody text={hover} />
-        </div>
-      )}
-      {inv.cursor && (
-        <div className="pointer-events-none fixed z-50" style={{ left: mouse.x - 17, top: mouse.y - 17 }}>
-          <img src={icons[inv.cursor.id]} width={34} height={34} className="pixelated" />
-          {inv.cursor.count > 1 && <span className="mc-count">{inv.cursor.count}</span>}
-        </div>
-      )}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm mc-text opacity-80">E / Esc – zamknij</div>
-    </div>
+    <>
+      <GuiWindow sprite={FURNACE.sprite} title={FURNACE.title} scale={scale} onClose={() => game.closeInventory()}>
+        <GuiSlot
+          x={FURNACE.input.x}
+          y={FURNACE.input.y}
+          stack={f.input}
+          icons={icons}
+          onHover={setHover}
+          onClick={(r) => { game.clickFurnace('input', r); refresh(); }}
+        />
+        <GuiSlot
+          x={FURNACE.fuel.x}
+          y={FURNACE.fuel.y}
+          stack={f.fuel}
+          icons={icons}
+          onHover={setHover}
+          onClick={(r) => { game.clickFurnace('fuel', r); refresh(); }}
+        />
+        <GuiSlot
+          x={FURNACE.output.x}
+          y={FURNACE.output.y}
+          stack={f.output}
+          icons={icons}
+          onHover={setHover}
+          onClick={(r) => { game.clickFurnace('output', r); refresh(); }}
+        />
+
+        {/* Płomień: wanilia rysuje dolny fragment sprite'a (od dołu do góry). */}
+        {lit && litH > 0 && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute', left: FURNACE.lit.x, top: FURNACE.lit.y + (FURNACE.lit.h - litH),
+              width: FURNACE.lit.w, height: litH,
+              backgroundImage: `url(${lit})`,
+              backgroundSize: `${FURNACE.lit.w}px ${FURNACE.lit.h}px`,
+              backgroundPosition: `0 -${FURNACE.lit.h - litH}px`,
+              imageRendering: 'pixelated', pointerEvents: 'none',
+            }}
+          />
+        )}
+        {/* Strzałka postępu: widoczny lewy fragment `burn_progress.png`. */}
+        {arrow && cookW > 0 && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute', left: FURNACE.burn.x, top: FURNACE.burn.y,
+              width: cookW, height: FURNACE.burn.h,
+              backgroundImage: `url(${arrow})`,
+              backgroundSize: `${FURNACE.burn.w}px ${FURNACE.burn.h}px`,
+              backgroundRepeat: 'no-repeat',
+              imageRendering: 'pixelated', pointerEvents: 'none',
+            }}
+          />
+        )}
+
+        <span style={{ position: 'absolute', left: 8, top: 74, fontSize: 7, lineHeight: '8px', color: '#5a5a5a' }}>
+          {burn > 0 ? 'Piec pracuje…' : 'Piec wygasł – dołóż paliwo.'}
+        </span>
+
+        <GuiInventory game={game} icons={icons} slots={slots} onHover={setHover} onChange={refresh} />
+      </GuiWindow>
+      <GuiOverlay game={game} icons={icons} hover={hover} mouse={mouse} />
+    </>
   );
 }

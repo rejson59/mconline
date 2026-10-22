@@ -1,73 +1,61 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
-import type { Stack } from '../game/inventory';
-import { TooltipBody } from '../utils/tooltip';
 import { I } from '../game/items';
 import { BREW_TIME, POTIONS, brewResult, type BrewingState } from '../game/brewing';
-import Slot from './Slot';
-import CloseButton from './CloseButton';
+import { BREWING, CONTAINER, containerInvSlot } from '../game/containerLayout';
+import { guiSprite } from '../game/art/uiSprites';
+import { GuiInventory, GuiOverlay, GuiSlot, GuiWindow, useCursorPos, useGuiScale } from './GuiContainer';
 
 /**
- * 2.4 „Godzina alchemika” – statyw alchemiczny.
+ * 2.28: statyw alchemiczny 1:1 jak `BrewingStandScreen` z Minecrafta.
  *
- * Trzy fiolki, cup na składnik i podstawa na paliwo. Reguły warzenia żyją
- * w game/brewing.ts, ekran tylko je pokazuje i puszcza kursor między slotami.
+ * Panel `gui/container/brewing_stand.png` (176 × 166): trzy fiolki w literę V,
+ * składnik u góry, różdżka w lewym górnym slocie, pęcherzyki `bubbles.png`
+ * (12 × 29) rosnące od dołu, pionowy pasek warzenia `brew_progress.png`
+ * (9 × 28) i poziomy pasek paliwa `fuel_length.png` (18 × 4) – wszystkie
+ * na waniliowych współrzędnych.
  */
-function LabeledSlot({
-  stack,
-  icons,
-  onClick,
-  onHover,
-  label,
-  active,
-}: {
-  stack: Stack | null;
-  icons: Record<number, string>;
-  onClick?: (right: boolean) => void;
-  onHover?: (name: string | null) => void;
-  label?: string;
-  active?: boolean;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div style={active ? { boxShadow: '0 0 10px 2px rgba(150,220,120,0.8)' } : undefined}>
-        <Slot stack={stack} icons={icons} onClick={onClick} onHover={onHover} imgSize={34} showCount />
-      </div>
-      {label && <div className="text-center text-[11px] text-[#333]">{label}</div>}
-    </div>
-  );
-}
-
-/** What a full batch would turn each bottle into (for the hint line). */
 function brewPreview(s: BrewingState): string | null {
   if (!s.ingredient) return null;
   const next = s.bottles
     .map((b) => (b ? brewResult(b.id, s.ingredient!.id) : null))
     .filter((id): id is number => id !== null && id !== 0);
   if (!next.length) return null;
-  const names = [...new Set(next)].map((id) => POTIONS[id]?.name ?? '').join(', ');
-  return names;
+  return [...new Set(next)].map((id) => POTIONS[id]?.name ?? '').join(', ');
+}
+
+/** Warstwy sprite'a, które rosną od dołu (przycinamy górną część obrazka). */
+function rising(sprite: string | null, x: number, y: number, w: number, h: number, frac: number, bottomToTop = true) {
+  const f = Math.max(0, Math.min(1, frac));
+  const visible = Math.round(h * f);
+  if (!sprite || visible <= 0) return null;
+  // Obrazek przycinamy tak, żeby widoczna była dolna (albo lewa) część –
+  // dokładnie jak `blit` z wanilii, który rysuje tylko fragment tekstury.
+  const clip = bottomToTop
+    ? `inset(${h - visible}px 0 0 0)`
+    : `inset(0 ${w - Math.round(w * f)}px 0 0)`;
+  return (
+    <div
+      key={`${x},${y}`}
+      style={{
+        position: 'absolute', left: x, top: y, width: w, height: h,
+        backgroundImage: `url(${sprite})`, backgroundSize: `${w}px ${h}px`,
+        clipPath: clip, imageRendering: 'pixelated', pointerEvents: 'none',
+      }}
+    />
+  );
 }
 
 export default function BrewingScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
   const [, setTick] = useState(0);
-  const [mouse, setMouse] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<string | null>(null);
-  const inv = game.inventory;
+  const mouse = useCursorPos();
+  const scale = useGuiScale(CONTAINER.maxScale);
   const stand = game.currentBrewing();
 
   useEffect(() => {
-    const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
     const id = window.setInterval(() => setTick((t) => t + 1), 120);
-    // 2.9: dotyk nie wysyła „mousemove” – pozycję ikony ustawia tapnięcie.
-    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    window.addEventListener('mousemove', mm);
-    window.addEventListener('pointerdown', pt, true);
-    return () => {
-      window.removeEventListener('mousemove', mm);
-      window.removeEventListener('pointerdown', pt, true);
-      window.clearInterval(id);
-    };
+    return () => window.clearInterval(id);
   }, []);
 
   const refresh = () => {
@@ -75,102 +63,88 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
     onChange();
   };
   if (!stand) return null;
+
   const frac = Math.max(0, Math.min(1, stand.progress / BREW_TIME));
   const lit = stand.progress > 0;
+  const fuelLeft = Math.max(0, Math.min(1, stand.fuelLeft > 0 ? stand.fuelLeft / 3 : stand.fuel ? 1 : 0));
   const preview = brewPreview(stand);
   const noFuel = stand.fuel === null;
   const hasFuelLeft = stand.fuelLeft > 0 || (stand.fuel !== null && stand.fuel.id === I.BLAZE_ROD);
+  const slots = Array.from({ length: 36 }, (_, i) => containerInvSlot(i));
+  const hint = noFuel && !hasFuelLeft
+    ? 'Potrzebna płomienna różdżka, żeby rozpalić kocioł.'
+    : lit
+      ? `Warzenie… ${preview ?? ''}`
+      : hasFuelLeft
+        ? preview
+          ? `Gotowe do warzenia: ${preview}.`
+          : 'Dołóż fiolkę z wodą albo zaczarowany napój.'
+        : 'Paliwo się skończyło – dołóż różdżkę.';
 
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center p-2"
-      style={{ background: 'rgba(0,0,0,0.55)' }}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) game.closeInventory();
-      }}
-    >
-      <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
-      <div className="mc-panel flex max-h-full w-[min(440px,96vw)] flex-col gap-3 overflow-y-auto p-4">
-        <div className="flex items-center justify-between">
-          <div className="text-lg font-semibold">Statyw alchemiczny</div>
-          <div className="text-xs text-[#444]">
-            Paliwo: {stand.fuel ? `${stand.fuel.count} × różdżka` : 'brak'}
-            {stand.fuelLeft > 0 ? ` (+${stand.fuelLeft} zapas)` : ''}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-center gap-2">
-          <div className="flex flex-col items-center gap-2">
-            <LabeledSlot stack={stand.bottles[0]} icons={icons} label="Fiolka 1" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('b0', r); refresh(); }} />
-            <LabeledSlot stack={stand.bottles[1]} icons={icons} label="Fiolka 2" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('b1', r); refresh(); }} />
-            <LabeledSlot stack={stand.bottles[2]} icons={icons} label="Fiolka 3" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('b2', r); refresh(); }} />
-          </div>
-          <div className="flex flex-col items-center gap-2 px-1">
-            <div className="text-2xl text-[#333]">→</div>
-            <div className="h-16 w-4 border-2 border-[#373737] bg-[#2a2a2a]">
-              <div
-                className="w-full"
-                style={{
-                  height: `${frac * 100}%`,
-                  marginTop: `${(1 - frac) * 100}%`,
-                  background: lit ? 'linear-gradient(0deg,#3dba3d,#9be86a)' : '#444',
-                  transition: 'height 120ms linear',
-                }}
-              />
-            </div>
-            <div className="text-[11px] text-[#444]">{lit ? 'Warzenie…' : 'Gotowy'}</div>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <LabeledSlot stack={stand.ingredient} icons={icons} label="Składnik" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('ingredient', r); refresh(); }} />
-            <div className="h-5" />
-            <LabeledSlot stack={stand.fuel} icons={icons} label="Paliwo (różdżka)" active={lit} onHover={setHover} onClick={(r) => { game.clickBrewing('fuel', r); refresh(); }} />
-          </div>
-        </div>
-
-        <div className="min-h-[16px] text-center text-xs text-[#333]">
-          {noFuel
-            ? 'Dość płomiennej różdżki, aby rozpalić kocioł.'
-            : lit
-              ? `Baza gotowa na: ${preview ?? 'brak'}.`
-              : hasFuelLeft
-                ? preview
-                  ? `Nalej fiolki z wodą i warzy: ${preview}.`
-                  : 'Dołóż fiolkę z wodą albo zaczarowany napój.'
-                : 'Paliwo się skończyło – dołóż różdżkę.'}
-        </div>
-
-        <div className="max-w-[400px] text-xs text-[#333]">
-          Fiolka napełnia się nad wodą (PPM na fiolce przy źródełku). Brodawka Netheru daje zaczarowany napój, z którego powstaną mocne eliksiry. Jedna różdżka = 3 warzenia.
-        </div>
-
-        <div className="grid grid-cols-9">
-          {inv.slots.map((s, i) => (
-            <Slot
+    <>
+      <GuiWindow sprite={BREWING.sprite} title={BREWING.title} scale={scale} onClose={() => game.closeInventory()}>
+        {stand.bottles.map((b, i) => {
+          const p = BREWING.bottles[i];
+          return (
+            <GuiSlot
               key={i}
-              stack={s}
+              x={p.x}
+              y={p.y}
+              stack={b}
               icons={icons}
               onHover={setHover}
-              onClick={(r) => {
-                inv.clickSlot(i, r);
-                refresh();
-              }}
+              onClick={(r) => { game.clickBrewing((['b0', 'b1', 'b2'] as const)[i], r); refresh(); }}
+              highlight={lit}
             />
-          ))}
-        </div>
-      </div>
-      {hover && !inv.cursor && (
-        <div className="pointer-events-none fixed z-50 max-w-[320px] px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', whiteSpace: 'pre-line' }}>
-          <TooltipBody text={hover} />
-        </div>
-      )}
-      {inv.cursor && (
-        <div className="pointer-events-none fixed z-50" style={{ left: mouse.x - 17, top: mouse.y - 17 }}>
-          <img src={icons[inv.cursor.id]} width={34} height={34} className="pixelated" />
-          {inv.cursor.count > 1 && <span className="mc-count">{inv.cursor.count}</span>}
-        </div>
-      )}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm mc-text opacity-80">E / Esc – zamknij</div>
-    </div>
+          );
+        })}
+        <GuiSlot
+          x={BREWING.ingredient.x}
+          y={BREWING.ingredient.y}
+          stack={stand.ingredient}
+          icons={icons}
+          onHover={setHover}
+          onClick={(r) => { game.clickBrewing('ingredient', r); refresh(); }}
+        />
+        <GuiSlot
+          x={BREWING.fuel.x}
+          y={BREWING.fuel.y}
+          stack={stand.fuel}
+          icons={icons}
+          dim={noFuel}
+          onHover={(t) => setHover(`${t ?? 'Paliwo'}${hasFuelLeft ? `\n§7zapas: ${stand.fuelLeft}` : ''}`)}
+          onClick={(r) => { game.clickBrewing('fuel', r); refresh(); }}
+        />
+
+        {/* Pęcherzyki i postęp warzenia – jak `blit` w waniliowym ekranie. */}
+        {lit && rising(guiSprite('brewing_bubbles'), BREWING.bubbles.x, BREWING.bubbles.y, BREWING.bubbles.w, BREWING.bubbles.h, Math.min(1, frac * 1.15 + 0.1))}
+        {rising(guiSprite('brewing_progress'), BREWING.progress.x, BREWING.progress.y, BREWING.progress.w, BREWING.progress.h, frac)}
+        {rising(
+          guiSprite('brewing_fuel'),
+          BREWING.fuelBar.x,
+          BREWING.fuelBar.y,
+          BREWING.fuelBar.w,
+          BREWING.fuelBar.h,
+          hasFuelLeft ? fuelLeft : 0,
+          false
+        )}
+
+        {/* Podpis stanu – wanilia nie ma tekstu, ale gracz musi wiedzieć, co dalej. */}
+        <span
+          title={hint}
+          style={{
+            position: 'absolute', left: 8, top: 74, maxWidth: 160,
+            fontSize: 7, lineHeight: '8px', color: '#5a5a5a', whiteSpace: 'nowrap',
+            overflow: 'hidden', textOverflow: 'ellipsis',
+          }}
+        >
+          {hint}
+        </span>
+
+        <GuiInventory game={game} icons={icons} slots={slots} onHover={setHover} onChange={refresh} />
+      </GuiWindow>
+      <GuiOverlay game={game} icons={icons} hover={hover} mouse={mouse} />
+    </>
   );
 }

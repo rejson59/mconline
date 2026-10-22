@@ -120,6 +120,11 @@ import {
   MERCHANT, merchantInvSlot, merchantMaxScroll, merchantRowTop, merchantRowVisible, merchantScale,
   merchantScrollable, merchantThumbHeight, merchantThumbOffset, merchantVisibleRows,
 } from '../src/game/merchantLayout';
+import {
+  ANVIL, BREWING, CONTAINER, ENCHANT, FURNACE, containerInvSlot, containerScale,
+} from '../src/game/containerLayout';
+import { FrameGovernor, chunkBuildScore, entityTickInterval, frameBudgetMs, lodRange, lodStepFor, shouldTickEntity, sortChunkOffsets } from '../src/game/perf';
+import { LOD_TILE, buildLodTile, lodRing } from '../src/game/lod';
 import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
@@ -3148,11 +3153,15 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.27'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Handel jak w grze, mieszkańcy bez drżenia');
+  check('release label is the current line', GAME_VERSION.startsWith('2.28'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Więcej FPS i okna jak w grze');
   // 2.27: stabilni mieszkańcy i okno handlu 1:1.
   check('2.27 highlights mention the steady villager', RELEASE_HIGHLIGHTS.some((h) => /drż/i.test(h.title)));
   check('2.27 highlights mention the merchant screen', RELEASE_HIGHLIGHTS.some((h) => /handl/i.test(h.title)));
+  // 2.28: wydajność i pozostałe okna 1:1.
+  check('2.28 highlights mention the horizon', RELEASE_HIGHLIGHTS.some((h) => /horyzont/i.test(h.title)));
+  check('2.28 highlights mention the fps boost', RELEASE_HIGHLIGHTS.some((h) => /chunki budują/i.test(h.title)));
+  check('2.28 highlights mention the anvil', RELEASE_HIGHLIGHTS.some((h) => /kowadło/i.test(h.title)));
   // 2.26: brak prześwitów, nawadnianie grządek, odrzut i golem.
   check('2.26 highlights mention the light leak', RELEASE_HIGHLIGHTS.some((h) => /prześwit/i.test(h.title)));
   check('2.26 highlights mention the golem', RELEASE_HIGHLIGHTS.some((h) => /golem/i.test(h.title)));
@@ -5992,6 +6001,117 @@ section('2.27: grafika okna handlu pochodzi z paczki');
   const png = guiSprite('villager_gui');
   check('panel handlu to obrazek z paczki', !!png && png.startsWith('data:image/png;base64,'));
   check('grafika GUI rośnie o widżety handlu', guiSpriteCount() >= 43);
+}
+
+section('2.28: teren w oddali (LOD) i automat jakości');
+{
+  // Budżet klatki i kolejność budowy chunków.
+  check('budżet klatki 60 FPS to ~16 ms', Math.abs(frameBudgetMs(60) - 16.7) < 1);
+  check('budżet klatki 30 FPS jest dwa razy większy', frameBudgetMs(30) > frameBudgetMs(60) * 1.8);
+  const front = chunkBuildScore(0, -3, 0, -1);
+  const back = chunkBuildScore(0, 3, 0, -1);
+  check('chunk przed graczem ma pierwszeństwo przed tym z tyłu', front < back, `${front.toFixed(2)} < ${back.toFixed(2)}`);
+  const offs: [number, number][] = [[0, 3], [-3, 0], [0, -2], [1, 0], [2, 2]];
+  const sorted = sortChunkOffsets(offs, 0, -1);
+  eq('sortowanie stawia najbliższy chunk z przodu', `${sorted[0][0]},${sorted[0][1]}`, '1,0');
+  check('sortowanie nie gubi żadnego offsetu', sorted.length === offs.length);
+  check('sortowanie nie zmienia oryginalnej tablicy', offs[0][0] === 0 && offs[0][1] === 3);
+
+  // Entity Culling: dalekie moby tickują rzadziej.
+  eq('bliski mob tickuje co klatkę', entityTickInterval(10), 1);
+  eq('mob 70 bloków dalej – co 3 klatki', entityTickInterval(70), 3);
+  eq('mob 200 bloków dalej – co 6 klatek', entityTickInterval(200), 6);
+  let ticked = 0;
+  for (let f = 0; f < 60; f++) if (shouldTickEntity(f, 200)) ticked++;
+  check('w 60 klatkach daleki mob rusza się ~10 razy', ticked >= 8 && ticked <= 12, `${ticked}`);
+
+  // Zasięg LOD rośnie z zasięgiem renderowania i wychodzi za horyzont.
+  check('LOD sięga dalej niż pełne chunki', lodRange(6, CS) > 6 * CS * 2);
+  check('LOD rośnie razem z zasięgiem', lodRange(12, CS) > lodRange(6, CS));
+  check('gęstość LOD maleje z odległością', lodStepFor(50) < lodStepFor(250) && lodStepFor(250) < lodStepFor(900));
+
+  // Automat jakości: po serii wolnych klatek schodzi z jakości, po dobrych wraca.
+  const g = new FrameGovernor();
+  eq('automat startuje w pełnej jakości', g.profile.label, 'pełny');
+  for (let i = 0; i < 120; i++) g.update(30, 1 / 60);
+  eq('2 s wolnych klatek = profil zrównoważony', g.profile.label, 'zrównoważony');
+  for (let i = 0; i < 240; i++) g.update(30, 1 / 60);
+  eq('długie zwolnienie = profil oszczędny', g.profile.label, 'oszczędny');
+  for (let i = 0; i < 400; i++) g.update(8, 1 / 60);
+  eq('po ustabilizowaniu wraca do pełnej jakości', g.profile.label, 'pełny');
+
+  // Kafel LOD: siatka, kolory i wysokości z generatora świata.
+  const w = new World(4242);
+  const tile = buildLodTile(w, 0, 0, 128, 8, 1.6);
+  eq('kafel LOD 128/8 ma 17×17 wierzchołków', tile.positions.length / 3, 17 * 17);
+  eq('kafel LOD ma 16×16×2 trójkątów', tile.indices.length, 16 * 16 * 6);
+  const ys = Array.from(tile.positions).filter((_, i) => i % 3 === 1);
+  check('kafel LOD leży na poziomie terenu (nie w zerze)', Math.min(...ys) > 20 && Math.max(...ys) < 140, `${Math.min(...ys).toFixed(0)}–${Math.max(...ys).toFixed(0)}`);
+  check('kolory wierzchołków są w zakresie 0–1', tile.colors.every((c) => c >= 0 && c <= 1));
+  const ring = lodRing(100, 100, 6 * CS, lodRange(6, CS), LOD_TILE);
+  check('pierścień LOD otacza gracza', ring.length >= 8, `${ring.length} kafli`);
+  // Kafel w całości pokryty pełnymi chunkami jest pomijany…
+  const atCenter = lodRing(64, 64, 6 * CS, lodRange(6, CS), LOD_TILE);
+  check('kafel pod stopami nie dubluje pełnych chunków', !atCenter.some((r) => r.ox === 0 && r.oz === 0));
+  // …ale kafel na granicy chunków i LOD zostaje, żeby nie było luki w horyzoncie.
+  check('kafel na granicy chunków i LOD jest rysowany', ring.some((r) => r.dist >= 6 * CS - LOD_TILE));
+  check('kafle są posortowane od najbliższego', ring.every((r, i) => i === 0 || r.dist >= ring[i - 1].dist));
+}
+
+section('2.28: kowadło, zaklęcia, warzenie i piec 1:1 z Minecraftem');
+{
+  // Wspólna siatka ekwipunku – dokładnie jak w wanilii.
+  eq('okna kontenerów mają 176 × 166', `${CONTAINER.width}×${CONTAINER.height}`, '176×166');
+  eq('pierwszy slot ekwipunku', `${containerInvSlot(0).x},${containerInvSlot(0).y}`, '8,84');
+  eq('ostatni slot siatki 9 × 3', `${containerInvSlot(26).x},${containerInvSlot(26).y}`, '152,120');
+  eq('pierwszy slot paska skrótów', `${containerInvSlot(27).x},${containerInvSlot(27).y}`, '8,142');
+  eq('ostatni slot paska skrótów', `${containerInvSlot(35).x},${containerInvSlot(35).y}`, '152,142');
+  check('panel skaluje się najwyżej 2×', containerScale(1280, 900) === 2);
+  const ss = containerScale(360, 640);
+  check('na telefonie panel mieści się w ekranie', CONTAINER.width * ss <= 360 && CONTAINER.height * ss <= 640, `${ss.toFixed(2)}×`);
+
+  // Kowadło: trzy sloty i pole nazwy na waniliowych współrzędnych.
+  eq('kowadło – slot A', `${ANVIL.slotA.x},${ANVIL.slotA.y}`, '27,47');
+  eq('kowadło – slot B', `${ANVIL.slotB.x},${ANVIL.slotB.y}`, '76,47');
+  eq('kowadło – slot wyniku', `${ANVIL.output.x},${ANVIL.output.y}`, '134,47');
+  eq('kowadło – pole nazwy 103 × 12', `${ANVIL.name.x},${ANVIL.name.y},${ANVIL.name.w},${ANVIL.name.h}`, '62,24,103,12');
+  eq('kowadło – tło pola 110 × 16', `${ANVIL.field.w}×${ANVIL.field.h}`, '110×16');
+
+  // Stół zaklęć: dwa sloty i trzy oferty co 19 px.
+  eq('zaklęcia – slot przedmiotu', `${ENCHANT.item.x},${ENCHANT.item.y}`, '15,47');
+  eq('zaklęcia – slot lazurytu', `${ENCHANT.lapis.x},${ENCHANT.lapis.y}`, '35,47');
+  eq('zaklęcia – pierwsza oferta', `${ENCHANT.offers[0].x},${ENCHANT.offers[0].y}`, '60,13');
+  eq('zaklęcia – odstęp ofert to 19 px', ENCHANT.offers[1].y - ENCHANT.offers[0].y, 19);
+  eq('zaklęcia – sprite oferty 108 × 19', `${ENCHANT.offerW}×${ENCHANT.offerH}`, '108×19');
+
+  // Statyw: fiolki w literę V, bąbelki i pasek postępu.
+  eq('statyw – lewa fiolka', `${BREWING.bottles[0].x},${BREWING.bottles[0].y}`, '56,51');
+  eq('statyw – środkowa fiolka niżej', `${BREWING.bottles[1].x},${BREWING.bottles[1].y}`, '79,58');
+  eq('statyw – prawa fiolka', `${BREWING.bottles[2].x},${BREWING.bottles[2].y}`, '102,51');
+  eq('statyw – składnik u góry', `${BREWING.ingredient.x},${BREWING.ingredient.y}`, '79,17');
+  eq('statyw – pęcherzyki 12 × 29', `${BREWING.bubbles.w}×${BREWING.bubbles.h}`, '12×29');
+  eq('statyw – postęp warzenia 9 × 28', `${BREWING.progress.w}×${BREWING.progress.h}`, '9×28');
+  eq('statyw – pasek paliwa 18 × 4', `${BREWING.fuelBar.w}×${BREWING.fuelBar.h}`, '18×4');
+
+  // Piec: surowiec, paliwo, wynik, płomień i strzałka.
+  eq('piec – surowiec', `${FURNACE.input.x},${FURNACE.input.y}`, '56,17');
+  eq('piec – paliwo', `${FURNACE.fuel.x},${FURNACE.fuel.y}`, '56,53');
+  eq('piec – wynik', `${FURNACE.output.x},${FURNACE.output.y}`, '116,31');
+  eq('piec – płomień 14 × 14', `${FURNACE.lit.w}×${FURNACE.lit.h}`, '14×14');
+  eq('piec – strzałka 24 × 16', `${FURNACE.burn.w}×${FURNACE.burn.h}`, '24×16');
+
+  // Grafika pochodzi z paczki 26.2.
+  const names = [
+    'anvil_gui', 'anvil_text_field', 'anvil_error', 'enchanting_gui', 'enchant_slot',
+    'enchant_slot_disabled', 'enchant_slot_highlighted', 'enchant_level_1', 'enchant_level_2',
+    'enchant_level_3', 'brewing_gui', 'brewing_bubbles', 'brewing_progress', 'brewing_fuel',
+    'furnace_gui', 'furnace_lit', 'furnace_burn',
+  ];
+  const missing = names.filter((n) => !hasGuiSprite(n));
+  check('wszystkie widżety nowych okien są w paczce', missing.length === 0, missing.join(', '));
+  const anvilPng = guiSprite('anvil_gui');
+  check('panel kowadła to obrazek z paczki', !!anvilPng && anvilPng.startsWith('data:image/png;base64,'));
+  check('grafik GUI jest teraz co najmniej 70', guiSpriteCount() >= 70, `${guiSpriteCount()}`);
 }
 
 // =================================================================== report
