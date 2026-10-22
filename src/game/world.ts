@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, isDoor, isDoorOpen, isFence, doorFacing, ladderFacing, tileFor, isSlabTop, stairsFacing } from './blocks';
+import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, isSlabTop, stairsFacing, isBed, isBedHead, bedFacing } from './blocks';
 import { tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
@@ -333,6 +333,123 @@ const uvPx = (u0: number, v0: number, u1: number, v1: number): [number, number, 
  * mini-drzwi (a górna połowa miała czarne szyby na warstwie bez alfy).
  * Teraz drzwi to płyta 3/16 przy krawędzi, a łóżko – bryła 9/16 wysokości.
  */
+/* --------------------------------------------------------------- 2.29
+ * Łóżko 1:1 jak w 26.2.
+ *
+ * Od 26.2 łóżko nie jest już renderowane przez encję, tylko przez dwa modele
+ * bloków (`template_bed_head.json` i `template_bed_foot.json`): materac 6 px
+ * grubości zawieszony 3 px nad podłogą plus dwie 3×3×3-pikselowe nogi, które
+ * stoją po przeciwnej stronie niż sąsiad (czyli razem cztery nogi na łóżko).
+ * Ściany boczne mają własne wycinki tekstur (`red_bed_head_east` itd.), dlatego
+ * każdy kierunek dostaje obróconą kopię modelu wraz z podmienionymi ścianami.
+ */
+const BED_SIDE_CROP: readonly [number, number, number, number] = uvPx(0, 7, 16, 13);
+const BED_LEG_CROP: readonly [number, number, number, number] = uvPx(7, 13, 10, 16);
+/** Dokąd trafia ściana po obrocie modelu: dest[stara] = nowa. */
+const BED_ROT: Record<number, number[]> = {
+  1: [4, 5, 2, 3, 1, 0],
+  2: [1, 0, 2, 3, 5, 4],
+  3: [5, 4, 2, 3, 1, 0],
+};
+
+function rotateBox(b: SpecialBox['b'], r: number): SpecialBox['b'] {
+  const [x0, y0, z0, x1, y1, z1] = b;
+  if (r === 1) return [1 - z1, y0, x0, 1 - z0, y1, x1];
+  if (r === 2) return [1 - x1, y0, 1 - z1, 1 - x0, y1, 1 - z0];
+  if (r === 3) return [z0, y0, 1 - x1, z1, y1, 1 - x0];
+  return b;
+}
+
+function rotateSpecial(box: SpecialBox, r: number): SpecialBox {
+  if (!r) return box;
+  const d = BED_ROT[r];
+  const out: SpecialBox = { ...box, b: rotateBox(box.b, r) };
+  if (box.tiles) {
+    const src = box.tiles;
+    const tiles = src.slice();
+    for (let i = 0; i < 6; i++) tiles[d[i]] = src[i];
+    out.tiles = tiles;
+  }
+  if (box.crops) {
+    const src = box.crops;
+    const crops = src.slice();
+    for (let i = 0; i < 6; i++) crops[d[i]] = src[i];
+    out.crops = crops;
+  }
+  return out;
+}
+
+function bedBoxes(id: number): SpecialBox[] {
+  const head = isBedHead(id);
+  const facing = bedFacing(id);
+  // Tekstury w układzie modelu (przód = północ). `head` ma poduszkę z przodu,
+  // `foot` – deskę przy stopach; reszta ścian to drewno albo kołdra.
+  const up = head ? T.bed_top : T.bed_foot_up;
+  const down = T.bed_side;
+  const north = head ? T.bed_head_north : T.bed_foot_south;
+  const south = T.bed_foot_south;
+  const east = head ? T.bed_head_east : T.bed_foot_east;
+  const west = head ? T.bed_head_west : T.bed_foot_west;
+  const leg = head ? T.bed_head_east : T.bed_foot_east;
+  const boxes: SpecialBox[] = [
+    {
+      b: [0, 3 / 16, 0, 1, 9 / 16, 1],
+      tiles: [west, east, down, up, north, south],
+      crops: [BED_SIDE_CROP, BED_SIDE_CROP, null, null, BED_SIDE_CROP, BED_SIDE_CROP],
+    },
+  ];
+  // Nogi stoją po przeciwnej stronie niż druga połowa łóżka – tak jak w
+  // waniliowych szablonach (głowa: z=0, stopa: z=13).
+  const legZ = head ? 0 : 13 / 16;
+  for (const legX of [0, 13 / 16]) {
+    boxes.push({
+      b: [legX, 0, legZ, legX + 3 / 16, 3 / 16, legZ + 3 / 16],
+      tiles: [leg, leg, leg, leg, leg, leg],
+      crops: [BED_LEG_CROP, BED_LEG_CROP, null, null, BED_LEG_CROP, BED_LEG_CROP],
+    });
+  }
+  return boxes.map((b) => rotateSpecial(b, facing));
+}
+
+/* --------------------------------------------------------------- 2.29
+ * Drzwi 1:1 z modelami `door_bottom_left(_open)` / `door_top_right` itd.
+ *
+ * Wanilia rysuje drzwi jako jedną bryłę 3×16×16 px i nadaje każdej ścianie
+ * własny wycinek tekstury: duże płaszczyzny biorą cały kafelek (jedna z nich
+ * lustrzanie), a 3-pikselowe krawędzie – tylko skrajne 3 kolumny deski. Dzięki
+ * temu brzeg drzwi to listwa, a nie ściśnięty obrazek całych drzwi.
+ */
+const DOOR_FACE = [4, 1, 5, 0]; // kompas (N,E,S,W) → indeks ściany w `SpecialBox`
+const DOOR_FULL: readonly [number, number, number, number] = [0, 0, 16, 16];
+const DOOR_FULL_MIRROR: readonly [number, number, number, number] = [16, 0, 0, 16];
+const DOOR_EDGE: readonly [number, number, number, number] = [0, 0, 3, 16];
+const DOOR_EDGE_MIRROR: readonly [number, number, number, number] = [3, 0, 0, 16];
+
+/** Kompasowa strona, w którą patrzy front skrzydła (0 N, 1 E, 2 S, 3 W). */
+function doorFrontDir(id: number): number {
+  const f = doorFacing(id);
+  if (f < 0 || !isDoorOpen(id)) return f;
+  return doorHinge(id) === 0 ? (f + 1) % 4 : (f + 3) % 4;
+}
+
+function doorBoxes(id: number): SpecialBox[] {
+  const [x0, z0, x1, z1] = doorPlate(id);
+  const front = doorFrontDir(id);
+  const crops: (readonly [number, number, number, number] | null)[] = [null, null, null, null, null, null];
+  crops[DOOR_FACE[front]] = DOOR_FULL_MIRROR;
+  crops[DOOR_FACE[(front + 2) % 4]] = DOOR_FULL;
+  crops[DOOR_FACE[(front + 1) % 4]] = DOOR_EDGE;
+  crops[DOOR_FACE[(front + 3) % 4]] = DOOR_EDGE_MIRROR;
+  // Góra i dół to 3-pikselowe paski deski (tak jak `up`/`down` w wanilii).
+  crops[2] = [0, 0, 16, 3];
+  crops[3] = [0, 13, 16, 16];
+  return [{
+    b: [x0, 0, z0, x1, 1, z1],
+    tiles: [tileFor(id, 0), tileFor(id, 0), tileFor(id, 0), tileFor(id, 0), tileFor(id, 0), tileFor(id, 0)],
+    crops,
+  }];
+}
+
 function specialBoxes(id: number): SpecialBox[] | null {
   const t = 0.1875;
   const face = ladderFacing(id);
@@ -348,9 +465,7 @@ function specialBoxes(id: number): SpecialBox[] | null {
   if (id === B.TRAP_S) return [{ b: [0, 0, 1 - t, 1, 1, 1] }];
   if (id === B.TRAP_W) return [{ b: [0, 0, 0, t, 1, 1] }];
   if (id === B.TRAP) return [{ b: [0, 1 - t, 0, 1, 1, 1] }];
-  if (id === B.BED) {
-    return [{ b: [0, 0, 0, 1, 0.5625, 1], side: tileFor(id, 0), top: tileFor(id, 3), bottom: tileFor(id, 2) }];
-  }
+  if (isBed(id)) return bedBoxes(id);
   if (id === B.PATH) {
     // 2.21: waniliowa ścieżka ma 15/16 wysokości, a boki zaczynają się 1 px
     // od góry (górny rząd kafelka jest przezroczysty – bez tego była szpara).
@@ -514,21 +629,10 @@ function specialBoxes(id: number): SpecialBox[] | null {
       },
     ];
   }
-  if (!isDoor(id)) return null;
-  const f = doorFacing(id);
-  const side = tileFor(id, 0);
-  if (isDoorOpen(id)) {
-    // Otwarte drzwi leżą płasko przy ościeżnicy.
-    if (f === 0) return [{ b: [0, 0, 0, t, 1, 1], side }];
-    if (f === 1) return [{ b: [0, 0, 0, 1, 1, t], side }];
-    if (f === 2) return [{ b: [1 - t, 0, 0, 1, 1, 1], side }];
-    return [{ b: [0, 0, 1 - t, 1, 1, 1], side }];
-  }
-  // Zamknięte drzwi stoją przy krawędzi, w którą patrzą.
-  if (f === 0) return [{ b: [0, 0, 0, 1, 1, t], side }];
-  if (f === 1) return [{ b: [1 - t, 0, 0, 1, 1, 1], side }];
-  if (f === 2) return [{ b: [0, 0, 1 - t, 1, 1, 1], side }];
-  return [{ b: [0, 0, 0, t, 1, 1], side }];
+  // 2.29: płyta drzwi liczona jednym źródłem prawdy (`doorPlate`), więc model
+  // i kolizja zawsze się zgadzają – także dla otwartych drzwi i obu zawiasów.
+  if (isDoor(id)) return doorBoxes(id);
+  return null;
 }
 
 export class World {

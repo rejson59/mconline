@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, type Biome, type Chunk } from './world';
-import { B, BLOCKS, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston } from './blocks';
+import { B, BLOCKS, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -426,7 +426,9 @@ function blockGeometry(id: number): THREE.BufferGeometry {
                 ? [2 / 16, 6 / 16, 14 / 16, 10 / 16, 4 / 16, 1]
                 : rt === 15
                   ? [7 / 16, 7 / 16, 9 / 16, 9 / 16, 0, 14 / 16]
-                  : null;
+                  : isDoor(id)
+                    ? [0, 0, 1, 1, 0, 3 / 16]
+                    : null;
   const inset = rt === 7 ? 1 : 0;
   // 2.21: w ręce bierzemy ten sam wycinek tekstury co model w świecie
   // (latarnia – korpus, statyw – słupek), a nie rozciągnięty kafelek.
@@ -3345,15 +3347,23 @@ export class Game {
     return facingFromNormal(nx, nz);
   }
 
-  private placeDoor(x: number, y: number, z: number, nx: number, ny: number, nz: number): boolean {
+  private placeDoor(x: number, y: number, z: number, _nx: number, _ny: number, _nz: number): boolean {
     if (y + 1 >= CH) { this.message('Drzwi potrzebują dwóch wolnych kratek.'); return false; }
     const above = this.world.getBlock(x, y + 1, z);
     if (above !== B.AIR && RENDER[above] !== 1 && RENDER[above] !== 2) { this.message('Drzwi potrzebują dwóch wolnych kratek.'); return false; }
     const b = this.body;
     if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, x, y + 1, z)) return false;
-    const face = this.facingOf(nx, ny, nz);
-    this.world.setBlock(x, y, z, doorPair(face, false, false));
-    this.world.setBlock(x, y + 1, z, doorPair(face, false, true));
+    const ground = this.world.getBlock(x, y - 1, z);
+    if (ground === B.AIR || !IS_SOLID[ground]) { this.message('Drzwi muszą stać na solidnym podłożu.'); return false; }
+    // 2.29: jak w wanilii – `facing` to kierunek patrzenia gracza, a zawias
+    // wybiera ta strona kratki, po której gracz stoi (lewa/prawa ręka).
+    const look = this.lookDir();
+    const face = facingFromNormal(look.x, look.z);
+    const right: [number, number][] = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+    const [rx, rz] = right[face];
+    const hinge = (b.pos.x - (x + 0.5)) * rx + (b.pos.z - (z + 0.5)) * rz > 0 ? 1 : 0;
+    this.world.setBlock(x, y, z, doorPair(face, false, false, hinge));
+    this.world.setBlock(x, y + 1, z, doorPair(face, false, true, hinge));
     return true;
   }
 
@@ -3363,12 +3373,66 @@ export class Game {
     if (face < 0) return;
     const top = isDoorTop(id);
     const open = !isDoorOpen(id);
+    // 2.29: zawias zostaje tam, gdzie go postawiono – inaczej drzwi przy
+    // każdym kliknięciu przeskakiwałyby na drugą stronę ościeżnicy.
+    const hinge = doorHinge(id);
     const otherY = top ? y - 1 : y + 1;
     const other = this.world.getBlock(x, otherY, z);
-    this.world.setBlock(x, y, z, doorPair(face, open, top));
-    if (other === B.AIR || isDoor(other)) this.world.setBlock(x, otherY, z, doorPair(face, open, !top));
-    Sfx.playPlace('wood');
+    this.world.setBlock(x, y, z, doorPair(face, open, top, hinge));
+    if (other === B.AIR || isDoor(other)) this.world.setBlock(x, otherY, z, doorPair(face, open, !top, hinge));
+    // 2.29: drzwi mają własny dźwięk (skrzypnięcie + klaśnięcie), a nie
+    // odgłos stawiania bloku – wcześniej brzmiały jak deska wbijana w ścianę.
+    Sfx.playDoor(open);
     this.swingT = 0;
+    this.onBlockChanged(x, y, z);
+    this.onBlockChanged(x, otherY, z);
+  }
+
+  /**
+   * 2.29: stawianie łóżka – stopa w miejscu kliknięcia, wezgłowie o kratkę
+   * dalej w kierunku patrzenia. Wymaga dwóch wolnych kratek i podłoża.
+   */
+  private placeBed(x: number, y: number, z: number): boolean {
+    const fx = -Math.sin(this.yaw);
+    const fz = -Math.cos(this.yaw);
+    const facing = facingFromNormal(fx, fz);
+    const dx = facing === 1 ? 1 : facing === 3 ? -1 : 0;
+    const dz = facing === 2 ? 1 : facing === 0 ? -1 : 0;
+    const hx = x + dx;
+    const hz = z + dz;
+    if (hx < 0 || hx >= CS || hz < 0 || hz >= CS) { this.message('Łóżko nie mieści się – brakuje miejsca na wezgłowie.'); return false; }
+    const ground = this.world.getBlock(x, y - 1, z);
+    const groundHead = this.world.getBlock(hx, y - 1, hz);
+    if (ground === B.AIR || ground === B.WATER || ground === B.LAVA || !IS_SOLID[ground] ||
+        groundHead === B.AIR || groundHead === B.WATER || groundHead === B.LAVA || !IS_SOLID[groundHead]) {
+      this.message('Łóżko musi stać na solidnym podłożu.');
+      return false;
+    }
+    for (const [bx, bz] of [[x, z], [hx, hz]] as [number, number][]) {
+      const cur = this.world.getBlock(bx, y, bz);
+      if (cur !== B.AIR && RENDER[cur] !== 1) { this.message('Łóżko potrzebuje dwóch wolnych kratek.'); return false; }
+    }
+    const b = this.body;
+    if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, x, y, z) ||
+        aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, hx, y, hz)) {
+      this.message('Nie możesz położyć łóżka na sobie.');
+      return false;
+    }
+    this.world.setBlock(x, y, z, bedPart(facing, false));
+    this.world.setBlock(hx, y, hz, bedPart(facing, true));
+    return true;
+  }
+
+  /** Druga połowa łóżka – bez niej niszczenie zostawiłoby sierotę. */
+  private bedOther(x: number, y: number, z: number): [number, number, number] | null {
+    const id = this.world.getBlock(x, y, z);
+    if (!isBed(id)) return null;
+    const facing = bedFacing(id);
+    const dx = facing === 1 ? 1 : facing === 3 ? -1 : 0;
+    const dz = facing === 2 ? 1 : facing === 0 ? -1 : 0;
+    const other: [number, number, number] = isBedHead(id) ? [x - dx, y, z - dz] : [x + dx, y, z + dz];
+    const oid = this.world.getBlock(other[0], other[1], other[2]);
+    return isBed(oid) && isBedHead(oid) === !isBedHead(id) ? other : null;
   }
 
   private toggleTrap(x: number, y: number, z: number, nx: number, nz: number) {
@@ -3623,10 +3687,13 @@ export class Game {
       this.message('W Netheru nie da się spać – wróć przez portal.');
       return;
     }
-    this.spawnPoint.set(x + 0.5, y + 1, z + 0.5);
-    this.message('Punkt odrodzenia ustawiony.');
+    // 2.29: punkt odrodzenia staje przy stopie łóżka, na środku kratki.
+    const id = this.world.getBlock(x, y, z);
+    const other = this.bedOther(x, y, z);
+    const foot = id >= 0 && isBed(id) && isBedHead(id) && other ? other : [x, y, z];
+    this.spawnPoint.set(foot[0] + 0.5, foot[1] + 1, foot[2] + 0.5);
     if (this.daylight() > 0.55) {
-      this.message('Możesz spać tylko w nocy.');
+      this.message('Punkt odrodzenia ustawiony – spać można tylko w nocy.');
       return;
     }
     const near = this.mobs.some((m) => !m.dead && (m.type === 'zombie' || m.type === 'creeper') && m.body.pos.distanceTo(this.body.pos) < 8);
@@ -3638,6 +3705,7 @@ export class Game {
     this.day++;
     this.health = Math.min(20, this.health + 2);
     this.unlock('bed');
+    Sfx.playBed();
     this.message('Przespałeś noc. Dzień ' + this.day + '.');
     this.emitHud();
   }
@@ -4781,7 +4849,7 @@ export class Game {
       if (t.id === B.CRAFTING) { this.openInventory(true); return; }
       if (t.id === B.FURNACE || t.id === B.FURNACE_ON) { this.openFurnace(t.x, t.y, t.z); return; }
       if (t.id === B.ENCHANT) { this.openEnchant(t.x, t.y, t.z); return; }
-      if (t.id === B.BED) { this.trySleep(t.x, t.y, t.z); return; }
+      if (isBed(t.id)) { this.trySleep(t.x, t.y, t.z); return; }
       if (t.id === B.LEVER || t.id === B.LEVER_ON) { this.toggleLever(t.x, t.y, t.z); return; }
       if (t.id === B.BUTTON || t.id === B.BUTTON_ON) { this.pressButton(t.x, t.y, t.z); return; }
       if (t.id === B.NOTE_BLOCK) { this.playNoteBlock(t.x, t.y, t.z); return; }
@@ -4939,6 +5007,13 @@ export class Game {
     } else if (id === B.LILY_PAD) {
       // 2.21: lilia rośnie tylko na tafli wody, jak w wanilii.
       if (below !== B.WATER && below !== B.ICE) { this.message('Lilię kładzie się na wodzie.'); return; }
+    } else if (isBed(id)) {
+      if (!this.placeBed(px, py, pz)) return;
+      Sfx.playPlace('cloth');
+      this.swingT = 0;
+      this.consumeSelected();
+      this.unlock('home');
+      return;
     } else if (isDoor(id)) {
       if (!this.placeDoor(px, py, pz, t.nx, t.ny, t.nz)) return;
       Sfx.playPlace('wood');
@@ -5198,7 +5273,7 @@ export class Game {
       const face = doorFacing(id);
       const oy = isDoorTop(id) ? y - 1 : y + 1;
       const other = this.world.getBlock(x, oy, z);
-      if (isDoor(other) && doorFacing(other) === face) this.world.setBlock(x, oy, z, B.AIR);
+      if (isDoor(other) && doorFacing(other) === face && doorHinge(other) === doorHinge(id)) this.world.setBlock(x, oy, z, B.AIR);
     }
     const attach: [number, number][] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
     for (let f = 0; f < 4; f++) {
@@ -5215,6 +5290,15 @@ export class Game {
     }
     this.growables.delete(`${x},${y},${z}`);
     if (id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG) this.decayLeaves(x, y, z);
+    if (isBed(id)) {
+      // Jedno łóżko = jeden przedmiot, niezależnie od tego, którą połowę
+      // gracz rozwalił – druga znika razem z nią, jak w wanilii.
+      const other = this.bedOther(x, y, z);
+      if (other) {
+        this.world.setBlock(other[0], other[1], other[2], fill);
+        this.growables.delete(`${other[0]},${other[1]},${other[2]}`);
+      }
+    }
     if (!silent) {
       this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 14, 0.35);
       Sfx.playBreak(def.sound);

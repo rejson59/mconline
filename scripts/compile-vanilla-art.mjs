@@ -466,6 +466,16 @@ const BLOCK_TILES = {
   wheat3: B + 'wheat_stage7.png',
   bed_top: B + 'red_bed_head_up.png',
   bed_side: B + 'bed_down.png',
+  // 2.29: łóżko w 26.2 jest zwykłym blokiem z dwóch części – paczka ma
+  // osobne tekstury głowy i stopy (góra, oba boki, przód), zupełnie jak
+  // `template_bed_head.json` / `template_bed_foot.json`.
+  bed_head_north: B + 'bed_head_north.png',
+  bed_head_east: B + 'red_bed_head_east.png',
+  bed_head_west: B + 'red_bed_head_west.png',
+  bed_foot_up: B + 'red_bed_foot_up.png',
+  bed_foot_east: B + 'red_bed_foot_east.png',
+  bed_foot_west: B + 'red_bed_foot_west.png',
+  bed_foot_south: B + 'red_bed_foot_south.png',
   furnace_lit: B + 'furnace_front_on.png',
   chest_top: B + 'oak_planks.png',
   chest_side: B + 'oak_planks.png',

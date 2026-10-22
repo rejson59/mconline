@@ -1,6 +1,15 @@
-# BlockCraft 2.28 🚀
+# BlockCraft 2.29 🚀
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 2.29 „Drzwi, łóżko i dźwięki jak w grze” 🚪 🛏️ 🔊
+
+Naprawa dwóch bloków, które do tej pory tylko udawały Minecrafta – **drzwi** i **łóżko** – oraz przebudowa warstwy dźwięku na oryginalne, waniliowe brzmienie. Wszystko dalej syntezowane proceduralnie: żadnych plików Mojanga.
+
+* **Drzwi z prawdziwym zawiasem.** Drzwi mają dwa warianty zawiasu (`hinge=left` i `hinge=right`, nowe ID 422–437) i stoją po **przeciwnej** stronie kratki niż patrzył gracz – dokładnie jak `DoorBlock#getShape`. Zamknięte to płyta 3/16 przy ościeżnicy, otwarte obracają się o 90° wokół zawiasu, a zawias wybiera ta strona, po której stoi gracz. Model bierze waniliowe wycinki: duża płaszczyzna to cały kafelek (front lustrzanie), 3-pikselowe krawędzie – tylko skrajne kolumny deski, góra i dół – paski 3 px. Otwarte drzwi wreszcie **blokują ruch** (wcześniej nie miały kolizji i były dziurą w ścianie).
+* **Łóżko z dwóch bloków.** Stopa i wezgłowie to osobne bloki w czterech kierunkach (ID 415–421; stare `B.BED` zostaje stopą zwróconą na północ, więc zapisy dalej stoją). Model to materac 6 px zawieszony 3 px nad podłogą plus dwie nogi 3×3×3 px na blok – razem cztery nogi, jak w `template_bed_head/foot.json`. Każda ściana ma własną teksturę z paczki (`red_bed_head_up/east/west`, `bed_head_north`, `red_bed_foot_up/east/west/south`). Stawiasz jednym kliknięciem (głowa dalej od ciebie), rozbicie dowolnej połowy usuwa całość i daje jedno łóżko, a punkt odrodzenia ustawia się przy stopie. Łóżka w wioskach też mają teraz obie części.
+* **Oryginalne dźwięki.** Każdy efekt przechodzi przez proceduralny **pogłos małego pomieszczenia** (syntezowany impuls 0,55 s z wczesnymi odbiciami i miękkim ogonem), a materiały mają własne barwy: rezonans pasmowy plus niskie „korpus” uderzenia – drewno ciepłe, kamień twardszy, wełna głucha, szkło dzwoni. Nowe efekty: **drzwi** (skrzypienie przy otwieraniu, klaśnięcie przy zamykaniu), **łóżko** (skrzypienie materaca po nocy), **plusk** z bąbelkami, **ból** z dwóch opadających tonów, **chrupanie** (trzy szumy), **wybuch** z niskim „bum” i spadającym gruzem oraz **cięciwa** łuku z świstem.
+* **Testy.** `npm test` to **2091 kontroli silnika + 234 testy UI**. Sekcja 2.29 sprawdza kolizję i model drzwi dla obu zawiasów, obrót skrzydła, nowe ID i `doorPlate`, obie połowy łóżka w czterech kierunkach, wysokość materaca, dropy, alfę, a także obecność nowych dźwięków, wspólne wyjście efektów i proceduralny pogłos. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
 
 ## Wersja 2.28.1 – skrzynia 1:1 📦
 
@@ -18,7 +27,7 @@ Wbudowane odpowiedniki modów wydajnościowych – **Distant Horizons, Sodium, E
 * **Stół zaklęć 1:1.** Slot przedmiotu (15, 47) i lazurytu (35, 47), trzy przyciski ofert `enchantment_slot` (108 × 19) na wysokościach 13 / 32 / 51, warianty `_disabled` i `_highlighted` z paczki.
 * **Statyw alchemiczny 1:1.** Trzy fiolki w literę V – (56, 51), (79, 58), (102, 51), składnik (79, 17), różdżka (17, 17), pęcherzyki `bubbles` (12 × 29) rosnące od dołu, postęp `brew_progress` (9 × 28) i pasek paliwa `fuel_length` (18 × 4) na (60, 44).
 * **Piec 1:1.** Surowiec (56, 17), paliwo (56, 53), wynik (116, 31), płomień `lit_progress` (14 × 14) na (56, 36) i strzałka `burn_progress` (24 × 16) na (79, 34).
-* **Testy.** `npm test` to **2045 kontroli silnika + 234 testy UI**. Nowa sekcja 2.28 sprawdza budżet klatki, kolejność budowy, interwały ticków, progi automatu, siatkę i pierścień LOD (17 × 17 wierzchołków kafla, wysokości z generatora, sortowanie po dystansie) oraz każdą współrzędną czterech nowych okien i obecność 17 widżetów w paczce. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
+* **Testy.** `npm test` to **2045 kontroli silnika + 234 testy UI** (w 2.28). Nowa sekcja 2.28 sprawdza budżet klatki, kolejność budowy, interwały ticków, progi automatu, siatkę i pierścień LOD (17 × 17 wierzchołków kafla, wysokości z generatora, sortowanie po dystansie) oraz każdą współrzędną czterech nowych okien i obecność 17 widżetów w paczce. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
 
 ## Wersja 2.27 „Handel jak w grze, mieszkańcy bez drżenia” 🧑‍🌾 🤝
 

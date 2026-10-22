@@ -46,6 +46,9 @@ export const T = {
   wool_purple: 165, wool_brown: 166,
   // 2.26: `farmland_moist.png` – grządka z wodą w promieniu 4 bloków.
   farmland_moist: 167,
+  // 2.29: łóżko 1:1 – siedem brakujących ścian z modelu `template_bed_*`.
+  bed_head_north: 168, bed_head_east: 169, bed_head_west: 170,
+  bed_foot_up: 171, bed_foot_east: 172, bed_foot_west: 173, bed_foot_south: 174,
 } as const;
 
 export const B = {
@@ -111,6 +114,13 @@ export const B = {
   // 2.26: nawodniona grządka ma własną teksturę (jak `moisture=7` w wanilii).
   // Uwaga: 341–351 to id przedmiotów (cukier, butelki…), dlatego blok dostaje 352.
   FARMLAND_WET: 352,
+  // 2.29: łóżko to wreszcie DWA bloki – stopa (52, zgodna ze starymi zapisami)
+  // i siedem wariantów kierunku/części. Append-only: stare światy dalej działają.
+  BED_E: 415, BED_S: 416, BED_W: 417,
+  BED_HEAD_N: 418, BED_HEAD_E: 419, BED_HEAD_S: 420, BED_HEAD_W: 421,
+  // 2.29: drzwi z zawiasem po prawej stronie (wanilia: `hinge=right`).
+  // Zamknięte dolne, otwarte dolne, zamknięte górne, otwarte górne.
+  DOOR_RN: 422, DOOR_ORN: 426, DOOR_URN: 430, DOOR_UORN: 434,
 } as const;
 
 export type RenderType =
@@ -234,16 +244,38 @@ def(B.CROP2, 'Pszenica', T.wheat2, { solid: false, opaque: false, layer: 1, rend
 def(B.CROP3, 'Dojrzała pszenica', T.wheat3, { solid: false, opaque: false, layer: 1, render: 'cross', hardness: 0, drop: -1, sound: 'grass' });
 // 2.20: łóżko to niska bryła (9/16), a nie pełny sześcian – wcześniej
 // wyglądało jak skrzynia z czerwonym wiekiem.
-def(B.BED, 'Łóżko', [T.bed_top, T.planks, T.bed_side], { hardness: 0.2, sound: 'cloth', render: 'bed', opaque: false });
+// 2.29: łóżko jak w 26.2 – dwa bloki (stopa + wezgłowie) i cztery kierunki.
+// B.BED (52) zostaje stopą zwróconą na północ, więc stare zapisy dalej stoją.
+const BED_FACES: [number, string][] = [
+  [B.BED, 'Łóżko'], [B.BED_E, 'Łóżko (wschód)'], [B.BED_S, 'Łóżko (południe)'], [B.BED_W, 'Łóżko (zachód)'],
+  [B.BED_HEAD_N, 'Łóżko – wezgłowie'], [B.BED_HEAD_E, 'Łóżko – wezgłowie (wschód)'],
+  [B.BED_HEAD_S, 'Łóżko – wezgłowie (południe)'], [B.BED_HEAD_W, 'Łóżko – wezgłowie (zachód)'],
+];
+for (const [id, name] of BED_FACES) {
+  def(id, name, [T.bed_top, T.bed_side, T.bed_head_east], {
+    // Boki materaca mają przezroczyste marginesy (tak jak w paczce), więc
+    // łóżko musi trafić na warstwę z wycinaniem alfy.
+    hardness: 0.2, sound: 'cloth', render: 'bed', opaque: false, layer: 1, drop: B.BED,
+  });
+}
 def(B.FURNACE_ON, 'Rozpalony piec', [T.furnace_side, T.furnace_side, T.furnace_side, T.furnace_lit], { hardness: 3.5, drop: B.FURNACE });
 def(B.CHEST, 'Skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', render: 'chest' });
 def(B.LOOT_CHEST, 'Stara skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', drop: B.CHEST, render: 'chest' });
 const FACE_PL = ['północ', 'wschód', 'południe', 'zachód'];
 for (let i = 0; i < 4; i++) {
   def(B.DOOR_N + i, i === 0 ? 'Drzwi' : `Drzwi (${FACE_PL[i]})`, T.door, { hardness: 3, sound: 'wood', drop: B.DOOR_N, opaque: false, layer: 1 });
-  def(B.DOOR_ON + i, `Otwarte drzwi (${FACE_PL[i]})`, T.door, { hardness: 3, sound: 'wood', drop: B.DOOR_N, solid: false, opaque: false });
+  // 2.29: otwarte drzwi nie są już „dziurą” – obrócona płyta nadal blokuje,
+  // a przejście jest tam, gdzie naprawdę jest (przez ościeżnicę).
+  def(B.DOOR_ON + i, `Otwarte drzwi (${FACE_PL[i]})`, T.door, { hardness: 3, sound: 'wood', drop: B.DOOR_N, opaque: false, layer: 1 });
   def(B.DOOR_UN + i, i === 0 ? 'Górne drzwi' : `Górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, opaque: false, layer: 1 });
-  def(B.DOOR_UON + i, `Otwarte górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, solid: false, opaque: false });
+  def(B.DOOR_UON + i, `Otwarte górne drzwi (${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, opaque: false, layer: 1 });
+  // 2.29: ten sam blok, tylko zawias po prawej – w wanilii nie ma osobnego
+  // id, ale nasz świat jest płaski (jedna liczba na kratkę), więc dokładamy
+  // cztery warianty.
+  def(B.DOOR_RN + i, `Drzwi (zawias z prawej, ${FACE_PL[i]})`, T.door, { hardness: 3, sound: 'wood', drop: B.DOOR_N, opaque: false, layer: 1 });
+  def(B.DOOR_ORN + i, `Otwarte drzwi (zawias z prawej, ${FACE_PL[i]})`, T.door, { hardness: 3, sound: 'wood', drop: B.DOOR_N, opaque: false, layer: 1 });
+  def(B.DOOR_URN + i, `Górne drzwi (zawias z prawej, ${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, opaque: false, layer: 1 });
+  def(B.DOOR_UORN + i, `Otwarte górne drzwi (zawias z prawej, ${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, opaque: false, layer: 1 });
   def(B.LADDER_N + i, i === 0 ? 'Drabina' : `Drabina (${FACE_PL[i]})`, T.ladder, { solid: false, opaque: false, layer: 1, hardness: 0.4, sound: 'wood', drop: B.LADDER_N });
   def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 3, sound: 'wood', drop: B.TRAP, solid: false, opaque: false });
 }
@@ -462,12 +494,10 @@ function collisionFor(d: BlockDef): Float32Array | null {
   if (d.id === B.FARMLAND || d.id === B.FARMLAND_WET) return new Float32Array([0, 0, 0, 1, 0.9375, 1]);
   if (d.id === B.CAMPFIRE) return new Float32Array([0, 0, 0, 1, 0.4375, 1]);
   if (isDoor(d.id)) {
-    const f = doorFacing(d.id);
-    const t = 0.1875;
-    if (f === 0) return new Float32Array([0, 0, 0, 1, 1, t]);
-    if (f === 1) return new Float32Array([1 - t, 0, 0, 1, 1, 1]);
-    if (f === 2) return new Float32Array([0, 0, 1 - t, 1, 1, 1]);
-    return new Float32Array([0, 0, 0, t, 1, 1]);
+    // 2.29: drzwi to płyta 3/16 przy krawędzi – zamknięta po stronie
+    // przeciwnej do `facing`, otwarta obrócona o 90° wokół zawiasu.
+    const [x0, z0, x1, z1] = doorPlate(d.id);
+    return new Float32Array([x0, 0, z0, x1, 1, z1]);
   }
   return FULL_BOX;
 }
@@ -520,11 +550,18 @@ function creativeVisible(id: number): boolean {
   if (id === B.AIR || id === B.WATER || id === B.LAVA || id === B.FURNACE_ON || id === B.CROP1 || id === B.CROP2 || id === B.LOOT_CHEST) return false;
   // 2.26: wariant hydracji zmienia się sam – nie jest osobnym blokiem do postawienia.
   if (id === B.FARMLAND_WET) return false;
+  // 2.29: warianty kierunku łóżka stawia się jednym przedmiotem.
+  if (id >= B.BED_E && id <= B.BED_W) return false;
+  if (id >= B.BED_HEAD_N && id <= B.BED_HEAD_W) return false;
   if (id === B.REDSTONE_LAMP_ON || id === B.REDSTONE_TORCH_OFF || id === B.LEVER_ON || id === B.BUTTON_ON) return false;
   if (id === B.PISTON_HEAD) return false;
   if (id === B.OAK_SLAB_TOP || id === B.STONE_SLAB_TOP || id === B.COBBLE_SLAB_TOP || id === B.BRICK_SLAB_TOP || id === B.SANDSTONE_SLAB_TOP || id === B.NETHER_BRICK_SLAB_TOP || id === B.QUARTZ_SLAB_TOP) return false;
   if (id >= B.DOOR_E && id <= B.DOOR_OW) return false;
   if (id >= B.DOOR_UN && id <= B.DOOR_UOW) return false;
+  if (id >= B.DOOR_RN && id <= B.DOOR_RN + 3) return false;
+  if (id >= B.DOOR_ORN && id <= B.DOOR_ORN + 3) return false;
+  if (id >= B.DOOR_URN && id <= B.DOOR_URN + 3) return false;
+  if (id >= B.DOOR_UORN && id <= B.DOOR_UORN + 3) return false;
   if (id >= B.LADDER_E && id <= B.LADDER_W) return false;
   if (id >= B.TRAP_N && id <= B.TRAP_W) return false;
   if (id >= B.OAK_STAIRS_E && id <= B.OAK_STAIRS_W) return false;
@@ -542,26 +579,91 @@ export const CREATIVE_BLOCKS: number[] = defs
   .map((d) => d.id)
   .concat([B.WATER, B.LAVA]);
 
-/** 0 north (−Z), 1 east (+X), 2 south (+Z), 3 west (−X). -1 if not a door. */
+/**
+ * 0 north (−Z), 1 east (+X), 2 south (+Z), 3 west (−X). -1 gdy to nie drzwi.
+ *
+ * 2.29: `facing` znaczy to samo co w wanilii – kierunek, w którym patrzył
+ * gracz, stawiając drzwi. Skrzydło stoi więc po PRZECIWNEJ stronie kratki
+ * (tak jak `DoorBlock#getShape` w Minecrafcie), a nie po stronie `facing`.
+ */
 export function doorFacing(id: number): number {
   if (id >= B.DOOR_N && id <= B.DOOR_W) return id - B.DOOR_N;
   if (id >= B.DOOR_ON && id <= B.DOOR_OW) return id - B.DOOR_ON;
   if (id >= B.DOOR_UN && id <= B.DOOR_UW) return id - B.DOOR_UN;
   if (id >= B.DOOR_UON && id <= B.DOOR_UOW) return id - B.DOOR_UON;
+  if (id >= B.DOOR_RN && id <= B.DOOR_RN + 3) return id - B.DOOR_RN;
+  if (id >= B.DOOR_ORN && id <= B.DOOR_ORN + 3) return id - B.DOOR_ORN;
+  if (id >= B.DOOR_URN && id <= B.DOOR_URN + 3) return id - B.DOOR_URN;
+  if (id >= B.DOOR_UORN && id <= B.DOOR_UORN + 3) return id - B.DOOR_UORN;
   return -1;
 }
 export function isDoor(id: number): boolean {
   return doorFacing(id) >= 0;
 }
 export function isDoorTop(id: number): boolean {
-  return id >= B.DOOR_UN && id <= B.DOOR_UOW;
+  return (id >= B.DOOR_UN && id <= B.DOOR_UW) || (id >= B.DOOR_UON && id <= B.DOOR_UOW) ||
+    (id >= B.DOOR_URN && id <= B.DOOR_URN + 3) || (id >= B.DOOR_UORN && id <= B.DOOR_UORN + 3);
 }
 export function isDoorOpen(id: number): boolean {
-  return (id >= B.DOOR_ON && id <= B.DOOR_OW) || (id >= B.DOOR_UON && id <= B.DOOR_UOW);
+  return (id >= B.DOOR_ON && id <= B.DOOR_OW) || (id >= B.DOOR_UON && id <= B.DOOR_UOW) ||
+    (id >= B.DOOR_ORN && id <= B.DOOR_ORN + 3) || (id >= B.DOOR_UORN && id <= B.DOOR_UORN + 3);
 }
-export function doorPair(facing: number, open: boolean, top: boolean): number {
+/** 0 – zawias z lewej, 1 – z prawej (waniliowe `hinge=left|right`). */
+export function doorHinge(id: number): number {
+  if (id >= B.DOOR_RN && id <= B.DOOR_RN + 3) return 1;
+  if (id >= B.DOOR_ORN && id <= B.DOOR_ORN + 3) return 1;
+  if (id >= B.DOOR_URN && id <= B.DOOR_URN + 3) return 1;
+  if (id >= B.DOOR_UORN && id <= B.DOOR_UORN + 3) return 1;
+  return 0;
+}
+export function doorPair(facing: number, open: boolean, top: boolean, hinge = 0): number {
+  if (hinge) return (top ? (open ? B.DOOR_UORN : B.DOOR_URN) : (open ? B.DOOR_ORN : B.DOOR_RN)) + facing;
   if (top) return (open ? B.DOOR_UON : B.DOOR_UN) + facing;
   return (open ? B.DOOR_ON : B.DOOR_N) + facing;
+}
+
+/**
+ * Prostokąt płyty drzwi w planie kratki: `[x0, z0, x1, z1]`.
+ *
+ * Wartości wprost z waniliowych modeli (`door_bottom_left_open` itd.) i z
+ * `DoorBlock#getShape`: zamknięte skrzydło leży po przeciwnej stronie niż
+ * `facing`, otwarte obraca się o 90° wokół zawiasu.
+ */
+export function doorPlate(id: number): [number, number, number, number] {
+  const t = 0.1875;
+  const f = doorFacing(id);
+  if (f < 0) return [0, 0, 1, 1];
+  const open = isDoorOpen(id);
+  if (!open) {
+    if (f === 0) return [0, 1 - t, 1, 1];
+    if (f === 1) return [0, 0, t, 1];
+    if (f === 2) return [0, 0, 1, t];
+    return [1 - t, 0, 1, 1];
+  }
+  const left = doorHinge(id) === 0;
+  if (f === 0) return left ? [0, 0, t, 1] : [1 - t, 0, 1, 1];
+  if (f === 1) return left ? [0, 0, 1, t] : [0, 1 - t, 1, 1];
+  if (f === 2) return left ? [1 - t, 0, 1, 1] : [0, 0, t, 1];
+  return left ? [0, 1 - t, 1, 1] : [0, 0, 1, t];
+}
+
+/** 0 north (−Z), 1 east (+X), 2 south (+Z), 3 west (−X); -1 gdy to nie łóżko. */
+export function bedFacing(id: number): number {
+  if (id === B.BED) return 0;
+  if (id >= B.BED_E && id <= B.BED_W) return id - B.BED_E + 1;
+  if (id >= B.BED_HEAD_N && id <= B.BED_HEAD_W) return id - B.BED_HEAD_N;
+  return -1;
+}
+export function isBed(id: number): boolean {
+  return bedFacing(id) >= 0;
+}
+export function isBedHead(id: number): boolean {
+  return id >= B.BED_HEAD_N && id <= B.BED_HEAD_W;
+}
+/** Stopa lub wezgłowie wskazującym na `facing` (głowa leży dalej od gracza). */
+export function bedPart(facing: number, head: boolean): number {
+  if (head) return B.BED_HEAD_N + facing;
+  return facing === 0 ? B.BED : B.BED_E + facing - 1;
 }
 
 export function ladderFacing(id: number): number {
