@@ -1,5 +1,5 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.28.0';
+export const GAME_VERSION = '2.28.1';
 export const GAME_RELEASE_NAME = 'Więcej FPS i okna jak w grze';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
@@ -61,6 +61,10 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Skrzynia jak w Minecrafcie',
+    text: 'Ostatnie duże okno bez waniliowego wyglądu: skrzynia ma teraz prawdziwy panel z `generic_54.png`, sklejony dokładnie tak, jak robi to `GenericContainerScreen` – górna część 176 × 71 i pasek ekwipunku 176 × 96. Siatka 9 × 3 leży na (8, 18), ekwipunek wraca na (8, 84), a pasek skrótów na (8, 142).',
+  },
   {
     title: 'Teren za horyzontem',
     text: 'Za pełnymi chunkami rysujemy teraz tanie pasmo terenu (LOD): siatka próbkuje generator świata co 4–16 bloków i dostaje kolory biomów, cieniowanie zboczy i śnieg na szczytach. Z góry widać góry i morza setki bloków dalej – zasięg to cztery razy zasięg renderowania, a koszt to kilkanaście tysięcy trójkątów. To odpowiednik moda Distant Horizons, włączany w opcjach („Teren w oddali”).',

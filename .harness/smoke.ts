@@ -121,7 +121,7 @@ import {
   merchantScrollable, merchantThumbHeight, merchantThumbOffset, merchantVisibleRows,
 } from '../src/game/merchantLayout';
 import {
-  ANVIL, BREWING, CONTAINER, ENCHANT, FURNACE, containerInvSlot, containerScale,
+  ANVIL, BREWING, CHEST, CONTAINER, ENCHANT, FURNACE, chestSlot, containerInvSlot, containerScale,
 } from '../src/game/containerLayout';
 import { FrameGovernor, chunkBuildScore, entityTickInterval, frameBudgetMs, lodRange, lodStepFor, shouldTickEntity, sortChunkOffsets } from '../src/game/perf';
 import { LOD_TILE, buildLodTile, lodRing } from '../src/game/lod';
@@ -6112,6 +6112,18 @@ section('2.28: kowadło, zaklęcia, warzenie i piec 1:1 z Minecraftem');
   const anvilPng = guiSprite('anvil_gui');
   check('panel kowadła to obrazek z paczki', !!anvilPng && anvilPng.startsWith('data:image/png;base64,'));
   check('grafik GUI jest teraz co najmniej 70', guiSpriteCount() >= 70, `${guiSpriteCount()}`);
+}
+
+section('2.28.1: skrzynia 1:1 z GenericContainerScreen');
+{
+  eq('panel skrzyni ma 176 × 167', `${CHEST.width}×${CHEST.height}`, '176×167');
+  eq('pierwszy slot skrzyni', `${chestSlot(0).x},${chestSlot(0).y}`, '8,18');
+  eq('ostatni slot skrzyni (3. wiersz)', `${chestSlot(26).x},${chestSlot(26).y}`, '152,54');
+  eq('skrzynia – wiersz co 18 px', chestSlot(9).y - chestSlot(0).y, 18);
+  eq('ekwipunek gracza pod siatką', `${containerInvSlot(0).x},${containerInvSlot(0).y}`, '8,84');
+  eq('pasek skrótów pod ekwipunkiem', `${containerInvSlot(27).x},${containerInvSlot(27).y}`, '8,142');
+  check('skrzynia ma widżet z paczki', hasGuiSprite('chest_gui'));
+  check('grafik GUI jest teraz 71', guiSpriteCount() >= 71, `${guiSpriteCount()}`);
 }
 
 // =================================================================== report

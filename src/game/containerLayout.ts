@@ -80,6 +80,33 @@ export const BREWING = {
   fuelBar: { x: 60, y: 44, w: 18, h: 4 },
 } as const;
 
+/**
+ * Skrzynia 27 slotów – `gui/container/generic_54.png`.
+ *
+ * Waniliowe `GenericContainerScreen` rysuje górną część (176 × 71) i dokleja
+ * pod nią ekwipunek gracza (176 × 96), więc panel ma 176 × 167 – o 1 px
+ * mniej niż pozostałe okna. Sloty leżą dokładnie tam, gdzie w grze.
+ */
+export const CHEST = {
+  sprite: 'chest_gui',
+  title: 'Skrzynia',
+  width: 176,
+  height: 167,
+  /** Siatka 9 × 3 od (8, 18), wiersz co 18 px. */
+  grid: { x: 8, y: 18, step: 18, cols: 9, rows: 3 },
+  /** Ekwipunek gracza – ten sam co w innych oknach. */
+  inv: { x: 8, y: 84 },
+  hotbar: { x: 8, y: 142 },
+} as const;
+
+/** Współrzędne slotu skrzyni (0–26) w pikselach GUI. */
+export function chestSlot(i: number): { x: number; y: number } {
+  return {
+    x: CHEST.grid.x + (i % CHEST.grid.cols) * CHEST.grid.step,
+    y: CHEST.grid.y + Math.floor(i / CHEST.grid.cols) * CHEST.grid.step,
+  };
+}
+
 /** Piec – `gui/container/furnace.png`. */
 export const FURNACE = {
   sprite: 'furnace_gui',

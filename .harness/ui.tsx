@@ -23,6 +23,7 @@ import { guiSprite } from '../src/game/art/uiSprites';
 import WaypointsScreen from '../src/components/WaypointsScreen';
 import AnvilScreen from '../src/components/AnvilScreen';
 import BrewingScreen from '../src/components/BrewingScreen';
+import ChestScreen from '../src/components/ChestScreen';
 import InventoryScreen from '../src/components/InventoryScreen';
 import ChatScreen from '../src/components/ChatScreen';
 import MultiplayerScreen from '../src/components/MultiplayerScreen';
@@ -31,6 +32,7 @@ import { SKINS, DEFAULT_SKIN_ID } from '../src/game/skins';
 import { COMMANDS, COMMAND_CATEGORIES, commandByName, applyCommandSuggestion } from '../src/game/commands';
 import { anvilResult } from '../src/game/anvil';
 import { Inventory, RECIPES } from '../src/game/inventory';
+import { emptyChest } from '../src/game/chest';
 import { I, isFood, isPotion, stackLimit } from '../src/game/items';
 import { B, BLOCKS } from '../src/game/blocks';
 import { applyBrew, emptyBrewing, tickBrewing, POTIONS, HEAL_AMOUNT } from '../src/game/brewing';
@@ -504,6 +506,31 @@ section('2.3: anvil screen: static render');
   const empty = { ...make(12, null, null), currentAnvil: () => null };
   const none = renderToStaticMarkup(<AnvilScreen game={empty as never} icons={{}} onChange={() => {}} />);
   check('a closed anvil renders nothing', none === '', none);
+}
+
+section('2.28.1: skrzynia 1:1 z GenericContainerScreen');
+{
+  const inv = new Inventory();
+  inv.slots[0] = { id: I.IRON_PICK, count: 1, dur: 10 };
+  const chest = emptyChest(0, 1, 0);
+  chest.slots[0] = { id: B.STONE, count: 12 };
+  const game = {
+    inventory: inv,
+    currentChest: () => chest,
+    clickChest: noop,
+    closeInventory: noop,
+    emitHud: noop,
+  };
+  const html = renderToStaticMarkup(<ChestScreen game={game as never} icons={{}} onChange={noop} />);
+  check('the chest panel has a title', html.includes('Skrzynia'));
+  check('the panel is the vanilla generic_54 texture', html.includes(guiSprite('chest_gui') ?? 'NO-PANEL'));
+  const slots = (html.match(/role="button"/g) ?? []).length;
+  check('the chest draws 27 slots plus the player inventory', slots >= 63, `${slots} slotów`);
+  check('the chest panel is 167 px tall', html.includes('height:334px') || html.includes('167px'));
+  const none = renderToStaticMarkup(
+    <ChestScreen game={{ ...game, currentChest: () => null } as never} icons={{}} onChange={noop} />
+  );
+  check('a closed chest renders nothing', none === '', none);
 }
 
 section('2.4: brewing screen');
