@@ -1,6 +1,17 @@
-# BlockCraft 2.26 🚀
+# BlockCraft 2.27 🚀
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 2.27 „Handel jak w grze, mieszkańcy bez drżenia” 🧑‍🌾 🤝
+
+Mieszkańcy przestali podskakiwać i trząść się, a okno handlu jest teraz **prawdziwym `MerchantScreen`** z Minecrafta – z panelem, listą ofert i przewijaniem prosto z paczki 26.2.
+
+* **Mieszkaniec nie skacze.** Skok przy przeszkodzie dokładał się w każdej klatce (`vel.y = 8.2` bez żadnego odstępu), a sonda przeszkody sięgała 0,8 bloku od środka ciała, więc przy płocie 1,5 bloku „widziała” powietrze i podskakiwała w miejscu. Teraz sonda mierzy od krawędzi ciała, skok ma 0,55 s odnowienia i tylko dla mobów, które naprawdę skaczą – mieszkaniec i żelazny golem, jak w wanilii, w ogóle nie skaczą, tylko zawracają (najwyżej raz na 0,7 s).
+* **Koniec trzęsienia.** W panice mieszkaniec dodawał losowy obrót w każdej klatce (`yaw += (random − 0,5) × 0,25`), co wyglądało jak dygotanie modelu. Kierunek ucieczki jest teraz zapamiętany w chwili ciosu, a tylko łagodnie faluje (sinus ±0,35 rad). Losowe obroty przy wodzie, klifie i ścianie też mają czas odnowienia.
+* **Moby rozsuwają się, zamiast stać w sobie.** Dwa przenikające się modele wyglądają jak drżenie, więc doszło waniliowe `pushEntities` w wersji bezpiecznej: delikatny impuls prędkości (do ~5 bloku/s², maks. 2,2 bloku/s), który zwykła fizyka rozwiązuje z kolizjami – bez wpychania mobów w ściany i bez podnoszenia ich w powietrze.
+* **Okno handlu 1:1 z `MerchantScreen`.** Panel 276 × 166 z `gui/container/villager.png` (przycięty z 512 × 256), lista ofert 88 × 140 przy (5, 18) z wierszem 20 px, przewijanie sprite'em `scroller` (6 × 27) i `scroller_disabled`, dwa sloty towaru (136, 37) i (162, 37), duży slot wyniku w ramce 26 × 26 przy (220, 37), znaczek `out_of_stock` i szara strzałka przy wyczerpanej ofercie, pasek doświadczenia mieszkańca `experience_bar_*` (102 × 5) i plakietka poziomu. Ekwipunek gracza to siatka 9 × 3 i pasek skrótów na waniliowych współrzędnych – bez własnych ramek, bo sloty są już w teksturze panelu.
+* **Handel jak w grze.** Klikasz wiersz, żeby wybrać ofertę, a wymianę wykonuje dopiero slot wyniku (albo dwuklik na wierszu) – wcześniej każde kliknięcie wiersza od razu handlowało. Panel skaluje się do 2× i zawsze mieści się na ekranie telefonu; kółko myszy i tapnięcie na torze przewijają listę.
+* **Testy.** `npm test` to **1974 kontrole silnika + 225 testów UI**. Nowa sekcja 2.27 sprawdza, że mieszkaniec nie podskakuje na otwartym polu, w zagrodzie i w panice (Δy < 2 cm), że nie obraca się gwałtowniej niż 0,25 rad na klatkę, że nadal chodzi i ucieka, że rozsuwanie mobów jest płynne, oraz cały układ waniliowego GUI (wymiary, sloty, scrollbar, skala) i obecność widżetów handlu w paczce. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
 
 ## Wersja 2.26 „Koniec prześwitów, golem na posterunku” 🧱 🤖
 

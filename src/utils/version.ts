@@ -1,10 +1,19 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.26.0';
-export const GAME_RELEASE_NAME = 'Koniec prześwitów, golem na posterunku';
+export const GAME_VERSION = '2.27.0';
+export const GAME_RELEASE_NAME = 'Handel jak w grze, mieszkańcy bez drżenia';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.27: stabilni mieszkańcy i okno handlu 1:1 z Minecraftem.
+ * Mieszkaniec nie podskakuje już przy płocie i ścianie (skok miał czas
+ * odnowienia, a sonda sięga od krawędzi ciała), przestał też trząść się
+ * w panice (kierunek ucieczki jest stały, a nie losowy co klatkę), a moby
+ * delikatnie się rozsuwają, zamiast stać w sobie. Okno handlu to prawdziwy
+ * `MerchantScreen`: panel 276 × 166 z paczki, lista ofert 88 × 140,
+ * przewijanie `scroller`, strzałka i znaczek „brak towaru” z paczki,
+ * pasek doświadczenia mieszkańca i ekwipunek 9 × 3 + pasek skrótów
+ * na waniliowych współrzędnych.
  * 2.26: koniec prześwitów w wioskach, nawadniane grządki, odrzut i golem.
  * Siatka bloku culluje ścianę sąsiada tylko wtedy, gdy ten naprawdę wypełnia
  * całą kratkę (`CULLS`), więc ścieżka i grządka (15/16) nie robią już
@@ -44,6 +53,22 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Mieszkańcy przestali drżeć',
+    text: 'Mieszkaniec podskakiwał przy płocie i ścianie, bo skok dokładał się w każdej klatce — teraz ma własny czas odnowienia, a sonda przeszkody sięga od krawędzi ciała (wcześniej 0,8 bloku od środka przeskakiwało płot i kod „widział” powietrze). Jak w wanilii mieszkaniec i golem w ogóle nie skaczą: po prostu zawracają, i to najwyżej raz na 0,7 s.',
+  },
+  {
+    title: 'Koniec trzęsienia w panice',
+    text: 'Po ciosie mieszkaniec dodawał losowy obrót w każdej klatce, więc model dosłownie dygotał w miejscu. Teraz kierunek ucieczki jest zapamiętany przy trafieniu, a tylko lekko faluje (sinus ±0,35 rad). Losowe obroty przy wodzie i klifie też mają czas odnowienia, a moby stojące w sobie delikatnie się rozsuwają — zamiast przenikać się modelami.',
+  },
+  {
+    title: 'Okno handlu jak w Minecrafcie',
+    text: 'Zamiast listy zielonych przycisków jest prawdziwy `MerchantScreen`: panel 276 × 166 z paczki, lista ofert 88 × 140 (7 wierszy po 20 px) z przewijaniem `scroller`, dwa sloty towaru i duży slot wyniku, strzałka i znaczek „brak towaru” (`out_of_stock`) z paczki, pasek doświadczenia mieszkańca i ekwipunek 9 × 3 + pasek skrótów na waniliowych współrzędnych.',
+  },
+  {
+    title: 'Handel jak w grze',
+    text: 'Klikasz wiersz, żeby wybrać ofertę, a dopiero slot wyniku (albo dwuklik na wierszu) wykonuje wymianę — dokładnie jak w Minecrafcie. Zostało widać zapas oferty, brak towaru zaznacza czerwony krzyżyk, a wyczerpana oferta dostaje szarą strzałkę. Panel skaluje się do 2× i zawsze mieści się na telefonie.',
+  },
   {
     title: 'Koniec prześwitów w wioskach',
     text: 'Ściana sąsiada znika teraz tylko wtedy, gdy ten sąsiad naprawdę wypełnia całą kratkę. Wcześniej siatka patrzyła na samą flagę „nieprzezroczysty”, więc ścieżka i grządka o wysokości 15/16 chowały sąsiadowi pełną ścianę – nad ich krawędzią zostawała 1-pikselowa szpara i przez podłogę wioski było widać świat. Nowa tablica `CULLS` liczy faktyczny kształt bryły, a kowadło (pełna kolizja, model 12/16) też przestało zasłaniać ściany.',

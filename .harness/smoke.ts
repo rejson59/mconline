@@ -116,6 +116,10 @@ import {
 import { mergeable } from '../src/game/inventory';
 import { slabFullBlock } from '../src/game/blocks';
 import { HYDRATION_RADIUS, isFarmland, isHydrated, updateFarmland } from '../src/game/farmland';
+import {
+  MERCHANT, merchantInvSlot, merchantMaxScroll, merchantRowTop, merchantRowVisible, merchantScale,
+  merchantScrollable, merchantThumbHeight, merchantThumbOffset, merchantVisibleRows,
+} from '../src/game/merchantLayout';
 import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
 import { resolveControlMode } from '../src/utils/input';
@@ -3144,8 +3148,11 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.26'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Koniec prześwitów, golem na posterunku');
+  check('release label is the current line', GAME_VERSION.startsWith('2.27'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Handel jak w grze, mieszkańcy bez drżenia');
+  // 2.27: stabilni mieszkańcy i okno handlu 1:1.
+  check('2.27 highlights mention the steady villager', RELEASE_HIGHLIGHTS.some((h) => /drż/i.test(h.title)));
+  check('2.27 highlights mention the merchant screen', RELEASE_HIGHLIGHTS.some((h) => /handl/i.test(h.title)));
   // 2.26: brak prześwitów, nawadnianie grządek, odrzut i golem.
   check('2.26 highlights mention the light leak', RELEASE_HIGHLIGHTS.some((h) => /prześwit/i.test(h.title)));
   check('2.26 highlights mention the golem', RELEASE_HIGHLIGHTS.some((h) => /golem/i.test(h.title)));
@@ -4968,14 +4975,24 @@ section('2.18: moby 1:1 z Minecrafta');
   check('oswojony wilk ma obrożę', collar);
 
   // --- głowa odwraca się w stronę gracza
+  // 2.27: ciało przypięte do miejsca, a gracz stoi pod kątem 0,5 rad względem
+  // kierunku ciała. Wcześniej wynik zależał od losowego spaceru krowy.
   const cow = new Mob('cow', 4.5, gy + 2, 4.5);
-  const player = new THREE.Vector3(4.5, gy + 1, 10.5);
+  const player = new THREE.Vector3(
+    4.5 + Math.sin(0.5) * 6,
+    gy + 1,
+    4.5 + Math.cos(0.5) * 6
+  );
   let maxTurn = 0;
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 120; i++) {
+    cow.body.pos.set(4.5, gy + 2, 4.5);
+    cow.yaw = 0;
+    cow.group.rotation.y = 0;
     cow.update(1 / 30, w, player, () => {}, () => {}, true, []);
     maxTurn = Math.max(maxTurn, Math.abs(cow.head.rotation.y));
   }
-  check('mob odwraca głowę do gracza', maxTurn > 0.1, `${maxTurn.toFixed(2)}`);
+  check('mob odwraca głowę do gracza', Math.abs(cow.head.rotation.y - 0.5) < 0.2, `${cow.head.rotation.y.toFixed(2)}`);
+  check('głowa odwraca się w tę stronę co gracz', cow.head.rotation.y > 0, `${cow.head.rotation.y.toFixed(2)}`);
   check('obrót głowy jest ograniczony', maxTurn <= 0.95, `${maxTurn.toFixed(2)}`);
   // 2.19: głowa musi patrzeć W STRONĘ gracza, a nie w przeciwną (golem).
   // 2.19: głowa golema musi skręcać W STRONĘ gracza, a nie w przeciwną.
@@ -5817,6 +5834,164 @@ section('2.26: odrzut po ciosie i golem, który broni wioski');
   for (let i = 0; i < 240; i++) g3.update(1 / 60, w, new THREE.Vector3(2.5, y, 3.5), () => { hits++; }, () => {}, false, [g3]);
   check('sprowokowany golem bije gracza', hits >= 2, `${hits} ciosów`);
   g3.dispose();
+}
+
+// ============================================ 2.27: stabilność mieszkańców i handel
+section('2.27: mieszkaniec stoi pewnie, nie skacze i nie trzęsie się');
+{
+  const w = new World(4242, true);
+  for (let cx = 0; cx <= 3; cx++) for (let cz = 0; cz <= 3; cz++) w.getChunk(cx, cz);
+  const ground = (x: number, z: number) => w.heightAt(x, z) + 1;
+  const player = new THREE.Vector3(2.5, 65, 2.5);
+
+  /** Ile razy mob podskoczył i jak mocno szarpał modelem w ciągu `seconds`. */
+  const watch = (mob: Mob, seconds: number, skip = 0) => {
+    let jumps = 0, upFrames = 0, maxDy = 0, maxYawStep = 0, path = 0;
+    let prevYaw = mob.yaw;
+    const prev = mob.body.pos.clone();
+    for (let i = 0; i < seconds * 60; i++) {
+      mob.update(1 / 60, w, player, () => {}, () => {}, false, [mob]);
+      if (mob.body.vel.y > 7.5) jumps++;
+      const dy = mob.body.pos.y - prev.y;
+      // Odrzut po ciosie (0,45 s) to fizyka, nie „podskok” – pomijamy go.
+      if (i > skip && dy > 0.02) upFrames++;
+      maxDy = Math.max(maxDy, Math.abs(dy));
+      let d = Math.abs(mob.yaw - prevYaw);
+      if (d > Math.PI) d = Math.abs(d - Math.PI * 2);
+      maxYawStep = Math.max(maxYawStep, d);
+      path += Math.hypot(mob.body.pos.x - prev.x, mob.body.pos.z - prev.z);
+      prev.copy(mob.body.pos);
+      prevYaw = mob.yaw;
+    }
+    return { jumps, upFrames, maxDy, maxYawStep, path };
+  };
+
+  // Otwarte pole: mieszkaniec po prostu chodzi.
+  const open = new Mob('villager', 30.5, ground(30, 30), 30.5);
+  const a = watch(open, 25);
+  check('mieszkaniec nie podskakuje na otwartym polu', a.jumps === 0 && a.upFrames === 0, `skoki=${a.jumps}`);
+  check('mieszkaniec nie trzęsie się (Δy < 2 cm)', a.maxDy < 0.02, `${a.maxDy.toFixed(3)}`);
+  check('mieszkaniec naprawdę chodzi', a.path > 3, `${a.path.toFixed(1)} bloku`);
+  open.dispose();
+
+  // Przy płocie (1,5 bloku) wcześniej skakał kilka razy na sekundę: sonda
+  // 0,8 bloku od środka przeskakiwała płot i widziała powietrze.
+  const pen = new Mob('villager', 20.5, ground(20, 20), 20.5);
+  const py = ground(20, 20);
+  for (let x = 18; x <= 22; x++) { w.setBlock(x, py, 18, B.FENCE); w.setBlock(x, py, 22, B.FENCE); }
+  for (let z = 18; z <= 22; z++) { w.setBlock(18, py, z, B.FENCE); w.setBlock(22, py, z, B.FENCE); }
+  pen.aiTimer = 999;
+  pen.walking = true;
+  const b = watch(pen, 25);
+  check('mieszkaniec w zagrodzie nie podskakuje', b.jumps === 0 && b.upFrames === 0, `skoki=${b.jumps}`);
+  check('mieszkaniec w zagrodzie zostaje w środku (Δy < 2 cm)', b.maxDy < 0.02, `${b.maxDy.toFixed(3)}`);
+  pen.dispose();
+
+  // Panika po ciosie: kierunek ucieczki jest stały, a nie losowy co klatkę.
+  const scared = new Mob('villager', 36.5, ground(36, 36), 36.5);
+  scared.damage(2, 36.5, 34.5, 'player');
+  const c = watch(scared, 6, 40);
+  check('przestraszony mieszkaniec nie skacze', c.jumps === 0 && c.upFrames === 0);
+  check('przestraszony mieszkaniec nie obraca się gwałtownie', c.maxYawStep < 0.25,
+    `${c.maxYawStep.toFixed(3)} rad/klatkę`);
+  check('przestraszony mieszkaniec ucieka', c.path > 1.5, `${c.path.toFixed(1)} bloku`);
+  scared.dispose();
+
+  // Mieszkańcy nie stoją w sobie: delikatne rozsuwanie zamiast nakładania
+  // się modeli (dwa przenikające się modele wyglądają jak drżenie).
+  {
+    const a = new Mob('villager', 30.5, ground(30, 30), 30.5);
+    const b = new Mob('villager', 30.6, ground(30, 30), 30.55);
+    for (const m of [a, b]) { m.walking = false; m.aiTimer = 999; }
+    let maxDy = 0;
+    const prev = a.body.pos.clone();
+    let maxStep = 0;
+    for (let i = 0; i < 300; i++) {
+      for (const m of [a, b]) {
+        const py = m.body.pos.y;
+        m.update(1 / 60, w, player, () => {}, () => {}, false, [a, b]);
+        maxDy = Math.max(maxDy, Math.abs(m.body.pos.y - py));
+      }
+      maxStep = Math.max(maxStep, Math.hypot(a.body.pos.x - prev.x, a.body.pos.z - prev.z));
+      prev.copy(a.body.pos);
+    }
+    const gap = Math.hypot(a.body.pos.x - b.body.pos.x, a.body.pos.z - b.body.pos.z);
+    check('mieszkańcy rozsuwają się, zamiast stać w sobie', gap > 0.45, `${gap.toFixed(2)} bloku`);
+    check('rozsuwanie nie podnosi mobów', maxDy < 0.02, `${maxDy.toFixed(3)}`);
+    check('rozsuwanie jest płynne (bez szarpania)', maxStep < 0.03, `${maxStep.toFixed(3)}/klatkę`);
+    a.dispose(); b.dispose();
+  }
+
+  // Zombie nadal omija niski stopień skokiem (stabilność nie zepsuła AI).
+  {
+    const zy = w.heightAt(6, 6) + 1;
+    for (let x = 4; x <= 14; x++) for (let z = 4; z <= 10; z++) {
+      w.setBlock(x, zy - 1, z, B.STONE);
+      for (let yy = zy; yy <= zy + 3; yy++) w.setBlock(x, yy, z, B.AIR);
+    }
+    for (let z = 4; z <= 10; z++) w.setBlock(10, zy, z, B.STONE);
+    const z = new Mob('zombie', 6.5, zy, 7.5);
+    let climbed = false;
+    const target = new THREE.Vector3(11.5, zy + 1, 7.5);
+    for (let i = 0; i < 600; i++) {
+      z.update(1 / 60, w, target, () => {}, () => {}, false, [z]);
+      if (z.body.pos.y > zy + 0.9) climbed = true;
+    }
+    check('zombie wciąż wskakuje na jednoblokowy stopień', climbed, `y=${(z.body.pos.y - zy).toFixed(2)}`);
+    z.dispose();
+  }
+}
+
+section('2.27: okno handlu 1:1 z MerchantScreen');
+{
+  // Wymiary waniliowego GUI i rozkład elementów.
+  eq('panel handlu ma 276 × 166', `${MERCHANT.width}×${MERCHANT.height}`, '276×166');
+  eq('lista ofert 88 × 140 przy (5,18)', `${MERCHANT.list.x},${MERCHANT.list.y},${MERCHANT.list.w},${MERCHANT.list.h}`, '5,18,88,140');
+  eq('wiersz oferty ma 20 px', MERCHANT.list.row, 20);
+  eq('na liście mieści się 7 ofert', merchantVisibleRows(), 7);
+  eq('sloty towaru na (136,37) i (162,37)', `${MERCHANT.input1.x},${MERCHANT.input1.y},${MERCHANT.input2.x},${MERCHANT.input2.y}`, '136,37,162,37');
+  eq('slot wyniku wyśrodkowany w ramce 26 × 26', `${MERCHANT.output.frameX}+${MERCHANT.output.x - MERCHANT.output.frameX}`, '215+5');
+  eq('pasek przewijania 6 × 140 przy x=94', `${MERCHANT.scrollbar.x},${MERCHANT.scrollbar.w},${MERCHANT.scrollbar.h}`, '94,6,140');
+  eq('kciuk przewijania ma waniliowe 27 px', MERCHANT.scrollbar.thumb, 27);
+  eq('pasek XP 102 × 5 przy (136,57)', `${MERCHANT.xp.x},${MERCHANT.xp.y},${MERCHANT.xp.w},${MERCHANT.xp.h}`, '136,57,102,5');
+
+  // Przewijanie: 7 ofert bez paska, dłuższa lista – kciuk się kurczy i jeździ.
+  check('7 ofert nie wymaga przewijania', !merchantScrollable(7) && merchantMaxScroll(7) === 0);
+  check('kciuk bez przewijania wypełnia tor', merchantThumbHeight(7) === MERCHANT.scrollbar.h);
+  check('przy 12 ofertach jest co przewijać', merchantScrollable(12) && merchantMaxScroll(12) === 5);
+  check('kciuk przy przewijaniu ma 27 px', merchantThumbHeight(12) === 27);
+  check('kciuk na końcu listy jedzie na dół', merchantThumbOffset(12, 5) === 1 && merchantThumbOffset(12, 0) === 0);
+  check('przesunięcie listy nie wychodzi poza zakres', merchantThumbOffset(12, 99) === 1);
+  check('wiersz 0 widoczny, wiersz 8 już nie', merchantRowVisible(0, 0, 12) && !merchantRowVisible(8, 0, 12));
+  check('po przewinięciu widać wiersze 5..11', merchantRowVisible(5, 5, 12) && merchantRowVisible(11, 5, 12) && !merchantRowVisible(4, 5, 12));
+  eq('górna krawędź wiersza 3', merchantRowTop(3), MERCHANT.list.y + 60);
+
+  // Sloty ekwipunku: siatka 9 × 3 od (108,84) i pasek skrótów na (108,142).
+  const first = merchantInvSlot(0);
+  const col8 = merchantInvSlot(8);
+  const row2 = merchantInvSlot(18);
+  const hot = merchantInvSlot(27);
+  eq('pierwszy slot ekwipunku', `${first.x},${first.y}`, '108,84');
+  eq('ósmy slot kończy rząd', `${col8.x},${col8.y}`, '252,84');
+  eq('trzeci rząd siatki', `${row2.x},${row2.y}`, '108,120');
+  eq('pasek skrótów zaczyna się pod siatką', `${hot.x},${hot.y}`, '108,142');
+  check('ostatni slot paska skrótów', merchantInvSlot(35).x === 252 && merchantInvSlot(35).y === 142);
+
+  // Skala panelu: nie większa niż 2× i zawsze mieści się na ekranie.
+  check('panel skaluje się do 2× na dużym ekranie', merchantScale(1280, 900) === 2);
+  const small = merchantScale(360, 640);
+  check('na telefonie panel mieści się w ekranie', MERCHANT.width * small <= 360 && MERCHANT.height * small <= 640,
+    `${small.toFixed(2)}×`);
+}
+
+section('2.27: grafika okna handlu pochodzi z paczki');
+{
+  const names = ['villager_gui', 'merchant_scroller', 'merchant_scroller_disabled', 'merchant_xp_bg', 'merchant_xp_current', 'merchant_out_of_stock'];
+  const missing = names.filter((n) => !hasGuiSprite(n));
+  check('wszystkie widżety handlu są w paczce', missing.length === 0, missing.join(', '));
+  const png = guiSprite('villager_gui');
+  check('panel handlu to obrazek z paczki', !!png && png.startsWith('data:image/png;base64,'));
+  check('grafika GUI rośnie o widżety handlu', guiSpriteCount() >= 43);
 }
 
 // =================================================================== report
