@@ -280,6 +280,8 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
             `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}” (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
+            // 2.28: profil automatu jakości – widać, czy gra właśnie oszczędza.
+            `Jakość: ${hud.perf} · LOD: ${hud.lodRange > 0 ? `${hud.lodRange} bloków` : 'wyłączony'}`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
@@ -302,7 +304,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
         </div>
       ) : hud.showFps ? (
         <div className="absolute left-2 top-2 px-1.5 py-0.5 text-[13px] leading-tight mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
-          <div>{hud.fps} FPS{hud.resScale < 1 ? ` · skala ${Math.round(hud.resScale * 100)}%` : ''}</div>
+          <div>{hud.fps} FPS{hud.resScale < 1 ? ` · skala ${Math.round(hud.resScale * 100)}%` : ''}{hud.perf !== 'pełny' ? ` · ${hud.perf}` : ''}</div>
           <div className="opacity-70">chunki: {hud.chunks} · kresl.: {hud.drawCalls}</div>
         </div>
       ) : (

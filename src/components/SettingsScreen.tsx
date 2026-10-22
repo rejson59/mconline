@@ -180,6 +180,20 @@ export default function SettingsScreen({
           <Btn active={settings.fpsCap > 0} onClick={cycleFps}>
             Limit klatek: {fpsLabel}
           </Btn>
+          <Btn active={settings.lod} onClick={() => set({ lod: !settings.lod })}>
+            Teren w oddali (LOD): {settings.lod ? 'włączony' : 'wyłączony'}
+          </Btn>
+          <div className="text-[11px] leading-tight opacity-70">
+            LOD rysuje tani teren za horyzontem – widać góry i morza setki bloków dalej, bez budowania
+            pełnych chunków. Włączone działa jak mod Distant Horizons; kosztuje kilka tysięcy trójkątów.
+          </div>
+          <Btn active={settings.autoQuality} onClick={() => set({ autoQuality: !settings.autoQuality })}>
+            Automat jakości: {settings.autoQuality ? 'włączony' : 'wyłączony'}
+          </Btn>
+          <div className="text-[11px] leading-tight opacity-70">
+            Automat pilnuje czasu klatki: gdy gra zwalnia, sam zmniejsza budżet budowania chunków
+            i zasięg LOD (jak presety w Sodium). Po ustabilizowaniu klatek wraca do pełnej jakości.
+          </div>
       </div>
       <div id="settings-panel-controls" role="tabpanel" aria-labelledby="settings-tab-controls" hidden={tab !== 'controls'} className="flex flex-col gap-3">
           <div className="text-xs text-green-300 mc-text">Wersja sterowania</div>

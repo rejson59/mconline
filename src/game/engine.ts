@@ -13,6 +13,8 @@ import { getAtlas, tileUV, tileUVInset, tileUVRect, AVG_COLOR } from './textures
 import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { fallPath, isFallingBlock, isPassableForFall } from './gravity';
 import { isFarmland, isHydrated, updateFarmland } from './farmland';
+import { FrameGovernor, entityTickInterval, lodRange, lodStepFor, sortChunkOffsets } from './perf';
+import { LOD_TILE, buildLodTile, lodRing } from './lod';
 import { Mob, mobVariantForBiome, isHostileMob, type MobType } from './mobs';
 
 const GREY: readonly number[] = [90, 90, 90];
@@ -169,6 +171,10 @@ export interface HUDState {
   xpFrac: number;
   /** Four equipped armor pieces (head, chest, legs, feet). */
   armor: (Stack | null)[];
+  /** 2.28: profil automatu wydajności (widoczny w debug-HUD). */
+  perf: 'oszczędny' | 'zrównoważony' | 'pełny';
+  /** 2.28: zasięg terenu w oddali w blokach (0 = LOD wyłączony). */
+  lodRange: number;
   /** Sum of armor points of the equipped pieces. */
   armorPoints: number;
   /** 1.6: co jest pod celownikiem (mob) – nazwa i wskazówka. */
@@ -826,6 +832,31 @@ export class Game {
   private rainGeo!: THREE.BufferGeometry;
 
   private offsets: [number, number][] = [];
+  /**
+   * 2.28: kolejność budowy chunków wg kierunku patrzenia (Sodium). Liczona
+   * od nowa, gdy gracz obróci się o ~0,4 rad albo co pół sekundy – sortowanie
+   * kilkuset offsetów na każdą klatkę byłoby droższe niż sam zysk.
+   */
+  private chunkOrder: [number, number][] = [];
+  private chunkOrderYaw = Number.NaN;
+  private chunkOrderTimer = 0;
+  /** 2.28: automat jakości (odpowiednik presetów w modach). */
+  private governor = new FrameGovernor();
+  /** 2.28: licznik klatek – decyduje, które moby tickują w danej klatce. */
+  private frameNo = 0;
+  /** 2.28: pasmo terenu w oddali (Distant Horizons). */
+  private lodGroup = new THREE.Group();
+  private lodMat!: THREE.MeshBasicMaterial;
+  private lodTiles: THREE.Mesh[] = [];
+  private lodKey = '';
+  private lodTimer = 0;
+  private lodEnabled = true;
+  /** 2.28: Entity Culling – moby daleko aktualizują się rzadziej. */
+  entityCulling = true;
+  /** 2.28: automat jakości (można wyłączyć w opcjach). */
+  autoQuality = true;
+  /** Profil wydajności wybrany przez automat (HUD/dziennik). */
+  perfLabel = 'pełny';
   private raf = 0;
   private lastTime = performance.now();
   private hudTimer = 0;
@@ -895,6 +926,13 @@ export class Game {
     this.remoteGroup = new THREE.Group();
     this.remoteGroup.name = 'gracze';
     this.scene.add(this.remoteGroup);
+    // 2.28: pasmo LOD rysujemy przed pełnymi chunkami (renderOrder −2),
+    // z włączoną mgłą, żeby zlewało się z horyzontem. Jeden materiał na
+    // wszystkie kafle – kolory są w wierzchołkach, więc nie ma tekstur.
+    this.lodMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: true });
+    this.lodGroup.name = 'teren-w-oddali';
+    this.lodGroup.renderOrder = -2;
+    this.scene.add(this.lodGroup);
     this.scene.fog = new THREE.Fog(0x88bbff, 20, this.renderDistance * CS);
 
     const atlas = getAtlas();
@@ -1895,6 +1933,114 @@ export class Game {
     this.offsets = [];
     for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) if (dx * dx + dz * dz <= R * R + 1) this.offsets.push([dx, dz]);
     this.offsets.sort((a, b) => a[0] * a[0] + a[1] * a[1] - (b[0] * b[0] + b[1] * b[1]));
+    // 2.28: nowa kolejka – wymuś przeliczenie pod kątem patrzenia.
+    this.chunkOrder = this.offsets.slice();
+    this.chunkOrderTimer = 0;
+  }
+
+  /**
+   * 2.28 (odpowiednik Sodium): chunki w polu widzenia i blisko gracza budują
+   * się pierwsze. Sortowanie jest leniwe – tylko po obrocie o ~0,4 rad albo
+   * co pół sekundy, bo sortowanie kilkuset par na każdą klatkę zjadłoby zysk.
+   */
+  private refreshChunkOrder(dt: number) {
+    if (!this.offsets.length) return;
+    this.chunkOrderTimer -= dt;
+    const dyaw = Math.abs(this.yaw - this.chunkOrderYaw);
+    const turned = !(dyaw < 0.4) && !(dyaw > Math.PI * 2 - 0.4);
+    if (!turned && this.chunkOrderTimer > 0) return;
+    this.chunkOrderTimer = 0.5;
+    this.chunkOrderYaw = this.yaw;
+    const fx = -Math.sin(this.yaw);
+    const fz = -Math.cos(this.yaw);
+    this.chunkOrder = sortChunkOffsets(this.offsets, fx, fz);
+  }
+
+  /** 2.28: zasięg pasma LOD w blokach (0 = wyłączone / Nether). */
+  lodFar(): number {
+    if (!this.lodEnabled || this.isInNether) return 0;
+    return lodRange(this.renderDistance, CS) * this.governor.profile.lodScale;
+  }
+
+  /** Włącz/wyłącz teren w oddali (ekran ustawień). */
+  setLodEnabled(on: boolean) {
+    if (this.lodEnabled === on) return;
+    this.lodEnabled = on;
+    this.clearLod();
+  }
+
+  private clearLod() {
+    for (const m of this.lodTiles) {
+      this.lodGroup.remove(m);
+      m.geometry.dispose();
+    }
+    this.lodTiles = [];
+    this.lodKey = '';
+  }
+
+  /**
+   * 2.28 (Distant Horizons): tani teren **za horyzontem**.
+   *
+   * Kafle powstają partiami (inaczej pierwszy skok o 128 bloków zamroziłby
+   * klatkę), a stare znikają od razu. Siatki są obniżone o 1,6 bloku, więc
+   * pod prawdziwymi chunkami chowają się w depth-buforze i nie migoczą.
+   */
+  private updateLod(dt: number) {
+    this.lodTimer -= dt;
+    if (this.lodTimer > 0) return;
+    this.lodTimer = 0.5;
+    const outer = this.lodFar();
+    if (!outer || this.loadingProgress < 0.9) {
+      if (this.lodTiles.length) this.clearLod();
+      return;
+    }
+    const px = this.body.pos.x, pz = this.body.pos.z;
+    const inner = this.renderDistance * CS;
+    const ring = lodRing(px, pz, inner, outer, LOD_TILE);
+    // Pierścień zmienia się dopiero po przekroczeniu granicy kafla (albo
+    // zasięgu), więc klucz opiera się na pozycji kafla, nie na pikselach.
+    const key = Math.floor(px / LOD_TILE) + ',' + Math.floor(pz / LOD_TILE) + ':' + Math.round(outer);
+    if (key === this.lodKey) return;
+    const want = new Map<string, number>();
+    for (const r of ring) want.set(r.ox + ',' + r.oz, r.dist);
+
+    // Usuń kafle, których już nie ma w pierścieniu.
+    if (this.lodTiles.length) {
+      const kept: THREE.Mesh[] = [];
+      for (const m of this.lodTiles) {
+        if (want.has(m.userData.k as string)) kept.push(m);
+        else {
+          this.lodGroup.remove(m);
+          m.geometry.dispose();
+        }
+      }
+      this.lodTiles = kept;
+    }
+    const have = new Set(this.lodTiles.map((m) => m.userData.k as string));
+    let budget = 12;
+    for (const r of ring) {
+      const k = r.ox + ',' + r.oz;
+      if (have.has(k)) continue;
+      if (budget-- <= 0) break;
+      const t = buildLodTile(this.world, r.ox, r.oz, LOD_TILE, lodStepFor(r.dist), 1.6);
+      // Kolory wierzchołków idą do GPU jako liniowe – bez tej korekty
+      // horyzont byłby wyprany (renderer robi konwersję sRGB na wyjściu).
+      for (let i = 0; i < t.colors.length; i++) t.colors[i] = Math.pow(t.colors[i], 2.2);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(t.positions, 3));
+      g.setAttribute('color', new THREE.BufferAttribute(t.colors, 3));
+      g.setIndex(new THREE.BufferAttribute(t.indices, 1));
+      g.computeBoundingSphere();
+      const mesh = new THREE.Mesh(g, this.lodMat);
+      mesh.userData.k = k;
+      mesh.renderOrder = -2;
+      mesh.frustumCulled = true;
+      this.lodGroup.add(mesh);
+      this.lodTiles.push(mesh);
+    }
+    // Klucz zapamiętujemy tylko po zbudowaniu kompletu – inaczej budżet
+    // przerwałby pracę i kolejne wywołanie uznałoby, że nic nie zostało.
+    this.lodKey = this.lodTiles.length >= want.size ? key : '';
   }
 
   setRenderDistance(r: number) {
@@ -1913,6 +2059,8 @@ export class Game {
     clouds?: boolean;
     dynamicResolution?: boolean;
     fpsCap?: number;
+    lod?: boolean;
+    autoQuality?: boolean;
     chunkBudgetMs?: number;
     chunksPerFrame?: number;
     unloadMargin?: number;
@@ -1940,6 +2088,12 @@ export class Game {
       }
     }
     if (o.fpsCap !== undefined) this.fpsCap = o.fpsCap > 0 ? Math.max(10, Math.min(240, o.fpsCap)) : 0;
+    if (o.lod !== undefined) this.setLodEnabled(o.lod);
+    if (o.autoQuality !== undefined && o.autoQuality !== this.autoQuality) {
+      this.autoQuality = o.autoQuality;
+      this.governor.reset();
+      this.perfLabel = 'pełny';
+    }
     if (o.chunkBudgetMs !== undefined) this.gfx.chunkBudgetMs = Math.max(3, Math.min(24, o.chunkBudgetMs));
     if (o.chunksPerFrame !== undefined) this.gfx.chunksPerFrame = Math.max(1, Math.min(6, o.chunksPerFrame));
     if (o.unloadMargin !== undefined) this.gfx.unloadMargin = Math.max(1, Math.min(4, o.unloadMargin));
@@ -3894,7 +4048,9 @@ export class Game {
     // dużych chunków naraz potrafiło zamrozić klatkę na kilkadziesiąt ms.
     const t0 = performance.now();
     // 2.8: na słabszym sprzęcie budujemy mniej na klatkę, żeby nie „szarpało”.
-    const adaptive = this.fps > 0 && this.fps < 28 ? 0.65 : 1;
+    // 2.28: automat jakości dokłada swoje, gdy klatki są wyraźnie za długie.
+    const adaptive = (this.fps > 0 && this.fps < 28 ? 0.65 : 1) * this.governor.profile.chunkScale;
+    this.refreshChunkOrder(1 / Math.max(1, this.fps || 60));
     let rebuilt = 0;
     for (const k of this.world.dirty) {
       const c = this.world.chunks.get(k);
@@ -3912,7 +4068,8 @@ export class Game {
     // pojawił się szybko; w trakcie gry liczy się przede wszystkim płynność.
     const budget = this.gfx.chunkBudgetMs * adaptive * (loading ? 1.8 : 1);
     const perFrame = this.gfx.chunksPerFrame * (loading ? 2 : 1);
-    for (const [dx, dz] of this.offsets) {
+    const order = this.chunkOrder.length ? this.chunkOrder : this.offsets;
+    for (const [dx, dz] of order) {
       total++;
       const c = this.world.chunks.get(World.key(pcx + dx, pcz + dz));
       if (c && c.built) { done++; continue; }
@@ -5301,6 +5458,16 @@ export class Game {
       }
     }
 
+    // 2.28 (ImmediatelyFast + Nvidium): jeden pomiar na klatkę, automat
+    // jakości decyduje o budżecie budowy i zasięgu LOD. Koszt: dwie liczby.
+    this.frameNo++;
+    if (this.autoQuality) {
+      this.perfLabel = this.governor.update(dt * 1000, dt).label;
+    } else if (this.governor.profile.label !== 'pełny') {
+      this.governor.reset();
+      this.perfLabel = 'pełny';
+    }
+
     const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
@@ -5339,6 +5506,7 @@ export class Game {
       if (this.saveTimer > 30) { this.saveTimer = 0; this.save(); }
     }
     this.updateChunks();
+    this.updateLod(dt);
     this.uTime.value += dt;
     this.updateCamera(dt);
     this.updateSky();
@@ -5758,8 +5926,21 @@ export class Game {
     const p = this.body.pos;
     const dl = this.daylight();
     const peaceful = this.mode === 'creative';
-    for (const m of this.mobs) {
-      m.update(dt, this.world, p, this.mobAttackPlayer, this.mobShootPlayer, peaceful, this.mobs, this.wolfBite);
+    for (let mi = 0; mi < this.mobs.length; mi++) {
+      const m = this.mobs[mi];
+      // 2.28 (Entity Culling): moby dalej niż 48 bloków aktualizują się co
+      // 2–6 klatek. Ruch liczymy z dt pomnożonym przez interwał, więc nic
+      // nie „zwalnia” – po prostu próbkujemy rzadziej i taniej.
+      const dist = m.body.pos.distanceTo(p);
+      let mdt = dt;
+      let skip = false;
+      if (this.entityCulling && !m.dead && dist > 48) {
+        const iv = Math.max(1, Math.round(entityTickInterval(dist) * this.governor.profile.entityScale));
+        skip = (this.frameNo + mi) % iv !== 0;
+        mdt = dt * iv;
+      }
+      if (skip) continue;
+      m.update(mdt, this.world, p, this.mobAttackPlayer, this.mobShootPlayer, peaceful, this.mobs, this.wolfBite);
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
         if (m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
@@ -5994,8 +6175,20 @@ export class Game {
         fog.color.g *= 1 - 0.18 * fogMix;
         fog.color.b *= 1 - 0.06 * fogMix;
       }
-      fog.near = this.renderDistance * CS * (raining ? 0.28 : 0.45);
-      fog.far = this.renderDistance * CS * (raining ? 0.7 : 0.95);
+      // 2.28: przy włączonym LOD mgła idzie aż po jego krawędź – inaczej
+      // horyzont kończyłby się na 96 blokach i teren w oddali byłby szary.
+      const far = this.lodFar();
+      if (far > 0) {
+        fog.near = this.renderDistance * CS * (raining ? 0.3 : 0.5);
+        fog.far = far * (raining ? 0.85 : 1);
+      } else {
+        fog.near = this.renderDistance * CS * (raining ? 0.28 : 0.45);
+        fog.far = this.renderDistance * CS * (raining ? 0.7 : 0.95);
+      }
+      // 2.28: kafle LOD mają kolory w wierzchołkach, więc nie łapią
+      // oświetlenia sceny – przyciemniamy je razem z dniem i deszczem,
+      // inaczej nocą horyzont świeciłby jak w południe.
+      if (this.lodMat) this.lodMat.color.setScalar((0.15 + dl * 0.85) * (raining ? 0.78 : 1));
       this.scene.background = sky;
     }
 
@@ -6116,6 +6309,8 @@ export class Game {
       level: this.xp.info().level,
       xpFrac: (() => { const i = this.xp.info(); return i.need > 0 ? i.inLevel / i.need : 0; })(),
       armor: this.armor.map((s) => (s ? { ...s } : null)),
+      perf: this.perfLabel as 'oszczędny' | 'zrównoważony' | 'pełny',
+      lodRange: Math.round(this.lodFar()),
       armorPoints: armorPoints(this.armor),
       mobHint: this.mobHint(),
       village: this.villageName,
@@ -6845,6 +7040,10 @@ export class Game {
     if (this.skyDome) (this.skyDome.material as THREE.Material).dispose();
     for (const mat of this.materials) mat.dispose();
     this.materials = [];
+    // 2.28: pasmo LOD ma własny materiał (bez tekstur) – zwalniamy je razem
+    // ze sceną, inaczej każde wejście do świata zostawiałoby siatki w GPU.
+    this.clearLod();
+    this.lodMat?.dispose();
     this.handMat.dispose();
     this.dropMat.dispose();
     this.arrowMat.dispose();

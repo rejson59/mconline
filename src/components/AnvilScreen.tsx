@@ -1,61 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Game } from '../game/engine';
-import { stackTooltip, TooltipBody } from '../utils/tooltip';
-import type { Stack } from '../game/inventory';
 import { displayName } from '../game/items';
-import Slot from './Slot';
-import CloseButton from './CloseButton';
+import { ANVIL, CONTAINER, containerInvSlot } from '../game/containerLayout';
+import { guiSprite } from '../game/art/uiSprites';
+import { GuiInventory, GuiOverlay, GuiSlot, GuiWindow, guiText, useCursorPos, useGuiScale } from './GuiContainer';
 
 /**
- * 2.3 „Wyprawa i ratunek” – kowadło.
+ * 2.28: kowadło 1:1 jak `AnvilScreen` z Minecrafta.
  *
- * Dwa sloty wejściowe i jeden wynik. Reguły (scalanie, przemianowywanie,
- * koszt poziomów) żyją w game/anvil.ts, ekran tylko je pokazuje.
+ * Panel `gui/container/anvil.png` (176 × 166), dwa sloty wejściowe i wynik
+ * dokładnie tam, gdzie w wanilii, pole nazwy na tle `anvil/text_field.png`
+ * i koszt w poziomach pod wynikiem – zielony, gdy gracz ma dość doświadczenia,
+ * czerwony, gdy brakuje. Reguły (scalanie, przemianowywanie, koszt) dalej
+ * żyją w `game/anvil.ts`; ekran tylko je pokazuje.
  */
-function LabeledSlot({
-  stack,
-  icons,
-  onClick,
-  onHover,
-  label,
-  empty,
-}: {
-  stack: Stack | null;
-  icons: Record<number, string>;
-  onClick?: (right: boolean) => void;
-  onHover?: (name: string | null) => void;
-  label?: string;
-  empty?: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <Slot stack={stack} icons={icons} onClick={onClick} onHover={() => onHover?.(stackTooltip(stack, empty ?? ''))} imgSize={34} showCount />
-      {label && <div className="text-center text-[11px] text-[#333]">{label}</div>}
-    </div>
-  );
-}
-
 export default function AnvilScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
   const [, setTick] = useState(0);
-  const [mouse, setMouse] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<string | null>(null);
-  const inv = game.inventory;
+  const mouse = useCursorPos();
+  const scale = useGuiScale(CONTAINER.maxScale);
   const anvil = game.currentAnvil();
   const offer = game.anvilOffer();
   const affordable = game.canAnvilTake();
-
-  useEffect(() => {
-    const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    // 2.9: na dotyku nie ma „mousemove” – ikona trzymanego przedmiotu
-    // zostawała w lewym górnym rogu. Tapnięcie też ustawia jej pozycję.
-    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    window.addEventListener('mousemove', mm);
-    window.addEventListener('pointerdown', pt, true);
-    return () => {
-      window.removeEventListener('mousemove', mm);
-      window.removeEventListener('pointerdown', pt, true);
-    };
-  }, []);
 
   const refresh = () => {
     setTick((t) => t + 1);
@@ -63,99 +29,102 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
   };
   if (!anvil) return null;
 
+  const field = guiSprite('anvil_text_field');
+  const cost = offer.cost;
+  const slots = Array.from({ length: 36 }, (_, i) => containerInvSlot(i));
+  const placeholder = anvil.a ? displayName(anvil.a.id) : '';
+  const title = offer.label
+    ? `${offer.label}${cost > 0 && !affordable ? ' — za mało poziomów' : ''}`
+    : 'Połącz dwa przedmioty tego samego typu, żeby naprawić narzędzie.';
+
   return (
-    <div
-      className="absolute inset-0 flex items-center justify-center p-2"
-      style={{ background: 'rgba(0,0,0,0.55)' }}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) game.closeInventory();
-      }}
-    >
-      <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
-      <div className="mc-panel flex max-h-full w-[min(430px,96vw)] flex-col gap-3 overflow-y-auto p-4">
-        <div className="flex items-center justify-between">
-          <div className="text-lg font-semibold">Kowadło</div>
-          <div className="text-xs text-[#444]">Poziom: {game.xp.info().level}</div>
-        </div>
+    <>
+    <GuiWindow sprite={ANVIL.sprite} title={ANVIL.title} scale={scale} onClose={() => game.closeInventory()}>
+      {/* Tło pola nazwy – waniliowy sprite 110 × 16 z paczki. */}
+      <div
+        style={{
+          position: 'absolute', left: ANVIL.field.x, top: ANVIL.field.y,
+          width: ANVIL.field.w, height: ANVIL.field.h,
+          backgroundImage: field ? `url(${field})` : undefined,
+          backgroundSize: '100% 100%', backgroundColor: field ? undefined : '#000',
+          imageRendering: 'pixelated', pointerEvents: 'none',
+        }}
+      />
+      <input
+        aria-label="Nazwa przedmiotu"
+        maxLength={32}
+        value={anvil.name}
+        placeholder={placeholder}
+        title="Nazwa przedmiotu (max 28 znaków, 1 poziom doświadczenia)"
+        onChange={(e) => { game.setAnvilName(e.target.value); refresh(); }}
+        onKeyDown={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute', left: ANVIL.name.x, top: ANVIL.name.y,
+          width: ANVIL.name.w, height: ANVIL.name.h,
+          background: 'transparent', border: 'none', outline: 'none',
+          color: '#e0e0e0', fontSize: 8, lineHeight: '12px', padding: 0,
+          fontFamily: 'inherit', textShadow: '1px 1px 0 #000',
+        }}
+      />
 
-        <div className="flex items-end justify-center gap-3">
-          <LabeledSlot
-            stack={anvil.a}
-            icons={icons}
-            label="Przedmiot"
-            empty="Włóż przedmiot (PPM na kowadle z nim w ręku)"
-            onHover={setHover}
-            onClick={(r) => { game.clickAnvilSlot('a', r); refresh(); }}
-          />
-          <LabeledSlot
-            stack={anvil.b}
-            icons={icons}
-            label="Do połączenia"
-            empty="Drugi przedmiot tego samego typu"
-            onHover={setHover}
-            onClick={(r) => { game.clickAnvilSlot('b', r); refresh(); }}
-          />
-          <div className="mb-6 text-2xl text-[#333]">→</div>
-          <LabeledSlot
-            stack={offer.out}
-            icons={icons}
-            label={offer.cost ? `Wynik · ${offer.cost} pkt` : 'Wynik'}
-            onHover={setHover}
-            onClick={() => { if (affordable && game.takeAnvilResult()) refresh(); }}
-          />
-        </div>
+      {/* Sloty: przedmiot + drugi przedmiot + wynik. */}
+      <GuiSlot
+        x={ANVIL.slotA.x}
+        y={ANVIL.slotA.y}
+        stack={anvil.a}
+        icons={icons}
+        onHover={setHover}
+        onClick={(r) => { game.clickAnvilSlot('a', r); refresh(); }}
+      />
+      <GuiSlot
+        x={ANVIL.slotB.x}
+        y={ANVIL.slotB.y}
+        stack={anvil.b}
+        icons={icons}
+        onHover={setHover}
+        onClick={(r) => { game.clickAnvilSlot('b', r); refresh(); }}
+      />
+      <GuiSlot
+        x={ANVIL.output.x}
+        y={ANVIL.output.y}
+        stack={offer.out}
+        icons={icons}
+        dim={!!offer.out && !affordable}
+        onHover={(t) => {
+          if (!offer.out) setHover(t);
+          else setHover(`${t ?? ''}\n${cost > 0 ? `Koszt: ${cost} poziomów` : 'Bez kosztu'}`.trim());
+        }}
+        onClick={() => { if (affordable && game.takeAnvilResult()) refresh(); }}
+      />
 
-        {offer.label && (
-          <div className="text-center text-xs text-[#333]">
-            {offer.label}
-            {offer.cost > 0 && !affordable && <span className="ml-1 font-bold text-[#a02020]">— za mało poziomów</span>}
-          </div>
-        )}
-
-        <label className="flex flex-col gap-1 text-xs text-[#333]">
-          <span>Nazwa przedmiotu (max 28 znaków, 1 poziom doświadczenia)</span>
-          <input
-            className="mc-input"
-            type="text"
-            value={anvil.name}
-            maxLength={32}
-            placeholder={anvil.a ? displayName(anvil.a.id) : '…'}
-            onChange={(e) => { game.setAnvilName(e.target.value); refresh(); }}
-          />
-        </label>
-
-        <div className="max-w-[380px] text-xs text-[#333]">
-          Dwa zniszczone narzędzia tego samego typu można połączyć: wytrzymałości się sumują, a zaklęcia zachowują najlepszy poziom. W polu nazwy nadaj przedmiotowi własne imię.
-        </div>
-
-        <div className="grid grid-cols-9">
-          {inv.slots.map((s, i) => (
-            <Slot
-              key={i}
-              stack={s}
-              icons={icons}
-              onHover={setHover}
-              onClick={(r) => {
-                inv.clickSlot(i, r);
-                refresh();
-              }}
-            />
-          ))}
-        </div>
-      </div>
-      {hover && !inv.cursor && (
-        <div className="pointer-events-none fixed z-50 max-w-[320px] px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', whiteSpace: 'pre-line' }}>
-          <TooltipBody text={hover} />
-        </div>
+      {/* Koszt w poziomach – wanilia rysuje go pod wynikiem, przy prawej. */}
+      {cost > 0 && (
+        <span
+          style={{
+            ...guiText(affordable ? '#80ff20' : '#ff6060'),
+            position: 'absolute', right: 176 - ANVIL.cost.right, top: ANVIL.cost.y,
+            textShadow: '1px 1px 0 #3f3f3f',
+          }}
+        >
+          {cost}
+        </span>
       )}
-      {inv.cursor && (
-        <div className="pointer-events-none fixed z-50" style={{ left: mouse.x - 17, top: mouse.y - 17 }}>
-          <img src={icons[inv.cursor.id]} width={34} height={34} className="pixelated" />
-          {inv.cursor.count > 1 && <span className="mc-count">{inv.cursor.count}</span>}
-        </div>
-      )}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm mc-text opacity-80">E / Esc – zamknij</div>
-    </div>
+
+      {/* Krótki opis efektu – zamiast dużego bloku tekstu z poprzedniej wersji. */}
+      <span
+        style={{
+          ...guiText('#5a5a5a'),
+          position: 'absolute', left: ANVIL.slotA.x, top: 74,
+          maxWidth: 140, whiteSpace: 'normal', lineHeight: '9px',
+        }}
+        title={title}
+      >
+        {offer.label ?? ''}
+      </span>
+
+      <GuiInventory game={game} icons={icons} slots={slots} onHover={setHover} onChange={refresh} />
+    </GuiWindow>
+    <GuiOverlay game={game} icons={icons} hover={hover} mouse={mouse} />
+    </>
   );
 }

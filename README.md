@@ -1,6 +1,20 @@
-# BlockCraft 2.27 🚀
+# BlockCraft 2.28 🚀
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 2.28 „Więcej FPS i okna jak w grze” ⚡ 🖥️
+
+Wbudowane odpowiedniki modów wydajnościowych – **Distant Horizons, Sodium, Entity Culling, ImmediatelyFast i Nvidium** – plus **kowadło, stół zaklęć, statyw alchemiczny i piec 1:1** z Minecrafta.
+
+* **Teren za horyzontem (Distant Horizons).** Za pełnymi chunkami rysujemy tanie pasmo kafli LOD: siatka 128 × 128 bloków próbkuje generator co 4–16 bloków (im dalej, tym rzadziej), dostaje kolory biomów, cieniowanie zboczy i śnieg na szczytach. Zasięg to `max(CS × (R + 2), CS × R × 4)`, czyli przy zasięgu 6 chunków **384 bloki** zamiast 96 – z góry widać góry i morza, a koszt to kilkanaście tysięcy trójkątów i ~40 draw calli. Kafle są obniżone o 1,6 bloku, więc chowają się pod prawdziwym terenem i nie migoczą; budują się partiami po 12, żeby nie zamrozić klatki.
+* **Sodium: kolejność budowy wg patrzenia.** Kolejka chunków jest sortowana po odległości **oraz** kierunku patrzenia (`hypot + (1 − facing) × 0,9`), więc teren w polu widzenia powstaje pierwszy. Sortowanie przelicza się dopiero po obrocie o ~0,4 rad albo co 0,5 s – sortowanie 169 par na każdą klatkę zjadłoby cały zysk.
+* **Entity Culling.** Moby dalej niż 48 bloków aktualizują się co 2–6 klatek, a ruch liczymy z `dt × interwał`, więc nic nie zwalnia – po prostu próbkujemy rzadziej. Ticki są rozłożone po indeksie moba, żeby nie wypadały wszystkie w jednej klatce.
+* **ImmediatelyFast / Nvidium: automat jakości.** `FrameGovernor` mierzy czas klatki (EMA 0,08) i po 1,5 s złych klatek schodzi z profilu `pełny → zrównoważony → oszczędny` (budżet budowy × 0,8 / × 0,55, zasięg LOD × 0,85 / × 0,6, interwał mobów × 1,5 / × 2), a po 3 s płynnej gry wraca. W opcjach: „Teren w oddali (LOD)” i „Automat jakości”.
+* **Kowadło 1:1 (`AnvilScreen`).** Panel `anvil.png` 176 × 166, sloty (27, 47), (76, 47) i wynik (134, 47), pole nazwy 103 × 12 na (62, 24) na tle `text_field` (110 × 16), koszt poziomów pod wynikiem – zielony `#80ff20`, czerwony `#ff6060`.
+* **Stół zaklęć 1:1.** Slot przedmiotu (15, 47) i lazurytu (35, 47), trzy przyciski ofert `enchantment_slot` (108 × 19) na wysokościach 13 / 32 / 51, warianty `_disabled` i `_highlighted` z paczki.
+* **Statyw alchemiczny 1:1.** Trzy fiolki w literę V – (56, 51), (79, 58), (102, 51), składnik (79, 17), różdżka (17, 17), pęcherzyki `bubbles` (12 × 29) rosnące od dołu, postęp `brew_progress` (9 × 28) i pasek paliwa `fuel_length` (18 × 4) na (60, 44).
+* **Piec 1:1.** Surowiec (56, 17), paliwo (56, 53), wynik (116, 31), płomień `lit_progress` (14 × 14) na (56, 36) i strzałka `burn_progress` (24 × 16) na (79, 34).
+* **Testy.** `npm test` to **2033 kontrole silnika + 229 testów UI**. Nowa sekcja 2.28 sprawdza budżet klatki, kolejność budowy, interwały ticków, progi automatu, siatkę i pierścień LOD (17 × 17 wierzchołków kafla, wysokości z generatora, sortowanie po dystansie) oraz każdą współrzędną czterech nowych okien i obecność 17 widżetów w paczce. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
 
 ## Wersja 2.27 „Handel jak w grze, mieszkańcy bez drżenia” 🧑‍🌾 🤝
 

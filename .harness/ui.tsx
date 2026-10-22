@@ -272,7 +272,7 @@ section('menus: static render');
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
   check('title is rendered', menu.includes('BLOCKCRAFT'));
-  check('main menu shows the current release', menu.includes('WERSJA 2.27') && menu.includes(GAME_RELEASE_NAME));
+  check('main menu shows the current release', menu.includes('WERSJA 2.28') && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
   check('options button', menu.includes('Opcje'));
@@ -437,14 +437,18 @@ section('enchant screen: static render');
   const html = renderToStaticMarkup(
     <EnchantScreen game={game as never} icons={{}} onChange={() => {}} />
   );
-  check('screen title renders', html.includes('Stół zaklęć'));
+  // 2.28: ekran to teraz waniliowy panel `enchanting_table.png` z trzema
+  // przyciskami ofert (108 × 19) na wysokościach 13 / 32 / 51.
+  check('screen title renders', html.includes('Zaklinanie'));
   check('shelf counter shows', html.includes('Biblioteczki: 15/15'));
   check('player level shows', html.includes('Poziom: 22'));
-  check('the item sits in the slot', html.includes('Diamentowy miecz') || html.includes('img'));
+  check('the vanilla enchanting panel is drawn', html.includes(guiSprite('enchanting_gui') ?? 'NO-PANEL'));
   check('three offers listed', options.length === 3);
-  for (const opt of options) check(`offer ${opt.ench} rendered`, html.includes(opt.cost + ' pkt'));
-  check('lapis cost shown', html.includes('1◆'));
-  check('inventory grid rendered', html.includes('mc-slot'));
+  for (const opt of options) check(`offer ${opt.ench} rendered`, html.includes(String(opt.cost)));
+  check('offer buttons use the vanilla enchantment slot sprite', html.includes(guiSprite('enchant_slot') ?? 'NO-SLOT'));
+  const invSlots = (html.match(/role="button"/g) ?? []).length;
+  check('inventory grid rendered', invSlots >= 36, `${invSlots} slotów`);
+  check('lapis slot shows the lapis stack', html.includes('Lazuryt'));
 }
 
 
@@ -477,13 +481,14 @@ section('2.3: anvil screen: static render');
     <AnvilScreen game={make(12, { id: I.IRON_PICK, count: 1, dur: 40 }, { id: I.IRON_PICK, count: 1, dur: 25 }) as never} icons={{}} onChange={() => {}} />
   );
   check('the anvil panel has a title', merge.includes('Kowadło'));
-  check('the player level is shown', merge.includes('Poziom: 12'));
+  check('the panel is the vanilla anvil texture', merge.includes(guiSprite('anvil_gui') ?? 'NO-PANEL'));
   check('the merge is described', merge.includes('Scal dwa przedmioty'));
-  check('the result slot shows its cost', merge.includes('Wynik · 1 pkt'));
-  check('both input slots are rendered', (merge.match(/mc-slot/g) ?? []).length >= 38);
+  check('the result slot shows its cost', merge.includes('>1</span>') && merge.includes('#80ff20'));
+  check('both input slots are rendered', (merge.match(/role="button"/g) ?? []).length >= 36);
   check('the durability bar is drawn', merge.includes('dur-bar'));
-  check('the name field is rendered', merge.includes('max 28 znaków'));
-  check('the how-to text is on screen', merge.includes('wytrzymałości się sumują'));
+  check('the name field is rendered', merge.includes('Nazwa przedmiotu'));
+  check('the name field has the vanilla background', merge.includes(guiSprite('anvil_text_field') ?? 'NO-FIELD'));
+  check('the hint under the slots describes the action', merge.includes('Scal dwa przedmioty'));
 
   const poor = renderToStaticMarkup(
     <AnvilScreen game={make(0, { id: I.IRON_PICK, count: 1, dur: 40 }, { id: I.IRON_PICK, count: 1, dur: 25 }) as never} icons={{}} onChange={() => {}} />
@@ -516,9 +521,9 @@ section('2.4: brewing screen');
   const fresh = emptyBrewing(0, 1, 0);
   const brew = renderToStaticMarkup(<BrewingScreen game={makeBrewing(fresh) as never} icons={{}} onChange={() => {}} />);
   check('the brewing panel has a title', brew.includes('Statyw alchemiczny'));
-  check('it lists three bottles', (brew.match(/Fiolka \d/g) ?? []).length === 3);
-  check('it shows the ingredient and fuel slots', brew.includes('Składnik') && brew.includes('Paliwo'));
-  check('a fresh stand asks for fuel', brew.includes('Dość płomiennej różdżki'));
+  check('the panel is the vanilla brewing texture', brew.includes(guiSprite('brewing_gui') ?? 'NO-PANEL'));
+  check('it draws five slots (3 bottles + ingredient + fuel)', (brew.match(/role="button"/g) ?? []).length >= 41);
+  check('a fresh stand asks for fuel', brew.includes('Potrzebna płomienna różdżka'));
 
   const lit = emptyBrewing(0, 1, 0);
   lit.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
@@ -527,7 +532,9 @@ section('2.4: brewing screen');
   lit.progress = 4;
   const brewing = renderToStaticMarkup(<BrewingScreen game={makeBrewing(lit) as never} icons={{}} onChange={() => {}} />);
   check('a lit stand announces brewing', brewing.includes('Warzenie…'));
-  check('the fuel is counted', brewing.includes('2 × różdżka'));
+  check('the bubbles sprite is drawn while brewing', brewing.includes(guiSprite('brewing_bubbles') ?? 'NO-BUBBLES'));
+  check('the progress sprite is drawn', brewing.includes(guiSprite('brewing_progress') ?? 'NO-PROGRESS'));
+  check('the fuel bar is drawn', brewing.includes(guiSprite('brewing_fuel') ?? 'NO-FUEL'));
 
   const gone = { ...makeBrewing(fresh), currentBrewing: () => null };
   const nothing = renderToStaticMarkup(<BrewingScreen game={gone as never} icons={{}} onChange={() => {}} />);
@@ -566,7 +573,7 @@ section('2.3/2.4: journal chapter and menus');
   const menu = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('the menu announces the public server', menu.includes('Serwer publiczny'));
   // the splash line is picked at random, so check the fixed version badge instead
-  check('the menu names the current release', menu.includes('WERSJA 2.27'));
+  check('the menu names the current release', menu.includes('WERSJA 2.28'));
 }
 
 section('2.4: brewing rules');

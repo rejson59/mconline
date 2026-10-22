@@ -1,10 +1,18 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.27.0';
-export const GAME_RELEASE_NAME = 'Handel jak w grze, mieszkańcy bez drżenia';
+export const GAME_VERSION = '2.28.0';
+export const GAME_RELEASE_NAME = 'Więcej FPS i okna jak w grze';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.28: wbudowane „mody wydajności” i pozostałe okna 1:1 z Minecraftem.
+ * Teren w oddali (odpowiednik Distant Horizons) rysuje tanie pasmo kafli
+ * za horyzontem – widać góry i morza setki bloków dalej bez budowania
+ * pełnych chunków. Chunki powstają w kolejności patrzenia (Sodium),
+ * dalekie moby aktualizują się co kilka klatek (Entity Culling), a automat
+ * jakości pilnuje czasu klatki i sam zmniejsza budżet, gdy gra zwalnia
+ * (ImmediatelyFast/Nvidium). Kowadło, stół zaklęć, statyw alchemiczny
+ * i piec mają teraz prawdziwe panele z paczki i waniliowe współrzędne.
  * 2.27: stabilni mieszkańcy i okno handlu 1:1 z Minecraftem.
  * Mieszkaniec nie podskakuje już przy płocie i ścianie (skok miał czas
  * odnowienia, a sonda sięga od krawędzi ciała), przestał też trząść się
@@ -53,6 +61,30 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Teren za horyzontem',
+    text: 'Za pełnymi chunkami rysujemy teraz tanie pasmo terenu (LOD): siatka próbkuje generator świata co 4–16 bloków i dostaje kolory biomów, cieniowanie zboczy i śnieg na szczytach. Z góry widać góry i morza setki bloków dalej – zasięg to cztery razy zasięg renderowania, a koszt to kilkanaście tysięcy trójkątów. To odpowiednik moda Distant Horizons, włączany w opcjach („Teren w oddali”).',
+  },
+  {
+    title: 'Chunki budują się tam, gdzie patrzysz',
+    text: 'Kolejka budowy sortuje chunki po odległości i kierunku patrzenia – to, co jest przed graczem, powstaje pierwsze, a to, co za plecami, poczeka. Sortowanie przelicza się dopiero po obrocie o ~0,4 rad albo co pół sekundy, więc nie zjada klatek. Efekt jest taki jak w Sodium: nowy teren pojawia się w polu widzenia, zamiast losowo wokół gracza.',
+  },
+  {
+    title: 'Automat jakości i culling mobów',
+    text: 'Automat mierzy czas klatki i po 1,5 s zwolnień sam zmniejsza budżet budowania oraz zasięg LOD, a po 3 s płynnej gry wraca do pełnej jakości – bez skoków obrazu. Moby dalej niż 48 bloków aktualizują się co 2–6 klatek (Entity Culling), z ruchem liczonym z pełnym czasem, więc nic nie zwalnia – po prostu rzadziej próbkujemy. Razem: więcej FPS przy tym samym zasięgu.',
+  },
+  {
+    title: 'Kowadło jak w Minecrafcie',
+    text: 'Prawdziwy panel `anvil.png` 176 × 166, dwa sloty wejściowe i wynik na waniliowych współrzędnych, pole nazwy na tle `text_field` (110 × 16) i koszt w poziomach pod wynikiem – zielony, gdy stać, czerwony, gdy brakuje. Zniknęły duże opisy i etykiety – zostaje to, co w grze.',
+  },
+  {
+    title: 'Stół zaklęć, statyw i piec 1:1',
+    text: 'Stół zaklęć ma trzy przyciski ofert (108 × 19) na wysokościach 13 / 32 / 51, slot przedmiotu i lazurytu. Statyw alchemiczny rysuje pęcherzyki (12 × 29) rosnące od dołu, pionowy postęp warzenia (9 × 28) i pasek paliwa (18 × 4). Piec dostał płomień (14 × 14) i strzałkę postępu (24 × 16) prosto z paczki, a wszystkie cztery okna dzielą waniliową siatkę ekwipunku 9 × 3 + pasek skrótów.',
+  },
+  {
+    title: 'Testy i build',
+    text: 'Nowa sekcja testów 2.28 sprawdza budżet klatki, kolejność budowy chunków, interwały ticków mobów, progi automatu jakości, siatkę i pierścień LOD oraz każdą współrzędną nowych okien (sloty, pole nazwy, oferty, pącherzyki, płomień). `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.',
+  },
   {
     title: 'Mieszkańcy przestali drżeć',
     text: 'Mieszkaniec podskakiwał przy płocie i ścianie, bo skok dokładał się w każdej klatce — teraz ma własny czas odnowienia, a sonda przeszkody sięga od krawędzi ciała (wcześniej 0,8 bloku od środka przeskakiwało płot i kod „widział” powietrze). Jak w wanilii mieszkaniec i golem w ogóle nie skaczą: po prostu zawracają, i to najwyżej raz na 0,7 s.',

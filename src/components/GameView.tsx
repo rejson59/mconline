@@ -136,6 +136,8 @@ export default function GameView({
       clouds: effective.clouds,
       dynamicResolution: effective.dynamicResolution,
       fpsCap: effective.fpsCap,
+      lod: effective.lod,
+      autoQuality: effective.autoQuality,
       chunkBudgetMs: gfxPreset.chunkBudgetMs,
       chunksPerFrame: gfxPreset.chunksPerFrame,
       unloadMargin: gfxPreset.unloadMargin,

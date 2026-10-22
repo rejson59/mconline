@@ -28,6 +28,10 @@ export interface Settings {
   dynamicResolution: boolean;
   /** 0 = bez limitu; 30 oszczędza baterię na telefonach. */
   fpsCap: number;
+  /** 2.28: tani teren za horyzontem (odpowiednik Distant Horizons). */
+  lod: boolean;
+  /** 2.28: automat jakości – sam zmniejsza budżet, gdy klatki są za długie. */
+  autoQuality: boolean;
   viewBobbing: boolean;
   showFps: boolean;
 
@@ -63,6 +67,8 @@ export const DEFAULT_SETTINGS: Settings = {
   clouds: true,
   dynamicResolution: true,
   fpsCap: 0,
+  lod: true,
+  autoQuality: true,
   viewBobbing: true,
   showFps: false,
 
@@ -141,6 +147,8 @@ export function normalizeSettings(value: unknown): Settings {
     clouds: bool('clouds'),
     dynamicResolution: bool('dynamicResolution'),
     fpsCap: fps,
+    lod: bool('lod'),
+    autoQuality: bool('autoQuality'),
     viewBobbing: bool('viewBobbing'),
     showFps: bool('showFps'),
     touchMode,
