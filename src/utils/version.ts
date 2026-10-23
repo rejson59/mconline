@@ -1,10 +1,26 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.30.0';
-export const GAME_RELEASE_NAME = 'Ścieżka bez trzęsienia i golem, który oddaje';
+export const GAME_VERSION = '2.31.0';
+export const GAME_RELEASE_NAME = 'Owca z runem, dźwięki 1:1 i spokojna ścieżka';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.31: owca z runem na właściwej stronie, dźwięki 1:1 i spokojna ścieżka.
+ * Wełna owcy była doklejona pod korzeń modelu, który sam obraca się o 180°,
+ * i miała własny obrót – razem 360°, więc runo stało tyłem i czarna bryła
+ * zasłaniała pysk. Teraz wełna dziedziczy tylko obrót korzenia. Warstwa
+ * dźwięku dostała prawdziwą przestrzeń: każdy dźwięk liczy odległość od
+ * uszu gracza, cichnie liniowo do zera (16–24 bloki jak waniliowe
+ * `attenuation_distance`), przesuwa się w panoramie zależnie od obrotu
+ * kamery i ciemnieje filtrem dolnoprzepustowym. Każdy z 14 mobów ma własny
+ * głos (barwa, formanty, wibrato, szum oddechu, ziarna) w trzech wariantach
+ * – bezczynność, trafienie, śmierć – plus własny rodzaj stąpania, a moby
+ * wreszcie stawiają słyszalne kroki. Skrzynia skrzypi przy otwarciu
+ * i trzaśnie przy zamknięciu, metale dzwonią jak `block.metal`, a limiter
+ * na wyjściu chroni miks przed przesterowaniem. Auto-skok patrzy teraz
+ * tylko na powierzchnie WYŻSZE od stóp i pomija wszystko w zasięgu kroku
+ * 0,6 – wcześniej sonda brała `floor(stopa + 0,05)`, trafiała w blok
+ * ścieżki pod nogami i gracz podskakiwał bez przerwy.
  * 2.30: koniec trzęsienia na ścieżce, golem oddaje, płynni gracze.
  * Fizyka ląduje teraz na RZECZYWISTEJ powierzchni bryły (ścieżka 15/16,
  * grządka 15/16, płyta 1/2, łóżko 9/16) zamiast na górnej krawędzi całej
@@ -82,6 +98,22 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Owca z runem na właściwej stronie',
+    text: 'Runo było doklejone pod korzeń modelu, który sam obraca się o 180°, a miało jeszcze własny obrót – razem pełne 360°. Efekt: wełniana bryła stała tyłem i zasłaniała pysk, a wełniane nogi wyrastały z tyłu głowy. Teraz wełna dziedziczy wyłącznie obrót korzenia: runo otacza tułów (spuchnięte o 1,75 px z każdej strony), głowa ma własną czapkę z wełny, a pysk jest widoczny. Model zgadza się co do piksela z waniliowym `sheep.json` z 26.1.2.',
+  },
+  {
+    title: 'Głosy mobów 1:1 z grą',
+    text: 'Każdy z 14 mobów ma własny, syntezowany głos: świnia chrząka szybkim wibratem, owca beczy wolno (9 Hz), krowa ma długie, niskie „muu”, szkielet klika kośćmi, creeper syczy szumem bez tonu, a enderman „vwuuup” z powolnym atakiem. Do tego trzy warianty – bezczynność, trafienie i śmierć – oraz własny rodzaj stąpania (miękkie łapy, twarde, kości, metal, szlam). Moby wreszcie stawiają słyszalne kroki liczone z przebytej drogi, więc stojący mob nie stuka.',
+  },
+  {
+    title: 'Dźwięk w przestrzeni, skrzynia i metal',
+    text: 'Każdy dźwięk liczy teraz odległość od uszu gracza, cichnie do zera na 16–24 blokach, przesuwa się w panoramie zależnie od obrotu kamery i ciemnieje filtrem dolnoprzepustowym, gdy źródło jest daleko – dokładnie jak waniliowe `attenuation_distance`. Skrzynia skrzypi przy otwarciu i trzaśnie przy zamknięciu (i tylko wtedy – nie przy każdym innym oknie), a żelazo, złoto, kowadło, dzwon, latarnia i tory dzwonią jak `block.metal`. Limiter na wyjściu chroni miks przed przesterowaniem, gdy kilkanaście mobów gra naraz.',
+  },
+  {
+    title: 'Koniec podskoków na ścieżce',
+    text: 'Auto-skok sprawdzał `floor(stopa + 0,05)`. Odkąd fizyka stawia stopy dokładnie na 15/16 ścieżki, ten `floor` trafiał w blok POD nogami – gracz widział przeszkodę w każdej klatce i podskakiwał bez przerwy. Nowa sonda (`autoJumpAhead`) patrzy wyłącznie na powierzchnie wyższe od stóp, pomija wszystko w zasięgu kroku 0,6 (ścieżka, grządka, płyta, łóżko, schody) i sprawdza, czy nad przeszkodą jest miejsce na głowę. Skok włącza się tylko przy prawdziwym bloku – jak w wanilii.',
+  },
   {
     title: 'Koniec trzęsienia na ścieżce',
     text: 'Postać ląduje teraz na rzeczywistej powierzchni bryły, a nie na górnej krawędzi całej kratki. Ścieżka i grządka mają 15/16 bloku, więc wcześniej gracz i moby były co klatkę podnoszone o 1/16 i opadały – kamera dosłownie drgała. Teraz stopa staje dokładnie na 15/16, a wejście na płytę kończy się na 0,5 (wcześniej było 0,55 w górę i pół bloku spadania).',

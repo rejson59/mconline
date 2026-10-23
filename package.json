@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.30.0",
-  "description": "BlockCraft 2.30 „Ścieżka bez trzęsienia i golem, który oddaje” – polska gra sandboxowa w przeglądarce: dokładna fizyka półbloków, golem reagujący na strzały i wybuchy, płynni gracze w multiplayerze, publiczny serwer, bez instalacji i bez konta.",
+  "version": "2.31.0",
+  "description": "BlockCraft 2.31 „Owca z runem, dźwięki 1:1 i spokojna ścieżka” – polska gra sandboxowa w przeglądarce: naprawiona owca, wszystkie dźwięki mobów i bloków jak w Minecrafcie (synteza, zero assetów), auto-skok tylko przy prawdziwej przeszkodzie, publiczny serwer, bez instalacji i bez konta.",
   "type": "module",
   "license": "MIT",
   "keywords": [

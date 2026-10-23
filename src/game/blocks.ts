@@ -141,7 +141,7 @@ export interface BlockDef {
   render: RenderType;
   hardness: number; // -1 unbreakable
   drop: number; // -1 = nothing, otherwise block id
-  sound: 'stone' | 'wood' | 'grass' | 'sand' | 'glass' | 'cloth' | 'slime';
+  sound: 'stone' | 'wood' | 'grass' | 'sand' | 'glass' | 'cloth' | 'slime' | 'metal';
 }
 
 const defs: BlockDef[] = [];
@@ -282,8 +282,8 @@ for (let i = 0; i < 4; i++) {
 def(B.TRAP, 'Właz', T.trapdoor, { hardness: 3, sound: 'wood', opaque: false });
 def(B.FENCE, 'Płot', T.fence, { opaque: false, layer: 1, hardness: 2, sound: 'wood', render: 'fence' });
 def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { hardness: 2, sound: 'wood', opaque: false, layer: 1 });
-def(B.IRON_BLOCK, 'Blok żelaza', T.iron_block, { hardness: 5, sound: 'stone' });
-def(B.GOLD_BLOCK, 'Blok złota', T.gold_block, { hardness: 3, sound: 'stone' });
+def(B.IRON_BLOCK, 'Blok żelaza', T.iron_block, { hardness: 5, sound: 'metal' });
+def(B.GOLD_BLOCK, 'Blok złota', T.gold_block, { hardness: 3, sound: 'metal' });
 def(B.DIAMOND_BLOCK, 'Blok diamentu', T.diamond_block, { hardness: 5, sound: 'stone' });
 // 1.5 „Zaklęcia“: lapis, enchanting table, sugar cane
 def(B.LAPIS_ORE, 'Ruda lazurytu', T.lapis_ore, { hardness: 3, drop: -1 });
@@ -295,10 +295,10 @@ def(B.PATH, 'Ścieżka', [T.path_top, T.dirt, T.path_side], { hardness: 0.65, dr
 def(B.HAY, 'Bela siana', [T.hay_top, T.hay_top, T.hay_side], { hardness: 0.5, sound: 'grass' });
 // 2.20: latarnia i dzwon to sprite'y z ikon przedmiotów – jako pełne
 // sześciany dawały czarne kostki z żółtym środkiem.
-def(B.LANTERN, 'Latarnia', T.lantern_block, { hardness: 3.5, solid: false, opaque: false, layer: 1, render: 'lantern', sound: 'glass', drop: B.LANTERN });
+def(B.LANTERN, 'Latarnia', T.lantern_block, { hardness: 3.5, solid: false, opaque: false, layer: 1, render: 'lantern', sound: 'metal', drop: B.LANTERN });
 def(B.EMERALD_ORE, 'Ruda szmaragdu', T.emerald_ore, { hardness: 3 });
 def(B.EMERALD_BLOCK, 'Blok szmaragdu', T.emerald_block, { hardness: 5 });
-def(B.BELL, 'Dzwon', T.bell, { hardness: 5, solid: false, opaque: false, layer: 1, render: 'bell', sound: 'stone' });
+def(B.BELL, 'Dzwon', T.bell, { hardness: 5, solid: false, opaque: false, layer: 1, render: 'bell', sound: 'metal' });
 // 1.7 „Nether & Redstone“
 def(B.REDSTONE_ORE, 'Ruda czerwonego kamienia', T.redstone_ore, { hardness: 3, drop: -1 });
 def(B.REDSTONE_BLOCK, 'Blok czerwonego kamienia', T.redstone_block, { hardness: 5 });
@@ -362,10 +362,10 @@ def(B.CONCRETE_GREEN, 'Zielony beton', T.concrete_green, { hardness: 1.8 });
 def(B.CONCRETE_YELLOW, 'Żółty beton', T.concrete_yellow, { hardness: 1.8 });
 def(B.CONCRETE_BLACK, 'Czarny beton', T.concrete_black, { hardness: 1.8 });
 def(B.TERRACOTTA, 'Terakota', T.terracotta, { hardness: 1.25 });
-def(B.RAIL, 'Tory', T.rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'stone' });
-def(B.POWERED_RAIL, 'Zasilane tory', T.powered_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'stone' });
-def(B.DETECTOR_RAIL, 'Tory detekcyjne', T.detector_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'stone' });
-def(B.ANVIL, 'Kowadło', T.anvil, { hardness: 5, sound: 'stone' });
+def(B.RAIL, 'Tory', T.rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'metal' });
+def(B.POWERED_RAIL, 'Zasilane tory', T.powered_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'metal' });
+def(B.DETECTOR_RAIL, 'Tory detekcyjne', T.detector_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'metal' });
+def(B.ANVIL, 'Kowadło', T.anvil, { hardness: 5, sound: 'metal' });
 def(B.BREWING, 'Statyw alchemiczny', T.brewing_top, { hardness: 0.5, sound: 'stone', solid: false, opaque: false, layer: 1, render: 'brewing' });
 def(B.SHROOMLIGHT, 'Shroomlight', T.shroomlight, { hardness: 1, sound: 'wood' });
 def(B.BASALT, 'Bazalt', [T.basalt_top, T.basalt_top, T.basalt_side], { hardness: 1.25 });

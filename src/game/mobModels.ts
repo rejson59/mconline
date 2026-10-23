@@ -520,6 +520,9 @@ export function buildMobModel(model: MobModel, skinKey = model.skin, opts: { alp
 
   for (const p of model.parts) {
     const group = new THREE.Group();
+    // 2.31: części mają nazwy (jak `PartDefinition` w wanilii) – dzięki temu
+    // można je znaleźć w drzewie sceny, np. wełnianą głowę owcy.
+    group.name = p.name;
     const pivot = toWorld(p.pivot);
     // 2.23: części mogą być zagnieżdżone (`parent`) – tak jak
     // `PartDefinition` w wanilii. Dziecko dostaje pozycję względem zawiasu

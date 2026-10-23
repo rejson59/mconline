@@ -1,6 +1,16 @@
-# BlockCraft 2.30 🚀
+# BlockCraft 2.31 🚀
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 2.31 „Owca z runem, dźwięki 1:1 i spokojna ścieżka” 🐑 🔊 🛤️
+
+Trzy rzeczy z jednego zgłoszenia: owca z czarną bryłą zamiast pyska, dźwięki, które nie brzmiały jak Minecraft, i gracz podskakujący bez przerwy na ścieżce.
+
+* **Owca wreszcie wygląda jak owca.** Runo było doklejone pod korzeń modelu, który sam obraca się o 180°, a miało jeszcze **własny** obrót – razem pełne 360°. Efekt: wełniana bryła stała tyłem i zasłaniała pysk, a wełniane nogi wyrastały z tyłu głowy. Teraz `wool.root` dziedziczy wyłącznie obrót korzenia: runo otacza tułów (spuchnięte o waniliowe 1,75 px z każdej strony), głowa dostaje własną czapkę z wełny, a pysk jest widoczny. Model zgadza się co do piksela z `sheep.json` z 26.1.2 (tułów 8×16×6, głowa 6×6×8, nogi 4×12×4, prawe lustrzane).
+* **Głosy mobów 1:1 z grą.** Każdy z **14 mobów** ma własny, syntezowany głos: świnia chrząka szybkim wibratem (26 Hz), owca beczy wolno (9 Hz), krowa ma długie, niskie „muu” (0,95 s), szkielet klika kośćmi, creeper syczy szumem **bez tonu**, a enderman „vwuuup” z powolnym atakiem. Do tego trzy warianty – bezczynność, trafienie i śmierć – plus własny rodzaj stąpania (miękkie łapy, twarde, kości, metal, szlam). Moby wreszcie **stawiają kroki**: dystans liczony z przebytej drogi (nie z czasu), więc stojący mob nie stuka, a idący słychać z 12 bloków.
+* **Dźwięk w przestrzeni.** Każdy dźwięk liczy odległość od uszu gracza, cichnie liniowo do zera na 16–24 blokach, przesuwa się w panoramie zależnie od obrotu kamery (`StereoPanner`, prawa oś kamery) i ciemnieje filtrem dolnoprzepustowym, gdy źródło jest daleko – dokładnie jak waniliowe `attenuation_distance`. Skrzynia skrzypi przy otwarciu i trzaśnie przy zamknięciu (i **tylko** wtedy – wcześniej robiłaby to przy każdym innym oknie), a żelazo, złoto, kowadło, dzwon, latarnia i tory mają nowy materiał `metal`. Limiter na wyjściu chroni miks przed przesterowaniem, gdy kilkanaście mobów gra naraz.
+* **Koniec podskoków na ścieżce.** Auto-skok sprawdzał `floor(stopa + 0,05)`. Odkąd fizyka stawia stopy dokładnie na 15/16 ścieżki (2.30), ten `floor` trafiał w blok **pod nogami** – gracz widział przeszkodę w każdej klatce i podskakiwał bez przerwy. Nowa sonda `autoJumpAhead` patrzy wyłącznie na powierzchnie wyższe od stóp, pomija wszystko w zasięgu kroku 0,6 (ścieżka, grządka, płyta, łóżko, schody) i sprawdza, czy nad przeszkodą jest miejsce na głowę. Skok włącza się tylko przy prawdziwym bloku – jak w wanilii.
+* **Testy.** `npm test` to **2207 kontroli silnika + 234 testy UI**. Sekcja 2.31 sprawdza geometrię wełny (głowa po stronie pyska, spuchnięcie 1,75 px, brak podwójnego obrotu), auto-skok na ścieżce/płycie/łóżku (brak) i przed pełnym blokiem (jest), niskie sufity, obecność 14 głosów z trzema wariantami, formanty, wibrato, ziarna, tłumienie odległością, panoramę, filtr, dźwięki kroków, śmierci i skrzyni oraz materiał `metal`. `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
 
 ## Wersja 2.30 „Ścieżka bez trzęsienia i golem, który oddaje” 🧱 🤖 🎮
 
