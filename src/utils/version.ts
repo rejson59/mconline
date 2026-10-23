@@ -1,10 +1,22 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.29.0';
-export const GAME_RELEASE_NAME = 'Drzwi, łóżko i dźwięki jak w grze';
+export const GAME_VERSION = '2.30.0';
+export const GAME_RELEASE_NAME = 'Ścieżka bez trzęsienia i golem, który oddaje';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.30: koniec trzęsienia na ścieżce, golem oddaje, płynni gracze.
+ * Fizyka ląduje teraz na RZECZYWISTEJ powierzchni bryły (ścieżka 15/16,
+ * grządka 15/16, płyta 1/2, łóżko 9/16) zamiast na górnej krawędzi całej
+ * kratki – właśnie to podnosiło postać o 1/16 bloku co klatkę i trzęsło
+ * kamerą oraz mobami. Krok to waniliowe 0,6 bloku, więc wchodzi się też na
+ * łóżko, a wejście na płytę stawia stopy dokładnie na 0,5 (wcześniej
+ * postać podskakiwała o pół bloku). Strzały i wybuchy niosą informację,
+ * kto je spowodował, więc żelazny golem oddaje także po strzale z łuku
+ * i po TNT, a w pościgu omija przeszkody, zamiast wbijać się w drzewo.
+ * Zdalni gracze są interpolowani z bufora migawek (4 Hz na serwerze
+ * publicznym), więc awatar płynie, a nie skacze i zamiera. Moby patrzą
+ * na gracza także górą/dół i rozglądają się, gdy nikt nie jest blisko.
  * 2.29: drzwi i łóżko wreszcie działają jak w Minecrafcie, a dźwięki
  * brzmią jak wanilia. Drzwi mają prawdziwe modele z zawiasem (lewy i prawy),
  * skrzydło stoi po przeciwnej stronie niż patrzył gracz, otwarte obraca się
@@ -70,6 +82,22 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Koniec trzęsienia na ścieżce',
+    text: 'Postać ląduje teraz na rzeczywistej powierzchni bryły, a nie na górnej krawędzi całej kratki. Ścieżka i grządka mają 15/16 bloku, więc wcześniej gracz i moby były co klatkę podnoszone o 1/16 i opadały – kamera dosłownie drgała. Teraz stopa staje dokładnie na 15/16, a wejście na płytę kończy się na 0,5 (wcześniej było 0,55 w górę i pół bloku spadania).',
+  },
+  {
+    title: 'Golem oddaje po strzale i wybuchu',
+    text: 'Każde źródło obrażeń mówi teraz, kto je zadał: strzała gracza, strzała szkieletu, TNT podpalone ogniwem i creeper. Dzięki temu żelazny golem bierze napastnika na cel także wtedy, gdy oberwie z łuku albo wybuchem, ściga go z 32 bloków i w pościgu omija drzewa i płoty, zamiast wbijać się w nie bez końca.',
+  },
+  {
+    title: 'Płynni gracze w multiplayerze',
+    text: 'Zdalny gracz nie „dogania” już ostatniego pakietu – pozycje trafiają do bufora migawek, a awatar jest rysowany w środku przedziału między dwiema z nich. Przy 4 pakietach na sekundę (serwer publiczny) ruch jest ciągły jak w Minecrafcie, obrót także jest interpolowany po krótszej drodze, a nogi i ręce animują się z faktycznej prędkości.',
+  },
+  {
+    title: 'Żywszy ruch głowy',
+    text: 'Mob patrzy na gracza nie tylko w poziomie, ale i w pionie – golem stojący nad tobą zadziera łeb, a krowa obok patrzy ci w oczy. Głowa odwraca się do 75° od tułowia (jak w wanilii), a gdy nikt nie jest blisko, mob co kilka sekund rozgląda się na boki. Naprawiony został też znak przy wypasie: owca skubiąca trawę patrzy w dół, a nie w niebo.',
+  },
   {
     title: 'Drzwi z prawdziwym zawiasem',
     text: 'Drzwi mają teraz dwa modele z paczki – zawias z lewej i z prawej – i stoją po przeciwnej stronie kratki niż patrzył gracz, dokładnie jak w `DoorBlock`. Zamknięte to płyta 3/16 przy ościeżnicy, otwarte obracają się o 90° wokół zawiasu, a krawędzie dostają własne 3-pikselowe wycinki tekstury, więc nie widać już ściśniętych drzwi na boku. Otwarte skrzydło wreszcie blokuje ruch, a nie jest dziurą w ścianie.',
