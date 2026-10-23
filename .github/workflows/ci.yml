@@ -5,6 +5,9 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # 2.31: ręczne uruchomienie z zakładki Actions (przydaje się po awarii
+  # runnera – nie trzeba wtedy robić pustego commita).
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,6 +15,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,7 +23,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 20 jest już po końcu wsparcia; 22 to bieżące LTS.
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
