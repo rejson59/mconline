@@ -45,6 +45,10 @@ for (const s of suites) {
 rmSync(cache, { recursive: true, force: true });
 mkdirSync(cache, { recursive: true });
 
+// 2.31: w logu CI od razu widać, na czym testy działają – bez tego diagnoza
+// awarii runnera sprowadzała się do zgadywania.
+console.log(`Node ${process.version} · ${process.platform}/${process.arch}`);
+
 let failed = false;
 
 for (const s of suites) {
@@ -76,7 +80,10 @@ for (const s of suites) {
   }
 
   const res = spawnSync(process.execPath, [out], { cwd: root, stdio: 'inherit' });
-  if (res.status !== 0) failed = true;
+  if (res.status !== 0) {
+    failed = true;
+    console.error(`✗ ${s.label}: kod ${res.status ?? 'brak'}${res.signal ? `, sygnał ${res.signal}` : ''}`);
+  }
 }
 
 rmSync(cache, { recursive: true, force: true });
