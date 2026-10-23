@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.29.0",
-  "description": "BlockCraft 2.28 „Więcej FPS i okna jak w grze” – polska gra sandboxowa w przeglądarce: modele mobów z paczki 26.2 z poprawną animacją kończyn, spadający piasek i żwir, publiczny serwer, bez instalacji i bez konta.",
+  "version": "2.30.0",
+  "description": "BlockCraft 2.30 „Ścieżka bez trzęsienia i golem, który oddaje” – polska gra sandboxowa w przeglądarce: dokładna fizyka półbloków, golem reagujący na strzały i wybuchy, płynni gracze w multiplayerze, publiczny serwer, bez instalacji i bez konta.",
   "type": "module",
   "license": "MIT",
   "keywords": [

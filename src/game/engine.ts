@@ -44,6 +44,7 @@ import {
   type NetPlayer,
 } from './net';
 import { PUBLIC_POS_HZ } from './online';
+import { REMOTE_DELAY_LOCAL, REMOTE_DELAY_PUBLIC, RemoteTrack } from './netSmooth';
 import { fallbackSkin, loadSkinId, skinById } from './skins';
 import { loadPlayerId, spreadSpawn, type PlayerProfile } from './profile';
 import { AVATAR_KINDS, avatarMaterial } from './mobTextures';
@@ -106,18 +107,24 @@ export interface Waypoint {
 /** 2.10: awatar zdalnego gracza w scenie (bloki + sprite z nazwą). */
 interface RemoteAvatar {
   group: THREE.Group;
-  head: THREE.Mesh;
+  /** 2.30: zawias szyi – obraca całą głowę razem z czapką, włosami i oczami. */
+  head: THREE.Object3D;
   armL: THREE.Mesh;
   legL: THREE.Mesh;
   legR: THREE.Mesh;
   hand: THREE.Mesh;
-  target: THREE.Vector3;
+  /** 2.30: bufor migawek – ruch jest interpolowany, a nie „doganiany”. */
+  track: RemoteTrack;
   yaw: number;
   pitch: number;
   held: number;
   heldId: number;
   name: string;
   walk: number;
+  /** 2.30: wygładzona amplituda kroku (nogi nie przeskakują w miejscu). */
+  swing: number;
+  /** 2.30: wygładzone pochylenie głowy zdalnego gracza. */
+  headPitch: number;
   seen: number;
   /** 2.12: aktualna skórka (żeby nie odtwarzać awatara bez potrzeby). */
   skinId: string;
@@ -350,6 +357,8 @@ interface TNTEntity {
   mesh: THREE.Mesh;
   body: Body;
   fuse: number;
+  /** 2.30: kto podpalił ładunek – golem wie, komu oddać za wybuch. */
+  owner: Mob | 'player' | null;
 }
 
 interface ArrowEntity {
@@ -639,6 +648,12 @@ export class Game {
   lavaAcc = 0;
   stepDist = 0;
   bobPhase = 0;
+  /**
+   * 2.30: amplituda kołysania kamery (0 = stoi, 1 = pełny bieg). Dzięki niej
+   * kołysanie wygasa razem z ruchem i nie zostawia stałego przesunięcia,
+   * gdy postać stoi – a przełącznik „Kołysanie kamery” wreszcie działa.
+   */
+  bobAmp = 0;
   shake = 0;
   spawnPoint = new THREE.Vector3();
 
@@ -1533,7 +1548,8 @@ export class Game {
           break;
         }
         avatar.group.visible = true;
-        avatar.target.set(m.x, m.y, m.z);
+        // 2.30: pakiet trafia do bufora, a nie do „celu” lerpa.
+        avatar.track.push(performance.now(), { x: m.x, y: m.y, z: m.z, yaw: m.yaw, pitch: m.pitch });
         avatar.yaw = m.yaw;
         avatar.pitch = m.pitch;
         avatar.held = m.held ?? 0;
@@ -1618,24 +1634,26 @@ export class Game {
       this.netEditTimer = 0;
       this.flushNetEdits();
     }
-    if (this.ui === 'playing' || this.ui === 'chat') {
-      this.netPosTimer += dt;
-      // Publiczny serwer ma limit wiadomości Realtime – 4 pozycje na sekundę
-      // w zupełności wystarczą, bo awatary i tak są wygładzane.
-      const posHz = net.public ? PUBLIC_POS_HZ : POS_HZ;
-      if (this.netPosTimer >= 1 / posHz) {
-        this.netPosTimer = 0;
-        const p = this.body.pos;
-        net.sendPos({
-          d: this.isInNether ? 'n' : 'o',
-          x: p.x, y: p.y, z: p.z,
-          yaw: this.yaw, pitch: this.pitch,
-          held: this.selectedStack()?.id ?? 0,
-          name: net.name,
-          hue: this.netHue,
-          skin: this.netSkin,
-        });
-      }
+    // 2.30: pozycja leci w KAŻDYM stanie gry, nie tylko przy zamkniętym
+    // ekwipunku. Wcześniej gracz, który otworzył plecak, skrzynię albo mapę,
+    // przestawał nadawać i po 9 sekundach znikał innym z sesji („zniknął
+    // z sesji”), a jego awatar zamarzał w miejscu.
+    this.netPosTimer += dt;
+    // Publiczny serwer ma limit wiadomości Realtime – 4 pozycje na sekundę
+    // w zupełności wystarczą, bo awatary są interpolowane (netSmooth).
+    const posHz = net.public ? PUBLIC_POS_HZ : POS_HZ;
+    if (this.netPosTimer >= 1 / posHz) {
+      this.netPosTimer = 0;
+      const p = this.body.pos;
+      net.sendPos({
+        d: this.isInNether ? 'n' : 'o',
+        x: p.x, y: p.y, z: p.z,
+        yaw: this.yaw, pitch: this.pitch,
+        held: this.selectedStack()?.id ?? 0,
+        name: net.name,
+        hue: this.netHue,
+        skin: this.netSkin,
+      });
     }
     // `pushState` sam pilnuje odstępu (STATE_EVERY) i zapisuje dane w migawce;
     // wołanie `setWorld` co klatkę kopiowałoby listę edytów bez potrzeby.
@@ -1646,23 +1664,34 @@ export class Game {
       const p = this.body.pos;
       net.setWorld({ spawn: { x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z), d: this.isInNether ? 'n' : 'o' } });
     }
-    // Awatary: łagodne dojście do ostatniej znanej pozycji + animacja nóg.
+    // Awatary: interpolacja z bufora migawek (2.30) + animacja nóg.
+    //
+    // Wcześniej pozycja „doganiała” ostatni pakiet z prędkością dt*10, więc
+    // przy 4 Hz awatar skakał i zamierał na 0,2 s. Teraz rysujemy go
+    // w środku przedziału między dwiema migawkami – ruch jest ciągły.
+    const delay = net.public ? REMOTE_DELAY_PUBLIC : REMOTE_DELAY_LOCAL;
     for (const [id, a] of this.remotes) {
       if (now - a.seen > 9000) {
         this.message(`${a.name} zniknął z sesji.`);
         this.dropRemote(id);
         continue;
       }
-      const k = Math.min(1, dt * 10);
-      a.group.position.lerp(a.target, k);
-      a.group.rotation.y = a.yaw;
-      a.head.rotation.x = -a.pitch * 0.6;
-      const moving = a.group.position.distanceToSquared(a.target) > 0.0016;
-      if (moving) a.walk += dt * 7;
-      const swing = moving ? Math.sin(a.walk) * 0.55 : 0;
-      a.legL.rotation.x = swing;
-      a.legR.rotation.x = -swing;
-      a.armL.rotation.x = -swing * 0.8;
+      const s = a.track.sample(now, delay);
+      if (s) {
+        a.group.position.set(s.x, s.y, s.z);
+        a.group.rotation.y = s.yaw;
+        // Głowa patrzy tam, gdzie gracz – w tę samą stronę co kamera.
+        a.headPitch += (s.pitch - a.headPitch) * Math.min(1, dt * 14);
+        a.head.rotation.x = a.headPitch;
+        // Tempo i amplituda kroku z faktycznej prędkości (nie z „dogonienia”).
+        const want = Math.min(1, s.speed / 3.2) * 0.55;
+        a.swing += (want - a.swing) * Math.min(1, dt * 9);
+        a.walk += dt * Math.min(9, s.speed * 1.7);
+        const swing = Math.sin(a.walk) * a.swing;
+        a.legL.rotation.x = swing;
+        a.legR.rotation.x = -swing;
+        a.armL.rotation.x = -swing * 0.8;
+      }
       if (a.held !== a.heldId) {
         a.heldId = a.held;
         a.hand.visible = !!a.held;
@@ -1681,8 +1710,7 @@ export class Game {
       return existing;
     }
     const avatar = this.makeAvatar(p.name, p.hue, p.skin);
-    avatar.target.copy(this.spawnPoint);
-    avatar.group.position.copy(avatar.target);
+    avatar.group.position.copy(this.spawnPoint);
     // Do pierwszej wiadomości `pos` nie wiemy, gdzie gracz jest – lepiej go
     // nie pokazywać na środku własnej postaci.
     avatar.group.visible = false;
@@ -1734,19 +1762,26 @@ export class Game {
     const armW = slim ? 0.1875 : 0.25;
     const body = part([0.5, 0.75, 0.25], 'body', skin.shirt, 'shirt');
     body.position.y = 1.125;
+    // 2.30: głowa to grupa z zawiasem na szyi (y = 1,5 – dolna krawędź
+    // sześcianu głowy). Wcześniej obracał się sam sześcian, a czapka, włosy
+    // i oczy zostawały w miejscu, więc przy każdym spojrzeniu w górę/dół
+    // głowa „rozdzielała się” na kawałki.
+    const NECK_Y = 1.5;
+    const neck = new THREE.Group();
+    neck.position.y = NECK_Y;
     const head = part([0.5, 0.5, 0.5], 'head', skin.skin, 'head');
-    head.position.y = 1.75;
+    head.position.y = 1.75 - NECK_Y;
     // 2.19: czapka/włosy to druga warstwa skórki (jak w grze).
     const hat = packTex ? skinnedHat([0.5, 0.5, 0.5], packTex) : null;
-    if (hat) hat.position.y = 1.75;
+    if (hat) hat.position.y = 1.75 - NECK_Y;
     // Włosy i oczy rysujemy tylko dla starych, kolorowych skórek.
     const hair = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.1, 0.52), mat(skin.hair, 'hair'));
-    hair.position.y = 1.98;
+    hair.position.y = 1.98 - NECK_Y;
     const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.34, 0.08), mat(skin.hair, 'hair'));
-    hairBack.position.set(0, 1.8, 0.24);
+    hairBack.position.set(0, 1.8 - NECK_Y, 0.24);
     const eyeMat = new THREE.MeshBasicMaterial({ color: skin.eye ?? 0x2b2b2b });
     const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.02), eyeMat);
-    eyeL.position.set(-0.11, 1.8, -0.255);
+    eyeL.position.set(-0.11, 1.8 - NECK_Y, -0.255);
     const eyeR = eyeL.clone();
     eyeR.position.x = 0.11;
     if (packTex) {
@@ -1776,9 +1811,10 @@ export class Game {
     hand.visible = false;
     // Skóra całej postaci jest skalowana jak w wanilii (15/16), ale stopy
     // zostają na y = 0, żeby `body.pos` dalej oznaczał ziemię.
+    neck.add(head, ...(hat ? [hat] : []), hair, hairBack, eyeL, eyeR);
     const figure = new THREE.Group();
     figure.scale.setScalar(AVATAR_SCALE);
-    figure.add(body, head, ...(hat ? [hat] : []), hair, hairBack, eyeL, eyeR, armL, armR, legL, legR, shoeL, shoeR, hand);
+    figure.add(body, neck, armL, armR, legL, legR, shoeL, shoeR, hand);
     group.add(figure);
 
     // Etykieta z nazwą.
@@ -1802,10 +1838,10 @@ export class Game {
     group.add(sprite);
 
     return {
-      group, head, armL, legL, legR, hand,
-      target: new THREE.Vector3(),
+      group, head: neck, armL, legL, legR, hand,
+      track: new RemoteTrack(),
       yaw: 0, pitch: 0, held: 0, heldId: -1,
-      name, walk: 0, seen: performance.now(), skinId: skin.id,
+      name, walk: 0, swing: 0, headPitch: 0, seen: performance.now(), skinId: skin.id,
     };
   }
 
@@ -1820,11 +1856,14 @@ export class Game {
     const player = this.netPlayers.find((p) => p.id === id);
     const fresh = this.makeAvatar(old.name, player?.hue ?? 0, skinId);
     fresh.group.position.copy(old.group.position);
-    fresh.target.copy(old.target);
+    fresh.track = old.track;
     fresh.yaw = old.yaw;
     fresh.pitch = old.pitch;
     fresh.held = old.held;
     fresh.seen = old.seen;
+    fresh.walk = old.walk;
+    fresh.swing = old.swing;
+    fresh.headPitch = old.headPitch;
     fresh.group.visible = old.group.visible;
     this.remoteGroup?.add(fresh.group);
     this.dropRemote(id);
@@ -4379,7 +4418,7 @@ export class Game {
       return;
     }
     if (this.target && this.target.id === B.TNT) {
-      this.igniteTNT(this.target.x, this.target.y, this.target.z, 4);
+      this.igniteTNT(this.target.x, this.target.y, this.target.z, 4, 'player');
       this.unlock('boom');
       this.mouseLeft = false; // podpalenie tylko na kliknięcie – bez trzymania
       return;
@@ -4773,6 +4812,30 @@ export class Game {
         const block = this.world.peekBlock(Math.floor(a.pos.x), Math.floor(a.pos.y), Math.floor(a.pos.z));
         if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) { spent = true; break; }
         if (a.from) {
+          // 2.30: strzała szkieletu leci dalej, aż w coś trafi – tak jak
+          // w wanilii rani też inne moby (wcześniej przelatywała przez golema
+          // i mieszkańca, więc nikt nie miał za co oddać).
+          let mobHit = false;
+          for (const m of this.mobs) {
+            if (m === a.from || m.dead) continue;
+            const mb = m.body;
+            const r = mb.w / 2 + 0.12;
+            if (
+              a.pos.x > mb.pos.x - r && a.pos.x < mb.pos.x + r &&
+              a.pos.y > mb.pos.y - 0.1 && a.pos.y < mb.pos.y + mb.h + 0.1 &&
+              a.pos.z > mb.pos.z - r && a.pos.z < mb.pos.z + r
+            ) {
+              if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2, a.from)) {
+                mb.vel.x += dir.x * 4;
+                mb.vel.z += dir.z * 4;
+                Sfx.playHurt();
+              }
+              mobHit = true;
+              spent = true;
+              break;
+            }
+          }
+          if (mobHit) break;
           // hostile arrow vs player – a shield in hand parries it
           const p = this.body.pos;
           if (
@@ -4804,7 +4867,8 @@ export class Game {
               a.pos.z > mb.pos.z - r && a.pos.z < mb.pos.z + r
             ) {
               if (a.pearl) { spent = true; break; }
-              if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2)) {
+              // 2.30: strzała gracza ma napastnika – golem wie, kto go drasnął.
+              if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2, 'player')) {
                 mb.vel.x += dir.x * 4;
                 mb.vel.z += dir.z * 4;
                 mb.vel.y = Math.max(mb.vel.y, 2.5);
@@ -4873,7 +4937,7 @@ export class Game {
     }
     if (t && s.id === I.FLINT_STEEL) {
       if (t.id === B.TNT) {
-        this.igniteTNT(t.x, t.y, t.z, 3.2);
+        this.igniteTNT(t.x, t.y, t.z, 3.2, 'player');
         this.unlock('boom');
         this.wearTool();
         this.swingT = 0;
@@ -5325,7 +5389,7 @@ export class Game {
     this.fallGravity(x, y + 1, z);
   }
 
-  igniteTNT(x: number, y: number, z: number, fuse: number) {
+  igniteTNT(x: number, y: number, z: number, fuse: number, owner: Mob | 'player' | null = null) {
     this.world.setBlock(x, y, z, B.AIR);
     const mesh = new THREE.Mesh(this.tntGeo, new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true }));
     mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
@@ -5334,11 +5398,17 @@ export class Game {
       mesh,
       body: { pos: new THREE.Vector3(x + 0.5, y, z + 0.5), vel: new THREE.Vector3((Math.random() - 0.5) * 1, 3, (Math.random() - 0.5) * 1), w: 0.98, h: 0.98, onGround: false, hitWall: false },
       fuse,
+      owner,
     });
     Sfx.playFuse();
   }
 
-  explode(cx: number, cy: number, cz: number, power: number) {
+  /**
+   * 2.30: `source` mówi, kto spowodował wybuch. Dzięki temu golem trafiony
+   * TNT podpalonym przez gracza (albo creeperem) bierze napastnika na cel,
+   * zamiast stać spokojnie w dymie.
+   */
+  explode(cx: number, cy: number, cz: number, power: number, source: Mob | 'player' | null = null) {
     Sfx.playExplosion();
     this.shake = 0.6;
     const disturbed = new Set<string>();
@@ -5351,7 +5421,7 @@ export class Game {
           const x = Math.floor(cx + dx), y = Math.floor(cy + dy), z = Math.floor(cz + dz);
           const id = this.world.getBlock(x, y, z);
           if (id === B.AIR || id === B.BEDROCK || id === B.OBSIDIAN || id === B.WATER || id === B.LAVA) continue;
-          if (id === B.TNT) { this.igniteTNT(x, y, z, 0.3 + Math.random() * 0.6); continue; }
+          if (id === B.TNT) { this.igniteTNT(x, y, z, 0.3 + Math.random() * 0.6, source); continue; }
           if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
           if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
           if (id === B.ANVIL) this.spillAnvil(x, y, z);
@@ -5382,7 +5452,7 @@ export class Game {
     });
     for (const m of this.mobs) affect(m.body.pos, m.body.h, (dmg, kb) => {
       m.hurtTime = 0;
-      m.damage(dmg, cx, cz);
+      m.damage(dmg, cx, cz, source === m ? null : source);
       m.body.vel.add(kb);
     });
   }
@@ -5830,7 +5900,9 @@ export class Game {
 
     // steps
     const hs = Math.hypot(b.vel.x, b.vel.z);
-    if (b.onGround && hs > 0.5) {
+    const walkingBob = b.onGround && hs > 0.5;
+    this.bobAmp += ((walkingBob ? Math.min(1, hs / 4.3) : 0) - this.bobAmp) * Math.min(1, dt * 10);
+    if (walkingBob) {
       this.stepDist += hs * dt;
       this.bobPhase += hs * dt * 1.9;
       if (this.stepDist > (this.sprinting ? 2.4 : 1.9)) {
@@ -6043,7 +6115,7 @@ export class Game {
     for (const m of this.mobs) {
       if (m.exploded && !m.looted) {
         m.looted = true;
-        this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2);
+        this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2, m);
       } else if (m.dead && !m.looted) {
         m.looted = true;
         this.mobLoot(m);
@@ -6154,16 +6226,25 @@ export class Game {
       this.tnts.splice(this.tnts.indexOf(t), 1);
       this.scene.remove(t.mesh);
       (t.mesh.material as THREE.Material).dispose();
-      this.explode(t.body.pos.x, t.body.pos.y + 0.5, t.body.pos.z, 4);
+      this.explode(t.body.pos.x, t.body.pos.y + 0.5, t.body.pos.z, 4, t.owner);
     }
   }
 
   private updateCamera(dt: number) {
     const b = this.body;
     const cam = this.camera;
-    const bob = Math.sin(this.bobPhase * Math.PI) * 0.045;
-    const bobX = Math.cos(this.bobPhase * Math.PI * 0.5) * 0.03;
-    cam.position.set(b.pos.x, b.pos.y + this.eyeHeight + Math.abs(bob), b.pos.z);
+    // 2.30: kołysanie kamery 1:1 z grą – pionowe podbicie i boczny ruch na
+    // zmianę, prostopadle do kierunku patrzenia. Amplituda rośnie z prędkością
+    // i wygasa po zatrzymaniu, a przełącznik „Kołysanie kamery” jest
+    // respektowany (wcześniej ustawienie nic nie robiło).
+    const amp = this.viewBobbing ? this.bobAmp : 0;
+    const bob = Math.sin(this.bobPhase * Math.PI) * 0.045 * amp;
+    const bobX = Math.cos(this.bobPhase * Math.PI * 0.5) * 0.03 * amp;
+    cam.position.set(
+      b.pos.x + Math.cos(this.yaw) * bobX,
+      b.pos.y + this.eyeHeight + Math.abs(bob),
+      b.pos.z - Math.sin(this.yaw) * bobX,
+    );
     cam.rotation.set(this.pitch, this.yaw, 0);
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt);

@@ -1,6 +1,16 @@
-# BlockCraft 2.29 🚀
+# BlockCraft 2.30 🚀
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 2.30 „Ścieżka bez trzęsienia i golem, który oddaje” 🧱 🤖 🎮
+
+Cztery błędy z jednego zgłoszenia: trzęsienie na ścieżce, golem, który nie oddaje, zacinający się gracze na multiplayerze i sztywny ruch głowy mobów.
+
+* **Koniec trzęsienia na ścieżce.** Fizyka ląduje teraz na **rzeczywistej powierzchni bryły** (`supportTop`/`ceilingBottom`), a nie na górnej krawędzi całej kratki. Ścieżka i grządka mają 15/16 bloku, więc wcześniej stojąca na nich postać była co klatkę podnoszona o 1/16 i opadała pod grawitacją – kamera drgała, a moby „dygotały”. Teraz stopa staje dokładnie na 15/16. Krok to waniliowe **0,6 bloku** (`maxUpStep`), więc wchodzi się także na łóżko (9/16), a wejście na płytę kończy się na 0,5 – wcześniej dodawaliśmy całe 0,55 i postać spadała pół bloku. Sufit zatrzymuje głowę dokładnie na spodzie bloku.
+* **Golem oddaje po strzale i wybuchu.** Każde źródło obrażeń przekazuje napastnika: strzała gracza (`'player'`), strzała szkieletu (mob), TNT z zapamiętanym podpalaczem i creeper. Żelazny golem bierze napastnika na cel także po trafieniu z łuku lub wybuchem, ściga go z **32 bloków**, a w pościgu **omija przeszkody** (drzewa, płoty) zamiast wbijać się w nie bez końca – wcześniej obrót po zderzeniu był co klatkę kasowany przez „idź prosto na cel”.
+* **Płynni gracze w multiplayerze.** Nowy moduł `netSmooth.ts` trzyma bufor migawek pozycji i rysuje zdalnego gracza **w środku przedziału między dwiema z nich** (120 ms w pokoju, 320 ms na serwerze publicznym, gdzie pakiety lecą 4 × na sekundę). Koniec ze „skokiem i zamarciem na 0,2 s”, obrót jest interpolowany po krótszej drodze, a nogi i ręce animują się z faktycznej prędkości. Pozycja leci też przy otwartym plecaku czy skrzyni, więc gracz nie znika innym z sesji.
+* **Żywszy ruch głowy i kołysanie kamery.** Moby patrzą na gracza w poziomie **i w pionie** (`LookControl` w wanilii), odwracają głowę do 75° od tułowia, a bezczynne rozglądają się co kilka sekund. Owca przy wypasie patrzy w trawę (znak był odwrócony – patrzyła w niebo), a zdalny gracz ma zawias szyi, więc czapka, włosy i oczy obracają się razem z głową (wcześniej zostawały w miejscu). Kołysanie kamery ma wreszcie boczny ruch prostopadły do patrzenia, wygasa po zatrzymaniu i **respektuje przełącznik** „Kołysanie kamery” (wcześniej ustawienie nic nie robiło).
+* **Testy.** `npm test` to **2145 kontroli silnika + 234 testy UI**. Sekcja 2.30 sprawdza brak drgań na ścieżce (gracz i golem), dokładne wysokości lądowania (15/16, 0,5, 9/16), blokowanie skrzyni, sufit, reakcję golema na strzał i wybuch, omijanie drzewa w pościgu, pionowy obrót głowy i wypas owcy oraz interpolację migawek (brak klatek bez ruchu, zawijanie kąta, teleport, limit ekstrapolacji). `npx tsc --noEmit`, `npm test` i `npm run build` przechodzą w całości.
 
 ## Wersja 2.29 „Drzwi, łóżko i dźwięki jak w grze” 🚪 🛏️ 🔊
 

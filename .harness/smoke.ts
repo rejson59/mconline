@@ -176,6 +176,7 @@ import {
   type NetEdit,
   type NetLink,
 } from '../src/game/net';
+import * as netSmooth from '../src/game/netSmooth';
 
 // ------------------------------------------------------------------- runner
 let pass = 0;
@@ -3153,8 +3154,13 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.29'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Drzwi, łóżko i dźwięki jak w grze', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION.startsWith('2.30'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Ścieżka bez trzęsienia i golem, który oddaje', GAME_RELEASE_NAME);
+  // 2.30: ścieżka, golem, głowa i płynni gracze.
+  check('2.30 highlights mention the path shake', RELEASE_HIGHLIGHTS.some((h) => /trzęsienia na ścieżce/i.test(h.title)));
+  check('2.30 highlights mention the golem fighting back', RELEASE_HIGHLIGHTS.some((h) => /golem oddaje/i.test(h.title)));
+  check('2.30 highlights mention smooth multiplayer', RELEASE_HIGHLIGHTS.some((h) => /płynni gracze/i.test(h.title)));
+  check('2.30 highlights mention the head movement', RELEASE_HIGHLIGHTS.some((h) => /ruch głowy/i.test(h.title)));
   // 2.29: drzwi, łóżko i dźwięki.
   check('2.29 highlights mention the door hinge', RELEASE_HIGHLIGHTS.some((h) => /zawias/i.test(h.title)));
   check('2.29 highlights mention the two-part bed', RELEASE_HIGHLIGHTS.some((h) => /łóżko z dwóch/i.test(h.title)));
@@ -5602,7 +5608,9 @@ section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
   check('rośliny nie mają kolizji', collisionBoxes(B.TALLGRASS) === null && collisionBoxes(B.TORCH) === null);
 
   // --- fizyka: wejście na pół bloku bez skoku (step-up 0,55)
-  eq('krok to 0,55 bloku', STEP_HEIGHT, 0.55);
+  // 2.30: waniliowe `maxUpStep` to dokładnie 0,6 – dzięki temu wchodzi się
+  // też na łóżko (9/16 = 0,5625).
+  eq('krok to 0,6 bloku (jak w wanilii)', STEP_HEIGHT, 0.6);
   const w4 = new World(4242, true);
   const gy4 = FLAT_H + 1;
   w4.setBlock(4, gy4, 4, B.OAK_SLAB);
@@ -6215,6 +6223,251 @@ section('2.29: drzwi i łóżko jak w Minecraftcie');
   check('efekty mają proceduralny pogłos (mały pokój)', /function buildRoom\(c: AudioContext, dest: GainNode\)/.test(audioSrc) && /createConvolver/.test(audioSrc) && /dest\.connect\(conv\)/.test(audioSrc));
   check('splash, ból i wybuch mają nową, cieplejszą barwę', /bąbelków o rosnącej wysokości/.test(audioSrc) && /dwa tony: krótkie/.test(audioSrc) && /niski „bum” pod szumem/.test(audioSrc));
   check('jedzenie chrupie trzy razy', /chrupnięcie: trzy krótkie/.test(audioSrc));
+}
+
+
+// ============================================ 2.30: ścieżka, golem, głowa, sieć
+section('2.30: koniec trzęsienia na ścieżce i dokładne lądowanie na bryłach');
+{
+  // --- płaski świat z pasem ścieżki (15/16) i kawałkiem trawy
+  const w = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w.getChunk(cx, cz);
+  const gy = FLAT_H + 1;
+  for (let x = 0; x < 6; x++) for (let z = -8; z <= 8; z++) w.setBlock(x, gy - 1, z, B.PATH);
+
+  /** Idzie po ziemi (z grawitacją) i zwraca kolejne wysokości stóp. */
+  const stride = (world: World, startX: number, y: number, w2: number, h: number, axis: 'x' | 'z', v: number, frames: number, startZ = 0.5) => {
+    const b = { pos: new THREE.Vector3(startX, y, startZ), vel: new THREE.Vector3(), w: w2, h, onGround: true, hitWall: false };
+    const ys: number[] = [];
+    for (let i = 0; i < frames; i++) {
+      if (axis === 'x') b.vel.x = v; else b.vel.z = v;
+      b.vel.y -= 28 / 60;
+      stepBody(world, b, 1 / 60);
+      ys.push(b.pos.y);
+    }
+    return { ys, body: b };
+  };
+
+  // Gracz (0,6 × 1,8) idzie wzdłuż ścieżki – wysokość musi być stała.
+  const stroll = stride(w, 2.5, gy - 0.0625, 0.6, 1.8, 'z', -3, 90, 6.5);
+  const settled = stroll.ys.slice(10);
+  const amp = Math.max(...settled) - Math.min(...settled);
+  check('na ścieżce gracz nie drga (amplituda 0)', amp < 1e-9, `amplituda ${amp.toFixed(5)}`);
+  check('gracz stoi dokładnie na 15/16 ścieżki', Math.abs(settled[0] - (gy - 0.0625)) < 1e-9, `${settled[0].toFixed(4)}`);
+  check('gracz nie stoi pół bloku nad ścieżką', settled[0] < gy - 0.03, `${settled[0].toFixed(3)}`);
+  check('gracz nie zapada się w ścieżkę', settled[0] > gy - 0.07, `${settled[0].toFixed(3)}`);
+
+  // Moby (szeroki golem 1,4 × 2,7) na tej samej ścieżce – też bez drgania.
+  const golemWalk = stride(w, 2.5, gy - 0.0625, 1.4, 2.7, 'z', -2.4, 90, 6.5);
+  const gSettled = golemWalk.ys.slice(10);
+  const gAmp = Math.max(...gSettled) - Math.min(...gSettled);
+  check('golem na ścieżce nie trzęsie się', gAmp < 1e-9, `amplituda ${gAmp.toFixed(5)}`);
+
+  // Zejście ze ścieżki na trawę (0,0625 wyżej) nie może podrzucić o pół bloku.
+  const w2 = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w2.getChunk(cx, cz);
+  for (let x = 0; x < 3; x++) for (let z = -4; z <= 4; z++) w2.setBlock(x, gy - 1, z, B.PATH);
+  const leave = stride(w2, 2.2, gy - 0.0625, 0.6, 1.8, 'x', 3, 50);
+  const maxY = Math.max(...leave.ys);
+  check('wyjście ze ścieżki na trawę to jeden schodek 1/16', maxY - (gy - 0.0625) < 0.08, `skok ${(maxY - (gy - 0.0625)).toFixed(3)}`);
+  check('po wyjściu gracz stoi na trawie', Math.abs(leave.body.pos.y - gy) < 1e-9, `${leave.body.pos.y.toFixed(4)}`);
+
+  // Płyta: wejście bez skoku i stopa DOKŁADNIE na 0,5.
+  const w3 = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w3.getChunk(cx, cz);
+  w3.setBlock(2, gy, 2, B.OAK_SLAB);
+  const slab = stride(w3, 2.5, gy, 0.6, 1.8, 'z', -2, 70, 4.5);
+  check('na płytę wchodzi się bez skoku', Math.abs(slab.body.pos.z - 2.5) < 0.4, `z=${slab.body.pos.z.toFixed(2)}`);
+  check('stopa staje dokładnie na pół bloku', Math.abs(slab.body.pos.y - (gy + 0.5)) < 1e-9, `${slab.body.pos.y.toFixed(4)}`);
+
+  // Łóżko (9/16) – od 2.30 też się na nie wchodzi (krok 0,6).
+  const w4 = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w4.getChunk(cx, cz);
+  w4.setBlock(2, gy, 2, B.BED);
+  const bed = stride(w4, 2.5, gy, 0.6, 1.8, 'z', -2, 70, 4.5);
+  check('na łóżko wchodzi się krokiem (9/16 < 0,6)', Math.abs(bed.body.pos.y - (gy + 0.5625)) < 1e-9, `${bed.body.pos.y.toFixed(4)}`);
+
+  // Skrzynia (14/16) nadal zatrzymuje.
+  const w5 = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w5.getChunk(cx, cz);
+  w5.setBlock(2, gy, 2, B.CHEST);
+  const chest = stride(w5, 2.5, gy, 0.6, 1.8, 'z', -2, 70, 4.5);
+  check('skrzynia nadal blokuje (0,875 > krok)', chest.body.pos.z > 2.7, `z=${chest.body.pos.z.toFixed(2)}`);
+
+  // Sufit: głowa zatrzymuje się dokładnie na spodzie bloku, nie w środku.
+  const w6 = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w6.getChunk(cx, cz);
+  w6.setBlock(2, gy + 2, 2, B.STONE);
+  const jump = { pos: new THREE.Vector3(2.5, gy, 2.5), vel: new THREE.Vector3(0, 7, 0), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+  let headMax = 0;
+  for (let i = 0; i < 60; i++) { jump.vel.y -= 28 / 60; stepBody(w6, jump, 1 / 60); headMax = Math.max(headMax, jump.pos.y + 1.8); }
+  check('głowa nie wchodzi w sufit', headMax <= gy + 2 + 1e-6, `głowa ${headMax.toFixed(4)}`);
+  check('głowa dolatuje do sufitu (bez martwej strefy)', headMax > gy + 2 - 0.01, `głowa ${headMax.toFixed(4)}`);
+}
+
+section('2.30: golem oddaje po strzale i wybuchu');
+{
+  const w = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w.getChunk(cx, cz);
+  const gy = FLAT_H + 1;
+
+  // Strzała gracza = `damage(..., 'player')` – golem musi się rozgniewać.
+  const shot = new Mob('golem', 0.5, gy, 3.5);
+  shot.damage(5, 0.5, 0.5, 'player');
+  check('strzał gracza budzi golema', shot.provoked > 0, `provoked=${shot.provoked}`);
+  let hits = 0;
+  const player = new THREE.Vector3(0.5, gy, 0.5);
+  for (let i = 0; i < 300; i++) shot.update(1 / 60, w, player, () => { hits++; }, () => {}, false, [shot]);
+  check('golem dogania i bije gracza po strzale', hits > 0, `${hits} ciosów`);
+  shot.dispose();
+
+  // Wybuch TNT podpalonego przez gracza – to samo.
+  const boom = new Mob('golem', 0.5, gy, 3.5);
+  boom.damage(9, 0.5, 3.5, 'player');
+  check('wybuch gracza też budzi golema', boom.provoked > 0);
+  boom.dispose();
+
+  // Creeper / szkielet = napastnik-mob, golem bierze go na cel.
+  const creeper = new Mob('creeper', 4.5, gy, 3.5);
+  const g2 = new Mob('golem', 0.5, gy, 3.5);
+  g2.damage(9, creeper.body.pos.x, creeper.body.pos.z, creeper);
+  check('golem pamięta moba, który go trafił', g2.retaliate === creeper);
+  const hp0 = creeper.health;
+  for (let i = 0; i < 240; i++) {
+    g2.update(1 / 60, w, player, () => {}, () => {}, false, [g2, creeper]);
+    creeper.update(1 / 60, w, player, () => {}, () => {}, false, [g2, creeper]);
+  }
+  check('golem oddaje creeperowi', creeper.health < hp0, `${hp0} → ${creeper.health}`);
+  creeper.dispose(); g2.dispose();
+
+  // Zasięg gniewu: gracz 25 bloków dalej też jest ścigany (było 20).
+  const far = new Mob('golem', 0.5, gy, 0.5);
+  far.damage(2, 25, 0.5, 'player');
+  const farStart = far.body.pos.clone();
+  const farPlayer = new THREE.Vector3(25.5, gy, 0.5);
+  for (let i = 0; i < 240; i++) far.update(1 / 60, w, farPlayer, () => {}, () => {}, false, [far]);
+  check('golem rusza do gracza z 25 bloków', far.body.pos.distanceTo(farStart) > 8, `${far.body.pos.distanceTo(farStart).toFixed(1)} bloku`);
+  far.dispose();
+
+  // Silnik naprawdę przekazuje napastnika (inaczej poprawka byłaby martwa).
+  const engineSrc = readSource('src/game/engine.ts');
+  check('strzała gracza niesie napastnika', /m\.damage\(a\.power, a\.pos\.x - dir\.x \* 2, a\.pos\.z - dir\.z \* 2, 'player'\)/.test(engineSrc));
+  check('wybuch przyjmuje źródło', /explode\(cx: number, cy: number, cz: number, power: number, source: Mob \| 'player' \| null = null\)/.test(engineSrc));
+  check('TNT pamięta podpalacza', /owner: Mob \| 'player' \| null;/.test(engineSrc) && /this\.explode\(t\.body\.pos\.x, t\.body\.pos\.y \+ 0\.5, t\.body\.pos\.z, 4, t\.owner\)/.test(engineSrc));
+  check('creeper jest źródłem własnego wybuchu', /explode\(m\.body\.pos\.x, m\.body\.pos\.y \+ 0\.6, m\.body\.pos\.z, 3\.2, m\)/.test(engineSrc));
+  check('strzała szkieletu rani też moby', /m\.damage\(a\.power, a\.pos\.x - dir\.x \* 2, a\.pos\.z - dir\.z \* 2, a\.from\)/.test(engineSrc));
+}
+
+section('2.30: realistyczny ruch głowy mobów');
+{
+  const w = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w.getChunk(cx, cz);
+  const gy = FLAT_H + 1;
+
+  /** Wektor od zawiasu głowy do jej nosa (przód modelu to −Z). */
+  const nose = (mob: Mob) => {
+    mob.head.updateMatrixWorld(true);
+    const o = mob.head.getWorldPosition(new THREE.Vector3());
+    const tip = mob.head.localToWorld(new THREE.Vector3(0, 0, -0.45));
+    return tip.sub(o).normalize();
+  };
+
+  // Gracz stoi NAD golemem – głowa zadziera do góry (dodatnie y).
+  const golem = new Mob('golem', 0.5, gy, 3.5);
+  const above = new THREE.Vector3(0.5, gy + 4, 2.2);
+  for (let i = 0; i < 60; i++) golem.update(1 / 60, w, above, () => {}, () => {}, false, [golem]);
+  const up = nose(golem);
+  check('głowa patrzy w górę na stojącego wyżej gracza', up.y > 0.15, `y=${up.y.toFixed(2)}`);
+  golem.dispose();
+
+  // Gracz obok – głowa odwraca się w jego stronę i nie wykręca karku.
+  const cow = new Mob('cow', 0.5, gy, 3.5);
+  const side = new THREE.Vector3(3.5, gy, 3.5);
+  let yawAbs = 0;
+  for (let i = 0; i < 90; i++) {
+    cow.update(1 / 60, w, side, () => {}, () => {}, false, [cow]);
+    yawAbs = Math.max(yawAbs, Math.abs(cow.head.rotation.y - 0));
+  }
+  check('głowa odwraca się do gracza z boku', yawAbs > 0.35, `yaw=${yawAbs.toFixed(2)}`);
+  check('kark nie skręca się bardziej niż 75°+baza', Math.abs(cow.head.rotation.y) <= 1.35, `yaw=${cow.head.rotation.y.toFixed(2)}`);
+  cow.dispose();
+
+  // Wypas owcy: nos w DÓŁ (wcześniej znak był odwrócony i owca patrzyła w niebo).
+  const sheep = new Mob('sheep', 0.5, gy, 3.5);
+  sheep.grazing = 0.5;
+  sheep.update(1 / 60, w, new THREE.Vector3(0.5, gy, 0.5 + 40), () => {}, () => {}, false, [sheep]);
+  const grazing = nose(sheep);
+  check('owca przy wypasie patrzy w trawę', grazing.y < -0.05, `y=${grazing.y.toFixed(2)}`);
+
+  // Bezczynny mob rozgląda się (wcześniej głowa stała jak zamurowana).
+  let moved = 0;
+  for (let i = 0; i < 600; i++) {
+    sheep.update(1 / 60, w, new THREE.Vector3(0.5, gy, 0.5 + 40), () => {}, () => {}, false, [sheep]);
+    moved = Math.max(moved, Math.abs(sheep.head.rotation.y));
+  }
+  check('bezczynny mob rozgląda się', moved > 0.03, `obrót ${moved.toFixed(3)} rad`);
+  sheep.dispose();
+
+  // Kołysanie kamery: waniliowe (pion + bok) i wreszcie zależne od ustawienia.
+  const engineSrc = readSource('src/game/engine.ts');
+  check('kołysanie kamery respektuje przełącznik', /const amp = this\.viewBobbing \? this\.bobAmp : 0/.test(engineSrc));
+  check('kołysanie wygasa po zatrzymaniu', /this\.bobAmp \+= \(\(walkingBob/.test(engineSrc));
+  check('kołysanie ma boczny ruch prostopadły do patrzenia', /b\.pos\.x \+ Math\.cos\(this\.yaw\) \* bobX/.test(engineSrc) && /b\.pos\.z - Math\.sin\(this\.yaw\) \* bobX/.test(engineSrc));
+}
+
+section('2.30: płynni gracze w multiplayerze (interpolacja migawek)');
+{
+  const { RemoteTrack, REMOTE_DELAY_LOCAL, REMOTE_DELAY_PUBLIC, REMOTE_MAX_SPEED, REMOTE_EXTRAPOLATE_MAX, wrapAngle, lerpAngle } = netSmooth;
+
+  eq('kąt zawija się wokół ±π (3,2 → −3,08)', +wrapAngle(3.2).toFixed(2), +(3.2 - Math.PI * 2).toFixed(2));
+  check('lerp kąta idzie krótszą drogą', Math.abs(lerpAngle(3.0, -3.0, 0.5)) > 3.0, `${lerpAngle(3.0, -3.0, 0.5).toFixed(2)}`);
+  check('serwer publiczny ma większy bufor niż pokój', REMOTE_DELAY_PUBLIC > REMOTE_DELAY_LOCAL);
+
+  // 4 Hz, 4,3 bloku/s – tak idzie gracz w grze.
+  const track = new RemoteTrack();
+  const stepDist = 4.3 * 0.25;
+  for (let i = 0; i < 12; i++) track.push(i * 250, { x: i * stepDist, y: 65, z: 0.5, yaw: 0, pitch: 0 });
+  const xs: number[] = [];
+  for (let t = 1000; t <= 2400; t += 16) xs.push(track.sample(t, REMOTE_DELAY_PUBLIC)!.x);
+  let maxStep = 0;
+  let still = 0;
+  for (let i = 1; i < xs.length; i++) {
+    const d = Math.abs(xs[i] - xs[i - 1]);
+    maxStep = Math.max(maxStep, d);
+    if (d < 0.02) still++;
+  }
+  check('awatar rusza się w każdej klatce (koniec zacinania)', still === 0, `${still} klatek bez ruchu`);
+  check('krok między klatkami jest równy', maxStep < 0.09, `max ${maxStep.toFixed(3)} bloku/klatkę`);
+  const midYaw = new RemoteTrack();
+  midYaw.push(0, { x: 0, y: 0, z: 0, yaw: 3.0, pitch: 0 });
+  midYaw.push(100, { x: 0, y: 0, z: 0, yaw: -3.0, pitch: 0 });
+  const s2 = midYaw.sample(50, 0)!;
+  check('obrót gracza też jest interpolowany (bez przeskoku ±π)', Math.abs(Math.abs(s2.yaw) - Math.PI) < 0.05, `yaw=${s2.yaw.toFixed(2)}`);
+
+  // Teleportacja: bufor się czyści, awatar nie leci przez mapę.
+  const tp = new RemoteTrack();
+  tp.push(0, { x: 0, y: 65, z: 0, yaw: 0, pitch: 0 });
+  tp.push(100, { x: 300, y: 65, z: 0, yaw: 0, pitch: 0 });
+  eq('teleport czyści bufor migawek', tp.size, 1);
+  const t2 = tp.sample(120, 0)!;
+  check('po teleportacji awatar jest na miejscu', Math.abs(t2.x - 300) < 1e-9, `x=${t2.x}`);
+
+  // Ekstrapolacja jest krótka i ograniczona prędkością.
+  const ex = new RemoteTrack();
+  ex.push(0, { x: 0, y: 65, z: 0, yaw: 0, pitch: 0 });
+  ex.push(250, { x: 1.07, y: 65, z: 0, yaw: 0, pitch: 0 });
+  const later = ex.sample(250 + 10000, 0)!;
+  check('ekstrapolacja nie ucieka (maks. 0,25 s)', later.x - 1.07 <= REMOTE_MAX_SPEED * REMOTE_EXTRAPOLATE_MAX + 1e-6, `x=${later.x.toFixed(2)}`);
+
+  // Silnik korzysta z bufora, a nie z lerpa do ostatniego pakietu.
+  const engineSrc = readSource('src/game/engine.ts');
+  check('silnik interpoluje migawki', /const s = a\.track\.sample\(now, delay\)/.test(engineSrc));
+  check('opóźnienie zależy od serwera', /const delay = net\.public \? REMOTE_DELAY_PUBLIC : REMOTE_DELAY_LOCAL/.test(engineSrc));
+  check('awatar nie dogania już „celu” lerpem', !/a\.group\.position\.lerp\(a\.target/.test(engineSrc));
+  check('głowa awatara patrzy tam, gdzie gracz (poprawny znak)', /a\.head\.rotation\.x = a\.headPitch/.test(engineSrc) && !/a\.head\.rotation\.x = -a\.pitch/.test(engineSrc));
+  check('czapka i oczy obracają się razem z głową (zawias szyi)', /const neck = new THREE\.Group\(\)/.test(engineSrc) && /neck\.add\(head/.test(engineSrc));
+  // Gracz z otwartym plecakiem/skrzynią nie znika już innym z sesji.
+  check('pozycja leci też przy otwartym oknie', /this\.netPosTimer \+= dt;/.test(engineSrc) && !/if \(this\.ui === 'playing' \|\| this\.ui === 'chat'\) \{\n      this\.netPosTimer/.test(engineSrc));
 }
 
 // =================================================================== report

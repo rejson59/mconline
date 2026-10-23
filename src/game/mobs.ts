@@ -144,6 +144,12 @@ export class Mob {
   private baseRot = new Map<THREE.Object3D, THREE.Euler>();
   /** 2.25: wygładzony obrót głowy względem tułowia (bez bazy z modelu). */
   private headYaw = 0;
+  /** 2.30: wygładzone pochylenie głowy (góra/dół) – wcześniej zawsze 0. */
+  private headPitch = 0;
+  /** 2.30: cel spojrzenia „bezczynnego” moba (rozglądanie się). */
+  private lookYaw = 0;
+  private lookPitch = 0;
+  private lookTimer = 1 + Math.random() * 3;
   /**
    * 2.26: czas odrzutu po trafieniu. Przez ten czas mob nie steruje ruchem –
    * leci tam, gdzie go odepchnięto. Wcześniej `moveAndAnimate` natychmiast
@@ -154,6 +160,18 @@ export class Mob {
   readonly kbResistance: number;
   /** 2.26: golem pamięta moba, który go uderzył, i oddaje mu. */
   retaliate: Mob | null = null;
+  /**
+   * 2.30: omijanie przeszkody w pościgu.
+   *
+   * Pościg co klatkę ustawia `yaw` prosto na cel, więc obrót o 90°, który
+   * `moveAndAnimate` wykonuje po zderzeniu ze ścianą, był natychmiast
+   * kasowany – golem wbijał się w drzewo albo płot i nigdy nie dochodził do
+   * gracza („golem nie atakuje spowrotem”). Teraz po zderzeniu przez pół
+   * sekundy idzie lekko w bok, a potem znowu prosto na cel.
+   */
+  private detour = 0;
+  private detourSign = 1;
+  private detourCd = 0;
   /**
    * 2.27: stabilność chodu mieszkańców.
    *
@@ -809,7 +827,16 @@ export class Mob {
     });
   }
 
+  /**
+   * Obrażenia od gracza, moba albo efektu (strzała, wybuch).
+   *
+   * 2.30: `attacker` jest teraz przekazywany przez WSZYSTKIE źródła –
+   * strzały gracza i wybuchy (TNT, creeper) też mówią, kto je spowodował.
+   * Wcześniej trafienie strzałą nie miało napastnika, więc żelazny golem
+   * (i każdy inny mob) po prostu to ignorował.
+   */
   damage(amount: number, fromX: number, fromZ: number, attacker: Mob | 'player' | null = null) {
+    if (amount <= 0) return false;
     if (this.dead || this.hurtTime > 0) return false;
     this.health -= amount;
     this.hurtTime = 0.5;
@@ -830,6 +857,8 @@ export class Mob {
     if (this.type === 'golem') {
       // 2.26: golem nie ucieka – odwraca się do napastnika. Gracz budzi go
       // na 20 s (jak w wanilii), a mob trafia do listy „oddaj mu”.
+      // 2.30: działa też po strzale z łuku i po wybuchu – źródło jest już
+      // znane, więc nie ma „obrażonego” golema, który stoi bezczynnie.
       if (attacker === 'player') this.provoked = 20;
       else if (attacker && attacker !== this) this.retaliate = attacker;
       this.walking = true;
@@ -911,17 +940,33 @@ export class Mob {
     if (this.hurtTime <= 0 && this.health < this.maxHealth) this.health = Math.min(this.maxHealth, this.health + dt * 0.35);
   }
 
+  /** Kierunek pościgu z chwilowym odchyleniem, gdy coś stoi na drodze. */
+  private chaseYaw(tx: number, tz: number): number {
+    const straight = Math.atan2(tx - this.body.pos.x, tz - this.body.pos.z);
+    if (this.body.hitWall && this.detourCd <= 0) {
+      this.detour = 0.55;
+      this.detourCd = 1.1;
+      this.detourSign = Math.random() < 0.5 ? -1 : 1;
+    }
+    return this.detour > 0 ? straight + this.detourSign * 0.95 : straight;
+  }
+
   /**
    * Żelazny golem: patroluje okolicę i atakuje potwory. Gdy gracz skrzywdzi
-   * mieszkańca, golem bierze go na cel (provoked > 0).
+   * mieszkańca (albo samego golema strzałą lub wybuchem), golem bierze go
+   * na cel (`provoked > 0`).
    */
   private updateGolem(dt: number, world: World, player: THREE.Vector3, allies: Mob[], onAttack: (dmg: number, mob: Mob) => void): void {
     const b = this.body;
     if (this.provoked > 0) this.provoked = Math.max(0, this.provoked - dt);
+    if (this.detour > 0) this.detour = Math.max(0, this.detour - dt);
+    if (this.detourCd > 0) this.detourCd = Math.max(0, this.detourCd - dt);
 
     const playerDist = Math.hypot(player.x - b.pos.x, player.z - b.pos.z);
-    if (this.provoked > 0 && playerDist < 20) {
-      this.yaw = Math.atan2(player.x - b.pos.x, player.z - b.pos.z);
+    // 2.30: zasięg gniewu to 32 bloki (jak zasięg wzroku golema w grze),
+    // więc golem ruszy także wtedy, gdy gracz strzela z dystansu.
+    if (this.provoked > 0 && playerDist < 32) {
+      this.yaw = this.chaseYaw(player.x, player.z);
       this.walking = playerDist > 1.9;
       if (playerDist < 2.4 && this.attackCooldown <= 0) {
         this.attackCooldown = 1.5;
@@ -956,7 +1001,7 @@ export class Mob {
       const dx = target.body.pos.x - b.pos.x;
       const dz = target.body.pos.z - b.pos.z;
       const d = Math.hypot(dx, dz);
-      this.yaw = Math.atan2(dx, dz);
+      this.yaw = this.chaseYaw(target.body.pos.x, target.body.pos.z);
       const stop = target.body.w / 2 + 0.9;
       this.walking = d > stop;
       if (d <= stop + 0.7 && this.attackCooldown <= 0) {
@@ -1409,21 +1454,52 @@ export class Mob {
 
     // 2.18: głowa odwraca się w stronę gracza, gdy ten jest blisko – tak jak
     // w grze. Kąt jest ograniczony, żeby mob nie skręcał karku na plecy.
+    //
+    // 2.30: głowa patrzy też GÓRĄ/DÓŁ (waniliowy `LookControl` liczy `xRot`),
+    // więc mob stojący pod graczem zadziera łeb, a nie patrzy w horyzont.
+    // Do tego bezczynny mob rozgląda się co kilka sekund, zupełnie jak
+    // zwierzę w grze – wcześniej głowa stała idealnie nieruchomo.
     let dip = 0;
+    const dist = Math.hypot(player.x - b.pos.x, player.z - b.pos.z);
     if (this.headCanTurn && !this.dead && this.head) {
       const toPlayer = Math.atan2(player.x - b.pos.x, player.z - b.pos.z);
       let rel = toPlayer - this.group.rotation.y;
       while (rel > Math.PI) rel -= Math.PI * 2;
       while (rel < -Math.PI) rel += Math.PI * 2;
-      const dist = Math.hypot(player.x - b.pos.x, player.z - b.pos.z);
       // Przód modelu to lokalne −Z, a korzeń jest obrócony o π, więc kąt
       // głowy dodaje się do kąta ciała: głowa patrzy tam, gdzie `g + h`.
       // Wcześniej stało tu `-rel`, przez co golem (i każdy mob) odwracał
       // głowę dokładnie w drugą stronę.
-      const want = dist < 12 ? Math.max(-0.9, Math.min(0.9, rel)) : 0;
-      this.headYaw += (want - this.headYaw) * Math.min(1, dt * 6);
+      // Wanilia: głowa odchyla się od tułowia najwyżej o 75° (1,31 rad).
+      const WATCH = 1.3;
+      let wantYaw: number;
+      let wantPitch: number;
+      if (dist < 12) {
+        wantYaw = Math.max(-WATCH, Math.min(WATCH, rel));
+        // `player` to stopy gracza – patrzymy na jego oczy (1,62 bloku).
+        const eyeY = player.y + 1.62;
+        const headY = b.pos.y + this.body.h * 0.92;
+        wantPitch = Math.max(-0.9, Math.min(0.9, Math.atan2(eyeY - headY, Math.max(0.35, dist))));
+      } else {
+        // Bezczynne rozglądanie się: nowy kierunek co 1,5–4 s, bez nerwowych
+        // drgań (poprzedni cel obowiązuje do końca odliczania).
+        this.lookTimer -= dt;
+        if (this.lookTimer <= 0) {
+          this.lookTimer = 1.5 + Math.random() * 3.5;
+          this.lookYaw = (Math.random() - 0.5) * 0.9;
+          this.lookPitch = (Math.random() - 0.5) * 0.26;
+        }
+        wantYaw = this.lookYaw;
+        wantPitch = this.lookPitch;
+      }
+      // Szybsze, ale ciągle płynne obracanie (wanilia robi to co tick).
+      const k = Math.min(1, dt * 9);
+      this.headYaw += (wantYaw - this.headYaw) * k;
+      this.headPitch += (wantPitch - this.headPitch) * Math.min(1, dt * 7);
     } else {
-      this.headYaw += (0 - this.headYaw) * Math.min(1, dt * 6);
+      const k = Math.min(1, dt * 6);
+      this.headYaw += (0 - this.headYaw) * k;
+      this.headPitch += (0 - this.headPitch) * k;
     }
 
     // 2.21.1: wypas – głowa zjeżdża w dół i przechyla się do trawy
@@ -1434,7 +1510,9 @@ export class Mob {
     }
     // 2.25: obrót głowy to baza z modelu + (wygładzony obrót w stronę gracza,
     // przechył przy wypasie) – żadna z tych wartości nie kasuje drugiej.
-    if (this.head) this.pose(this.head, dip * 0.62, this.headYaw, 0);
+    // 2.30: pochylenie ma znak ujemny przy wypasie – dodatnie `rotation.x`
+    // zadziera łeb do góry, więc owca „patrzyła w niebo”, skubiąc trawę.
+    if (this.head) this.pose(this.head, this.headPitch - dip * 0.62, this.headYaw, 0);
   }
 
   /** Cheap visibility test used by the skeleton before it shoots. */

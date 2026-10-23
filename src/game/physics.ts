@@ -3,8 +3,12 @@ import type { World } from './world';
 import { collisionBoxes } from './blocks';
 
 const EPS = 0.001;
-/** Waniliowa wysokość kroku (0,6 bloku) – na tyle wspinamy się bez skoku. */
-export const STEP_HEIGHT = 0.55;
+/**
+ * Waniliowa wysokość kroku (0,6 bloku) – na tyle wspinamy się bez skoku.
+ * 2.30: dokładnie tyle, ile `Entity#maxUpStep` w grze. Wcześniej było 0,55,
+ * więc nie dało się wejść na łóżko (9/16 = 0,5625) bez podskoku.
+ */
+export const STEP_HEIGHT = 0.6;
 
 export interface Body {
   pos: THREE.Vector3; // feet center
@@ -61,6 +65,64 @@ export function aabbIntersectsBlock(px: number, py: number, pz: number, w: numbe
 }
 
 /**
+ * 2.30: najwyższa powierzchnia kolizji pod stopami, ale nie wyżej niż `py`.
+ *
+ * To naprawia trzęsienie na ścieżce. Wcześniej zejście w dół kończyło się
+ * `Math.floor(ny) + 1` – czyli stopami na górnej krawędzi CAŁEJ kratki.
+ * Ścieżka i grządka mają 15/16, więc stojąca na nich postać była co klatkę
+ * podnoszona o 1/16 bloku i z powrotem opadała (grawitacja) – kamera
+ * i modele drgały. Teraz bryła ląduje dokładnie na te 15/16.
+ */
+function supportTop(world: World, px: number, py: number, pz: number, w: number): number {
+  const hw = w / 2;
+  const x0 = Math.floor(px - hw + EPS), x1 = Math.floor(px + hw - EPS);
+  const z0 = Math.floor(pz - hw + EPS), z1 = Math.floor(pz + hw - EPS);
+  const yTop = Math.floor(py + 0.02);
+  let best = -Infinity;
+  for (let y = yTop; y >= yTop - 2; y--)
+    for (let x = x0; x <= x1; x++)
+      for (let z = z0; z <= z1; z++) {
+        const boxes = collisionBoxes(world.peekBlock(x, y, z));
+        if (!boxes) continue;
+        for (let i = 0; i < boxes.length; i += 6) {
+          if (px + hw <= x + boxes[i] || px - hw >= x + boxes[i + 3]) continue;
+          if (pz + hw <= z + boxes[i + 2] || pz - hw >= z + boxes[i + 5]) continue;
+          const top = y + boxes[i + 4];
+          if (top <= py + 0.02 && top > best) best = top;
+        }
+      }
+  return best;
+}
+
+/** 2.30: najniższy spód kolizji nad głową (`Infinity`, gdy nic nie blokuje). */
+function ceilingBottom(world: World, px: number, py: number, pz: number, w: number, h: number): number {
+  const hw = w / 2;
+  const x0 = Math.floor(px - hw + EPS), x1 = Math.floor(px + hw - EPS);
+  const z0 = Math.floor(pz - hw + EPS), z1 = Math.floor(pz + hw - EPS);
+  const y0 = Math.floor(py + EPS), y1 = Math.floor(py + h + 0.02);
+  let best = Infinity;
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++)
+      for (let z = z0; z <= z1; z++) {
+        const boxes = collisionBoxes(world.peekBlock(x, y, z));
+        if (!boxes) continue;
+        for (let i = 0; i < boxes.length; i += 6) {
+          if (px + hw <= x + boxes[i] || px - hw >= x + boxes[i + 3]) continue;
+          if (pz + hw <= z + boxes[i + 2] || pz - hw >= z + boxes[i + 5]) continue;
+          const bottom = y + boxes[i + 1];
+          if (bottom >= py + EPS && bottom < best) best = bottom;
+        }
+      }
+  return best;
+}
+
+/** Krok w górę: stopy lądują na rzeczywistej powierzchni, a nie 0,6 nad nią. */
+function stepUpTop(world: World, b: Body, nx: number, nz: number): number {
+  return supportTop(world, nx, b.pos.y + STEP_HEIGHT, nz, b.w);
+}
+
+
+/**
  * 2.3: odbicie od bloku szlamu. Zwraca nową prędkość pionową albo null,
  * gdy odbicia nie było. Odrębna funkcja, bo warunek „byłem w powietrzu”
  * łatwo było napisać tak, że nigdy nie zachodził.
@@ -78,8 +140,16 @@ function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, d: number): boolean {
   if (axis === 1) {
     const ny = p.y + d;
     if (!collidesAt(world, p.x, ny, p.z, b.w, b.h)) { p.y = ny; return false; }
-    if (d < 0) p.y = Math.floor(ny) + 1 + EPS * 0.5;
-    else p.y = Math.floor(ny + b.h) - b.h - EPS * 0.5;
+    // 2.30: lądujemy na rzeczywistej powierzchni bryły, którą mamy pod
+    // stopami (płyta 1/2, ścieżka 15/16, łóżko 9/16…), a nie na suficie
+    // całej kratki – właśnie to powodowało drganie na ścieżce.
+    if (d < 0) {
+      const top = supportTop(world, p.x, p.y, p.z, b.w);
+      p.y = Number.isFinite(top) ? top : Math.floor(ny) + 1 + EPS * 0.5;
+    } else {
+      const bottom = ceilingBottom(world, p.x, ny, p.z, b.w, b.h);
+      p.y = Number.isFinite(bottom) ? bottom - b.h - EPS * 0.5 : Math.floor(ny + b.h) - b.h - EPS * 0.5;
+    }
     // safety: if still colliding, just don't move
     if (collidesAt(world, p.x, p.y, p.z, b.w, b.h)) p.y = ny - d;
     return true;
@@ -87,11 +157,16 @@ function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, d: number): boolean {
   if (axis === 0) {
     const nx = p.x + d;
     if (!collidesAt(world, nx, p.y, p.z, b.w, b.h)) { p.x = nx; return false; }
-    // 2.21: automatyczny krok na płytę/schodzenie (0,55) – jak w wanilii.
+    // 2.21: automatyczny krok na płytę/schodzenie (0,6) – jak w wanilii.
+    // 2.30: po wejściu stopy stają DOKŁADNIE na powierzchni przeszkody;
+    // wcześniej dodawaliśmy całe 0,55 i postać spadała pół bloku.
     if (b.onGround && !collidesAt(world, nx, p.y + STEP_HEIGHT, p.z, b.w, b.h)) {
-      p.y += STEP_HEIGHT;
-      p.x = nx;
-      return false;
+      const top = stepUpTop(world, b, nx, p.z);
+      if (Number.isFinite(top)) {
+        p.y = Math.max(p.y, top);
+        p.x = nx;
+        return false;
+      }
     }
     if (d > 0) p.x = Math.floor(nx + hw) - hw - EPS * 0.5;
     else p.x = Math.floor(nx - hw) + 1 + hw + EPS * 0.5;
@@ -101,9 +176,12 @@ function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, d: number): boolean {
   const nz = p.z + d;
   if (!collidesAt(world, p.x, p.y, nz, b.w, b.h)) { p.z = nz; return false; }
   if (b.onGround && !collidesAt(world, p.x, p.y + STEP_HEIGHT, nz, b.w, b.h)) {
-    p.y += STEP_HEIGHT;
-    p.z = nz;
-    return false;
+    const top = stepUpTop(world, b, p.x, nz);
+    if (Number.isFinite(top)) {
+      p.y = Math.max(p.y, top);
+      p.z = nz;
+      return false;
+    }
   }
   if (d > 0) p.z = Math.floor(nz + hw) - hw - EPS * 0.5;
   else p.z = Math.floor(nz - hw) + 1 + hw + EPS * 0.5;
