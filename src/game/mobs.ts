@@ -104,6 +104,10 @@ export class Mob {
   soundTimer = 3 + Math.random() * 10;
   /** Creeper fuse. -1 = idle, otherwise seconds left. */
   fuse = -1;
+  /** 2.31: przebytа droga od ostatniego kroku (dźwięk stąpania w silniku). */
+  stepDist = 0;
+  /** 2.31: dźwięk śmierci gra tylko raz. */
+  deathCried = false;
   exploded = false;
   looted = false;
   sheared = false;
@@ -359,6 +363,12 @@ export class Mob {
     if (this.type === 'sheep') {
       const wool = buildMobModel(MOB_MODELS.sheep_wool, 'sheep_wool');
       if (wool) {
+        // 2.31: `buildMobModel` obraca już korzeń o π (wanilia patrzy w −Z,
+        // nasze moby w +Z). Wełna jest doklejana POD ten korzeń, więc jej
+        // własny obrót trzeba skasować – inaczej obracała się dwa razy
+        // (2π) i stała tyłem: czarna „puchata” bryła zasłaniała pysk,
+        // a wełniane nogi wychodziły z tyłu głowy.
+        wool.root.rotation.y = 0;
         built.root.add(wool.root);
         this.woolParts = [wool.root];
         this.meshes.push(...wool.meshes);

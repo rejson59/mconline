@@ -10,7 +10,7 @@ import {
   type BrewingState, type PotionEffectId,
 } from './brewing';
 import { getAtlas, tileUV, tileUVInset, tileUVRect, AVG_COLOR } from './textures';
-import { stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
+import { autoJumpAhead, stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { fallPath, isFallingBlock, isPassableForFall } from './gravity';
 import { isFarmland, isHydrated, updateFarmland } from './farmland';
 import { FrameGovernor, entityTickInterval, lodRange, lodStepFor, sortChunkOffsets } from './perf';
@@ -2447,6 +2447,7 @@ export class Game {
   }
 
   setUI(s: UIState) {
+    const prev = this.ui;
     this.ui = s;
     try {
       if (s === 'playing') {
@@ -2459,6 +2460,13 @@ export class Game {
       // Pointer lock / audio can be blocked by the browser: never let that
       // stop the game from switching state (the React UI stays in sync).
       console.warn('setUI side effect failed', e);
+    }
+    // 2.31: zamknięcie skrzyni ma własny dźwięk, jak `block.chest.close`.
+    // Tylko przy realnym wyjściu ze skrzyni – inaczej każde inne okno
+    // powtarzałoby trzaśnięcie wiekiem.
+    if (prev === 'chest' && s !== 'chest' && this.chestPos) {
+      Sfx.playChest(false, this.chestPos.x + 0.5, this.chestPos.y + 0.5, this.chestPos.z + 0.5);
+      this.chestPos = null;
     }
     if (s === 'paused') this.save();
     // Leaving the inventory must never eat the items sitting in the grid.
@@ -2506,9 +2514,11 @@ export class Game {
   closeInventory() {
     this.returnHeldStack();
     this.furnacePos = null;
-    this.chestPos = null;
     this.enchantPos = null;
+    // `setUI` gra trzaśnięcie wiekiem skrzyni (prev === 'chest') i samo
+    // zeruje `chestPos`; zerujemy go też tutaj, gdy okno było inne.
     this.setUI('playing');
+    this.chestPos = null;
     this.emitHud();
   }
 
@@ -2707,6 +2717,8 @@ export class Game {
     }
     while (chest.slots.length < 27) chest.slots.push(null);
     this.chestPos = { x, y, z };
+    // 2.31: waniliowe `block.chest.open` – skrzynia skrzypi przy otwieraniu.
+    Sfx.playChest(true, x + 0.5, y + 0.5, z + 0.5);
     this.setUI('chest');
   }
 
@@ -4468,7 +4480,8 @@ export class Game {
         mob.body.vel.y = Math.max(mob.body.vel.y, 6 * kb);
       }
       Sfx.playHurt();
-      Sfx.playMob(mob.type);
+      // 2.31: głos moba niesie się w przestrzeni (ciszej z oddali, z panoramą).
+      Sfx.playMob(mob.type, 'hurt', mob.body.pos.x, mob.body.pos.y + mob.body.h * 0.8, mob.body.pos.z);
       this.wearTool();
       if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
       // Grabież: remember the level so mobLoot() can roll extras once
@@ -4873,7 +4886,7 @@ export class Game {
                 mb.vel.z += dir.z * 4;
                 mb.vel.y = Math.max(mb.vel.y, 2.5);
                 Sfx.playHurt();
-                Sfx.playMob(m.type);
+                Sfx.playMob(m.type, 'hurt', m.body.pos.x, m.body.pos.y + m.body.h * 0.8, m.body.pos.z);
                 this.wearTool();
               }
               spent = true;
@@ -5115,7 +5128,7 @@ export class Game {
     if (finalId === B.SAPLING || finalId === B.BIRCH_SAPLING || finalId === B.SUGARCANE || (finalId >= B.CROP0 && finalId <= B.CROP2)) this.growables.set(`${px},${py},${pz}`, performance.now());
     if (finalId === B.TORCH || finalId === B.REDSTONE_TORCH) this.unlock('torch');
     if (finalId === B.NETHER_BRICKS || finalId === B.QUARTZ_BLOCK) this.unlock('nether');
-    Sfx.playPlace(BLOCKS[finalId].sound);
+    Sfx.playPlace(BLOCKS[finalId].sound, px + 0.5, py + 0.5, pz + 0.5);
     this.swingT = 0;
     this.consumeSelected();
   }
@@ -5365,7 +5378,7 @@ export class Game {
     }
     if (!silent) {
       this.spawnParticles(x + 0.5, y + 0.5, z + 0.5, id, 14, 0.35);
-      Sfx.playBreak(def.sound);
+      Sfx.playBreak(def.sound, x + 0.5, y + 0.5, z + 0.5);
     }
     if (this.mode === 'survival' && !silent) {
       const toolId = this.selectedStack()?.id ?? 0;
@@ -5677,15 +5690,19 @@ export class Game {
     return this.world.peekBlock(Math.floor(p.x), Math.floor(p.y + yoff), Math.floor(p.z));
   }
 
-  /** 2.0: czy przed graczem stoi dokładnie 1 blok, na który można wejść? */
+  /**
+   * 2.31: auto-skok tylko przy prawdziwej przeszkodzie.
+   *
+   * Stara wersja patrzyła na `floor(p.y + 0.05)`. Odkąd fizyka stawia stopy
+   * dokładnie na 15/16 ścieżki, ten `floor` trafiał w blok ścieżki POD
+   * nogami, więc gracz „widział” przeszkodę w każdej klatce i podskakiwał
+   * bez przerwy. Nowa sonda (`autoJumpAhead`) sprawdza tylko powierzchnie
+   * WYŻSZE od stóp i pomija wszystko, co mieści się w kroku 0,6 – płyty,
+   * ścieżki i schody obsługuje step-up.
+   */
   private canAutoStep(p: THREE.Vector3, dx: number, dz: number): boolean {
-    const x = Math.floor(p.x + dx * 0.7);
-    const z = Math.floor(p.z + dz * 0.7);
-    const y = Math.floor(p.y + 0.05);
-    const step = this.world.peekBlock(x, y, z);
-    const above = this.world.peekBlock(x, y + 1, z);
-    const head = this.world.peekBlock(x, y + 2, z);
-    return IS_SOLID[step] !== 0 && !IS_SOLID[above] && !IS_SOLID[head] && RENDER[above] !== 1;
+    void p;
+    return autoJumpAhead(this.world, this.body, dx, dz);
   }
 
   private updatePlayer(dt: number) {
@@ -5986,7 +6003,7 @@ export class Game {
             if (this.swingT >= 1) this.swingT = 0;
             if (this.digSoundTimer <= 0) {
               this.digSoundTimer = 0.22;
-              Sfx.playDig(def.sound);
+              Sfx.playDig(def.sound, t.x + 0.5, t.y + 0.5, t.z + 0.5);
               this.spawnParticles(t.x + 0.5 + t.nx * 0.52, t.y + 0.5 + t.ny * 0.52, t.z + 0.5 + t.nz * 0.52, t.id, 2, 0.3);
             }
             if (this.breakProgress >= 1) {
@@ -6097,9 +6114,20 @@ export class Game {
       }
       if (skip) continue;
       m.update(mdt, this.world, p, this.mobAttackPlayer, this.mobShootPlayer, peaceful, this.mobs, this.wolfBite);
+      // 2.31: kroki mobów – wanilia gra `step` co ok. 0,35 s chodu, więc
+      // liczymy przebytą drogę, a nie czas (stojący mob nie stuka).
+      if (!m.dead && m.body.onGround) {
+        const moved = Math.hypot(m.body.vel.x, m.body.vel.z) * mdt;
+        m.stepDist += moved;
+        if (m.stepDist > (m.type === 'chicken' ? 0.85 : 1.45) && m.body.pos.distanceTo(p) < 16) {
+          m.stepDist = 0;
+          Sfx.playMobStep(m.type, m.body.pos.x, m.body.pos.y, m.body.pos.z);
+        }
+      }
       if (m.soundTimer <= 0) {
         m.soundTimer = 6 + Math.random() * 12;
-        if (m.body.pos.distanceTo(p) < 16) Sfx.playMob(m.type);
+        // Głos słychać z 24 bloków (waniliowe `attenuation_distance` 16–32).
+        if (m.body.pos.distanceTo(p) < 24) Sfx.playMob(m.type, 'idle', m.body.pos.x, m.body.pos.y + m.body.h * 0.8, m.body.pos.z);
       }
       // zombies burn in daylight (but never under the Nether roof)
       if (m.type === 'zombie' && dl > 0.7 && !m.dead && !this.isInNether) {
@@ -6113,6 +6141,11 @@ export class Game {
     }
     // remove dead / far
     for (const m of this.mobs) {
+      // 2.31: własny dźwięk śmierci, grany raz przy zejściu zdrowia do zera.
+      if (m.dead && !m.deathCried) {
+        m.deathCried = true;
+        Sfx.playMob(m.type, 'death', m.body.pos.x, m.body.pos.y + m.body.h * 0.8, m.body.pos.z);
+      }
       if (m.exploded && !m.looted) {
         m.looted = true;
         this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2, m);
@@ -6233,6 +6266,9 @@ export class Game {
   private updateCamera(dt: number) {
     const b = this.body;
     const cam = this.camera;
+    // 2.31: uszy gracza = kamera. Od tej pozycji liczone jest tłumienie
+    // i panorama każdego dźwięku w świecie (moby, bloki, skrzynie).
+    Sfx.setListener(cam.position.x || b.pos.x, cam.position.y || b.pos.y + this.eyeHeight, cam.position.z || b.pos.z, this.yaw);
     // 2.30: kołysanie kamery 1:1 z grą – pionowe podbicie i boczny ruch na
     // zmianę, prostopadle do kierunku patrzenia. Amplituda rośnie z prędkością
     // i wygasa po zatrzymaniu, a przełącznik „Kołysanie kamery” jest
@@ -6610,7 +6646,7 @@ export class Game {
     const above = this.world.getBlock(t.x, t.y + 1, t.z);
     if (above !== B.AIR) return false;
     this.world.setBlock(t.x, t.y, t.z, B.PATH);
-    Sfx.playDig('grass');
+    Sfx.playDig('grass', t.x + 0.5, t.y + 0.5, t.z + 0.5);
     this.wearTool();
     this.swingT = 0;
     return true;

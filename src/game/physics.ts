@@ -121,6 +121,66 @@ function stepUpTop(world: World, b: Body, nx: number, nz: number): number {
   return supportTop(world, nx, b.pos.y + STEP_HEIGHT, nz, b.w);
 }
 
+/** 2.31: najwyższa powierzchnia kolizji nad stopami, do wysokości `maxY`. */
+export function surfaceTopBetween(
+  world: World,
+  px: number,
+  py: number,
+  pz: number,
+  w: number,
+  maxY: number,
+): number {
+  const hw = w / 2;
+  const x0 = Math.floor(px - hw + EPS), x1 = Math.floor(px + hw - EPS);
+  const z0 = Math.floor(pz - hw + EPS), z1 = Math.floor(pz + hw - EPS);
+  const y0 = Math.floor(py + 0.001), y1 = Math.floor(maxY);
+  let best = -Infinity;
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++)
+      for (let z = z0; z <= z1; z++) {
+        const boxes = collisionBoxes(world.peekBlock(x, y, z));
+        if (!boxes) continue;
+        for (let i = 0; i < boxes.length; i += 6) {
+          if (px + hw <= x + boxes[i] || px - hw >= x + boxes[i + 3]) continue;
+          if (pz + hw <= z + boxes[i + 2] || pz - hw >= z + boxes[i + 5]) continue;
+          const top = y + boxes[i + 4];
+          if (top > py + 0.001 && top <= maxY + 0.001 && top > best) best = top;
+        }
+      }
+  return best;
+}
+
+/**
+ * 2.31: czy przed stopami naprawdę stoi przeszkoda wyższa niż krok?
+ *
+ * To naprawia podskakiwanie na ścieżce. Stara sonda brała klocek na
+ * `floor(p.y + 0.05)` – dopóki staliśmy na pełnym bloku (stopy na 65,0),
+ * wypadał on NAD stopami. Od 2.30 stopy stoją na 15/16 ścieżki (64,9375),
+ * więc `floor` trafiał w sam blok ścieżki pod nogami i gracz „widział”
+ * przeszkodę w każdej klatce – auto-skok włączał się bez przerwy.
+ *
+ * Teraz liczy się wyłącznie powierzchnia WYŻSZA od stóp. Płyty, ścieżki
+ * i schody (do 0,6) obsługuje step-up, więc auto-skok włącza się tylko
+ * przy prawdziwym bloku – dokładnie jak waniliowe `AutoJump`.
+ */
+export function autoJumpAhead(
+  world: World,
+  body: Body,
+  dx: number,
+  dz: number,
+): boolean {
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-4) return false;
+  const probeX = body.pos.x + (dx / len) * (body.w / 2 + 0.32);
+  const probeZ = body.pos.z + (dz / len) * (body.w / 2 + 0.32);
+  const top = surfaceTopBetween(world, probeX, body.pos.y, probeZ, body.w * 0.9, body.pos.y + 1.25);
+  if (!Number.isFinite(top)) return false;
+  // Tylko klocek WYŻSZY niż krok (step-up sam sobie radzi z półblokami).
+  if (top <= body.pos.y + STEP_HEIGHT + 0.02) return false;
+  // Musi być miejsce na całe ciało nad nową powierzchnią.
+  return !collidesAt(world, probeX, top + 0.02, probeZ, body.w, body.h);
+}
+
 
 /**
  * 2.3: odbicie od bloku szlamu. Zwraca nową prędkość pionową albo null,

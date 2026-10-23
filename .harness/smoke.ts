@@ -69,7 +69,7 @@ import { Inventory, RECIPES, LOG_IDS, MAX_STACK, type Stack } from '../src/game/
 import {
   SKINS, DEFAULT_SKIN_ID, SKIN_KEY, skinById, loadSkinId, saveSkinId, nextSkinId, fallbackSkin,
 } from '../src/game/skins';
-import { aabbIntersectsBlock, stepBody, STEP_HEIGHT, type Body } from '../src/game/physics';
+import { aabbIntersectsBlock, autoJumpAhead, stepBody, STEP_HEIGHT, type Body } from '../src/game/physics';
 import { fallPath, fallColumnHeight, isCrushable, isFallingBlock, isSupported } from '../src/game/gravity';
 import { Mob, isHostileMob, isVillageMob, mobVariantForBiome, SHEEP_WOOL_COLORS, woolBlockFor, type MobType } from '../src/game/mobs';
 import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial, type MobTexKind } from '../src/game/mobTextures';
@@ -3154,8 +3154,13 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.30'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Ścieżka bez trzęsienia i golem, który oddaje', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION.startsWith('2.31'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Owca z runem, dźwięki 1:1 i spokojna ścieżka', GAME_RELEASE_NAME);
+  // 2.31: owca, głosy mobów, przestrzeń dźwięku i auto-skok.
+  check('2.31 highlights mention the sheep', RELEASE_HIGHLIGHTS.some((h) => /owca z runem/i.test(h.title)));
+  check('2.31 highlights mention mob voices', RELEASE_HIGHLIGHTS.some((h) => /głosy mobów/i.test(h.title)));
+  check('2.31 highlights mention spatial sound', RELEASE_HIGHLIGHTS.some((h) => /w przestrzeni/i.test(h.title)));
+  check('2.31 highlights mention the auto-jump fix', RELEASE_HIGHLIGHTS.some((h) => /podskoków na ścieżce/i.test(h.title)));
   // 2.30: ścieżka, golem, głowa i płynni gracze.
   check('2.30 highlights mention the path shake', RELEASE_HIGHLIGHTS.some((h) => /trzęsienia na ścieżce/i.test(h.title)));
   check('2.30 highlights mention the golem fighting back', RELEASE_HIGHLIGHTS.some((h) => /golem oddaje/i.test(h.title)));
@@ -6220,7 +6225,7 @@ section('2.29: drzwi i łóżko jak w Minecraftcie');
   check('materiały mają własne barwy (korpus + rezonans)', /const MAT: Record<Kind/.test(audioSrc) && /bodyThump/.test(audioSrc));
   check('dźwięki nadal są w pełni syntezowane', !/new Audio\(|\.mp3|\.ogg/.test(audioSrc));
   check('każdy efekt idzie przez wspólne wyjście', /function out\(node: AudioNode\)/.test(audioSrc) && (audioSrc.match(/out\(/g)?.length ?? 0) > 25);
-  check('efekty mają proceduralny pogłos (mały pokój)', /function buildRoom\(c: AudioContext, dest: GainNode\)/.test(audioSrc) && /createConvolver/.test(audioSrc) && /dest\.connect\(conv\)/.test(audioSrc));
+  check('efekty mają proceduralny pogłos (mały pokój)', /function buildRoom\(c: AudioContext, dest: GainNode, out: AudioNode\)/.test(audioSrc) && /createConvolver/.test(audioSrc) && /dest\.connect\(conv\)/.test(audioSrc));
   check('splash, ból i wybuch mają nową, cieplejszą barwę', /bąbelków o rosnącej wysokości/.test(audioSrc) && /dwa tony: krótkie/.test(audioSrc) && /niski „bum” pod szumem/.test(audioSrc));
   check('jedzenie chrupie trzy razy', /chrupnięcie: trzy krótkie/.test(audioSrc));
 }
@@ -6468,6 +6473,143 @@ section('2.30: płynni gracze w multiplayerze (interpolacja migawek)');
   check('czapka i oczy obracają się razem z głową (zawias szyi)', /const neck = new THREE\.Group\(\)/.test(engineSrc) && /neck\.add\(head/.test(engineSrc));
   // Gracz z otwartym plecakiem/skrzynią nie znika już innym z sesji.
   check('pozycja leci też przy otwartym oknie', /this\.netPosTimer \+= dt;/.test(engineSrc) && !/if \(this\.ui === 'playing' \|\| this\.ui === 'chat'\) \{\n      this\.netPosTimer/.test(engineSrc));
+}
+
+
+// ============================================ 2.31: owca, dźwięki, auto-skok
+section('2.31: owca z wełną na właściwej stronie');
+{
+  const mob = new Mob('sheep', 0, 0, 0);
+  mob.group.updateMatrixWorld(true);
+  const woolRoot = (mob as unknown as { woolParts: THREE.Object3D[] }).woolParts[0];
+  check('owca ma osobny model wełny', !!woolRoot);
+  // Wełna doklejona pod korzeń modelu nie może obracać się drugi raz –
+  // wcześniej stała tyłem i zasłaniała pysk.
+  eq('wełna nie jest obrócona podwójnie', woolRoot.rotation.y, 0);
+
+  // Pysk (baza) i wełniana głowa muszą leżeć po tej samej stronie,
+  // a wełna TUŁOWIA ma otaczać tułów, a nie stać z tyłu.
+  // Wełniana głowa (dziecko „head” w modelu wełny) musi leżeć dokładnie tam,
+  // gdzie pysk bazy – wcześniej stała obrócona o 180° i zasłaniała twarz.
+  const woolHead = woolRoot.getObjectByName('head');
+  check('wełna ma własną głowę', !!woolHead);
+  const baseHead = new THREE.Box3().setFromObject(mob.head);
+  const woolHeadBox = new THREE.Box3().setFromObject(woolHead as THREE.Object3D);
+  check('wełniana głowa jest po stronie pyska', Math.abs(woolHeadBox.getCenter(new THREE.Vector3()).z - baseHead.getCenter(new THREE.Vector3()).z) < 0.25,
+    `pysk z=${baseHead.getCenter(new THREE.Vector3()).z.toFixed(2)}, wełna z=${woolHeadBox.getCenter(new THREE.Vector3()).z.toFixed(2)}`);
+  const woolBody = woolRoot.getObjectByName('body');
+  const baseBody = new THREE.Box3().setFromObject(mob.group.getObjectByName('body') as THREE.Object3D);
+  const woolBodyBox = new THREE.Box3().setFromObject(woolBody as THREE.Object3D);
+  const bs = new THREE.Vector3(), ws = new THREE.Vector3();
+  baseBody.getSize(bs);
+  woolBodyBox.getSize(ws);
+  check('wełna otacza tułów (spuchnięta o 1,75 px z każdej strony)',
+    Math.abs(ws.x - bs.x - 3.5 / 16) < 0.01 && Math.abs(ws.y - bs.y - 3.5 / 16) < 0.01 && Math.abs(ws.z - bs.z - 3.5 / 16) < 0.01,
+    `baza ${bs.x.toFixed(2)}×${bs.y.toFixed(2)}×${bs.z.toFixed(2)}, wełna ${ws.x.toFixed(2)}×${ws.y.toFixed(2)}×${ws.z.toFixed(2)}`);
+  mob.dispose();
+
+  const src = readSource('src/game/mobs.ts');
+  check('owca: wełna nie obraca się drugi raz', /wool\.root\.rotation\.y = 0;/.test(src));
+}
+
+section('2.31: auto-skok nie włącza się na ścieżce, płycie ani schodach');
+{
+  const w = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w.getChunk(cx, cz);
+  const gy = FLAT_H + 1;
+  const makeBody = (x: number, z: number, y = gy) => ({
+    pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: true, hitWall: false,
+  });
+  // Stojąc na 15/16 bloku ścieżki, stopy są PONIŻEJ pełnej kratki – stara
+  // sonda `floor(p.y + 0.05)` widziała wtedy „przeszkodę” i skakała co klatkę.
+  for (let x = 0; x < 6; x++) for (let z = -6; z <= 6; z++) w.setBlock(x, gy - 1, z, B.PATH);
+  const onPath = makeBody(2.5, 0.5, gy - 0.0625);
+  check('na ścieżce nie ma auto-skołu', !autoJumpAhead(w, onPath as never, 0, -1));
+  check('na ścieżce nie ma auto-skołu w żadną stronę',
+    !autoJumpAhead(w, onPath as never, 1, 0) && !autoJumpAhead(w, onPath as never, -1, 0) && !autoJumpAhead(w, onPath as never, 0, 1));
+
+  // Płyta i łóżko: też wchodzi się krokiem, więc bez skoku.
+  const w2 = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w2.getChunk(cx, cz);
+  w2.setBlock(2, gy, 2, B.OAK_SLAB);
+  w2.setBlock(4, gy, 4, B.BED);
+  check('płyta nie wymaga skoku', !autoJumpAhead(w2, makeBody(2.5, 3.0) as never, 0, -1));
+  check('łóżko nie wymaga skoku (krok 0,6)', !autoJumpAhead(w2, makeBody(4.5, 5.0) as never, 0, -1));
+
+  // Prawdziwy blok – tu auto-skok ma zadziałać (jak w wanilii).
+  const w3 = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w3.getChunk(cx, cz);
+  w3.setBlock(2, gy, 2, B.STONE);
+  check('pełny blok uruchamia auto-skok', autoJumpAhead(w3, makeBody(2.5, 3.0) as never, 0, -1));
+  // …ale nie, gdy nad blokiem nie ma miejsca na głowę.
+  const w4 = new World(4242, true);
+  for (let cx = -1; cx <= 1; cx++) for (let cz = -1; cz <= 1; cz++) w4.getChunk(cx, cz);
+  w4.setBlock(2, gy, 2, B.STONE);
+  w4.setBlock(2, gy + 1, 2, B.STONE);
+  w4.setBlock(2, gy + 2, 2, B.STONE);
+  check('auto-skok nie włącza się pod niskim sufitem', !autoJumpAhead(w4, makeBody(2.5, 3.0) as never, 0, -1));
+
+  const engineSrc = readSource('src/game/engine.ts');
+  check('silnik używa nowej sondy auto-skołu', /return autoJumpAhead\(this\.world, this\.body, dx, dz\);/.test(engineSrc));
+  check('auto-skok nie patrzy już na klocek pod stopami', !/Math\.floor\(p\.y \+ 0\.05\)/.test(engineSrc));
+}
+
+section('2.31: dźwięki mobów i przestrzeń jak w Minecrafcie');
+{
+  const audioSrc = readSource('src/game/audio.ts');
+
+  // --- każdy mob ma własny głos (barwa, nie jeden wspólny ton)
+  const mobs = ['pig', 'sheep', 'cow', 'chicken', 'creeper', 'spider', 'skeleton',
+    'zombie', 'wolf', 'villager', 'golem', 'enderman', 'slime', 'ghast'] as const;
+  for (const m of mobs) {
+    check(`głos moba: ${m}`, new RegExp(`\\b${m}: \\{`).test(audioSrc));
+  }
+  check('każdy głos ma trzy warianty (bezczynność, trafienie, śmierć)',
+    (audioSrc.match(/hurt: \{ wave:/g)?.length ?? 0) >= 14 && (audioSrc.match(/death: \{ wave:/g)?.length ?? 0) >= 14);
+  check('głosy mają formanty (barwę gardła, nie czysty ton)', /formants: \[\[\d+, \d+, [\d.]+\]/.test(audioSrc));
+  check('beczenie owcy ma wibrato', /sheep: \{[\s\S]{0,400}vibrato/.test(audioSrc));
+  check('krowa ma długie „muu” (≥ 0,9 s)', /cow: \{[\s\S]{0,300}dur: 0\.95/.test(audioSrc));
+  check('szkielet klika kośćmi (ziarna)', /skeleton: \{[\s\S]{0,400}grains/.test(audioSrc));
+  check('creeper syczy szumem, bez tonu', /creeper: \{[\s\S]{0,220}formants: \[\]/.test(audioSrc));
+  check('każdy mob ma własny rodzaj kroku', (audioSrc.match(/step: '(soft|hard|bone|metal|slime)'/g)?.length ?? 0) >= 14);
+
+  // --- przestrzeń: tłumienie, panorama, filtr
+  check('dźwięk ma pozycję i tłumienie odległością', /export function placeAt\(/.test(audioSrc) && /const gain = Math\.max\(0, 1 - d \/ distance\)/.test(audioSrc));
+  check('panorama stereo zależy od obrotu kamery', /createStereoPanner/.test(audioSrc) && /rightX = Math\.cos\(listener\.yaw\)/.test(audioSrc));
+  check('oddalone dźwięki są ciemniejsze (filtr dolnoprzepustowy)', /lp\.frequency\.value = 16000 - where\.dull \* 11000/.test(audioSrc));
+  check('uszy gracza ustawia silnik', /Sfx\.setListener\(/.test(readSource('src/game/engine.ts')));
+
+  // --- nowe dźwięki: kroki mobów, śmierć, skrzynia
+  check('mob ma osobny dźwięk kroku', /export function playMobStep\(/.test(audioSrc));
+  check('mob ma dźwięk śmierci', /playMob\(m\.type, 'death'/.test(readSource('src/game/engine.ts')));
+  check('trafienie moba gra jego własny głos', /Sfx\.playMob\(mob\.type, 'hurt'/.test(readSource('src/game/engine.ts')));
+  check('skrzynia ma dźwięk otwierania i zamykania', /export function playChest\(open: boolean/.test(audioSrc) && /Sfx\.playChest\(true/.test(readSource('src/game/engine.ts')) && /Sfx\.playChest\(false/.test(readSource('src/game/engine.ts')));
+
+  // --- bloki: dźwięk z pozycji, kilka ziaren jak w wanilii
+  check('rozbicie bloku ma pozycję', /Sfx\.playBreak\(def\.sound, x \+ 0\.5/.test(readSource('src/game/engine.ts')));
+  check('stawianie bloku ma pozycję', /Sfx\.playPlace\(BLOCKS\[finalId\]\.sound, px \+ 0\.5/.test(readSource('src/game/engine.ts')));
+  check('kopanie bloku ma pozycję', /Sfx\.playDig\(def\.sound, t\.x \+ 0\.5/.test(readSource('src/game/engine.ts')));
+  check('rozbicie to kilka ziaren, nie jeden klik', /const grains = kind === 'grass' \|\| kind === 'sand' \? 4 : 3/.test(audioSrc));
+  check('dźwięki nadal syntezowane (zero plików z gry)', !/new Audio\(|\.mp3['"]|\.ogg['"]|\.wav['"]|data:audio/.test(audioSrc));
+
+  // ---metal brzmi inaczej niż kamień/ szkło
+  check('metal to własny materiał dźwięku', /metal: \{ freq: 1750/.test(audioSrc));
+  check('bloki metalowe używają dźwięku metalu', (readSource('src/game/blocks.ts').match(/sound: 'metal'/g)?.length ?? 0) >= 8);
+  check('kowadło i dzwon dzwonią metalicznie', /T\.anvil, \{ hardness: 5, sound: 'metal' \}/.test(readSource('src/game/blocks.ts')));
+
+  // --- limiter: tłum mobów nie przesterowuje miksu
+  check('miks ma limiter jak w wanilii', /createDynamicsCompressor\(\)/.test(audioSrc) && /limiter jak w wanilii/.test(audioSrc));
+  check('pogłos też przechodzi przez limiter', /conv\.connect\(g\)\.connect\(out\)/.test(audioSrc));
+
+  // --- skrzynia nie trzaśnie przy każdym innym oknie
+  const engine2 = readSource('src/game/engine.ts');
+  check('trzaśnięcie skrzyni tylko przy wyjściu z niej', /prev === 'chest' && s !== 'chest' && this\.chestPos/.test(engine2));
+  check('zamknięcie okna czyści pozycję skrzyni', /this\.setUI\('playing'\);\n\s*this\.chestPos = null;/.test(engine2));
+
+  // --- kroki mobów w silniku (nie tylko w audio.ts)
+  check('silnik woła kroki mobów', /Sfx\.playMobStep\(/.test(engine2));
+  check('krok liczony z przebytej drogi, nie z czasu', /m\.stepDist > \(m\.type === 'chicken'/.test(engine2));
+  check('stojący mob nie stuka', /if \(!m\.dead && m\.body\.onGround\)/.test(engine2));
 }
 
 // =================================================================== report
