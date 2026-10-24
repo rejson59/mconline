@@ -2376,6 +2376,8 @@ export class Game {
     this.on(document, 'pointerlockchange', () => {
       const was = this.locked;
       this.locked = document.pointerLockElement === canvas;
+      // 2.32: udało się przechwycić kursor – wracamy do zwykłego sterowania.
+      if (this.locked) this.mouseFallback = false;
       // Sterowanie dotykowe nie korzysta z Pointer Lock. Na części telefonów
       // jego nieudana aktywacja natychmiast pauzowała grę i zerowała gesty.
       if (!this.touchInput && !this.locked && this.ui === 'playing') this.setUI('paused');
@@ -2641,10 +2643,17 @@ export class Game {
     // na iPadzie nie ma jej wcale). Wtedy nie poddajemy się – kamerę
     // obraca różnica pozycji kursora, a nie `movementX`, więc mysz i tak
     // działa. Włączamy to po pierwszej nieudanej próbie.
+    // 2.32: tryb „bez blokady” włączamy TYLKO na urządzeniu dotykowym
+    // (tam Pointer Lock często nie istnieje – iPad). Na komputerze nieudana
+    // próba (np. cooldown Chrome po Esc) nie może przestawić sterowania:
+    // gracz dostaje normalną podpowiedź „kliknij, aby kontynuować”.
+    const touchDevice = (navigator.maxTouchPoints ?? 0) > 0;
     const enableFallback = () => {
+      if (!touchDevice) return;
       this.mouseFallback = true;
       this.lastMouseX = Number.NaN;
       this.lastMouseY = Number.NaN;
+      this.emitHud();
     };
     try {
       const p = c.requestPointerLock({ unadjustedMovement: true });
