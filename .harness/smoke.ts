@@ -5740,6 +5740,17 @@ section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
   eq('skrzynia na wschód: większe z to lewa połówka', we.chestRegionAt(2, gye, 3), 'chest_left');
   eq('skrzynia na wschód: mniejsze z to prawa połówka', we.chestRegionAt(2, gye, 2), 'chest_right');
 
+  // 2.32: wieko dostaje światło z kratki skrzyni (jaskinia ≠ słońce).
+  wc.buildMesh(wc.getChunk(0, 0));
+  const lit = wc.chestLightAt(5, gyc, 5);
+  check('siatka zapisuje światło kratki ze skrzynią', lit.sky > 0 && lit.sky <= 1, `${lit.sky.toFixed(2)}/${lit.blk.toFixed(2)}`);
+  const darkLid = chestLidGeometry('chest', 0.1, 0);
+  darkLid.computeBoundingBox();
+  const cols = darkLid.getAttribute('color');
+  const brightLid = chestLidGeometry('chest', 1, 0);
+  const bcols = brightLid.getAttribute('color');
+  check('ciemne wieko ma ciemniejsze wierzchołki niż jasne', cols.getX(0) < bcols.getX(0), `${cols.getX(0).toFixed(2)} < ${bcols.getX(0).toFixed(2)}`);
+
   const lid = chestLidGeometry('chest');
   lid.computeBoundingBox();
   const bb = lid.boundingBox!;
