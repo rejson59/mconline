@@ -6261,8 +6261,14 @@ export class Game {
     const backZ = [-1, 0, 1, 0][yaw];
     group.position.set(x + 0.5 + (backX * 7) / 16, y + 9 / 16, z + 0.5 + (backZ * 7) / 16);
     group.rotation.y = (yaw * Math.PI) / 2;
-    // 2.32: połowa podwójnej skrzyni ma własną teksturę i szersze wieko.
-    const mesh = new THREE.Mesh(chestLidGeometry(this.world.chestRegionAt(x, y, z)), this.materials[0]);
+    // 2.32: połowa podwójnej skrzyni ma własną teksturę i szersze wieko,
+    // a światło bierzemy z tej samej kratki co korpus – inaczej klapa
+    // w jaskini świeciłaby pełnym niebem.
+    const light = this.world.chestLightAt(x, y, z);
+    const mesh = new THREE.Mesh(
+      chestLidGeometry(this.world.chestRegionAt(x, y, z), light.sky, light.blk),
+      this.materials[0]
+    );
     mesh.frustumCulled = true;
     group.add(mesh);
     this.scene.add(group);

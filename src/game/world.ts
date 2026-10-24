@@ -319,11 +319,15 @@ function chestFaceRect(box: ChestBox, f: number): [number, number, number, numbe
  * pionowo i odchyla się do tyłu, a nie „unosi” w powietrzu. Silnik stawia
  * tę siatkę w świecie i animuje `rotation.x` od 0 do −π/2.
  */
-export function chestLidGeometry(region: 'chest' | 'chest_left' | 'chest_right' = 'chest'): THREE.BufferGeometry {
+export function chestLidGeometry(
+  region: 'chest' | 'chest_left' | 'chest_right' = 'chest',
+  sky = 1,
+  blk = 0
+): THREE.BufferGeometry {
   const buf = new MeshBuffer(64);
-  addChestBox(buf, 0, 0, 0, chestBoxFor(region, CHEST_LID), 0, 1, 0, region);
+  addChestBox(buf, 0, 0, 0, chestBoxFor(region, CHEST_LID), 0, sky, blk, region);
   // 2.32: każda połówka ma własną część zamka przy brzegu styku.
-  addChestBox(buf, 0, 0, 0, chestLockFor(region), 0, 1, 0, region);
+  addChestBox(buf, 0, 0, 0, chestLockFor(region), 0, sky, blk, region);
   const g = buf.geometry();
   // Zawias: środek kratki w x, 9/16 w y (płaszczyzna styku wieka z korpusem),
   // 1/16 w z (tylna krawędź). Po przesunięciu obrót wokół X wygląda jak w grze.
@@ -1566,6 +1570,21 @@ export class World {
   readonly hiddenChestLids = new Set<string>();
 
   /**
+   * 2.32: światło zmierzone dla kratek ze skrzyniami.
+   *
+   * Animowane wieko jest osobnym modelem, więc nie dostaje kolorów z siatki
+   * chunka. Zapisujemy tu wartości policzone przy budowie siatki (dokładnie
+   * te same, co dla korpusu), żeby klapa w jaskini była ciemna, a w słońcu
+   * jasna – inaczej świeciłaby pełnym niebem wszędzie.
+   */
+  private chestLight = new Map<string, { sky: number; blk: number }>();
+
+  /** Światło kratki ze skrzynią (1, 1, gdy siatka jeszcze jej nie widziała). */
+  chestLightAt(x: number, y: number, z: number): { sky: number; blk: number } {
+    return this.chestLight.get(`${x},${y},${z}`) ?? { sky: 1, blk: 0 };
+  }
+
+  /**
    * 2.32: tekstura skrzyni dla danej kratki. Na razie każda skrzynia używa
    * `normal.png` – lewa/prawa połowa czeka na podwójne skrzynie.
    */
@@ -1951,6 +1970,7 @@ export class World {
             const wx = ox + x, wz = oz + z;
             const hidden = this.hiddenChestLids.has(`${wx},${y},${wz}`);
             const region = this.chestRegionAt(wx, y, wz);
+            this.chestLight.set(`${wx},${y},${wz}`, { sky, blk });
             const body = chestBoxFor(region, CHEST_BODY);
             const skip = region === 'chest' ? 0 : chestSeamSkip(region, yaw);
             addChestBox(buf, wx, y, wz, body, yaw, sky, blk, region, skip);
