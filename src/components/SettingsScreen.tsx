@@ -130,23 +130,24 @@ export default function SettingsScreen({
 
       <div id="settings-panel-gfx" role="tabpanel" aria-labelledby="settings-tab-gfx" hidden={tab !== 'gfx'} className="flex flex-col gap-3">
           <div className="text-xs leading-snug text-green-300 mc-text">Twoje urządzenie: {describeProfile(profile)}</div>
-          <div className="grid grid-cols-2 gap-2">
-            <Btn active={settings.quality === 'auto'} onClick={() => pickQuality('auto')}>
-              Jakość: {qualityLabel.auto}
-            </Btn>
-            <div className="grid grid-cols-4 gap-1">
-              {(['potato', 'low', 'medium', 'high'] as PresetName[]).map((p) => (
-                <button
-                  key={p}
-                  className="mc-btn !px-1 !py-2 !text-[13px]"
-                  aria-pressed={settings.quality === p}
-                  style={settings.quality === p ? { background: 'linear-gradient(#8e98d6,#6c75b8)', color: '#ffffa0' } : undefined}
-                  onClick={() => pickQuality(p)}
-                >
-                  {PRESETS[p].label}
-                </button>
-              ))}
-            </div>
+          {/* 2.32: „Auto” na całą szerokość, a cztery presety pod nim – przy
+              czterech kolumnach obok przycisku Auto etykiety (np. „Ziemniak”)
+              nie mieściły się na telefonie. */}
+          <Btn active={settings.quality === 'auto'} onClick={() => pickQuality('auto')}>
+            Jakość: {qualityLabel.auto}
+          </Btn>
+          <div className="grid grid-cols-4 gap-1">
+            {(['potato', 'low', 'medium', 'high'] as PresetName[]).map((p) => (
+              <button
+                key={p}
+                className="mc-btn !px-1 !py-2 !text-[12.5px]"
+                aria-pressed={settings.quality === p}
+                style={settings.quality === p ? { background: 'linear-gradient(#8e98d6,#6c75b8)', color: '#ffffa0' } : undefined}
+                onClick={() => pickQuality(p)}
+              >
+                {PRESETS[p].label}
+              </button>
+            ))}
           </div>
           {settings.quality === 'auto' && (
             <div className="text-[11px] leading-tight opacity-70">
