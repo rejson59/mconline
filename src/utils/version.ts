@@ -1,5 +1,5 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.32.1';
+export const GAME_VERSION = '2.32.2';
 export const GAME_RELEASE_NAME = 'Skrzynia 1:1, tryb „ziemniak” i klawiatura na tablecie';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
