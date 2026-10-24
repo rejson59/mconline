@@ -115,6 +115,8 @@ import {
 } from '../src/game/anvil';
 import { mergeable } from '../src/game/inventory';
 import { slabFullBlock } from '../src/game/blocks';
+import { chestFacing, chestFacingTowards, chestIdFor, chestLeftDir, isChestBlock, isLootChest } from '../src/game/blocks';
+import { chestLidGeometry } from '../src/game/world';
 import { HYDRATION_RADIUS, isFarmland, isHydrated, updateFarmland } from '../src/game/farmland';
 import {
   MERCHANT, merchantInvSlot, merchantMaxScroll, merchantRowTop, merchantRowVisible, merchantScale,
@@ -123,11 +125,11 @@ import {
 import {
   ANVIL, BREWING, CHEST, CONTAINER, ENCHANT, FURNACE, chestSlot, containerInvSlot, containerScale,
 } from '../src/game/containerLayout';
-import { FrameGovernor, chunkBuildScore, entityTickInterval, frameBudgetMs, lodRange, lodStepFor, shouldTickEntity, sortChunkOffsets } from '../src/game/perf';
+import { FrameGovernor, chunkBuildScore, drawDistanceChunks, entityTickInterval, frameBudgetMs, lodRange, lodStepFor, profileResScale, shouldTickEntity, sortChunkOffsets, PERF_PROFILES } from '../src/game/perf';
 import { LOD_TILE, buildLodTile, lodRing } from '../src/game/lod';
 import { slimeBounce } from '../src/game/physics';
 import { buildItemIcons } from '../src/game/itemIcons';
-import { resolveControlMode } from '../src/utils/input';
+import { HARDWARE_IDLE_MS, TOUCH_RESTORE_TAPS, hardwareHint, resolveControlMode, shouldRestoreTouch } from '../src/utils/input';
 import { GAME_VERSION, GAME_RELEASE_NAME, MINECRAFT_TARGET, RELEASE_HIGHLIGHTS } from '../src/utils/version';
 import {
   LAUNCHER_TABS, LAUNCH_STEPS, DEFAULT_PROFILE, TARGET_LABEL, launcherNews, loadLauncherProfile, sinceLabel, worldMeta,
@@ -2428,6 +2430,8 @@ section('2.2: travel waypoints');
 section('2.0: automatic graphics and settings');
 {
   // presety mają sensowne, rosnące wartości
+  check('preset potato renders closer than low', PRESETS.potato.renderDistance < PRESETS.low.renderDistance);
+  check('preset potato is the lightest', PRESETS.potato.particles < PRESETS.low.particles && PRESETS.potato.pixelRatio <= PRESETS.low.pixelRatio);
   check('preset low renders closer than medium', PRESETS.low.renderDistance < PRESETS.medium.renderDistance);
   check('preset medium renders closer than high', PRESETS.medium.renderDistance < PRESETS.high.renderDistance);
   check('low preset caps FPS to save battery', PRESETS.low.fpsCap === 30);
@@ -2444,7 +2448,10 @@ section('2.0: automatic graphics and settings');
   const weakPhone: DeviceProfile = { mobile: true, tier: 'low', cores: 4, memoryGB: 2, gpu: 'Adreno 506', dpr: 2, minScreen: 360 };
   const midPhone: DeviceProfile = { mobile: true, tier: 'mid', cores: 8, memoryGB: 6, gpu: 'Mali-G77', dpr: 2.6, minScreen: 390 };
   const gamingPC: DeviceProfile = { mobile: false, tier: 'high', cores: 16, memoryGB: 32, gpu: 'RTX 4070', dpr: 1, minScreen: 1080 };
-  eq('weak phone -> low preset', recommendPreset(weakPhone), 'low');
+  // 2.32: bardzo słaby telefon (2 GB RAM / 4 rdzenie) dostaje „Ziemniaka”.
+  eq('very weak phone -> potato preset', recommendPreset(weakPhone), 'potato');
+  const lowPhone: DeviceProfile = { ...weakPhone, memoryGB: 4, cores: 6, gpu: 'Mali-G52' };
+  eq('weak but not ancient phone -> low preset', recommendPreset(lowPhone), 'low');
   eq('mid phone -> medium preset', recommendPreset(midPhone), 'medium');
   eq('gaming PC -> high preset', recommendPreset(gamingPC), 'high');
   check('describeProfile mentions the GPU', describeProfile(gamingPC).includes('RTX 4070'));
@@ -2458,7 +2465,7 @@ section('2.0: automatic graphics and settings');
 
   // effectiveSettings w trybie Auto korzysta z rekomendacji, ale zachowuje wybór
   const auto = effectiveSettings({ ...DEFAULT_SETTINGS, quality: 'auto' }, weakPhone);
-  eq('effective auto uses recommended render distance', auto.renderDistance, PRESETS.low.renderDistance);
+  eq('effective auto uses recommended render distance', auto.renderDistance, PRESETS.potato.renderDistance);
   eq('effective auto keeps quality=auto flag', auto.quality, 'auto');
   const manual = effectiveSettings({ ...DEFAULT_SETTINGS, quality: 'high', renderDistance: 10 }, weakPhone);
   eq('manual quality wins over recommendation', manual.renderDistance, 10);
@@ -3154,8 +3161,12 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.31'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Owca z runem, dźwięki 1:1 i spokojna ścieżka', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION.startsWith('2.32'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Skrzynia 1:1, tryb „ziemniak” i klawiatura na tablecie', GAME_RELEASE_NAME);
+  // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
+  check('2.32 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1/i.test(h.title)));
+  check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak/i.test(h.title)));
+  check('2.32 highlights mention keyboard on tablets', RELEASE_HIGHLIGHTS.some((h) => /klawiatura i mysz na tablecie/i.test(h.title)));
   // 2.31: owca, głosy mobów, przestrzeń dźwięku i auto-skok.
   check('2.31 highlights mention the sheep', RELEASE_HIGHLIGHTS.some((h) => /owca z runem/i.test(h.title)));
   check('2.31 highlights mention mob voices', RELEASE_HIGHLIGHTS.some((h) => /głosy mobów/i.test(h.title)));
@@ -5659,7 +5670,71 @@ section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
   check('płot ma model wysokości bloku', Math.abs(Math.max(...fv) - gy5 - 1) < 0.01, `${(Math.max(...fv) - gy5).toFixed(2)}`);
   w5.setBlock(10, gy5, 10, B.CHEST);
   const cv = verts(10, 10);
-  check('skrzynia jest niższa niż blok', Math.max(...cv) - gy5 < 0.94 && Math.max(...cv) - gy5 > 0.9);
+  // 2.32: waniliowy `ChestModel` ma dokładnie 14/16 wysokości (korpus 10 px,
+  // wieko 5 px od 9 do 14 px). Wcześniej bryła sięgała 15/16, bo była
+  // zbudowana z przeskalowanych kafelków zamiast z prawdziwego modelu.
+  check('skrzynia ma waniliowe 14/16 wysokości', Math.abs(Math.max(...cv) - gy5 - 14 / 16) < 0.005, `${(Math.max(...cv) - gy5).toFixed(3)}`);
+  // --- 2.32: skrzynia 1:1 – kierunki, podwójna skrzynia, wieko
+  eq('skrzynia w starym zapisie patrzy na południe', chestFacing(B.CHEST), 0);
+  eq('wariant wschodni skrzyni', chestFacing(B.CHEST_E), 1);
+  eq('wariant północny skrzyni', chestFacing(B.CHEST_N), 2);
+  eq('wariant zachodni skrzyni', chestFacing(B.CHEST_W), 3);
+  check('skrzynia z łupem to skrzynia', isChestBlock(B.LOOT_CHEST_N) && isLootChest(B.LOOT_CHEST_N));
+  check('zwykła skrzynia nie jest skrzynią z łupem', !isLootChest(B.CHEST_E));
+  eq('id z kierunku wschodniego', chestIdFor(1), B.CHEST_E);
+  eq('id z kierunku zachodniego dla łupu', chestIdFor(3, true), B.LOOT_CHEST_W);
+  eq('stawianie: gracz po stronie −z patrzy na północ', chestFacingTowards(0, -1), 2);
+  eq('stawianie: gracz po stronie +x patrzy na wschód', chestFacingTowards(1, 0), 1);
+  eq('stawianie: po przekątnej wygrywa większa oś', chestFacingTowards(0.9, 0.2), 1);
+  eq('lewo od skrzyni patrzącej na południe to +x', JSON.stringify(chestLeftDir(0)), JSON.stringify([1, 0]));
+  eq('lewo od skrzyni patrzącej na północ to −x', JSON.stringify(chestLeftDir(2)), JSON.stringify([-1, 0]));
+
+  const wc = new World(777, true);
+  const gyc = FLAT_H + 1;
+  wc.getChunk(0, 0);
+  wc.setBlock(2, gyc, 2, B.CHEST);
+  wc.setBlock(3, gyc, 2, B.CHEST);
+  eq('dwie skrzynie obok siebie tworzą lewą połówkę', wc.chestRegionAt(2, gyc, 2), 'chest_left');
+  eq('i prawą połówkę', wc.chestRegionAt(3, gyc, 2), 'chest_right');
+  wc.setBlock(5, gyc, 5, B.CHEST);
+  eq('samotna skrzynia zostaje pojedyncza', wc.chestRegionAt(5, gyc, 5), 'chest');
+  wc.setBlock(7, gyc, 5, B.CHEST_E);
+  wc.setBlock(7, gyc, 6, B.CHEST);
+  eq('skrzynie patrzące w różne strony się nie łączą', wc.chestRegionAt(7, gyc, 5), 'chest');
+  eq('sąsiad z innej strony też nie', wc.chestRegionAt(7, gyc, 6), 'chest');
+
+  const meshBox = (world: World, bx: number, bz: number) => {
+    const xs: number[] = [], ys: number[] = [];
+    for (const g of world.buildMesh(world.getChunk(0, 0))) {
+      const p = g.getAttribute('position') as THREE.BufferAttribute | undefined;
+      if (!p) continue;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), z = p.getZ(i);
+        if (p.getY(i) <= gyc + 0.001) continue; // pomijamy podłogę pod skrzynią
+        if (x >= bx - 0.01 && x <= bx + 1.01 && z >= bz - 0.01 && z <= bz + 1.01) { xs.push(x); ys.push(p.getY(i)); }
+      }
+    }
+    return { xs, ys };
+  };
+  const single = meshBox(wc, 5, 5);
+  check('pojedyncza skrzynia zajmuje 14 px szerokości', Math.abs(Math.max(...single.xs) - Math.min(...single.xs) - 14 / 16) < 0.002,
+    `${(Math.max(...single.xs) - Math.min(...single.xs)).toFixed(3)}`);
+  check('skrzynia jest wsunięta 1 px od krawędzi kratki', Math.abs(Math.min(...single.xs) - 5 - 1 / 16) < 0.002);
+  const dbg = meshBox(wc, 2, 2);
+  // Podwójna skrzynia: lewa połówka 1–16 px swojej kratki, prawa 0–15 px.
+  check('lewa połówka podwójnej skrzyni zaczyna się 1 px od krawędzi', Math.abs(Math.min(...dbg.xs) - 2 - 1 / 16) < 0.002, `${Math.min(...dbg.xs).toFixed(3)}`);
+  check('i sięga krawędzi kratki od strony sąsiada', Math.abs(Math.max(...dbg.xs) - 3) < 0.002, `${Math.max(...dbg.xs).toFixed(3)}`);
+  const dbg2 = meshBox(wc, 3, 2);
+  check('prawa połówka sięga krawędzi kratki od strony sąsiada', Math.abs(Math.min(...dbg2.xs) - 3) < 0.002, `${Math.min(...dbg2.xs).toFixed(3)}`);
+  check('i kończy 1 px przed zewnętrzną krawędzią', Math.abs(Math.max(...dbg2.xs) - 4 + 1 / 16) < 0.002, `${Math.max(...dbg2.xs).toFixed(3)}`);
+
+  const lid = chestLidGeometry('chest');
+  lid.computeBoundingBox();
+  const bb = lid.boundingBox!;
+  // Klapa ma 5 px, a zamek (dziecko klapy) sięga 2 px niżej – razem 7 px.
+  check('wieko z zamkiem ma 7 px wysokości', Math.abs(bb.max.y - bb.min.y - 7 / 16) < 0.002, `${(bb.max.y - bb.min.y).toFixed(3)}`);
+  check('zamek wystaje przed front skrzyni', Math.abs(bb.max.z - 15 / 16) < 0.002, `${bb.max.z.toFixed(3)}`);
+
   w5.setBlock(12, gy5, 12, B.LANTERN);
   const lv = verts(12, 12);
   check('latarnia ma model 11/16 wysokości', Math.abs(Math.max(...lv) - gy5 - 11 / 16) < 0.02, `${(Math.max(...lv) - gy5).toFixed(2)}`);
@@ -6057,10 +6132,50 @@ section('2.28: teren w oddali (LOD) i automat jakości');
   eq('automat startuje w pełnej jakości', g.profile.label, 'pełny');
   for (let i = 0; i < 120; i++) g.update(30, 1 / 60);
   eq('2 s wolnych klatek = profil zrównoważony', g.profile.label, 'zrównoważony');
-  for (let i = 0; i < 240; i++) g.update(30, 1 / 60);
+  for (let i = 0; i < 150; i++) g.update(30, 1 / 60);
   eq('długie zwolnienie = profil oszczędny', g.profile.label, 'oszczędny');
-  for (let i = 0; i < 400; i++) g.update(8, 1 / 60);
+  // 2.32: czwarty stopień – „ziemniak” dostaje jeszcze mniej pracy.
+  for (let i = 0; i < 150; i++) g.update(45, 1 / 60);
+  eq('bardzo wolny sprzęt schodzi do profilu minimalnego', g.profile.label, 'minimalny');
+  for (let i = 0; i < 700; i++) g.update(8, 1 / 60);
   eq('po ustabilizowaniu wraca do pełnej jakości', g.profile.label, 'pełny');
+  eq('profil minimalny tnie zasięg rysowania', drawDistanceChunks(6, PERF_PROFILES.minimal), 4);
+  eq('profil pełny rysuje cały zasięg', drawDistanceChunks(6, PERF_PROFILES.full), 6);
+  check('zasięg rysowania nigdy nie spada poniżej 2 chunków', drawDistanceChunks(3, PERF_PROFILES.minimal) >= 2);
+  check('limit rozdzielczości profilu minimalnego obniża skalę', profileResScale(1, PERF_PROFILES.minimal) < 1);
+  eq('profil pełny nie rusza rozdzielczości', profileResScale(1, PERF_PROFILES.full), 1);
+  // Limit 30 FPS: klatka 33 ms jest sukcesem, automat nie schodzi z jakości.
+  const cap = new FrameGovernor();
+  cap.setFpsCap(30);
+  for (let i = 0; i < 300; i++) cap.update(33, 1 / 30);
+  eq('przy limicie 30 FPS automat trzyma pełną jakość', cap.profile.label, 'pełny');
+
+  // 2.32: fizyczna klawiatura i mysz na tablecie.
+  eq('mysz: pointerdown z pointerType mouse', hardwareHint({ type: 'pointerdown', pointerType: 'mouse' }), 'mouse');
+  eq('palec: pointerdown z pointerType touch', hardwareHint({ type: 'pointerdown', pointerType: 'touch' }), null);
+  eq('mysz: ruch względny w mousemove', hardwareHint({ type: 'mousemove', movementX: 3 }), 'mouse');
+  eq('palec: mousemove bez ruchu względnego', hardwareHint({ type: 'mousemove', movementX: 0, movementY: 0 }), null);
+  eq('klawiatura fizyczna: litera W', hardwareHint({ type: 'keydown', code: 'KeyW' }), 'keyboard');
+  eq('klawiatura ekranowa nie przełącza sterowania', hardwareHint({ type: 'keydown', code: 'KeyW', sourceCapabilities: { firesTouchEvents: true } }), null);
+  eq('klawisz spoza gry (np. F5) nie przełącza sterowania', hardwareHint({ type: 'keydown', code: 'F5' }), null);
+  eq('rolka myszy to mysz', hardwareHint({ type: 'wheel' }), 'mouse');
+  // 2.32: pola zdarzeń w przeglądarce są getterami na prototypie – funkcja
+  // musi czytać je wprost, a nie przez kopiowanie obiektu.
+  class FakeKey {
+    type = 'keydown';
+    get code() { return 'KeyA'; }
+    get sourceCapabilities() { return null; }
+  }
+  eq('klawisz z getterem na prototypie też jest wykryty', hardwareHint(new FakeKey() as never), 'keyboard');
+  class FakePointer {
+    type = 'pointermove';
+    get pointerType() { return 'mouse'; }
+    get movementX() { return 0; }
+  }
+  eq('mysz z pointerType z gettera', hardwareHint(new FakePointer() as never), 'mouse');
+  check('po 15 s ciszy i 3 dotknięciach wracamy na dotyk', shouldRestoreTouch(HARDWARE_IDLE_MS, TOUCH_RESTORE_TAPS));
+  check('samo dotknięcie nie przełącza z powrotem', !shouldRestoreTouch(HARDWARE_IDLE_MS, TOUCH_RESTORE_TAPS - 1));
+  check('krótka przerwa nie przełącza z powrotem', !shouldRestoreTouch(5000, 10));
 
   // Kafel LOD: siatka, kolory i wysokości z generatora świata.
   const w = new World(4242);

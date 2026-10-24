@@ -10,7 +10,7 @@
  */
 
 export type DeviceTier = 'low' | 'mid' | 'high';
-export type PresetName = 'low' | 'medium' | 'high';
+export type PresetName = 'potato' | 'low' | 'medium' | 'high';
 
 export interface DeviceProfile {
   /** Telefon albo tablet (ekran dotykowy + kompaktowy UA). */
@@ -52,6 +52,21 @@ export interface Preset {
 }
 
 export const PRESETS: Record<PresetName, Preset> = {
+  // 2.32: „Ziemniak” – dla sprzętu, na którym wszystko inne już nie wystarcza.
+  // Zasięg 3 chunków (widok 7×7) plus automat jakości z czwartym stopniem
+  // utrzymują ≥30 FPS nawet na starym telefonie klasy Galaxy J / iPadzie 4.
+  potato: {
+    label: 'Ziemniak',
+    renderDistance: 3,
+    pixelRatio: 0.75,
+    particles: 0.15,
+    clouds: false,
+    dynamicResolution: true,
+    fpsCap: 30,
+    chunkBudgetMs: 5,
+    chunksPerFrame: 2,
+    unloadMargin: 1,
+  },
   low: {
     label: 'Niskie',
     renderDistance: 4,
@@ -157,7 +172,12 @@ export function detectDeviceProfile(): DeviceProfile {
 
 /** Rekomendowany preset dla urządzenia (tryb „Auto”). */
 export function recommendPreset(p: DeviceProfile): PresetName {
-  if (p.tier === 'low') return 'low';
+  if (p.tier === 'low') {
+    // Bardzo słaby telefon: mało RAM-u albo tylko cztery rdzenie i tak
+    // zgłoszony sprzęt. Wtedy nawet „Niskie” to za dużo.
+    const veryWeak = (p.memoryGB > 0 && p.memoryGB <= 2) || (p.cores > 0 && p.cores <= 4 && p.mobile);
+    return veryWeak ? 'potato' : 'low';
+  }
   if (p.tier === 'mid') return 'medium';
   return 'high';
 }

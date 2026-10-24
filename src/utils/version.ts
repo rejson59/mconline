@@ -1,10 +1,24 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.31.0';
-export const GAME_RELEASE_NAME = 'Owca z runem, dźwięki 1:1 i spokojna ścieżka';
+export const GAME_VERSION = '2.32.0';
+export const GAME_RELEASE_NAME = 'Skrzynia 1:1, tryb „ziemniak” i klawiatura na tablecie';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
 /**
+ * 2.32: skrzynia jak z Minecrafta, gra na „ziemniaku” i klawiatura na tablecie.
+ * Skrzynia ma teraz prawdziwy model `ChestModel` z paczki 26.2: korpus
+ * 14 × 10 × 14 px, wieko 5 px na zawiasie y = 9, zamek wystający 1 px przed
+ * front i teksturę `entity/chest/normal.png` wprost z atlasu – pojedyncza
+ * oraz podwójna, z lewą i prawą połówką (`normal_left/right.png`) i klapą,
+ * która podnosi się, gdy gracz podejdzie. Skrzynia staje przodem do gracza
+ * (cztery kierunki, jak `HorizontalDirectionalBlock#FACING`). Wydajność:
+ * automat jakości ma czwarty stopień („minimalny”), tnie zasięg rysowania,
+ * limit rozdzielczości i cząsteczki, presety dostały „Ziemniaka” (3 chunki),
+ * a mesher liczy specjalne bryły raz na typ bloku i czyta UV z gotowej
+ * tabeli – mniej pracy na chunk i mniej śmieci dla GC. Sterowanie: tablet
+ * z klawiaturą lub myszką Bluetooth przełącza się na tryb komputerowy
+ * w locie (mysz działa nawet bez Pointer Lock), a po 15 s ciszy i trzech
+ * dotknięciach ekranu wraca do drążka.
  * 2.31: owca z runem na właściwej stronie, dźwięki 1:1 i spokojna ścieżka.
  * Wełna owcy była doklejona pod korzeń modelu, który sam obraca się o 180°,
  * i miała własny obrót – razem 360°, więc runo stało tyłem i czarna bryła
@@ -98,6 +112,18 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'Skrzynia 1:1 z Minecrafta',
+    text: 'Skrzynia nie jest już bryłą z trzech rozciągniętych kafelków 16 × 16. Ma prawdziwy model `ChestModel` z paczki 26.2: korpus 14 × 10 × 14 px od (1,0,1), wieko 5 px zawieszone na y = 9 i zamku wystający 1 px przed front, a wszystko czyta piksele wprost z `entity/chest/normal.png` (UV liczone jak w waniliowym `ModelPart.Cube`). Skrzynia staje przodem do gracza, łączy się w podwójną (lewa i prawa połówka z `normal_left/right.png`, wspólna klamra na środku, bez szczeliny), a wieko podnosi się, gdy podejdziesz, i opada po odejściu.',
+  },
+  {
+    title: 'Gramy na „ziemniaku” – 30 FPS i więcej',
+    text: 'Automat jakości dostał czwarty stopień („minimalny”). Gdy klatki są wolne, gra nie tylko buduje chunki rzadziej, ale przede wszystkim zmniejsza zasięg rysowania (bez kasowania świata w pamięci), obniża limit rozdzielczości i tnie cząsteczki – a mgła kończy się tam, gdzie kończą się siatki, więc horyzont nie wygląda na urwany. Nowy preset „Ziemniak” (3 chunki, rozdzielczość 0,75) jest dla sprzętu, na którym „Niskie” to za dużo. Sam mesher też przyspieszył: specjalne bryły liczy raz na typ bloku, a UV czyta z gotowej tabeli.',
+  },
+  {
+    title: 'Klawiatura i mysz na tablecie',
+    text: 'Tablet z klawiaturą albo myszką Bluetooth (albo USB) zgłasza się jako urządzenie dotykowe, więc wcześniej gra pokazywała drążek i ignorowała sprzęt. Teraz pierwszy realny ruch myszy lub klawisz gry przełącza sterowanie na komputerowe w locie, bez restartu świata – mysz działa nawet tam, gdzie przeglądarka nie pozwala przechwycić kursora (iPad), bo kamera obraca się różnicą pozycji wskaźnika. Po 15 s bez sprzętu i trzech dotknięciach ekranu gra sama wraca do drążka, a klawiatura ekranowa nigdy nie przełącza sterowania.',
+  },
   {
     title: 'Owca z runem na właściwej stronie',
     text: 'Runo było doklejone pod korzeń modelu, który sam obraca się o 180°, a miało jeszcze własny obrót – razem pełne 360°. Efekt: wełniana bryła stała tyłem i zasłaniała pysk, a wełniane nogi wyrastały z tyłu głowy. Teraz wełna dziedziczy wyłącznie obrót korzenia: runo otacza tułów (spuchnięte o 1,75 px z każdej strony), głowa ma własną czapkę z wełny, a pysk jest widoczny. Model zgadza się co do piksela z waniliowym `sheep.json` z 26.1.2.',

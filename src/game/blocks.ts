@@ -121,6 +121,11 @@ export const B = {
   // 2.29: drzwi z zawiasem po prawej stronie (wanilia: `hinge=right`).
   // Zamknięte dolne, otwarte dolne, zamknięte górne, otwarte górne.
   DOOR_RN: 422, DOOR_ORN: 426, DOOR_URN: 430, DOOR_UORN: 434,
+  // 2.32: skrzynia ma kierunek jak `HorizontalDirectionalBlock#FACING`.
+  // B.CHEST (54) zostaje wariantem „przód na południe”, więc stare zapisy
+  // stoją dokładnie tak, jak stały; nowe stawianie wybiera stronę gracza.
+  CHEST_E: 438, CHEST_N: 439, CHEST_W: 440,
+  LOOT_CHEST_E: 441, LOOT_CHEST_N: 442, LOOT_CHEST_W: 443,
 } as const;
 
 export type RenderType =
@@ -259,9 +264,16 @@ for (const [id, name] of BED_FACES) {
   });
 }
 def(B.FURNACE_ON, 'Rozpalony piec', [T.furnace_side, T.furnace_side, T.furnace_side, T.furnace_lit], { hardness: 3.5, drop: B.FURNACE });
+const FACE_PL = ['północ', 'wschód', 'południe', 'zachód'];
 def(B.CHEST, 'Skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', render: 'chest' });
 def(B.LOOT_CHEST, 'Stara skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', drop: B.CHEST, render: 'chest' });
-const FACE_PL = ['północ', 'wschód', 'południe', 'zachód'];
+// 2.32: skrzynia odwrócona w pozostałe trzy strony (przód ku graczowi).
+for (const [i, id] of [B.CHEST_E, B.CHEST_N, B.CHEST_W].entries()) {
+  def(id, `Skrzynia (przód na ${FACE_PL[i + 1]})`, [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', drop: B.CHEST, render: 'chest' });
+}
+for (const [i, id] of [B.LOOT_CHEST_E, B.LOOT_CHEST_N, B.LOOT_CHEST_W].entries()) {
+  def(id, `Stara skrzynia (przód na ${FACE_PL[i + 1]})`, [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', drop: B.CHEST, render: 'chest' });
+}
 for (let i = 0; i < 4; i++) {
   def(B.DOOR_N + i, i === 0 ? 'Drzwi' : `Drzwi (${FACE_PL[i]})`, T.door, { hardness: 3, sound: 'wood', drop: B.DOOR_N, opaque: false, layer: 1 });
   // 2.29: otwarte drzwi nie są już „dziurą” – obrócona płyta nadal blokuje,
@@ -480,7 +492,9 @@ function collisionFor(d: BlockDef): Float32Array | null {
   if (d.render === 'fence') return new Float32Array([0, 0, 0, 1, 1.5, 1]);
   if (d.render === 'cactus') return new Float32Array([1 / 16, 0, 1 / 16, 15 / 16, 1, 15 / 16]);
   if (d.render === 'bed') return new Float32Array([0, 0, 0, 1, 0.5625, 1]);
-  if (d.render === 'chest') return new Float32Array([1 / 16, 0, 1 / 16, 15 / 16, 0.875, 15 / 16]);
+  // 2.32: waniliowa skrzynia ma dokładnie 14/16 wysokości (korpus 10 px +
+  // wieko 5 px od y=9), więc i kolizja, i celownik muszą sięgać 14/16.
+  if (d.render === 'chest') return new Float32Array([1 / 16, 0, 1 / 16, 15 / 16, 14 / 16, 15 / 16]);
   if (d.id === B.PATH) return new Float32Array([0, 0, 0, 1, 0.9375, 1]);
   if (d.id === B.TRAP) return new Float32Array([0, 0.8125, 0, 1, 1, 1]);
   if (isLadder(d.id)) {
@@ -774,6 +788,61 @@ export function isPiston(id: number): boolean {
 export function isPistonHead(id: number): boolean {
   return id === B.PISTON_HEAD;
 }
+/* ---------------------------------------------------------------- 2.32 skrzynia */
+/** Czy to skrzynia w dowolnym wariancie (zwykła albo z łupem, każdy kierunek). */
+export function isChestBlock(id: number): boolean {
+  return (
+    id === B.CHEST || id === B.LOOT_CHEST ||
+    (id >= B.CHEST_E && id <= B.CHEST_W) || (id >= B.LOOT_CHEST_E && id <= B.LOOT_CHEST_W)
+  );
+}
+
+/** Skrzynia z łupem (ta, która po pierwszym otwarciu staje się zwykłą). */
+export function isLootChest(id: number): boolean {
+  return id === B.LOOT_CHEST || (id >= B.LOOT_CHEST_E && id <= B.LOOT_CHEST_W);
+}
+
+/**
+ * Kierunek skrzyni: 0 = przód na południe (+z), 1 = wschód (+x),
+ * 2 = północ (−z), 3 = zachód (−x). Tak jak `facing` w wanilii.
+ */
+export function chestFacing(id: number): number {
+  if (id === B.CHEST_E || id === B.LOOT_CHEST_E) return 1;
+  if (id === B.CHEST_N || id === B.LOOT_CHEST_N) return 2;
+  if (id === B.CHEST_W || id === B.LOOT_CHEST_W) return 3;
+  return 0;
+}
+
+/**
+ * Wektor „w lewo” dla skrzyni patrzącej w stronę `facing` (0 = +z, 1 = +x,
+ * 2 = −z, 3 = −x). Lewa strona to ta po lewej ręce gracza stojącego przodem
+ * do skrzyni – tak samo liczy to waniliowe `ChestBlock#getChestType`.
+ */
+export function chestLeftDir(facing: number): [number, number] {
+  switch (((Math.round(facing) % 4) + 4) % 4) {
+    case 0: return [1, 0];   // przód +z → lewo to +x
+    case 1: return [0, -1];  // przód +x → lewo to −z
+    case 2: return [-1, 0];  // przód −z → lewo to −x
+    default: return [0, 1];  // przód −x → lewo to +z
+  }
+}
+
+/** Id skrzyni dla podanego kierunku (0–3) i rodzaju (łup albo zwykła). */
+export function chestIdFor(facing: number, loot = false): number {
+  const f = ((Math.round(facing) % 4) + 4) % 4;
+  if (loot) return [B.LOOT_CHEST, B.LOOT_CHEST_E, B.LOOT_CHEST_N, B.LOOT_CHEST_W][f];
+  return [B.CHEST, B.CHEST_E, B.CHEST_N, B.CHEST_W][f];
+}
+
+/**
+ * Kierunek, w którym skrzynia ma patrzeć, gdy stawia ją gracz: przodem do
+ * niego, jak w wanilii (`getStateForPlacement` bierze `Direction.getNearest`).
+ */
+export function chestFacingTowards(dx: number, dz: number): number {
+  if (Math.abs(dx) > Math.abs(dz)) return dx > 0 ? 1 : 3;
+  return dz > 0 ? 0 : 2;
+}
+
 export function isPortal(id: number): boolean {
   return id === B.NETHER_PORTAL;
 }

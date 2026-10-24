@@ -49,6 +49,7 @@ export default function SettingsScreen({
 
   const qualityLabel: Record<Settings['quality'], string> = {
     auto: `Auto (${PRESETS[auto].label.toLowerCase()})`,
+    potato: 'Ziemniak',
     low: 'Niskie',
     medium: 'Średnie',
     high: 'Wysokie',
@@ -133,8 +134,8 @@ export default function SettingsScreen({
             <Btn active={settings.quality === 'auto'} onClick={() => pickQuality('auto')}>
               Jakość: {qualityLabel.auto}
             </Btn>
-            <div className="grid grid-cols-3 gap-1">
-              {(['low', 'medium', 'high'] as PresetName[]).map((p) => (
+            <div className="grid grid-cols-4 gap-1">
+              {(['potato', 'low', 'medium', 'high'] as PresetName[]).map((p) => (
                 <button
                   key={p}
                   className="mc-btn !px-1 !py-2 !text-[13px]"

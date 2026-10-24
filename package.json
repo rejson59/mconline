@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.31.0",
-  "description": "BlockCraft 2.31 „Owca z runem, dźwięki 1:1 i spokojna ścieżka” – polska gra sandboxowa w przeglądarce: naprawiona owca, wszystkie dźwięki mobów i bloków jak w Minecrafcie (synteza, zero assetów), auto-skok tylko przy prawdziwej przeszkodzie, publiczny serwer, bez instalacji i bez konta.",
+  "version": "2.32.0",
+  "description": "BlockCraft 2.32 „Skrzynia 1:1, tryb ziemniak i klawiatura na tablecie” – polska gra sandboxowa w przeglądarce: skrzynia z prawdziwego modelu Minecrafta (także podwójna i z otwieranym wiekiem), czwarty stopień automatu jakości i preset „Ziemniak” dla 30 FPS na słabym sprzęcie, automatyczne sterowanie klawiaturą i myszką na tablecie, publiczny serwer, bez instalacji i bez konta.",
   "type": "module",
   "license": "MIT",
   "keywords": [

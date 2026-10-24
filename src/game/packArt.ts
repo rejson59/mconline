@@ -12,6 +12,7 @@
 
 import {
   BLOCK_ATLAS_PNG,
+  ENTITY_TEXTURES,
   ITEM_ATLAS_PNG,
   ITEM_TILE,
   OFFICIAL_TILES,
@@ -25,6 +26,69 @@ const ATLAS_SIZE = TILE * ATLAS_TILES;
 let blockImage: DecodedImage | null = null;
 let itemImage: DecodedImage | null = null;
 let failed = false;
+const entityImages = new Map<string, DecodedImage | null>();
+
+/**
+ * 2.32: miejsce w atlasie 256×256 na całe tekstury encji.
+ *
+ * Kafelki 0–175 są zajęte przez bloki, więc reszta (od wiersza 11) jest wolna.
+ * Skrzynia potrzebuje 64×64 px, czyli 4 × 4 kafelki – mieści się trzy razy
+ * (zwykła, lewa i prawa połowa podwójnej), bez skalowania ani utraty pikseli.
+ */
+export const ENTITY_ATLAS = {
+  chest: { x: 0, y: 176 },
+  chest_left: { x: 64, y: 176 },
+  chest_right: { x: 128, y: 176 },
+} as const;
+
+export type EntityAtlasKey = keyof typeof ENTITY_ATLAS;
+
+/** Obraz tekstury encji z paczki (albo null, gdy jej nie ma). */
+export function entityImage(key: EntityAtlasKey): DecodedImage | null {
+  if (entityImages.has(key)) return entityImages.get(key) ?? null;
+  const entry = ENTITY_TEXTURES[key];
+  if (!entry) {
+    entityImages.set(key, null);
+    return null;
+  }
+  let img: DecodedImage | null = null;
+  try {
+    img = decodePng(entry.png);
+  } catch (e) {
+    console.warn('Nie udało się odczytać tekstury encji z paczki:', key, e);
+  }
+  entityImages.set(key, img);
+  return img;
+}
+
+/**
+ * Wkleja tekstury encji do atlasu gry. Atlas trzyma obraz „od góry”, tak jak
+ * canvas, więc kopiujemy wiersz po wierszu bez odwracania – UV liczy siatka.
+ */
+export function applyEntityTextures(img: ImageData): number {
+  let copied = 0;
+  for (const key of Object.keys(ENTITY_ATLAS) as EntityAtlasKey[]) {
+    const src = entityImage(key);
+    if (!src) continue;
+    const { x: ox, y: oy } = ENTITY_ATLAS[key];
+    for (let y = 0; y < src.height; y++) {
+      const sy = oy + y;
+      if (sy >= ATLAS_SIZE) break;
+      for (let x = 0; x < src.width; x++) {
+        const sx = ox + x;
+        if (sx >= ATLAS_SIZE) break;
+        const s = (y * src.width + x) * 4;
+        const d = (sy * ATLAS_SIZE + sx) * 4;
+        img.data[d] = src.data[s];
+        img.data[d + 1] = src.data[s + 1];
+        img.data[d + 2] = src.data[s + 2];
+        img.data[d + 3] = src.data[s + 3];
+      }
+    }
+    copied++;
+  }
+  return copied;
+}
 
 function decode(data: string): DecodedImage | null {
   try {

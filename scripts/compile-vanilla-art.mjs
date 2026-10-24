@@ -897,6 +897,30 @@ for (const [type, files] of Object.entries(MOB_SKIN_FILES)) {
 }
 
 // ---------------------------------------------------------------------------
+// 2.32: tekstury encji skrzyni – 64×64 w całości, bez przeskalowywania.
+//
+// Do 2.31 skrzynia była składana z trzech kafelków 16×16, które powstały przez
+// ROZCIĄGNIĘCIE 14-pikselowych ścianek do 16 px. Przez to piksele się gubiły,
+// a przód z klamrą nie zgadzał się z waniliowym modelem. Teraz gra dostaje
+// całą teksturę `entity/chest/normal.png` i mapuje ją dokładnie tak, jak robi
+// to `ChestModel` (korpus 14×10×14, wieko 14×5×14, zamek 2×4×1).
+// `_left`/`_right` są potrzebne dla podwójnej skrzyni.
+// ---------------------------------------------------------------------------
+const entityTextures = {};
+for (const [key, file] of [
+  ['chest', 'chest/normal.png'],
+  ['chest_left', 'chest/normal_left.png'],
+  ['chest_right', 'chest/normal_right.png'],
+]) {
+  const img = loadTex(E + file);
+  if (!img) {
+    missingGui.push(`entity ${file}`);
+    continue;
+  }
+  entityTextures[key] = { png: encodePNG(img.w, img.h, img.data).toString('base64'), w: img.w, h: img.h };
+}
+
+// ---------------------------------------------------------------------------
 // grafika interfejsu (serca, głód, hotbar, sloty, przyciski, niebo)
 // ---------------------------------------------------------------------------
 const GUI_FILES = {
@@ -1302,6 +1326,16 @@ ${Object.entries(mobSkins)
   .join('\n')}
 };
 
+/**
+ * Tekstury encji w całości (bez skalowania) – dziś tylko skrzynia.
+ * Pola w/h to rozmiar obrazka, żeby siatka mogła policzyć dokładne UV.
+ */
+export const ENTITY_TEXTURES: Readonly<Record<string, { readonly png: string; readonly w: number; readonly h: number }>> = {
+${Object.entries(entityTextures)
+  .map(([name, t]) => `  ${name}: { w: ${t.w}, h: ${t.h}, png: 'data:image/png;base64,${t.png}' },`)
+  .join('\n')}
+};
+
 /** Grafika interfejsu i nieba z paczki (serca, hotbar, sloty, słońce…). */
 export const GUI_SPRITES: Readonly<Record<string, string>> = {
 ${Object.entries(guiSprites)
@@ -1329,7 +1363,7 @@ console.log(`kafelki bloków z paczki: ${officialTiles.length}/${Object.keys(T_I
 console.log(`ikony przedmiotów z paczki: ${nextItemTile}/${Object.keys(ITEM_IDS()).length}`);
 console.log(`podglądy: .art-preview/blocks.png, .art-preview/items.png`);
 console.log(`skórki graczy: ${Object.keys(playerSkins).length}, palety mobów: ${Object.keys(mobPalettes).length}`);
-console.log(`skórki mobów 1:1: ${Object.keys(mobSkins).length}, grafika GUI: ${Object.keys(guiSprites).length}`);
+console.log(`skórki mobów 1:1: ${Object.keys(mobSkins).length}, grafika GUI: ${Object.keys(guiSprites).length}, tekstury encji: ${Object.keys(entityTextures).join(', ')}`);
 if (missingSkins.length) console.log('brakujące skórki mobów:', missingSkins.join(', '));
 if (missingGui.length) console.log('brakująca grafika GUI:', missingGui.join(', '));
 if (missingMobs.length) console.log('brakujące moby:', missingMobs.join(', '));

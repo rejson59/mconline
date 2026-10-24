@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { World, CS, CH, SEA, plantTree, type Biome, type Chunk } from './world';
-import { B, BLOCKS, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart } from './blocks';
+import { World, CS, CH, SEA, plantTree, chestLidGeometry, type Biome, type Chunk } from './world';
+import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
+import { B, BLOCKS, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -13,7 +14,7 @@ import { getAtlas, tileUV, tileUVInset, tileUVRect, AVG_COLOR } from './textures
 import { autoJumpAhead, stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
 import { fallPath, isFallingBlock, isPassableForFall } from './gravity';
 import { isFarmland, isHydrated, updateFarmland } from './farmland';
-import { FrameGovernor, entityTickInterval, lodRange, lodStepFor, sortChunkOffsets } from './perf';
+import { FrameGovernor, drawDistanceChunks, entityTickInterval, lodRange, lodStepFor, profileResScale, sortChunkOffsets, type PerfProfile } from './perf';
 import { LOD_TILE, buildLodTile, lodRing } from './lod';
 import { Mob, mobVariantForBiome, isHostileMob, type MobType } from './mobs';
 
@@ -621,6 +622,26 @@ export class Game {
   showFps = false;
   /** Telefon nie używa Pointer Lock — blokował on gesty w części mobilnych przeglądarek. */
   touchInput = false;
+  /**
+   * 2.32: automatyczne wykrywanie fizycznej klawiatury i myszy.
+   *
+   * Tablet z klawiaturą/myszką Bluetooth zgłasza się jako urządzenie
+   * dotykowe, więc gra pokazywała drążek i sprzęt był bezużyteczny. Gdy
+   * `autoControl` jest włączone (opcja „Automat”), pierwszy realny ruch myszy
+   * albo klawisz gry przełącza sterowanie na komputerowe w locie – bez
+   * restartu świata. Po 15 s ciszy i trzech dotknięciach ekranu wracamy do
+   * dotyku (odłączona klawiatura nie zostawia gracza bez drążka).
+   */
+  autoControl = true;
+  /** Wywoływane przy automatycznej zmianie trybu – React chowa/pokazuje drążek. */
+  onControlChange: ((kind: InputKind, auto: boolean) => void) | null = null;
+  private lastHardwareAt = 0;
+  private hardwareSeen: HardwareKind | null = null;
+  /** Mysza bez Pointer Lock (tablet) – ruch obraca kamerę po delcie kursora. */
+  private mouseFallback = false;
+  private lastMouseX = Number.NaN;
+  private lastMouseY = Number.NaN;
+  private touchTaps = 0;
   /** Cel dotyku w NDC (-1..1) – gdy ustawione, celownik podąża za palcem. */
   touchAim: { x: number; y: number } | null = null;
   /** Kierunek celowania z ostatniej klatki (crosshair albo palec). */
@@ -750,6 +771,17 @@ export class Game {
   furnacePos: { x: number; y: number; z: number } | null = null;
   chests = new Map<string, ChestState>();
   chestPos: { x: number; y: number; z: number } | null = null;
+
+  /**
+   * 2.32: otwierane wieka skrzyń.
+   *
+   * W grze klapa skrzyni podnosi się, gdy gracz stoi w promieniu 5 bloków
+   * (`ChestBlockEntity#getOpenCount`), i opada po odejściu. Siatka chunka
+   * rysuje tylko korpus, a wieko z zamkiem to osobny model z zawiasem
+   * w punkcie (0, 9/16, 1/16), obracany o `rotation.x` od 0 do −π/2.
+   */
+  private chestLids = new Map<string, { group: THREE.Group; open: number; target: number; x: number; y: number; z: number }>();
+  private chestLidCooldown = 0;
   /** 2.3: kowadła – PPM otwiera ekran scalania i przemianowywania. */
   anvils = new Map<string, AnvilState>();
   anvilPos: { x: number; y: number; z: number } | null = null;
@@ -859,6 +891,16 @@ export class Game {
   private chunkOrderTimer = 0;
   /** 2.28: automat jakości (odpowiednik presetów w modach). */
   private governor = new FrameGovernor();
+  /**
+   * 2.32: ostatnio zastosowany profil automatu jakości.
+   *
+   * Zmiana profilu to nie tylko budżet chunków: skraca się zasięg rysowania
+   * (mniej siatek i pikseli) i obniża limit rozdzielczości. Stosujemy to
+   * dopiero przy realnej zmianie stopnia, nie co klatkę.
+   */
+  private appliedTier = 'full';
+  /** Zasięg rysowania w chunkach po uwzględnieniu profilu. */
+  drawDistance = 6;
   /** 2.28: licznik klatek – decyduje, które moby tickują w danej klatce. */
   private frameNo = 0;
   /** 2.28: pasmo terenu w oddali (Distant Horizons). */
@@ -899,11 +941,14 @@ export class Game {
   constructor(
     container: HTMLElement,
     opts: { seed: number; mode: GameMode; save?: SaveData; renderDistance?: number; worldId?: string; worldName?: string; worldType?: 'normal' | 'flat'; net?: NetLike },
-    cb: { onHud: (h: HUDState) => void; onUI: (s: UIState) => void }
+    cb: { onHud: (h: HUDState) => void; onUI: (s: UIState) => void; onControl?: (kind: InputKind) => void }
   ) {
     this.container = container;
     this.onHud = cb.onHud;
     this.onUI = cb.onUI;
+    // 2.32: React dostaje informację o automatycznej zmianie trybu sterowania
+    // (tablet + klawiatura/mysz Bluetooth), żeby schować drążek i gesty.
+    if (cb.onControl) this.onControlChange = (kind) => cb.onControl?.(kind);
     this.mode = opts.save ? opts.save.mode : opts.mode;
     this.renderDistance = opts.renderDistance ?? 6;
     this.worldId = opts.worldId || opts.save?.id || 'w' + Date.now().toString(36);
@@ -951,6 +996,7 @@ export class Game {
     this.lodGroup.renderOrder = -2;
     this.scene.add(this.lodGroup);
     this.scene.fog = new THREE.Fog(0x88bbff, 20, this.renderDistance * CS);
+    this.drawDistance = this.renderDistance;
 
     const atlas = getAtlas();
     this.icons = { ...atlas.icons, ...buildItemIcons() };
@@ -2086,8 +2132,62 @@ export class Game {
 
   setRenderDistance(r: number) {
     this.renderDistance = r;
+    this.drawDistance = drawDistanceChunks(r, this.governor.profile);
     this.computeOffsets();
+    this.updateChunkVisibility(true);
   }
+
+  /**
+   * 2.32: realna odległość widzenia w blokach (zasięg rysowania × 16).
+   *
+   * Mgła kończy się dokładnie tam, gdzie kończą się siatki, więc obcięcie
+   * zasięgu przez automat jakości nie zostawia „urwanego” horyzontu.
+   */
+  viewDistance(): number {
+    return Math.max(2, Math.min(this.drawDistance, this.renderDistance)) * CS;
+  }
+
+  /**
+   * 2.32: nakłada profil automatu jakości na renderowanie.
+   *
+   * Na słabym sprzęcie najdroższe są wierzchołki i wypełnianie pikseli, a nie
+   * sama logika gry. Dlatego automat nie tylko zwalnia budowę chunków, ale
+   * przede wszystkim zmniejsza zasięg rysowania, obniża rozdzielczość i tnie
+   * cząsteczki. Chunki zostają w pamięci – powrót do wyższej jakości jest
+   * natychmiastowy, bez ponownego generowania świata.
+   */
+  private applyPerfProfile(p: PerfProfile) {
+    this.appliedTier = this.governor.tier;
+    this.drawDistance = drawDistanceChunks(this.renderDistance, p);
+    this.gfx.particleScale = p.particleScale;
+    if (this.rainGeo) this.rainGeo.setDrawRange(0, Math.floor(420 * p.particleScale));
+    this.updateChunkVisibility(true);
+    this.applyResScale();
+    this.emitHud();
+  }
+
+  /**
+   * 2.32: rysuje tylko chunki w zasięgu `drawDistance`.
+   *
+   * Wołane przy zmianie profilu i przy przejściu gracza do następnego chunka
+   * (a nie co klatkę), więc koszt to jedno przejście po ~170 siatkach.
+   */
+  private updateChunkVisibility(force = false) {
+    const pcx = Math.floor(this.body.pos.x / CS), pcz = Math.floor(this.body.pos.z / CS);
+    if (!force && pcx === this.visCx && pcz === this.visCz) return;
+    this.visCx = pcx;
+    this.visCz = pcz;
+    const r = Math.min(this.drawDistance, this.renderDistance);
+    for (const c of this.world.chunks.values()) {
+      if (!c.built) continue;
+      const d = Math.max(Math.abs(c.cx - pcx), Math.abs(c.cz - pcz));
+      const vis = d <= r;
+      for (const m of c.meshes) m.visible = vis;
+    }
+  }
+
+  private visCx = Number.NaN;
+  private visCz = Number.NaN;
 
   /**
    * 2.0: nakłada ustawienia graficzne w czasie rzeczywistym – wywoływane
@@ -2128,7 +2228,10 @@ export class Game {
         this.applyResScale();
       }
     }
-    if (o.fpsCap !== undefined) this.fpsCap = o.fpsCap > 0 ? Math.max(10, Math.min(240, o.fpsCap)) : 0;
+    if (o.fpsCap !== undefined) {
+      this.fpsCap = o.fpsCap > 0 ? Math.max(10, Math.min(240, o.fpsCap)) : 0;
+      this.governor.setFpsCap(this.fpsCap);
+    }
     if (o.lod !== undefined) this.setLodEnabled(o.lod);
     if (o.autoQuality !== undefined && o.autoQuality !== this.autoQuality) {
       this.autoQuality = o.autoQuality;
@@ -2149,7 +2252,8 @@ export class Game {
   /** Stosuje bieżącą skalę rozdzielczości do renderera. */
   private applyResScale() {
     try {
-      this.renderer.setPixelRatio(this.basePixelRatio * this.resScale);
+      const scale = profileResScale(this.resScale, this.governor.profile);
+      this.renderer.setPixelRatio(Math.max(0.5, this.basePixelRatio * scale));
     } catch {
       /* renderer może być już zniszczony przy wyłączaniu gry */
     }
@@ -2285,7 +2389,10 @@ export class Game {
     });
     this.on(canvas, 'mousedown', ((e: MouseEvent) => {
       if (this.ui !== 'playing') return;
-      if (!this.locked) { this.lockPointer(); return; }
+      // 2.32: gdy przeglądarka nie umie przechwycić kursora (iPad), mysz
+      // i tak działa – nie blokujemy wtedy kliknięć próbą blokady, bo gracz
+      // nigdy nie mógłby zaatakować ani postawić bloku.
+      if (!this.locked && !this.mouseFallback) { this.lockPointer(); return; }
       Sfx.unlockAudio();
       if (e.button === 0) { this.mouseLeft = true; this.tryAttack(); }
       else if (e.button === 2) { this.mouseRight = true; this.placeCooldown = 0; this.tryUse(); }
@@ -2309,7 +2416,38 @@ export class Game {
       this.selected = (this.selected + (e.deltaY > 0 ? 1 : -1) + 9) % 9;
       this.emitHud();
     }) as EventListener, { passive: true });
-    this.on(window, 'keydown', ((e: KeyboardEvent) => this.onKeyDown(e)) as EventListener);
+    // 2.32: nasłuch sprzętu – klawiatura i mysz Bluetooth podłączone do
+    // tabletu przełączają sterowanie zanim gracz zdąży się zdziwić.
+    this.on(window, 'keydown', ((e: KeyboardEvent) => {
+      this.noteHardware(e);
+      this.onKeyDown(e);
+    }) as EventListener);
+    // Mysz bez Pointer Lock (typowy tablet): pozycja kursora jest znana,
+    // więc obracamy kamerę o różnicę względem poprzedniego zdarzenia.
+    this.on(window, 'mousemove', ((e: MouseEvent) => {
+      this.noteHardware(e);
+      if (!this.touchInput && !this.locked && this.mouseFallback && this.ui === 'playing') {
+        const dx = Number.isFinite(this.lastMouseX) ? e.clientX - this.lastMouseX : 0;
+        const dy = Number.isFinite(this.lastMouseY) ? e.clientY - this.lastMouseY : 0;
+        this.lastMouseX = e.clientX;
+        this.lastMouseY = e.clientY;
+        const s = 0.0022 * this.sensitivity * (this.zooming ? 0.4 : 1) * 1.6;
+        if (dx || dy) {
+          this.yaw -= dx * s;
+          this.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, this.pitch - dy * s));
+        }
+      }
+    }) as EventListener);
+    this.on(window, 'pointerdown', ((e: PointerEvent) => {
+      if (e.pointerType === 'mouse') this.noteHardware(e);
+      else if (e.pointerType === 'touch') this.noteTouch();
+    }) as EventListener);
+    this.on(window, 'pointermove', ((e: PointerEvent) => {
+      if (e.pointerType === 'mouse') this.noteHardware(e);
+    }) as EventListener, { passive: true });
+    this.on(window, 'wheel', (() => {
+      this.noteHardware({ type: 'wheel' });
+    }) as EventListener, { passive: true });
     this.on(window, 'keyup', ((e: KeyboardEvent) => {
       this.keys.delete(e.code);
       // 2.5: dwuklik W na sprint liczony od nowa po puszczeniu klawisza –
@@ -2327,6 +2465,72 @@ export class Game {
 
   /** Klawisze ruchu – powtórzenia (e.repeat) mają je po prostu utrzymywać. */
   static readonly HOLD_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight']);
+
+  /**
+   * 2.32: zapisuje sygnał sprzętu i ewentualnie przełącza tryb sterowania.
+   *
+   * Klawiatura wymaga dwóch sygnałów w krótkim odstępie (pojedyncze
+   * przypadkowe naciśnięcie nie zmienia sterowania), mysz – jednego, bo
+   * ruch względny to jednoznaczny dowód na prawdziwy wskaźnik.
+   */
+  private noteHardware(ev: Parameters<typeof hardwareHint>[0]) {
+    // 2.32: czytamy pola WPROST ze zdarzenia. `code`, `pointerType` i
+    // `movementX` to gettery na prototypie, więc kopiowanie przez
+    // `{ ...ev }` gubiłoby je i wykrywanie nigdy by nie zadziałało.
+    const kind = hardwareHint(ev);
+    if (!kind) return;
+    const now = performance.now();
+    const gap = this.lastHardwareAt > 0 ? now - this.lastHardwareAt : Infinity;
+    this.lastHardwareAt = now;
+    this.hardwareSeen = kind;
+    this.touchTaps = 0;
+    if (!this.autoControl || !this.touchInput) return;
+    if (kind === 'mouse' || gap < 2500) this.switchControl('desktop', true);
+  }
+
+  /** Dotknięcie ekranu – liczy się do powrotu na drążek po odłączeniu sprzętu. */
+  private noteTouch() {
+    if (!this.touchInput) this.touchTaps++;
+  }
+
+  /** Publiczne: przełączenie trybu sterowania (także z opcji w pauzie). */
+  switchControl(kind: InputKind, auto = false) {
+    const touch = kind === 'touch';
+    if (touch === this.touchInput) return;
+    this.touchInput = touch;
+    this.mouseFallback = !touch;
+    this.keys.clear();
+    this.mouseLeft = this.mouseRight = false;
+    if (!touch) {
+      // Wyjście z trybu dotykowego: chowamy palec z celownika.
+      this.touchAim = null;
+      if (!document.pointerLockElement) this.lockPointer();
+    } else if (document.pointerLockElement) {
+      try {
+        document.exitPointerLock();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.onControlChange?.(kind, auto);
+    this.emitHud();
+  }
+
+  /**
+   * 2.32: powrót na dotyk po ciszy w eterze (odłączone BT).
+   *
+   * Wołane raz na klatkę, koszt: jedna arytmetyka. Warunek jest celowo
+   * ostrożny – 15 s bez sprzętu i trzy realne dotknięcia ekranu.
+   */
+  private checkHardwareIdle() {
+    if (!this.autoControl || this.touchInput || !this.mouseFallback) return;
+    if (this.hardwareSeen === null) return;
+    const idle = performance.now() - this.lastHardwareAt;
+    if (!shouldRestoreTouch(idle, this.touchTaps)) return;
+    this.hardwareSeen = null;
+    this.touchTaps = 0;
+    this.switchControl('touch', true);
+  }
 
   private onKeyDown(e: KeyboardEvent) {
     if (this.ui === 'chat') return;
@@ -2433,17 +2637,27 @@ export class Game {
     };
     // 2.5: surowy ruch myszy (bez przyspieszania z ustawień systemowych) daje
     // celowanie jak w prawdziwym FPS; starsze przeglądarki dostają zwykłą wersję.
+    // 2.32: na tablecie blokada kursora często nie jest dostępna (Safari
+    // na iPadzie nie ma jej wcale). Wtedy nie poddajemy się – kamerę
+    // obraca różnica pozycji kursora, a nie `movementX`, więc mysz i tak
+    // działa. Włączamy to po pierwszej nieudanej próbie.
+    const enableFallback = () => {
+      this.mouseFallback = true;
+      this.lastMouseX = Number.NaN;
+      this.lastMouseY = Number.NaN;
+    };
     try {
       const p = c.requestPointerLock({ unadjustedMovement: true });
       if (p && typeof (p as Promise<void>).catch === 'function') {
         (p as Promise<void>).catch(() => {
           try {
             const fallback = c.requestPointerLock();
-            if (fallback && typeof (fallback as Promise<void>).catch === 'function') (fallback as Promise<void>).catch(() => {});
-          } catch { /* ignore */ }
+            if (fallback && typeof (fallback as Promise<void>).catch === 'function') (fallback as Promise<void>).catch(enableFallback);
+            else enableFallback();
+          } catch { enableFallback(); }
         });
       }
-    } catch { /* ignore */ }
+    } catch { enableFallback(); }
   }
 
   setUI(s: UIState) {
@@ -2707,10 +2921,12 @@ export class Game {
     let chest = this.chests.get(key);
     if (!chest) {
       const id = this.world.getBlock(x, y, z);
-      chest = id === B.LOOT_CHEST ? lootChest(this.world.seed, x, y, z) : emptyChest(x, y, z);
+      chest = isLootChest(id) ? lootChest(this.world.seed, x, y, z) : emptyChest(x, y, z);
       chest.dim = this.isInNether ? 1 : 0;
-      if (id === B.LOOT_CHEST) {
-        this.world.setBlock(x, y, z, B.CHEST);
+      if (isLootChest(id)) {
+        // 2.32: po opróżnieniu skrzynia z łupem staje się zwykłą – ale musi
+        // zostać odwrócona tak, jak stała (`facing` z ID).
+        this.world.setBlock(x, y, z, chestIdFor(chestFacing(id), false));
         this.unlock('loot');
       }
       this.chests.set(key, chest);
@@ -2738,7 +2954,7 @@ export class Game {
     const key = this.cKey(x, y, z);
     const saved = this.chests.get(key);
     const id = this.world.getBlock(x, y, z);
-    const stacks = saved ? saved.slots : id === B.LOOT_CHEST ? lootChest(this.world.seed, x, y, z).slots : [];
+    const stacks = saved ? saved.slots : isLootChest(id) ? lootChest(this.world.seed, x, y, z).slots : [];
     for (const s of stacks) {
       if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.dur, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2, s.ench, s.name);
     }
@@ -4150,11 +4366,17 @@ export class Game {
     }
     c.meshes = [];
     const geos = this.world.buildMesh(c);
+    // 2.32: nowy chunk od razu dostaje widoczność zgodną z zasięgiem
+    // rysowania – inaczej po zwolnieniu jakości „wskakiwałyby” siatki
+    // spoza horyzontu, dopóki gracz nie zmieni chunka.
+    const pcx = Math.floor(this.body.pos.x / CS), pcz = Math.floor(this.body.pos.z / CS);
+    const vis = Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz)) <= Math.min(this.drawDistance, this.renderDistance);
     geos.forEach((g, i) => {
       if (!g.getAttribute('position')) { g.dispose(); return; }
       const m = new THREE.Mesh(g, this.materials[i]);
       m.matrixAutoUpdate = false;
       m.renderOrder = i;
+      m.visible = vis;
       this.scene.add(m);
       c.meshes.push(m);
     });
@@ -4188,10 +4410,16 @@ export class Game {
     const budget = this.gfx.chunkBudgetMs * adaptive * (loading ? 1.8 : 1);
     const perFrame = this.gfx.chunksPerFrame * (loading ? 2 : 1);
     const order = this.chunkOrder.length ? this.chunkOrder : this.offsets;
+    // 2.32: nie budujemy siatek chunków, których automat jakości i tak nie
+    // rysuje. Na „ziemniaku” to 169 → 81 chunków, czyli o połowę mniej
+    // generowania i meshingu przy każdym kroku gracza. Po powrocie do
+    // wyższej jakości brakujące siatki powstaną same.
+    const buildLimit = this.drawDistance + 1;
     for (const [dx, dz] of order) {
       total++;
       const c = this.world.chunks.get(World.key(pcx + dx, pcz + dz));
       if (c && c.built) { done++; continue; }
+      if (Math.max(Math.abs(dx), Math.abs(dz)) > buildLimit) { done++; continue; }
       // 2.0: budżet zależny od jakości (na słabych telefonach mniejszy).
       if (built < perFrame && performance.now() - t0 < budget) {
         this.buildChunk(pcx + dx, pcz + dz);
@@ -4922,7 +5150,7 @@ export class Game {
       if (t.id === B.BELL) { this.ringBell(t.x, t.y, t.z); return; }
       if (isDoor(t.id)) { this.toggleDoor(t.x, t.y, t.z); return; }
       if (isTrap(t.id)) { this.toggleTrap(t.x, t.y, t.z, t.nx, t.nz); return; }
-      if (t.id === B.CHEST || t.id === B.LOOT_CHEST) { this.openChest(t.x, t.y, t.z); return; }
+      if (isChestBlock(t.id)) { this.openChest(t.x, t.y, t.z); return; }
       if (t.id === B.CRAFTING) { this.openInventory(true); return; }
       if (t.id === B.FURNACE || t.id === B.FURNACE_ON) { this.openFurnace(t.x, t.y, t.z); return; }
       if (t.id === B.ENCHANT) { this.openEnchant(t.x, t.y, t.z); return; }
@@ -5115,7 +5343,16 @@ export class Game {
       this.consumeSelected();
       return;
     } else if (id === B.CHEST) {
+      // 2.32: przód skrzyni patrzy w stronę gracza (jak `getStateForPlacement`).
       this.unlock('stash');
+      this.world.setBlock(px, py, pz, chestIdFor(
+        chestFacingTowards(this.body.pos.x - (px + 0.5), this.body.pos.z - (pz + 0.5)), false));
+      this.swingT = 0;
+      this.consumeSelected();
+      Sfx.playPlace('wood', px + 0.5, py + 0.5, pz + 0.5);
+      this.fallGravity(px, py, pz);
+      this.onBlockChanged(px, py, pz);
+      return;
     } else if (RENDER[id] === 1) {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && !isFarmland(below)) return;
     }
@@ -5342,7 +5579,7 @@ export class Game {
       if (n === B.LAVA) fill = B.LAVA;
     }
     if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
-    if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
+    if (isChestBlock(id)) this.spillChest(x, y, z);
     if (id === B.ANVIL) this.spillAnvil(x, y, z);
     if (id === B.BREWING) this.spillBrewing(x, y, z);
     this.world.setBlock(x, y, z, fill);
@@ -5436,7 +5673,7 @@ export class Game {
           if (id === B.AIR || id === B.BEDROCK || id === B.OBSIDIAN || id === B.WATER || id === B.LAVA) continue;
           if (id === B.TNT) { this.igniteTNT(x, y, z, 0.3 + Math.random() * 0.6, source); continue; }
           if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
-          if (id === B.CHEST || id === B.LOOT_CHEST) this.spillChest(x, y, z);
+          if (isChestBlock(id)) this.spillChest(x, y, z);
           if (id === B.ANVIL) this.spillAnvil(x, y, z);
           if (id === B.BREWING) this.spillBrewing(x, y, z);
           this.world.setBlock(x, y, z, B.AIR);
@@ -5634,11 +5871,13 @@ export class Game {
       this.governor.reset();
       this.perfLabel = 'pełny';
     }
+    if (this.governor.tier !== this.appliedTier) this.applyPerfProfile(this.governor.profile);
 
     const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);
+      this.updateChestLids(dt);
       this.updateInteraction(dt);
       this.updateMobs(dt);
       // 2.14: po ruchu mobów – auto-bicie zawsze celuje w aktualną pozycję.
@@ -5672,7 +5911,9 @@ export class Game {
       this.saveTimer += dt;
       if (this.saveTimer > 30) { this.saveTimer = 0; this.save(); }
     }
+    this.checkHardwareIdle();
     this.updateChunks();
+    this.updateChunkVisibility();
     this.updateLod(dt);
     this.uTime.value += dt;
     this.updateCamera(dt);
@@ -5680,8 +5921,13 @@ export class Game {
     this.updateHeldLight();
     this.tickNet(dt);
 
+    // 2.32: HUD odświeża się 10 × na sekundę, ale na słabym sprzęcie
+    // 4 × – każde odświeżenie to re-render Reacta z pełnym stanem ekwipunku.
     this.hudTimer += dt;
-    if (this.hudTimer > 0.1) { this.hudTimer = 0; this.emitHud(); }
+    if (this.hudTimer > (this.governor.tier === 'eco' || this.governor.tier === 'minimal' ? 0.25 : 0.1)) {
+      this.hudTimer = 0;
+      this.emitHud();
+    }
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -5932,6 +6178,101 @@ export class Game {
     }
     const targetEye = sneaking ? 1.42 : 1.62;
     this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 15);
+  }
+
+  /**
+   * 2.32: wieka skrzyń – otwieranie w promieniu 5 bloków i animacja klapy.
+   *
+   * Skan kratek robimy cztery razy na sekundę (11³ = 1331 odczytów), a nie
+   * co klatkę: przy 60 FPS to 20 razy mniej pracy, a oko i tak widzi tylko
+   * płynne 0,25 s przejścia.
+   */
+  private updateChestLids(dt: number) {
+    this.chestLidCooldown -= dt;
+    if (this.chestLidCooldown <= 0 && this.ui !== 'inventory' && this.ui !== 'paused') {
+      this.chestLidCooldown = 0.25;
+      const px = Math.floor(this.body.pos.x), py = Math.floor(this.body.pos.y), pz = Math.floor(this.body.pos.z);
+      for (let dy = -2; dy <= 2; dy++)
+        for (let dz = -5; dz <= 5; dz++)
+          for (let dx = -5; dx <= 5; dx++) {
+            const x = px + dx, y = py + dy, z = pz + dz;
+            if (!isChestBlock(this.world.peekBlock(x, y, z))) continue;
+            const key = this.wKey(x, y, z);
+            let lid = this.chestLids.get(key);
+            if (!lid) {
+              lid = this.spawnChestLid(x, y, z);
+              if (!lid) continue;
+              this.chestLids.set(key, lid);
+            }
+            lid.target = 1;
+            // 2.32: podwójna skrzynia to jeden mebel – wieko sąsiada też się
+            // podnosi, inaczej wyglądałoby to jak dwie osobne skrzynie.
+            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+              const n = this.world.peekBlock(x + dx, y, z + dz);
+              if (!isChestBlock(n) || chestFacing(n) !== chestFacing(this.world.peekBlock(x, y, z))) continue;
+              const nk = this.wKey(x + dx, y, z + dz);
+              let other = this.chestLids.get(nk);
+              if (!other) {
+                other = this.spawnChestLid(x + dx, y, z + dz);
+                if (!other) continue;
+                this.chestLids.set(nk, other);
+              }
+              other.target = 1;
+            }
+          }
+    }
+    for (const [key, lid] of this.chestLids) {
+      // Wieko zamyka się, gdy skrzynia zniknęła albo gracz odszedł.
+      if (!isChestBlock(this.world.peekBlock(lid.x, lid.y, lid.z))) lid.target = 0;
+      else if (Math.hypot(lid.x + 0.5 - this.body.pos.x, lid.y + 0.5 - this.body.pos.y, lid.z + 0.5 - this.body.pos.z) > 5.5) lid.target = 0;
+      const speed = 5.5; // waniliowe `openNess` dochodzi w ~0,25 s
+      lid.open += Math.sign(lid.target - lid.open) * Math.min(Math.abs(lid.target - lid.open), speed * dt);
+      lid.group.rotation.x = -lid.open * (Math.PI / 2);
+      if (lid.target === 0 && lid.open <= 0.001) {
+        this.scene.remove(lid.group);
+        lid.group.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (mesh.isMesh) mesh.geometry.dispose();
+        });
+        this.chestLids.delete(key);
+        // Korpus w siatce chunka znów może rysować wieko.
+        this.world.hiddenChestLids.delete(key);
+        this.markChestDirty(lid.x, lid.y, lid.z);
+      }
+    }
+  }
+
+  private wKey(x: number, y: number, z: number) {
+    return `${x},${y},${z}`;
+  }
+
+  /** Nowy model wieka dla skrzyni – chowa je w siatce chunka. */
+  private spawnChestLid(x: number, y: number, z: number) {
+    const id = this.world.peekBlock(x, y, z);
+    const key = this.wKey(x, y, z);
+    this.world.hiddenChestLids.add(key);
+    this.markChestDirty(x, y, z);
+    const group = new THREE.Group();
+    // 2.32: zawias leży 7/16 przed środkiem kratki, po stronie TYŁU skrzyni
+    // (w modelu z = 1 px). Dla każdego kierunku trzeba go więc przesunąć
+    // odwrotnie do przodu, inaczej wieko obracałoby się w złym miejscu.
+    const yaw = chestFacing(id);
+    const backX = [-0, -1, 0, 1][yaw];
+    const backZ = [-1, 0, 1, 0][yaw];
+    group.position.set(x + 0.5 + (backX * 7) / 16, y + 9 / 16, z + 0.5 + (backZ * 7) / 16);
+    group.rotation.y = (yaw * Math.PI) / 2;
+    // 2.32: połowa podwójnej skrzyni ma własną teksturę i szersze wieko.
+    const mesh = new THREE.Mesh(chestLidGeometry(this.world.chestRegionAt(x, y, z)), this.materials[0]);
+    mesh.frustumCulled = true;
+    group.add(mesh);
+    this.scene.add(group);
+    return { group, open: 0, target: 1, x, y, z };
+  }
+
+  private markChestDirty(x: number, y: number, z: number) {
+    // 2.32: tylko ten chunk (plus sąsiad, gdy skrzynia stoi na krawędzi),
+    // a nie pięć chunków naraz.
+    this.world.markBlockDirty(x, y, z);
   }
 
   private updateInteraction(dt: number) {
@@ -6353,8 +6694,8 @@ export class Game {
     if (nether) {
       // Nether: stałe, czerwone mrok – bez słońca, chmur i cyklu dnia.
       fog.color.setRGB(0.23, 0.055, 0.04);
-      fog.near = this.renderDistance * CS * 0.4;
-      fog.far = this.renderDistance * CS * 0.95;
+      fog.near = this.viewDistance() * 0.4;
+      fog.far = this.viewDistance() * 0.95;
       this.scene.background = fog.color;
     } else if (eyeBlock === B.WATER) {
       fog.color.setRGB(0.05 * dl, 0.15 * dl, 0.5 * dl);
@@ -6380,11 +6721,11 @@ export class Game {
       // horyzont kończyłby się na 96 blokach i teren w oddali byłby szary.
       const far = this.lodFar();
       if (far > 0) {
-        fog.near = this.renderDistance * CS * (raining ? 0.3 : 0.5);
+        fog.near = this.viewDistance() * (raining ? 0.3 : 0.5);
         fog.far = far * (raining ? 0.85 : 1);
       } else {
-        fog.near = this.renderDistance * CS * (raining ? 0.28 : 0.45);
-        fog.far = this.renderDistance * CS * (raining ? 0.7 : 0.95);
+        fog.near = this.viewDistance() * (raining ? 0.28 : 0.45);
+        fog.far = this.viewDistance() * (raining ? 0.7 : 0.95);
       }
       // 2.28: kafle LOD mają kolory w wierzchołkach, więc nie łapią
       // oświetlenia sceny – przyciemniamy je razem z dniem i deszczem,
@@ -6497,7 +6838,9 @@ export class Game {
       messages: this.messages.filter((m) => now - m.t < 10000 || this.ui === 'chat').slice(-10),
       loading: this.loadingProgress,
       day: this.day,
-      locked: this.locked,
+      // 2.32: tablet bez Pointer Lock gra dalej myszą – nakładka
+      // „kliknij, aby kontynuować” tylko by przeszkadzała.
+      locked: this.locked || this.mouseFallback,
       hunger: this.hunger,
       weather: this.weather,
       toast: this.toast && now - this.toast.at < 4600 ? { title: this.toast.title, text: this.toast.text } : null,
