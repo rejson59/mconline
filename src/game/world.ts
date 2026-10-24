@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, isSlabTop, stairsFacing, isBed, isBedHead, bedFacing } from './blocks';
-import { tileUV, tileUVInset, tileUVRect } from './textures';
+import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, isSlabTop, stairsFacing, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
+import { TILE_UV4, entityUV, tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
 import {
@@ -214,6 +214,169 @@ class MeshBuffer {
       : new THREE.BufferAttribute(Uint16Array.from(indices), 1));
     g.computeBoundingSphere();
     return g;
+  }
+}
+
+/* ------------------------------------------------------------------ 2.32
+ * Skrzynia 1:1 z waniliowym `ChestModel` (26.1.2).
+ *
+ * Pudełka z `minecraft:chest`:
+ *  • korpus – origin (1,0,1), rozmiar 14×10×14, UV (0,19),
+ *  • wieko  – pivot (0,9,1), pudełko (1,0,0) 14×5×14, UV (0,0),
+ *  • zamek  – pivot (0,9,1), pudełko (7,−2,14) 2×4×1, UV (0,0).
+ *
+ * Tekstura `entity/chest/normal.png` (64×64) leży w atlasie w całości, więc
+ * UV bierzemy wprost z waniliowego rozkładu pudełka (ModelPart.Cube):
+ * góra (u+d, v), dół (u+d+w, v), wschód (u, v+d), północ (u+d, v+d),
+ * zachód (u+d+w, v+d), południe (u+d+w+d, v+d).
+ * ------------------------------------------------------------------------ */
+interface ChestBox {
+  /** Pudełko w pikselach modelu (0–16) – tak jak w JSON-ie encji. */
+  x0: number; y0: number; z0: number; x1: number; y1: number; z1: number;
+  /** Początek UV w teksturze 64×64. */
+  u: number; v: number;
+}
+
+const CHEST_BODY: ChestBox = { x0: 1, y0: 0, z0: 1, x1: 15, y1: 10, z1: 15, u: 0, v: 19 };
+const CHEST_LID: ChestBox = { x0: 1, y0: 9, z0: 1, x1: 15, y1: 14, z1: 15, u: 0, v: 0 };
+const CHEST_LOCK: ChestBox = { x0: 7, y0: 7, z0: 15, x1: 9, y1: 11, z1: 16, u: 0, v: 0 };
+// 2.32: w podwójnej skrzyni zamek jest dzielony na dwie połówki – każda
+// przy swoim brzegu styku, więc razem dają jedną klamrę na środku, jak w grze.
+const CHEST_LOCK_LEFT: ChestBox = { x0: 15, y0: 7, z0: 15, x1: 16, y1: 11, z1: 16, u: 0, v: 0 };
+const CHEST_LOCK_RIGHT: ChestBox = { x0: 0, y0: 7, z0: 15, x1: 1, y1: 11, z1: 16, u: 0, v: 0 };
+
+/**
+ * 2.32: lewa i prawa połowa podwójnej skrzyni.
+ *
+ * W wanilii `ChestModel` dla `doubleLeft` przesuwa początek na x = 0 i zwęża
+ * pudełko do 15 px, a dla `doubleRight` zaczyna na x = 1 i kończy na 16.
+ * Ścianki stykowe dwóch połówek leżą dokładnie w tej samej płaszczyźnie, ale
+ * mają przeciwne normalne, więc z zewnątrz nigdy nie widać żadnej z nich –
+ * dlatego podwójna skrzynia wygląda jak jedna bryła bez szwu.
+ */
+function chestBoxFor(region: 'chest' | 'chest_left' | 'chest_right', box: ChestBox): ChestBox {
+  if (region === 'chest') return box;
+  // `chest_left` to połówka bliżej −x (dla przodu na +z) i rysuje się od
+  // 1 do 16, a `chest_right` od 0 do 15. Dzięki temu bryła jest ciągła bez
+  // szczeliny, a ciemne obramowanie z `normal_left/right.png` wypada tylko
+  // na zewnętrznych krawędziach – dokładnie jak w Minecrafcie.
+  // 2.32: połówki zachodzą na siebie o 1 px przy styku, więc podwójna
+  // skrzynia jest jedną bryłą bez szczeliny: lewa zajmuje 1–16 px swojej
+  // kratki, prawa 0–15 px. Razem dają 30 px szerokości – tyle, ile ma
+  // waniliowa podwójna skrzynia. Ciemne obramowanie z `normal_left.png`
+  // wypada na zewnętrznej krawędzi lewej połówki, a z `normal_right.png` na
+  // zewnętrznej krawędzi prawej – na styku zostaje czyste drewno.
+  return region === 'chest_left' ? { ...box, x0: 1, x1: 16 } : { ...box, x0: 0, x1: 15 };
+}
+
+/**
+ * 2.32: która ścianka połówki jest schowana w styku.
+ *
+ * `chest_left` sięga krawędzi kratki od strony sąsiada (x = +16 px), więc
+ * jego ściana +x jest w środku podwójnej skrzyni; `chest_right` ma taką
+ * samą ścianę −x. Dla obrotu o 90° te osie zamieniają się miejscami.
+ */
+function chestSeamSkip(region: 'chest' | 'chest_left' | 'chest_right', _yaw?: number): number {
+  // 1 = pomiń +x, −1 = pomiń −x (w układzie modelu).
+  return region === 'chest_left' ? 1 : -1;
+}
+
+/** Zamek dla danej połówki – pojedyncza skrzynia ma jeden, szeroki. */
+function chestLockFor(region: 'chest' | 'chest_left' | 'chest_right'): ChestBox {
+  if (region === 'chest_left') return CHEST_LOCK_LEFT;
+  if (region === 'chest_right') return CHEST_LOCK_RIGHT;
+  return CHEST_LOCK;
+}
+
+/** Prostokąt UV jednej ściany pudełka w pikselach tekstury encji. */
+function chestFaceRect(box: ChestBox, f: number): [number, number, number, number] {
+  const w = box.x1 - box.x0, h = box.y1 - box.y0, d = box.z1 - box.z0;
+  const { u, v } = box;
+  // 0 −x, 1 +x, 2 −y (spód), 3 +y (góra), 4 −z, 5 +z.
+  // W waniliowym `ModelPart.Cube` górna ściana bierze (u+d, v), a dolna
+  // (u+d+w, v). W `normal.png` to drugie jest jasną deską (zewnętrzna góra
+  // wieka), a pierwsze ciemnym wnętrzem – dlatego góra czyta się poprawnie
+  // tylko przy tej kolejności. Wnętrze korpusu (28,19) jest czarne, więc po
+  // otwarciu wieka widać dokładnie taką ciemność jak w grze.
+  switch (f) {
+    case 0: return [u + d + w, v + d, d, h];
+    case 1: return [u, v + d, d, h];
+    // 2.32: w `normal.png` zewnętrzna góra wieka leży pod (28,0), a ciemne
+    // wnętrze pod (14,0) – dlatego +y bierze prawe pudełko, a −y lewe.
+    case 2: return [u + d, v, w, d];
+    case 3: return [u + d + w, v, w, d];
+    case 4: return [u + d, v + d, w, h];
+    default: return [u + d + w + d, v + d, w, h];
+  }
+}
+
+/**
+ * 2.32: geometria samego wieka skrzyni (wieko + zamek), w układzie lokalnym
+ * z zawiasem w punkcie (0, 0, 0).
+ *
+ * W wanilii `ChestModel` obraca wieko wokół linii y = 9, z = 1 px – czyli
+ * przedniej krawędzi TYLNEJ ściany. Dzięki temu po otwarciu klapa staje
+ * pionowo i odchyla się do tyłu, a nie „unosi” w powietrzu. Silnik stawia
+ * tę siatkę w świecie i animuje `rotation.x` od 0 do −π/2.
+ */
+export function chestLidGeometry(region: 'chest' | 'chest_left' | 'chest_right' = 'chest'): THREE.BufferGeometry {
+  const buf = new MeshBuffer(64);
+  addChestBox(buf, 0, 0, 0, chestBoxFor(region, CHEST_LID), 0, 1, 0, region);
+  // 2.32: każda połówka ma własną część zamka przy brzegu styku.
+  addChestBox(buf, 0, 0, 0, chestLockFor(region), 0, 1, 0, region);
+  const g = buf.geometry();
+  // Zawias: środek kratki w x, 9/16 w y (płaszczyzna styku wieka z korpusem),
+  // 1/16 w z (tylna krawędź). Po przesunięciu obrót wokół X wygląda jak w grze.
+  g.translate(-0.5, -9 / 16, -1 / 16);
+  return g;
+}
+
+/**
+ * Rysuje skrzynię obróconą o `yaw` × 90° wokół środka kratki
+ * (0 = przód na +z, 1 = +x, 2 = −z, 3 = −x).
+ */
+function addChestBox(
+  buf: MeshBuffer, ox: number, oy: number, oz: number, box: ChestBox,
+  yaw: number, sky: number, blk: number,
+  region: 'chest' | 'chest_left' | 'chest_right' = 'chest',
+  /** Ściany do pominięcia (0 = −x, 1 = +x) – styk dwóch połówek. */
+  skipX = 0
+) {
+  const cos = [1, 0, -1, 0][yaw & 3];
+  const sin = [0, 1, 0, -1][yaw & 3];
+  const rot = (x: number, z: number): [number, number] => [x * cos + z * sin, -x * sin + z * cos];
+  // Normalne ścian po obrocie – `aFace` steruje kierunkiem światła w shaderze.
+  const normal: [number, number, number][] = [
+    [-1, 0, 0], [1, 0, 0], [0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1],
+  ];
+  for (let f = 0; f < 6; f++) {
+    // 2.32: w podwójnej skrzyni ścianka stykowa dwóch połówek leży w tej
+    // samej płaszczyźnie dla obu modeli – gdyby ją rysować, walczyłaby
+    // o głębię z sąsiadem i na środku pojawiałby się ciemny pasek.
+    if (skipX && (((yaw & 1) === 0 && f === (skipX > 0 ? 1 : 0)) || ((yaw & 1) === 1 && f === (skipX > 0 ? 5 : 4)))) continue;
+    const F = FACES[f];
+    const [rx, ry, rw, rh] = chestFaceRect(box, f);
+    const n = normal[f];
+    const [rnx, rnz] = n[1] === 0 ? rot(n[0], n[2]) : [n[0], n[2]];
+    const faceIdx = n[1] !== 0 ? (n[1] > 0 ? 3 : 2) : Math.abs(rnx) > 0.5 ? (rnx > 0 ? 1 : 0) : rnz > 0 ? 5 : 4;
+    const shade = FACES[faceIdx].shade;
+    const br = shade * sky * shade * sky;
+    const bl = shade * blk * shade * blk;
+    const base = buf.count;
+    for (let k = 0; k < 4; k++) {
+      const cr = F.c[k];
+      const lx = box.x0 + cr[0] * (box.x1 - box.x0);
+      const ly = box.y0 + cr[1] * (box.y1 - box.y0);
+      const lz = box.z0 + cr[2] * (box.z1 - box.z0);
+      const [dx, dz] = rot(lx - 8, lz - 8);
+      const px = ox + 0.5 + dx / 16;
+      const pz = oz + 0.5 + dz / 16;
+      // lokalne (u,v) ściany → piksel w prostokącie tekstury
+      const [cu, cv] = [cr[3], cr[4]];
+      const uv = entityUV(region, rx + cu * rw, ry + (1 - cv) * rh);
+      buf.vertex(px, oy + ly / 16, pz, uv[0], uv[1], br, br, br, bl, 0, faceIdx);
+    }
+    buf.quad(base);
   }
 }
 
@@ -448,6 +611,24 @@ function doorBoxes(id: number): SpecialBox[] {
     tiles: [tileFor(id, 0), tileFor(id, 0), tileFor(id, 0), tileFor(id, 0), tileFor(id, 0), tileFor(id, 0)],
     crops,
   }];
+}
+
+/**
+ * 2.32: wynik `specialBoxes` trzymany per ID bloku.
+ *
+ * Wcześniej funkcja leciała dla KAŻDEGO niepustego bloku w chunku (około
+ * 18 tysięcy wywołań na chunk), za każdym razem przechodząc łańcuch
+ * kilkunastu `if`-ów i wywołań `isBed`/`ladderFacing`. Teraz wynik liczymy
+ * raz na typ bloku (jest ich ~350), a pętla siatki robi jeden odczyt
+ * z tablicy. Dla zwykłego kamienia to od razu `null` bez żadnej pracy.
+ */
+const SPECIAL_CACHE: (SpecialBox[] | null | undefined)[] = [];
+function specialOf(id: number): SpecialBox[] | null {
+  const cached = SPECIAL_CACHE[id];
+  if (cached !== undefined) return cached;
+  const boxes = specialBoxes(id);
+  SPECIAL_CACHE[id] = boxes;
+  return boxes;
 }
 
 function specialBoxes(id: number): SpecialBox[] | null {
@@ -1367,6 +1548,79 @@ export class World {
   }
 
   // ---------- Meshing ----------
+  /**
+   * 2.32: kratki skrzyń, którym siatka ma pominąć wieko i zamek.
+   *
+   * Wieko otwiera się animacją w silniku (osobny, obracany model), więc
+   * statyczna siatka chunka nie może go rysować – inaczej widzielibyśmy dwa
+   * wieka naraz. Zbiór jest pusty, dopóki gracz nie otworzy skrzyni.
+   */
+  readonly hiddenChestLids = new Set<string>();
+
+  /**
+   * 2.32: tekstura skrzyni dla danej kratki. Na razie każda skrzynia używa
+   * `normal.png` – lewa/prawa połowa czeka na podwójne skrzynie.
+   */
+  chestRegionAt(x: number, y: number, z: number): 'chest' | 'chest_left' | 'chest_right' {
+    const id = this.peekBlock(x, y, z);
+    if (!isChestBlock(id)) return 'chest';
+    // W grze podwójna skrzynia powstaje tylko z dwóch skrzyń stojących
+    // obok siebie i patrzących w tę samą stronę (`ChestBlock#getChestType`).
+    // Lewa strona to ta po lewej ręce patrząc przez przód skrzyni.
+    const f = chestFacing(id);
+    const [lx, lz] = chestLeftDir(f);
+    const sameFacing = (nx: number, nz: number) => {
+      const n = this.peekBlock(nx, y, nz);
+      return isChestBlock(n) && chestFacing(n) === f;
+    };
+    // 2.32: połówki dobieramy tak, żeby obramowanie z tekstury wypadło na
+    // zewnętrznych krawędziach, a nie na styku. Dlatego skrzynia ze
+    // sąsiadem po swojej lewej jest połówką `chest_left` (rysuje się od
+    // 1 do 16 px), a ta z sąsiadem po prawej – `chest_right` (0 do 15 px).
+    if (sameFacing(x + lx, z + lz)) return 'chest_left';
+    if (sameFacing(x - lx, z - lz)) return 'chest_right';
+    return 'chest';
+  }
+
+  /**
+   * 2.32: oznacza chunk do przebudowy bez zmiany bloku.
+   *
+   * Wieko skrzyni raz jest w siatce chunka, a raz nie (gdy jest animowane
+   * osobnym modelem) – a to nie zmienia ani jednego bloku, więc zwykłe
+   * `setBlock` nie zadziała. Ta metoda robi dokładnie to, co potrzeba,
+   * razem z sąsiadami (AO i światło na krawędziach).
+   */
+  markDirtyChunk(cx: number, cz: number) {
+    const k = World.key(cx, cz);
+    if (this.chunks.has(k)) this.dirty.add(k);
+  }
+
+  /**
+   * 2.32: przebudowa TYLKO tego, co blok naprawdę zmienia.
+   *
+   * Wieko skrzyni znika z siatki chunka, gdy pojawia się animowany model.
+   * Wcześniej oznaczaliśmy chunk i czterech sąsiadów (5 × ~5 ms = klatka
+   * zamarzała), choć sąsiedzi zmieniają się tylko wtedy, gdy blok leży
+   * dokładnie na krawędzi – bo tylko tam dochodzi do zmian AO i światła.
+   */
+  markBlockDirty(x: number, y: number, z: number) {
+    void y;
+    const cx = Math.floor(x / CS), cz = Math.floor(z / CS);
+    this.markDirtyChunk(cx, cz);
+    const lx = x - cx * CS, lz = z - cz * CS;
+    const border: [number, number, number, number][] = [];
+    if (lx === 0) border.push([cx - 1, cz, x - 1, z]);
+    if (lx === CS - 1) border.push([cx + 1, cz, x + 1, z]);
+    if (lz === 0) border.push([cx, cz - 1, x, z - 1]);
+    if (lz === CS - 1) border.push([cx, cz + 1, x, z + 1]);
+    for (const [ncx, ncz, nx, nz] of border) {
+      const nk = World.key(ncx, ncz);
+      if (!this.chunks.has(nk)) continue;
+      this.dirty.add(nk);
+      void nx; void nz;
+    }
+  }
+
   buildMesh(c: Chunk): THREE.BufferGeometry[] {
     const bufs = [new MeshBuffer(), new MeshBuffer(), new MeshBuffer()];
     const ox = c.cx * CS, oz = c.cz * CS;
@@ -1508,7 +1762,7 @@ export class World {
           const layer = LAYER[id];
           const rt = RENDER[id];
           const buf = bufs[layer];
-          const special = specialBoxes(id);
+          const special = specialOf(id);
           if (special) {
             const sky = skyLight(x, y, z);
             const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
@@ -1678,24 +1932,24 @@ export class World {
             continue;
           }
           if (rt === 12) {
-            // 2.21: waniliowa skrzynia – korpus (0–10 px) i wieko (10–15 px)
-            // z tekstury encji. Kafelki mają korpus w dolnych 11 i wieko
-            // w górnych 5 wierszach, więc każda bryła bierze swój wycinek.
+            // 2.32: skrzynia z waniliowego `ChestModel` – korpus, wieko i zamek
+            // z dokładnymi UV z `entity/chest/normal.png`. Wcześniej była to
+            // bryła z trzech przeskalowanych kafelków 16×16 (piksele się
+            // gubiły, a przód z klamrą nie zgadzał się z grą).
             const sky = skyLight(x, y, z);
             const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
-            const side = tileFor(id, 4);
-            const top = tileFor(id, 3);
-            const bottom = tileFor(id, 2);
-            const front = tileFor(id, 5);
-            const body: [number, number, number, number] = [0, 0, 16, 11];
-            const lid: [number, number, number, number] = [0, 11, 16, 16];
+            const yaw = chestFacing(id);
+            // 2.32: `hiddenChestLids` trzyma klucze w koordynatach ŚWIATA.
             const wx = ox + x, wz = oz + z;
-            addBox(buf, wx, y, wz, 1 / 16, 0, 1 / 16, 15 / 16, 10 / 16, 15 / 16,
-              [side, side, bottom, side, side, front], sky, blk, undefined, undefined, 0,
-              [body, body, null, null, body, body]);
-            addBox(buf, wx, y, wz, 1 / 16, 10 / 16, 1 / 16, 15 / 16, 15 / 16, 15 / 16,
-              [side, side, bottom, top, side, front], sky, blk, undefined, undefined, 0,
-              [lid, lid, null, null, lid, lid]);
+            const hidden = this.hiddenChestLids.has(`${wx},${y},${wz}`);
+            const region = this.chestRegionAt(wx, y, wz);
+            const body = chestBoxFor(region, CHEST_BODY);
+            const skip = region === 'chest' ? 0 : chestSeamSkip(region, yaw);
+            addChestBox(buf, wx, y, wz, body, yaw, sky, blk, region, skip);
+            if (!hidden) {
+              addChestBox(buf, wx, y, wz, chestBoxFor(region, CHEST_LID), yaw, sky, blk, region, skip);
+              addChestBox(buf, wx, y, wz, chestLockFor(region), yaw, sky, blk, region);
+            }
             continue;
           }
           const isLiquid = rt === 2;
@@ -1741,12 +1995,15 @@ export class World {
               ao[k] = aoF;
               let vy = y + py;
               if (liquidTopLow && py === 1) vy -= 0.12;
-              const uv = tileUV(t, cr[3], cr[4]);
+              // 2.32: narożniki (u,v) to zawsze 0/1, więc UV czytamy z tabeli.
+              const uvi = (t * 4 + ((cr[3] ? 1 : 0) | (cr[4] ? 2 : 0))) * 2;
+              const uv0 = TILE_UV4[uvi];
+              const uv1 = TILE_UV4[uvi + 1];
               const shadeAo = F.shade * aoF;
               const skyB = shadeAo * sky;
               const br = skyB * skyB;
               const bb = shadeAo * blk;
-              buf.vertex(ox + x + px, vy, oz + z + pz, uv[0], uv[1], br, br, br, bb * bb, wave, f);
+              buf.vertex(ox + x + px, vy, oz + z + pz, uv0, uv1, br, br, br, bb * bb, wave, f);
             }
             buf.quad(base, ao[0] + ao[3] > ao[1] + ao[2]);
           }

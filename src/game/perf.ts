@@ -110,27 +110,70 @@ export function lodRange(renderDistance: number, chunkSize: number): number {
  * klatek, a wracamy po ~3 s dobrych, żeby obraz nie „pływał”.
  */
 export interface PerfProfile {
-  /** 0,55 = oszczędnie, 1 = pełna jakość. */
+  /** 0,4 = oszczędnie, 1 = pełna jakość. Skaluje budżet budowy chunków. */
   chunkScale: number;
-  /** 1 = normalnie, 2 = moby tickują rzadziej. */
+  /** 1 = normalnie, 3 = moby tickują trzy razy rzadziej. */
   entityScale: number;
-  /** 0,6 = krótsze pasmo LOD, 1 = pełne. */
+  /** 0,45 = krótsze pasmo LOD, 1 = pełne. */
   lodScale: number;
+  /**
+   * 2.32: ile z ZASIĘGU renderowania faktycznie rysujemy (1 = wszystko).
+   *
+   * To najskuteczniejsza dźwignia na słabym GPU: mniejszy zasięg to mniej
+   * siatek do przesłania wierzchołkami i mniej pikseli do wypełnienia.
+   * Chunki zostają w pamięci (nie ma ponownego generowania), tylko znikają
+   * z rysowania – dokładnie tak, jak suwak „Render Distance” w grze.
+   */
+  drawScale: number;
+  /** 2.32: górny limit skali rozdzielczości (1 = tyle, ile w ustawieniach). */
+  resScale: number;
+  /** 2.32: mnożnik cząsteczek i deszczu (1 = pełne). */
+  particleScale: number;
   /** Etykieta do HUD/dziennika. */
-  label: 'oszczędny' | 'zrównoważony' | 'pełny';
+  label: 'minimalny' | 'oszczędny' | 'zrównoważony' | 'pełny';
 }
 
-export const PERF_PROFILES: Record<'eco' | 'balanced' | 'full', PerfProfile> = {
-  eco: { chunkScale: 0.55, entityScale: 2, lodScale: 0.6, label: 'oszczędny' },
-  balanced: { chunkScale: 0.8, entityScale: 1.5, lodScale: 0.85, label: 'zrównoważony' },
-  full: { chunkScale: 1, entityScale: 1, lodScale: 1, label: 'pełny' },
+export type PerfTier = 'full' | 'balanced' | 'eco' | 'minimal';
+
+export const PERF_PROFILES: Record<PerfTier, PerfProfile> = {
+  full: { chunkScale: 1, entityScale: 1, lodScale: 1, drawScale: 1, resScale: 1, particleScale: 1, label: 'pełny' },
+  balanced: { chunkScale: 0.8, entityScale: 1.5, lodScale: 0.85, drawScale: 0.9, resScale: 1, particleScale: 0.75, label: 'zrównoważony' },
+  eco: { chunkScale: 0.55, entityScale: 2, lodScale: 0.6, drawScale: 0.75, resScale: 0.9, particleScale: 0.5, label: 'oszczędny' },
+  minimal: { chunkScale: 0.4, entityScale: 3, lodScale: 0.45, drawScale: 0.6, resScale: 0.8, particleScale: 0.25, label: 'minimalny' },
 };
+
+/** Kolejność stopni – od najlepszego do najbardziej oszczędnego. */
+export const PERF_ORDER: PerfTier[] = ['full', 'balanced', 'eco', 'minimal'];
+
+/**
+ * 2.32: ile chunków w każdą stronę naprawdę rysować.
+ *
+ * Dla bazowego zasięgu 6 i profilu oszczędnego wychodzi 4 – czyli 81 chunków
+ * zamiast 169, ponad dwa razy mniej pracy dla karty graficznej. Nigdy nie
+ * schodzimy poniżej 2 (widok 5×5), bo świat robi się wtedy zbyt ciasny.
+ */
+export function drawDistanceChunks(base: number, profile: PerfProfile): number {
+  return Math.max(2, Math.min(base, Math.round(base * profile.drawScale)));
+}
+
+/**
+ * 2.32: skala rozdzielczości z limitu profilu.
+ *
+ * `resScale` z profilu jest górnym limitem dla dynamicznej rozdzielczości –
+ * w trybie minimalnym gra nie renderuje więcej niż 80% pikseli, nawet gdy
+ * klatki są szybkie (na „ziemniaku” i tak by się to nie utrzymało).
+ */
+export function profileResScale(userScale: number, profile: PerfProfile): number {
+  return Math.max(0.4, Math.min(1, userScale * profile.resScale));
+}
 
 export class FrameGovernor {
   /** Wygładzony czas klatki w ms. */
   frameMs = 0;
   /** Bieżący profil. */
   profile: PerfProfile = PERF_PROFILES.full;
+  /** 0 = pełny, 3 = minimalny. Łatwiej porównywać niż obiekty profilu. */
+  tier: PerfTier = 'full';
   private badFor = 0;
   private goodFor = 0;
 
@@ -139,32 +182,52 @@ export class FrameGovernor {
   update(sampleMs: number, dt: number): PerfProfile {
     this.frameMs = smoothFrameMs(this.frameMs, sampleMs, 0.08);
     // Klatka „zła” to wyraźnie więcej niż 60 FPS (albo 30 na telefonie,
-    // gdzie i tak nie ma sensu walczyć o więcej).
-    const bad = this.frameMs > Math.max(this.targetMs * 1.5, 20);
-    const good = this.frameMs < Math.max(this.targetMs * 1.08, 15);
+    // gdzie i tak nie ma sensu walczyć o więcej). 2.32: przy włączonym
+    // limicie klatek próg liczymy od limitu – 33 ms przy capie 30 FPS to
+    // sukces, a nie powód do zjeżdżania z jakości.
+    const bad = this.frameMs > Math.max(this.targetMs * 1.5, 20, this.capMs * 1.25);
+    // 2.32: próg „dobra” bierzemy też z limitu klatek – przy 30 FPS cap
+    // klatka 33 ms jest idealna, a nie „za wolna”, jak przy limicie 60.
+    const goodMs = Math.max(this.targetMs * 1.08, 15, this.capMs * 0.95);
+    const good = this.frameMs < goodMs;
     this.badFor = bad ? this.badFor + dt : 0;
     this.goodFor = good ? this.goodFor + dt : 0;
 
     if (this.badFor > 1.5) {
       this.badFor = 0;
-      this.profile = this.profile === PERF_PROFILES.full
-        ? PERF_PROFILES.balanced
-        : PERF_PROFILES.eco;
+      this.step(1, 0);
       this.goodFor = 0;
     } else if (this.goodFor > 3) {
       this.goodFor = 0;
-      this.profile = this.profile === PERF_PROFILES.eco
-        ? PERF_PROFILES.balanced
-        : PERF_PROFILES.full;
+      this.step(-1, 0);
       this.badFor = 0;
     }
     return this.profile;
+  }
+
+  /**
+   * 2.32: ręczne dobranie stopnia (suwak „Jakość”) i limit klatek.
+   *
+   * `capMs` to czas klatki, do którego automat dąży – przy limicie 30 FPS
+   * nie ma sensu zjeżdżać z jakości, bo klatka 33 ms to sukces, nie porażka.
+   */
+  capMs = 0;
+  setFpsCap(fps: number) {
+    this.capMs = fps > 0 ? 1000 / fps : 0;
+  }
+
+  private step(delta: number, from: number) {
+    const idx = Math.max(0, Math.min(PERF_ORDER.length - 1, PERF_ORDER.indexOf(this.tier) + delta + from));
+    const tier = PERF_ORDER[idx];
+    this.tier = tier;
+    this.profile = PERF_PROFILES[tier];
   }
 
   reset() {
     this.frameMs = 0;
     this.badFor = 0;
     this.goodFor = 0;
+    this.tier = 'full';
     this.profile = PERF_PROFILES.full;
   }
 }

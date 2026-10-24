@@ -64,6 +64,14 @@ export default function GameView({
   // 2.5: wersja PC i dotykowa są wyraźnie rozdzielone – decyduje tryb
   // sterowania (auto wg głównego wskaźnika urządzenia albo wymuszony).
   const [touch, setTouch] = useState(() => resolveControlMode(loadSettings()) === 'touch');
+  // 2.32: krótki komunikat, gdy gra sama przełączy sterowanie na komputerowe
+  // (tablet z klawiaturą/myszką Bluetooth) – gracz musi wiedzieć, co się stało.
+  const [controlNotice, setControlNotice] = useState(false);
+  useEffect(() => {
+    if (!controlNotice) return;
+    const t = window.setTimeout(() => setControlNotice(false), 6000);
+    return () => window.clearTimeout(t);
+  }, [controlNotice]);
 
   // Profil urządzenia liczony raz – steruje trybem „Auto”.
   const profile: DeviceProfile = useMemo(() => detectDeviceProfile(), []);
@@ -80,7 +88,16 @@ export default function GameView({
       game = new Game(
         containerRef.current!,
         { seed, mode, save, renderDistance: s.renderDistance, worldId, worldName, worldType, net },
-        { onHud: setHud, onUI: setUi }
+        {
+          onHud: setHud,
+          onUI: setUi,
+          // 2.32: tablet z klawiaturą/myszką Bluetooth przełącza się na
+          // sterowanie komputerowe w locie – chowamy drążek i gesty.
+          onControl: (kind) => {
+            setTouch(kind === 'touch');
+            if (kind === 'desktop') setControlNotice(true);
+          },
+        }
       );
     } catch (e) {
       console.error('Nie udało się uruchomić silnika gry', e);
@@ -93,6 +110,7 @@ export default function GameView({
     // Ustaw przed pierwszym wznowieniem: telefon nie może próbować przejąć
     // wskaźnika myszy, bo Android/iOS potrafią wtedy zgubić wszystkie gesty.
     game.touchInput = touch;
+    game.autoControl = s.controlMode === 'auto';
     game.sensitivity = s.sensitivity;
     game.fovBase = s.fov;
     game.showMinimap = s.minimap;
@@ -119,6 +137,7 @@ export default function GameView({
     setTouch(touchNow);
     if (!g) return;
     g.touchInput = touchNow;
+    g.autoControl = effective.controlMode === 'auto';
     // Przejście na wersję dotykową w trakcie gry nie może zostawić
     // zablokowanego kursora (blokada uniemożliwiałaby gesty).
     if (touchNow && document.pointerLockElement) {
@@ -271,6 +290,16 @@ export default function GameView({
           }}
           onWaypoints={() => game.setUI('waypoints')}
         />
+      )}
+      {/* 2.32: tablet z klawiaturą/myszką Bluetooth – gra sama przeszła na
+          sterowanie komputerowe. Komunikat znika sam po 6 s. */}
+      {controlNotice && ui === 'playing' && (
+        <div
+          className="pointer-events-none absolute left-1/2 top-24 -translate-x-1/2 rounded bg-black/65 px-4 py-2 text-center text-sm text-white mc-text"
+          style={{ animation: 'fadeOut 6s forwards' }}
+        >
+          Wykryto klawiaturę i mysz – sterowanie komputerowe. Dotknij ekranu 3 razy, aby wrócić do dotyku.
+        </div>
       )}
       {/* 2.13: w grze wymuszamy poziom – w pionie HUD i sterowanie na siebie nachodzą. */}
       {wantsLandscape && <OrientationGuard />}

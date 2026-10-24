@@ -1,6 +1,6 @@
 import { T, BLOCKS, RENDER, tileFor } from './blocks';
 import { mulberry32 } from './noise';
-import { applyOfficialTiles, isOfficialTile } from './packArt';
+import { applyEntityTextures, applyOfficialTiles, ENTITY_ATLAS, isOfficialTile, type EntityAtlasKey } from './packArt';
 
 export const TILE = 16;
 export const ATLAS_TILES = 16; // tiles per row
@@ -510,6 +510,12 @@ export interface AtlasResult {
   canvas: HTMLCanvasElement;
   icons: Record<number, string>;
   cracks: HTMLCanvasElement[];
+  /**
+   * 2.32: surowe piksele atlasu (RGBA). Silnik używa ich do własnych tekstur
+   * (np. animowanego wieka skrzyni), a testy headless – do sprawdzania, czy
+   * skrzynia naprawdę bierze piksele z `entity/chest/normal.png`.
+   */
+  pixels: Uint8ClampedArray;
 }
 
 export function buildAtlas(): AtlasResult {
@@ -1307,6 +1313,11 @@ export function buildAtlas(): AtlasResult {
   // dziury, a gra traktuje je jak pełny blok (inaczej byłyby czarne plamy).
   applyOfficialTiles(img);
 
+  // --------------------------------------------------------------- 2.32 „Skrzynia 1:1”
+  // Cała tekstura encji skrzyni (64×64) ląduje w wolnym rogu atlasu, żeby
+  // siatka mogła wziąć waniliowe UV bez skalowania i utraty pikseli.
+  applyEntityTextures(img);
+
   // --------------------------------------------------------------- 2.8.1 „Światło i chmury”
   // Liście są teraz pełnymi blokami (opaque), więc dziury w ich teksturze
   // muszą zniknąć – inaczej w miejscu „przezroczystych” pikseli pojawiłaby
@@ -1368,7 +1379,7 @@ export function buildAtlas(): AtlasResult {
     cracks.push(c);
   }
 
-  return { canvas, icons, cracks };
+  return { canvas, icons, cracks, pixels: img.data };
 }
 
 /**
@@ -1555,6 +1566,52 @@ export function tileUVRect(tile: number, rect: readonly [number, number, number,
   const U = (col + a) / ATLAS_TILES + (u === 0 ? e : -e);
   const V = 1 - (row + 1 - b) / ATLAS_TILES + (v === 0 ? e : -e);
   return [U, V];
+}
+
+/**
+ * 2.32: gotowe UV czterech narożników kafelka – tabela dla meshera.
+ *
+ * Każdy bok sześcianu ma narożniki tylko z {0,1} × {0,1}, więc zamiast
+ * liczyć `tileUV` (dzielenie, `Math.floor`, dwie tablice-alokacje) dla
+ * KAŻDEGO wierzchołka, mesher czyta dwie liczby z tej tablicy. Przy chunku
+ * z ~1000 ścian to 4000 wierzchołków i 4000 mniej alokacji na chunk –
+ * mniej śmieci dla GC i szybsza budowa siatki.
+ *
+ * Układ: `TILE_UV4[(kafelek * 4 + narożnik) * 2 + 0/1]`,
+ * narożniki: 0 = (0,0), 1 = (1,0), 2 = (0,1), 3 = (1,1) – tak jak `u`,`v`
+ * w `FACES`.
+ */
+export const TILE_UV4 = (() => {
+  const out = new Float32Array(ATLAS_TILES * ATLAS_TILES * 4 * 2);
+  for (let tile = 0; tile < ATLAS_TILES * ATLAS_TILES; tile++) {
+    const col = tile % ATLAS_TILES;
+    const row = Math.floor(tile / ATLAS_TILES);
+    const e = 0.0004;
+    for (let corner = 0; corner < 4; corner++) {
+      const u = corner & 1;
+      const v = corner >> 1;
+      const U = (col + u) / ATLAS_TILES + (u === 0 ? e : -e);
+      const V = 1 - (row + 1 - v) / ATLAS_TILES + (v === 0 ? e : -e);
+      const i = (tile * 4 + corner) * 2;
+      out[i] = U;
+      out[i + 1] = V;
+    }
+  }
+  return out;
+})();
+
+/**
+ * 2.32: UV wprost z całej tekstury encji wklejonej do atlasu (np. skrzyni).
+ *
+ * `px`/`py` to piksele wewnątrz obrazka encji (64×64), liczone OD GÓRY, jak
+ * w pliku PNG. Zwracamy środek piksela, żeby próbkowanie z filtrem „nearest”
+ * nigdy nie trafiało w krawędź między sąsiednimi pikselami.
+ */
+export function entityUV(key: EntityAtlasKey, px: number, py: number): [number, number] {
+  const o = ENTITY_ATLAS[key];
+  const u = (o.x + px + 0.5) / ATLAS_SIZE;
+  const v = 1 - (o.y + py + 0.5) / ATLAS_SIZE;
+  return [u, v];
 }
 
 export function tileUVInset(tile: number, u: number, v: number, inset = 0): [number, number] {

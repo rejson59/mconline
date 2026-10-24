@@ -1,4 +1,4 @@
-import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap } from './blocks';
+import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, isChestBlock } from './blocks';
 import type { Stack } from './inventory';
 
 /** Item ids sit above block ids so a stack can hold either. */
@@ -461,7 +461,7 @@ export function mineSeconds(blockId: number, toolId: number, eff = 0): number {
   const tier = pickTier(toolId);
   const woodish = (id: number) =>
     AXE_BLOCKS.has(id) || isDoor(id) || isLadder(id) || isTrap(id) ||
-    id === B.FENCE || id === B.CHEST || id === B.LOOT_CHEST || id === B.CAMPFIRE;
+    id === B.FENCE || isChestBlock(id) || id === B.CAMPFIRE;
   let correct = false;
   let speed = 1;
   if (PICK_BLOCKS.has(blockId)) {
@@ -490,7 +490,7 @@ export function toolHelps(blockId: number, toolId: number): boolean {
   const tool = ITEMS[toolId];
   if (!tool?.tool) return false;
   if (tool.tool === 'pick') return PICK_BLOCKS.has(blockId);
-  if (tool.tool === 'axe') return AXE_BLOCKS.has(blockId) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || blockId === B.FENCE || blockId === B.CHEST || blockId === B.LOOT_CHEST || blockId === B.CAMPFIRE;
+  if (tool.tool === 'axe') return AXE_BLOCKS.has(blockId) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || blockId === B.FENCE || isChestBlock(blockId) || blockId === B.CAMPFIRE;
   if (tool.tool === 'shovel') return SHOVEL_BLOCKS.has(blockId);
   if (tool.tool === 'sword') return RENDER[blockId] === 1 || blockId === B.LEAVES || blockId === B.BIRCH_LEAVES;
   if (tool.tool === 'shears') return blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.TALLGRASS;
@@ -639,7 +639,7 @@ export function smeltResult(id: number): number | null {
 export function fuelSeconds(id: number): number {
   if (id === I.COAL || id === B.COAL_ORE) return 32;
   if (id === I.BLAZE_ROD) return 60;
-  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || id === B.CHEST || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
+  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || isChestBlock(id) || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
   if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || isLadder(id)) return 2;
   if (id === B.HAY) return 6;
   if (id >= B.WOOL_WHITE && id <= B.WOOL_BLACK) return 3;
