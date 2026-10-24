@@ -5728,6 +5728,18 @@ section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
   check('prawa połówka sięga krawędzi kratki od strony sąsiada', Math.abs(Math.min(...dbg2.xs) - 3) < 0.002, `${Math.min(...dbg2.xs).toFixed(3)}`);
   check('i kończy 1 px przed zewnętrzną krawędzią', Math.abs(Math.max(...dbg2.xs) - 4 + 1 / 16) < 0.002, `${Math.max(...dbg2.xs).toFixed(3)}`);
 
+  // Podwójna skrzynia obrócona o 90° (przód na wschód) – styk biegnie wzdłuż
+  // osi Z, a wycinana jest ścianka lokalna +x lewej połówki.
+  const we = new World(778, true);
+  const gye = FLAT_H + 1;
+  we.getChunk(0, 0);
+  we.setBlock(2, gye, 2, B.CHEST_E);
+  we.setBlock(2, gye, 3, B.CHEST_E);
+  // Wanilia: lewa połowa leży po lewej ręce gracza patrzącego w przód skrzyni.
+  // Dla przodu na wschód (+x) lewo to +z, więc lewa połówka jest na większym z.
+  eq('skrzynia na wschód: większe z to lewa połówka', we.chestRegionAt(2, gye, 3), 'chest_left');
+  eq('skrzynia na wschód: mniejsze z to prawa połówka', we.chestRegionAt(2, gye, 2), 'chest_right');
+
   const lid = chestLidGeometry('chest');
   lid.computeBoundingBox();
   const bb = lid.boundingBox!;

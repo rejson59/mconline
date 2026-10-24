@@ -353,7 +353,9 @@ function addChestBox(
     // 2.32: w podwójnej skrzyni ścianka stykowa dwóch połówek leży w tej
     // samej płaszczyźnie dla obu modeli – gdyby ją rysować, walczyłaby
     // o głębię z sąsiadem i na środku pojawiałby się ciemny pasek.
-    if (skipX && (((yaw & 1) === 0 && f === (skipX > 0 ? 1 : 0)) || ((yaw & 1) === 1 && f === (skipX > 0 ? 5 : 4)))) continue;
+    // `f` jest lokalny dla modelu (obrót dzieje się niżej, na wierzchołkach),
+    // więc ścianka stykowa to zawsze lokalne +x (1) albo −x (0).
+    if (skipX && f === (skipX > 0 ? 1 : 0)) continue;
     const F = FACES[f];
     const [rx, ry, rw, rh] = chestFaceRect(box, f);
     const n = normal[f];
@@ -371,9 +373,15 @@ function addChestBox(
       const [dx, dz] = rot(lx - 8, lz - 8);
       const px = ox + 0.5 + dx / 16;
       const pz = oz + 0.5 + dz / 16;
-      // lokalne (u,v) ściany → piksel w prostokącie tekstury
+      // 2.32: lokalne (u,v) ściany → ŚRODEK piksela w prostokącie tekstury.
+      // Prostokąt ma dokładnie `rw` × `rh` pikseli, więc ostatni piksel leży
+      // na rx+rw−1, a nie na rx+rw. Bez tego UV sięgały jednego piksela za
+      // malowany obszar i na krawędziach pojawiały się czarne linie
+      // (na styku dwóch połówek podwójnej skrzyni było to bardzo widoczne).
       const [cu, cv] = [cr[3], cr[4]];
-      const uv = entityUV(region, rx + cu * rw, ry + (1 - cv) * rh);
+      // Środek pierwszego piksela to cały piksel, ostatniego – cały ostatni:
+      // dla szerokości rw narożniki wypadają na rx i rx+rw−1.
+      const uv = entityUV(region, rx + cu * (rw - 1), ry + (1 - cv) * (rh - 1));
       buf.vertex(px, oy + ly / 16, pz, uv[0], uv[1], br, br, br, bl, 0, faceIdx);
     }
     buf.quad(base);

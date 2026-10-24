@@ -814,16 +814,20 @@ export function chestFacing(id: number): number {
 }
 
 /**
- * Wektor „w lewo” dla skrzyni patrzącej w stronę `facing` (0 = +z, 1 = +x,
- * 2 = −z, 3 = −x). Lewa strona to ta po lewej ręce gracza stojącego przodem
- * do skrzyni – tak samo liczy to waniliowe `ChestBlock#getChestType`.
+ * 2.32: kierunek od LEWEJ połówki do jej sąsiada.
+ *
+ * Lewa połówka to ta po lewej ręce gracza stojącego przodem do skrzyni
+ * (`up × (−facing)`), czyli: przód +z → lewo −x, przód +x → lewo +z,
+ * przód −z → lewo +x, przód −x → lewo −z. Skrzynia, która ma sąsiada po
+ * swojej lewej, jest połówką prawą (bo to sąsiad jest lewy) – dlatego ten
+ * wektor wskazuje od lewej połówki do partnera, a nie „w lewo” od gracza.
  */
 export function chestLeftDir(facing: number): [number, number] {
   switch (((Math.round(facing) % 4) + 4) % 4) {
-    case 0: return [1, 0];   // przód +z → lewo to +x
-    case 1: return [0, -1];  // przód +x → lewo to −z
-    case 2: return [-1, 0];  // przód −z → lewo to −x
-    default: return [0, 1];  // przód −x → lewo to +z
+    case 0: return [1, 0];   // lewa połówka stoi na mniejszym x, partner na +x
+    case 1: return [0, -1];  // przód +x → lewa połówka na większym z, partner na −z
+    case 2: return [-1, 0];  // przód −z → partner na −x
+    default: return [0, 1];  // przód −x → partner na +z
   }
 }
 
