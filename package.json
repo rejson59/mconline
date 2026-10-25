@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.33.0",
-  "description": "BlockCraft 2.33 „Zombies 1:1 – Dead End, Bad Blood, Alien Arcadium i Prison” – polska gra sandboxowa w przeglądarce z trybem Zombies jak na Hypixelu: 4 mapy 1:1, 30 rund, drzwi 500-1250g, perki, Mystery Chest i Ultimate Machine, bronie palne (Pistol/Rifle/Shotgun/Sniper/Rocket + Elder Gun/Zapper/Gold Digger) i publiczny serwer. Bez instalacji i bez konta.",
+  "version": "3.0.0",
+  "description": "BlockCraft 3.0 – Zombies 1:1: broń CoD, 4 mapy, drzwi, perki, hordy jak na Hypixelu",
   "type": "module",
   "license": "MIT",
   "keywords": [

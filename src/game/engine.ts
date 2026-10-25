@@ -19,6 +19,7 @@ import { LOD_TILE, buildLodTile, lodRing } from './lod';
 import { Mob, mobVariantForBiome, isHostileMob, type MobType } from './mobs';
 import { getMapLayout } from './zombies';
 import { buildZombiesWorld } from './zombies/worldBuilder';
+import { ZombiesRuntime } from './zombies/zombiesRuntime';
 
 const GREY: readonly number[] = [90, 90, 90];
 
@@ -215,6 +216,12 @@ export interface HUDState {
   tpa: { from: string; name: string } | null;
   /** 2.19: wysłana prośba – czekamy na odpowiedź. */
   tpaSent: { name: string } | null;
+  /** 3.0 Zombies HUD */
+  zombiesGold?: number;
+  zombiesRound?: number;
+  zombiesPower?: boolean;
+  zombiesAmmo?: { mag: number; reserve: number; maxMag: number };
+  zombiesWeapon?: string;
 }
 
 export interface TradeRow {
@@ -903,6 +910,8 @@ export class Game {
   private appliedTier = 'full';
   /** Zasięg rysowania w chunkach po uwzględnieniu profilu. */
   drawDistance = 6;
+  /** 3.0: Zombies – runtime (rundy, złoto, bronie, drzwi). Tylko gdy mode === 'zombies'. */
+  zombies: ZombiesRuntime | null = null;
   /** 2.28: licznik klatek – decyduje, które moby tickują w danej klatce. */
   private frameNo = 0;
   /** 2.28: pasmo terenu w oddali (Distant Horizons). */
@@ -1260,7 +1269,17 @@ export class Game {
           // rebuild spawn chunks now (they were built before spawn override)
           for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) this.buildChunk(Math.floor(sp.x / CS) + dx, Math.floor(sp.z / CS) + dz);
         }
+        // 3.0: runtime – rundy, bronie, drzwi, złoto
+        try { this.zombies = new ZombiesRuntime(this as unknown as never, mapId); } catch { /* ignore */ }
       } catch { /* ignore */ }
+    }
+    // 3.0: zombies – startowa broń w ekwipunku (pistol) i pełne zdrowie
+    if (this.mode === 'zombies' && this.zombies) {
+      this.health = 20;
+      this.hunger = 20;
+      (this.inventory as unknown as { clear?: () => void }).clear?.();
+      this.inventory.slots.fill(null);
+      this.inventory.cursor = null;
     }
     this.fallStart = this.body.pos.y;
 
@@ -2629,6 +2648,22 @@ export class Game {
     // Alt-Tabs albo odrzuconym Pointer Lock) – blokada jest potrzebna tylko
     // do rozglądania się myszą. Wcześniej całe sterowanie „zamierało”,
     // dopóki gracz nie kliknął ponownie w ekran.
+    // 3.0 Zombies: sterowanie jak w FPS – 1-3 broń, R przeładuj, E interakcja, E nie otwiera ekwipunku
+    if (this.mode === 'zombies' && this.zombies) {
+      if (!e.repeat) {
+        if (e.code === 'KeyR') { this.zombies.tryReload(); this.emitHud(); return; }
+        if (e.code === 'KeyE') { this.zombies.tryInteract(); this.emitHud(); return; }
+        if (e.code.startsWith('Digit') || e.code.startsWith('Numpad')) {
+          const n = parseInt(e.code.slice(e.code.startsWith('Digit') ? 5 : 6), 10);
+          if (n >= 1 && n <= 3) { this.zombies.switchWeapon(n - 1); this.emitHud(); return; }
+        }
+      }
+      if (e.code === 'KeyQ') return; // nie wyrzucaj broni
+      if (e.code === 'KeyF') return;
+      // inventory nie działa w zombies (perki przez sklepy)
+      // ale pozwól na czat/pause etc. dalej
+      if (e.code === 'KeyE' && e.repeat) return;
+    }
     if (this.ui !== 'playing') return;
     if (e.repeat) {
       // Przytrzymane klawisze pozostają wciśnięte, ale akcje jednorazowe
@@ -4687,6 +4722,11 @@ export class Game {
   }
 
   tryAttack() {
+    // 3.0 Zombies: LPM = strzał z broni palnej
+    if (this.mode === 'zombies' && this.zombies) {
+      if (this.zombies.shoot()) this.swingT = 0;
+      return;
+    }
     this.swingT = 0;
     const blockDist = this.target ? this.target.dist : 99;
     const { mob, dist } = this.findMobTarget(3.5);
@@ -5178,6 +5218,14 @@ export class Game {
   }
 
   tryUse() {
+    // 3.0 Zombies: PPM = interakcja z drzwiami/sklepami/oknami/dźwignią, nie stawianie bloków
+    if (this.mode === 'zombies' && this.zombies) {
+      const res = this.zombies.tryInteract();
+      if (res) { this.emitHud(); this.placeCooldown = 0.3; return; }
+      // fallthrough to nothing – zombies nie stawia bloków PPM
+      this.placeCooldown = 0.22;
+      return;
+    }
     const t = this.target;
     this.placeCooldown = 0.22;
     const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
@@ -5765,6 +5813,30 @@ export class Game {
       Sfx.playHurt();
       this.buzz(35);
     }
+    // 3.0 Zombies: downed – nie od razu dead, solo auto-revive po 8s
+    if (this.mode === 'zombies' && this.zombies && this.health <= 0 && !force) {
+      const st = this.zombies.state;
+      const pid = this.zombies.pid;
+      const p = st.players.get(pid);
+      if (p && !p.isDowned) {
+        p.isDowned = true;
+        (p as unknown as { downUntil?: number }).downUntil = performance.now() + 8000;
+        this.health = 6;
+        this.message('💀 Padnięto! Przytrzymaj E przy koledze aby reanimować. Solo: wstajesz za 8s.');
+        setTimeout(() => {
+          const cur = this.zombies?.state.players.get(pid);
+          if (cur?.isDowned) {
+            cur.isDowned = false;
+            (cur as unknown as { perks?: unknown[] }).perks = [];
+            this.health = 10;
+            this.message('Wstałeś! Perki przepadły.');
+            this.emitHud();
+          }
+        }, 8000);
+        this.emitHud();
+        return;
+      }
+    }
     // 2.3: Totem Ratowania kupuje drugie życie – raz na 5 sekund.
     if (this.health <= 0 && !force && this.tryTotem()) {
       this.emitHud();
@@ -5930,6 +6002,8 @@ export class Game {
       this.updateDrops(dt);
       this.updateOrbs(dt);
       this.updateGrowth(dt);
+      // 3.0 Zombies: perki, rundy, spawn, power-ups, okna HP
+      if (this.mode === 'zombies' && this.zombies) this.zombies.tick(dt);
       this.updateFurnaces(dt);
       this.updateAnvils(dt);
       this.updateBrewings(dt);
@@ -6368,7 +6442,7 @@ export class Game {
         this.breakProgress = 0;
         this.breakKey = '';
         if (this.attackCooldown <= 0) this.tryAttack();
-      } else if (t) {
+      } else if (t && this.mode !== 'zombies') {
         const key = `${t.x},${t.y},${t.z}`;
         if (this.mode === 'creative') {
           if (this.breakCooldown <= 0) { this.breakBlock(t.x, t.y, t.z); this.breakCooldown = 0.25; this.swingT = 0; }
@@ -6533,13 +6607,23 @@ export class Game {
       if (m.dead && !m.deathCried) {
         m.deathCried = true;
         Sfx.playMob(m.type, 'death', m.body.pos.x, m.body.pos.y + m.body.h * 0.8, m.body.pos.z);
+        // 3.0 zombies: gold + kill count + instaKill
+        if (this.mode === 'zombies' && this.zombies) {
+          try { this.zombies.onMobKill(m as never); } catch {}
+          try { this.zombies.onMobDeath(m as never); } catch {}
+          // add hit gold handling already in shoot, but also ensure drop handling
+        }
       }
       if (m.exploded && !m.looted) {
         m.looted = true;
         this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2, m);
       } else if (m.dead && !m.looted) {
         m.looted = true;
-        this.mobLoot(m);
+        if (this.mode === 'zombies') {
+          // zombies: nie rób survival lootu, tylko gold i szansa na drop amunicji/buff
+        } else {
+          this.mobLoot(m);
+        }
       }
     }
     this.mobs = this.mobs.filter((m) => {
@@ -6554,10 +6638,14 @@ export class Game {
       return !gone;
     });
 
-    // spawn
+    // spawn – zombies ma własny spawner
+    if (this.mode === 'zombies') {
+      this.spawnTimer = 999;
+    }
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 1.5;
+      if (this.mode === 'zombies') return;
       const alive = this.mobs.filter((m) => !m.dead);
       const hostile = alive.filter((m) => HOSTILE_MOBS.has(m.type)).length;
       const passive = alive.length - hostile;
@@ -6937,7 +7025,8 @@ export class Game {
       // 2.19: prośby o teleportację tracą ważność po minucie.
       tpa: this.tpaIn && now - this.tpaIn.at < 60_000 ? { from: this.tpaIn.from, name: this.tpaIn.name } : null,
       tpaSent: this.tpaOut && now - this.tpaOut.at < 60_000 ? { name: this.tpaOut.name } : null,
-    });
+      ...(this.mode === 'zombies' && this.zombies ? this.zombies.hudExtra() as unknown as Partial<HUDState> : {}),
+    } as HUDState);
   }
 
   private heldHint(): string | null {
