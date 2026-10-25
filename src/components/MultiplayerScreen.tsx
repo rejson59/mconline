@@ -76,7 +76,7 @@ export default function MultiplayerScreen({
   const [role, setRole] = useState<'host' | 'guest'>('host');
   const [room, setRoom] = useState('las-123');
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1_000_000));
-  const [gameMode, setGameMode] = useState<GameMode>('survival');
+  const [gameMode, setGameMode] = useState<'survival' | 'creative'>('survival');
   const [worldType, setWorldType] = useState<WorldType>('normal');
   const [status, setStatus] = useState<NetStatus | 'idle'>('idle');
   const [message, setMessage] = useState('');

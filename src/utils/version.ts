@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.32.4';
-export const GAME_RELEASE_NAME = 'Skrzynia 1:1, tryb „ziemniak” i klawiatura na tablecie';
+export const GAME_VERSION = '2.33.0';
+export const GAME_RELEASE_NAME = 'Zombies 1:1 – Dead End, Bad Blood, Alien Arcadium i Prison';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 

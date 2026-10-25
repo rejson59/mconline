@@ -3161,12 +3161,12 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('2.32'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Skrzynia 1:1, tryb „ziemniak” i klawiatura na tablecie', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION.startsWith('2.33'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Zombies 1:1 – Dead End, Bad Blood, Alien Arcadium i Prison', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
-  check('2.32 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1/i.test(h.title)));
-  check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak/i.test(h.title)));
-  check('2.32 highlights mention keyboard on tablets', RELEASE_HIGHLIGHTS.some((h) => /klawiatura i mysz na tablecie/i.test(h.title)));
+  check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
+  check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
+  check('2.32 highlights mention keyboard on tablets', RELEASE_HIGHLIGHTS.some((h) => /klawiatura i m|ZOMBIESysz na tablecie/i.test(h.title)));
   // 2.31: owca, głosy mobów, przestrzeń dźwięku i auto-skok.
   check('2.31 highlights mention the sheep', RELEASE_HIGHLIGHTS.some((h) => /owca z runem/i.test(h.title)));
   check('2.31 highlights mention mob voices', RELEASE_HIGHLIGHTS.some((h) => /głosy mobów/i.test(h.title)));

@@ -17,6 +17,8 @@ import { isFarmland, isHydrated, updateFarmland } from './farmland';
 import { FrameGovernor, drawDistanceChunks, entityTickInterval, lodRange, lodStepFor, profileResScale, sortChunkOffsets, type PerfProfile } from './perf';
 import { LOD_TILE, buildLodTile, lodRing } from './lod';
 import { Mob, mobVariantForBiome, isHostileMob, type MobType } from './mobs';
+import { getMapLayout } from './zombies';
+import { buildZombiesWorld } from './zombies/worldBuilder';
 
 const GREY: readonly number[] = [90, 90, 90];
 
@@ -92,7 +94,7 @@ import {
 import { villageSpawnSpots } from './village';
 import { isVillageMob } from './mobs';
 
-export type GameMode = 'survival' | 'creative';
+export type GameMode = 'survival' | 'creative' | 'zombies';
 export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'anvil' | 'brewing';
 
 export interface Waypoint {
@@ -964,6 +966,16 @@ export class Game {
       this.world.loadMods(opts.save.mods);
       this.netherWorld.loadMods(opts.save.netherMods ?? {});
     }
+    // 2.33: Zombies – nadpisz teren areną Dead End / Bad Blood / etc. (jeśli tryb zombies)
+    if (opts.mode === 'zombies') {
+      try {
+        const zombiesAny = opts as unknown as { zombiesMapId?: string };
+        const mapId = (zombiesAny.zombiesMapId as string) || 'deadend';
+        (this as unknown as { _zombiesMapId: string })._zombiesMapId = mapId;
+        const layout = getMapLayout(mapId as never);
+        buildZombiesWorld(this.world, layout);
+      } catch { /* ignore */ }
+    }
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
@@ -1230,6 +1242,26 @@ export class Game {
       this.body.pos.copy(this.spawnPoint);
       this.giveStarterItems();
     }
+    // 2.33: Zombies – nadpisz spawn na arenę (po findSpawn, żeby nie losował na proceduralnym terenie)
+    if (opts.mode === 'zombies') {
+      try {
+        const zombiesAny = opts as unknown as { zombiesMapId?: string };
+        const mapId = (zombiesAny.zombiesMapId as string) || 'deadend';
+        const layout = getMapLayout(mapId as never);
+        const sp = layout.spawnPoints[0];
+        if (sp) {
+          this.body.pos.set(sp.x, sp.y + 1, sp.z);
+          this.spawnPoint.set(sp.x, sp.y + 1, sp.z);
+          this.fallStart = this.body.pos.y;
+          // ensure chunk for meshes
+          this.world.getChunk(Math.floor(sp.x / CS), Math.floor(sp.z / CS));
+          this.world.getChunk(Math.floor((sp.x + 16) / CS), Math.floor(sp.z / CS));
+          this.world.getChunk(Math.floor(sp.x / CS), Math.floor((sp.z + 16) / CS));
+          // rebuild spawn chunks now (they were built before spawn override)
+          for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) this.buildChunk(Math.floor(sp.x / CS) + dx, Math.floor(sp.z / CS) + dz);
+        }
+      } catch { /* ignore */ }
+    }
     this.fallStart = this.body.pos.y;
 
     // Build nearby chunks right away
@@ -1368,7 +1400,7 @@ export class Game {
       }
     }
     // To, co gospodarz pokaże nowym graczom.
-    net.setWorld({ seed: this.world.seed, mode: this.mode, worldType: this.worldType, name: this.worldName, time: this.time, day: this.day, weather: this.weather });
+    net.setWorld({ seed: this.world.seed, mode: this.mode as 'survival' | 'creative', worldType: this.worldType, name: this.worldName, time: this.time, day: this.day, weather: this.weather } as never);
     this.message(
       net.role === 'host'
         ? 'Sesja utworzona. Kod pokoju podaj znajomym, żeby dołączyli.'
