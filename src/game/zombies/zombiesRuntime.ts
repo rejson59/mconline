@@ -23,6 +23,7 @@ interface GameRef {
   hunger: number;
   spawnMob(type: MobType, x: number, y: number, z: number, profession?: number): Mob;
   mobs: Mob[];
+  scene: THREE.Scene;
   message(text: string): void;
   spawnParticles(x: number, y: number, z: number, id: number, n: number, s: number): void;
   spawnDrop(id: number, count: number, x: number, y: number, z: number): void;
@@ -30,6 +31,13 @@ interface GameRef {
   setUI(s: string): void;
   mode: string;
   worldName: string;
+}
+
+interface ZombieBot {
+  id: string; name: string; color: number;
+  pos: THREE.Vector3; target: Mob | null;
+  hp: number; maxHp: number; shootCd: number; reviveCd: number;
+  mesh: THREE.Group; dead: boolean;
 }
 
 export class ZombiesRuntime {
@@ -78,6 +86,9 @@ export class ZombiesRuntime {
   hitMarker = 0; // seconds left
   hitMarkerCrit = false;
   lastHitMarkerAt = 0;
+  // AI Teammates – solo test (3 botów jak na Hypixel)
+  bots: ZombieBot[] = [];
+  botNames = ['Alex','Sam','Jordan'];
 
   constructor(game: GameRef, mapId: string) {
     this.game = game;
@@ -128,6 +139,27 @@ export class ZombiesRuntime {
     }
     this.spawnLeft = this.roundDefs[0].zombieCount;
     console.log(`[Zombies] ${mapId} R1 – ${this.spawnLeft} zombie, gold ${this.gold}`);
+    // AI teammates – spawn 2 boty obok spawnu (solo test)
+    this.spawnBots();
+  }
+
+  private spawnBots() {
+    if ((this.game as unknown as { net?: unknown }).net) return; // multiplayer – nie spawnowanie botów
+    const colors = [0x55aaff, 0xffaa55, 0x55ff88];
+    for (let i = 0; i < 2; i++) {
+      const sp = this.layout.spawnPoints[i % this.layout.spawnPoints.length];
+      const pos = new THREE.Vector3(sp.x + (Math.random() - 0.5) * 2, sp.y + 0.1, sp.z + (Math.random() - 0.5) * 2);
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.2, 0.3), new THREE.MeshStandardMaterial({ color: colors[i] }));
+      body.position.y = 0.7; g.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 10), new THREE.MeshStandardMaterial({ color: 0xffdbac }));
+      head.position.y = 1.55; g.add(head);
+      // nametag placeholder via simple plane
+      g.position.copy(pos);
+      try { this.game.scene.add(g); } catch {}
+      this.bots.push({ id: 'bot' + i, name: this.botNames[i], color: colors[i], pos, target: null, hp: 20, maxHp: 20, shootCd: 0, reviveCd: 0, mesh: g, dead: false });
+    }
+    if (this.bots.length) this.game.message(`🤖 Dołączyli AI towarzysze: ${this.bots.map(b => b.name).join(', ')} – pomogą Ci i reanimują!`);
   }
 
   currentWeapon(): WeaponInstance {
@@ -645,8 +677,89 @@ export class ZombiesRuntime {
     }
     // window damage: zombies attack nearby windows when blocked
     this.tickWindows(dt);
+    this.tickBots(dt);
     // check win
     if (this.spawnLeft <= 0 && this.zombiesAlive <= 0) this.checkRoundEnd();
+  }
+
+  private tickBots(dt: number) {
+    if (!this.bots.length) return;
+    const playerPos = this.game.body.pos;
+    const playerDown = this.player.isDowned;
+    for (const bot of this.bots) {
+      if (bot.dead) continue;
+      bot.shootCd = Math.max(0, bot.shootCd - dt);
+      bot.reviveCd = Math.max(0, bot.reviveCd - dt);
+      // jeśli gracz padnięty – biegnij do niego i reanimuj
+      if (playerDown) {
+        const dToPlayer = bot.pos.distanceTo(playerPos);
+        if (dToPlayer < 2.5) {
+          if (bot.reviveCd <= 0) {
+            bot.reviveCd = 1.2;
+            this.game.message(`🤖 ${bot.name} reanimuje Cię...`);
+            // reanimate after 3 tiks (~3.6s) – symulacja Fast Revive
+            setTimeout(() => {
+              if (this.player.isDowned) {
+                this.player.isDowned = false; (this.player as unknown as { downTimeLeft?: number }).downTimeLeft = 0;
+                (this.game as unknown as { health: number }).health = 10;
+                this.game.message(`💚 ${bot.name} Cię podniósł! (AI revive)`);
+                this.game.emitHud();
+              }
+            }, 800);
+          }
+        } else {
+          // move to player
+          const dir = new THREE.Vector3().subVectors(playerPos, bot.pos); dir.y = 0; dir.normalize().multiplyScalar(4.2 * dt);
+          bot.pos.add(dir); bot.mesh.position.copy(bot.pos);
+        }
+        continue;
+      }
+      // find nearest zombie
+      let best: Mob | null = null; let bestD = 24;
+      for (const m of this.game.mobs) {
+        if (m.dead) continue;
+        if (!['zombie','skeleton','spider','creeper','slime','ghast','enderman','wolf'].includes(m.type)) continue;
+        const d = bot.pos.distanceTo(m.body.pos);
+        if (d < bestD) { bestD = d; best = m; }
+      }
+      bot.target = best;
+      if (best) {
+        const d = bot.pos.distanceTo(best.body.pos);
+        if (d > 9) {
+          const dir = new THREE.Vector3().subVectors(best.body.pos, bot.pos); dir.y = 0; dir.normalize().multiplyScalar(3.8 * dt);
+          bot.pos.add(dir);
+        }
+        // face target
+        const yaw = Math.atan2(best.body.pos.x - bot.pos.x, best.body.pos.z - bot.pos.z);
+        bot.mesh.rotation.y = yaw;
+        // shoot
+        if (d < 18 && bot.shootCd <= 0) {
+          bot.shootCd = 0.55 + Math.random() * 0.25;
+          const dmg = 5 + Math.random() * 3;
+          // simple damage
+          const before = best.health;
+          best.damage(dmg, bot.pos.x, bot.pos.z, 'player' as never);
+          this.game.spawnParticles(best.body.pos.x, best.body.pos.y + 0.9, best.body.pos.z, B.GLOWSTONE, 3, 0.15);
+          if (best.health <= 0 || best.dead) {
+            // gold for player? small bonus
+            this.addGold(8, `asysta ${bot.name}`);
+          }
+          void before;
+        }
+      } else {
+        // no target – follow player within 6 blocks
+        const dToP = bot.pos.distanceTo(playerPos);
+        if (dToP > 7) {
+          const dir = new THREE.Vector3().subVectors(playerPos, bot.pos); dir.y = 0; dir.normalize().multiplyScalar(3 * dt);
+          bot.pos.add(dir);
+        } else if (dToP < 3 && Math.random() < 0.02) {
+          // wander a bit
+          bot.pos.x += (Math.random() - 0.5) * 0.6; bot.pos.z += (Math.random() - 0.5) * 0.6;
+        }
+      }
+      bot.mesh.position.copy(bot.pos);
+      bot.mesh.position.y = bot.pos.y;
+    }
   }
 
   private spawnOne() {

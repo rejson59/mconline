@@ -192,6 +192,43 @@ export default function MultiplayerScreen({
     }
   };
 
+  // 3.6: prywatny pokój Zombies przez Supabase (kod jak na Hypixel party)
+  const joinPrivateZombies = async (asHost: boolean) => {
+    const code = (normalizeRoom(room) || makeRoomCode()).toLowerCase();
+    setRoom(code);
+    reset();
+    setMode('public');
+    setBusy(true);
+    setStatus('connecting');
+    setMessage(asHost ? `Tworzę prywatny pokój Zombies ${code}…` : `Dołączam do pokoju ${code}…`);
+    const mapName = ZOMBIES_MAPS[zombiesMap]?.name ?? 'Dead End';
+    const worldId = `zombies-${zombiesMap}-${code}`;
+    const channel = `zombies-${code}`;
+    const s = new PublicServer({ name: name.trim() || 'Gracz', worldId, channel, worldName: `🧟 ${mapName} #${code}` });
+    s.skin = skin;
+    (s as unknown as { world: Record<string, unknown> }).world = { ...s.world, mode: 'zombies', zombiesMapId: zombiesMap, seed: PUBLIC_SEED, name: `Zombies ${mapName} #${code}` };
+    session.current = s as unknown as NetLike;
+    s.onProgress = (text) => setMessage(text);
+    s.onPeers = (list) => setPlayers(list);
+    s.onStatus = (st, err) => { setStatus(st); if (err) setMessage(err); };
+    // handshake overrides to carry zombiesMapId to handOff
+    const prev = s.world as unknown as Record<string, unknown>;
+    (s as unknown as { world: unknown }).world = { ...prev, zombiesMapId: zombiesMap, mode: 'zombies' };
+    try {
+      await s.connect();
+      setBusy(false);
+      setMessage(asHost ? `Pokój ${code} gotowy – zaproś znajomych tym kodem!` : `Dołączono do ${code} – czekam na start…`);
+      // for Supabase both are guests – handoff immediately
+      handOff(s as unknown as NetLike);
+    } catch (e) {
+      setBusy(false); setStatus('error');
+      setMessage(e instanceof Error ? e.message : 'Nie udało się połączyć z pokojem prywatnym.');
+    }
+    // Supabase flush tick
+    clearInterval(tick.current);
+    tick.current = window.setInterval(() => (s as unknown as { tick: () => void }).tick?.(), 1000);
+  };
+
   // -------------------------------------------------- ta sama przeglądarka
 
   const startLocalHost = () => {
@@ -390,7 +427,7 @@ export default function MultiplayerScreen({
         </div>
 
         {mode === 'public' && (
-          <div className="mb-3 space-y-2">
+          <div className="mb-3 space-y-3">
             <div className="border border-green-400/25 bg-green-900/20 p-3 text-sm">
               <div className="mb-1 flex flex-wrap items-center gap-2">
                 <span className="text-green-300">● Publiczny świat</span>
@@ -404,11 +441,29 @@ export default function MultiplayerScreen({
               </p>
             </div>
             <button type="button" className="mc-btn w-full !py-4 !text-lg" onClick={joinPublic} disabled={busy}>
-              {busy ? 'Łączę…' : '▶ Graj online'}
+              {busy ? 'Łączę…' : '▶ Graj online (globalny survival)'}
             </button>
             <p className="text-[11px] leading-snug text-white/45">
               Do gry wystarczy przeglądarka i internet. Serwer działa 24/7 – nie musisz nic otwierać ani nikogo zapraszać.
             </p>
+            <div className="rounded border border-red-500/30 bg-red-950/30 p-3">
+              <div className="mb-2 text-sm font-bold text-red-300">🧟 Prywatny pokój ZOMBIES (Supabase) – z kodem</div>
+              <p className="mb-2 text-[11px] text-white/55">Stwórz pokój tylko dla znajomych – działa jak Hypixel party: kod ważny 24h, każdy widzi ten sam postęp rund.</p>
+              <div className="mb-2 grid grid-cols-4 gap-1">
+                {(Object.entries(ZOMBIES_MAPS) as [ZombiesMapId, { name: string }][]).map(([id, m]) => (
+                  <button key={id} type="button" className={`${zombiesMap === id ? 'mc-btn mc-btn-primary !py-1 !text-[10px]' : 'mc-btn !py-1 !text-[10px] opacity-60'}`} onClick={() => setZombiesMap(id as ZombiesMapId)}>{m.name}</button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <input className={`${inputCls} min-w-0 flex-1`} value={room} onChange={(e) => setRoom(e.target.value)} placeholder="kod-pokoju np. deadend-42" maxLength={24} onKeyDown={(e) => e.stopPropagation()} />
+                <button type="button" className={`${btn} !px-2`} onClick={() => setRoom(makeRoomCode())}>Losuj</button>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" className={btnPrimary} onClick={() => joinPrivateZombies(true)} disabled={busy}>Utwórz pokój</button>
+                <button type="button" className={btn} onClick={() => joinPrivateZombies(false)} disabled={busy}>Dołącz do kodu</button>
+              </div>
+              <p className="mt-1 text-[10px] text-white/35">Każdy pokój = osobny zapis w chmurze (blokcraft_blocks world=zombies-...), Realtime live. Solo dostajesz 2 AI botów do testu – patrz niżej.</p>
+            </div>
           </div>
         )}
 

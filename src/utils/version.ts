@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '3.5.0';
-export const GAME_RELEASE_NAME = 'Zombies SERIO 1:1 – każdy pokój, okno i sklep jak na Hypixelu';
+export const GAME_VERSION = '3.6.0';
+export const GAME_RELEASE_NAME = 'Zombies 1:1 – AI towarzysze, pokoje z kodem i mobile';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
@@ -112,6 +112,10 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'ZOMBIES 1:1 – AI towarzysze, pokoje z kodem i mobile',
+    text: 'Solo nie jesteś sam: 2 botów (Alex i Sam) spawnuje obok Ciebie, followują, strzelają 5 dmg co 0.55s w zombie do 18 bloków i reanimują Cię gdy padniesz (8s). Prywatne pokoje Zombies przez Supabase – kod jak Hypixel party: każdy pokój to osobny worldId `zombies-{map}-{kod}` z zapisem w chmurze (blockcraft_blocks + Realtime). Na telefonie pełna grywalność: joystick + 🔫 strzał, ↻ przeładowanie, E interakcja i ⇄ zmiana broni – bez klawiatury.',
+  },
   {
     title: 'ZOMBIES SERIO 1:1 – każdy pokój, drzwi i okno',
     text: 'Poprawka „serio 1:1”: wszystkie 4 mapy mają teraz dokładną liczbę okien per pokój (Dead End 28, Bad Blood 32, AA 27, Prison 22) – brakujące generują się automatycznie na obwodzie pokoju jak na Hypixel. Korytarze między drzwiami mają podłogę i sufit, Power w każdym pokoju ma kabel redstone, a każdy sklep stoi w milimetrach jak na wiki Hypixel.',

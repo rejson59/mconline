@@ -1,7 +1,7 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "3.5.0",
+  "version": "3.6.0",
   "description": "BlockCraft 3.5 – Zombies SERIO 1:1: autouzupełnianie okien, korytarze 1:1, każdy sklep per wiki",
   "type": "module",
   "license": "MIT",
