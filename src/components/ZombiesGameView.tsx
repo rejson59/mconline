@@ -49,10 +49,16 @@ export default function ZombiesGameView({
   const effective = useMemo(() => effectiveSettings(settings, profile), [settings, profile]);
   const gfxPreset = PRESETS[effective.quality === 'auto' ? recommendPreset(profile) : effective.quality];
 
-  // Zombies HUD extension: gold, round, power
+  // Zombies HUD extension: gold, round, power, ammo, perks, zombies left
   const [zGold, setZGold] = useState(500);
   const [zRound, setZRound] = useState(1);
   const [zPower, setZPower] = useState(false);
+  const [zAmmo, setZAmmo] = useState('12/60');
+  const [zWeapon, setZWeapon] = useState('Pistol');
+  const [zLeft, setZLeft] = useState(0);
+  const [zInsta, setZInsta] = useState(false);
+  const [zDouble, setZDouble] = useState(false);
+  const [zInter, setZInter] = useState(0);
 
   useEffect(() => {
     const s = effectiveSettings(loadSettings(), profile);
@@ -67,11 +73,16 @@ export default function ZombiesGameView({
         {
           onHud: (h) => {
             setHud(h);
-            // Try to extract zombies gold if present in custom HUD field
-            const anyHud = h as unknown as { zombiesGold?: number; zombiesRound?: number; zombiesPower?: boolean };
+            const anyHud = h as unknown as { zombiesGold?: number; zombiesRound?: number; zombiesPower?: boolean; zombiesAmmo?: string; zombiesWeapon?: string; zombiesZombiesLeft?: number; zombiesInsta?: boolean; zombiesDoubleGold?: boolean; zombiesRoundIntermission?: number };
             if (anyHud.zombiesGold != null) setZGold(anyHud.zombiesGold);
             if (anyHud.zombiesRound != null) setZRound(anyHud.zombiesRound);
             if (anyHud.zombiesPower != null) setZPower(anyHud.zombiesPower);
+            if (anyHud.zombiesAmmo) setZAmmo(anyHud.zombiesAmmo);
+            if (anyHud.zombiesWeapon) setZWeapon(anyHud.zombiesWeapon);
+            if (anyHud.zombiesZombiesLeft != null) setZLeft(anyHud.zombiesZombiesLeft);
+            if (anyHud.zombiesInsta != null) setZInsta(!!anyHud.zombiesInsta);
+            if (anyHud.zombiesDoubleGold != null) setZDouble(!!anyHud.zombiesDoubleGold);
+            if (anyHud.zombiesRoundIntermission != null) setZInter(anyHud.zombiesRoundIntermission);
           },
           onUI: setUi,
           onControl: (kind) => {
@@ -160,19 +171,33 @@ export default function ZombiesGameView({
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="absolute inset-0" />
-      {/* Zombies HUD bar on top */}
+      {/* Zombies HUD bar on top – 1:1 Hypixel style */}
       {hud && (
-        <div className="pointer-events-none absolute left-0 right-0 top-0 flex items-center justify-between gap-2 bg-black/60 px-3 py-2 text-xs text-white">
+        <div className="pointer-events-none absolute left-0 right-0 top-0 flex flex-wrap items-center justify-between gap-2 bg-black/70 px-3 py-1.5 text-xs text-white">
           <div className="flex items-center gap-3">
             <span className="text-red-400 font-bold">ZOMBIES {mapId.toUpperCase()}</span>
-            <span>Runda {zRound}/30</span>
-            <span className={zPower ? 'text-emerald-300' : 'text-white/40'}>⚡ {zPower ? 'PRĄD WŁ.' : 'PRĄD WYŁ.'}</span>
+            <span className="rounded bg-red-900/60 px-2 py-0.5 font-bold">Runda {zRound}/30 {zInter > 0 ? `(start ${Math.ceil(zInter)}s)` : `• ${zLeft} zombie`}</span>
+            <span className={`${zPower ? 'text-emerald-300' : 'text-white/40'} text-[11px]`}>⚡ {zPower ? 'PRĄD WŁ.' : 'PRĄD WYŁ.'}</span>
+            {zInsta && <span className="animate-pulse rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold">INSTA-KILL</span>}
+            {zDouble && <span className="animate-pulse rounded bg-yellow-600 px-1.5 py-0.5 text-[10px] font-bold">×2 GOLD</span>}
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-yellow-300 font-bold">💰 {zGold}g</span>
-            <span>Drzwi: E • Sklep: PPM • Strzał: LPM</span>
+            <span className="rounded bg-black/60 px-2 py-0.5 text-yellow-300 font-bold">💰 {zGold}g</span>
+            <span className="hidden sm:inline text-white/70">Drzwi: E • Sklep: PPM • Strzał: LPM • R przeładuj</span>
           </div>
         </div>
+      )}
+      {/* Ammo + weapon – bottom center like CoD */}
+      {hud && ui === 'playing' && (
+        <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 bg-black/60 px-4 py-1.5 text-white border border-white/10">
+          <div className="text-[11px] text-white/60 tracking-widest">{zWeapon.toUpperCase()}</div>
+          <div className={`text-xl font-bold tracking-wider ${zAmmo.startsWith('0/') ? 'text-red-400' : 'text-white'}`}>{zAmmo}</div>
+          <div className="text-[10px] text-white/40">1-3 przełącz • R przeładuj • T czat</div>
+        </div>
+      )}
+      {/* crosshair hint when looking at shop/door */}
+      {hud && hud.target !== '-' && ui === 'playing' && hud.target && (
+        <div className="pointer-events-none absolute left-1/2 top-[52%] -translate-x-1/2 rounded bg-black/70 px-2 py-1 text-[11px] text-white/90">{hud.target}</div>
       )}
       {hud && game && ui !== 'dead' && (
         <HUD hud={hud} icons={icons} minimap={game.minimapCanvas} touchControls={touch} onSelectSlot={touch ? (i) => { game.selected = i; game.emitHud(); } : undefined} onTpaAccept={() => game.acceptTeleport()} onTpaDeny={() => game.denyTeleport()} />

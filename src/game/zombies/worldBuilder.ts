@@ -27,7 +27,6 @@ type RoomTheme = { wall: number; floor: number; ceil: number; accent?: number };
 
 function themeFor(roomId: string): RoomTheme {
   switch (roomId) {
-    // B.IRON_BARS not exists -> use FENCE, SMOOTH_STONE -> STONE, etc.
     case 'alley': return { wall: B.STONE_BRICKS, floor: B.COBBLE, ceil: B.STONE, accent: B.FENCE };
     case 'office': return { wall: B.PLANKS, floor: B.PLANKS, ceil: B.STONE, accent: B.BOOKSHELF };
     case 'gallery': return { wall: B.QUARTZ_BLOCK, floor: B.STONE, ceil: B.QUARTZ_BLOCK, accent: B.WOOL_WHITE };
@@ -36,8 +35,30 @@ function themeFor(roomId: string): RoomTheme {
     case 'powerstation': return { wall: B.STONE, floor: B.STONE_BRICKS, ceil: B.IRON_BLOCK, accent: B.REDSTONE_BLOCK };
     case 'rooftop': return { wall: B.STONE, floor: B.STONE, ceil: B.AIR, accent: B.FENCE };
     case 'garden': return { wall: B.LEAVES, floor: B.GRASS, ceil: B.AIR, accent: B.LEAVES };
-    // Bad Blood / AA / Prison fallback
-    case 'crypt': case 'mansion': case 'dungeon': return { wall: B.STONE_BRICKS, floor: B.MOSSY, ceil: B.STONE_BRICKS, accent: B.COBBLE };
+    // Bad Blood – gothic mansion
+    case 'courtyard': return { wall: B.STONE_BRICKS, floor: B.COBBLE, ceil: B.STONE_BRICKS, accent: B.FENCE };
+    case 'mansion': return { wall: B.BRICK, floor: B.PLANKS, ceil: B.PLANKS, accent: B.BOOKSHELF };
+    case 'library': return { wall: B.BOOKSHELF, floor: B.PLANKS, ceil: B.STONE, accent: B.BOOKSHELF };
+    case 'dungeon': return { wall: B.COBBLE, floor: B.STONE, ceil: B.COBBLE, accent: B.FENCE };
+    case 'crypt': return { wall: B.STONE_BRICKS, floor: B.MOSSY, ceil: B.STONE, accent: B.COBBLE };
+    case 'balcony': return { wall: B.STONE, floor: B.PLANKS, ceil: B.AIR, accent: B.FENCE };
+    case 'greathall': return { wall: B.STONE_BRICKS, floor: B.PLANKS, ceil: B.STONE_BRICKS, accent: B.GLOWSTONE };
+    case 'graveyard': return { wall: B.COBBLE, floor: B.DIRT, ceil: B.AIR, accent: B.WOOL_BLACK };
+    // Alien Arcadium – neon arcade
+    case 'spawn': return { wall: B.STONE_BRICKS, floor: B.STONE, ceil: B.STONE, accent: B.GLOWSTONE };
+    case 'arcade': return { wall: B.QUARTZ_BLOCK, floor: B.WOOL_BLUE, ceil: B.GLOWSTONE, accent: B.WOOL_GREEN };
+    case 'roller': return { wall: B.IRON_BLOCK, floor: B.PLANKS, ceil: B.BRICK, accent: B.GOLD_BLOCK };
+    case 'power': return { wall: B.IRON_BLOCK, floor: B.STONE_BRICKS, ceil: B.REDSTONE_BLOCK, accent: B.REDSTONE_BLOCK };
+    case 'kitchen': return { wall: B.BRICK, floor: B.PLANKS, ceil: B.STONE, accent: B.FURNACE };
+    case 'gardenAA': return { wall: B.LEAVES, floor: B.GRASS, ceil: B.AIR, accent: B.LEAVES };
+    case 'rooftopAA': return { wall: B.STONE, floor: B.STONE, ceil: B.AIR, accent: B.FENCE };
+    // Prison
+    case 'cells': return { wall: B.IRON_BLOCK, floor: B.STONE, ceil: B.STONE, accent: B.FENCE };
+    case 'cafeteria': return { wall: B.BRICK, floor: B.PLANKS, ceil: B.STONE, accent: B.FURNACE };
+    case 'yard': return { wall: B.COBBLE, floor: B.GRASS, ceil: B.AIR, accent: B.FENCE };
+    case 'alleyPrison': return { wall: B.STONE_BRICKS, floor: B.COBBLE, ceil: B.STONE, accent: B.COBBLE };
+    case 'roofPrison': return { wall: B.STONE, floor: B.STONE, ceil: B.AIR, accent: B.FENCE };
+    case 'powerPrison': return { wall: B.IRON_BLOCK, floor: B.IRON_BLOCK, ceil: B.REDSTONE_BLOCK, accent: B.REDSTONE_BLOCK };
     default: return { wall: B.STONE_BRICKS, floor: B.PLANKS, ceil: B.STONE_BRICKS };
   }
 }
@@ -88,6 +109,57 @@ function decorateRoom(world: World, r: { id: string; x1: number; z1: number; x2:
     world.setBlock(r.x2 - 2, r.y + 1, r.z2 - 2, B.LOG); world.setBlock(r.x2 - 2, r.y + 2, r.z2 - 2, B.LEAVES); world.setBlock(r.x2 - 2, r.y + 3, r.z2 - 2, B.LEAVES);
     world.setBlock(cx + 2, r.y + 1, cz + 1, B.FLOWER_RED); world.setBlock(cx - 1, r.y + 1, cz - 2, B.FLOWER_YELLOW);
   }
+  // --- Bad Blood themes
+  else if (r.id === 'courtyard') {
+    // fountain
+    fill(world, cx - 1, r.y + 1, cz - 1, cx + 1, r.y + 1, cz + 1, B.WATER);
+    world.setBlock(cx, r.y + 1, cz, B.GLOWSTONE); world.setBlock(cx, r.y + 2, cz, B.FENCE);
+    // hedge corners
+    for (let dx = -2; dx <= 2; dx++) { world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 4 + dx, B.LEAVES); world.setBlock(r.x2 - 2, r.y + 1, r.z2 - 4 - dx, B.LEAVES); }
+  } else if (r.id === 'mansion') {
+    // fireplace + stairs
+    fill(world, cx - 2, r.y + 1, r.z1 + 2, cx + 2, r.y + 3, r.z1 + 2, B.BRICK);
+    world.setBlock(cx, r.y + 2, r.z1 + 3, B.LAVA); world.setBlock(cx, r.y + 1, cz, B.WOOL_RED);
+    world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 6, B.CHEST);
+  } else if (r.id === 'library') {
+    for (let x = r.x1 + 1; x <= r.x2 - 1; x++) for (let dy = 1; dy < 3; dy++) world.setBlock(x, r.y + dy, r.z1 + 1, B.BOOKSHELF);
+    for (let z = r.z1 + 2; z <= r.z2 - 2; z++) if ((z & 1) === 0) world.setBlock(r.x1 + 1, r.y + 1, z, B.BOOKSHELF);
+    world.setBlock(cx, r.y + 1, cz, B.ENCHANT);
+  } else if (r.id === 'dungeon') {
+    for (let x = r.x1 + 2; x <= r.x2 - 2; x += 3) { fill(world, x, r.y + 1, r.z1 + 1, x, r.y + 3, r.z1 + 1, B.FENCE); world.setBlock(x, r.y + 1, r.z1 + 2, B.IRON_BLOCK); }
+    fill(world, r.x1 + 1, r.y + 1, r.z2 - 2, r.x2 - 1, r.y + 1, r.z2 - 2, B.WATER);
+  } else if (r.id === 'crypt') {
+    fill(world, cx - 1, r.y + 1, cz - 2, cx + 1, r.y + 2, cz + 2, B.COBBLE);
+    world.setBlock(cx, r.y + 2, cz, B.CHEST); world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 2, B.GLOWSTONE);
+  } else if (r.id === 'balcony') {
+    fill(world, r.x1, r.y + r.height, r.z1, r.x2, r.y + r.height, r.z2, B.AIR);
+    for (let x = r.x1; x <= r.x2; x++) world.setBlock(x, r.y + 1, r.z2, B.FENCE);
+  } else if (r.id === 'greathall') {
+    fill(world, cx - 3, r.y + 1, cz, cx + 3, r.y + 1, cz, B.WOOL_RED);
+    world.setBlock(cx, r.y + 4, cz, B.GLOWSTONE); world.setBlock(r.x1 + 3, r.y + 1, r.z1 + 3, B.CHEST);
+  } else if (r.id === 'graveyard') {
+    fill(world, r.x1, r.y + r.height, r.z1, r.x2, r.y + r.height, r.z2, B.AIR);
+    for (let i = 0; i < 5; i++) { const x = r.x1 + 2 + i * 3; const z = r.z1 + 2 + (i & 1); world.setBlock(x, r.y + 1, z, B.COBBLE); world.setBlock(x, r.y + 2, z, B.STONE); }
+    fill(world, r.x1 + 1, r.y + 1, r.z1 + 1, r.x2 - 1, r.y + 1, r.z2 - 1, B.GRASS);
+  } else if (r.id === 'arcade') {
+    for (let x = r.x1 + 2; x <= r.x2 - 2; x += 4) world.setBlock(x, r.y + 1, r.z1 + 2, B.NOTE_BLOCK);
+    world.setBlock(r.x1 + 2, r.y + 1, r.z2 - 2, B.CHEST); world.setBlock(r.x2 - 2, r.y + 1, r.z2 - 2, B.CRAFTING);
+  } else if (r.id === 'roller') {
+    // coaster track mock
+    fill(world, r.x1 + 1, r.y + 2, r.z1 + 3, r.x2 - 1, r.y + 2, r.z2 - 3, B.IRON_BLOCK);
+    fill(world, cx, r.y + 1, r.z1 + 3, cx, r.y + 1, r.z2 - 3, B.GOLD_BLOCK);
+  } else if (r.id === 'kitchen') {
+    fill(world, r.x1 + 1, r.y + 1, r.z1 + 1, r.x2 - 1, r.y + 1, r.z1 + 1, B.FURNACE);
+    world.setBlock(r.x1 + 3, r.y + 1, cz, B.WATER);
+  } else if (r.id === 'cells' || r.id === 'power' || r.id === 'powerPrison') {
+    fill(world, cx - 1, r.y + 1, cx - 1, cx + 1, r.y + 3, cz + 1, B.IRON_BLOCK);
+    world.setBlock(cx, r.y + 2, cz, B.REDSTONE_BLOCK);
+  } else if (r.id === 'yard') {
+    fill(world, r.x1, r.y + r.height, r.z1, r.x2, r.y + r.height, r.z2, B.AIR);
+    fill(world, r.x1 + 2, r.y + 1, r.z1 + 2, r.x2 - 2, r.y + 1, r.z2 - 2, B.GRASS);
+    for (let x = r.x1 + 2; x <= r.x2 - 2; x += 5) world.setBlock(x, r.y + 1, cz, B.FENCE);
+  }
+
   if (r.id === 'office' || r.id === 'gallery') {
     fill(world, cx - 2, r.y + 1, cz - 1, cx + 2, r.y + 1, cz + 1, B.WOOL_WHITE);
   }
