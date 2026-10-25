@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "3.4.0",
-  "description": "BlockCraft 3.4 – Zombies masterpiece: hitmarkery CoD, pasek przeładowania, boss FX, scoreboard Hypixel",
+  "version": "3.5.0",
+  "description": "BlockCraft 3.5 – Zombies SERIO 1:1: autouzupełnianie okien, korytarze 1:1, każdy sklep per wiki",
   "type": "module",
   "license": "MIT",
   "keywords": [

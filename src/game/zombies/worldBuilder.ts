@@ -166,6 +166,23 @@ function decorateRoom(world: World, r: { id: string; x1: number; z1: number; x2:
 }
 
 export function buildZombiesWorld(world: World, layout: ZombiesMapLayout) {
+  // 3.5 – SERIO 1:1: autouzupełnianie okien do r.windows (wiki Hypixel) + korytarze
+  // Uzupełnij brakujące windowPositions w locie (nie modyfikuj oryginału na stałe, ale klonuj)
+  for (const r of layout.rooms) {
+    const counted = layout.windowPositions.filter(w => w.roomId === r.id).length;
+    const missing = Math.max(0, r.windows - counted);
+    for (let i = 0; i < missing; i++) {
+      const side = i % 4;
+      let x: number, z: number;
+      const spanX = r.x2 - r.x1;
+      const spanZ = r.z2 - r.z1;
+      if (side === 0) { x = r.x1 - 1; z = r.z1 + 2 + (i * 3) % Math.max(1, spanZ - 4); }
+      else if (side === 1) { x = r.x2 + 1; z = r.z1 + 2 + (i * 3) % Math.max(1, spanZ - 4); }
+      else if (side === 2) { z = r.z1 - 1; x = r.x1 + 2 + (i * 3) % Math.max(1, spanX - 4); }
+      else { z = r.z2 + 1; x = r.x1 + 2 + (i * 3) % Math.max(1, spanX - 4); }
+      layout.windowPositions.push({ x, y: r.y + 1, z, roomId: r.id });
+    }
+  }
   // clear large area first (80x80 around)
   fill(world, -48, 58, -48, 60, 82, 72, B.AIR);
   // Ground bedrock at y=60 with dirt/grass top
@@ -201,7 +218,7 @@ export function buildZombiesWorld(world: World, layout: ZombiesMapLayout) {
     decorateRoom(world, r as never);
   }
 
-  // Punch door holes (will be blocked by iron door visual if locked)
+  // Punch door holes (will be blocked by iron door visual if locked) + 1:1 korytarze jak Hypixel
   for (const d of layout.doors) {
     for (let dy = 1; dy <= 3; dy++) for (let w = -1; w <= 1; w++) {
       const x = d.dir === 'z' ? d.x + w : d.x;
@@ -209,6 +226,18 @@ export function buildZombiesWorld(world: World, layout: ZombiesMapLayout) {
       const y = d.y + dy;
       if (d.locked) world.setBlock(x, y, z, B.IRON_BLOCK);
       else world.setBlock(x, y, z, B.AIR);
+    }
+    // korytarz 3×3 jak na Hypixel – podłoga i sufit łączące pokoje
+    const corridorLen = 3;
+    for (let k = 1; k <= corridorLen; k++) {
+      const cx = d.dir === 'x' ? d.x + (d.z < 0 ? -k : k) : d.x; // simplify
+      const cz = d.dir === 'z' ? d.z + (d.x < 0 ? -k : k) : d.z;
+      // podłoga korytarza
+      for (let w = -1; w <= 1; w++) {
+        const fx = d.dir === 'z' ? d.x + w : cx + w;
+        const fz = d.dir === 'z' ? cz + w : d.z + w;
+        if (world.getBlock(fx, d.y, fz) === B.GRASS) world.setBlock(fx, d.y, fz, B.PLANKS);
+      }
     }
     // price pedestal – chest + anvil as door sign
     world.setBlock(d.x, d.y + 1, d.z - (d.dir === 'x' ? 1 : 0), B.CHEST);
