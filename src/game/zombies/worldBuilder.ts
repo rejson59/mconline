@@ -27,7 +27,7 @@ type RoomTheme = { wall: number; floor: number; ceil: number; accent?: number };
 
 function themeFor(roomId: string): RoomTheme {
   switch (roomId) {
-    case 'alley': return { wall: B.STONE_BRICKS, floor: B.COBBLE, ceil: B.STONE, accent: B.FENCE };
+    case 'alley': return { wall: B.STONE_BRICKS, floor: B.COBBLE, ceil: B.AIR, accent: B.FENCE };
     case 'office': return { wall: B.PLANKS, floor: B.PLANKS, ceil: B.STONE, accent: B.BOOKSHELF };
     case 'gallery': return { wall: B.QUARTZ_BLOCK, floor: B.STONE, ceil: B.QUARTZ_BLOCK, accent: B.WOOL_WHITE };
     case 'hotel': return { wall: B.BRICK, floor: B.WOOL_RED, ceil: B.PLANKS, accent: B.WOOL_WHITE };
@@ -63,51 +63,245 @@ function themeFor(roomId: string): RoomTheme {
   }
 }
 
+function placeLamp(world: World, x: number, y: number, z: number) {
+  // simple street lamp: fence pole + lantern
+  fill(world, x, y + 1, z, x, y + 4, z, B.FENCE);
+  world.setBlock(x, y + 5, z, B.LANTERN);
+  world.setBlock(x, y + 4, z, B.GLOWSTONE);
+}
+function placeCar(world: World, x: number, y: number, z: number, color: number, dir: 'x' | 'z') {
+  // 4x2 car body + windshield
+  const c = color;
+  if (dir === 'x') {
+    fill(world, x - 2, y + 1, z - 1, x + 2, y + 1, z + 1, c);
+    fill(world, x - 2, y + 2, z - 1, x + 2, y + 2, z + 1, B.WOOL_BLACK);
+    world.setBlock(x - 1, y + 2, z, B.GLASS);
+    world.setBlock(x + 1, y + 2, z, B.GLASS);
+    world.setBlock(x - 2, y + 1, z, B.WOOL_LIGHT_GRAY);
+    world.setBlock(x + 2, y + 1, z, B.WOOL_LIGHT_GRAY);
+  } else {
+    fill(world, x - 1, y + 1, z - 2, x + 1, y + 1, z + 2, c);
+    fill(world, x - 1, y + 2, z - 2, x + 1, y + 2, z + 2, B.WOOL_BLACK);
+    world.setBlock(x, y + 2, z - 1, B.GLASS);
+    world.setBlock(x, y + 2, z + 1, B.GLASS);
+    world.setBlock(x, y + 1, z - 2, B.WOOL_LIGHT_GRAY);
+    world.setBlock(x, y + 1, z + 2, B.WOOL_LIGHT_GRAY);
+  }
+}
+
 function decorateRoom(world: World, r: { id: string; x1: number; z1: number; x2: number; z2: number; y: number; height: number }) {
   const cx = Math.floor((r.x1 + r.x2) / 2);
   const cz = Math.floor((r.z1 + r.z2) / 2);
-  const th = themeFor(r.id);
+  void themeFor(r.id);
   // central light
-  if (r.id !== 'rooftop' && r.id !== 'garden') world.setBlock(cx, r.y + Math.min(3, r.height - 1), cz, B.GLOWSTONE);
+  if (r.id !== 'rooftop' && r.id !== 'garden' && r.id !== 'alley' && r.id !== 'yard') world.setBlock(cx, r.y + Math.min(3, r.height - 1), cz, B.GLOWSTONE);
   // corners torches
   world.setBlock(r.x1 + 1, r.y + 2, r.z1 + 1, B.TORCH);
   world.setBlock(r.x2 - 1, r.y + 2, r.z2 - 1, B.TORCH);
 
-  if (r.id === 'office') {
-    // desks + bookshelves along walls
-    fill(world, r.x1 + 1, r.y + 1, r.z1 + 1, r.x1 + 3, r.y + 1, r.z1 + 2, B.CRAFTING);
-    // fill bookshelves on north wall interior
-    for (let x = r.x1 + 2; x <= r.x2 - 2; x++) { if ((x & 1) === 0) { world.setBlock(x, r.y + 1, r.z1 + 1, B.BOOKSHELF); world.setBlock(x, r.y + 2, r.z1 + 1, B.BOOKSHELF); } }
+  if (r.id === 'alley') {
+    // === ALLEY as outdoor street – Hypixel spawn street ===
+    // street asphalt already via floor override outside; here add sidewalks, facades, props
+    // sidewalks (raise 1 block along north/south edges inside room)
+    for (let x = r.x1; x <= r.x2; x++) {
+      world.setBlock(x, r.y + 1, r.z1 + 1, B.STONE_BRICKS);
+      world.setBlock(x, r.y + 1, r.z2 - 1, B.STONE_BRICKS);
+    }
+    // street lamps corners
+    placeLamp(world, r.x1 + 2, r.y, r.z1 + 4);
+    placeLamp(world, r.x2 - 2, r.y, r.z1 + 4);
+    placeLamp(world, r.x1 + 2, r.y, r.z2 - 4);
+    placeLamp(world, r.x2 - 2, r.y, r.z2 - 4);
+    // 2 parked cars on street center
+    placeCar(world, cx - 6, r.y, cz, B.WOOL_RED, 'x');
+    placeCar(world, cx + 6, r.y, cz, B.WOOL_BLUE, 'x');
+    // dumpsters
+    fill(world, r.x1 + 1, r.y + 1, r.z1 + 5, r.x1 + 2, r.y + 2, r.z1 + 6, B.IRON_BLOCK);
+    fill(world, r.x2 - 2, r.y + 1, r.z2 - 6, r.x2 - 1, r.y + 2, r.z2 - 5, B.IRON_BLOCK);
+    // graffiti walls – colored wool splashes on outer walls
+    world.setBlock(r.x1, r.y + 2, r.z1 + 3, B.WOOL_RED);
+    world.setBlock(r.x1, r.y + 3, r.z1 + 4, B.WOOL_YELLOW);
+    world.setBlock(r.x2, r.y + 2, r.z2 - 3, B.WOOL_BLUE);
+    world.setBlock(r.x2, r.y + 3, r.z2 - 4, B.WOOL_GREEN);
+    // building facades: awnings + shop fronts
+    for (let x = r.x1 + 4; x <= r.x2 - 4; x += 5) {
+      world.setBlock(x, r.y + 3, r.z1, B.WOOL_ORANGE); // awning north
+      world.setBlock(x, r.y + 3, r.z2, B.WOOL_CYAN); // awning south
+      world.setBlock(x, r.y + 2, r.z1, B.GLASS); // shop window
+      world.setBlock(x, r.y + 2, r.z2, B.GLASS);
+    }
+    // truck in alley center-back (Hypixel truck easter egg)
+    fill(world, cx - 2, r.y + 1, r.z1 + 2, cx + 2, r.y + 2, r.z1 + 4, B.WOOL_BROWN);
+    world.setBlock(cx, r.y + 2, r.z1 + 3, B.GLASS);
+    // scattered leaves trash
+    world.setBlock(cx + 3, r.y + 1, cz + 1, B.LEAVES);
+    world.setBlock(cx - 2, r.y + 1, cz - 2, B.LEAVES);
+  } else if (r.id === 'office') {
+    // === OFFICE – cubicles, desks with computers, filing cabinets ===
+    // cubicle walls (half-height)
+    for (let z = r.z1 + 4; z <= r.z2 - 4; z += 4) {
+      for (let x = r.x1 + 2; x <= r.x2 - 2; x += 6) {
+        fill(world, x, r.y + 1, z, x, r.y + 2, z + 1, B.PLANKS);
+        // desk + computer
+        world.setBlock(x + 1, r.y + 1, z, B.CRAFTING);
+        world.setBlock(x + 1, r.y + 2, z, B.GLASS); // monitor
+        world.setBlock(x + 2, r.y + 1, z, B.WOOL_GRAY); // chair
+      }
+    }
+    // filing cabinets along north wall
+    for (let x = r.x1 + 3; x <= r.x2 - 3; x += 2) world.setBlock(x, r.y + 1, r.z1 + 1, B.IRON_BLOCK);
+    // water cooler + plant
+    world.setBlock(r.x1 + 2, r.y + 1, r.z2 - 2, B.WATER);
+    world.setBlock(r.x1 + 2, r.y + 2, r.z2 - 2, B.LEAVES);
+    // conference table center
+    fill(world, cx - 3, r.y + 1, cz - 1, cx + 3, r.y + 1, cz + 1, B.PLANKS);
+    for (let x = cx - 2; x <= cx + 2; x += 2) world.setBlock(x, r.y + 1, cz - 2, B.WOOL_GRAY);
+    for (let x = cx - 2; x <= cx + 2; x += 2) world.setBlock(x, r.y + 1, cz + 2, B.WOOL_GRAY);
   } else if (r.id === 'gallery') {
-    // paintings = colored wool
-    for (let z = r.z1 + 2; z <= r.z2 - 2; z += 3) { world.setBlock(r.x1 + 1, r.y + 2, z, B.WOOL_YELLOW); world.setBlock(r.x2 - 1, r.y + 2, z, B.WOOL_LIGHT_BLUE); }
-    world.setBlock(cx, r.y + 1, cz, B.CHEST);
+    // === GALLERY – art museum with paintings, benches, reception ===
+    // white marble walls already; add art frames (wool with fence frames)
+    const arts = [B.WOOL_RED, B.WOOL_BLUE, B.WOOL_YELLOW, B.WOOL_GREEN, B.WOOL_PURPLE, B.WOOL_ORANGE];
+    let ai = 0;
+    for (let z = r.z1 + 2; z <= r.z2 - 2; z += 4) {
+      world.setBlock(r.x1 + 1, r.y + 2, z, arts[ai % arts.length]);
+      world.setBlock(r.x1 + 1, r.y + 3, z, B.FENCE); // frame
+      world.setBlock(r.x2 - 1, r.y + 2, z, arts[(ai + 2) % arts.length]);
+      world.setBlock(r.x2 - 1, r.y + 3, z, B.FENCE);
+      ai++;
+    }
+    // benches in center
+    fill(world, cx - 2, r.y + 1, cz - 3, cx + 2, r.y + 1, cz - 3, B.PLANKS);
+    fill(world, cx - 2, r.y + 1, cz + 3, cx + 2, r.y + 1, cz + 3, B.PLANKS);
+    // reception desk north
+    fill(world, r.x1 + 3, r.y + 1, r.z1 + 3, r.x1 + 7, r.y + 1, r.z1 + 5, B.BOOKSHELF);
+    world.setBlock(r.x1 + 5, r.y + 2, r.z1 + 4, B.CHEST);
+    // skylight glass ceiling (instead of quartz)
+    for (let x = cx - 2; x <= cx + 2; x++) for (let z = cz - 2; z <= cz + 2; z++) world.setBlock(x, r.y + r.height, z, B.GLASS);
   } else if (r.id === 'hotel') {
-    // beds (use BED id)
-    world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 3, B.BED);
-    world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 4, B.BED);
-    world.setBlock(r.x2 - 2, r.y + 1, r.z2 - 3, B.BED);
-    world.setBlock(r.x2 - 2, r.y + 1, r.z2 - 4, B.BED);
-    fill(world, cx - 1, r.y + 1, cz, cx + 1, r.y + 1, cz, B.WOOL_RED);
+    // === HOTEL – 2-story lobby, reception, hallway with rooms ===
+    // reception desk
+    fill(world, r.x1 + 3, r.y + 1, r.z1 + 3, r.x1 + 8, r.y + 2, r.z1 + 4, B.PLANKS);
+    world.setBlock(r.x1 + 5, r.y + 2, r.z1 + 3, B.BOOKSHELF);
+    // lobby couches
+    fill(world, cx - 3, r.y + 1, cz, cx - 1, r.y + 1, cz, B.WOOL_RED);
+    fill(world, cx + 1, r.y + 1, cz, cx + 3, r.y + 1, cz, B.WOOL_RED);
+    world.setBlock(cx - 2, r.y + 1, cz + 1, B.WOOL_WHITE);
+    world.setBlock(cx + 2, r.y + 1, cz + 1, B.WOOL_WHITE);
+    // staircase to 2nd floor (south side) – steps as stairs via slabs
+    for (let i = 0; i < 4; i++) {
+      world.setBlock(r.x2 - 3 - i, r.y + 1 + i, r.z2 - 3, B.PLANKS);
+      world.setBlock(r.x2 - 3 - i, r.y + 2 + i, r.z2 - 2, B.FENCE); // railing
+    }
+    // second floor hallway balcony (around upper edge)
+    for (let x = r.x1 + 2; x <= r.x2 - 2; x++) world.setBlock(x, r.y + 4, r.z1 + 6, B.FENCE);
+    // 4 hotel rooms with doors (beds inside)
+    const rooms = [{ x: r.x1 + 2, z: r.z1 + 8 }, { x: r.x2 - 6, z: r.z1 + 8 }, { x: r.x1 + 2, z: r.z2 - 8 }, { x: r.x2 - 6, z: r.z2 - 8 }];
+    for (const rm of rooms) {
+      fill(world, rm.x, r.y + 1, rm.z, rm.x + 3, r.y + 3, rm.z + 4, B.WOOL_WHITE); // temporary walls then carve
+      fill(world, rm.x + 1, r.y + 1, rm.z + 1, rm.x + 2, r.y + 3, rm.z + 3, B.AIR);
+      // beds
+      world.setBlock(rm.x + 1, r.y + 1, rm.z + 1, B.BED);
+      world.setBlock(rm.x + 1, r.y + 1, rm.z + 2, B.BED_HEAD_N);
+      world.setBlock(rm.x + 1, r.y + 1, rm.z + 3, B.WOOL_WHITE); // pillow
+      // nightstand
+      world.setBlock(rm.x + 2, r.y + 1, rm.z + 1, B.CRAFTING);
+      world.setBlock(rm.x + 2, r.y + 2, rm.z + 1, B.LANTERN);
+    }
+    // hallway carpet
+    fill(world, r.x1 + 6, r.y + 1, r.z1 + 6, r.x2 - 6, r.y + 1, r.z2 - 6, B.WOOL_RED);
+    // paintings in hallway
+    world.setBlock(r.x1 + 1, r.y + 2, cz, B.WOOL_YELLOW);
+    world.setBlock(r.x2 - 1, r.y + 2, cz, B.WOOL_YELLOW);
   } else if (r.id === 'apartments') {
-    fill(world, r.x1 + 1, r.y + 1, r.z1 + 1, r.x1 + 4, r.y + 1, r.z1 + 1, B.FURNACE);
-    world.setBlock(r.x1 + 2, r.y + 1, r.z2 - 2, B.CHEST);
+    // === APARTMENTS – lived-in: kitchen, living room, bedroom ===
+    // kitchen corner
+    fill(world, r.x1 + 1, r.y + 1, r.z1 + 1, r.x1 + 5, r.y + 1, r.z1 + 3, B.FURNACE);
+    fill(world, r.x1 + 1, r.y + 2, r.z1 + 1, r.x1 + 5, r.y + 2, r.z1 + 1, B.BOOKSHELF); // cabinets
+    world.setBlock(r.x1 + 3, r.y + 1, r.z1 + 2, B.WATER); // sink
+    // dining table
+    fill(world, cx - 2, r.y + 1, r.z1 + 6, cx + 2, r.y + 1, r.z1 + 8, B.PLANKS);
+    world.setBlock(cx - 1, r.y + 1, r.z1 + 5, B.WOOL_BROWN);
+    world.setBlock(cx + 1, r.y + 1, r.z1 + 5, B.WOOL_BROWN);
+    world.setBlock(cx - 1, r.y + 1, r.z1 + 9, B.WOOL_BROWN);
+    world.setBlock(cx + 1, r.y + 1, r.z1 + 9, B.WOOL_BROWN);
+    // living room couch + TV
+    fill(world, r.x1 + 2, r.y + 1, cz, r.x1 + 6, r.y + 1, cz, B.WOOL_BLUE);
+    world.setBlock(r.x2 - 2, r.y + 2, cz, B.WOOL_BLACK); // TV
+    world.setBlock(r.x2 - 2, r.y + 1, cz, B.CRAFTING); // stand
+    // bedroom with bunk beds
+    fill(world, r.x1 + 2, r.y + 1, r.z2 - 5, r.x1 + 6, r.y + 1, r.z2 - 3, B.WOOL_GREEN);
+    world.setBlock(r.x1 + 3, r.y + 2, r.z2 - 4, B.BED);
+    world.setBlock(r.x1 + 5, r.y + 2, r.z2 - 4, B.BED);
+    // balcony with view to Power Station
+    for (let x = r.x1 + 2; x <= r.x2 - 2; x++) world.setBlock(x, r.y + 1, r.z2 - 1, B.FENCE);
+    // sniper nest sandbags
+    fill(world, r.x2 - 3, r.y + 1, r.z2 - 4, r.x2 - 1, r.y + 1, r.z2 - 2, B.SANDSTONE);
   } else if (r.id === 'powerstation') {
-    fill(world, cx - 1, r.y + 1, cz - 1, cx + 1, r.y + 2, cz + 1, B.IRON_BLOCK);
-    world.setBlock(cx, r.y + 3, cz, B.REDSTONE_BLOCK);
-    world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 2, B.CRAFTING);
+    // === POWER STATION – industrial turbines, pipes, control room ===
+    // 2 turbines
+    fill(world, cx - 4, r.y + 1, cz - 2, cx - 2, r.y + 4, cz + 2, B.IRON_BLOCK);
+    fill(world, cx + 2, r.y + 1, cz - 2, cx + 4, r.y + 4, cz + 2, B.IRON_BLOCK);
+    world.setBlock(cx - 3, r.y + 5, cz, B.REDSTONE_BLOCK);
+    world.setBlock(cx + 3, r.y + 5, cz, B.REDSTONE_BLOCK);
+    // overhead pipes
+    for (let x = r.x1 + 2; x <= r.x2 - 2; x++) { world.setBlock(x, r.y + 5, cz, B.IRON_BLOCK); if (x % 3 === 0) world.setBlock(x, r.y + 4, cz, B.FENCE); }
+    // control panels
+    fill(world, r.x1 + 2, r.y + 1, r.z1 + 2, r.x1 + 6, r.y + 2, r.z1 + 2, B.IRON_BLOCK);
+    world.setBlock(r.x1 + 3, r.y + 2, r.z1 + 2, B.LANTERN);
+    world.setBlock(r.x1 + 5, r.y + 2, r.z1 + 2, B.LEVER);
+    // glass partition to Gallery stairs (GSTEP)
+    for (let x = r.x1; x <= r.x2; x++) { if (x !== 42) world.setBlock(x, r.y + 1, r.z1, B.GLASS); }
+    // coolant water pit
+    fill(world, r.x2 - 5, r.y, r.z2 - 5, r.x2 - 2, r.y, r.z2 - 2, B.WATER);
+    world.setBlock(r.x2 - 3, r.y + 1, r.z2 - 3, B.LANTERN);
   } else if (r.id === 'rooftop') {
+    // === ROOFTOP – helipad H, antennas, bunker ===
     fill(world, r.x1, r.y + r.height, r.z1, r.x2, r.y + r.height, r.z2, B.AIR);
-    for (let x = r.x1; x <= r.x2; x++) { world.setBlock(x, r.y + 2, r.z1, th.accent ?? B.STONE); world.setBlock(x, r.y + 2, r.z2, th.accent ?? B.STONE); }
-    for (let z = r.z1; z <= r.z2; z++) { world.setBlock(r.x1, r.y + 2, z, th.accent ?? B.STONE); world.setBlock(r.x2, r.y + 2, z, th.accent ?? B.STONE); }
-    fill(world, cx - 1, r.y + 1, cz - 1, cx + 1, r.y + 1, cz + 1, B.GRASS);
-    world.setBlock(cx, r.y + 2, cz, B.SAPLING);
+    // helipad circle
+    fill(world, cx - 4, r.y + 1, cz - 4, cx + 4, r.y + 1, cz + 4, B.WOOL_WHITE);
+    fill(world, cx - 1, r.y + 1, cz - 4, cx + 1, r.y + 1, cz + 4, B.WOOL_RED); // H vertical
+    fill(world, cx - 4, r.y + 1, cz, cx + 4, r.y + 1, cz, B.WOOL_RED); // H horizontal
+    // parapet walls
+    for (let x = r.x1; x <= r.x2; x++) { world.setBlock(x, r.y + 2, r.z1, B.STONE_BRICKS); world.setBlock(x, r.y + 2, r.z2, B.STONE_BRICKS); }
+    for (let z = r.z1; z <= r.z2; z++) { world.setBlock(r.x1, r.y + 2, z, B.STONE_BRICKS); world.setBlock(r.x2, r.y + 2, z, B.STONE_BRICKS); }
+    // antenna tower
+    for (let y = r.y + 1; y <= r.y + 6; y++) world.setBlock(r.x2 - 2, y, r.z2 - 2, B.FENCE);
+    world.setBlock(r.x2 - 2, r.y + 7, r.z2 - 2, B.GLOWSTONE);
+    world.setBlock(r.x2 - 2, r.y + 8, r.z2 - 2, B.LANTERN);
+    // AC units
+    fill(world, r.x1 + 2, r.y + 1, r.z1 + 2, r.x1 + 4, r.y + 2, r.z1 + 4, B.IRON_BLOCK);
+    world.setBlock(r.x1 + 3, r.y + 3, r.z1 + 3, B.FENCE);
+    // bunker for Team Machine
+    fill(world, cx - 2, r.y + 1, r.z2 - 6, cx + 2, r.y + 3, r.z2 - 4, B.IRON_BLOCK);
+    fill(world, cx - 1, r.y + 1, r.z2 - 5, cx + 1, r.y + 2, r.z2 - 5, B.AIR);
+    // stair access from Power Station
+    for (let i = 0; i < 3; i++) { world.setBlock(r.x1 + 2 + i, r.y + 1 + i, r.z1 + 2, B.STONE); world.setBlock(r.x1 + 2 + i, r.y + 2 + i, r.z1 + 1, B.FENCE); }
   } else if (r.id === 'garden') {
+    // === GARDEN – hedge maze, fountain, greenhouse ===
     fill(world, r.x1, r.y + r.height, r.z1, r.x2, r.y + r.height, r.z2, B.AIR);
-    fill(world, r.x1 + 1, r.y + 1, r.z1 + 1, r.x2 - 1, r.y + 1, r.z2 - 1, B.GRASS);
-    world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 2, B.LOG); world.setBlock(r.x1 + 2, r.y + 2, r.z1 + 2, B.LEAVES); world.setBlock(r.x1 + 2, r.y + 3, r.z1 + 2, B.LEAVES);
-    world.setBlock(r.x2 - 2, r.y + 1, r.z2 - 2, B.LOG); world.setBlock(r.x2 - 2, r.y + 2, r.z2 - 2, B.LEAVES); world.setBlock(r.x2 - 2, r.y + 3, r.z2 - 2, B.LEAVES);
-    world.setBlock(cx + 2, r.y + 1, cz + 1, B.FLOWER_RED); world.setBlock(cx - 1, r.y + 1, cz - 2, B.FLOWER_YELLOW);
+    // hedge maze walls 2 high
+    for (let x = r.x1 + 2; x <= r.x2 - 2; x++) { if (x % 4 === 0) fill(world, x, r.y + 1, r.z1 + 2, x, r.y + 2, r.z2 - 2, B.LEAVES); }
+    for (let z = r.z1 + 2; z <= r.z2 - 2; z++) { if (z % 5 === 0) fill(world, r.x1 + 2, r.y + 1, z, r.x2 - 2, r.y + 2, z, B.LEAVES); }
+    // clear paths (carve)
+    fill(world, cx - 1, r.y + 1, r.z1 + 2, cx + 1, r.y + 1, r.z2 - 2, B.GRASS);
+    fill(world, r.x1 + 2, r.y + 1, cz - 1, r.x2 - 2, r.y + 1, cz + 1, B.GRASS);
+    // central fountain
+    fill(world, cx - 2, r.y, cz - 2, cx + 2, r.y, cz + 2, B.WATER);
+    fill(world, cx - 3, r.y + 1, cz - 3, cx + 3, r.y + 1, cz - 3, B.STONE_BRICKS);
+    fill(world, cx - 3, r.y + 1, cz + 3, cx + 3, r.y + 1, cz + 3, B.STONE_BRICKS);
+    fill(world, cx - 3, r.y + 1, cz - 3, cx - 3, r.y + 1, cz + 3, B.STONE_BRICKS);
+    fill(world, cx + 3, r.y + 1, cz - 3, cx + 3, r.y + 1, cz + 3, B.STONE_BRICKS);
+    world.setBlock(cx, r.y + 1, cz, B.COBBLE);
+    world.setBlock(cx, r.y + 2, cz, B.WATER);
+    // flower beds
+    for (let x = r.x1 + 3; x <= r.x2 - 3; x += 3) { world.setBlock(x, r.y + 1, r.z1 + 3, B.FLOWER_RED); world.setBlock(x, r.y + 1, r.z2 - 3, B.FLOWER_YELLOW); }
+    // greenhouse for Ultimate (glass walls)
+    fill(world, r.x1 + 8, r.y + 1, r.z2 - 8, r.x2 - 8, r.y + 4, r.z2 - 8, B.GLASS);
+    fill(world, r.x1 + 8, r.y + 1, r.z2 - 8, r.x1 + 8, r.y + 4, r.z2 - 4, B.GLASS);
+    fill(world, r.x2 - 8, r.y + 1, r.z2 - 8, r.x2 - 8, r.y + 4, r.z2 - 4, B.GLASS);
+    // 2 trees
+    world.setBlock(r.x1 + 3, r.y + 1, r.z1 + 3, B.LOG); world.setBlock(r.x1 + 3, r.y + 2, r.z1 + 3, B.LEAVES); world.setBlock(r.x1 + 3, r.y + 3, r.z1 + 3, B.LEAVES); world.setBlock(r.x1 + 2, r.y + 2, r.z1 + 3, B.LEAVES); world.setBlock(r.x1 + 4, r.y + 2, r.z1 + 3, B.LEAVES);
+    world.setBlock(r.x2 - 3, r.y + 1, r.z2 - 3, B.LOG); world.setBlock(r.x2 - 3, r.y + 2, r.z2 - 3, B.LEAVES); world.setBlock(r.x2 - 3, r.y + 3, r.z2 - 3, B.LEAVES);
   }
   // --- Bad Blood themes
   else if (r.id === 'courtyard') {
@@ -118,6 +312,34 @@ function decorateRoom(world: World, r: { id: string; x1: number; z1: number; x2:
     for (let dx = -2; dx <= 2; dx++) { world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 4 + dx, B.LEAVES); world.setBlock(r.x2 - 2, r.y + 1, r.z2 - 4 - dx, B.LEAVES); }
   } else if (r.id === 'mansion') {
     // fireplace + stairs
+    fill(world, cx - 2, r.y + 1, r.z1 + 2, cx + 2, r.y + 3, r.z1 + 2, B.BRICK);
+    world.setBlock(cx, r.y + 2, r.z1 + 3, B.LAVA); world.setBlock(cx, r.y + 1, cz, B.WOOL_RED);
+    world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 6, B.CHEST);
+  } else if (r.id === 'library') {
+    for (let x = r.x1 + 1; x <= r.x2 - 1; x++) for (let dy = 1; dy < 3; dy++) world.setBlock(x, r.y + dy, r.z1 + 1, B.BOOKSHELF);
+    for (let z = r.z1 + 2; z <= r.z2 - 2; z++) if ((z & 1) === 0) world.setBlock(r.x1 + 1, r.y + 1, z, B.BOOKSHELF);
+    world.setBlock(cx, r.y + 1, cz, B.ENCHANT);
+  } else if (r.id === 'dungeon') {
+    for (let x = r.x1 + 2; x <= r.x2 - 2; x += 3) { fill(world, x, r.y + 1, r.z1 + 1, x, r.y + 3, r.z1 + 1, B.FENCE); world.setBlock(x, r.y + 1, r.z1 + 2, B.IRON_BLOCK); }
+    fill(world, r.x1 + 1, r.y + 1, r.z2 - 2, r.x2 - 1, r.y + 1, r.z2 - 2, B.WATER);
+  } else if (r.id === 'crypt') {
+    fill(world, cx - 1, r.y + 1, cz - 2, cx + 1, r.y + 2, cz + 2, B.COBBLE);
+    world.setBlock(cx, r.y + 2, cz, B.CHEST); world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 2, B.GLOWSTONE);
+  } else if (r.id === 'balcony') {
+    fill(world, r.x1, r.y + r.height, r.z1, r.x2, r.y + r.height, r.z2, B.AIR);
+    for (let x = r.x1; x <= r.x2; x++) world.setBlock(x, r.y + 1, r.z2, B.FENCE);
+  } else if (r.id === 'greathall') {
+    fill(world, cx - 3, r.y + 1, cz, cx + 3, r.y + 1, cz, B.WOOL_RED);
+    world.setBlock(cx, r.y + 4, cz, B.GLOWSTONE); world.setBlock(r.x1 + 3, r.y + 1, r.z1 + 3, B.CHEST);
+  } else if (r.id === 'graveyard') {
+    fill(world, r.x1, r.y + r.height, r.z1, r.x2, r.y + r.height, r.z2, B.AIR);
+    for (let i = 0; i < 5; i++) { const x = r.x1 + 2 + i * 3; const z = r.z1 + 2 + (i & 1); world.setBlock(x, r.y + 1, z, B.COBBLE); world.setBlock(x, r.y + 2, z, B.STONE); }
+    fill(world, r.x1 + 1, r.y + 1, r.z1 + 1, r.x2 - 1, r.y + 1, r.z2 - 1, B.GRASS);
+  } else if (r.id === 'courtyard') {
+    fill(world, cx - 1, r.y + 1, cz - 1, cx + 1, r.y + 1, cz + 1, B.WATER);
+    world.setBlock(cx, r.y + 1, cz, B.GLOWSTONE); world.setBlock(cx, r.y + 2, cz, B.FENCE);
+    for (let dx = -2; dx <= 2; dx++) { world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 4 + dx, B.LEAVES); world.setBlock(r.x2 - 2, r.y + 1, r.z2 - 4 - dx, B.LEAVES); }
+  } else if (r.id === 'mansion') {
     fill(world, cx - 2, r.y + 1, r.z1 + 2, cx + 2, r.y + 3, r.z1 + 2, B.BRICK);
     world.setBlock(cx, r.y + 2, r.z1 + 3, B.LAVA); world.setBlock(cx, r.y + 1, cz, B.WOOL_RED);
     world.setBlock(r.x1 + 2, r.y + 1, r.z1 + 6, B.CHEST);
@@ -201,8 +423,17 @@ export function buildZombiesWorld(world: World, layout: ZombiesMapLayout) {
     // override floor/ceil per theme
     for (let x = r.x1; x <= r.x2; x++) for (let z = r.z1; z <= r.z2; z++) {
       world.setBlock(x, r.y, z, th.floor);
-      if (r.id === 'rooftop' || r.id === 'garden') world.setBlock(x, r.y + r.height, z, B.AIR);
+      if (r.id === 'rooftop' || r.id === 'garden' || r.id === 'alley') world.setBlock(x, r.y + r.height, z, B.AIR);
       else world.setBlock(x, r.y + r.height, z, th.ceil);
+    }
+    // Alley street asphalt pattern (Hypixel street)
+    if (r.id === 'alley') {
+      for (let x = r.x1; x <= r.x2; x++) for (let z = r.z1 + 4; z <= r.z2 - 4; z++) world.setBlock(x, r.y, z, B.WOOL_BLACK);
+      const mz = Math.floor((r.z1 + r.z2) / 2);
+      for (let x = r.x1; x <= r.x2; x++) {
+        world.setBlock(x, r.y, mz, B.WOOL_YELLOW);
+        if (x % 4 === 0) world.setBlock(x, r.y, mz, B.WOOL_WHITE);
+      }
     }
     // walls (outer shell)
     for (let x = x1; x <= x2; x++) for (let dy = 1; dy < r.height; dy++) {
