@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '3.6.0';
-export const GAME_RELEASE_NAME = 'Zombies 1:1 – AI towarzysze, pokoje z kodem i mobile';
+export const GAME_VERSION = '3.7.0';
+export const GAME_RELEASE_NAME = 'Zombies 1:1 – Dead End jak na Hypixelu: ulice, wnętrza, 8 pokoi';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
@@ -112,6 +112,10 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'ZOMBIES 1:1 – Dead End jak na Hypixelu: ulice i wnętrza',
+    text: 'Dead End przebudowany 1:1: Alley to ulica z asfaltem (czarna wełna + żółta linia), 2 auta, lampy i graffiti; Office z 4 cubicles z komputerami; Gallery z białym marmurem i 6 obrazami; Hotel 2-piętrowy z recepcją, 4 pokojami z łóżkami i balkonem; Apartments z kuchnią, jadalnią i sniper nest; Power Station z 2 turbinami i rurami; Rooftop z helipadem H i anteną; Garden z labiryntem żywopłotu i fontanną 5×5. Poprawione koszty drzwi (Rooftop 1250) i okna 4/3/3/6/4/3/4/3 = 30.',
+  },
   {
     title: 'ZOMBIES 1:1 – AI towarzysze, pokoje z kodem i mobile',
     text: 'Solo nie jesteś sam: 2 botów (Alex i Sam) spawnuje obok Ciebie, followują, strzelają 5 dmg co 0.55s w zombie do 18 bloków i reanimują Cię gdy padniesz (8s). Prywatne pokoje Zombies przez Supabase – kod jak Hypixel party: każdy pokój to osobny worldId `zombies-{map}-{kod}` z zapisem w chmurze (blockcraft_blocks + Realtime). Na telefonie pełna grywalność: joystick + 🔫 strzał, ↻ przeładowanie, E interakcja i ⇄ zmiana broni – bez klawiatury.',

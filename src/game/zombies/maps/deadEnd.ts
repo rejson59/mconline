@@ -10,26 +10,26 @@ const meta = ZOMBIES_MAPS.deadend;
 
 export const deadEndLayout: ZombiesMapLayout = {
   meta,
+  // 3.7 FIX 1:1 wiki – windows per Hypixel fandom/Namu: Alley 4, Office 3, Gallery 3, Hotel 6, Apartments 4, Power 3, Roof 4, Garden 3 = 30
   rooms: [
-    { id: 'alley', name: 'Alley – Spawn', x1: -10, z1: -10, x2: 10, z2: 10, y: 64, height: 6, windows: 3 },
-    { id: 'office', name: 'Office', x1: 12, z1: -10, x2: 28, z2: 10, y: 64, height: 6, windows: 4 },
-    { id: 'gallery', name: 'Gallery', x1: 30, z1: -10, x2: 44, z2: 10, y: 64, height: 7, windows: 3 },
-    { id: 'hotel', name: 'Hotel', x1: -10, z1: 12, x2: 10, z2: 28, y: 64, height: 6, windows: 4 },
-    { id: 'apartments', name: 'Apartments', x1: -10, z1: 30, x2: 10, z2: 44, y: 66, height: 6, windows: 5 },
-    { id: 'powerstation', name: 'Power Station', x1: 30, z1: 12, x2: 44, z2: 28, y: 64, height: 6, windows: 4 },
-    { id: 'rooftop', name: 'Rooftop', x1: 30, z1: 30, x2: 46, z2: 46, y: 72, height: 6, windows: 3 },
-    { id: 'garden', name: 'Garden – Ultimate', x1: -10, z1: 46, x2: 10, z2: 60, y: 64, height: 6, windows: 2 },
+    { id: 'alley', name: 'Alley – Spawn', x1: -14, z1: -10, x2: 14, z2: 10, y: 64, height: 7, windows: 4 },
+    { id: 'office', name: 'Office', x1: 16, z1: -12, x2: 32, z2: 12, y: 64, height: 6, windows: 3 },
+    { id: 'gallery', name: 'Gallery', x1: 34, z1: -12, x2: 50, z2: 12, y: 64, height: 8, windows: 3 },
+    { id: 'hotel', name: 'Hotel', x1: -14, z1: 14, x2: 14, z2: 32, y: 64, height: 7, windows: 6 },
+    { id: 'apartments', name: 'Apartments', x1: -14, z1: 34, x2: 14, z2: 54, y: 66, height: 7, windows: 4 },
+    { id: 'powerstation', name: 'Power Station', x1: 28, z1: 14, x2: 50, z2: 32, y: 64, height: 8, windows: 3 },
+    { id: 'rooftop', name: 'Rooftop', x1: 28, z1: 34, x2: 52, z2: 52, y: 74, height: 6, windows: 4 },
+    { id: 'garden', name: 'Garden – Ultimate', x1: -14, z1: 56, x2: 14, z2: 70, y: 64, height: 6, windows: 3 },
   ],
   doors: [
-    { id: 'alley-office', from: 'alley', to: 'office', cost: 500, x: 11, y: 64, z: 0, dir: 'z', locked: true },
-    { id: 'office-gallery', from: 'office', to: 'gallery', cost: 750, x: 29, y: 64, z: 0, dir: 'z', locked: true },
-    { id: 'alley-hotel', from: 'alley', to: 'hotel', cost: 750, x: 0, y: 64, z: 11, dir: 'x', locked: true },
-    { id: 'hotel-apartments', from: 'hotel', to: 'apartments', cost: 750, x: 0, y: 65, z: 29, dir: 'x', locked: true },
-    { id: 'office-powerstation', from: 'office', to: 'powerstation', cost: 1000, x: 20, y: 64, z: 11, dir: 'x', locked: true },
-    { id: 'powerstation-rooftop', from: 'powerstation', to: 'rooftop', cost: 1000, x: 37, y: 66, z: 29, dir: 'x', locked: true },
-    { id: 'hotel-garden', from: 'hotel', to: 'garden', cost: 750, x: 0, y: 64, z: 45, dir: 'x', locked: true },
-    // shortcut doors
-    { id: 'gallery-powerstation', from: 'gallery', to: 'powerstation', cost: 750, x: 30, y: 64, z: 11, dir: 'z', locked: true },
+    { id: 'alley-office', from: 'alley', to: 'office', cost: 500, x: 15, y: 64, z: 0, dir: 'z', locked: true },
+    { id: 'office-gallery', from: 'office', to: 'gallery', cost: 750, x: 33, y: 64, z: 0, dir: 'z', locked: true },
+    { id: 'alley-hotel', from: 'alley', to: 'hotel', cost: 750, x: 0, y: 64, z: 12, dir: 'x', locked: true },
+    { id: 'hotel-apartments', from: 'hotel', to: 'apartments', cost: 750, x: 0, y: 65, z: 33, dir: 'x', locked: true },
+    { id: 'apartments-powerstation', from: 'apartments', to: 'powerstation', cost: 1000, x: 21, y: 66, z: 42, dir: 'z', locked: true },
+    { id: 'powerstation-rooftop', from: 'powerstation', to: 'rooftop', cost: 1250, x: 39, y: 67, z: 33, dir: 'x', locked: true },
+    { id: 'hotel-garden', from: 'hotel', to: 'garden', cost: 750, x: 0, y: 64, z: 55, dir: 'x', locked: true },
+    { id: 'gallery-powerstation', from: 'gallery', to: 'powerstation', cost: 1000, x: 42, y: 64, z: 13, dir: 'x', locked: true },
   ],
   shops: [
     // Alley spawn
