@@ -695,7 +695,7 @@ export class ZombiesRuntime {
     this.game.message(`Broń: ${WEAPONS[this.currentWeapon().weaponId].name}`);
   }
 
-  // ---- HUD data
+  // ---- HUD data – scoreboard jak na Hypixel
   hudExtra(): Record<string, unknown> {
     const cur = this.currentWeapon();
     const def = WEAPONS[cur.weaponId];
@@ -712,6 +712,9 @@ export class ZombiesRuntime {
       zombiesFireCooldown: this.fireCooldown,
       zombiesReloading: this.isReloading,
       zombiesRoundIntermission: this.roundIntermission,
+      zombiesPerks: this.player.perks.map(p => p.id).join(','),
+      zombiesKills: this.player.kills,
+      zombiesPerksCount: this.player.perks.length,
     };
   }
 

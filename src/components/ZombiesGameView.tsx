@@ -59,6 +59,8 @@ export default function ZombiesGameView({
   const [zInsta, setZInsta] = useState(false);
   const [zDouble, setZDouble] = useState(false);
   const [zInter, setZInter] = useState(0);
+  const [zPerks, setZPerks] = useState('');
+  const [zKills, setZKills] = useState(0);
 
   useEffect(() => {
     const s = effectiveSettings(loadSettings(), profile);
@@ -73,7 +75,7 @@ export default function ZombiesGameView({
         {
           onHud: (h) => {
             setHud(h);
-            const anyHud = h as unknown as { zombiesGold?: number; zombiesRound?: number; zombiesPower?: boolean; zombiesAmmo?: string; zombiesWeapon?: string; zombiesZombiesLeft?: number; zombiesInsta?: boolean; zombiesDoubleGold?: boolean; zombiesRoundIntermission?: number };
+            const anyHud = h as unknown as { zombiesGold?: number; zombiesRound?: number; zombiesPower?: boolean; zombiesAmmo?: string; zombiesWeapon?: string; zombiesZombiesLeft?: number; zombiesInsta?: boolean; zombiesDoubleGold?: boolean; zombiesRoundIntermission?: number; zombiesPerks?: string; zombiesKills?: number };
             if (anyHud.zombiesGold != null) setZGold(anyHud.zombiesGold);
             if (anyHud.zombiesRound != null) setZRound(anyHud.zombiesRound);
             if (anyHud.zombiesPower != null) setZPower(anyHud.zombiesPower);
@@ -83,6 +85,8 @@ export default function ZombiesGameView({
             if (anyHud.zombiesInsta != null) setZInsta(!!anyHud.zombiesInsta);
             if (anyHud.zombiesDoubleGold != null) setZDouble(!!anyHud.zombiesDoubleGold);
             if (anyHud.zombiesRoundIntermission != null) setZInter(anyHud.zombiesRoundIntermission);
+            if (anyHud.zombiesPerks != null) setZPerks(anyHud.zombiesPerks);
+            if (anyHud.zombiesKills != null) setZKills(anyHud.zombiesKills);
           },
           onUI: setUi,
           onControl: (kind) => {
@@ -193,6 +197,19 @@ export default function ZombiesGameView({
           <div className="text-[11px] text-white/60 tracking-widest">{zWeapon.toUpperCase()}</div>
           <div className={`text-xl font-bold tracking-wider ${zAmmo.startsWith('0/') ? 'text-red-400' : 'text-white'}`}>{zAmmo}</div>
           <div className="text-[10px] text-white/40">1-3 przełącz • R przeładuj • T czat</div>
+        </div>
+      )}
+      {/* Scoreboard prawo jak Hypixel */}
+      {hud && ui === 'playing' && (
+        <div className="pointer-events-none absolute right-2 top-12 hidden md:flex flex-col gap-1 bg-black/70 border border-yellow-900/40 p-2 text-xs text-white min-w-[140px]">
+          <div className="text-yellow-300 font-bold text-center border-b border-white/20 pb-1">ZOMBIES</div>
+          <div>Runda: <b className="text-red-400">{zRound}/30</b></div>
+          <div>Zombie: <b className={zLeft === 0 ? 'text-green-400' : 'text-white'}>{zLeft}</b></div>
+          <div>Złoto: <b className="text-yellow-300">{zGold}g</b></div>
+          <div>Zabicia: <b>{zKills}</b></div>
+          <div>Broń: <b className="text-cyan-300">{zWeapon}</b> <span className="text-white/60">{zAmmo}</span></div>
+          <div>Prąd: <b className={zPower ? 'text-emerald-400' : 'text-white/40'}>{zPower ? 'ON' : 'OFF'}</b></div>
+          <div className="border-t border-white/20 pt-1 text-[10px]">Perki: {zPerks ? zPerks.split(',').map(p => ({ quickFire: '⚡QF', flameBullets: '🔥', frozenBullets: '❄️', extraHealth: '❤️', extraWeapon: '🎒', speed: '👟', fastRevive: '💉' } as never)[p] ?? p).join(' ') : <span className="text-white/40">brak</span>}</div>
         </div>
       )}
       {/* crosshair hint when looking at shop/door */}

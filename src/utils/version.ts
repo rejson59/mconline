@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '3.2.0';
-export const GAME_RELEASE_NAME = 'Zombies 1:1 – 4 mapy, HUD, bossy i detale jak na Hypixelu';
+export const GAME_VERSION = '3.3.0';
+export const GAME_RELEASE_NAME = 'Zombies 1:1 – scoreboard, bossy, okna i pełny HUD';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 

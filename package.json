@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "3.2.0",
-  "description": "BlockCraft 3.2 – Zombies komplet: 4 mapy tematyczne, multiplayer, HUD CoD, bossy co 10 rund",
+  "version": "3.3.0",
+  "description": "BlockCraft 3.3 – Zombies final: scoreboard Hypixel, bossy, okna 1:1, HUD CoD",
   "type": "module",
   "license": "MIT",
   "keywords": [
