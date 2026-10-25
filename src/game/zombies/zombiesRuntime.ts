@@ -74,6 +74,10 @@ export class ZombiesRuntime {
   instaKillLeft = 0;
   doubleGoldLeft = 0;
   maxAmmoQueued = false;
+  // masterpiece FX
+  hitMarker = 0; // seconds left
+  hitMarkerCrit = false;
+  lastHitMarkerAt = 0;
 
   constructor(game: GameRef, mapId: string) {
     this.game = game;
@@ -236,15 +240,17 @@ export class ZombiesRuntime {
 
         const died = this.damageZombie(c.mob, dmg, crit, def.id);
         if (flame && !died) {
-          // mark burning – we store via extra velocity tint
           (c.mob as unknown as { burning?: number }).burning = 3;
         }
         if (frozen && !died) {
           (c.mob as unknown as { slowed?: number }).slowed = 4;
         }
-        // Gold per hit
+        // Gold per hit + hitmarker (masterpiece FX)
         const goldHit = crit ? def.goldPerCrit : def.goldPerHit;
         this.addGold(goldHit);
+        this.hitMarker = 0.18; this.hitMarkerCrit = !!crit; this.lastHitMarkerAt = performance.now();
+        // subtle screenshake on crit
+        if (crit) try { (this.game as unknown as { shake: number }).shake = Math.max((this.game as unknown as { shake: number }).shake ?? 0, 0.35); } catch {}
         hits++;
         pierced++;
         if (pellets === 1) break; // rifle/pistol etc one hit per trigger
@@ -592,12 +598,18 @@ export class ZombiesRuntime {
   tick(dt: number) {
     this.roundTimer += dt;
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
+    if (this.hitMarker > 0) this.hitMarker = Math.max(0, this.hitMarker - dt);
     if (this.isReloading) {
       this.reloadTimer -= dt;
       if (this.reloadTimer <= 0) this.finishReload();
     }
     if (this.instaKillLeft > 0) this.instaKillLeft = Math.max(0, this.instaKillLeft - dt);
     if (this.doubleGoldLeft > 0) this.doubleGoldLeft = Math.max(0, this.doubleGoldLeft - dt);
+    // power glow FX – shops pulse when power on
+    if (this.powerOn && Math.random() < 0.06 * dt * 60) {
+      const s = this.layout.shops[Math.floor(Math.random() * this.layout.shops.length)];
+      if (s) this.game.spawnParticles(s.x, s.y + 1.5, s.z, B.GLOWSTONE, 1, 0.2);
+    }
     // handle intermission
     if (this.roundIntermission > 0) {
       this.roundIntermission -= dt;
@@ -695,10 +707,11 @@ export class ZombiesRuntime {
     this.game.message(`Broń: ${WEAPONS[this.currentWeapon().weaponId].name}`);
   }
 
-  // ---- HUD data – scoreboard jak na Hypixel
+  // ---- HUD data – scoreboard jak na Hypixel + masterpiece FX
   hudExtra(): Record<string, unknown> {
     const cur = this.currentWeapon();
     const def = WEAPONS[cur.weaponId];
+    const reloadPct = this.isReloading ? Math.max(0, Math.min(1, 1 - this.reloadTimer / (def?.reloadTime ?? 1.6))) : 0;
     return {
       zombiesGold: this.gold,
       zombiesRound: this.state.round,
@@ -711,10 +724,13 @@ export class ZombiesRuntime {
       zombiesDoubleGold: this.doubleGoldLeft > 0,
       zombiesFireCooldown: this.fireCooldown,
       zombiesReloading: this.isReloading,
+      zombiesReloadPct: reloadPct,
       zombiesRoundIntermission: this.roundIntermission,
       zombiesPerks: this.player.perks.map(p => p.id).join(','),
       zombiesKills: this.player.kills,
       zombiesPerksCount: this.player.perks.length,
+      zombiesHitMarker: this.hitMarker > 0 ? (this.hitMarkerCrit ? 'crit' : 'hit') : '',
+      zombiesHitMarkerT: this.hitMarker,
     };
   }
 

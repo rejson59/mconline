@@ -61,6 +61,9 @@ export default function ZombiesGameView({
   const [zInter, setZInter] = useState(0);
   const [zPerks, setZPerks] = useState('');
   const [zKills, setZKills] = useState(0);
+  const [zHit, setZHit] = useState('');
+  const [zReloading, setZReloading] = useState(false);
+  const [zReloadPct, setZReloadPct] = useState(0);
 
   useEffect(() => {
     const s = effectiveSettings(loadSettings(), profile);
@@ -75,7 +78,7 @@ export default function ZombiesGameView({
         {
           onHud: (h) => {
             setHud(h);
-            const anyHud = h as unknown as { zombiesGold?: number; zombiesRound?: number; zombiesPower?: boolean; zombiesAmmo?: string; zombiesWeapon?: string; zombiesZombiesLeft?: number; zombiesInsta?: boolean; zombiesDoubleGold?: boolean; zombiesRoundIntermission?: number; zombiesPerks?: string; zombiesKills?: number };
+            const anyHud = h as unknown as { zombiesGold?: number; zombiesRound?: number; zombiesPower?: boolean; zombiesAmmo?: string; zombiesWeapon?: string; zombiesZombiesLeft?: number; zombiesInsta?: boolean; zombiesDoubleGold?: boolean; zombiesRoundIntermission?: number; zombiesPerks?: string; zombiesKills?: number; zombiesHitMarker?: string; zombiesReloading?: boolean; zombiesReloadPct?: number };
             if (anyHud.zombiesGold != null) setZGold(anyHud.zombiesGold);
             if (anyHud.zombiesRound != null) setZRound(anyHud.zombiesRound);
             if (anyHud.zombiesPower != null) setZPower(anyHud.zombiesPower);
@@ -87,6 +90,9 @@ export default function ZombiesGameView({
             if (anyHud.zombiesRoundIntermission != null) setZInter(anyHud.zombiesRoundIntermission);
             if (anyHud.zombiesPerks != null) setZPerks(anyHud.zombiesPerks);
             if (anyHud.zombiesKills != null) setZKills(anyHud.zombiesKills);
+            if (anyHud.zombiesHitMarker != null) setZHit(anyHud.zombiesHitMarker);
+            if (anyHud.zombiesReloading != null) setZReloading(!!anyHud.zombiesReloading);
+            if (anyHud.zombiesReloadPct != null) setZReloadPct(anyHud.zombiesReloadPct);
           },
           onUI: setUi,
           onControl: (kind) => {
@@ -191,12 +197,20 @@ export default function ZombiesGameView({
           </div>
         </div>
       )}
-      {/* Ammo + weapon – bottom center like CoD */}
+      {/* Ammo + weapon – bottom center like CoD + reload bar */}
       {hud && ui === 'playing' && (
-        <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 bg-black/60 px-4 py-1.5 text-white border border-white/10">
-          <div className="text-[11px] text-white/60 tracking-widest">{zWeapon.toUpperCase()}</div>
-          <div className={`text-xl font-bold tracking-wider ${zAmmo.startsWith('0/') ? 'text-red-400' : 'text-white'}`}>{zAmmo}</div>
-          <div className="text-[10px] text-white/40">1-3 przełącz • R przeładuj • T czat</div>
+        <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 bg-black/70 px-5 py-2 text-white border border-white/15 min-w-[220px]">
+          <div className="text-[11px] text-white/60 tracking-widest">{zWeapon.toUpperCase()} {zPerks.includes('extraWeapon') ? '• 3 sloty' : ''}</div>
+          <div className={`text-2xl font-bold tracking-wider ${zAmmo.startsWith('0/') ? 'text-red-400 animate-pulse' : zReloading ? 'text-yellow-300' : 'text-white'}`}>{zReloading ? 'PRZEŁADOWANIE...' : zAmmo}</div>
+          {zReloading ? (
+            <div className="h-1 w-full bg-white/20 rounded"><div className="h-1 bg-yellow-400 rounded transition-all" style={{ width: `${Math.round(zReloadPct * 100)}%` }} /></div>
+          ) : <div className="text-[10px] text-white/40">1-3 przełącz • R przeładuj • T czat</div>}
+        </div>
+      )}
+      {/* Hit marker – CoD style */}
+      {hud && ui === 'playing' && zHit && (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none">
+          <div className={`text-2xl font-black ${zHit === 'crit' ? 'text-red-500' : 'text-white'} drop-shadow-[0_0_6px_rgba(255,255,255,0.9)]`}>{zHit === 'crit' ? '✕' : '+'}</div>
         </div>
       )}
       {/* Scoreboard prawo jak Hypixel */}
