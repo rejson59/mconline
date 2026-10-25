@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "3.0.0",
-  "description": "BlockCraft 3.0 – Zombies 1:1: broń CoD, 4 mapy, drzwi, perki, hordy jak na Hypixelu",
+  "version": "3.1.0",
+  "description": "BlockCraft 3.1 – Zombies: tematyczne mapy Dead End/Bad Blood/AA/Prison, multiplayer 4 graczy, bronie CoD z modelami 3D",
   "type": "module",
   "license": "MIT",
   "keywords": [

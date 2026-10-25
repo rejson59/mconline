@@ -8,6 +8,7 @@ import type { ZombiesMapLayout, ZombiesGameState, PlayerZombiesState, WeaponInst
 import { getMapLayout } from './index';
 import { WEAPONS } from './weapons';
 import { PERKS, ULTIMATE_MACHINE_PRICE } from './perks';
+import * as Sfx from '../audio';
 import { buildRounds } from './roundConfig';
 import { unlockDoor } from './worldBuilder';
 import { B } from '../blocks';
@@ -169,10 +170,11 @@ export class ZombiesRuntime {
   }
 
   private showMuzzleFlash(_def: { id: string }) {
-    // particles forward
     const dir = this.aimDir();
     const p = this.game.body.pos.clone().add(new THREE.Vector3(0, 1.4, 0)).add(dir.clone().multiplyScalar(1.2));
     this.game.spawnParticles(p.x, p.y, p.z, B.GLOWSTONE, 6, 0.2);
+    // CoD-like gun sound – use dig/metal as placeholder per weapon speed
+    try { if (_def.id === 'shotgun') Sfx.playExplosion(); else if (_def.id === 'sniper') (Sfx as unknown as { playBow?: () => void }).playBow?.(); else Sfx.playDig('metal', p.x, p.y, p.z); } catch {}
   }
 
   private aimDir(): THREE.Vector3 {

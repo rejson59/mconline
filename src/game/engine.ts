@@ -4668,6 +4668,53 @@ export class Game {
 
   // ---------- Hand ----------
   updateHand() {
+    // 3.1 Zombies: gun model in hand
+    if (this.mode === 'zombies' && this.zombies) {
+      const def = this.zombies.currentWeaponDef();
+      const wid = def?.id ?? 'pistol';
+      let key = 1000; for (let i = 0; i < wid.length; i++) key = Math.imul(key, 31) + wid.charCodeAt(i);
+      key = key | 0;
+      if (key === this.handId && this.handMesh) return;
+      this.handId = key;
+      if (this.handMesh) { this.hand.remove(this.handMesh); (this.handMesh as unknown as THREE.Group).clear?.(); (this.handMesh as THREE.Mesh).geometry?.dispose(); const mat = (this.handMesh as THREE.Mesh).material as THREE.Material | undefined; if (mat && mat !== this.handMat) (mat as THREE.Material).dispose(); }
+      const g = new THREE.Group();
+      const gripMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a });
+      const bodyMat = new THREE.MeshStandardMaterial({ color: wid === 'shotgun' ? 0x6b4a2a : wid === 'sniper' ? 0x2b3a4a : wid === 'rocket' ? 0x5a6b2a : wid === 'rifle' ? 0x4a4a4a : 0x2a2a2a });
+      const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+      // body
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.42), bodyMat);
+      body.position.set(0, 0, 0);
+      g.add(body);
+      // barrel length by type
+      const blen = wid === 'sniper' ? 0.55 : wid === 'rifle' ? 0.45 : wid === 'shotgun' ? 0.32 : wid === 'rocket' ? 0.6 : 0.28;
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, blen), barrelMat);
+      barrel.position.set(0, 0.02, -(0.21 + blen / 2));
+      g.add(barrel);
+      // handle
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.08), gripMat);
+      grip.position.set(0, -0.12, 0.08); grip.rotation.x = 0.25; g.add(grip);
+      // magazine
+      if (wid !== 'shotgun' && wid !== 'rocket') {
+        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.1), new THREE.MeshStandardMaterial({ color: 0x2e2e2e }));
+        mag.position.set(0, -0.1, 0.02); g.add(mag);
+      }
+      if (wid === 'sniper') {
+        const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.18, 10), new THREE.MeshStandardMaterial({ color: 0x0a0a0a }));
+        scope.rotation.z = Math.PI / 2; scope.position.set(0, 0.08, -0.08); g.add(scope);
+      }
+      if (wid === 'shotgun') {
+        const pump = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.22), bodyMat);
+        pump.position.set(0, -0.02, -0.18); g.add(pump);
+      }
+      // position like original hand block
+      g.position.set(0.42, -0.32, -0.58);
+      g.rotation.set(0.1, -0.15, 0);
+      g.scale.set(1, 1, 1);
+      g.renderOrder = 1000;
+      this.handMesh = g as unknown as THREE.Mesh;
+      this.hand.add(g as unknown as THREE.Object3D);
+      return;
+    }
     const s = this.selectedStack();
     const id = s ? s.id : -1;
     if (id === this.handId) return;

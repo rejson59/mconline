@@ -31,6 +31,7 @@ interface ZombiesSession {
   id: number;
   worldId: string;
   worldName: string;
+  net?: NetLike;
 }
 
 function asSave(raw: ReturnType<typeof loadSaves>[number]): SaveData {
@@ -115,6 +116,12 @@ export default function App() {
     } catch {
       /* ignore */
     }
+    if (s.mode === 'zombies') {
+      const mapId = (s.zombiesMapId ?? 'deadend') as ZombiesMapId;
+      const seedZ = s.seed || Math.abs(mapId.split('').reduce((a, c) => Math.imul(a, 31) + c.charCodeAt(0), 0)) + 1337;
+      setZombiesSession({ mapId, seed: seedZ, id: Date.now(), worldId: 'mpzombies-' + mapId, worldName: s.worldName, net: s.net });
+      return;
+    }
     setSession({
       seed: s.seed,
       mode: s.mode,
@@ -167,7 +174,11 @@ export default function App() {
         seed={zombiesSession.seed}
         worldId={zombiesSession.worldId}
         worldName={zombiesSession.worldName}
-        onQuit={() => setZombiesSession(null)}
+        net={(zombiesSession.net ?? (window as unknown as { __zombiesNet?: NetLike }).__zombiesNet) as never}
+        onQuit={() => {
+          (window as unknown as { __zombiesNet?: NetLike }).__zombiesNet = undefined;
+          setZombiesSession(null);
+        }}
       />
     );
   }
