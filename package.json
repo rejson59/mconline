@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "2.32.4",
-  "description": "BlockCraft 2.32 „Skrzynia 1:1, tryb ziemniak i klawiatura na tablecie” – polska gra sandboxowa w przeglądarce: skrzynia z prawdziwego modelu Minecrafta (także podwójna i z otwieranym wiekiem), czwarty stopień automatu jakości i preset „Ziemniak” dla 30 FPS na słabym sprzęcie, automatyczne sterowanie klawiaturą i myszką na tablecie, publiczny serwer, bez instalacji i bez konta.",
+  "version": "3.6.0",
+  "description": "BlockCraft 3.5 – Zombies SERIO 1:1: autouzupełnianie okien, korytarze 1:1, każdy sklep per wiki",
   "type": "module",
   "license": "MIT",
   "keywords": [

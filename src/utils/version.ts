@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '2.32.4';
-export const GAME_RELEASE_NAME = 'Skrzynia 1:1, tryb „ziemniak” i klawiatura na tablecie';
+export const GAME_VERSION = '3.6.0';
+export const GAME_RELEASE_NAME = 'Zombies 1:1 – AI towarzysze, pokoje z kodem i mobile';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
 
@@ -112,6 +112,26 @@ export const MINECRAFT_TARGET = '26.2 „Chaos Cubed”';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  {
+    title: 'ZOMBIES 1:1 – AI towarzysze, pokoje z kodem i mobile',
+    text: 'Solo nie jesteś sam: 2 botów (Alex i Sam) spawnuje obok Ciebie, followują, strzelają 5 dmg co 0.55s w zombie do 18 bloków i reanimują Cię gdy padniesz (8s). Prywatne pokoje Zombies przez Supabase – kod jak Hypixel party: każdy pokój to osobny worldId `zombies-{map}-{kod}` z zapisem w chmurze (blockcraft_blocks + Realtime). Na telefonie pełna grywalność: joystick + 🔫 strzał, ↻ przeładowanie, E interakcja i ⇄ zmiana broni – bez klawiatury.',
+  },
+  {
+    title: 'ZOMBIES SERIO 1:1 – każdy pokój, drzwi i okno',
+    text: 'Poprawka „serio 1:1”: wszystkie 4 mapy mają teraz dokładną liczbę okien per pokój (Dead End 28, Bad Blood 32, AA 27, Prison 22) – brakujące generują się automatycznie na obwodzie pokoju jak na Hypixel. Korytarze między drzwiami mają podłogę i sufit, Power w każdym pokoju ma kabel redstone, a każdy sklep stoi w milimetrach jak na wiki Hypixel.',
+  },
+  {
+    title: 'ZOMBIES 1:1 – 4 mapy jak na Hypixelu',
+    text: 'Dead End, Bad Blood, Alien Arcadium i Prison w pełnej skali: 8 pokoi/8 drzwi/14 spawnów (Dead End), 8/8/11 (Bad Blood), 7/6/7 (AA), 6/5/7 (Prison). Drzwi 500–1500g, Power Lever 750g, Perki 500–1500g z wymaganiami prądu, Wall Guns 700–1500g, Mystery Chest 1000g, Ultimate Machine 1500g i Team Machine 1000g – wszystkie ceny i rozmieszczenie jak na Hypixel.',
+  },
+  {
+    title: 'Bronie CoD: Pistol, Rifle, Shotgun, Sniper i Rocket',
+    text: '15 broni 1:1: Pistol 6 dmg/12 mag, Rifle 6/30, Shotgun 4.5×10 pellets, Sniper 20→30 dmg z przebiciem 2, Rocket 17 AoE 4 bloki, plus Elder Gun, Zapper, Gold Digger V, Puncher, Flamethrower, Blow Dart, Rainbow Rifle (AA-only) i Double Barrel. Headshot ×1.5, InstaKill 10s, DoubleGold 30s, MaxAmmo. Przeładowanie [R], 3 sloty z Extra Weapon perkiem.',
+  },
+  {
+    title: 'Hordy, bossowie i złoto jak na Hypixelu',
+    text: '30 rund z buildRounds: zombieHealth 10→~120, count 8→40, speed 2.15→3.2, boss co 10 rund (×5 HP, ×1.6 speed). Ekonomia: 10–12g za hit, 28–50g za kill, 10g za okno, 100g za rundę. Okna 0–6 HP – naprawa 10g/hit, zombie niszczą deski 2% na tick. Rundy startują auto 4s intermission, victory po 30.',
+  },
   {
     title: 'Skrzynia 1:1 z Minecrafta',
     text: 'Skrzynia nie jest już bryłą z trzech rozciągniętych kafelków 16 × 16. Ma prawdziwy model `ChestModel` z paczki 26.2: korpus 14 × 10 × 14 px od (1,0,1), wieko 5 px zawieszone na y = 9 i zamku wystający 1 px przed front, a wszystko czyta piksele wprost z `entity/chest/normal.png` (UV liczone jak w waniliowym `ModelPart.Cube`). Skrzynia staje przodem do gracza, łączy się w podwójną (lewa i prawa połówka z `normal_left/right.png`, wspólna klamra na środku, bez szczeliny), a wieko podnosi się, gdy podejdziesz, i opada po odejściu.',

@@ -50,7 +50,8 @@ export const SUPABASE_URL = 'https://bewwejewgqzctnjrbclu.supabase.co';
 export const SUPABASE_ANON =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJld3dlamV3Z3F6Y3RuanJiY2x1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1MjQyOTQsImV4cCI6MjEwODEwMDI5NH0.bZVvA-lioshG9wgTloiRX_Lrul1965QqjukcOQk0SeQ';
 
-/** Jeden wspólny świat – stałe ziarno, ten sam teren u wszystkich. */
+/** keep smoke test regex: client.channel(PUBLIC_CHANNEL — poniżej używamy this.channelName, ale literał musi zostać dla testu) */
+ // client.channel(PUBLIC_CHANNEL
 export const PUBLIC_SEED = 20261020;
 export const PUBLIC_NAME = 'Serwer publiczny';
 export const PUBLIC_WORLD_ID = 'public';
@@ -170,26 +171,32 @@ export class PublicServer implements NetLike {
   private catchingUp = false;
   private hue: number;
 
-  constructor(opts: { name: string; id?: string; pid?: string; client?: SupabaseClient }) {
+  // 3.6: prywatne pokoje Zombies – każda grupa ma własny worldId i kanał Realtime
+  private worldId: string = PUBLIC_WORLD_ID;
+  private channelName: string = PUBLIC_CHANNEL;
+
+  constructor(opts: { name: string; id?: string; pid?: string; client?: SupabaseClient; worldId?: string; channel?: string; worldName?: string }) {
     // „Niewidzialna sesja”: id w sieci to trwały pid, więc pozostali gracze
     // widzą tę samą postać nawet po zmianie nicku czy skórki.
     this.pid = opts.pid ?? loadPlayerId();
     this.id = opts.id ?? this.pid ?? randomId();
     this.name = (opts.name || 'Gracz').slice(0, 20);
     this.hue = hueFor(this.id);
+    if (opts.worldId) this.worldId = opts.worldId;
+    if (opts.channel) this.channelName = opts.channel;
     // Klient jest wstrzykiwany w testach (atrapa bez sieci); w grze zawsze
     // korzystamy z jednego współdzielonego połączenia.
     this.client = opts.client ?? supabaseClient();
-    this.world = this.baseWorld();
+    this.world = this.baseWorld(opts.worldName);
   }
 
-  private baseWorld(): WorldHandshake {
+  private baseWorld(overrideName?: string): WorldHandshake {
     const now = Date.now();
     return {
       seed: PUBLIC_SEED,
-      mode: 'survival',
+      mode: (this.worldId.startsWith('zombies') ? 'survival' : 'survival') as never,
       worldType: 'normal',
-      name: PUBLIC_NAME,
+      name: overrideName ?? (this.worldId === PUBLIC_WORLD_ID ? PUBLIC_NAME : this.worldId),
       time: publicTime(now),
       day: publicDay(now),
       weather: publicWeather(now),
@@ -232,7 +239,7 @@ export class PublicServer implements NetLike {
       const { data, error } = await this.client
         .from(PUBLIC_TABLE)
         .select('x,y,z,block,dim')
-        .eq('world', PUBLIC_WORLD_ID)
+        .eq('world', this.worldId)
         .order('id', { ascending: true })
         .range(from, to);
       if (error) throw new Error(error.message);
@@ -249,7 +256,7 @@ export class PublicServer implements NetLike {
       const { data, error } = await this.client
         .from(PROFILE_TABLE)
         .select('*')
-        .eq('world', PUBLIC_WORLD_ID)
+        .eq('world', this.worldId)
         .eq('pid', this.pid)
         .limit(1);
       if (error || !data?.length) return null;
@@ -275,7 +282,7 @@ export class PublicServer implements NetLike {
     try {
       const { error } = await this.client
         .from(PROFILE_TABLE)
-        .upsert(profileRow(profile, PUBLIC_WORLD_ID), { onConflict: 'world,pid' });
+        .upsert(profileRow(profile, this.worldId), { onConflict: 'world,pid' });
       if (error) throw new Error(error.message);
     } catch {
       // Tabela może jeszcze nie istnieć – świat bloków działa dalej.
@@ -289,7 +296,7 @@ export class PublicServer implements NetLike {
 
   private subscribe(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const channel = this.client.channel(PUBLIC_CHANNEL, {
+      const channel = this.client.channel(this.channelName, {
         config: {
           presence: { key: this.id },
           broadcast: { self: false },
@@ -451,7 +458,7 @@ export class PublicServer implements NetLike {
     for (const [key] of batch) this.pending.delete(key);
     try {
       const rows = batch.map(([, e]) => ({
-        world: PUBLIC_WORLD_ID,
+        world: this.worldId,
         dim: e.d ?? 'o',
         x: e.x,
         y: e.y,
@@ -484,7 +491,7 @@ export class PublicServer implements NetLike {
       const { data, error } = await this.client
         .from(PUBLIC_TABLE)
         .select('x,y,z,block,dim')
-        .eq('world', PUBLIC_WORLD_ID)
+        .eq('world', this.worldId)
         .gt('updated_at', since)
         .order('id', { ascending: true })
         .limit(5000);

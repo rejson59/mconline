@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import GameView from './components/GameView';
+import ZombiesGameView from './components/ZombiesGameView';
+import ZombiesScreen from './components/ZombiesScreen';
 import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
 import Launcher from './components/Launcher';
 import { type GameMode, type SaveData } from './game/engine';
 import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
 import OrientationGuard from './components/OrientationGuard';
 import type { NetLike } from './game/net';
+import type { ZombiesMapId } from './game/zombies';
 import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
 import { onViewportChange } from './utils/viewport';
 import { watchLandscape } from './utils/screen';
@@ -19,6 +22,15 @@ interface Session {
   worldName: string;
   worldType: WorldType;
   /** 2.10: sesja sieciowa (null/brak = gra jednoosobowa). */
+  net?: NetLike;
+}
+
+interface ZombiesSession {
+  mapId: ZombiesMapId;
+  seed: number;
+  id: number;
+  worldId: string;
+  worldName: string;
   net?: NetLike;
 }
 
@@ -72,6 +84,8 @@ export default function App() {
   const [saves, setSaves] = useState<WorldCard[]>(cards);
   const [shared, setShared] = useState(readSharedWorld);
   const [multiplayer, setMultiplayer] = useState(false);
+  const [zombiesMenu, setZombiesMenu] = useState(false);
+  const [zombiesSession, setZombiesSession] = useState<ZombiesSession | null>(null);
   // 2.24.1: pierwszym ekranem znów jest klasyczne menu gry. Launcher został
   // w projekcie, ale domyślnie się nie pokazuje – wchodzi się do niego tylko
   // pod adresem #launcher (i wychodzi „Klasycznym menu”).
@@ -101,6 +115,12 @@ export default function App() {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     } catch {
       /* ignore */
+    }
+    if (s.mode === 'zombies') {
+      const mapId = (s.zombiesMapId ?? 'deadend') as ZombiesMapId;
+      const seedZ = s.seed || Math.abs(mapId.split('').reduce((a, c) => Math.imul(a, 31) + c.charCodeAt(0), 0)) + 1337;
+      setZombiesSession({ mapId, seed: seedZ, id: Date.now(), worldId: 'mpzombies-' + mapId, worldName: s.worldName, net: s.net });
+      return;
     }
     setSession({
       seed: s.seed,
@@ -146,6 +166,23 @@ export default function App() {
     setSession({ seed, mode, id: Date.now(), worldId: 'w' + Date.now().toString(36), worldName: name, worldType });
   };
 
+  if (zombiesSession) {
+    return (
+      <ZombiesGameView
+        key={zombiesSession.id}
+        mapId={zombiesSession.mapId}
+        seed={zombiesSession.seed}
+        worldId={zombiesSession.worldId}
+        worldName={zombiesSession.worldName}
+        net={(zombiesSession.net ?? (window as unknown as { __zombiesNet?: NetLike }).__zombiesNet) as never}
+        onQuit={() => {
+          (window as unknown as { __zombiesNet?: NetLike }).__zombiesNet = undefined;
+          setZombiesSession(null);
+        }}
+      />
+    );
+  }
+
   if (session) {
     return (
       <GameView
@@ -162,6 +199,24 @@ export default function App() {
           setTimeout(refresh, 50);
         }}
       />
+    );
+  }
+
+  if (zombiesMenu) {
+    return (
+      <div className="flex h-full w-full flex-col">
+        <OrientationGuard variant="menu" />
+        <div className="relative min-h-0 w-full flex-1">
+          <ZombiesScreen
+            onBack={() => setZombiesMenu(false)}
+            onStart={(mapId) => {
+              setZombiesMenu(false);
+              const seed = Math.abs(mapId.split('').reduce((a, c) => Math.imul(a, 31) + c.charCodeAt(0), 0)) + 1337;
+              setZombiesSession({ mapId, seed, id: Date.now(), worldId: 'zombies-' + mapId, worldName: 'ZOMBIES ' + mapId.toUpperCase() });
+            }}
+          />
+        </div>
+      </div>
     );
   }
 
@@ -215,6 +270,7 @@ export default function App() {
       <OrientationGuard variant="menu" />
       <div className="relative min-h-0 w-full flex-1">
         <MainMenu
+          onZombies={() => setZombiesMenu(true)}
           onMultiplayer={() => setMultiplayer(true)}
           saves={saves}
           sharedSeed={shared.seed}
