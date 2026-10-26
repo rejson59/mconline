@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.1.0';
-export const GAME_RELEASE_NAME = 'Czysty Minecraft – bez ZOMBIES';
+export const GAME_VERSION = '4.2.0';
+export const GAME_RELEASE_NAME = 'Naturalne osady i struktury';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: 'Osady dopasowane do terenu', text: 'Każdy dom ma własny poziom fundamentu. Ścieżki idą po pagórkach, bez wielkiej płaskiej platformy. Dachy ze schodów i okapami, kominy kuźni oraz piaskowcowe tarasy na pustyni.' },
+  { title: 'Cztery nowe struktury', text: 'Pustynne świątynie ze skarbcem, zamszone ruiny w dżungli, chatki na palach na bagnach i zniszczone portale. Szukaj ich w nowym świecie; zapisane zmiany bloków nadal mają pierwszeństwo.' },
   {
     title: 'Skrzynia 1:1 z Minecrafta',
     text: 'Skrzynia nie jest już bryłą z trzech rozciągniętych kafelków 16 × 16. Ma prawdziwy model `ChestModel` z paczki 26.2: korpus 14 × 10 × 14 px od (1,0,1), wieko 5 px zawieszone na y = 9 i zamku wystający 1 px przed front, a wszystko czyta piksele wprost z `entity/chest/normal.png` (UV liczone jak w waniliowym `ModelPart.Cube`). Skrzynia staje przodem do gracza, łączy się w podwójną (lewa i prawa połówka z `normal_left/right.png`, wspólna klamra na środku, bez szczeliny), a wieko podnosi się, gdy podejdziesz, i opada po odejściu.',

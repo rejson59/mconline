@@ -1,6 +1,15 @@
-# BlockCraft 2.32 🚀
+# BlockCraft 4.2 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.2 „Naturalne osady i struktury”
+
+- **Bez płaskiego talerza pod wioską.** Domy mają indywidualne poziomy fundamentów, a drogi korzystają z miejscowej wysokości. Wyrównywany jest tylko obrys budynku z krótkim przejściem do otoczenia. Niezabudowane fragmenty zachowują naturalne pagórki i drzewa.
+- **Detale zabudowy.** Strome dachy ze schodów, okapy, zamknięte szczyty i kalenice z płyt; piaskowcowe tarasy z niskimi attykami na pustyni; akacjowe słupy na sawannie; kominy i kowadła w kuźniach.
+- **Cztery struktury inspirowane Minecraftem** (autorskie szablony, nie import oryginalnych budowli 1:1): pustynna świątynia z dwiema wieżami i dostępnym skarbcem, zamszone ruiny w dżungli, chatka na palach na bagnie oraz zniszczony, nieaktywny portal z nieregularnym podłożem. Wszystkie mają skrzynie z łupem.
+- **Generator.** Położenie zależy od ziarna i biomu, a orientacja może przyjąć cztery kierunki. Budowle przekraczają granice chunków bez szwów, omijają wioski, oceany i zbyt strome zbocza. Nie pojawiają się w Netherze ani na superflat. Generowanie nie zapisuje sztucznych modyfikacji gracza.
+- **Zapisy.** Najlepiej obejrzeć zmiany w nowym świecie. Generator odtwarza teren również przy ponownym wczytaniu starych światów; zapisane edycje bloków nadal nakładane są na końcu, ale otoczenie starych budowli może się zmienić. Przed aktualizacją ważnego świata warto wyeksportować kopię.
+- **Weryfikacja.** Testy obejmują lokalne fundamenty, zachowanie naturalnego terenu, osobne cache świata płaskiego i naturalnego, biomy, obroty, kolejność generowania chunków, wnętrza i pierwszeństwo zapisanych edycji. Przy okazji przywrócono wywołanie zwykłego lootu mobów, pominięte podczas usuwania osobnego trybu gry.
 
 ## Wersja 2.32 „Skrzynia 1:1, tryb ziemniak i klawiatura na tablecie” 📦 🥔 ⌨️
 

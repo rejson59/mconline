@@ -1,3 +1,4 @@
+import { applyStructures } from './structures';
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
 import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, isSlabTop, stairsFacing, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
@@ -1103,6 +1104,7 @@ export class World {
     const village = applyVillages(d, c.cx, c.cz, this.villageContext());
     const vmask = village.mask;
     if (village.top > maxY) maxY = village.top;
+    maxY = Math.max(maxY, applyStructures(d, c.cx, c.cz, this.villageContext(), vmask));
 
     // Surface decoration (pomija kolumny zajęte przez wioskę)
     for (let z = 0; z < CS; z++)
@@ -1200,7 +1202,7 @@ export class World {
     // Wyrównany grunt wioski wygrywa z „najwyższym blokiem”: dach domu ani
     // tafla wody w studni nie mogą udawać poziomu terenu, bo po nim stawiamy
     // mieszkańców i moby.
-    for (let i = 0; i < vmask.length; i++) if (vmask[i]) c.heightMap[i] = village.ground[i];
+    for (let i = 0; i < vmask.length; i++) if (village.ground[i]) c.heightMap[i] = village.ground[i];
   }
 
   /**
@@ -1305,7 +1307,7 @@ export class World {
     // Wyrównany grunt wioski wygrywa z „najwyższym blokiem”: dach domu ani
     // tafla wody w studni nie mogą udawać poziomu terenu, bo po nim stawiamy
     // mieszkańców i moby.
-    for (let i = 0; i < vmask.length; i++) if (vmask[i]) c.heightMap[i] = village.ground[i];
+    for (let i = 0; i < vmask.length; i++) if (village.ground[i]) c.heightMap[i] = village.ground[i];
   }
 
   /** Replays the player's block changes onto a freshly generated chunk. */

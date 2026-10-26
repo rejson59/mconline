@@ -37,6 +37,8 @@ export interface VillageBuilding {
   /** Strona, w którą patrzą drzwi: 0 = północ (−Z), 1 = wschód (+X), 2 = południe (+Z), 3 = zachód (−X). */
   face: number;
   variant: number;
+  /** Local foundation height; each plot follows its own terrain. */
+  y?: number;
 }
 
 export interface Rect {
@@ -52,7 +54,7 @@ export interface Village {
   gz: number;
   x: number;
   z: number;
-  /** Poziom gruntu wioski – wszystkie budynki stoją na tej wysokości. */
+  /** Poziom studni; pozostałe budynki dopasowują się do terenu. */
   y: number;
   radius: number;
   biome: string;
@@ -76,15 +78,15 @@ const OK_BIOMES = new Set(['Równiny', 'Sawanna', 'Pustynia', 'Tundra']);
 
 // Memoizacja: ten sam świat pyta o te same komórki bardzo często (generator,
 // minimapa, spawn mobów).
-const cache = new Map<string, Village | null>();
-const CACHE_LIMIT = 512;
-
-function cached(key: string, make: () => Village | null): Village | null {
-  const hit = cache.get(key);
-  if (hit !== undefined) return hit;
-  if (cache.size > CACHE_LIMIT) cache.clear();
+// Context-keyed: flat and natural worlds with the same seed must not share plots.
+const cache = new WeakMap<VillageContext, Map<string, Village | null>>();
+function cached(ctx: VillageContext, key: string, make: () => Village | null): Village | null {
+  let entries = cache.get(ctx);
+  if (!entries) { entries = new Map(); cache.set(ctx, entries); }
+  if (entries.has(key)) return entries.get(key)!;
+  if (entries.size > 512) entries.clear();
   const v = make();
-  cache.set(key, v);
+  entries.set(key, v);
   return v;
 }
 
@@ -209,7 +211,7 @@ export function doorCell(b: VillageBuilding): { x: number; z: number } {
 /** Wioska w danej komórce siatki albo null, gdy teren na nią nie pozwala. */
 export function villageInCell(gx: number, gz: number, ctx: VillageContext): Village | null {
   const key = `${ctx.seed}:${gx},${gz}`;
-  return cached(key, () => {
+  return cached(ctx, key, () => {
     const chance = hash(gx, 11, gz, ctx.seed);
     if (chance > 0.62) return null;
     const x = Math.round(gx * VILLAGE_CELL + MARGIN + hash(gx, 12, gz, ctx.seed) * (VILLAGE_CELL - 2 * MARGIN));
@@ -242,6 +244,10 @@ export function villageInCell(gx: number, gz: number, ctx: VillageContext): Vill
     const v = layout(gx, gz, x, z, radius, ctx, desert);
     v.y = y;
     v.biome = info.biome;
+    for (const b of v.buildings) {
+      const door = doorCell(b);
+      b.y = b.kind === 'well' ? y : ctx.surface(door.x, door.z).h;
+    }
     return v;
   });
 }
@@ -309,7 +315,7 @@ function groundBlock(v: Village, x: number, z: number): number {
 }
 
 /** Miejsca, w których mogą pojawiać się mieszkańcy (drogi i plac). */
-export function villageSpawnSpots(v: Village): { x: number; y: number; z: number }[] {
+export function villageSpawnSpots(v: Village, ctx?: VillageContext): { x: number; y: number; z: number }[] {
   const out: { x: number; y: number; z: number }[] = [];
   const steps = [6, 11, 16];
   for (const s of steps) {
@@ -320,6 +326,7 @@ export function villageSpawnSpots(v: Village): { x: number; y: number; z: number
   }
   out.push({ x: v.x + 4, y: v.y + 1, z: v.z + 4 });
   out.push({ x: v.x - 4, y: v.y + 1, z: v.z - 4 });
+  if (ctx) for (const spot of out) spot.y = villageGroundAt(v, spot.x, spot.z, ctx) + 1;
   return out;
 }
 
@@ -359,45 +366,28 @@ function roofStyleFor(v: Village, style: 'planks' | 'library' | 'smith'): RoofSt
  */
 function gableRoof(b: VillageBuilding, set: SetBlock, baseY: number, st: RoofStyle) {
   const alongX = b.w >= b.d;
-  const stair = (facing: number) => st.stair + (facing & 3);
-  if (alongX) {
-    for (let x = -1; x <= b.w; x++)
-      for (let z = -1; z <= b.d; z++) {
-        const rise = Math.ceil(Math.min(z + 1, b.d - z) * 0.6);
-        for (let lv = 0; lv < rise; lv++) set(b.x + x, baseY + lv, b.z + z, st.deck);
-        // Wyższa połowa stopnia zawsze po stronie kalenicy.
-        const toRidge = z + 1 <= b.d - z ? 2 : 0;
-        set(b.x + x, baseY + rise, b.z + z, stair(toRidge));
+  const span = alongX ? b.d : b.w;
+  const length = alongX ? b.w : b.d;
+  const center = (span - 1) / 2;
+  for (let a = -1; a <= length; a++) {
+    for (let c = -1; c <= span; c++) {
+      const rise = Math.min(c + 1, span - c);
+      const x = b.x + (alongX ? a : c);
+      const z = b.z + (alongX ? c : a);
+      const facing = alongX ? (c < center ? 2 : 0) : (c < center ? 1 : 3);
+      // Hollow 45-degree roof, closed timber gables, slab ridge and one-block eaves.
+      if (a === 0 || a === length - 1) {
+        for (let h = 0; h < rise; h++) set(x, baseY + h, z, st.deck);
       }
-  } else {
-    for (let z = -1; z <= b.d; z++)
-      for (let x = -1; x <= b.w; x++) {
-        const rise = Math.ceil(Math.min(x + 1, b.w - x) * 0.6);
-        for (let lv = 0; lv < rise; lv++) set(b.x + x, baseY + lv, b.z + z, st.deck);
-        const toRidge = x + 1 <= b.w - x ? 1 : 3;
-        set(b.x + x, baseY + rise, b.z + z, stair(toRidge));
-      }
-  }
-  // Kalenica – najwyższa linia, żeby grzbiet nie był zębaty.
-  if (alongX) {
-    const zA = Math.floor((b.d - 1) / 2);
-    for (let x = -1; x <= b.w; x++) for (const z of [zA, b.d - 1 - zA]) {
-      const y = baseY + Math.ceil(Math.min(z + 1, b.d - z) * 0.6);
-      set(b.x + x, y, b.z + z, st.deck);
-    }
-  } else {
-    const xA = Math.floor((b.w - 1) / 2);
-    for (let z = -1; z <= b.d; z++) for (const x of [xA, b.w - 1 - xA]) {
-      const y = baseY + Math.ceil(Math.min(x + 1, b.w - x) * 0.6);
-      set(b.x + x, y, b.z + z, st.deck);
+      set(x, baseY + rise, z, c === center ? st.ridge : st.stair + facing);
     }
   }
 }
 
 function house(v: Village, b: VillageBuilding, set: SetBlock, style: 'planks' | 'library' | 'smith') {
-  const floor = v.y;
+  const floor = b.y ?? v.y;
   const wall = v.desert ? B.SANDSTONE : B.PLANKS;
-  const corner = v.desert ? B.SANDSTONE : B.LOG;
+  const corner = v.desert ? B.SANDSTONE : v.biome === 'Sawanna' ? B.ACACIA_LOG : B.LOG;
   const plinth = v.desert ? B.SANDSTONE : B.COBBLE;
   const h = 3;
   const door = doorCell(b);
@@ -429,7 +419,16 @@ function house(v: Village, b: VillageBuilding, set: SetBlock, style: 'planks' | 
     }
   // Płaski strop pod dachem – wnętrze ma sufit, a nie widok na krokwie.
   for (let x = 0; x < b.w; x++) for (let z = 0; z < b.d; z++) set(b.x + x, floor + h + 1, b.z + z, st.deck);
-  gableRoof(b, set, floor + h + 1, st);
+  if (v.desert) {
+    // Vanilla desert houses have sandstone roof terraces with low parapets.
+    for (let x = 0; x < b.w; x++) for (let z = 0; z < b.d; z++) {
+      if (x === 0 || z === 0 || x === b.w - 1 || z === b.d - 1) {
+        set(b.x + x, floor + h + 2, b.z + z, B.SANDSTONE_SLAB);
+      }
+    }
+  } else {
+    gableRoof(b, set, floor + h + 1, st);
+  }
 
   // Wnętrze
   const mx = b.x + Math.floor(b.w / 2);
@@ -437,9 +436,11 @@ function house(v: Village, b: VillageBuilding, set: SetBlock, style: 'planks' | 
   if (style === 'smith') {
     set(b.x + 1, floor + 1, b.z + 1, B.FURNACE);
     set(b.x + 2, floor + 1, b.z + 1, B.FURNACE_ON);
+    for (let h = 2; h <= 8; h++) set(b.x + 2, floor + h, b.z + 1, B.BRICK);
+    set(b.x + 2, floor + 9, b.z + 1, B.CAMPFIRE);
     set(b.x + b.w - 2, floor + 1, b.z + 1, B.LOOT_CHEST);
     set(b.x + 1, floor + 1, b.z + b.d - 2, B.CRAFTING);
-    set(b.x + b.w - 2, floor + 1, b.z + b.d - 2, B.IRON_BLOCK); // kowadło
+    set(b.x + b.w - 2, floor + 1, b.z + b.d - 2, B.ANVIL); // kowadło
   } else {
     // 2.29: łóżko to dwa bloki – w chacie stawiamy stopę przy ścianie i
     // wezgłowie w głąb izby, jak w waniliowej wiosce.
@@ -472,7 +473,7 @@ function wallMid(b: VillageBuilding, x: number, z: number): boolean {
 }
 
 function farm(v: Village, b: VillageBuilding, set: SetBlock) {
-  const floor = v.y;
+  const floor = b.y ?? v.y;
   // ogrodzenie z przejściem od strony wioski
   for (let x = 0; x < b.w; x++)
     for (let z = 0; z < b.d; z++) {
@@ -503,7 +504,7 @@ function farm(v: Village, b: VillageBuilding, set: SetBlock) {
 }
 
 function well(v: Village, b: VillageBuilding, set: SetBlock) {
-  const floor = v.y;
+  const floor = b.y ?? v.y;
   const cx = b.x + 3;
   const cz = b.z + 3;
   for (let x = -3; x <= 3; x++)
@@ -543,7 +544,7 @@ function well(v: Village, b: VillageBuilding, set: SetBlock) {
 }
 
 function hayPile(v: Village, b: VillageBuilding, set: SetBlock) {
-  const floor = v.y;
+  const floor = b.y ?? v.y;
   set(b.x, floor + 1, b.z, B.HAY);
   set(b.x + 1, floor + 1, b.z, B.HAY);
   set(b.x, floor + 1, b.z + 1, B.HAY);
@@ -553,7 +554,7 @@ function hayPile(v: Village, b: VillageBuilding, set: SetBlock) {
 }
 
 function lamp(v: Village, b: VillageBuilding, set: SetBlock) {
-  const floor = v.y;
+  const floor = b.y ?? v.y;
   set(b.x, floor, b.z, B.COBBLE);
   set(b.x, floor + 1, b.z, B.FENCE);
   set(b.x, floor + 2, b.z, B.FENCE);
@@ -561,7 +562,7 @@ function lamp(v: Village, b: VillageBuilding, set: SetBlock) {
 }
 
 function plazaWithBell(v: Village, b: VillageBuilding, set: SetBlock) {
-  const floor = v.y;
+  const floor = b.y ?? v.y;
   for (let x = -2; x <= 2; x++)
     for (let z = -2; z <= 2; z++) {
       set(b.x + x, floor, b.z + z, B.COBBLE);
@@ -610,74 +611,56 @@ function writeBuilding(v: Village, b: VillageBuilding, set: SetBlock) {
  * Wypisuje wycinek wsi należący do chunka (cx, cz).
  * `data` to surowa tablica chunka: (y * CS + z) * CS + x.
  */
+/** Local grading only: no circular plateau, no random one-block bumps. */
+export function villageGroundAt(v: Village, x: number, z: number, ctx: VillageContext): number {
+  const natural = ctx.surface(x, z).h;
+  let target = natural;
+  let strongest = 0;
+  for (const b of v.buildings) {
+    const pad = b.kind === 'plaza' ? 2 : 0;
+    const dx = Math.max(b.x - pad - x, 0, x - (b.x + b.w - 1 + pad));
+    const dz = Math.max(b.z - pad - z, 0, z - (b.z + b.d - 1 + pad));
+    const distance = Math.max(dx, dz);
+    const influence = Math.max(0, 1 - distance / 4);
+    if (influence > strongest) {
+      strongest = influence;
+      const smooth = influence * influence * (3 - 2 * influence);
+      target = Math.round(natural + ((b.y ?? v.y) - natural) * smooth);
+    }
+  }
+  return target;
+}
+
 export function applyVillages(data: Uint16Array | Uint8Array, ccx: number, ccz: number, ctx: VillageContext): VillageApplyResult {
   const mask = new Uint8Array(CS * CS);
   const ground = new Uint8Array(CS * CS);
   let top = 0;
-  const ox = ccx * CS;
-  const oz = ccz * CS;
+  const ox = ccx * CS, oz = ccz * CS;
   const villages = villagesOverlapping(ox, oz, ox + CS - 1, oz + CS - 1, ctx);
-  if (!villages.length) return { mask, ground, top };
-
-  const put = (lx: number, y: number, lz: number, id: number) => {
-    if (y < 0 || y >= CH) return;
+  const put = (x: number, y: number, z: number, id: number) => {
+    const lx = x - ox, lz = z - oz;
+    if (lx < 0 || lx >= CS || lz < 0 || lz >= CS || y < 1 || y >= CH) return;
     data[(y * CS + lz) * CS + lx] = id;
+    mask[lz * CS + lx] = 1;
+    if (y > top) top = y;
   };
-
   for (const v of villages) {
-    // 2.19: osada nie jest już betonową płytą na palach. Środek jest płaski,
-    // a na obrzeżach teren łagodnie wraca do naturalnego (5 bloków skosu),
-    // więc nie ma ani wiszących platform, ani pionowych ścian w ziemi.
-    const reach = v.radius + 14;
-    const x0 = Math.max(ox, v.x - reach);
-    const x1 = Math.min(ox + CS - 1, v.x + reach);
-    const z0 = Math.max(oz, v.z - reach);
-    const z1 = Math.min(oz + CS - 1, v.z + reach);
-    const fill = v.desert ? B.SANDSTONE : B.DIRT;
-    for (let x = x0; x <= x1; x++)
-      for (let z = z0; z <= z1; z++) {
-        const lx = x - ox;
-        const lz = z - oz;
-        const mi = lz * CS + lx;
-        if (mask[mi]) continue;
-        const dist = Math.hypot(x - v.x, z - v.z);
-        if (dist > reach) continue;
-        mask[mi] = 1;
-        const base = v.y;
-        // 0 w środku osady, 1 na końcu skosu – gładkie przejście do terenu.
-        // 2.19: skos ma 16 bloków, więc zbocze wygląda jak naturalne
-        // wzniesienie, a nie jak ściana wykopu.
-        const tRaw = Math.min(1, Math.max(0, (dist - (v.radius - 2)) / 16));
-        const ease = tRaw * tRaw * (3 - 2 * tRaw);
-        const natural = ctx.surface(x, z).h;
-        const target = Math.round(base + (natural - base) * ease);
-        // Najwyższy istniejący blok (drzewa, wzgórki) – nad `target` zniknie.
-        let cur = target;
-        for (let y = CH - 1; y > target; y--) {
-          if (data[(y * CS + lz) * CS + lx] !== B.AIR) {
-            cur = y;
-            break;
-          }
-        }
-        // Zasypujemy dziurę pod platformą aż do naturalnego gruntu.
-        for (let y = Math.max(1, Math.min(natural, target) + 1); y < target; y++) {
-          if (data[(y * CS + lz) * CS + lx] === B.AIR) put(lx, y, lz, fill);
-        }
-        put(lx, target, lz, ease < 0.35 ? groundBlock(v, x, z) : v.desert ? B.SAND : B.GRASS);
-        ground[mi] = Math.max(1, Math.min(CH - 1, target));
-        for (let y = target + 1; y <= Math.min(CH - 1, cur); y++) put(lx, y, lz, B.AIR);
-        if (target + 7 > top) top = target + 7; // dachy, latarnie i dzwon sięgają wyżej
+    for (let z = oz; z < oz + CS; z++) for (let x = ox; x < ox + CS; x++) {
+      const natural = ctx.surface(x, z).h;
+      const target = villageGroundAt(v, x, z, ctx);
+      const plot = v.buildings.find((b) => x >= b.x - 1 && x <= b.x + b.w && z >= b.z - 1 && z <= b.z + b.d);
+      const yard = onYard(v, x, z);
+      if (!plot && !yard && target === natural) continue;
+      // Solid local foundations, including the old surface layer (no buried grass).
+      for (let y = Math.max(1, Math.min(natural, target) - 2); y < target; y++) {
+        put(x, y, z, v.desert ? B.SANDSTONE : B.DIRT);
       }
-
-    const set: SetBlock = (x, y, z, id) => {
-      const lx = x - ox;
-      const lz = z - oz;
-      if (lx < 0 || lx >= CS || lz < 0 || lz >= CS) return;
-      put(lx, y, lz, id);
-      mask[lz * CS + lx] = 1;
-      if (y > top) top = y;
-    };
-    for (const b of v.buildings) writeBuilding(v, b, set);
+      put(x, target, z, groundBlock(v, x, z));
+      for (let y = target + 1; y <= Math.max(natural, target + (plot ? 12 : 2)); y++) put(x, y, z, B.AIR);
+      ground[(z - oz) * CS + x - ox] = target;
+    }
+    // All terrain first, all buildings second; independent of chunk generation order.
+    for (const b of v.buildings) writeBuilding(v, b, put);
   }
   return { mask, ground, top };
 }
