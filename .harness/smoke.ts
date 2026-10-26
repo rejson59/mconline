@@ -2170,6 +2170,7 @@ section('engine: portal switches dimensions without touching the overworld');
   g.mobs = []; g.drops = []; g.arrows = []; g.tnts = []; g.orbs = []; g.falling = []; g.particles = [];
   g.buttonTimers = new Map(); g.redstoneDirty = new Set();
   g.biomeCache = new Map(); g.villageName = null;
+  g.chestLids = new Map();
   g.chestPos = null; g.furnacePos = null; g.enchantPos = null; g.tradeMob = null;
   g.breakProgress = 0; g.breakKey = '';
   g.loadingProgress = 1; g.unloadTimer = 2;
@@ -6874,6 +6875,157 @@ section('4.2: terrain-following villages and vanilla-inspired landmarks');
   const data = new Uint16Array(CS * CS * CH);
   eq('flat landmark pass leaves terrain alone', applyStructures(data, 0, 0, flat, new Uint8Array(CS * CS)), 0);
   check('mob loot still runs after the removed game mode', /this\.mobLoot\(m\)/.test(readSource('src/game/engine.ts')));
+}
+
+section('4.2.1: door thresholds and intentional chest opening');
+{
+  // Real player size, 1/16 path-to-foundation step, a two-block opening.
+  // Pure block fixture avoids changing existing worlds or needing WebGL.
+  const entrance = (face: number, hinge: number, open: boolean, floor: number, lintel = 3) => {
+    const [nx, nz] = [[0, -1], [1, 0], [0, 1], [-1, 0]][face];
+    const [tx, tz] = [-nz, nx];
+    const map = new Map<string, number>();
+    for (let x = -6; x <= 6; x++) for (let z = -6; z <= 6; z++) {
+      map.set(`${x},64,${z}`, x * nx + z * nz > 0 ? floor : B.COBBLE);
+      const normal = x * nx + z * nz;
+      const tangent = x * tx + z * tz;
+      if (normal !== 0 || Math.abs(tangent) > 2) continue;
+      for (let y = 65; y <= 68; y++) {
+        map.set(`${x},${y},${z}`, tangent === 0 && y < 64 + lintel ? B.AIR : B.PLANKS);
+      }
+    }
+    map.set('0,65,0', doorPair(face, open, false, hinge));
+    map.set('0,66,0', lintel === 2 ? B.PLANKS : doorPair(face, open, true, hinge));
+    const world = { peekBlock: (x: number, y: number, z: number) => map.get(`${x},${y},${z}`) ?? B.AIR } as unknown as World;
+    return { world, nx, nz };
+  };
+  const walk = (fixture: ReturnType<typeof entrance>, entering: boolean, dt: number) => {
+    const { nx, nz, world } = fixture;
+    const side = entering ? 1 : -1;
+    const start = side * 2.5;
+    const b: Body = { pos: new THREE.Vector3(0.5 + nx * start, entering ? 64.9375 : 65, 0.5 + nz * start),
+      vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+    let maxY = b.pos.y;
+    for (let i = 0; i < Math.ceil(1.3 / dt); i++) {
+      b.vel.set(-side * nx * 3, b.vel.y - 28 * dt, -side * nz * 3);
+      stepBody(world, b, dt);
+      maxY = Math.max(maxY, b.pos.y);
+    }
+    return { body: b, normal: (b.pos.x - 0.5) * nx + (b.pos.z - 0.5) * nz, maxY };
+  };
+  for (let face = 0; face < 4; face++) for (let hinge = 0; hinge < 2; hinge++) {
+    for (const dt of [1 / 60, 1 / 30, 0.1]) {
+      const fixture = entrance(face, hinge, true, B.PATH);
+      const into = walk(fixture, true, dt);
+      check(`open door passes from path f${face} h${hinge} dt${dt}`, into.normal < -0.8, `normal=${into.normal}`);
+      check(`threshold step stays at the real floor f${face} h${hinge}`, into.maxY <= 65.001, `y=${into.maxY}`);
+      check(`exit also fits f${face} h${hinge}`, walk(fixture, false, dt).normal > 0.8);
+    }
+    check(`closed door still blocks f${face} h${hinge}`, walk(entrance(face, hinge, false, B.PATH), true, 1 / 60).normal > 0);
+    check(`open door panel still blocks its own side f${face} h${hinge}`, collisionBoxes(doorPair(face, true, false, hinge)) !== null);
+    check(`low ceiling is not bypassed by stepping f${face} h${hinge}`, walk(entrance(face, hinge, true, B.PATH, 2), true, 1 / 60).normal > 0);
+  }
+
+  const world = new World(777, true);
+  world.getChunk(0, 0);
+  const y = FLAT_H + 1;
+  world.setBlock(5, y, 5, B.CHEST);
+  world.setBlock(6, y, 5, B.CHEST);
+  world.setBlock(5, y, 6, B.CHEST); // behind, not part of the double chest
+  world.setBlock(8, y, 5, B.LOOT_CHEST);
+  const material = new THREE.MeshBasicMaterial();
+  const g = Object.assign(Object.create(Game.prototype), {
+    world, body: { pos: new THREE.Vector3(5.5, y, 5.5) }, scene: new THREE.Scene(), materials: [material],
+    ui: 'playing', chestPos: null, chestLids: new Map(),
+    chests: new Map(), isInNether: false,
+    setUI(state: string) { this.ui = state; }, unlock() {},
+  }) as Record<string, any>;
+  g.updateChestLids(0.25);
+  eq('walking near chests never animates their lids', g.chestLids.size, 0);
+  eq('walking near chests never hides their static lids', world.hiddenChestLids.size, 0);
+  eq('walking near loot does not generate inventory', g.chests.size, 0);
+  eq('walking near loot does not consume it', world.getBlock(8, y, 5), B.LOOT_CHEST);
+
+  g.openChest(5, y, 5);
+  g.updateChestLids(0.1);
+  check('using a chest raises its own lid', g.chestLids.get(`5,${y},5`)?.open > 0);
+  check('using one half raises the matching double half', g.chestLids.get(`6,${y},5`)?.open > 0);
+  check('chest behind the selected one stays closed', !g.chestLids.has(`5,${y},6`));
+  check('other nearby chest stays closed', !g.chestLids.has(`8,${y},5`));
+  let disposed = 0;
+  for (const lid of g.chestLids.values()) lid.group.traverse((obj: THREE.Object3D) => {
+    if ((obj as THREE.Mesh).isMesh) (obj as THREE.Mesh).geometry.addEventListener('dispose', () => disposed++);
+  });
+  g.ui = 'playing'; g.chestPos = null;
+  for (let i = 0; i < 8; i++) g.updateChestLids(0.1);
+  eq('closing the inventory closes lids without walking away', g.chestLids.size, 0);
+  eq('closing restores static chunk lids', world.hiddenChestLids.size, 0);
+  eq('closing removes animated meshes from scene', g.scene.children.length, 0);
+  eq('closing disposes both lid geometries', disposed, 2);
+  g.updateChestLids(1);
+  eq('standing next to the closed chest does not reopen it', g.chestLids.size, 0);
+  // Open a different chest, then switch UI or destroy it while open.
+  g.openChest(8, y, 5); g.updateChestLids(0.1);
+  eq('loot is generated only on actual use', world.getBlock(8, y, 5), B.CHEST);
+  g.ui = 'inventory'; g.updateChestLids(1);
+  eq('switching to a non-chest UI closes its lid', g.chestLids.size, 0);
+  g.openChest(8, y, 5); g.updateChestLids(0.1);
+  world.setBlock(8, y, 5, B.AIR); g.updateChestLids(1);
+  eq('destroying an open chest removes its animated lid', g.chestLids.size, 0);
+  // Fast close/reopen reuses the animation rather than stacking duplicate lids.
+  g.openChest(5, y, 5); g.updateChestLids(0.1);
+  const original = g.chestLids.get(`5,${y},5`).group;
+  g.ui = 'playing'; g.chestPos = null; g.updateChestLids(0.01);
+  g.openChest(5, y, 5); g.updateChestLids(0.01);
+  eq('reopening during closure reuses the original lid', g.chestLids.get(`5,${y},5`).group, original);
+  eq('reopening never duplicates the double chest', g.chestLids.size, 2);
+  g.clearChestLids();
+
+  for (let facing = 0; facing < 4; facing++) {
+    world.setBlock(11, y, 11, chestIdFor(facing));
+    g.openChest(11, y, 11); g.updateChestLids(1);
+    const lid = g.chestLids.get(`11,${y},11`);
+    const raisedFront = lid.group.localToWorld(new THREE.Vector3(0, 0, 14 / 16));
+    check(`lid opens upward about its local hinge facing ${facing}`, Math.abs(raisedFront.y - (y + 23 / 16)) < 1e-8);
+    g.clearChestLids();
+    const [dx, dz] = chestLeftDir(facing);
+    world.setBlock(11 + dx, y, 11 + dz, chestIdFor(facing));
+    for (const [cx, cz] of [[11, 11], [11 + dx, 11 + dz]]) {
+      g.openChest(cx, y, cz); g.updateChestLids(1);
+      eq(`either half opens exactly one pair facing ${facing}`, g.chestLids.size, 2);
+      check(`matching lateral neighbor opens facing ${facing}`, g.chestLids.has(`11,${y},11`) && g.chestLids.has(`${11 + dx},${y},${11 + dz}`));
+      g.clearChestLids();
+    }
+    world.setBlock(11 + dx, y, 11 + dz, B.AIR);
+  }
+
+  g.homeWorld = world;
+  g.stashLiveEntities = () => {};
+  g.restoreStashedEntities = () => {};
+  g.removeBobber = () => {};
+  g.biomeCache = new Map();
+  g.openChest(5, y, 5); g.updateChestLids(0.1);
+  const next = new World(777, false, true);
+  g.switchDimension(next);
+  eq('changing dimension clears animated lids', g.chestLids.size, 0);
+  eq('changing dimension restores the old world static lids', world.hiddenChestLids.size, 0);
+  eq('changing dimension never hides lids in the new world', next.hiddenChestLids.size, 0);
+  eq('changing dimension detaches old lid meshes', g.scene.children.length, 0);
+
+  // Same interaction used by a tap and the held action button on Android.
+  const use = Object.assign(Object.create(Game.prototype), {
+    world, keys: new Set(), mouseRight: true, swingT: 1,
+    target: { x: 2, y, z: 2, id: B.DOOR_N },
+    findMobTarget: () => ({ mob: null }), onBlockChanged() {},
+  }) as Record<string, any>;
+  world.setBlock(2, y, 2, B.DOOR_N); world.setBlock(2, y + 1, 2, B.DOOR_UN);
+  use.tryUse();
+  check('touch use opens both halves', isDoorOpen(world.getBlock(2, y, 2)) && isDoorOpen(world.getBlock(2, y + 1, 2)));
+  eq('door use consumes the held action until the next press', use.mouseRight, false);
+  use.mouseRight = true;
+  use.tryUse();
+  check('a fresh press can close the door', !isDoorOpen(world.getBlock(2, y, 2)));
+  material.dispose();
 }
 
 // =================================================================== report

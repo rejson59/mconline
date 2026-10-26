@@ -118,7 +118,12 @@ function ceilingBottom(world: World, px: number, py: number, pz: number, w: numb
 
 /** Krok w górę: stopy lądują na rzeczywistej powierzchni, a nie 0,6 nad nią. */
 function stepUpTop(world: World, b: Body, nx: number, nz: number): number {
-  return supportTop(world, nx, b.pos.y + STEP_HEIGHT, nz, b.w);
+  const top = supportTop(world, nx, b.pos.y + STEP_HEIGHT, nz, b.w);
+  // Check clearance at the actual landing height, not at the maximum step.
+  // A path-to-door threshold rises only 1/16; testing +0.6 falsely hits
+  // the lintel of a perfectly usable two-block-high doorway.
+  if (!Number.isFinite(top) || top <= b.pos.y || top > b.pos.y + STEP_HEIGHT + EPS) return -Infinity;
+  return collidesAt(world, nx, top, nz, b.w, b.h) ? -Infinity : top;
 }
 
 /** 2.31: najwyższa powierzchnia kolizji nad stopami, do wysokości `maxY`. */
@@ -220,7 +225,7 @@ function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, d: number): boolean {
     // 2.21: automatyczny krok na płytę/schodzenie (0,6) – jak w wanilii.
     // 2.30: po wejściu stopy stają DOKŁADNIE na powierzchni przeszkody;
     // wcześniej dodawaliśmy całe 0,55 i postać spadała pół bloku.
-    if (b.onGround && !collidesAt(world, nx, p.y + STEP_HEIGHT, p.z, b.w, b.h)) {
+    if (b.onGround) {
       const top = stepUpTop(world, b, nx, p.z);
       if (Number.isFinite(top)) {
         p.y = Math.max(p.y, top);
@@ -235,7 +240,7 @@ function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, d: number): boolean {
   }
   const nz = p.z + d;
   if (!collidesAt(world, p.x, p.y, nz, b.w, b.h)) { p.z = nz; return false; }
-  if (b.onGround && !collidesAt(world, p.x, p.y + STEP_HEIGHT, nz, b.w, b.h)) {
+  if (b.onGround) {
     const top = stepUpTop(world, b, p.x, nz);
     if (Number.isFinite(top)) {
       p.y = Math.max(p.y, top);

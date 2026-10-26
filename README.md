@@ -1,6 +1,14 @@
-# BlockCraft 4.2 🌍
+# BlockCraft 4.2.1 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.2.1 — progi drzwi i skrzynie
+
+- **Przejście ze ścieżki do domu.** Ścieżka jest niższa od pełnego bloku o 1/16. Silnik sprawdza teraz prześwit nad rzeczywistą wysokością kroku, a nie 0,6 bloku wyżej — nadproże nie blokuje poprawnego wejścia. Dotyczy wszystkich kierunków i obu zawiasów. Zamknięte drzwi, otwarte skrzydło i zbyt niski sufit nadal mają kolizję; rozmiar gracza nie został zmniejszony.
+- **Jedno naciśnięcie — jedno przełączenie drzwi.** Przytrzymanie przycisku użycia, także na ekranie dotykowym, nie zamyka otwartych właśnie drzwi podczas wchodzenia.
+- **Skrzynie nie otwierają się przy podejściu.** Animacja jest powiązana z używanym oknem skrzyni. Po jego zamknięciu wieko opada, nawet gdy gracz stoi obok. W podwójnej skrzyni otwierają się tylko pasujące boczne połówki, nie skrzynie stojące przed nią lub za nią.
+- **Porządkowanie animacji.** Poprawiono oś zawiasu obróconych skrzyń oraz usuwanie animowanych wiek przy zmianie wymiaru i zamykaniu gry. Statyczne wieka są przywracane we właściwym świecie, a geometria animacji zwalniana.
+- **Bez migracji zapisów.** Naprawa dotyczy fizyki i interakcji, nie wymaga nowego świata ani przebudowania domów. Testy regresji odtwarzają próg, nadproże, oba zawiasy i cztery kierunki przy 60, 30 i 10 FPS, a także cykl otwarcia/zamknięcia, podwójne skrzynie i zmianę wymiaru.
 
 ## Wersja 4.2 „Naturalne osady i struktury”
 

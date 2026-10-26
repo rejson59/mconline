@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, chestLidGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
-import { B, BLOCKS, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards } from './blocks';
+import { B, BLOCKS, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -781,7 +781,6 @@ export class Game {
    * w punkcie (0, 9/16, 1/16), obracany o `rotation.x` od 0 do −π/2.
    */
   private chestLids = new Map<string, { group: THREE.Group; open: number; target: number; x: number; y: number; z: number }>();
-  private chestLidCooldown = 0;
   /** 2.3: kowadła – PPM otwiera ekran scalania i przemianowywania. */
   anvils = new Map<string, AnvilState>();
   anvilPos: { x: number; y: number; z: number } | null = null;
@@ -3809,6 +3808,9 @@ export class Game {
     const prev = this.world;
     if (prev === next) return;
 
+    // Restore hidden static lids before changing their owning world.
+    this.clearChestLids();
+
     // 1. odepnij siatki wymiaru, z którego wychodzimy (geometria zostaje)
     for (const c of prev.chunks.values()) for (const m of c.meshes) this.scene.remove(m);
     // 2. odłóż jego żyjące obiekty
@@ -5157,7 +5159,13 @@ export class Game {
     }
     if (t && !sneaking) {
       if (t.id === B.BELL) { this.ringBell(t.x, t.y, t.z); return; }
-      if (isDoor(t.id)) { this.toggleDoor(t.x, t.y, t.z); return; }
+      if (isDoor(t.id)) {
+        this.toggleDoor(t.x, t.y, t.z);
+        // A held touch/use button must not toggle the door shut again
+        // while the player walks through. A fresh press can toggle it again.
+        this.mouseRight = false;
+        return;
+      }
       if (isTrap(t.id)) { this.toggleTrap(t.x, t.y, t.z, t.nx, t.nz); return; }
       if (isChestBlock(t.id)) { this.openChest(t.x, t.y, t.z); return; }
       if (t.id === B.CRAFTING) { this.openInventory(true); return; }
@@ -6189,66 +6197,56 @@ export class Game {
     this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 15);
   }
 
-  /**
-   * 2.32: wieka skrzyń – otwieranie w promieniu 5 bloków i animacja klapy.
-   *
-   * Skan kratek robimy cztery razy na sekundę (11³ = 1331 odczytów), a nie
-   * co klatkę: przy 60 FPS to 20 razy mniej pracy, a oko i tak widzi tylko
-   * płynne 0,25 s przejścia.
-   */
+  /** Animate only the container currently in use; closing the UI closes its lid. */
   private updateChestLids(dt: number) {
-    this.chestLidCooldown -= dt;
-    if (this.chestLidCooldown <= 0 && this.ui !== 'inventory' && this.ui !== 'paused') {
-      this.chestLidCooldown = 0.25;
-      const px = Math.floor(this.body.pos.x), py = Math.floor(this.body.pos.y), pz = Math.floor(this.body.pos.z);
-      for (let dy = -2; dy <= 2; dy++)
-        for (let dz = -5; dz <= 5; dz++)
-          for (let dx = -5; dx <= 5; dx++) {
-            const x = px + dx, y = py + dy, z = pz + dz;
-            if (!isChestBlock(this.world.peekBlock(x, y, z))) continue;
-            const key = this.wKey(x, y, z);
-            let lid = this.chestLids.get(key);
-            if (!lid) {
-              lid = this.spawnChestLid(x, y, z);
-              if (!lid) continue;
-              this.chestLids.set(key, lid);
-            }
-            lid.target = 1;
-            // 2.32: podwójna skrzynia to jeden mebel – wieko sąsiada też się
-            // podnosi, inaczej wyglądałoby to jak dwie osobne skrzynie.
-            for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
-              const n = this.world.peekBlock(x + dx, y, z + dz);
-              if (!isChestBlock(n) || chestFacing(n) !== chestFacing(this.world.peekBlock(x, y, z))) continue;
-              const nk = this.wKey(x + dx, y, z + dz);
-              let other = this.chestLids.get(nk);
-              if (!other) {
-                other = this.spawnChestLid(x + dx, y, z + dz);
-                if (!other) continue;
-                this.chestLids.set(nk, other);
-              }
-              other.target = 1;
-            }
+    // Only the explicitly opened inventory owns a lid animation. Proximity
+    // must not open containers (or unrelated chests in front/behind a pair).
+    const selected = new Set<string>();
+    const pos = this.ui === 'chest' ? this.chestPos : null;
+    if (pos) {
+      const { x, y, z } = pos;
+      const id = this.world.peekBlock(x, y, z);
+      if (isChestBlock(id)) {
+        selected.add(this.wKey(x, y, z));
+        const [dx, dz] = chestLeftDir(chestFacing(id));
+        const region = this.world.chestRegionAt(x, y, z);
+        if (region !== 'chest') {
+          const sign = region === 'chest_left' ? 1 : -1;
+          selected.add(this.wKey(x + dx * sign, y, z + dz * sign));
+        }
+        for (const key of selected) {
+          if (!this.chestLids.has(key)) {
+            const [lx, ly, lz] = key.split(',').map(Number);
+            this.chestLids.set(key, this.spawnChestLid(lx, ly, lz));
           }
+        }
+      }
     }
     for (const [key, lid] of this.chestLids) {
-      // Wieko zamyka się, gdy skrzynia zniknęła albo gracz odszedł.
-      if (!isChestBlock(this.world.peekBlock(lid.x, lid.y, lid.z))) lid.target = 0;
-      else if (Math.hypot(lid.x + 0.5 - this.body.pos.x, lid.y + 0.5 - this.body.pos.y, lid.z + 0.5 - this.body.pos.z) > 5.5) lid.target = 0;
+      lid.target = selected.has(key) ? 1 : 0;
       const speed = 5.5; // waniliowe `openNess` dochodzi w ~0,25 s
       lid.open += Math.sign(lid.target - lid.open) * Math.min(Math.abs(lid.target - lid.open), speed * dt);
       lid.group.rotation.x = -lid.open * (Math.PI / 2);
       if (lid.target === 0 && lid.open <= 0.001) {
-        this.scene.remove(lid.group);
-        lid.group.traverse((o) => {
-          const mesh = o as THREE.Mesh;
-          if (mesh.isMesh) mesh.geometry.dispose();
-        });
-        this.chestLids.delete(key);
-        // Korpus w siatce chunka znów może rysować wieko.
-        this.world.hiddenChestLids.delete(key);
-        this.markChestDirty(lid.x, lid.y, lid.z);
+        this.removeChestLid(key, lid);
       }
     }
+  }
+
+  /** Restore the static lid in the owning world and release animated geometry. */
+  private removeChestLid(key: string, lid: { group: THREE.Group; x: number; y: number; z: number }) {
+    this.scene.remove(lid.group);
+    lid.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) mesh.geometry.dispose();
+    });
+    this.chestLids.delete(key);
+    this.world.hiddenChestLids.delete(key);
+    this.markChestDirty(lid.x, lid.y, lid.z);
+  }
+
+  private clearChestLids() {
+    for (const [key, lid] of this.chestLids) this.removeChestLid(key, lid);
   }
 
   private wKey(x: number, y: number, z: number) {
@@ -6269,6 +6267,8 @@ export class Game {
     const backX = [-0, -1, 0, 1][yaw];
     const backZ = [-1, 0, 1, 0][yaw];
     group.position.set(x + 0.5 + (backX * 7) / 16, y + 9 / 16, z + 0.5 + (backZ * 7) / 16);
+    // Yaw around the world Y axis, then opening around the local hinge X.
+    group.rotation.order = 'YXZ';
     group.rotation.y = (yaw * Math.PI) / 2;
     // 2.32: połowa podwójnej skrzyni ma własną teksturę i szersze wieko,
     // a światło bierzemy z tej samej kratki co korpus – inaczej klapa
@@ -7530,6 +7530,7 @@ export class Game {
   }
 
   dispose() {
+    this.clearChestLids();
     cancelAnimationFrame(this.raf);
     this.viewRO?.disconnect();
     this.viewRO = null;
