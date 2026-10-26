@@ -17,9 +17,6 @@ import { isFarmland, isHydrated, updateFarmland } from './farmland';
 import { FrameGovernor, drawDistanceChunks, entityTickInterval, lodRange, lodStepFor, profileResScale, sortChunkOffsets, type PerfProfile } from './perf';
 import { LOD_TILE, buildLodTile, lodRing } from './lod';
 import { Mob, mobVariantForBiome, isHostileMob, type MobType } from './mobs';
-import { getMapLayout } from './zombies';
-import { buildZombiesWorld } from './zombies/worldBuilder';
-import { ZombiesRuntime } from './zombies/zombiesRuntime';
 
 const GREY: readonly number[] = [90, 90, 90];
 
@@ -95,7 +92,7 @@ import {
 import { villageSpawnSpots } from './village';
 import { isVillageMob } from './mobs';
 
-export type GameMode = 'survival' | 'creative' | 'zombies';
+export type GameMode = 'survival' | 'creative';
 export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'anvil' | 'brewing';
 
 export interface Waypoint {
@@ -216,12 +213,6 @@ export interface HUDState {
   tpa: { from: string; name: string } | null;
   /** 2.19: wysłana prośba – czekamy na odpowiedź. */
   tpaSent: { name: string } | null;
-  /** 3.0 Zombies HUD */
-  zombiesGold?: number;
-  zombiesRound?: number;
-  zombiesPower?: boolean;
-  zombiesAmmo?: { mag: number; reserve: number; maxMag: number };
-  zombiesWeapon?: string;
 }
 
 export interface TradeRow {
@@ -910,8 +901,6 @@ export class Game {
   private appliedTier = 'full';
   /** Zasięg rysowania w chunkach po uwzględnieniu profilu. */
   drawDistance = 6;
-  /** 3.0: Zombies – runtime (rundy, złoto, bronie, drzwi). Tylko gdy mode === 'zombies'. */
-  zombies: ZombiesRuntime | null = null;
   /** 2.28: licznik klatek – decyduje, które moby tickują w danej klatce. */
   private frameNo = 0;
   /** 2.28: pasmo terenu w oddali (Distant Horizons). */
@@ -974,16 +963,6 @@ export class Game {
     if (opts.save) {
       this.world.loadMods(opts.save.mods);
       this.netherWorld.loadMods(opts.save.netherMods ?? {});
-    }
-    // 2.33: Zombies – nadpisz teren areną Dead End / Bad Blood / etc. (jeśli tryb zombies)
-    if (opts.mode === 'zombies') {
-      try {
-        const zombiesAny = opts as unknown as { zombiesMapId?: string };
-        const mapId = (zombiesAny.zombiesMapId as string) || 'deadend';
-        (this as unknown as { _zombiesMapId: string })._zombiesMapId = mapId;
-        const layout = getMapLayout(mapId as never);
-        buildZombiesWorld(this.world, layout);
-      } catch { /* ignore */ }
     }
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -1250,36 +1229,6 @@ export class Game {
       this.findSpawn();
       this.body.pos.copy(this.spawnPoint);
       this.giveStarterItems();
-    }
-    // 2.33: Zombies – nadpisz spawn na arenę (po findSpawn, żeby nie losował na proceduralnym terenie)
-    if (opts.mode === 'zombies') {
-      try {
-        const zombiesAny = opts as unknown as { zombiesMapId?: string };
-        const mapId = (zombiesAny.zombiesMapId as string) || 'deadend';
-        const layout = getMapLayout(mapId as never);
-        const sp = layout.spawnPoints[0];
-        if (sp) {
-          this.body.pos.set(sp.x, sp.y + 1, sp.z);
-          this.spawnPoint.set(sp.x, sp.y + 1, sp.z);
-          this.fallStart = this.body.pos.y;
-          // ensure chunk for meshes
-          this.world.getChunk(Math.floor(sp.x / CS), Math.floor(sp.z / CS));
-          this.world.getChunk(Math.floor((sp.x + 16) / CS), Math.floor(sp.z / CS));
-          this.world.getChunk(Math.floor(sp.x / CS), Math.floor((sp.z + 16) / CS));
-          // rebuild spawn chunks now (they were built before spawn override)
-          for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) this.buildChunk(Math.floor(sp.x / CS) + dx, Math.floor(sp.z / CS) + dz);
-        }
-        // 3.0: runtime – rundy, bronie, drzwi, złoto
-        try { this.zombies = new ZombiesRuntime(this as unknown as never, mapId); } catch { /* ignore */ }
-      } catch { /* ignore */ }
-    }
-    // 3.0: zombies – startowa broń w ekwipunku (pistol) i pełne zdrowie
-    if (this.mode === 'zombies' && this.zombies) {
-      this.health = 20;
-      this.hunger = 20;
-      (this.inventory as unknown as { clear?: () => void }).clear?.();
-      this.inventory.slots.fill(null);
-      this.inventory.cursor = null;
     }
     this.fallStart = this.body.pos.y;
 
@@ -2648,22 +2597,6 @@ export class Game {
     // Alt-Tabs albo odrzuconym Pointer Lock) – blokada jest potrzebna tylko
     // do rozglądania się myszą. Wcześniej całe sterowanie „zamierało”,
     // dopóki gracz nie kliknął ponownie w ekran.
-    // 3.0 Zombies: sterowanie jak w FPS – 1-3 broń, R przeładuj, E interakcja, E nie otwiera ekwipunku
-    if (this.mode === 'zombies' && this.zombies) {
-      if (!e.repeat) {
-        if (e.code === 'KeyR') { this.zombies.tryReload(); this.emitHud(); return; }
-        if (e.code === 'KeyE') { this.zombies.tryInteract(); this.emitHud(); return; }
-        if (e.code.startsWith('Digit') || e.code.startsWith('Numpad')) {
-          const n = parseInt(e.code.slice(e.code.startsWith('Digit') ? 5 : 6), 10);
-          if (n >= 1 && n <= 3) { this.zombies.switchWeapon(n - 1); this.emitHud(); return; }
-        }
-      }
-      if (e.code === 'KeyQ') return; // nie wyrzucaj broni
-      if (e.code === 'KeyF') return;
-      // inventory nie działa w zombies (perki przez sklepy)
-      // ale pozwól na czat/pause etc. dalej
-      if (e.code === 'KeyE' && e.repeat) return;
-    }
     if (this.ui !== 'playing') return;
     if (e.repeat) {
       // Przytrzymane klawisze pozostają wciśnięte, ale akcje jednorazowe
@@ -4668,53 +4601,6 @@ export class Game {
 
   // ---------- Hand ----------
   updateHand() {
-    // 3.1 Zombies: gun model in hand
-    if (this.mode === 'zombies' && this.zombies) {
-      const def = this.zombies.currentWeaponDef();
-      const wid = def?.id ?? 'pistol';
-      let key = 1000; for (let i = 0; i < wid.length; i++) key = Math.imul(key, 31) + wid.charCodeAt(i);
-      key = key | 0;
-      if (key === this.handId && this.handMesh) return;
-      this.handId = key;
-      if (this.handMesh) { this.hand.remove(this.handMesh); (this.handMesh as unknown as THREE.Group).clear?.(); (this.handMesh as THREE.Mesh).geometry?.dispose(); const mat = (this.handMesh as THREE.Mesh).material as THREE.Material | undefined; if (mat && mat !== this.handMat) (mat as THREE.Material).dispose(); }
-      const g = new THREE.Group();
-      const gripMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a });
-      const bodyMat = new THREE.MeshStandardMaterial({ color: wid === 'shotgun' ? 0x6b4a2a : wid === 'sniper' ? 0x2b3a4a : wid === 'rocket' ? 0x5a6b2a : wid === 'rifle' ? 0x4a4a4a : 0x2a2a2a });
-      const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
-      // body
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.42), bodyMat);
-      body.position.set(0, 0, 0);
-      g.add(body);
-      // barrel length by type
-      const blen = wid === 'sniper' ? 0.55 : wid === 'rifle' ? 0.45 : wid === 'shotgun' ? 0.32 : wid === 'rocket' ? 0.6 : 0.28;
-      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, blen), barrelMat);
-      barrel.position.set(0, 0.02, -(0.21 + blen / 2));
-      g.add(barrel);
-      // handle
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.08), gripMat);
-      grip.position.set(0, -0.12, 0.08); grip.rotation.x = 0.25; g.add(grip);
-      // magazine
-      if (wid !== 'shotgun' && wid !== 'rocket') {
-        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.1), new THREE.MeshStandardMaterial({ color: 0x2e2e2e }));
-        mag.position.set(0, -0.1, 0.02); g.add(mag);
-      }
-      if (wid === 'sniper') {
-        const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.18, 10), new THREE.MeshStandardMaterial({ color: 0x0a0a0a }));
-        scope.rotation.z = Math.PI / 2; scope.position.set(0, 0.08, -0.08); g.add(scope);
-      }
-      if (wid === 'shotgun') {
-        const pump = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.22), bodyMat);
-        pump.position.set(0, -0.02, -0.18); g.add(pump);
-      }
-      // position like original hand block
-      g.position.set(0.42, -0.32, -0.58);
-      g.rotation.set(0.1, -0.15, 0);
-      g.scale.set(1, 1, 1);
-      g.renderOrder = 1000;
-      this.handMesh = g as unknown as THREE.Mesh;
-      this.hand.add(g as unknown as THREE.Object3D);
-      return;
-    }
     const s = this.selectedStack();
     const id = s ? s.id : -1;
     if (id === this.handId) return;
@@ -4769,11 +4655,6 @@ export class Game {
   }
 
   tryAttack() {
-    // 3.0 Zombies: LPM = strzał z broni palnej
-    if (this.mode === 'zombies' && this.zombies) {
-      if (this.zombies.shoot()) this.swingT = 0;
-      return;
-    }
     this.swingT = 0;
     const blockDist = this.target ? this.target.dist : 99;
     const { mob, dist } = this.findMobTarget(3.5);
@@ -5265,14 +5146,6 @@ export class Game {
   }
 
   tryUse() {
-    // 3.0 Zombies: PPM = interakcja z drzwiami/sklepami/oknami/dźwignią, nie stawianie bloków
-    if (this.mode === 'zombies' && this.zombies) {
-      const res = this.zombies.tryInteract();
-      if (res) { this.emitHud(); this.placeCooldown = 0.3; return; }
-      // fallthrough to nothing – zombies nie stawia bloków PPM
-      this.placeCooldown = 0.22;
-      return;
-    }
     const t = this.target;
     this.placeCooldown = 0.22;
     const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
@@ -5860,30 +5733,6 @@ export class Game {
       Sfx.playHurt();
       this.buzz(35);
     }
-    // 3.0 Zombies: downed – nie od razu dead, solo auto-revive po 8s
-    if (this.mode === 'zombies' && this.zombies && this.health <= 0 && !force) {
-      const st = this.zombies.state;
-      const pid = this.zombies.pid;
-      const p = st.players.get(pid);
-      if (p && !p.isDowned) {
-        p.isDowned = true;
-        (p as unknown as { downUntil?: number }).downUntil = performance.now() + 8000;
-        this.health = 6;
-        this.message('💀 Padnięto! Przytrzymaj E przy koledze aby reanimować. Solo: wstajesz za 8s.');
-        setTimeout(() => {
-          const cur = this.zombies?.state.players.get(pid);
-          if (cur?.isDowned) {
-            cur.isDowned = false;
-            (cur as unknown as { perks?: unknown[] }).perks = [];
-            this.health = 10;
-            this.message('Wstałeś! Perki przepadły.');
-            this.emitHud();
-          }
-        }, 8000);
-        this.emitHud();
-        return;
-      }
-    }
     // 2.3: Totem Ratowania kupuje drugie życie – raz na 5 sekund.
     if (this.health <= 0 && !force && this.tryTotem()) {
       this.emitHud();
@@ -6049,8 +5898,6 @@ export class Game {
       this.updateDrops(dt);
       this.updateOrbs(dt);
       this.updateGrowth(dt);
-      // 3.0 Zombies: perki, rundy, spawn, power-ups, okna HP
-      if (this.mode === 'zombies' && this.zombies) this.zombies.tick(dt);
       this.updateFurnaces(dt);
       this.updateAnvils(dt);
       this.updateBrewings(dt);
@@ -6489,7 +6336,7 @@ export class Game {
         this.breakProgress = 0;
         this.breakKey = '';
         if (this.attackCooldown <= 0) this.tryAttack();
-      } else if (t && this.mode !== 'zombies') {
+      } else if (t) {
         const key = `${t.x},${t.y},${t.z}`;
         if (this.mode === 'creative') {
           if (this.breakCooldown <= 0) { this.breakBlock(t.x, t.y, t.z); this.breakCooldown = 0.25; this.swingT = 0; }
@@ -6638,7 +6485,7 @@ export class Game {
         // Głos słychać z 24 bloków (waniliowe `attenuation_distance` 16–32).
         if (m.body.pos.distanceTo(p) < 24) Sfx.playMob(m.type, 'idle', m.body.pos.x, m.body.pos.y + m.body.h * 0.8, m.body.pos.z);
       }
-      // zombies burn in daylight (but never under the Nether roof)
+      // mob burn in daylight (but never under the Nether roof)
       if (m.type === 'zombie' && dl > 0.7 && !m.dead && !this.isInNether) {
         const exposed = m.body.pos.y >= this.world.heightAt(Math.floor(m.body.pos.x), Math.floor(m.body.pos.z));
         if (exposed) {
@@ -6654,23 +6501,12 @@ export class Game {
       if (m.dead && !m.deathCried) {
         m.deathCried = true;
         Sfx.playMob(m.type, 'death', m.body.pos.x, m.body.pos.y + m.body.h * 0.8, m.body.pos.z);
-        // 3.0 zombies: gold + kill count + instaKill
-        if (this.mode === 'zombies' && this.zombies) {
-          try { this.zombies.onMobKill(m as never); } catch {}
-          try { this.zombies.onMobDeath(m as never); } catch {}
-          // add hit gold handling already in shoot, but also ensure drop handling
-        }
       }
       if (m.exploded && !m.looted) {
         m.looted = true;
         this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2, m);
       } else if (m.dead && !m.looted) {
         m.looted = true;
-        if (this.mode === 'zombies') {
-          // zombies: nie rób survival lootu, tylko gold i szansa na drop amunicji/buff
-        } else {
-          this.mobLoot(m);
-        }
       }
     }
     this.mobs = this.mobs.filter((m) => {
@@ -6685,14 +6521,9 @@ export class Game {
       return !gone;
     });
 
-    // spawn – zombies ma własny spawner
-    if (this.mode === 'zombies') {
-      this.spawnTimer = 999;
-    }
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 1.5;
-      if (this.mode === 'zombies') return;
       const alive = this.mobs.filter((m) => !m.dead);
       const hostile = alive.filter((m) => HOSTILE_MOBS.has(m.type)).length;
       const passive = alive.length - hostile;
@@ -7072,7 +6903,6 @@ export class Game {
       // 2.19: prośby o teleportację tracą ważność po minucie.
       tpa: this.tpaIn && now - this.tpaIn.at < 60_000 ? { from: this.tpaIn.from, name: this.tpaIn.name } : null,
       tpaSent: this.tpaOut && now - this.tpaOut.at < 60_000 ? { name: this.tpaOut.name } : null,
-      ...(this.mode === 'zombies' && this.zombies ? this.zombies.hudExtra() as unknown as Partial<HUDState> : {}),
     } as HUDState);
   }
 

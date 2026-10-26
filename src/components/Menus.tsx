@@ -299,12 +299,10 @@ export function MainMenu({
   onToggleFavorite,
   onImported,
   onMultiplayer,
-  onZombies,
 }: {
   saves: WorldCard[];
   /** 2.10: otwiera poczekalnię multiplayer. */
   onMultiplayer?: () => void;
-  onZombies?: () => void;
   /** called after a save file was imported so the list can refresh */
   onImported?: () => void;
   /** seed / mode taken from the URL hash (shareable world links) */
@@ -418,11 +416,6 @@ export function MainMenu({
                 <button className="mc-btn mc-btn-primary" onClick={() => setView('new')}>
                   {saves.length >= MAX_SAVES ? `Nowy świat · limit ${MAX_SAVES}` : 'Nowy świat'}
                 </button>
-                {onZombies && (
-                  <button className="mc-btn !border-red-500/60 !bg-red-900/30 !text-red-200 hover:!bg-red-900/50" onClick={onZombies}>
-                    🧟 ZOMBIES 1:1 — Dead End • Bad Blood • Alien • Prison
-                  </button>
-                )}
                 {onMultiplayer && (
                   <button className="mc-btn" onClick={onMultiplayer}>
                     Gra razem · multiplayer

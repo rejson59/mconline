@@ -3161,8 +3161,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('3.7'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Zombies 1:1 – Dead End jak na Hypixelu: ulice, wnętrza, 8 pokoi', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION.startsWith('4.1'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Czysty Minecraft – bez ZOMBIES', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -3198,7 +3198,7 @@ section('2.8/2.8.1: wersja wydania');
   // 2.24.1: powrót do poprzedniego wyglądu – klasyczne menu jest pierwszym ekranem.
   check('2.24.1 highlights announce the classic menu', RELEASE_HIGHLIGHTS.some((h) => /klasyczne menu/i.test(h.title)));
   check('2.24.1 highlights explain the #launcher route', RELEASE_HIGHLIGHTS.some((h) => /#launcher/.test(h.text)));
-  check('gra celuje w konkretną wersję Minecrafta', MINECRAFT_TARGET.startsWith('26.2'), MINECRAFT_TARGET);
+  check('gra celuje w konkretną wersję Minecrafta', MINECRAFT_TARGET.includes('Minecraft: Java Edition 1.20.4'), MINECRAFT_TARGET);
   check('2.23 highlights mention the 26.2 models', RELEASE_HIGHLIGHTS.some((h) => /26\.2/.test(h.title)));
   check('2.23 highlights mention biome variants', RELEASE_HIGHLIGHTS.some((h) => /wariant/i.test(h.title)));
   check('2.24 highlights mention the launcher', RELEASE_HIGHLIGHTS.some((h) => /launcher/i.test(h.title)));
@@ -4924,7 +4924,7 @@ section('2.18: moby 1:1 z Minecrafta');
     const news = launcherNews(3);
     eq('launcher pokazuje 3 nowości', news.length, 3);
     check('pierwsza nowość to bieżące wydanie', news[0].tag.includes(GAME_VERSION), news[0].tag);
-    check('launcher zna docelową wersję Minecrafta', TARGET_LABEL.includes('26.2'), TARGET_LABEL);
+    check('launcher zna docelową wersję Minecrafta', TARGET_LABEL.includes('Minecraft: Java Edition 1.20.4'), TARGET_LABEL);
     eq('meta świata: tryb, typ, seed i dzień', worldMeta({ mode: 'creative', worldType: 'flat', seed: 42, day: 3 }), 'Kreatywny · płaski · seed 42 · dzień 3');
     eq('meta świeżego świata', worldMeta({ seed: 7 }), 'Przetrwanie · normalny · seed 7 · nowy');
     eq('sinceLabel bez uruchomień', sinceLabel(null), 'jeszcze nie uruchamiano');
