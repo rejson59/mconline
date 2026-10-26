@@ -171,7 +171,6 @@ export class PublicServer implements NetLike {
   private catchingUp = false;
   private hue: number;
 
-  // 3.6: prywatne pokoje Zombies – każda grupa ma własny worldId i kanał Realtime
   private worldId: string = PUBLIC_WORLD_ID;
   private channelName: string = PUBLIC_CHANNEL;
 
@@ -194,7 +193,7 @@ export class PublicServer implements NetLike {
     const now = Date.now();
     return {
       seed: PUBLIC_SEED,
-      mode: (this.worldId.startsWith('zombies') ? 'survival' : 'survival') as never,
+      mode: 'survival' as never,
       worldType: 'normal',
       name: overrideName ?? (this.worldId === PUBLIC_WORLD_ID ? PUBLIC_NAME : this.worldId),
       time: publicTime(now),

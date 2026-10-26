@@ -540,36 +540,7 @@ export default function TouchControls({
       )}
 
       {/* przyciski akcji – diament pod prawym kciukiem */}
-      {(game as unknown as { mode: string }).mode === 'zombies' ? (
-        <div
-          className="pointer-events-none absolute touch-actions"
-          style={{
-            right: 'calc(env(safe-area-inset-right, 0px) + 10px)',
-            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 110px)',
-            width: 170,
-            height: 200,
-            transform: `scale(${uiScale.toFixed(3)})`,
-            transformOrigin: 'right bottom',
-          }}
-        >
-          <div className="absolute" style={{ right: 0, bottom: 0 }}>
-            <ActionButton label="🔫" size={78} fontSize={28} opacity={0.9} onDown={() => { (game as unknown as { tryAttack: () => void }).tryAttack(); buzz(10, settings.haptics); }} haptics={settings.haptics} />
-          </div>
-          <div className="absolute" style={{ right: 86, bottom: 8 }}>
-            <ActionButton label="↻" size={54} onDown={() => { (game as unknown as { zombies?: { tryReload: () => void } }).zombies?.tryReload(); buzz(6, settings.haptics); }} haptics={settings.haptics} />
-          </div>
-          <div className="absolute" style={{ right: 88, bottom: 74 }}>
-            <ActionButton label="E" size={54} onDown={() => { (game as unknown as { zombies?: { tryInteract: () => void } }).zombies?.tryInteract(); buzz(6, settings.haptics); }} haptics={settings.haptics} />
-          </div>
-          <div className="absolute" style={{ right: 0, bottom: 88 }}>
-            <ActionButton label="⇄" size={54} onDown={() => { const z = (game as unknown as { zombies?: { switchWeapon: (n: number) => void; player: { weapons: unknown[]; currentWeapon: number } } }).zombies; if (z && z.player.weapons.length > 1) z.switchWeapon((z.player.currentWeapon + 1) % z.player.weapons.length); buzz(6, settings.haptics); }} haptics={settings.haptics} />
-          </div>
-          <div className="absolute" style={{ right: 46, bottom: 150 }}>
-            <ActionButton label={flying ? '⤒' : '⬆'} size={52} fontSize={18} opacity={jumping ? 1 : 0.7} onDown={() => pressJump(true)} onUp={() => pressJump(false)} haptics={settings.haptics} />
-          </div>
-        </div>
-      ) : (
-        <div
+      {(        <div
           className="pointer-events-none absolute touch-actions"
           style={{
             right: 'calc(env(safe-area-inset-right, 0px) + 12px)',

@@ -15,8 +15,6 @@ import { loadSkinId, saveSkinId, skinById } from '../game/skins';
 import { SkinPicker, SkinAvatar, SkinHead } from './SkinPicker';
 import type { GameMode } from '../game/engine';
 import type { WorldType } from './Menus';
-import type { ZombiesMapId } from '../game/zombies';
-import { ZOMBIES_MAPS } from '../game/zombies/types';
 import CloseButton from './CloseButton';
 
 /**
@@ -34,7 +32,6 @@ export interface NetStart {
   mode: GameMode;
   worldType: WorldType;
   worldName: string;
-  zombiesMapId?: ZombiesMapId;
 }
 
 const NICK_KEY = 'blockcraft-nick';
@@ -80,7 +77,6 @@ export default function MultiplayerScreen({
   const [room, setRoom] = useState('las-123');
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1_000_000));
   const [gameMode, setGameMode] = useState<GameMode>('survival');
-  const [zombiesMap, setZombiesMap] = useState<ZombiesMapId>('deadend');
   const [worldType, setWorldType] = useState<WorldType>('normal');
   const [status, setStatus] = useState<NetStatus | 'idle'>('idle');
   const [message, setMessage] = useState('');
@@ -135,14 +131,12 @@ export default function MultiplayerScreen({
     handedOff.current = true;
     clearInterval(tick.current);
     session.current = null;
-    const detectedZombies = ((net.world?.mode as string) === 'zombies' ? (net.world as unknown as { zombiesMapId?: ZombiesMapId }).zombiesMapId : undefined) ?? (gameMode === 'zombies' ? zombiesMap : undefined);
     onStart({
       net,
       seed: net.world?.seed ?? PUBLIC_SEED,
       mode: (net.world?.mode as GameMode) ?? gameMode,
       worldType: net.world?.worldType ?? worldType,
       worldName: net.world?.name ?? PUBLIC_NAME,
-      zombiesMapId: detectedZombies,
     });
   };
 
@@ -192,42 +186,6 @@ export default function MultiplayerScreen({
     }
   };
 
-  // 3.6: prywatny pokój Zombies przez Supabase (kod jak na Hypixel party)
-  const joinPrivateZombies = async (asHost: boolean) => {
-    const code = (normalizeRoom(room) || makeRoomCode()).toLowerCase();
-    setRoom(code);
-    reset();
-    setMode('public');
-    setBusy(true);
-    setStatus('connecting');
-    setMessage(asHost ? `Tworzę prywatny pokój Zombies ${code}…` : `Dołączam do pokoju ${code}…`);
-    const mapName = ZOMBIES_MAPS[zombiesMap]?.name ?? 'Dead End';
-    const worldId = `zombies-${zombiesMap}-${code}`;
-    const channel = `zombies-${code}`;
-    const s = new PublicServer({ name: name.trim() || 'Gracz', worldId, channel, worldName: `🧟 ${mapName} #${code}` });
-    s.skin = skin;
-    (s as unknown as { world: Record<string, unknown> }).world = { ...s.world, mode: 'zombies', zombiesMapId: zombiesMap, seed: PUBLIC_SEED, name: `Zombies ${mapName} #${code}` };
-    session.current = s as unknown as NetLike;
-    s.onProgress = (text) => setMessage(text);
-    s.onPeers = (list) => setPlayers(list);
-    s.onStatus = (st, err) => { setStatus(st); if (err) setMessage(err); };
-    // handshake overrides to carry zombiesMapId to handOff
-    const prev = s.world as unknown as Record<string, unknown>;
-    (s as unknown as { world: unknown }).world = { ...prev, zombiesMapId: zombiesMap, mode: 'zombies' };
-    try {
-      await s.connect();
-      setBusy(false);
-      setMessage(asHost ? `Pokój ${code} gotowy – zaproś znajomych tym kodem!` : `Dołączono do ${code} – czekam na start…`);
-      // for Supabase both are guests – handoff immediately
-      handOff(s as unknown as NetLike);
-    } catch (e) {
-      setBusy(false); setStatus('error');
-      setMessage(e instanceof Error ? e.message : 'Nie udało się połączyć z pokojem prywatnym.');
-    }
-    // Supabase flush tick
-    clearInterval(tick.current);
-    tick.current = window.setInterval(() => (s as unknown as { tick: () => void }).tick?.(), 1000);
-  };
 
   // -------------------------------------------------- ta sama przeglądarka
 
@@ -236,8 +194,7 @@ export default function MultiplayerScreen({
     const code = normalizeRoom(room) || makeRoomCode();
     setRoom(code);
     const s = new NetSession({ role: 'host', name: name.trim() || 'Gracz', transport: 'local' });
-    const worldExtra = gameMode === 'zombies' ? { zombiesMapId: zombiesMap } : {};
-    s.setWorld({ seed, mode: gameMode as 'survival', worldType, name: `Świat ${name.trim() || 'Gracza'}`, time: 0.25, day: 1, weather: 'clear', ...(worldExtra as object) } as never);
+    s.setWorld({ seed, mode: gameMode as 'survival', worldType, name: `Świat ${name.trim() || 'Gracza'}`, time: 0.25, day: 1, weather: 'clear' } as never);
     wire(s);
     try {
       s.attach(createLocalLink(code, (raw) => s.ingest(raw)));
@@ -288,8 +245,7 @@ export default function MultiplayerScreen({
     }
     rtc.current = host;
     const s = new NetSession({ role: 'host', name: name.trim() || 'Gracz', transport: 'p2p' });
-    const extra2: object = gameMode === 'zombies' ? { zombiesMapId: zombiesMap } : {};
-    s.setWorld({ seed, mode: gameMode as 'survival', worldType, name: `Świat ${name.trim() || 'Gracza'}`, time: 0.25, day: 1, weather: 'clear', ...extra2 } as never);
+    s.setWorld({ seed, mode: gameMode as 'survival', worldType, name: `Świat ${name.trim() || 'Gracza'}`, time: 0.25, day: 1, weather: 'clear' } as never);
     wire(s);
     setStatus('connecting');
     try {
@@ -446,24 +402,6 @@ export default function MultiplayerScreen({
             <p className="text-[11px] leading-snug text-white/45">
               Do gry wystarczy przeglądarka i internet. Serwer działa 24/7 – nie musisz nic otwierać ani nikogo zapraszać.
             </p>
-            <div className="rounded border border-red-500/30 bg-red-950/30 p-3">
-              <div className="mb-2 text-sm font-bold text-red-300">🧟 Prywatny pokój ZOMBIES (Supabase) – z kodem</div>
-              <p className="mb-2 text-[11px] text-white/55">Stwórz pokój tylko dla znajomych – działa jak Hypixel party: kod ważny 24h, każdy widzi ten sam postęp rund.</p>
-              <div className="mb-2 grid grid-cols-4 gap-1">
-                {(Object.entries(ZOMBIES_MAPS) as [ZombiesMapId, { name: string }][]).map(([id, m]) => (
-                  <button key={id} type="button" className={`${zombiesMap === id ? 'mc-btn mc-btn-primary !py-1 !text-[10px]' : 'mc-btn !py-1 !text-[10px] opacity-60'}`} onClick={() => setZombiesMap(id as ZombiesMapId)}>{m.name}</button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <input className={`${inputCls} min-w-0 flex-1`} value={room} onChange={(e) => setRoom(e.target.value)} placeholder="kod-pokoju np. deadend-42" maxLength={24} onKeyDown={(e) => e.stopPropagation()} />
-                <button type="button" className={`${btn} !px-2`} onClick={() => setRoom(makeRoomCode())}>Losuj</button>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button type="button" className={btnPrimary} onClick={() => joinPrivateZombies(true)} disabled={busy}>Utwórz pokój</button>
-                <button type="button" className={btn} onClick={() => joinPrivateZombies(false)} disabled={busy}>Dołącz do kodu</button>
-              </div>
-              <p className="mt-1 text-[10px] text-white/35">Każdy pokój = osobny zapis w chmurze (blokcraft_blocks world=zombies-...), Realtime live. Solo dostajesz 2 AI botów do testu – patrz niżej.</p>
-            </div>
           </div>
         )}
 
@@ -518,27 +456,18 @@ export default function MultiplayerScreen({
                   <span className="mb-1 block text-xs uppercase tracking-widest text-white/50">Tryb / teren</span>
                   <div className="flex flex-col gap-1">
                     <div className="flex gap-1">
-                      <button type="button" className={`${btn} !px-2 !text-[11px]`} onClick={() => setGameMode(gameMode === 'survival' ? 'creative' : gameMode === 'creative' ? 'zombies' : 'survival')}>
-                        {gameMode === 'survival' ? 'Przetrwanie' : gameMode === 'creative' ? 'Kreatywny' : '🧟 ZOMBIES'}
+                      <button type="button" className={`${btn} !px-2 !text-[11px]`} onClick={() => setGameMode(gameMode === 'survival' ? 'creative' : 'survival')}>
+                        {gameMode === 'survival' ? 'Przetrwanie' : 'Kreatywny'}
                       </button>
-                      <button type="button" className={`${btn} !px-2 ${gameMode === 'zombies' ? 'opacity-40' : ''}`} onClick={() => setWorldType(worldType === 'normal' ? 'flat' : 'normal')} disabled={gameMode === 'zombies'}>
+                      <button type="button" className={`${btn} !px-2`} onClick={() => setWorldType(worldType === 'normal' ? 'flat' : 'normal')}>
                         {worldType === 'normal' ? 'Normalny' : 'Płaski'}
                       </button>
                     </div>
-                    {gameMode === 'zombies' && (
-                      <div className="grid grid-cols-2 gap-1">
-                        {(Object.entries(ZOMBIES_MAPS) as [ZombiesMapId, { name: string }][]).map(([id, m]) => (
-                          <button key={id} type="button" className={`${zombiesMap === id ? 'mc-btn mc-btn-primary !py-1 !text-[11px]' : 'mc-btn !py-1 !text-[11px] opacity-70'}`} onClick={() => setZombiesMap(id as ZombiesMapId)}>{m.name}</button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </label>
               </div>
             )}
-            {isHost && gameMode === 'zombies' && mode === 'local' && (
-              <div className="mb-2 text-xs text-red-300">Po wejściu wszyscy spawnują w {ZOMBIES_MAPS[zombiesMap].name} – drzwi 500-1500g, prąd 750g</div>
-            )}
+
 
             {mode === 'p2p' && (
               <div className="mb-3 space-y-2 rounded border border-white/10 bg-black/30 p-3">
