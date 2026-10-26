@@ -1,3 +1,4 @@
+import { structureInCell, structureBlocks, applyStructures, type StructureKind } from '../src/game/structures';
 /**
  * Headless smoke tests for the BlockCraft engine.
  *
@@ -102,7 +103,7 @@ import { Xp as XpClass } from '../src/game/xp';
 import { Game, MOB_NAMES, type SaveData, type TradeRow, type UIState } from '../src/game/engine';
 import { tryCreatePortal } from '../src/game/redstone';
 import { brewingKey, emptyBrewing } from '../src/game/brewing';
-import { VILLAGE_CELL, villageInCell, villageSpawnSpots, type Village } from '../src/game/village';
+import { VILLAGE_CELL, villageInCell, villageSpawnSpots, villageGroundAt, applyVillages, type Village, type VillageContext } from '../src/game/village';
 import {
   PROFESSIONS, VILLAGER_LEVEL_XP, applyTrade, canTrade, createVillagerState, offersFor,
   professionFor, restockIfDue, restockIn, usesLeft, villagerLevel, villagerProgress, villagerTitle,
@@ -1651,6 +1652,7 @@ section('update 1.6: villages');
       const ccx = Math.floor(village.x / CS);
       const ccz = Math.floor(village.z / CS);
       w.getChunk(ccx, ccz);
+      const graded = applyVillages(new Uint16Array(CS * CS * CH), ccx, ccz, ctx);
       let checked = 0;
       let bad = 0;
       for (let lx = 0; lx < CS; lx++)
@@ -1659,13 +1661,13 @@ section('update 1.6: villages');
           const z = ccz * CS + lz;
           if (Math.hypot(x - village.x, z - village.z) > village.radius - 4) continue;
           checked++;
-          if (w.heightAt(x, z) !== village.y) bad++;
+          if (graded.ground[lz * CS + lx] && w.heightAt(x, z) !== villageGroundAt(village, x, z, ctx)) bad++;
         }
-      check('heightMap knows the levelled ground', checked > 0 && bad === 0, `${bad}/${checked} kolumn`);
+      check('heightMap knows each local village ground height', checked > 0 && bad === 0, `${bad}/${checked} kolumn`);
     }
 
     // punkt startowy mieszkańców stoi na twardym gruncie
-    const spots = villageSpawnSpots(village);
+    const spots = villageSpawnSpots(village, ctx);
     check('spawn spots are provided', spots.length >= 10);
     const usable = spots.filter((sp) => IS_SOLID[w.getBlock(Math.floor(sp.x), Math.floor(sp.y) - 1, Math.floor(sp.z))]).length;
     check('most spawn spots have solid ground', usable / spots.length > 0.7, `${usable}/${spots.length}`);
@@ -3161,8 +3163,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('4.1'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Czysty Minecraft – bez ZOMBIES', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION.startsWith('4.2'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Naturalne osady i struktury', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -5446,7 +5448,8 @@ section('2.19: naturalne biomy i wioski');
     for (let dx = -v.radius + 4; dx <= v.radius - 4; dx += 4) for (let dz = -v.radius + 4; dz <= v.radius - 4; dz += 4) {
       const x = v.x + dx, z = v.z + dz;
       sampled++;
-      if (IS_SOLID[w.getBlock(x, v.y - 1, z)]) solidGround++;
+      const local = villageGroundAt(v, x, z, ctx);
+      if (IS_SOLID[w.getBlock(x, local - 1, z)]) solidGround++;
       if (!IS_SOLID[w.getBlock(x, v.y + 1, z)] || w.getBlock(x, v.y, z) !== B.AIR) atLevel++;
     }
     check('pod placem wioski jest twardy grunt', solidGround / sampled > 0.97, `${solidGround}/${sampled}`);
@@ -5459,7 +5462,7 @@ section('2.19: naturalne biomy i wioski');
   }
 
   const villageSrc = readSource('src/game/village.ts');
-  check('wioska wygładza teren na obrzeżach', /ease/.test(villageSrc) && /natural/.test(villageSrc));
+  check('wioska wygładza teren na obrzeżach', /smooth/.test(villageSrc) && /natural/.test(villageSrc));
   const worldSrc = readSource('src/game/world.ts');
   check('generator ma osobny szum rzek', /nRiver/.test(worldSrc));
   check('jaskinie nie otwierają dziur w powierzchni', /y < h - 2/.test(worldSrc));
@@ -5562,7 +5565,7 @@ section('2.20: słońce, kaktus, drzwi i dachy wiosek');
       let stairs = 0;
       for (let x = house.x - 1; x <= house.x + house.w; x++)
         for (let z = house.z - 1; z <= house.z + house.d; z++)
-          for (let y = vil.y + 4; y <= vil.y + 10; y++) {
+          for (let y = (house.y ?? vil.y) + 4; y <= (house.y ?? vil.y) + 10; y++) {
             const id = w3.getBlock(x, y, z);
             if (!stairId(id)) continue;
             stairs++;
@@ -5571,14 +5574,14 @@ section('2.20: słońce, kaktus, drzwi i dachy wiosek');
           }
       check('dach domu jest ze schodów', stairs > 20, `${stairs} bloków`);
       check('dach ma dwie połacie', dirs.size >= 2, [...dirs].join(','));
-      check('dach jest wyżej niż ściany', roofTop >= vil.y + 6, `szczyt=${roofTop - vil.y}`);
-      check('dom ma podmurówkę z bruku', w3.getBlock(house.x, vil.y, house.z) === B.COBBLE || w3.getBlock(house.x, vil.y, house.z) === B.SANDSTONE);
+      check('dach jest wyżej niż ściany', roofTop >= (house.y ?? vil.y) + 6, `szczyt=${roofTop - (house.y ?? vil.y)}`);
+      check('dom ma podmurówkę z bruku', w3.getBlock(house.x, (house.y ?? vil.y), house.z) === B.COBBLE || w3.getBlock(house.x, (house.y ?? vil.y), house.z) === B.SANDSTONE);
       // 2.29: łóżko to stopa + wezgłowie, więc w chacie muszą stać obie części.
       check('w środku domu stoi łóżko (stopa i wezgłowie)', (() => {
         let foot = false, head = false;
         for (let x = house.x + 1; x < house.x + house.w - 1; x++)
           for (let z = house.z + 1; z < house.z + house.d - 1; z++) {
-            const b = w3.getBlock(x, vil.y + 1, z);
+            const b = w3.getBlock(x, (house.y ?? vil.y) + 1, z);
             if (isBed(b) && !isBedHead(b)) foot = true;
             if (isBedHead(b)) head = true;
           }
@@ -5587,7 +5590,7 @@ section('2.20: słońce, kaktus, drzwi i dachy wiosek');
     }
   }
   const villageSrc = readSource('src/game/village.ts');
-  check('wioska buduje dwuspadowy dach', /gableRoof/.test(villageSrc) && /toRidge/.test(villageSrc));
+  check('wioska buduje dwuspadowy dach', /gableRoof/.test(villageSrc) && /st.stair \+ facing/.test(villageSrc));
   check('wioska nie stawia już płaskiej płyty', !/Dach: okap \+ coraz węższe warstwy/.test(villageSrc));
 
   // --- ręka: blok nie może zasłaniać pół ekranu
@@ -6748,6 +6751,129 @@ section('2.31: dźwięki mobów i przestrzeń jak w Minecrafcie');
   check('silnik woła kroki mobów', /Sfx\.playMobStep\(/.test(engine2));
   check('krok liczony z przebytej drogi, nie z czasu', /m\.stepDist > \(m\.type === 'chicken'/.test(engine2));
   check('stojący mob nie stuka', /if \(!m\.dead && m\.body\.onGround\)/.test(engine2));
+}
+
+section('4.2: terrain-following villages and vanilla-inspired landmarks');
+{
+  const ctx: VillageContext = { seed: 94217, flat: false, sea: SEA,
+    surface: (x, z) => ({ h: 82 + Math.floor(3 * Math.sin(x / 35) + 2 * Math.sin(z / 45)), biome: 'Równiny' }) };
+  let village: Village | null = null;
+  for (let x = -5; x <= 5 && !village; x++) for (let z = -5; z <= 5 && !village; z++) {
+    const v = villageInCell(x, z, ctx);
+    if (v && v.buildings.some(b => b.kind === 'house') && new Set(v.buildings.map(b => b.y)).size > 1) village = v;
+  }
+  check('sloping village has plots at different heights', !!village);
+  if (village) {
+    const v = village;
+    let untouched = 0, changed = 0;
+    for (let dx = -v.radius - 6; dx <= v.radius + 6; dx++) for (let dz = -v.radius - 6; dz <= v.radius + 6; dz++) {
+      const x = v.x + dx, z = v.z + dz;
+      const nearPlot = v.buildings.some(b => x >= b.x - 4 && x <= b.x + b.w + 3 && z >= b.z - 4 && z <= b.z + b.d + 3);
+      if (nearPlot) continue;
+      if (villageGroundAt(v, x, z, ctx) !== ctx.surface(x, z).h) changed++;
+      untouched++;
+    }
+    check('village preserves substantial unbuilt terrain', untouched > 100);
+    eq('unbuilt terrain retains its natural height', changed, 0);
+    for (const b of v.buildings.filter(b => b.kind === 'house')) {
+      const data = new Uint16Array(CS * CS * CH);
+      const cx = Math.floor(b.x / CS), cz = Math.floor(b.z / CS);
+      const result = applyVillages(data, cx, cz, ctx);
+      const at = (x: number, y: number, z: number) => data[(y * CS + z - cz * CS) * CS + x - cx * CS];
+      eq('foundation follows the individual plot height', at(b.x, b.y!, b.z), B.COBBLE);
+      eq('plot height is stored for mob spawning', result.ground[(b.z - cz * CS) * CS + b.x - cx * CS], b.y);
+      eq('foundation reaches ground rather than floating', at(b.x, b.y! - 1, b.z), B.DIRT);
+    }
+    const flatCtx = { ...ctx, flat: true, surface: () => ({ h: FLAT_H, biome: 'Równiny' }) };
+    const sameCell = villageInCell(v.gx, v.gz, flatCtx);
+    check('flat and natural caches remain separate with the same seed', sameCell?.buildings.every(b => b.y === FLAT_H) === true);
+  }
+
+  const kinds: [StructureKind, string][] = [['desert_temple', 'Pustynia'], ['jungle_ruin', 'Dżungla'], ['swamp_hut', 'Bagno'], ['ruined_portal', 'Las']];
+  for (const [kind, biome] of kinds) {
+    const context: VillageContext = { seed: 47117, flat: false, sea: SEA, surface: () => ({ h: 78, biome }) };
+    let s: ReturnType<typeof structureInCell> = null;
+    for (let gx = -5; gx <= 5 && !s; gx++) for (let gz = -5; gz <= 5 && !s; gz++) s = structureInCell(gx, gz, context);
+    check(`${kind} generates in its biome`, s?.kind === kind);
+    if (!s) continue;
+    const blocks = structureBlocks(s, context);
+    eq(`${kind} deterministic template`, JSON.stringify(blocks), JSON.stringify(structureBlocks(s, context)));
+    eq(`${kind} has no duplicate block coordinates`, new Set(blocks.map(b => `${b.x},${b.y},${b.z}`)).size, blocks.length);
+    check(`${kind} stays inside world bounds`, blocks.every(b => b.y > 0 && b.y < CH && BLOCKS[b.id]));
+    check(`${kind} includes accessible treasure`, blocks.some(b => isLootChest(b.id)));
+    check(`${kind} is a three-dimensional structure`, new Set(blocks.filter(b => b.id !== B.AIR).map(b => b.y)).size >= 6);
+    check(`${kind} never spawns an active portal`, !blocks.some(b => b.id === B.NETHER_PORTAL));
+    if (kind === 'desert_temple') {
+      eq('temple has four buried treasure chests', blocks.filter(b => isLootChest(b.id)).length, 4);
+      check('temple has a hollow main chamber', blocks.some(b => b.id === B.AIR && b.y === s!.y + 2));
+      check('temple has a way down to the vault', blocks.some(b => b.id >= B.LADDER_N && b.id <= B.LADDER_W && b.y < s!.y));
+    }
+    if (kind === 'swamp_hut') {
+      check('hut has stilts below its floor', blocks.some(b => b.id === B.LOG && b.y < s!.y));
+      check('hut roof is pitched', blocks.some(b => b.id >= B.OAK_STAIRS_N && b.id <= B.OAK_STAIRS_W));
+    }
+    // Compare every template voxel with chunk-clipped output in reverse order.
+    // An x/z position near a boundary forces the structure to cross multiple chunks.
+    const keys = [...new Set(blocks.map(b => `${Math.floor(b.x / CS)},${Math.floor(b.z / CS)}`))].reverse();
+    const chunks = new Map<string, Uint16Array>();
+    for (const key of keys) {
+      const [cx, cz] = key.split(',').map(Number);
+      const data = new Uint16Array(CS * CS * CH);
+      const mask = new Uint8Array(CS * CS);
+      const top = applyStructures(data, cx, cz, context, mask);
+      check(`${kind} reports its render bounds`, top > 0 && top < CH);
+      chunks.set(key, data);
+    }
+    let mismatch = 0;
+    for (const b of blocks) {
+      const cx = Math.floor(b.x / CS), cz = Math.floor(b.z / CS);
+      const data = chunks.get(`${cx},${cz}`)!;
+      if (data[(b.y * CS + b.z - cz * CS) * CS + b.x - cx * CS] !== b.id) mismatch++;
+    }
+    eq(`${kind} matches across chunk boundaries in reverse order`, mismatch, 0);
+    for (let rotation = 0; rotation < 4; rotation++) {
+      const rotated = structureBlocks({ ...s, rotation }, context);
+      eq(`${kind} rotation preserves volume`, rotated.length, blocks.length);
+      check(`${kind} rotation preserves a usable chest`, rotated.some(b => isLootChest(b.id)));
+    }
+  }
+  for (const biome of ['Ocean', 'Plaża', 'Nether']) {
+    const context: VillageContext = { seed: 47117, flat: false, sea: SEA, surface: () => ({ h: 78, biome }) };
+    check(`landmarks never appear in ${biome}`, Array.from({ length: 20 }, (_, n) => structureInCell(n - 10, 0, context)).every(s => s === null));
+  }
+  const flat: VillageContext = { ...ctx, flat: true };
+  check('superflat remains free of scattered landmarks', structureInCell(0, 0, flat) === null);
+  const steep: VillageContext = { ...ctx, surface: (x) => ({ h: 80 + ((x % 32) + 32) % 32, biome: 'Pustynia' }) };
+  check('landmarks reject cliffs instead of making floating platforms', Array.from({ length: 20 }, (_, n) => structureInCell(n - 10, 0, steep)).every(s => s === null));
+
+  // Full world integration: decorations do not overwrite templates, and edits win.
+  const world = new World(47117);
+  let landmark: ReturnType<typeof structureInCell> = null;
+  for (let gx = -8; gx <= 8 && !landmark; gx++) for (let gz = -8; gz <= 8 && !landmark; gz++) landmark = structureInCell(gx, gz, world.villageContext());
+  check('natural world contains scattered landmarks', !!landmark);
+  if (landmark) {
+    const blocks = structureBlocks(landmark, world.villageContext());
+    const second = new World(47117);
+    const coords = [...new Set(blocks.map(b => `${Math.floor(b.x / CS)},${Math.floor(b.z / CS)}`))];
+    for (const key of coords) { const [x,z] = key.split(',').map(Number); world.getChunk(x,z); }
+    for (const key of [...coords].reverse()) { const [x,z] = key.split(',').map(Number); second.getChunk(x,z); }
+    let differences = 0, overwritten = 0;
+    for (const b of blocks) {
+      if (world.getBlock(b.x,b.y,b.z) !== second.getBlock(b.x,b.y,b.z)) differences++;
+      if (world.getBlock(b.x,b.y,b.z) !== b.id) overwritten++;
+    }
+    eq('full generation is chunk-order independent', differences, 0);
+    eq('trees and decorations leave landmark blocks intact', overwritten, 0);
+    eq('world generation never records player edits', world.mods.size, 0);
+    const chest = blocks.find(b => isLootChest(b.id))!;
+    world.setBlock(chest.x, chest.y, chest.z, B.AIR);
+    const restored = new World(47117);
+    restored.loadMods(world.serializeMods());
+    eq('player edits override regenerated landmarks', restored.getBlock(chest.x, chest.y, chest.z), B.AIR);
+  }
+  const data = new Uint16Array(CS * CS * CH);
+  eq('flat landmark pass leaves terrain alone', applyStructures(data, 0, 0, flat, new Uint8Array(CS * CS)), 0);
+  check('mob loot still runs after the removed game mode', /this\.mobLoot\(m\)/.test(readSource('src/game/engine.ts')));
 }
 
 // =================================================================== report

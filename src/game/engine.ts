@@ -6507,6 +6507,7 @@ export class Game {
         this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2, m);
       } else if (m.dead && !m.looted) {
         m.looted = true;
+        this.mobLoot(m);
       }
     }
     this.mobs = this.mobs.filter((m) => {
@@ -7031,7 +7032,7 @@ export class Game {
     const near = this.mobs.filter((m) => !m.dead && isVillageMob(m.type) && Math.hypot(m.body.pos.x - v.x, m.body.pos.z - v.z) < 64);
     const villagers = near.filter((m) => m.type === 'villager').length;
     const golems = near.filter((m) => m.type === 'golem').length;
-    const spots = villageSpawnSpots(v);
+    const spots = villageSpawnSpots(v, this.world.villageContext());
     const free = (x: number, y: number, z: number) => {
       if (this.world.peekBlock(Math.floor(x), Math.floor(y), Math.floor(z)) !== B.AIR) return false;
       if (this.world.peekBlock(Math.floor(x), Math.floor(y) + 1, Math.floor(z)) !== B.AIR) return false;
