@@ -113,6 +113,7 @@ export default function EnchantScreen({ game, icons, onChange }: { game: Game; i
           stack={item}
           icons={icons}
           onHover={setHover}
+          onAction={(a) => { game.inventoryAction('enchant', 0, a); refresh(); }}
           onClick={(r) => { game.clickEnchantSlot(r); refresh(); }}
         />
         <GuiSlot

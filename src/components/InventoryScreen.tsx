@@ -10,24 +10,7 @@ import Slot from './Slot';
 import CloseButton from './CloseButton';
 import { SkinAvatar } from './SkinPicker';
 
-/**
- * 2.13: ekwipunek w układzie z Minecrafta.
- *
- * Wcześniej crafting był osobnym panelem obok plecaka, siatka 3×3 udawała
- * 2×2 (z wygaszonymi polami), a na telefonie całość trzeba było przewijać,
- * żeby w ogóle zobaczyć przepisy. Teraz jest jak w grze:
- *
- *  • po lewej zbroja i podgląd własnej postaci,
- *  • obok siatka rzemieślnicza: 2×2 w plecaku, 3×3 przy stole,
- *  • pod spodem 27 slotów plecaka i pasek szybkiego dostępu,
- *  • „Receptury” to odpowiednik książki przepisów – tapnij pozycję i masz
- *    przedmiot bez przekładania składników.
- *
- * Najważniejsza poprawka dotyczy układania składników dotykiem: tapnięcie
- * kładzie JEDEN przedmiot (a nie cały stos), więc „4 deski w kwadracie”
- * da się zrobić czterema tapnięciami – wcześniej trzeba było przytrzymywać
- * palec i prawie nikt tego nie odkrywał.
- */
+/** Player inventory: standard mouse buttons, Shift transfer/crafting and hovered-slot keys. */
 export default function InventoryScreen({
   game,
   icons,
@@ -81,14 +64,10 @@ export default function InventoryScreen({
     refresh();
   };
 
-  /**
-   * Siatka rzemieślnicza: z kursorem tapnięcie kładzie jedną sztukę,
-   * przytrzymanie – cały stos. Bez kursora tapnięcie bierze wszystko,
-   * przytrzymanie – połowę (jak PPM w Minecrafcie).
-   */
+  // The same LPM/PPM semantics as every other inventory slot.
   const clickGrid = (i: number, right: boolean) => {
     if (!inv.cursor && !inv.grid[i]) return;
-    inv.clickGrid(i, inv.cursor ? !right : right);
+    inv.clickGrid(i, right);
     refresh();
   };
 
@@ -97,19 +76,11 @@ export default function InventoryScreen({
     const cur = inv.cursor;
     if (cur && !mergeable(cur, gridMatch.out)) return;
     const room = cur ? stackLimit(cur.id) - cur.count : stackLimit(gridMatch.out.id);
-    if (room <= 0) return;
+    if (room < gridMatch.out.count) return;
     const made = inv.craftGrid(atTable);
     if (!made) return;
-    const take = Math.min(made.count, room);
-    if (cur) {
-      cur.count += take;
-    } else {
-      inv.cursor = { ...made, count: take, ...(made.ench ? { ench: { ...made.ench } } : {}) };
-    }
-    if (made.count > take && !inv.add(made.id, made.count - take, made.dur, made.ench, made.name)) {
-      game.spawnDrop(made.id, made.count - take, game.body.pos.x, game.body.pos.y + 1, game.body.pos.z, made.dur, undefined, undefined, undefined, made.ench, made.name);
-      game.message('Brak miejsca – nadmiar wytworzonego przedmiotu upadł na ziemię.');
-    }
+    if (cur) cur.count += made.count;
+    else inv.cursor = { ...made, ...(made.ench ? { ench: { ...made.ench } } : {}) };
     game.onCraft(made.id);
     refresh();
   };
@@ -143,7 +114,7 @@ export default function InventoryScreen({
     <div className="mc-inv-hotbar flex gap-0">
       {inv.slots.slice(0, 9).map((s, i) => (
         <div key={i} data-hotbar-slot={i} className="contents">
-          <Slot stack={s} icons={icons} onClick={(r) => clickSlot(i, r)} onHover={setHover} showCount={!creative} highlight={i === game.selected} />
+          <Slot stack={s} icons={icons} onAction={(a) => { game.inventoryAction('inventory', i, a); refresh(); }} onClick={(r) => clickSlot(i, r)} onHover={setHover} showCount={!creative} highlight={i === game.selected} />
         </div>
       ))}
     </div>
@@ -198,6 +169,7 @@ export default function InventoryScreen({
                       <Slot
                         key={i}
                         stack={s}
+                        onAction={(a) => { game.inventoryAction('armor', i, a); refresh(); }}
                         icons={icons}
                         onClick={() => {
                           game.clickArmorSlot(i);
@@ -231,6 +203,7 @@ export default function InventoryScreen({
                           stack={inv.grid[i]}
                           icons={icons}
                           onHover={setHover}
+                          onAction={(a) => { game.inventoryAction('grid', i, a); refresh(); }}
                           onClick={(right) => clickGrid(i, right)}
                         />
                       </div>
@@ -243,6 +216,7 @@ export default function InventoryScreen({
                       icons={icons}
                       showCount
                       onHover={setHover}
+                      onAction={(a) => { if (a.type === 'quick') { game.quickCraft(); refresh(); } else if (a.type === 'collect') takeResult(); }}
                       onClick={takeResult}
                     />
                   </div>
@@ -267,7 +241,7 @@ export default function InventoryScreen({
 
                 <div className="mc-inv-storage">
                   {inv.slots.slice(9, 36).map((s, i) => (
-                    <Slot key={i + 9} stack={s} icons={icons} onClick={(r) => clickSlot(i + 9, r)} onHover={setHover} />
+                    <Slot key={i + 9} stack={s} icons={icons} onAction={(a) => { game.inventoryAction('inventory', i + 9, a); refresh(); }} onClick={(r) => clickSlot(i + 9, r)} onHover={setHover} />
                   ))}
                 </div>
                 {hotbar}
@@ -275,8 +249,9 @@ export default function InventoryScreen({
             </div>
 
             <div className="mc-inv-hint">
+              Shift+klik: przenieś stos / wytwórz serię · 1–9: zamień z paskiem · Dwuklik: zbierz stos · Q / Ctrl+Q: wyrzuć.
               {atTable
-                ? 'Ułóż wzór w siatce 3×3 i tapnij wynik. Tapnięcie kładzie 1 sztukę, przytrzymanie – cały stos.'
+                ? 'Ułóż wzór w siatce 3×3 i tapnij wynik. LPM / tapnięcie: cały stos; PPM / przytrzymanie: 1 sztuka.'
                 : 'Siatka 2×2: tapnij składnik, potem pole siatki. 1 pień → 4 deski, 4 deski w kwadracie → stół rzemieślniczy.'}
             </div>
           </div>

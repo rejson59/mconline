@@ -1,5 +1,5 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.2.1';
+export const GAME_VERSION = '4.2.2';
 export const GAME_RELEASE_NAME = 'Naturalne osady i struktury';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';

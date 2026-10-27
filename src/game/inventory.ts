@@ -465,7 +465,7 @@ export class Inventory {
     const r = this.gridMatch(table);
     if (!r) return null;
     const out: Stack = { ...r.out };
-    for (let i = 0; i < 9; i++) {
+    for (const i of table ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [0, 1, 3, 4]) {
       const cell = this.grid[i];
       if (!cell) continue;
       cell.count -= 1;

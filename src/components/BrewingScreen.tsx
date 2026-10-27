@@ -94,6 +94,7 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
               stack={b}
               icons={icons}
               onHover={setHover}
+              onAction={(a) => { game.inventoryAction('brewing', i, a); refresh(); }}
               onClick={(r) => { game.clickBrewing((['b0', 'b1', 'b2'] as const)[i], r); refresh(); }}
               highlight={lit}
             />
@@ -105,6 +106,7 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
           stack={stand.ingredient}
           icons={icons}
           onHover={setHover}
+          onAction={(a) => { game.inventoryAction('brewing', 3, a); refresh(); }}
           onClick={(r) => { game.clickBrewing('ingredient', r); refresh(); }}
         />
         <GuiSlot
@@ -114,6 +116,7 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
           icons={icons}
           dim={noFuel}
           onHover={(t) => setHover(`${t ?? 'Paliwo'}${hasFuelLeft ? `\n§7zapas: ${stand.fuelLeft}` : ''}`)}
+          onAction={(a) => { game.inventoryAction('brewing', 4, a); refresh(); }}
           onClick={(r) => { game.clickBrewing('fuel', r); refresh(); }}
         />
 

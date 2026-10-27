@@ -46,6 +46,7 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
           stack={f.input}
           icons={icons}
           onHover={setHover}
+          onAction={(a) => { game.inventoryAction('furnace', 0, a); refresh(); }}
           onClick={(r) => { game.clickFurnace('input', r); refresh(); }}
         />
         <GuiSlot
@@ -54,6 +55,7 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
           stack={f.fuel}
           icons={icons}
           onHover={setHover}
+          onAction={(a) => { game.inventoryAction('furnace', 1, a); refresh(); }}
           onClick={(r) => { game.clickFurnace('fuel', r); refresh(); }}
         />
         <GuiSlot
@@ -62,6 +64,7 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
           stack={f.output}
           icons={icons}
           onHover={setHover}
+          onAction={(a) => { game.inventoryAction('furnace', 2, a); refresh(); }}
           onClick={(r) => { game.clickFurnace('output', r); refresh(); }}
         />
 

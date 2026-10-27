@@ -1,4 +1,6 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import { useSlotNavigation } from './useSlotNavigation';
+import type { SlotAction } from '../game/inventoryNavigation';
 import type { Stack } from '../game/inventory';
 import { durabilityMax } from '../game/items';
 import { stackTooltip } from '../utils/tooltip';
@@ -22,6 +24,7 @@ export default function Slot({
   stack,
   icons,
   onClick,
+  onAction,
   onHover,
   showCount = true,
   highlight = false,
@@ -31,31 +34,46 @@ export default function Slot({
   icons: Record<number, string>;
   /** `right = true` to akcja prawego przycisku (połowa stosu / jeden szt.). */
   onClick?: (right: boolean) => void;
+  onAction?: (action: SlotAction) => void;
   onHover?: (name: string | null) => void;
   showCount?: boolean;
   highlight?: boolean;
   imgSize?: number;
 }) {
+  const navigation = useSlotNavigation(onAction);
   const pressTimer = useRef<number | null>(null);
   const firedLongPress = useRef(false);
 
   const clearTimer = () => {
     if (pressTimer.current !== null) {
-      clearTimeout(pressTimer.current);
+      window.clearTimeout(pressTimer.current);
       pressTimer.current = null;
     }
   };
 
+  useEffect(() => clearTimer, []);
+
   return (
     <div
       className="mc-slot cursor-pointer"
+      role={onClick || onAction ? 'button' : undefined}
+      tabIndex={onClick || onAction ? 0 : undefined}
+      onFocus={navigation.enter}
+      onBlur={navigation.leave}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (e.shiftKey && onAction) onAction({ type: 'quick' });
+          else onClick?.(false);
+        }
+      }}
       style={highlight ? { outline: '2px solid #fff', zIndex: 1 } : undefined}
       onPointerDown={(e) => {
         if (e.pointerType === 'mouse') {
           // Mysz: LPM / PPM jak dotychczas.
           if (e.button !== 0 && e.button !== 2) return;
           e.preventDefault();
-          onClick?.(e.button === 2);
+          if (!navigation.pointer(e)) onClick?.(e.button === 2);
           return;
         }
         // Dotyk/pióro: tap = LPM, przytrzymanie = PPM.
@@ -99,8 +117,8 @@ export default function Slot({
         firedLongPress.current = false;
       }}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseEnter={() => onHover?.(stackTooltip(stack))}
-      onMouseLeave={() => onHover?.(null)}
+      onMouseEnter={() => { navigation.enter(); onHover?.(stackTooltip(stack)); }}
+      onMouseLeave={() => { navigation.leave(); onHover?.(null); }}
     >
       {stack && <img src={icons[stack.id]} className="pixelated pointer-events-none" width={imgSize} height={imgSize} draggable={false} />}
       {stack && showCount && stack.count > 1 && <span className="mc-count">{stack.count}</span>}

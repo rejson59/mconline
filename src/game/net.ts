@@ -256,7 +256,7 @@ export interface NetLike {
   tick(): void;
   close(reason?: string): void;
   /** 2.19: zapis postępu gracza (tylko serwer publiczny). */
-  saveProfile?(profile: PlayerProfile): void;
+  saveProfile?(profile: PlayerProfile, force?: boolean): void;
   /** 2.19: prośba o teleportację do innego gracza (id odbiorcy). */
   sendTeleport?(to: string, t: NetTeleport): void;
 }

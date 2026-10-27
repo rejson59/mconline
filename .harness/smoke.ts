@@ -1,3 +1,5 @@
+import { arraySlots, quickMove, swapSlots, collectStacks } from '../src/game/inventoryNavigation';
+import { cacheProfile, loadCachedProfile } from '../src/game/profile';
 import { structureInCell, structureBlocks, applyStructures, type StructureKind } from '../src/game/structures';
 /**
  * Headless smoke tests for the BlockCraft engine.
@@ -3300,7 +3302,7 @@ section('2.13: ekwipunek i crafting jak w Minecrafcie');
 
   const screen = readSource('src/components/InventoryScreen.tsx');
   check('plecak ma siatkę 2×2 i 3×3', screen.includes('mc-craft-grid') && screen.includes('is-3') && screen.includes('is-2'));
-  check('tapnięcie w siatce odwraca akcję prawego przycisku', /inv\.clickGrid\(i, inv\.cursor \? !right : right\)/.test(screen));
+  check('LPM/PPM w siatce działa tak samo jak w plecaku', screen.includes('inv.clickGrid(i, right)'));
   check('są skróty „Deski” i „Stół rzemieślniczy”', screen.includes('Deski (') && screen.includes("label: 'Stół rzemieślniczy'"));
   check('książka przepisów jest domyślna na dużym ekranie', screen.includes('initialBookOpen'));
   check('plecak pokazuje podgląd postaci', screen.includes('SkinAvatar') && screen.includes('getSkinId'));
@@ -4417,7 +4419,7 @@ section('2.10: multiplayer wpięty w grę');
   eq('sesję zamyka tylko dispose', (engine.match(/this\.net\?\.close\(/g) ?? []).length, 1);
   check('dispose zamyka sesję', /dispose\(\)[\s\S]{0,1400}this\.net\?\.close\(/.test(engine));
   check('zmiana wymiaru chowa awatary zamiast zrywać sesję', /Awatary są przywiązane do współrzędnych wymiaru/.test(engine));
-  check('silnik nie zapisuje sesji sieciowej do slotów', /if \(this\.net\) return;/.test(engine));
+  check('silnik zapisuje profil sieciowy zamiast świata w slotach', /if \(this\.net\) \{ this\.saveProfileNow\(\); return; \}/.test(engine));
   check('silnik odtwarza migawkę zmian od gospodarza', /applyNetEdits\(net\.world\.edits\)/.test(engine));
   check('silnik rysuje awatary innych graczy', /makeAvatar/.test(engine));
   check('gość startuje obok gospodarza', /net\.world\.spawn/.test(engine));
@@ -7026,6 +7028,221 @@ section('4.2.1: door thresholds and intentional chest opening');
   use.tryUse();
   check('a fresh press can close the door', !isDoorOpen(world.getBlock(2, y, 2)));
   material.dispose();
+}
+
+section('4.2.2: durable multiplayer profile and ordered saves');
+{
+  const pid = 'p1234567890abcdef123';
+  const profile = sanitizeProfile({ pid, x: 123.375, y: 65.9375, z: -8.625, updated: 1000,
+    dim: 'n', yaw: 0.52, pitch: -0.2, health: 17.5, hunger: 19.987, xp: 42,
+    inv: [{ id: B.LOG, count: 13 }], armor: [{ id: I.IRON_HELMET, count: 1, dur: 21 }],
+    cursor: { id: B.PLANKS, count: 7, name: 'Named' }, grid: [{ id: B.LOG, count: 3 }],
+    enchantItem: { id: I.IRON_PICK, count: 1, dur: 17, ench: { efficiency: 2 }, name: 'Tool' },
+  })!;
+  const row = profileRow(profile, 'test-save');
+  const restored = sanitizeProfile(row)!;
+  eq('cloud row keeps exact fractional XYZ', `${row.x},${row.y},${row.z}`, '123.375,65.9375,-8.625');
+  eq('cloud roundtrip reads updated_at, not current time', restored.updated, 1000);
+  eq('cloud roundtrip retains fractional hunger', restored.hunger, 19.987);
+  eq('cursor survives leaving with the inventory open', restored.cursor?.count, 7);
+  eq('crafting ingredients survive reconnect', restored.grid?.[0]?.count, 3);
+  eq('enchanting item keeps all metadata', JSON.stringify(restored.enchantItem), JSON.stringify(profile.enchantItem));
+  eq('legacy inv array remains compatible', restored.inv.length, 36);
+  cacheProfile('test-save', profile);
+  eq('local checkpoint survives a new session', loadCachedProfile('test-save', pid)?.inv[0]?.count, 13);
+  eq('profile cache is scoped to world', loadCachedProfile('other-save', pid), null);
+  eq('blocked storage is handled', cacheProfile('test', profile, { getItem() { throw Error('denied'); }, setItem() { throw Error('denied'); } }), false);
+  const corruptStorage = { getItem: () => '{broken', setItem() {} };
+  eq('corrupt cache does not crash loading', loadCachedProfile('test', pid, corruptStorage), null);
+  const vitalsSql = readSource('supabase/migrations/202610270001_player_vitals_fractional.sql');
+  check('migration fixes the fractional hunger/health rejection', /health TYPE double precision/.test(vitalsSql) && /hunger TYPE double precision/.test(vitalsSql));
+  check('DB ignores late writes from an older session', /NEW.updated_at < OLD.updated_at/.test(readSource('supabase/migrations/202610270002_player_profile_keep_newest.sql')));
+
+  let remote: unknown[] = [];
+  let readError = false;
+  let writeError = false;
+  let hold: (() => void) | null = null;
+  let delay = false;
+  const writes: Record<string, unknown>[] = [];
+  const client = { from() {
+    const q = {
+      select() { return q; }, eq() { return q; },
+      limit() { return Promise.resolve({ data: remote, error: readError ? { message: 'offline' } : null }); },
+      async upsert(r: Record<string, unknown>) {
+        writes.push(r);
+        if (delay) { delay = false; await new Promise<void>((resolve) => { hold = resolve; }); }
+        return { error: writeError ? { message: 'offline' } : null };
+      },
+    }; return q;
+  } };
+  const srv = new PublicServer({ name: 'Tester', pid, worldId: 'test-save', client: client as never });
+  const api = srv as unknown as { loadProfile(): Promise<ReturnType<typeof sanitizeProfile>> };
+  remote = [profileRow({ ...profile, updated: 500, x: 5 }, 'test-save')];
+  eq('newer local save wins over stale cloud', (await api.loadProfile())?.x, 123.375);
+  remote = [profileRow({ ...profile, updated: 2000, x: 8 }, 'test-save')];
+  eq('newer cloud save wins over local cache', (await api.loadProfile())?.x, 8);
+  readError = true;
+  eq('network read failure restores cached inventory', (await api.loadProfile())?.inv[0]?.count, 13);
+  const noCache = new PublicServer({ name: 'Tester', pid, worldId: 'no-cache', client: client as never });
+  let rejected = false;
+  try { await (noCache as unknown as typeof api).loadProfile(); } catch { rejected = true; }
+  check('failed cloud read without backup cannot create an empty player', rejected);
+  readError = false;
+  remote = [];
+  eq('a confirmed first visit is still a new player', await (noCache as unknown as typeof api).loadProfile(), null);
+
+  delay = true;
+  srv.saveProfile({ ...profile, updated: 3000, x: 30 }, true);
+  srv.saveProfile({ ...profile, updated: 4000, x: 40 }, true);
+  srv.saveProfile({ ...profile, updated: 5000, x: 50 }, true);
+  eq('concurrent saves wait for the in-flight request', writes.length, 1);
+  eq('latest snapshot is cached synchronously before HTTP completes', loadCachedProfile('test-save', pid)?.x, 50);
+  (hold as unknown as () => void)();
+  await new Promise((r) => setTimeout(r, 0));
+  eq('queued writes coalesce to the newest snapshot', writes.length, 2);
+  eq('slow old request finishes before the exit snapshot', writes[1]?.x, 50);
+  const count = writes.length;
+  srv.saveProfile({ ...profile, updated: 6000, x: 60 });
+  eq('periodic save throttles HTTP', writes.length, count);
+  eq('throttling never skips the local checkpoint', loadCachedProfile('test-save', pid)?.x, 60);
+  srv.close();
+  await new Promise((r) => setTimeout(r, 0));
+  eq('close flushes the newest throttled snapshot', writes.at(-1)?.x, 60);
+
+  const failureSrv = new PublicServer({ name: 'Tester', pid, worldId: 'failed-write', client: client as never });
+  const warnings: string[] = [];
+  failureSrv.onChat = (_name, text) => warnings.push(text);
+  writeError = true;
+  failureSrv.saveProfile({ ...profile, updated: 7000 }, true);
+  await new Promise((r) => setTimeout(r, 0));
+  check('failed cloud save is visible rather than silently discarded', warnings.some((m) => m.includes('lokalnie')));
+  eq('failed cloud save retains inventory locally', loadCachedProfile('failed-write', pid)?.cursor?.count, 7);
+  writeError = false;
+  failureSrv.saveProfile({ ...profile, updated: 8000, x: 80 }, true);
+  await new Promise((r) => setTimeout(r, 0));
+  eq('a subsequent save retries cloud persistence', writes.at(-1)?.x, 80);
+
+  const g = Object.assign(Object.create(Game.prototype), {
+    playerId: pid, netName: 'Tester', netSkin: 'steve', isInNether: true,
+    body: { pos: new THREE.Vector3(profile.x, profile.y, profile.z) },
+    yaw: profile.yaw, pitch: profile.pitch, health: profile.health, hunger: profile.hunger,
+    xp: new Xp(42), inventory: new Inventory(), armor: profile.armor, enchantItem: profile.enchantItem,
+    net: { public: true, saveProfile: (p: unknown, force: boolean) => { saved = p; forced = force; } },
+  });
+  g.inventory.slots = profile.inv; g.inventory.grid = profile.grid; g.inventory.cursor = profile.cursor;
+  let saved: unknown = null, forced = false;
+  g.save();
+  check('Game.save no longer ignores multiplayer', !!saved && forced);
+  const snapshot = g.buildProfile();
+  eq('game snapshot includes the UI cursor', snapshot.cursor?.count, 7);
+  g.inventory.cursor.count = 1;
+  eq('snapshot does not alias live cursor items', snapshot.cursor?.count, 7);
+  const air = { getBlock: () => B.AIR, getChunk() {} };
+  const reload = Object.assign(Object.create(Game.prototype), {
+    body: { pos: new THREE.Vector3(), vel: new THREE.Vector3(1, 2, 3) },
+    isInNether: true, world: air, spawnPoint: new THREE.Vector3(), inventory: new Inventory(), armor: Array(4).fill(null),
+  });
+  reload.applyProfile(snapshot);
+  eq('game restores exact saved feet position', reload.body.pos.y, 65.9375);
+  eq('game restores saved dimension and yaw', `${reload.isInNether},${reload.yaw}`, 'true,0.52');
+  eq('game restores inventory and armor', reload.inventory.slots[0]?.count, 13);
+  eq('game restores crafting grid', reload.inventory.grid[0]?.count, 3);
+  eq('game restores cursor', reload.inventory.cursor?.count, 7);
+}
+
+section('4.2.2: Minecraft-style quick inventory actions');
+{
+  const a = [{ id: B.LOG, count: 20 }] as (Stack | null)[];
+  const b = [null, { id: B.LOG, count: 60 }] as (Stack | null)[];
+  eq('Shift transfer moves the whole source', quickMove(arraySlots(a)[0], arraySlots(b)), 20);
+  eq('Shift fills existing stacks before empty cells', b[1]?.count, 64);
+  eq('Shift puts the remainder into an empty cell', b[0]?.count, 16);
+  eq('empty source is cleared', a[0], null);
+  a[0] = { id: B.LOG, count: 10 };
+  b[0] = { id: B.LOG, count: 63 }; b[1] = { id: B.STONE, count: 64 };
+  eq('full target accepts only what fits', quickMove(arraySlots(a)[0], arraySlots(b)), 1);
+  eq('partial transfer retains source remainder', a[0]?.count, 9);
+  eq('full target is a no-op', quickMove(arraySlots(a)[0], arraySlots(b)), 0);
+  const named = { id: I.IRON_PICK, count: 1, dur: 17, ench: { efficiency: 2 }, name: 'My pick' };
+  a[0] = structuredClone(named); b[0] = null;
+  quickMove(arraySlots(a)[0], arraySlots(b));
+  eq('quick move keeps durability, enchants and name', JSON.stringify(b[0]), JSON.stringify(named));
+  b[0] = { id: B.LOG, count: 2, name: 'A' }; a[0] = { id: B.LOG, count: 3, name: 'B' };
+  eq('different names cannot merge', quickMove(arraySlots(a)[0], arraySlots(b)), 0);
+  check('number keys swap complete stacks', swapSlots(arraySlots(a)[0], arraySlots(b)[0]));
+  eq('number keys preserve custom names', a[0]?.name, 'A');
+  const input = { ...arraySlots(a)[0], accepts: (s: Stack) => s.id === B.STONE };
+  const old = JSON.stringify([a, b]);
+  check('invalid hotbar swap is rejected atomically', !swapSlots(input, arraySlots(b)[0]));
+  eq('failed swap changes neither slot', JSON.stringify([a, b]), old);
+  const cursor = { id: B.LOG, count: 60 };
+  b[0] = { id: B.LOG, count: 10 }; b[1] = { id: B.LOG, count: 20, name: 'Named' };
+  eq('double-click collects only up to stack limit', collectStacks(cursor, arraySlots(b)), 4);
+  eq('double-click leaves overflow in the source', b[0]?.count, 6);
+  eq('double-click does not mix named and plain stacks', b[1]?.count, 20);
+
+  const inv = new Inventory();
+  const chest = { slots: Array(27).fill(null) };
+  const furnace = emptyFurnace(0, 64, 0);
+  const drops: unknown[][] = [];
+  const g = Object.assign(Object.create(Game.prototype), {
+    inventory: inv, ui: 'inventory', armor: Array(4).fill(null), body: { pos: new THREE.Vector3(0, 65, 0) },
+    currentChest: () => chest, currentFurnace: () => furnace,
+    spawnDrop: (...args: unknown[]) => drops.push(args), onCraft() {}, notePickup() {}, unlock() {},
+  });
+  inv.slots[0] = { id: B.LOG, count: 12 };
+  inv.cursor = { id: B.STONE, count: 5 };
+  g.inventoryAction('inventory', 0, { type: 'quick' });
+  eq('Shift hotbar moves to backpack', inv.slots[9]?.count, 12);
+  eq('Shift leaves cursor untouched', inv.cursor?.count, 5);
+  g.inventoryAction('inventory', 9, { type: 'quick' });
+  eq('Shift backpack moves back to hotbar', inv.slots[0]?.count, 12);
+  inv.slots[10] = { id: I.IRON_HELMET, count: 1, dur: 12 };
+  g.inventoryAction('inventory', 10, { type: 'quick' });
+  eq('Shift auto-equips matching armor', g.armor[0]?.dur, 12);
+  g.inventoryAction('armor', 0, { type: 'quick' });
+  eq('Shift unequips armor back into inventory', g.armor[0], null);
+  g.ui = 'chest';
+  g.inventoryAction('inventory', 0, { type: 'quick' });
+  eq('Shift inventory sends items into open chest', chest.slots[0]?.count, 12);
+  g.inventoryAction('chest', 0, { type: 'hotbar', index: 2 });
+  eq('1-9 works from container to hotbar', inv.slots[2]?.count, 12);
+  g.inventoryAction('inventory', 2, { type: 'drop', all: false });
+  eq('Q drops exactly one', drops.at(-1)?.[1], 1);
+  eq('Q leaves the rest', inv.slots[2]?.count, 11);
+  g.inventoryAction('inventory', 2, { type: 'drop', all: true });
+  eq('Ctrl+Q drops the whole remainder', drops.at(-1)?.[1], 11);
+  eq('Ctrl+Q clears the hovered slot', inv.slots[2], null);
+  g.ui = 'furnace';
+  inv.slots[0] = { id: B.IRON_ORE, count: 6 };
+  g.inventoryAction('inventory', 0, { type: 'quick' });
+  eq('Shift sends smeltable items to furnace input', furnace.input?.count, 6);
+  inv.slots[0] = { id: I.COAL, count: 4 };
+  g.inventoryAction('inventory', 0, { type: 'quick' });
+  eq('Shift sends fuel to furnace fuel slot', furnace.fuel?.count, 4);
+  furnace.output = { id: I.IRON, count: 3 };
+  inv.slots[1] = { id: B.LOG, count: 1 };
+  g.inventoryAction('furnace', 2, { type: 'hotbar', index: 1 });
+  eq('furnace output rejects insertion via hotbar swap', furnace.output?.id, I.IRON);
+  g.inventoryAction('furnace', 2, { type: 'quick' });
+  eq('Shift takes furnace output without cursor', furnace.output, null);
+  g.ui = 'inventory';
+  inv.slots.fill(null); inv.grid.fill(null); inv.cursor = null;
+  inv.grid[0] = { id: B.LOG, count: 5 };
+  g.quickCraft();
+  eq('Shift crafting repeats until ingredients are exhausted', inv.countOf(B.PLANKS), 20);
+  eq('Shift crafting consumes exactly its inputs', inv.grid[0], null);
+  inv.slots.fill(null); inv.grid[0] = { id: B.LOG, count: 5 };
+  inv.slots = inv.slots.map(() => ({ id: B.STONE, count: 64 }));
+  g.quickCraft();
+  eq('full inventory never consumes crafting ingredients', inv.grid[0]?.count, 5);
+  inv.slots[0] = { id: B.PLANKS, count: 60 };
+  g.quickCraft();
+  eq('Shift crafting stops as soon as the next batch cannot fit', inv.grid[0]?.count, 4);
+  eq('Shift crafting respects the output stack limit', inv.slots[0]?.count, 64);
+  inv.grid[8] = { id: B.STONE, count: 2 };
+  inv.craftGrid(false);
+  eq('2x2 crafting does not consume hidden 3x3 cells', inv.grid[8]?.count, 2);
 }
 
 // =================================================================== report

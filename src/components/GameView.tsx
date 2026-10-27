@@ -303,13 +303,13 @@ export default function GameView({
       )}
       {/* 2.13: w grze wymuszamy poziom – w pionie HUD i sterowanie na siebie nachodzą. */}
       {wantsLandscape && <OrientationGuard />}
-      {game && ui === 'inventory' && <InventoryScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'furnace' && <FurnaceScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'anvil' && <AnvilScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'brewing' && <BrewingScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'inventory' && <InventoryScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'furnace' && <FurnaceScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'anvil' && <AnvilScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'brewing' && <BrewingScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+      {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
       {game && hud && ui === 'journal' && <JournalScreen hud={hud} unlocked={game.achievementIds()} onClose={() => game.setUI('playing')} />}
       {game && ui === 'waypoints' && <WaypointsScreen game={game} onClose={() => game.setUI('playing')} />}
       {game && ui === 'chat' && (
