@@ -33,6 +33,7 @@ const HELD_LIGHT_ITEMS: ReadonlySet<number> = new Set<number>([
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
 import { Inventory, RECIPES, type Stack } from './inventory';
+import { arraySlots, quickMove, swapSlots, collectStacks, type StackSlot, type SlotArea, type SlotAction } from './inventoryNavigation';
 import { COMMANDS, commandByName, searchCommands } from './commands';
 import {
   POS_HZ,
@@ -1402,6 +1403,9 @@ export class Game {
     this.fallStart = p.y;
     if (Array.isArray(p.inv)) for (let i = 0; i < this.inventory.slots.length; i++) this.inventory.slots[i] = p.inv[i] ?? null;
     if (Array.isArray(p.armor)) for (let i = 0; i < this.armor.length; i++) this.armor[i] = p.armor[i] ?? null;
+    this.inventory.cursor = p.cursor ?? null;
+    this.inventory.grid = p.grid?.slice() ?? new Array(9).fill(null);
+    this.enchantItem = p.enchantItem ?? null;
     if (Number.isFinite(p.health)) this.health = Math.max(1, Math.min(20, p.health));
     if (Number.isFinite(p.hunger)) this.hunger = Math.max(0, Math.min(20, p.hunger));
     if (Number.isFinite(p.xp)) this.xp = new Xp(Math.max(0, p.xp));
@@ -1457,14 +1461,17 @@ export class Game {
       health: this.health,
       hunger: this.hunger,
       xp: this.xp.total,
+      cursor: this.inventory.cursor ? structuredClone(this.inventory.cursor) : null,
+      grid: this.inventory.grid.map((st) => st ? structuredClone(st) : null),
+      enchantItem: this.enchantItem ? structuredClone(this.enchantItem) : null,
       inv: this.inventory.slots.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
       armor: this.armor.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
     };
   }
 
   /** 2.19: zapis postępu bez czekania na koniec (np. przed wyjściem). */
-  saveProfileNow() {
-    if (this.net?.public && this.net.saveProfile) this.net.saveProfile(this.buildProfile());
+  saveProfileNow(force = true) {
+    if (this.net?.public && this.net.saveProfile) this.net.saveProfile(this.buildProfile(), force);
   }
 
   /** 2.19: prośba o teleportację do gracza o podanym nicku (lub id). */
@@ -2951,6 +2958,85 @@ export class Game {
     return this.chests.get(this.cKey(this.chestPos.x, this.chestPos.y, this.chestPos.z)) ?? null;
   }
 
+  /** Shared keyboard/Shift navigation for the backpack and container screens. */
+  private navigationSlots(area: SlotArea): StackSlot[] {
+    if (area === 'inventory') return arraySlots(this.inventory.slots);
+    if (area === 'grid') return arraySlots(this.inventory.grid);
+    if (area === 'armor') return arraySlots(this.armor).map((slot, i) => ({ ...slot, limit: 1, accepts: (s: Stack) => armorSlotOf(s.id) === i }));
+    if (area === 'chest') return arraySlots(this.currentChest()?.slots ?? []);
+    if (area === 'enchant') return [{ get: () => this.enchantItem, set: (s) => { this.enchantItem = s; this.enchOptions = rollEnchantOptions(s, this.enchantPower(), Math.random); }, limit: 1, accepts: (s) => ENCHANTS.some((e) => canEnchant(s.id, e.id)) }];
+    const furnace = area === 'furnace' ? this.currentFurnace() : null;
+    if (furnace) return (['input', 'fuel', 'output'] as const).map((key) => ({
+      get: () => furnace[key],
+      set: (s: Stack | null) => { const prev = furnace.input?.id; furnace[key] = s; if (furnace.input?.id !== prev) furnace.cook = 0; },
+      accepts: (s: Stack) => key === 'input' ? smeltResult(s.id) != null : key === 'fuel' && fuelSeconds(s.id) > 0,
+    }));
+    const anvil = area === 'anvil' ? this.currentAnvil() : null;
+    if (anvil) return (['a', 'b'] as const).map((key) => ({ get: () => anvil[key], set: (s: Stack | null) => { anvil[key] = s; } }));
+    const brewing = area === 'brewing' ? this.currentBrewing() : null;
+    if (brewing) return [0, 1, 2, 3, 4].map((i) => ({
+      get: () => i < 3 ? brewing.bottles[i] : i === 3 ? brewing.ingredient : brewing.fuel,
+      set: (s: Stack | null) => { if (i < 3) brewing.bottles[i] = s; else if (i === 3) brewing.ingredient = s; else brewing.fuel = s; brewing.progress = 0; },
+      limit: i < 3 ? 1 : 64,
+      accepts: (s: Stack) => i < 3 ? !!POTIONS[s.id] : i === 3 ? BREWING_INGREDIENTS.has(s.id) : s.id === I.BLAZE_ROD,
+    }));
+    return [];
+  }
+
+  inventoryAction(area: SlotArea, index: number, action: SlotAction) {
+    const source = this.navigationSlots(area)[index];
+    if (!source) return;
+    const previous = source.get();
+    const previousCount = previous?.count ?? 0;
+    const inventory = this.navigationSlots('inventory');
+    const containerArea = (['chest', 'furnace', 'enchant', 'anvil', 'brewing'] as const).find((a) => this.ui === a);
+    const container = containerArea ? this.navigationSlots(containerArea) : [];
+    if (action.type === 'quick') {
+      if (area !== 'inventory') quickMove(source, [...inventory.slice(9), ...inventory.slice(0, 9)]);
+      else if (container.length && source.get() && container.some((slot) => slot.accepts?.(source.get()!) !== false)) quickMove(source, container);
+      else {
+        const stack = source.get();
+        const armor = stack ? armorSlotOf(stack.id) : null;
+        if (this.ui === 'inventory' && armor !== null && !this.armor[armor]) quickMove(source, [this.navigationSlots('armor')[armor]]);
+        else quickMove(source, index < 9 ? inventory.slice(9) : inventory.slice(0, 9));
+      }
+    } else if (action.type === 'hotbar') {
+      if (action.index >= 0 && action.index < 9) swapSlots(source, inventory[action.index]);
+    } else if (action.type === 'collect') {
+      if (!this.inventory.cursor) { this.inventory.cursor = source.get(); source.set(null); }
+      const grid = this.ui === 'inventory' ? this.navigationSlots('grid').filter((_, i) => !!this.craftingTable || [0, 1, 3, 4].includes(i)) : [];
+      collectStacks(this.inventory.cursor, [...inventory, ...container, ...grid]);
+    } else if (action.type === 'drop') {
+      const stack = source.get();
+      if (stack) {
+        const n = action.all ? stack.count : 1;
+        this.spawnDrop(stack.id, n, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, stack.dur, undefined, undefined, undefined, stack.ench, stack.name);
+        stack.count -= n;
+        if (!stack.count) source.set(null);
+      }
+    }
+    if (action.type !== 'drop' && area !== 'inventory' && area !== 'grid' && area !== 'armor' && previous && (source.get() !== previous || previousCount > (source.get()?.count ?? 0))) {
+      this.notePickup(previous.id);
+      if (area === 'furnace' && index === 2 && previous.id === I.IRON) this.unlock('iron');
+    }
+    this.saveProfileNow(false);
+  }
+
+  quickCraft() {
+    // Check capacity BEFORE consuming ingredients; never spill a full-inventory craft.
+    for (let n = 0; n < 1024; n++) {
+      const recipe = this.inventory.gridMatch(!!this.craftingTable);
+      if (!recipe) break;
+      const s = recipe.out;
+      if (!this.inventory.canAdd(s.id, s.count, s.dur, s.ench, s.name)) break;
+      const made = this.inventory.craftGrid(!!this.craftingTable);
+      if (!made) break;
+      this.inventory.add(made.id, made.count, made.dur, made.ench, made.name);
+      this.onCraft(made.id);
+    }
+    this.saveProfileNow(false);
+  }
+
   clickChest(i: number, right: boolean) {
     const c = this.currentChest();
     if (!c || i < 0 || i >= c.slots.length) return;
@@ -4321,7 +4407,7 @@ export class Game {
   save() {
     // 2.10: sesje multiplayer nie zapisują się do slotów – świat należy do
     // gospodarza, a każda rozgrywka miałaby inny identyfikator.
-    if (this.net) return;
+    if (this.net) { this.saveProfileNow(); return; }
     try {
       // homeWorld zawsze istnieje w pełnej grze; defensywny fallback
       // przydaje się też testom, które budują obiekt przez Game.prototype.

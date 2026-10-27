@@ -74,6 +74,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
         stack={anvil.a}
         icons={icons}
         onHover={setHover}
+        onAction={(a) => { game.inventoryAction('anvil', 0, a); refresh(); }}
         onClick={(r) => { game.clickAnvilSlot('a', r); refresh(); }}
       />
       <GuiSlot
@@ -82,6 +83,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
         stack={anvil.b}
         icons={icons}
         onHover={setHover}
+        onAction={(a) => { game.inventoryAction('anvil', 1, a); refresh(); }}
         onClick={(r) => { game.clickAnvilSlot('b', r); refresh(); }}
       />
       <GuiSlot
@@ -94,6 +96,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
           if (!offer.out) setHover(t);
           else setHover(`${t ?? ''}\n${cost > 0 ? `Koszt: ${cost} poziomów` : 'Bez kosztu'}`.trim());
         }}
+        onAction={(a) => { if (a.type === 'quick' && affordable && game.takeAnvilResult()) refresh(); }}
         onClick={() => { if (affordable && game.takeAnvilResult()) refresh(); }}
       />
 

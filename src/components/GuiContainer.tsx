@@ -1,3 +1,5 @@
+import { useSlotNavigation } from './useSlotNavigation';
+import type { SlotAction } from '../game/inventoryNavigation';
 /**
  * BlockCraft 2.28 – wspólne elementy waniliowych okien kontenerów.
  *
@@ -24,7 +26,7 @@ const LONG_PRESS_MS = 350;
  * dotyku) przekazuje `right = true` – tak działa dzielenie stosu.
  */
 export function GuiSlot({
-  x, y, stack, icons, dim, hit = 1, onClick, onHover, highlight,
+  x, y, stack, icons, dim, hit = 1, onClick, onAction, onHover, highlight,
 }: {
   x: number; y: number;
   stack: Stack | null;
@@ -32,15 +34,17 @@ export function GuiSlot({
   dim?: boolean;
   hit?: number;
   onClick?: (right: boolean) => void;
+  onAction?: (action: SlotAction) => void;
   onHover?: (text: string | null) => void;
   /** Delikatna poświata – np. slot, na który właśnie kliknięto. */
   highlight?: boolean;
 }) {
+  const navigation = useSlotNavigation(onAction);
   const timer = useRef<number | null>(null);
   const held = useRef(false);
   const clear = () => {
     if (timer.current !== null) {
-      clearTimeout(timer.current);
+      window.clearTimeout(timer.current);
       timer.current = null;
     }
   };
@@ -50,9 +54,11 @@ export function GuiSlot({
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       aria-label={stack ? displayName(stack.id) : undefined}
+      onFocus={navigation.enter}
+      onBlur={navigation.leave}
       onKeyDown={(e) => {
         if (!onClick) return;
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(false); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (e.shiftKey && onAction) onAction({ type: 'quick' }); else onClick(false); }
       }}
       style={{
         position: 'absolute', left: x - hit, top: y - hit, width: 16 + hit * 2, height: 16 + hit * 2,
@@ -63,7 +69,7 @@ export function GuiSlot({
         if (e.pointerType === 'mouse') {
           if (e.button !== 0 && e.button !== 2) return;
           e.preventDefault();
-          onClick?.(e.button === 2);
+          if (!navigation.pointer(e)) onClick?.(e.button === 2);
           return;
         }
         e.preventDefault();
@@ -86,8 +92,8 @@ export function GuiSlot({
       onPointerCancel={() => { clear(); held.current = false; }}
       onPointerLeave={() => { clear(); held.current = false; }}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseEnter={() => onHover?.(stack ? stackTooltip(stack) : null)}
-      onMouseLeave={() => onHover?.(null)}
+      onMouseEnter={() => { navigation.enter(); onHover?.(stack ? stackTooltip(stack) : null); }}
+      onMouseLeave={() => { navigation.leave(); onHover?.(null); }}
     >
       {stack && (
         <img
@@ -159,7 +165,7 @@ export function useGuiScale(maxScale: number, fitH = 84, height = 166): number {
  * więc współrzędne z layoutów działają bez przeliczania.
  */
 export function GuiWindow({
-  sprite, title, scale, onClose, children, footer = 'E / Esc – zamknij', titleX = 8, titleY = 6,
+  sprite, title, scale, onClose, children, footer = 'Shift+klik – przenieś · 1–9 – pasek · Q / Ctrl+Q – wyrzuć · E / Esc – zamknij', titleX = 8, titleY = 6,
   width = 176, height = 166,
 }: {
   sprite: string;
@@ -234,6 +240,7 @@ export function GuiInventory({
             stack={s}
             icons={icons}
             onHover={onHover}
+            onAction={(action) => { game.inventoryAction('inventory', i, action); onChange(); }}
             onClick={(right) => {
               inv.clickSlot(i, right);
               onChange();

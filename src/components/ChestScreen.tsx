@@ -45,6 +45,7 @@ export default function ChestScreen({ game, icons, onChange }: { game: Game; ico
               stack={s}
               icons={icons}
               onHover={setHover}
+              onAction={(a) => { game.inventoryAction('chest', i, a); refresh(); }}
               onClick={(r) => { game.clickChest(i, r); refresh(); }}
             />
           );

@@ -20,7 +20,7 @@
  */
 
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
-import { loadPlayerId, profileRow, sanitizeProfile, type PlayerProfile } from './profile';
+import { loadPlayerId, profileRow, sanitizeProfile, cacheProfile, loadCachedProfile, type PlayerProfile } from './profile';
 import {
   MAX_SNAPSHOT_EDITS,
   publicDay,
@@ -167,6 +167,10 @@ export class PublicServer implements NetLike {
   private lastSyncIso = new Date().toISOString();
   private lastProfile: PlayerProfile | null = null;
   private lastProfileSave = 0;
+  private pendingProfile: PlayerProfile | null = null;
+  private writingProfile = false;
+  private warnedProfile = false;
+  private warnedCache = false;
   private flushing = false;
   private catchingUp = false;
   private hue: number;
@@ -251,41 +255,60 @@ export class PublicServer implements NetLike {
 
   /** 2.19: postęp tego gracza z bazy (albo `null` przy pierwszej wizycie). */
   private async loadProfile(): Promise<PlayerProfile | null> {
+    const cached = loadCachedProfile(this.worldId, this.pid);
     try {
-      const { data, error } = await this.client
-        .from(PROFILE_TABLE)
-        .select('*')
-        .eq('world', this.worldId)
-        .eq('pid', this.pid)
-        .limit(1);
-      if (error || !data?.length) return null;
-      const row = { ...(data[0] as Record<string, unknown>), pid: this.pid };
-      return sanitizeProfile(row);
-    } catch {
-      // Brak tabeli albo chwilowy błąd sieci nie może blokować wejścia.
-      return null;
-    }
-  }
-
-  /** 2.19: zapis postępu (pozycja + ekwipunek). Wywołuje silnik co kilka sekund. */
-  saveProfile(profile: PlayerProfile) {
-    if (this.closed || !profile) return;
-    this.lastProfile = profile;
-    const now = Date.now();
-    if (now - this.lastProfileSave < PROFILE_SAVE_MS) return;
-    this.lastProfileSave = now;
-    void this.writeProfile(profile);
-  }
-
-  private async writeProfile(profile: PlayerProfile) {
-    try {
-      const { error } = await this.client
-        .from(PROFILE_TABLE)
-        .upsert(profileRow(profile, this.worldId), { onConflict: 'world,pid' });
+      const { data, error } = await this.client.from(PROFILE_TABLE).select('*')
+        .eq('world', this.worldId).eq('pid', this.pid).limit(1);
       if (error) throw new Error(error.message);
-    } catch {
-      // Tabela może jeszcze nie istnieć – świat bloków działa dalej.
+      const remote = data?.length ? sanitizeProfile(data[0]) : null;
+      if (data?.length && (!remote || remote.pid !== this.pid)) throw new Error('Nieprawidłowy zapis gracza');
+      const newest = cached && (!remote || cached.updated >= remote.updated) ? cached : remote;
+      if (newest) cacheProfile(this.worldId, newest);
+      return newest;
+    } catch (error) {
+      if (cached) return cached;
+      // Never mistake a failed read for a new player and overwrite their inventory.
+      throw new Error(`Nie można wczytać postępu gracza. Spróbuj ponownie. (${String(error)})`);
     }
+  }
+
+  saveProfile(profile: PlayerProfile, force = false) {
+    if (this.closed || !profile) return;
+    // Detach from mutable game stacks before caching or queuing a request.
+    const snapshot = sanitizeProfile(profile);
+    if (!snapshot || snapshot.pid !== this.pid) return;
+    this.lastProfile = snapshot;
+    const cached = cacheProfile(this.worldId, snapshot);
+    if (!cached && !this.warnedCache) this.onChat?.('Zapis', 'Przeglądarka nie pozwala utworzyć kopii awaryjnej postępu.');
+    this.warnedCache = !cached;
+    const now = Date.now();
+    if (!force && now - this.lastProfileSave < PROFILE_SAVE_MS) return;
+    this.lastProfileSave = now;
+    this.pendingProfile = snapshot;
+    void this.writeProfiles();
+  }
+
+  /** Serialize writes: an older slow request must not replace the exit snapshot. */
+  private async writeProfiles() {
+    if (this.writingProfile) return;
+    this.writingProfile = true;
+    try {
+      while (this.pendingProfile) {
+        const profile = this.pendingProfile;
+        this.pendingProfile = null;
+        try {
+          const { error } = await this.client.from(PROFILE_TABLE)
+            .upsert(profileRow(profile, this.worldId), { onConflict: 'world,pid' });
+          if (error) throw new Error(error.message);
+          this.warnedProfile = false;
+        } catch (error) {
+          console.warn('Player profile upload failed; local snapshot retained', error);
+          if (!this.warnedProfile) this.onChat?.('Zapis', 'Brak zapisu w chmurze. Postęp zachowany lokalnie; ponowimy próbę.');
+          this.warnedProfile = true;
+          // Retry on the next periodic/forced save, without a tight retry loop.
+        }
+      }
+    } finally { this.writingProfile = false; }
   }
 
   /** 2.19: prośba o teleportację do wskazanego gracza. */
@@ -555,7 +578,10 @@ export class PublicServer implements NetLike {
     this.closed = true;
     void this.flush();
     // 2.19: ostatni zapis postępu – gracz wraca tu, gdzie wyszedł.
-    if (this.lastProfile) void this.writeProfile({ ...this.lastProfile, updated: Date.now() });
+    if (this.lastProfile) {
+      this.pendingProfile = this.lastProfile;
+      void this.writeProfiles();
+    }
     const ch = this.channel;
     this.channel = null;
     if (ch) {

@@ -36,6 +36,9 @@ export interface PlayerProfile {
   /** Ekwipunek: 36 slotów (9 × hotbar + 27 plecaka). */
   inv: (Stack | null)[];
   armor: (Stack | null)[];
+  cursor?: Stack | null;
+  grid?: (Stack | null)[];
+  enchantItem?: Stack | null;
 }
 
 const PID_ALPHABET = '0123456789abcdef';
@@ -153,7 +156,7 @@ export function sanitizeProfile(raw: unknown): PlayerProfile | null {
     pid,
     name: typeof r.name === 'string' ? r.name.slice(0, 20) : 'Gracz',
     skin: typeof r.skin === 'string' ? r.skin.slice(0, 24) : '',
-    updated: num(r.updated, Date.now()),
+    updated: num(r.updated, typeof r.updated_at === 'string' ? Date.parse(r.updated_at) || 0 : 0),
     x,
     y,
     z,
@@ -165,6 +168,9 @@ export function sanitizeProfile(raw: unknown): PlayerProfile | null {
     xp: Math.max(0, Math.trunc(num(r.xp, 0))),
     inv: cleanStacks(inv, 36),
     armor: cleanStacks(armor, 4),
+    cursor: cleanStacks([r.cursor ?? (Array.isArray(inv) ? inv[36] : null)], 1)[0],
+    grid: cleanStacks(r.grid ?? (Array.isArray(inv) ? inv.slice(37, 46) : []), 9),
+    enchantItem: cleanStacks([r.enchantItem ?? (Array.isArray(inv) ? inv[46] : null)], 1)[0],
   };
 }
 
@@ -175,17 +181,35 @@ export function profileRow(p: PlayerProfile, world: string) {
     pid: p.pid,
     name: p.name,
     skin: p.skin,
-    x: Math.round(p.x),
-    y: Math.round(p.y),
-    z: Math.round(p.z),
+    x: p.x,
+    y: p.y,
+    z: p.z,
     dim: p.dim,
     yaw: p.yaw,
     pitch: p.pitch,
     health: p.health,
     hunger: p.hunger,
     xp: p.xp,
-    inv: JSON.stringify(p.inv),
+    // Keep the legacy first 36 slots; tail stores items still in the UI.
+    inv: JSON.stringify([...p.inv, p.cursor ?? null, ...cleanStacks(p.grid, 9), p.enchantItem ?? null]),
     armor: JSON.stringify(p.armor),
     updated_at: new Date(p.updated || Date.now()).toISOString(),
   };
+}
+
+/** Synchronous fallback: survives page teardown even when the HTTP request cannot. */
+export function loadCachedProfile(world: string, pid: string, storage = safeStorage()): PlayerProfile | null {
+  try {
+    const raw = storage?.getItem(`${PROFILE_KEY}:${world}:${pid}`);
+    const p = raw ? sanitizeProfile(JSON.parse(raw)) : null;
+    return p?.pid === pid ? p : null;
+  } catch { return null; }
+}
+
+export function cacheProfile(world: string, profile: PlayerProfile, storage = safeStorage()): boolean {
+  try {
+    if (!storage) return false;
+    storage.setItem(`${PROFILE_KEY}:${world}:${profile.pid}`, JSON.stringify(profile));
+    return true;
+  } catch { return false; }
 }

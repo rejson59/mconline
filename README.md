@@ -1,6 +1,19 @@
-# BlockCraft 4.2.1 🌍
+# BlockCraft 4.2.2 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.2.2 — trwały postęp multiplayer i skróty ekwipunku
+
+- **Naprawa odrzucanych zapisów.** Głód zmniejsza się płynnie, ale tabela graczy miała kolumny `integer` dla zdrowia i głodu. Ułamkowa wartość odrzucała cały zapis, razem z ekwipunkiem i pozycją. Obie kolumny mają teraz typ `double precision`; migracje są w `supabase/migrations/` i zostały zastosowane na publicznym serwerze.
+- **Zapis przy wyjściu, pauzie, ukryciu strony i odświeżeniu.** Multiplayer zapisuje profil zamiast pomijać `Game.save()`. Współrzędne nie są zaokrąglane do pełnych bloków. Zapisy obejmują też kursor, siatkę craftingu i przedmiot w zaklinaniu; zachowują nazwy, zaklęcia i zużycie.
+- **Kopia awaryjna w przeglądarce.** Migawka jest zapisywana synchronicznie w `localStorage`, przed wysłaniem do chmury, oddzielnie dla świata i identyfikatora gracza. Wczytywany jest nowszy zapis (lokalny lub z chmury). Błąd odczytu bez kopii nie jest już traktowany jak pierwsza wizyta, a błąd wysłania jest sygnalizowany w czacie. Kolejka zapisów oraz zabezpieczenie w bazie chronią przed nadpisaniem nowszego postępu starszym żądaniem.
+- **Shift+klik:** pasek ↔ plecak, plecak ↔ otwarta skrzynia, odpowiednie sloty pieca, kowadła, zaklinania i statywu; automatyczne zakładanie zbroi. Najpierw uzupełniane są istniejące stosy, a nadmiar zostaje w źródle — bez kasowania i bez zamiany kursora.
+- **Shift+wynik craftingu:** wytwarzanie kolejnych partii, aż zabraknie składników lub miejsca, bez zużywania składników za niedający się pomieścić wynik.
+- **1–9** nad zwykłym slotem zamienia go z odpowiednim miejscem paska. **Dwuklik LPM** zbiera pasujące przedmioty do limitu stosu. **Q / Ctrl+Q** wyrzuca jedną sztukę / cały stos spod kursora. Pola wyszukiwania i nazywania przechwytują pisanie, bez przypadkowego przenoszenia przedmiotów.
+- **Jednolite LPM/PPM w craftingu:** lewy przycisk / tapnięcie bierze lub odkłada cały stos; prawy przycisk / długie przytrzymanie bierze połowę albo odkłada jedną sztukę. Nie jest już odwrotnie niż w pozostałych slotach.
+- **Testy:** trwałość profilu, awarie odczytu/zapisu, kolejność żądań, pełny ekwipunek, metadane i reguły slotów; dodatkowo interaktywne testy React w jsdom dla Shift, cyfr, Q, dwukliku, LPM/PPM i krótkiego/długiego dotyku. To nie jest deklaracja pełnej zgodności wszystkich gestów z Minecraftem — np. rozdzielanie stosu przeciąganiem pozostaje poza tą aktualizacją.
+
+Tożsamość multiplayer nadal jest powiązana z danymi tej przeglądarki, nie z nickiem ani kontem. **Nie czyść danych witryny**, jeśli chcesz zachować identyfikator i kopię awaryjną. Ta poprawka nie odzyska przedmiotów, których wcześniejszy odrzucony zapis nigdy nie zachował.
 
 ## Wersja 4.2.1 — progi drzwi i skrzynie
 
@@ -514,7 +527,7 @@ Połączenie jest bezpośrednie (P2P, publiczny STUN). Jeśli sieć blokuje P2P 
 
 * **Wspólne:** bloki (także w Netherze), czat, pora dnia, pogoda, lista graczy, awatary.
 * **Osobne:** ekwipunek, zdrowie, głód, osiągnięcia, moby, minimapa, punkty podróży i ustawienia grafiki. Każdy gracz ma własny punkt odrodzenia.
-* **Zapis:** serwer publiczny zapisuje bloki w chmurze. Pokój lokalny/P2P żyje w pamięci gospodarza i nie trafia do slotów zapisu.
+* **Zapis:** serwer publiczny zapisuje bloki i profile graczy w chmurze; profile mają też lokalną kopię awaryjną. Pokój lokalny/P2P żyje w pamięci gospodarza i nie trafia do slotów zapisu.
 
 ### Baza danych (Supabase)
 

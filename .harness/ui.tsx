@@ -716,6 +716,92 @@ async function mountWithJsdom(): Promise<boolean> {
 
   const container = w.document.getElementById('root')!;
   let root = createRoot(container);
+  // Exercise real pointer/keyboard handlers, not only static markup.
+  section('4.2.2: inventory pointer and hovered-slot keyboard navigation');
+  const { Game: RealGame } = await import('../src/game/engine');
+  const inv = new Inventory();
+  const cursorCount = () => inv.cursor?.count;
+  const chest = { slots: Array(27).fill(null) };
+  const dropped: unknown[][] = [];
+  const game = Object.assign(Object.create(RealGame.prototype), {
+    inventory: inv, armor: Array(4).fill(null), mode: 'survival', ui: 'inventory', selected: 0,
+    craftingTable: null, getSkinId: () => 'steve', onCraft() {}, notePickup() {}, unlock() {}, closeInventory() {},
+    body: { pos: { x: 1, y: 70, z: 2 } }, spawnDrop: (...args: unknown[]) => dropped.push(args),
+    currentChest: () => chest,
+  }) as Game;
+  const renderInventory = async () => {
+    await React.act(async () => { root.render(<InventoryScreen game={game} icons={{}} onChange={() => {}} initialBookOpen />); });
+  };
+  const pointer = async (el: Element, button = 0, shiftKey = false, type = 'mouse', eventType = 'pointerdown') => {
+    const e = new dom.window.MouseEvent(eventType, { bubbles: true, cancelable: true, button, shiftKey });
+    Object.defineProperty(e, 'pointerType', { value: type });
+    Object.defineProperty(e, 'pointerId', { value: 1 });
+    await React.act(async () => { el.dispatchEvent(e); });
+  };
+  const leave = (el: Element) => el.dispatchEvent(new dom.window.MouseEvent('mouseout', { bubbles: true, relatedTarget: w.document.body }));
+  const hotbarSlot = (i = 0) => container.querySelector(`[data-hotbar-slot="${i}"] .mc-slot`)!;
+  const gridSlot = (i = 0) => container.querySelector(`[data-craft-cell="${i}"] .mc-slot`)!;
+  await renderInventory();
+  inv.slots[0] = { id: B.LOG, count: 4 };
+  await renderInventory();
+  await pointer(hotbarSlot()); leave(hotbarSlot());
+  check('UI: LPM picks up the whole stack', cursorCount() === 4 && inv.slots[0] === null);
+  await pointer(gridSlot()); leave(gridSlot());
+  check('UI: LPM puts the whole stack in the crafting grid', inv.grid[0]?.count === 4 && inv.cursor === null);
+  inv.cursor = { id: B.LOG, count: 3 };
+  await renderInventory();
+  await pointer(gridSlot(1), 2); leave(gridSlot(1));
+  check('UI: PPM places exactly one crafting ingredient', inv.grid[1]?.count === 1 && cursorCount() === 2);
+  await pointer(gridSlot(), 0, true); leave(gridSlot());
+  check('UI: Shift grid transfers directly without replacing the cursor', inv.grid[0] === null && inv.countOf(B.LOG) === 4 && cursorCount() === 2);
+  inv.cursor = null; inv.grid.fill(null); inv.slots.fill(null); inv.slots[0] = { id: B.LOG, count: 8 };
+  await renderInventory();
+  await pointer(hotbarSlot(), 0, true); leave(hotbarSlot());
+  check('UI: Shift hotbar sends the stack to the backpack', inv.slots[0] === null && inv.slots[9]?.count === 8);
+  const backpack = container.querySelector('.mc-inv-storage .mc-slot')! as HTMLElement;
+  await React.act(async () => { backpack.focus(); });
+  await React.act(async () => { backpack.dispatchEvent(new dom.window.KeyboardEvent('keydown', { code: 'Digit3', key: '3', bubbles: true, cancelable: true })); });
+  check('UI: number key on the focused slot swaps with hotbar', inv.slots[2]?.count === 8 && inv.slots[9] === null);
+  inv.slots[9] = { id: B.STONE, count: 3 };
+  await renderInventory();
+  await React.act(async () => { backpack.focus(); backpack.dispatchEvent(new dom.window.KeyboardEvent('keydown', { code: 'KeyQ', key: 'q', bubbles: true, cancelable: true })); });
+  check('UI: Q drops one from the active slot', inv.slots[9]?.count === 2 && dropped[dropped.length - 1]?.[1] === 1);
+  await React.act(async () => { backpack.dispatchEvent(new dom.window.KeyboardEvent('keydown', { code: 'KeyQ', key: 'q', ctrlKey: true, bubbles: true, cancelable: true })); });
+  check('UI: Ctrl+Q drops the rest from the active slot', inv.slots[9] === null && dropped[dropped.length - 1]?.[1] === 2);
+  const search = container.querySelector('input')!;
+  inv.slots[9] = { id: B.LOG, count: 6 };
+  await renderInventory();
+  await React.act(async () => { search.dispatchEvent(new dom.window.KeyboardEvent('keydown', { code: 'Digit1', key: '1', bubbles: true, cancelable: true })); });
+  check('UI: typing in recipe search never moves inventory items', inv.slots[9]?.count === 6 && inv.slots[0] === null);
+  leave(backpack);
+  inv.slots.fill(null); inv.slots[0] = { id: B.LOG, count: 8 }; inv.slots[9] = { id: B.LOG, count: 12 };
+  await renderInventory();
+  await pointer(hotbarSlot()); await pointer(hotbarSlot()); leave(hotbarSlot());
+  check('UI: double-click gathers matching stacks into the cursor', cursorCount() === 20 && inv.slots[9] === null);
+  inv.cursor = null; inv.slots.fill(null); inv.grid.fill(null); inv.grid[0] = { id: B.LOG, count: 3 };
+  await renderInventory();
+  await pointer(container.querySelector('[data-craft-result] .mc-slot')!, 0, true);
+  check('UI: Shift output crafts the full available series', inv.countOf(B.PLANKS) === 12 && inv.grid[0] === null);
+  inv.slots.fill(null); inv.grid.fill(null); inv.slots[0] = { id: B.LOG, count: 6 };
+  await renderInventory();
+  await pointer(hotbarSlot(), 0, false, 'touch');
+  check('UI: touch waits for pointerup, without a phantom mouse action', inv.cursor === null);
+  await pointer(hotbarSlot(), 0, false, 'touch', 'pointerup');
+  check('UI: a short touch still picks up a stack', cursorCount() === 6);
+  inv.cursor = null; inv.slots.fill(null); inv.slots[0] = { id: B.LOG, count: 8 };
+  await renderInventory();
+  await pointer(hotbarSlot(), 0, false, 'touch');
+  await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 370)); });
+  await pointer(hotbarSlot(), 0, false, 'touch', 'pointerup');
+  check('UI: long touch splits once, without a second action on release', cursorCount() === 4 && inv.slots[0]?.count === 4);
+  inv.cursor = null; inv.slots.fill(null); chest.slots[0] = { id: B.LOG, count: 15 }; game.ui = 'chest';
+  await React.act(async () => { root.render(<ChestScreen game={game} icons={{}} onChange={() => {}} />); });
+  const guiSlot = container.querySelector('[role="button"]')!;
+  await pointer(guiSlot, 0, true); leave(guiSlot);
+  check('UI: GuiSlot Shift uses the same quick transfer as the backpack', chest.slots[0] === null && inv.countOf(B.LOG) === 15);
+  await React.act(async () => { root.unmount(); });
+  root = createRoot(container);
+
   await React.act(async () => { root.render(<App />); });
 
   const text = () => container.textContent ?? '';
