@@ -1,6 +1,15 @@
-# BlockCraft 4.3.0 🌍
+# BlockCraft 4.3.1 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.3.1 „Wiadra i druga ręka”
+
+- **Nabieranie płynów działa.** PPM z pustym wiadrem celuje w wodę/lawę, a fiolka w wodę. Zwykłe kopanie i stawianie nadal ignoruje płyny. Wymiana jednego pustego/pełnego pojemnika używa jego dotychczasowego slotu, więc działa przy pełnym plecaku. Dla stosu najpierw sprawdzane jest miejsce na wynik; nie ma utraty przedmiotu ani usunięcia źródła przy braku miejsca. Fiolka napełnia jedną sztukę, nie cały stos. Creative zachowuje źródło.
+- **Rzeczywista druga ręka.** Slot w survivalu i creative, osobny model po lewej stronie oraz HUD z liczbą sztuk, zaklęciem i zużyciem. **F** zamienia całe stosy z bieżącym slotem; nad slotem ekwipunku zamienia wskazany stos. Działają LPM/PPM, Shift, cyfry, Q i zbieranie stosów. Nazwy, zaklęcia i wytrzymałość zostają zachowane w zapisie lokalnego świata, profilu multiplayer i kopii awaryjnej. Śmierć wyrzuca zawartość drugiej ręki dokładnie raz.
+- **Użyteczna podczas gry.** Pochodnia w drugiej ręce oświetla kopalnię obok kilofa, tarcza chroni i zużywa własną wytrzymałość, totem zapobiega śmierci. PPM może użyć z drugiej ręki m.in. bloku, wiadra, fiolki lub jedzenia, kiedy główna ręka nie ma własnej akcji użycia. Łuk, wędka i lorneta pozostają obsługiwane w głównej ręce — można je przenieść klawiszem F. Lot creative: **dwukrotna spacja**, nie F.
+- **Bez bicia przez szkło.** Wspólny promień fizyczny przechodzi przez wszystkie przecinane kratki i sprawdza pudełka kolizji. Szkło i liście blokują ciosy, trawa nie; otwarte drzwi oraz płyty zachowują wolną część przejścia. Kontrola obejmuje wybór ręcznego/dotykowego celu, auto-bicie, handel/oswajanie oraz ciosy mobów w gracza.
+- **Zabezpieczenia podłogi i kopania.** Kliknięcie odświeża cel zamiast używać celu z poprzedniej klatki — po obrocie kamery nie rozbija już starego bloku pod nogami. Utrata fokusu, anulowanie wskaźnika i odczyt puszczonych przycisków kasują zacięte kopanie. Postęp nie przechodzi przez pusty cel. Przebudowa chunka zachowuje poprzednią geometrię do uzyskania nowej; błąd zostawia ją widoczną i kolejkuje ponowną próbę.
+- **Weryfikacja anonimowego zgłoszenia kopalni.** Bez konkretnego świata i kroków nie da się przypisać zgłoszenia jednej przyczynie. Regresje obejmują powyższe błędy wejścia, wymuszoną awarię meshera, widoczne górne ściany wszystkich odsłoniętych desek, kolizje, granice chunków, cztery obroty i zachowanie podłóg po oddaleniu oraz wczytaniu zapisu. Nie blokujemy celowego kopania pod sobą ani normalnego działania wybuchów i grawitacji. Nie zmieniamy generatora 4.3.0 ani łupów.
 
 ## Wersja 4.3.0 „Osady i niebezpieczne wyprawy”
 

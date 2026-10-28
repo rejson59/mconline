@@ -1,8 +1,8 @@
 import { mergeable, type Stack } from './inventory';
 import { stackLimit } from './items';
 
-export type SlotAction = { type: 'quick' | 'collect' } | { type: 'hotbar'; index: number } | { type: 'drop'; all: boolean };
-export type SlotArea = 'inventory' | 'grid' | 'armor' | 'chest' | 'furnace' | 'enchant' | 'anvil' | 'brewing';
+export type SlotAction = { type: 'quick' | 'collect' | 'offhand' } | { type: 'hotbar'; index: number } | { type: 'drop'; all: boolean };
+export type SlotArea = 'inventory' | 'offhand' | 'grid' | 'armor' | 'chest' | 'furnace' | 'enchant' | 'anvil' | 'brewing';
 export interface StackSlot {
   get(): Stack | null;
   set(stack: Stack | null): void;

@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.3.0';
-export const GAME_RELEASE_NAME = 'Osady i niebezpieczne wyprawy';
+export const GAME_VERSION = '4.3.1';
+export const GAME_RELEASE_NAME = 'Wiadra i druga ręka';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,10 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: 'Woda i lawa trafiają do wiadra', text: 'PPM na płynie napełnia puste wiadro lub fiolkę. Pojedyncze wiadro zamienia się w pełne we własnym slocie, nawet gdy plecak jest pełny; nieudana wymiana nie usuwa płynu ani przedmiotu.' },
+  { title: 'Druga ręka: F', text: 'Nowy slot w plecaku i na HUD. F zamienia ręce, także nad slotem ekwipunku. Pochodnia świeci obok kilofa, tarcza chroni, a totem ratuje. Zapis zachowuje przedmiot, nazwę, zaklęcia i wytrzymałość.' },
+  { title: 'Szkło zatrzymuje ciosy', text: 'Ataki sprawdzają fizyczną bryłę przeszkody zamiast jej przezroczystości. Automatyczne bicie nie przechodzi przez szyby; trawa i wolne części otwartych przejść nie stają się niewidzialną ścianą.' },
+  { title: 'Bez przypadkowego kopania pod nogami', text: 'Kliknięcie odświeża cel po obrocie kamery. Utrata fokusu lub anulowanie wskaźnika przerywa kopanie. Nieudana przebudowa chunka zachowuje poprzednią siatkę i ponawia próbę.' },
   { title: 'Większe osady i nowe profesje', text: 'Boczne ulice łączą więcej domów z kuźnią, biblioteką, piekarnią, domem alchemika i wieżą strażniczą. Każda parcela nadal ma lokalny fundament, bez płaskiej platformy pod całą osadą.' },
   { title: 'Skrzynie z zapasami pasującymi do miejsca', text: '5–8 różnych stosów w skrzyni: narzędzia i żelazo u kowala, książki w bibliotece, jedzenie w piekarni, składniki w alchemii. Kopalnie, kratery, świątynie i portale mają własne pule łupów; opróżnione skrzynie nie odnawiają zawartości.' },
   { title: 'Kopalnie, kratery i więcej portali', text: 'Opuszczone kopalnie ze schodami, torami, podporami i rudami. Suche i gorące kratery z bazaltem, żwirem, magmą i lawą. Częściej spotykane ruiny portali są nieaktywne. Komenda /locate kopalnia, krater lub portal podaje współrzędne bez teleportowania.' },

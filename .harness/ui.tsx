@@ -727,6 +727,7 @@ async function mountWithJsdom(): Promise<boolean> {
     inventory: inv, armor: Array(4).fill(null), mode: 'survival', ui: 'inventory', selected: 0,
     craftingTable: null, getSkinId: () => 'steve', onCraft() {}, notePickup() {}, unlock() {}, closeInventory() {},
     body: { pos: { x: 1, y: 70, z: 2 } }, spawnDrop: (...args: unknown[]) => dropped.push(args),
+    updateHand() {}, emitHud() {}, saveProfileNow() {},
     currentChest: () => chest,
   }) as Game;
   const renderInventory = async () => {
@@ -794,6 +795,45 @@ async function mountWithJsdom(): Promise<boolean> {
   await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 370)); });
   await pointer(hotbarSlot(), 0, false, 'touch', 'pointerup');
   check('UI: long touch splits once, without a second action on release', cursorCount() === 4 && inv.slots[0]?.count === 4);
+  section('4.3.1: second-hand UI in survival and creative');
+  inv.cursor = null; inv.slots.fill(null);
+  inv.slots[0] = { id: I.IRON_PICK, count: 1, dur: 21, name: 'Named pick' };
+  await renderInventory();
+  const cursorStack = () => inv.cursor;
+  const secondary = () => container.querySelector('[data-offhand-slot] .mc-slot')!;
+  await React.act(async () => { (hotbarSlot() as HTMLElement).focus(); hotbarSlot().dispatchEvent(new dom.window.KeyboardEvent('keydown', { code: 'KeyF', bubbles: true, cancelable: true })); });
+  check('UI: F moves a focused stack into the second hand intact', inv.offhand?.name === 'Named pick' && inv.slots[0] === null);
+  await pointer(secondary()); leave(secondary());
+  check('UI: LPM picks an item up from the second hand', cursorStack()?.name === 'Named pick' && inv.offhand === null);
+  await pointer(secondary()); leave(secondary());
+  check('UI: LPM returns an item to the second hand', inv.cursor === null && inv.offhand?.dur === 21);
+  await pointer(secondary(), 0, true); leave(secondary());
+  check('UI: Shift removes an offhand stack without loss', inv.offhand === null && inv.slots.some(s => s?.name === 'Named pick'));
+  game.mode = 'creative'; await renderInventory();
+  check('UI: creative inventory also exposes the offhand slot', !!secondary());
+  inv.cursor = { id: B.TORCH, count: 9 }; await renderInventory();
+  await pointer(secondary()); leave(secondary());
+  check('UI: creative offhand accepts a whole stack', inv.offhand?.count === 9 && inv.cursor === null);
+  game.mode = 'survival'; await renderInventory();
+  const input = container.querySelector('input')!;
+  await React.act(async () => { input.focus(); input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { code: 'KeyF', key: 'f', bubbles: true, cancelable: true })); });
+  check('UI: typing F in search never swaps the offhand', inv.offhand?.count === 9);
+  inv.offhand = null;
+  // Exercise the registered DOM listeners, not only the reset helper.
+  const eventGame = Object.assign(Object.create(RealGame.prototype), {
+    renderer: { domElement: w.document.createElement('canvas') }, listeners: [], bindViewport() {}, noteHardware() {},
+    keys: new Set(['KeyW']), mouseLeft: true, mouseRight: true, breakProgress: 0.95, breakKey: 'floor',
+    ui: 'playing', touchInput: false, save() {},
+  }) as any;
+  eventGame.bindEvents();
+  dom.window.dispatchEvent(new dom.window.Event('blur'));
+  check('UI: browser blur immediately stops mining the floor', !eventGame.mouseLeft && !eventGame.mouseRight && eventGame.breakProgress === 0 && eventGame.keys.size === 0);
+  eventGame.mouseLeft = true;
+  dom.window.dispatchEvent(new dom.window.MouseEvent('mousemove', { buttons: 0 }));
+  check('UI: lost mouseup is reconciled by the next real mouse event', !eventGame.mouseLeft);
+  eventGame.mouseLeft = true; dom.window.dispatchEvent(new dom.window.Event('pointercancel'));
+  check('UI: a cancelled pointer cannot leave mining pressed', !eventGame.mouseLeft);
+  for (const [target, type, fn, options] of eventGame.listeners) target.removeEventListener(type, fn, options);
   inv.cursor = null; inv.slots.fill(null); chest.slots[0] = { id: B.LOG, count: 15 }; game.ui = 'chest';
   await React.act(async () => { root.render(<ChestScreen game={game} icons={{}} onChange={() => {}} />); });
   const guiSlot = container.querySelector('[role="button"]')!;

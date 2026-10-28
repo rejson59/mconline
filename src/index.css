@@ -977,3 +977,9 @@ button,
     max-height: 46vh;
   }
 }
+
+/* Offhand is outside the nine-slot texture; narrow screens keep all slots in view. */
+.hotbar-offhand { position: absolute; right: calc(100% + 8px); bottom: 0; }
+@media (max-width: 550px) {
+  .hotbar-offhand { right: auto; left: 0; bottom: calc(100% + 64px); }
+}

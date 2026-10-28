@@ -4,7 +4,7 @@ import { villageChestPosition, doorCell, villagesOverlapping } from '../src/game
 import { explorationLootKind } from '../src/game/explorationLoot';
 import type { ChestLootKind } from '../src/game/chest';
 import { arraySlots, quickMove, swapSlots, collectStacks } from '../src/game/inventoryNavigation';
-import { cacheProfile, loadCachedProfile } from '../src/game/profile';
+import { cacheProfile, loadCachedProfile, type PlayerProfile } from '../src/game/profile';
 import { structureInCell, structureBlocks, applyStructures, type StructureKind } from '../src/game/structures';
 /**
  * Headless smoke tests for the BlockCraft engine.
@@ -2729,10 +2729,14 @@ section('2.3: totem of undying');
   plain.keys = new Set();
   plain.onUI = () => {};
   plain.lockPointer = () => {};
-  plain.spawnDrop = () => {};
+  const offhandDrops: unknown[][] = [];
+  plain.inventory.offhand = { id: I.IRON_PICK, count: 1, dur: 13, name: 'Second hand', ench: { efficiency: 1 } };
+  plain.spawnDrop = (...args: unknown[]) => offhandDrops.push(args);
   plain.spawnParticles = () => {};
   plain.damage(30);
   eq('without a totem a lethal hit is fatal', plain.health, 0);
+  eq('death clears the offhand slot', plain.inventory.offhand, null);
+  eq('death drops the offhand exactly once with metadata', JSON.stringify(offhandDrops.map(d => [d[0], d[1], d[5], d[9], d[10]])), JSON.stringify([[I.IRON_PICK, 1, 13, { efficiency: 1 }, 'Second hand']]));
   check('and the death screen opens', plain.ui === 'dead' || plain.ui === 'respawn', String(plain.ui));
 }
 
@@ -2950,7 +2954,7 @@ section('2.4: bug fixes');
   let deleted: boolean = false;
   g.world = { setBlock: (_x: number, _y: number, _z: number, id: number) => { if (id === B.AIR) deleted = true; } };
   g.tryBucket({ x: 5, y: 5, z: 5, nx: 0, ny: 1, nz: 0, id: B.WATER }, s);
-  eq('the held bucket turns into a water bucket', s.id, I.WATER_BUCKET);
+  eq('the held bucket turns into a water bucket', g.inventory.slots[0]?.id, I.WATER_BUCKET);
   check('the water source is left alone in creative', deleted === false);
 
   const sv = Object.create(Game.prototype) as unknown as Record<string, any>;
@@ -3011,6 +3015,7 @@ section('2.5: wielka naprawa sterowania');
   g2.yaw = 0; g2.pitch = 0;
   g2.aimDir = new THREE.Vector3(1, 0, 0); // palec po prawej stronie ekranu
   g2.mobs = [fakeMob];
+  g2.world = { peekBlock: () => B.AIR };
   const found = g2.findMobTarget(5);
   eq('touch aim finds the mob under the finger', found.mob === fakeMob, true);
   check('the search direction follows the finger, not the screen centre', Math.abs(aims[0].x - 1) < 1e-6);
@@ -3043,6 +3048,7 @@ section('2.5: wielka naprawa sterowania');
   g3b.touchAim = null;
   g3b.target = null;
   g3b.refreshTarget = function () { this.target = null; };
+  g3b.raycastTarget = () => null;
   let wolfHits = 0;
   const wolfie = new Mob('wolf', 0, 0, 0);
   wolfie.damage = () => { wolfHits++; return true; };
@@ -3172,7 +3178,7 @@ section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
   check('release label is the current line', GAME_VERSION.startsWith('4.3'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Osady i niebezpieczne wyprawy', GAME_RELEASE_NAME);
+  check('release name is set', GAME_RELEASE_NAME === 'Wiadra i druga ręka', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -3330,7 +3336,7 @@ section('2.14: auto-skok i auto-bicie');
 
   check('silnik przyjmuje auto-bicie przez applyGfx', /autoAttack\?: boolean/.test(engine) && /o\.autoAttack !== undefined/.test(engine));
   check('auto-bicie wybiera tylko wrogie moby', /isHostileMob\(m\.type\)/.test(engine));
-  check('auto-bicie nie bije przez ścianę', /clearShot\(eye\.x, eye\.y, eye\.z/.test(engine) && /OCCLUDES\[id\] !== 0/.test(engine));
+  check('auto-bicie nie bije przez ścianę', /clearShot\(eye\.x, eye\.y, eye\.z/.test(engine) && /solidOnly: true/.test(engine));
   check('auto-bicie bije z cooldownem', /autoAttackTick\(dt: number\)[\s\S]{0,600}attackCooldown > 0/.test(engine));
   check('auto-bicie nie działa w otwartym oknie', /autoAttackTick\(dt: number\)[\s\S]{0,200}this\.ui !== 'playing'/.test(engine));
   check('auto-bicie jest wołane w pętli gry', /updateMobs\(dt\);[\s\S]{0,200}autoAttackTick\(dt\)/.test(engine));
@@ -3429,13 +3435,13 @@ section('2.14: auto-skok i auto-bicie');
   check('auto-bicie ustawia cooldown ciosu', g3.attackCooldown > 0, String(g3.attackCooldown));
   check('na dotyku postać obraca się w stronę wroga', Math.abs(g3.yaw) > 0.001, String(g3.yaw));
 
-  // clearShot: ściana zasłania, szyba nie.
+  // clearShot: ściana i szkło zatrzymują cios.
   check('czysty strzał do moba', g3.clearShot(8.5, FLAT_H + 2.6, 8.5, 1, 0, 0, 1.5) === true);
   w3.setBlock(9, FLAT_H + 2, 8, B.STONE);
   check('kamienna ściana przerywa auto-bicie', g3.clearShot(8.5, FLAT_H + 2.6, 8.5, 1, 0, 0, 1.5) === false);
   w3.setBlock(9, FLAT_H + 2, 8, B.AIR);
   w3.setBlock(9, FLAT_H + 2, 8, B.GLASS);
-  check('szyba nie przerywa auto-bicia', g3.clearShot(8.5, FLAT_H + 2.6, 8.5, 1, 0, 0, 1.5) === true);
+  check('szyba przerywa auto-bicie', g3.clearShot(8.5, FLAT_H + 2.6, 8.5, 1, 0, 0, 1.5) === false);
 
   // applyGfx przekazuje ustawienie do silnika.
   const gf = Object.create(Game.prototype) as Record<string, any>;
@@ -3664,6 +3670,7 @@ section('2.8.1: światło w ręce');
   const uniform = { value: 0 };
   g.materials = [{ userData: { uHeldStrength: uniform } }];
   g.camera = { position: new THREE.Vector3(4, 70, -3) };
+  g.inventory = new Inventory();
   g.heldLight = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
   let held: any = { id: B.TORCH };
   g.selectedStack = () => held;
@@ -3674,6 +3681,8 @@ section('2.8.1: światło w ręce');
   held = { id: B.STONE };
   g.updateHeldLight();
   eq('a stone in hand turns the light off', uniform.value, 0);
+  g.inventory.offhand = { id: B.TORCH, count: 1 }; g.updateHeldLight();
+  check('offhand torch illuminates the cave while holding a tool', uniform.value > HELD_POWER * 0.8);
 }
 
 section('2.8.1: chmury i pogoda');
@@ -7021,7 +7030,9 @@ section('4.2.1: door thresholds and intentional chest opening');
 
   // Same interaction used by a tap and the held action button on Android.
   const use = Object.assign(Object.create(Game.prototype), {
-    world, keys: new Set(), mouseRight: true, swingT: 1,
+    world, keys: new Set(), mouseRight: true, swingT: 1, mode: 'survival',
+    inventory: new Inventory(), selected: 0,
+    eyePos: () => new THREE.Vector3(2.5, y + 0.5, 4.5), lookDir: () => new THREE.Vector3(0, 0, -1),
     target: { x: 2, y, z: 2, id: B.DOOR_N },
     findMobTarget: () => ({ mob: null }), onBlockChanged() {},
   }) as Record<string, any>;
@@ -7043,6 +7054,7 @@ section('4.2.2: durable multiplayer profile and ordered saves');
     inv: [{ id: B.LOG, count: 13 }], armor: [{ id: I.IRON_HELMET, count: 1, dur: 21 }],
     cursor: { id: B.PLANKS, count: 7, name: 'Named' }, grid: [{ id: B.LOG, count: 3 }],
     enchantItem: { id: I.IRON_PICK, count: 1, dur: 17, ench: { efficiency: 2 }, name: 'Tool' },
+    offhand: { id: I.SHIELD, count: 1, dur: 21, name: 'Offhand' },
   })!;
   const row = profileRow(profile, 'test-save');
   const restored = sanitizeProfile(row)!;
@@ -7134,6 +7146,7 @@ section('4.2.2: durable multiplayer profile and ordered saves');
     xp: new Xp(42), inventory: new Inventory(), armor: profile.armor, enchantItem: profile.enchantItem,
     net: { public: true, saveProfile: (p: unknown, force: boolean) => { saved = p; forced = force; } },
   });
+  g.inventory.offhand = profile.offhand;
   g.inventory.slots = profile.inv; g.inventory.grid = profile.grid; g.inventory.cursor = profile.cursor;
   let saved: unknown = null, forced = false;
   g.save();
@@ -7153,6 +7166,9 @@ section('4.2.2: durable multiplayer profile and ordered saves');
   eq('game restores inventory and armor', reload.inventory.slots[0]?.count, 13);
   eq('game restores crafting grid', reload.inventory.grid[0]?.count, 3);
   eq('game restores cursor', reload.inventory.cursor?.count, 7);
+  eq('Game builds and applies the offhand profile', JSON.stringify(reload.inventory.offhand), JSON.stringify(profile.offhand));
+  g.inventory.offhand.name = 'Changed';
+  eq('profile snapshots do not alias the live offhand', snapshot.offhand?.name, 'Offhand');
 }
 
 section('4.2.2: Minecraft-style quick inventory actions');
@@ -7457,6 +7473,222 @@ section('4.3: mineshafts, craters, denser portals and chunk seams');
   check('locate never teleports the player into a hazard', commandGame.body.pos.equals(position));
   commandGame.command('/locate unknown');
   check('invalid locate input shows available choices', commandGame.messages.some((m: { text: string }) => m.text.includes('Użycie: /locate')));
+}
+
+section('4.3.1: fluid targeting and atomic container exchange');
+{
+  const world = new World(431, true); const y = FLAT_H + 2;
+  world.getChunk(0, 0);
+  world.setBlock(5, y, 5, B.WATER); world.setBlock(5, y, 4, B.STONE);
+  eq('normal targeting ignores water and sees the bank', world.raycast(5.5, y + 0.5, 7.5, 0, 0, -1, 5)?.id, B.STONE);
+  eq('container targeting stops at water', world.raycast(5.5, y + 0.5, 7.5, 0, 0, -1, 5, { fluids: true })?.id, B.WATER);
+  world.setBlock(5, y, 6, B.GLASS);
+  eq('fluid targeting never reaches through glass', world.raycast(5.5, y + 0.5, 7.5, 0, 0, -1, 5, { fluids: true })?.id, B.GLASS);
+  world.setBlock(5, y, 6, B.AIR);
+  const inventory = new Inventory();
+  const g = Object.assign(Object.create(Game.prototype), {
+    world, inventory, selected: 0, mode: 'survival', keys: new Set(), mobs: [],
+    eyePos: () => new THREE.Vector3(5.5, y + 0.5, 7.5), lookDir: () => new THREE.Vector3(0, 0, -1),
+    findMobTarget: () => ({ mob: null }), updateHand() {}, emitHud() {}, message() {},
+  });
+  inventory.slots.fill(null); inventory.slots[0] = { id: I.BUCKET, count: 1 };
+  g.target = null; // no previous frame's hit: reproduce an immediate right click
+  g.tryUse();
+  eq('right-click fills a bucket without needing a cached fluid target', inventory.slots[0]?.id, I.WATER_BUCKET);
+  eq('survival removes only the source hit', world.peekBlock(5, y, 5), B.AIR);
+  inventory.slots = Array.from({ length: 36 }, () => ({ id: B.COBBLE, count: 64 }));
+  inventory.slots[0] = { id: I.BUCKET, count: 1 };
+  world.setBlock(5, y, 5, B.LAVA); g.tryUse();
+  eq('one empty bucket can fill even with a full backpack', inventory.slots[0]?.id, I.LAVA_BUCKET);
+  eq('filling lava removes its source', world.peekBlock(5, y, 5), B.AIR);
+  g.tryUse();
+  eq('pouring returns the empty bucket to its original slot', inventory.slots[0]?.id, I.BUCKET);
+  eq('pouring places lava against the bank', world.peekBlock(5, y, 5), B.LAVA);
+  inventory.slots[0] = { id: I.BUCKET, count: 2 }; g.tryUse();
+  eq('a stacked bucket with no result capacity is unchanged', inventory.slots[0]?.count, 2);
+  eq('a failed fill never destroys the source', world.peekBlock(5, y, 5), B.LAVA);
+  inventory.slots[12] = null; g.tryUse();
+  eq('stacked bucket consumes exactly one empty bucket', inventory.slots[0]?.count, 1);
+  eq('stacked bucket stores exactly one filled bucket', (inventory.slots[12] as Stack | null)?.id, I.LAVA_BUCKET);
+  world.setBlock(5, y, 5, B.WATER); inventory.slots[0] = { id: I.BOTTLE, count: 3 };
+  inventory.slots[12] = null; g.tryUse();
+  eq('filling bottles never converts the entire empty stack', inventory.slots[0]?.count, 2);
+  eq('bottle fill creates exactly one water bottle', (inventory.slots[12] as Stack | null)?.count, 1);
+  eq('bottle fill leaves water intact', world.peekBlock(5, y, 5), B.WATER);
+  inventory.slots[12] = { id: B.COBBLE, count: 64 };
+  inventory.slots[0] = { id: I.BOTTLE, count: 2 }; g.tryUse();
+  eq('full backpack rejects a stacked bottle without loss', inventory.slots[0]?.count, 2);
+  inventory.slots[0] = { id: I.BOTTLE, count: 1 }; g.tryUse();
+  eq('singleton bottle reuses its own slot when full', inventory.slots[0]?.id, I.WATER_BOTTLE);
+  g.mode = 'creative'; inventory.slots[0] = { id: I.BUCKET, count: 64 }; g.tryUse();
+  eq('creative filling gives one legal full bucket', inventory.slots[0]?.count, 1);
+  eq('creative leaves the source intact', world.peekBlock(5, y, 5), B.WATER);
+  inventory.slots[0] = { id: I.IRON_PICK, count: 1, dur: 17, name: 'Pick' };
+  inventory.offhand = { id: I.BUCKET, count: 1 }; g.mode = 'survival'; g.tryUse();
+  eq('a bucket in the second hand can collect water', inventory.offhand?.id, I.WATER_BUCKET);
+  eq('offhand use never replaces the main tool', inventory.slots[0]?.name, 'Pick');
+  check('hand context is reset after use', !g.usingOffhand);
+  const invalid = world.raycast(0, 0, 0, 0, 0, 0, 5);
+  eq('zero direction terminates without a hit', invalid, null);
+}
+
+section('4.3.1: collision shapes block melee, not merely opaque blocks');
+{
+  const world = new World(432, true), y = FLAT_H + 2; world.getChunk(0, 0);
+  const g = Object.assign(Object.create(Game.prototype), { world });
+  for (const id of [B.STONE, B.GLASS, B.LEAVES, B.DOOR_N, B.TRAP]) {
+    world.setBlock(5, y, 5, id);
+    const fy = id === B.TRAP ? 0.9 : 0.5;
+    check(`collision blocks a melee segment: ${id}`, !g.clearShot(5.5, y + fy, 7.5, 0, 0, -1, 3));
+  }
+  world.setBlock(5, y, 5, B.TALLGRASS);
+  check('grass does not stop a punch', g.clearShot(5.5, y + 0.5, 7.5, 0, 0, -1, 3));
+  world.setBlock(5, y, 5, B.STONE_SLAB);
+  check('the open half of a slab is not an invisible wall', g.clearShot(5.5, y + 0.75, 7.5, 0, 0, -1, 3));
+  check('the solid half of a slab stops the same ray', !g.clearShot(5.5, y + 0.25, 7.5, 0, 0, -1, 3));
+  world.setBlock(5, y, 5, B.DOOR_ON);
+  check('an open door allows melee through its open centre', g.clearShot(5.5, y + 0.5, 7.5, 0, 0, -1, 3));
+  world.setBlock(5, y, 5, B.FENCE);
+  check('upper half of a fence also stops a punch', !g.clearShot(5.5, y + 1.25, 7.5, 0, 0, -1, 3));
+  world.setBlock(5, y, 5, B.GLASS);
+  g.eyePos = () => new THREE.Vector3(5.5, y + 0.5, 7.5); g.lookDir = () => new THREE.Vector3(0, 0, -1);
+  const hidden = { dead: false, rayHit: () => 3 };
+  g.mobs = [hidden];
+  eq('manual attacks, touch, trading and taming share the barrier check', g.findMobTarget(5).mob, null);
+  world.setBlock(5, y, 5, B.AIR);
+  eq('removing glass exposes the same target', g.findMobTarget(5).mob, hidden);
+}
+
+section('4.3.1: functional offhand, metadata and persistence');
+{
+  const inventory = new Inventory();
+  const g = Object.assign(Object.create(Game.prototype), {
+    inventory, armor: Array(4).fill(null), selected: 0, ui: 'inventory', mode: 'survival',
+    updateHand() {}, emitHud() {}, saveProfileNow() {}, message() {},
+  });
+  const tool: Stack = { id: I.IRON_PICK, count: 1, dur: 32, ench: { efficiency: 2 }, name: 'My pick' };
+  const torch: Stack = { id: B.TORCH, count: 11 };
+  inventory.slots[0] = tool; inventory.offhand = torch;
+  g.swapHands();
+  eq('F swaps the entire main stack into the second hand', JSON.stringify(inventory.offhand), JSON.stringify(tool));
+  eq('F brings back the whole secondary stack', inventory.slots[0]?.count, 11);
+  g.swapHands();
+  check('swapping twice preserves the original objects and metadata', inventory.slots[0] === tool && inventory.offhand === torch);
+  inventory.cursor = null; g.clickOffhand(true);
+  eq('right-click splits an offhand stack', (inventory.cursor as Stack | null)?.count, 6);
+  eq('right-click leaves the smaller half in the offhand', inventory.offhand?.count, 5);
+  g.clickOffhand(true);
+  eq('right-click places a single offhand item', inventory.offhand?.count, 6);
+  inventory.cursor = null;
+  g.inventoryAction('inventory', 0, { type: 'offhand' });
+  check('F over a slot is an atomic metadata-preserving swap', inventory.offhand === tool);
+  g.inventoryAction('offhand', 0, { type: 'hotbar', index: 4 });
+  check('number keys work over the offhand slot', inventory.slots[4] === tool && inventory.offhand === null);
+  inventory.offhand = { id: B.TORCH, count: 8 };
+  g.inventoryAction('offhand', 0, { type: 'quick' });
+  eq('Shift transfers the second-hand stack into the backpack', inventory.offhand, null);
+  inventory.offhand = { id: I.SHIELD, count: 1, dur: 20, name: 'Guard' };
+  inventory.slots[0] = tool;
+  check('a shield protects while the main hand holds a tool', g.holdingShield());
+  g.wearShield(8); eq('the second-hand shield loses durability', inventory.offhand?.dur, 12);
+  g.wearShield(12); eq('a broken offhand shield is removed from the correct slot', inventory.offhand, null);
+  eq('breaking a shield never deletes the main tool', inventory.slots[0], tool);
+  inventory.offhand = { id: I.TOTEM, count: 1 }; g.totemHeal = 0; g.hunger = 10;
+  g.body = { pos: new THREE.Vector3(1, 70, 1) }; g.spawnParticles = () => {}; g.unlock = () => {};
+  check('the offhand totem prevents death', g.tryTotem()); eq('the offhand totem is consumed', inventory.offhand, null);
+  const source: PlayerProfile = { pid: 'p1234567890123456789', name: 'Tester', skin: 'steve', updated: 100, x: 1, y: 70.25, z: 3, dim: 'o', yaw: 0, pitch: 0,
+    health: 20, hunger: 20, xp: 0, inv: inventory.slots, armor: [], offhand: tool };
+  const restored = sanitizeProfile(profileRow(source, 'offhand-test'))!;
+  eq('cloud row tail preserves every offhand field', JSON.stringify(restored.offhand), JSON.stringify(tool));
+  eq('legacy 36-slot profiles start with an empty offhand', sanitizeProfile({ ...source, offhand: undefined })?.offhand, null);
+  const memory = new Map<string, string>(); const storage = { getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => memory.set(k, v) };
+  cacheProfile('offhand-test', source, storage);
+  eq('the local fallback restores the second hand', JSON.stringify(loadCachedProfile('offhand-test', source.pid, storage)?.offhand), JSON.stringify(tool));
+  // Both hands render without WebGL; visibility and shared material ownership.
+  const hands = Object.assign(Object.create(Game.prototype), { inventory, selected: 0, hand: new THREE.Group(), offHand: new THREE.Group(), handId: -2, offHandId: -2,
+    handMesh: null, offHandMesh: null, handMat: new THREE.MeshBasicMaterial(), itemTexture: () => new THREE.Texture() });
+  inventory.offhand = { id: B.TORCH, count: 1 }; hands.updateHand();
+  check('offhand has a real left-side first-person model', hands.offHandMesh?.position.x < 0 && hands.handMesh?.position.x > 0);
+  inventory.offhand = null; hands.updateHand(); eq('empty second hand hides the item model', hands.offHand.children.length, 0);
+  hands.handMesh.geometry.dispose(); if (hands.handMesh.material !== hands.handMat) hands.handMesh.material.dispose(); hands.handMat.dispose();
+}
+
+section('4.3.1: floor safety, cancelled input and atomic chunk rebuilding');
+{
+  const g = Object.assign(Object.create(Game.prototype), { keys: new Set(['KeyW']), mouseLeft: true, mouseRight: true, breakProgress: 0.9, breakKey: '0,60,0', bowDraw: 0.5, zooming: true });
+  g.cancelActions();
+  check('lost focus cancels held mining and item use', !g.mouseLeft && !g.mouseRight && g.keys.size === 0 && g.breakProgress === 0 && g.breakKey === '');
+  eq('lost focus cancels rather than firing a bow', g.bowDraw, -1);
+  g.mouseLeft = true; g.mouseRight = true; g.breakProgress = 0.8;
+  g.reconcileMouseButtons(0);
+  check('a missing mouseup is repaired by the next actual buttons state', !g.mouseLeft && !g.mouseRight && g.breakProgress === 0);
+  g.reconcileMouseButtons(1); check('movement cannot start phantom mining', !g.mouseLeft);
+  g.mouseLeft = true; g.mouseRight = true; g.reconcileMouseButtons(1);
+  check('a genuinely held left button is preserved without a stuck right button', g.mouseLeft && !g.mouseRight);
+  const clickedWorld = new World(433, true), fy = FLAT_H + 1;
+  clickedWorld.setBlock(5, fy, 7, B.PLANKS);
+  clickedWorld.setBlock(5, fy + 1, 5, B.STONE);
+  const destroyed: number[][] = [];
+  const click = Object.assign(Object.create(Game.prototype), { world: clickedWorld, mode: 'creative',
+    eyePos: () => new THREE.Vector3(5.5, fy + 1.62, 7.5), lookDir: () => new THREE.Vector3(0, 0, -1),
+    target: { x: 5, y: fy, z: 7, id: B.PLANKS, dist: 1.62 },
+    findMobTarget: () => ({ mob: null }), breakBlock: (...p: number[]) => destroyed.push(p),
+  });
+  click.tryAttack();
+  eq('turning between frames cannot destroy the cached floor underfoot', JSON.stringify(destroyed), JSON.stringify([[5, fy + 1, 5]]));
+  clickedWorld.setBlock(5, fy + 1, 5, B.AIR); destroyed.length = 0;
+  click.target = { x: 5, y: fy, z: 7, id: B.PLANKS, dist: 1.62 }; click.tryAttack();
+  eq('clicking open air never destroys a stale floor target', destroyed.length, 0);
+  const world = new World(433, true); const chunk = world.getChunk(0, 0);
+  const scene = new THREE.Scene(); const old = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+  let disposed = false; old.geometry.addEventListener('dispose', () => { disposed = true; }); scene.add(old); chunk.meshes = [old]; chunk.built = true;
+  const meshes = Object.assign(Object.create(Game.prototype), { world, scene, body: { pos: new THREE.Vector3(1, 70, 1) }, drawDistance: 2, renderDistance: 3, materials: [old.material, old.material, old.material] });
+  const build = world.buildMesh; world.buildMesh = () => { throw new Error('injected mesher failure'); };
+  const warn = console.warn; console.warn = () => {};
+  try { meshes.buildChunk(0, 0); } finally { console.warn = warn; }
+  check('failed remeshing keeps the existing floor visible', chunk.meshes[0] === old && scene.children.includes(old) && !disposed);
+  check('failed remeshing is scheduled for retry', world.dirty.has(World.key(0, 0)));
+  world.buildMesh = build; meshes.buildChunk(0, 0);
+  check('successful rebuild atomically replaces and frees old geometry', disposed && !scene.children.includes(old) && chunk.meshes.length > 0);
+  for (const mesh of chunk.meshes) mesh.geometry.dispose(); (old.material as THREE.Material).dispose();
+  // Exhaustive gallery-floor checks in all rotations: data, visible top faces,
+  // collision and unload/reload must agree, including rails and chunk seams.
+  const ctx: VillageContext = { seed: 81551, flat: false, sea: SEA, surface: () => ({ h: 82, biome: 'Las' }) };
+  const site = structuresOverlapping(-600, -600, 600, 600, ctx).find(s => s.kind === 'mineshaft')!;
+  for (let rotation = 0; rotation < 4; rotation++) {
+    const w = new World(434 + rotation, true);
+    const blocks = structureBlocks({ ...site, x: -1, z: -1, y: FLAT_H + 18, rotation }, ctx);
+    for (const b of blocks) w.setBlock(b.x, b.y, b.z, b.id);
+    const floors = blocks.filter(b => b.id === B.PLANKS && new Set<number>([B.AIR, B.RAIL]).has(w.peekBlock(b.x, b.y + 1, b.z)));
+    check(`mine has a nontrivial walkable floor, rotation ${rotation}`, floors.length > 80);
+    const keys = [...new Set(floors.map(b => World.key(Math.floor(b.x / CS), Math.floor(b.z / CS))))];
+    const tops = new Set<string>(); let invalid = 0;
+    for (const key of keys) {
+      const c = w.chunks.get(key)!;
+      for (const geometry of w.buildMesh(c)) {
+        const pos = geometry.getAttribute('position'), face = geometry.getAttribute('aFace'), indices = geometry.getIndex();
+        if (pos) {
+          for (let i = 0; i < pos.count; i += 4) {
+            if (face.getX(i) !== 3) continue;
+            const y = pos.getY(i);
+            if (![1, 2, 3].every(n => pos.getY(i + n) === y)) continue;
+            const x = [0, 1, 2, 3].reduce((v, n) => v + pos.getX(i + n), 0) / 4;
+            const z = [0, 1, 2, 3].reduce((v, n) => v + pos.getZ(i + n), 0) / 4;
+            tops.add(`${Math.floor(x)},${y - 1},${Math.floor(z)}`);
+          }
+          for (let i = 0; indices && i < indices.count; i++) if (indices.getX(i) >= pos.count) invalid++;
+        }
+        geometry.dispose();
+      }
+    }
+    eq(`mine mesh never overflows its vertex indices, rotation ${rotation}`, invalid, 0);
+    eq(`every exposed floor has a visible upward face, rotation ${rotation}`, floors.filter(b => !tops.has(`${b.x},${b.y},${b.z}`)).length, 0);
+    eq(`every floor stops a downward physical ray, rotation ${rotation}`, floors.filter(b => !w.raycast(b.x + 0.5, b.y + 1.1, b.z + 0.5, 0, -1, 0, 1, { solidOnly: true })).length, 0);
+    const saved = w.serializeMods(); const reload = new World(434 + rotation, true); reload.loadMods(saved);
+    for (const c of [...w.chunks.values()]) w.releaseChunk(c.cx, c.cz);
+    eq(`walking away and returning never removes mine floors, rotation ${rotation}`, floors.filter(b => w.getBlock(b.x, b.y, b.z) !== B.PLANKS).length, 0);
+    eq(`saved mine floors survive reload, rotation ${rotation}`, floors.filter(b => reload.getBlock(b.x, b.y, b.z) !== B.PLANKS).length, 0);
+  }
 }
 
 // =================================================================== report

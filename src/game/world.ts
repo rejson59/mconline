@@ -1,7 +1,7 @@
 import { applyStructures } from './structures';
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, isSlabTop, stairsFacing, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
+import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxes, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, isSlabTop, stairsFacing, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
 import { TILE_UV4, entityUV, tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
@@ -2048,7 +2048,8 @@ export class World {
   }
 
   // Voxel raycast (DDA)
-  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number) {
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, options: { fluids?: boolean; solidOnly?: boolean } = {}) {
+    if (![ox, oy, oz, dx, dy, dz, maxDist].every(Number.isFinite) || maxDist < 0 || dx * dx + dy * dy + dz * dz === 0) return null;
     let x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
     const stepX = dx > 0 ? 1 : -1, stepY = dy > 0 ? 1 : -1, stepZ = dz > 0 ? 1 : -1;
     const tDeltaX = Math.abs(1 / dx), tDeltaY = Math.abs(1 / dy), tDeltaZ = Math.abs(1 / dz);
@@ -2059,7 +2060,39 @@ export class World {
     let t = 0;
     while (t <= maxDist) {
       const id = this.peekBlock(x, y, z);
-      if (id !== 0 && RENDER[id] !== 2) return { x, y, z, nx, ny, nz, id, dist: t };
+      if (options.solidOnly) {
+        // Slab intersection, not opacity or coarse point samples: glass stops
+        // melee, while the empty part of an open door/slab remains passable.
+        // Fences can extend half a block above their own voxel.
+        let nearest: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: number; dist: number } | null = null;
+        for (const by of [y, y - 1]) {
+          const bid = by === y ? id : this.peekBlock(x, by, z);
+          const boxes = collisionBoxes(bid);
+          if (!boxes) continue;
+          for (let i = 0; i < boxes.length; i += 6) {
+            if (by !== y && boxes[i + 4] <= 1) continue;
+            let near = 0, far = maxDist;
+            let hx = 0, hy = 0, hz = 0;
+            for (let axis = 0; axis < 3; axis++) {
+              const o = [ox, oy, oz][axis], d = [dx, dy, dz][axis];
+              const base = [x, by, z][axis];
+              const lo = base + boxes[i + axis], hi = base + boxes[i + axis + 3];
+              if (d === 0) { if (o < lo || o > hi) far = -1; continue; }
+              const a = (lo - o) / d, b = (hi - o) / d;
+              const entry = Math.min(a, b);
+              if (entry > near) {
+                near = entry; hx = axis === 0 ? -Math.sign(d) : 0;
+                hy = axis === 1 ? -Math.sign(d) : 0; hz = axis === 2 ? -Math.sign(d) : 0;
+              }
+              far = Math.min(far, Math.max(a, b));
+            }
+            if (near <= far && far >= t && near <= Math.min(tMaxX, tMaxY, tMaxZ, maxDist) && (!nearest || near < nearest.dist)) {
+              nearest = { x, y: by, z, nx: hx, ny: hy, nz: hz, id: bid, dist: near };
+            }
+          }
+        }
+        if (nearest) return nearest;
+      } else if (id !== 0 && (options.fluids || RENDER[id] !== 2)) return { x, y, z, nx, ny, nz, id, dist: t };
       if (tMaxX < tMaxY && tMaxX < tMaxZ) { x += stepX; t = tMaxX; tMaxX += tDeltaX; nx = -stepX; ny = 0; nz = 0; }
       else if (tMaxY < tMaxZ) { y += stepY; t = tMaxY; tMaxY += tDeltaY; nx = 0; ny = -stepY; nz = 0; }
       else { z += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; nx = 0; ny = 0; nz = -stepZ; }

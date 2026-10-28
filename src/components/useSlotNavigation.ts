@@ -5,6 +5,7 @@ import type { SlotAction } from '../game/inventoryNavigation';
 let activeSlot: symbol | null = null;
 export function slotKeyAction(code: string, ctrl = false): SlotAction | null {
   if (/^Digit[1-9]$/.test(code)) return { type: 'hotbar', index: Number(code.slice(5)) - 1 };
+  if (code === 'KeyF') return { type: 'offhand' };
   return code === 'KeyQ' ? { type: 'drop', all: ctrl } : null;
 }
 export function useSlotNavigation(onAction?: (action: SlotAction) => void) {
