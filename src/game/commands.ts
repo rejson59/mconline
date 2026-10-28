@@ -133,6 +133,15 @@ export const COMMANDS: CommandInfo[] = [
     keywords: ['wieś', 'mieszkańcy'],
   },
   {
+    name: 'locate',
+    aliases: ['znajdz'],
+    usage: 'locate <kopalnia|krater|portal|świątynia|ruiny|chatka>',
+    description: 'Podaje współrzędne najbliższej struktury do 768 bloków, bez teleportowania.',
+    example: '/locate kopalnia',
+    category: 'świat',
+    keywords: ['eksploracja', 'kopalnia', 'krater', 'portal', 'struktury'],
+  },
+  {
     name: 'give',
     usage: 'give <przedmiot|id> [ilość]',
     description: 'Daje przedmiot lub blok; nazwy są po polsku albo angielsku.',

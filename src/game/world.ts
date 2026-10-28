@@ -1104,7 +1104,8 @@ export class World {
     const village = applyVillages(d, c.cx, c.cz, this.villageContext());
     const vmask = village.mask;
     if (village.top > maxY) maxY = village.top;
-    maxY = Math.max(maxY, applyStructures(d, c.cx, c.cz, this.villageContext(), vmask));
+    const lootMask = vmask.slice();
+    maxY = Math.max(maxY, applyStructures(d, c.cx, c.cz, this.villageContext(), vmask, lootMask));
 
     // Surface decoration (pomija kolumny zajęte przez wioskę)
     for (let z = 0; z < CS; z++)
@@ -1178,7 +1179,7 @@ export class World {
       if (hash(ox + n, 80, oz, s) > 0.42) continue;
       const lx = 1 + Math.floor(hash(ox, 81 + n, oz, s) * 14);
       const lz = 1 + Math.floor(hash(ox, 91 + n, oz, s) * 14);
-      if (vmask[lz * CS + lx]) continue;
+      if (lootMask[lz * CS + lx]) continue;
       const colH = surf[lz * CS + lx].h;
       for (let y = 8; y < colH - 3 && y < 52; y++) {
         if (d[idx(lx, y, lz)] !== B.AIR || d[idx(lx, y + 1, lz)] !== B.AIR) continue;

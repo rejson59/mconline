@@ -1,6 +1,19 @@
-# BlockCraft 4.2.2 🌍
+# BlockCraft 4.3.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.3.0 „Osady i niebezpieczne wyprawy”
+
+- **Więcej budynków, nie tylko ozdób.** Osady mają promień 34–40 bloków zamiast 20–27 i do 16 parceli połączonych bocznymi ulicami. Na odpowiednim terenie pojawiają się co najmniej cztery domy mieszkalne, kuźnia, biblioteka, farma, nowa **piekarnia**, **dom alchemika** i **wieża strażnicza**. Kuźnia ma piece i kowadło, piekarnia piece i zapasy, alchemik statyw, a wieża dostępną drabiną kondygnację i dach z blankami. Trudne parcele są pomijane; nie wyrównujemy całego terenu ani nie prowadzimy dróg przez wnętrza domów.
+- **Bogatsze skrzynie.** Zwykłe domy nie generują już pustych skrzyń. Dwanaście tematycznych pul obejmuje profesje wioski i miejsca wypraw. Każda daje **5–8 różnych stosów**: np. żelazo, narzędzia i zbroję w kuźni, książki i papier w bibliotece, pieczywo i pszenicę w piekarni, butelki i składniki u alchemika, strzały w wieży, tory i surowce w kopalni. Wagi ograniczają rzadkie nagrody, a narzędzia i eliksiry przestrzegają limitów stosu. Stare skrzynie jaskiniowe zachowują dotychczasową pulę.
+- **Opuszczone kopalnie.** Widoczne wejście prowadzi schodami do podziemnego skrzyżowania chodników z podporami, torami, rudami i dwiema skrzyniami. Można zejść i wrócić bez przekopywania tunelu. To autorskie szablony inspirowane Minecraftem, nie import oryginalnych struktur 1:1.
+- **Kratery i różne powierzchnie.** Nieregularne zagłębienia z mieszaniną bazaltu, czernitu, żwiru i odsłoniętego węgla; warianty suche i gorące. Gorący środek zawiera prawdziwą lawę i magmę, a duży spadek jest zagrożeniem także w suchym kraterze. Łup znajduje się z boku, nie w środku lawy.
+- **Więcej ruin portali.** Dodatkowa warstwa miejsc eksploracji na siatce 128 bloków uzupełnia wcześniejsze świątynie, ruiny i chatki. Portale pozostają zniszczone i nieaktywne. Struktury omijają wioski, siebie nawzajem, oceany, plaże i urwiska; nie rzeźbią superflat ani Netheru.
+- **Szukaj bez ryzykownego teleportu:** `/locate kopalnia`, `/locate krater`, `/locate portal`, `/locate świątynia`, `/locate ruiny`, `/locate chatka` (alias `/znajdz`). Komenda podaje współrzędne najbliższego pasującego miejsca do 768 bloków, bez generowania chunków ani przenoszenia gracza.
+- **Bez odnawiania łupów.** Otwieranie i rozbijanie nietkniętej skrzyni korzysta z tej samej deterministycznej puli. Otwarty znacznik staje się zwykłą skrzynią; zapisana zawartość ma pierwszeństwo. Skrzynie stawiane przez gracza nie dostają darmowych przedmiotów, także wewnątrz wioski.
+- **Testy regresji.** Typy budynków, przejścia drzwiowe i drabiny, brak dróg przecinających domy, legalne i różnorodne łupy, brak ponownego napełniania, granice chunków i cztery obroty. Fizyka sprawdza zejście i powrót schodami kopalni. Pełne generowanie świata sprawdza kolejność chunków, dekoracje oraz pierwszeństwo zapisanych edycji.
+
+**Ważne dla starych światów:** zmieniły się układ wiosek i generator miejsc eksploracji. Przed aktualizacją ważnego lokalnego świata wyeksportuj kopię. Zapisane modyfikacje bloków, ekwipunki i zawartość skrzyń są zachowane, ale otoczenie niezmodyfikowanych fragmentów starych osad może się zmienić. Najczytelniejszy efekt daje nowy świat lub wyprawa do nowych okolic; istniejące skrzynie nie są automatycznie uzupełniane.
 
 ## Wersja 4.2.2 — trwały postęp multiplayer i skróty ekwipunku
 

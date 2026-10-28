@@ -1,3 +1,5 @@
+import { nearestStructure, structureKindFromName, STRUCTURE_LABELS } from './structures';
+import { explorationLootKind } from './explorationLoot';
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, chestLidGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
@@ -2931,12 +2933,19 @@ export class Game {
     return true;
   }
 
+  /** Opening and breaking an unopened marker must award the same themed loot. */
+  private generatedChest(x: number, y: number, z: number) {
+    const ctx = this.world.villageContext?.();
+    const kind = !this.isInNether && ctx ? explorationLootKind(ctx, x, y, z) : 'cave';
+    return lootChest(this.world.seed, x, y, z, kind);
+  }
+
   openChest(x: number, y: number, z: number) {
     const key = this.cKey(x, y, z);
     let chest = this.chests.get(key);
     if (!chest) {
       const id = this.world.getBlock(x, y, z);
-      chest = isLootChest(id) ? lootChest(this.world.seed, x, y, z) : emptyChest(x, y, z);
+      chest = isLootChest(id) ? this.generatedChest(x, y, z) : emptyChest(x, y, z);
       chest.dim = this.isInNether ? 1 : 0;
       if (isLootChest(id)) {
         // 2.32: po opróżnieniu skrzynia z łupem staje się zwykłą – ale musi
@@ -3048,7 +3057,7 @@ export class Game {
     const key = this.cKey(x, y, z);
     const saved = this.chests.get(key);
     const id = this.world.getBlock(x, y, z);
-    const stacks = saved ? saved.slots : isLootChest(id) ? lootChest(this.world.seed, x, y, z).slots : [];
+    const stacks = saved ? saved.slots : isLootChest(id) ? this.generatedChest(x, y, z).slots : [];
     for (const s of stacks) {
       if (s) this.spawnDrop(s.id, s.count, x + 0.5, y + 0.5, z + 0.5, s.dur, (Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2, s.ench, s.name);
     }
@@ -4305,6 +4314,15 @@ export class Game {
         const mob = this.spawnMob(t, this.body.pos.x + d.x * 3, this.body.pos.y + 1, this.body.pos.z + d.z * 3, profession);
         if (t === 'golem') this.unlock('golem');
         this.message('Przyzwano: ' + (t === 'villager' ? `mieszkańca (${villagerTitle(mob.trade ?? createVillagerState(professionFor(profession), this.nowSeconds()))})` : t));
+        break;
+      }
+      case 'locate': case 'znajdz': {
+        const kind = structureKindFromName(args[0] ?? '');
+        if (!kind) { this.message('Użycie: /locate <kopalnia|krater|portal|świątynia|ruiny|chatka>'); break; }
+        if (this.isInNether || this.world.flat) { this.message('Te struktury występują w naturalnym nadświecie, nie w Netherze ani na superflat.'); break; }
+        const near = nearestStructure(this.body.pos.x, this.body.pos.z, this.world.villageContext(), kind);
+        if (!near) { this.message('Nie znaleziono takiej struktury w promieniu 768 bloków. Spróbuj dalej od tego miejsca.'); break; }
+        this.message(`${STRUCTURE_LABELS[kind]}: ${near.site.x} ${near.site.y} ${near.site.z} · ${Math.round(near.dist)} bloków. Uważaj na spadki terenu i lawę; ruiny portalu nie są aktywne.`);
         break;
       }
       case 'village': case 'wioska': {

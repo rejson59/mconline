@@ -9,6 +9,7 @@
  */
 import { B, doorPair } from './blocks';
 import { CH, CS } from './constants';
+import type { ChestLootKind } from './chest';
 
 /** Odstęp między kandydatami na wioskę. */
 export const VILLAGE_CELL = 224;
@@ -26,7 +27,7 @@ export interface VillageContext {
   surface: (x: number, z: number) => VillageSurface;
 }
 
-export type BuildingKind = 'house' | 'library' | 'smith' | 'farm' | 'well' | 'lamp' | 'hay' | 'plaza';
+export type BuildingKind = 'house' | 'library' | 'smith' | 'bakery' | 'apothecary' | 'watchtower' | 'farm' | 'well' | 'lamp' | 'hay' | 'plaza';
 
 export interface VillageBuilding {
   kind: BuildingKind;
@@ -122,50 +123,47 @@ function layout(gx: number, gz: number, x: number, z: number, radius: number, ct
   // Studnia w środku – serce osady.
   buildings.push({ kind: 'well', x: x - 3, z: z - 3, w: 7, d: 7, face: 0, variant: 0 });
 
-  // Place pod budynki: cztery narożniki placu plus parcele wzdłuż dróg.
+  // Side streets separate outer plots: door paths never cut through a neighbour.
+  for (const offset of [-17, 17]) {
+    pushRect(yards, x + offset, z - radius + 2, x + offset, z + radius - 2);
+    pushRect(yards, x - radius + 2, z + offset, x + radius - 2, z + offset);
+  }
   const lots: [number, number][] = [
-    [5, 5], [-14, 5], [5, -14], [-14, -14],
-    [-14, -8], [10, -8], [-8, -14], [-8, 10],
-    [12, 5], [-21, -14], [12, -14], [-21, 5],
+    [6, 6], [-14, 6], [6, -14], [-14, -14],
+    [20, 6], [-28, 6], [6, 20], [-14, 20], [20, -14], [-28, -14],
+    [20, 20], [-28, 20], [6, -28], [-14, -28], [20, -28], [-28, -28],
   ];
-  let houses = 0;
-  let farms = 0;
-  let smiths = 0;
-  let libraries = 0;
-
+  const core: BuildingKind[] = ['smith', 'library', 'bakery', 'apothecary', 'house', 'house', 'farm', 'house', 'watchtower', 'house'];
   for (let i = 0; i < lots.length; i++) {
     const roll = rnd(40 + i * 7);
-    if (roll < 0.24) continue; // pusta parcela – czasem tylko siano albo latarnia
+    if (i >= core.length && roll < 0.12) continue;
     const [ox, oz] = lots[i];
-    let kind: BuildingKind;
-    if (roll < 0.58) kind = 'house';
-    else if (roll < 0.72) kind = 'farm';
-    else if (roll < 0.79 && smiths < 1) kind = 'smith';
-    else if (roll < 0.86 && libraries < 1) kind = 'library';
-    else if (roll < 0.93) kind = 'hay';
-    else kind = houses > 2 && farms > 0 ? 'lamp' : 'house';
-
-    const wide = kind === 'farm' || kind === 'smith' || kind === 'library';
-    const w = wide ? 9 : 7;
-    const d = kind === 'house' && rnd(41 + i * 7) < 0.4 ? 9 : 7;
-    const bx = kind === 'lamp' || kind === 'hay' ? x + ox + 2 : x + ox;
-    const bz = kind === 'lamp' || kind === 'hay' ? z + oz + 2 : z + oz;
-    const face = Math.abs(ox) > Math.abs(oz) ? (ox > 0 ? 3 : 1) : oz > 0 ? 0 : 2;
-    const b: VillageBuilding = { kind, x: bx, z: bz, w: kind === 'lamp' || kind === 'hay' ? 2 : w, d: kind === 'lamp' || kind === 'hay' ? 2 : d, face, variant: Math.floor(rnd(60 + i) * 4) };
+    const kind: BuildingKind = core[i] ?? (roll < 0.65 ? 'house' : roll < 0.9 ? 'farm' : 'hay');
+    const small = kind === 'hay';
+    const w = small ? 2 : kind === 'watchtower' ? 7 : 9;
+    const d = small ? 2 : kind === 'house' && rnd(41 + i * 7) < 0.5 ? 9 : 7;
+    const alongX = rnd(42 + i * 7) < 0.5;
+    const face = alongX ? (ox > 0 ? 3 : 1) : (oz > 0 ? 0 : 2);
+    const b: VillageBuilding = { kind, x: x + ox, z: z + oz, w, d, face, variant: Math.floor(rnd(60 + i) * 4) };
     const fp = footprint(b);
     if (!inside({ x, z, radius }, fp)) continue;
     if (yards.some((r) => overlaps(fp, r, 0))) continue;
     if (buildings.some((o) => overlaps(fp, footprint(o), 0))) continue;
+    // Grade a modest slope under each plot, not an entire enlarged plateau.
+    if (!ctx.flat) {
+      const heights = [ctx.surface(b.x, b.z).h, ctx.surface(b.x + w - 1, b.z).h,
+        ctx.surface(b.x, b.z + d - 1).h, ctx.surface(b.x + w - 1, b.z + d - 1).h];
+      if (Math.max(...heights) - Math.min(...heights) > 5 || Math.min(...heights) <= ctx.sea + 1 || Math.max(...heights) > CH - 16) continue;
+    }
     buildings.push(b);
-    if (kind === 'house') houses++;
-    if (kind === 'farm') farms++;
-    if (kind === 'smith') smiths++;
-    if (kind === 'library') libraries++;
-    // Ścieżka od drzwi do najbliższej drogi.
     const door = doorCell(b);
-    const dx = Math.abs(ox) > Math.abs(oz);
-    if (dx) pushRect(yards, Math.min(door.x, x), b.z + Math.floor(d / 2), Math.max(door.x, x), b.z + Math.floor(d / 2));
-    else pushRect(yards, b.x + Math.floor(w / 2), Math.min(door.z, z), b.x + Math.floor(w / 2), Math.max(door.z, z));
+    if (alongX) {
+      const street = x + (Math.abs(ox) > 16 ? Math.sign(ox) * 17 : 0);
+      pushRect(yards, street, door.z, door.x, door.z);
+    } else {
+      const street = z + (Math.abs(oz) > 16 ? Math.sign(oz) * 17 : 0);
+      pushRect(yards, door.x, street, door.x, door.z);
+    }
   }
 
   // Latarnie wzdłuż głównych dróg.
@@ -239,7 +237,7 @@ export function villageInCell(gx: number, gz: number, ctx: VillageContext): Vill
       y = Math.round(sum / n);
       if (y <= ctx.sea + 2 || y > 96) return null;
     }
-    const radius = 20 + Math.floor(hash(gx, 15, gz, ctx.seed) * 8);
+    const radius = 34 + Math.floor(hash(gx, 15, gz, ctx.seed) * 7);
     const desert = info.biome === 'Pustynia';
     const v = layout(gx, gz, x, z, radius, ctx, desert);
     v.y = y;
@@ -350,7 +348,9 @@ interface RoofStyle {
   ridge: number; // najwyższy blok kalenicy
 }
 
-function roofStyleFor(v: Village, style: 'planks' | 'library' | 'smith'): RoofStyle {
+type HouseStyle = 'planks' | 'library' | 'smith' | 'bakery' | 'apothecary' | 'watchtower';
+
+function roofStyleFor(v: Village, style: HouseStyle): RoofStyle {
   if (v.desert) return { deck: B.SANDSTONE, stair: B.SANDSTONE_STAIRS_N, ridge: B.SANDSTONE_SLAB };
   if (style === 'smith') return { deck: B.COBBLE, stair: B.COBBLE_STAIRS_N, ridge: B.STONE_SLAB };
   if (style === 'library') return { deck: B.PLANKS, stair: B.OAK_STAIRS_N, ridge: B.OAK_SLAB };
@@ -384,12 +384,12 @@ function gableRoof(b: VillageBuilding, set: SetBlock, baseY: number, st: RoofSty
   }
 }
 
-function house(v: Village, b: VillageBuilding, set: SetBlock, style: 'planks' | 'library' | 'smith') {
+function house(v: Village, b: VillageBuilding, set: SetBlock, style: HouseStyle) {
   const floor = b.y ?? v.y;
-  const wall = v.desert ? B.SANDSTONE : B.PLANKS;
+  const wall = v.desert ? B.SANDSTONE : style === 'bakery' ? B.BRICK : style === 'watchtower' ? B.STONE_BRICKS : B.PLANKS;
   const corner = v.desert ? B.SANDSTONE : v.biome === 'Sawanna' ? B.ACACIA_LOG : B.LOG;
   const plinth = v.desert ? B.SANDSTONE : B.COBBLE;
-  const h = 3;
+  const h = style === 'watchtower' ? 7 : 3;
   const door = doorCell(b);
   const st = roofStyleFor(v, style);
   for (let x = 0; x < b.w; x++)
@@ -419,7 +419,18 @@ function house(v: Village, b: VillageBuilding, set: SetBlock, style: 'planks' | 
     }
   // Płaski strop pod dachem – wnętrze ma sufit, a nie widok na krokwie.
   for (let x = 0; x < b.w; x++) for (let z = 0; z < b.d; z++) set(b.x + x, floor + h + 1, b.z + z, st.deck);
-  if (v.desert) {
+  if (style === 'watchtower') {
+    // Walkable upper floor and crenellated roof, with a supported ladder hatch.
+    for (let x = 1; x < b.w - 1; x++) for (let z = 1; z < b.d - 1; z++) {
+      if (x === 1 && z === 1) continue;
+      set(b.x + x, floor + 4, b.z + z, B.PLANKS);
+    }
+    for (let y = 1; y <= h + 1; y++) set(b.x + 1, floor + y, b.z + 1, B.LADDER_W);
+    for (let x = 0; x < b.w; x++) for (let z = 0; z < b.d; z++) {
+      if ((x === 0 || z === 0 || x === b.w - 1 || z === b.d - 1) && (x + z) % 2 === 0) set(b.x + x, floor + h + 2, b.z + z, v.desert ? B.SANDSTONE : B.STONE_BRICKS);
+      if ((x === 0 || z === 0 || x === b.w - 1 || z === b.d - 1) && wallMid(b, x, z)) set(b.x + x, floor + 5, b.z + z, B.GLASS);
+    }
+  } else if (v.desert) {
     // Vanilla desert houses have sandstone roof terraces with low parapets.
     for (let x = 0; x < b.w; x++) for (let z = 0; z < b.d; z++) {
       if (x === 0 || z === 0 || x === b.w - 1 || z === b.d - 1) {
@@ -438,19 +449,33 @@ function house(v: Village, b: VillageBuilding, set: SetBlock, style: 'planks' | 
     set(b.x + 2, floor + 1, b.z + 1, B.FURNACE_ON);
     for (let h = 2; h <= 8; h++) set(b.x + 2, floor + h, b.z + 1, B.BRICK);
     set(b.x + 2, floor + 9, b.z + 1, B.CAMPFIRE);
-    set(b.x + b.w - 2, floor + 1, b.z + 1, B.LOOT_CHEST);
+
     set(b.x + 1, floor + 1, b.z + b.d - 2, B.CRAFTING);
     set(b.x + b.w - 2, floor + 1, b.z + b.d - 2, B.ANVIL); // kowadło
+  } else if (style === 'bakery') {
+    set(b.x + 1, floor + 1, b.z + 1, B.FURNACE);
+    set(b.x + 2, floor + 1, b.z + 1, B.FURNACE);
+    set(b.x + 1, floor + 1, b.z + b.d - 2, B.CRAFTING);
+    set(b.x + b.w - 2, floor + 1, b.z + 1, B.HAY);
+  } else if (style === 'apothecary') {
+    set(b.x + 1, floor + 1, b.z + 1, B.BREWING);
+    set(b.x + b.w - 2, floor + 1, b.z + 1, B.BOOKSHELF);
+    set(b.x + 1, floor + 1, b.z + b.d - 2, B.CRAFTING);
+  } else if (style === 'watchtower') {
+    set(b.x + b.w - 2, floor + 1, b.z + 1, B.CRAFTING);
+    set(mx, floor + 7, mz, B.LANTERN);
   } else {
     // 2.29: łóżko to dwa bloki – w chacie stawiamy stopę przy ścianie i
     // wezgłowie w głąb izby, jak w waniliowej wiosce.
     set(b.x + 1, floor + 1, b.z + 1, B.BED_S);
     set(b.x + 1, floor + 1, b.z + 2, B.BED_HEAD_S);
-    set(b.x + b.w - 2, floor + 1, b.z + b.d - 2, B.CHEST);
+
     if (b.variant % 3 === 0) set(b.x + b.w - 2, floor + 1, b.z + 1, B.FURNACE);
     else if (b.variant % 3 === 1) set(b.x + b.w - 2, floor + 1, b.z + 1, B.CRAFTING);
     else set(b.x + 1, floor + 1, b.z + b.d - 2, B.CRAFTING);
   }
+  const chest = villageChestPosition(v, b);
+  if (chest) set(chest.x, chest.y, chest.z, B.LOOT_CHEST);
   // Lampka pod sufitem – wcześniej stała w powietrzu pochodnia na wysokości
   // ściany, która wyglądała jak błąd.
   set(mx, floor + h, mz, B.LANTERN);
@@ -464,6 +489,19 @@ function house(v: Village, b: VillageBuilding, set: SetBlock, style: 'planks' | 
   set(latX, floor + 1, latZ, B.FENCE);
   set(latX, floor + 2, latZ, B.FENCE);
   set(latX, floor + 3, latZ, B.LANTERN);
+}
+
+/** One shared anchor for both the template and contextual loot lookup. */
+export function villageChestPosition(v: Village, b: VillageBuilding): { x: number; y: number; z: number } | null {
+  if (!['house', 'library', 'smith', 'bakery', 'apothecary', 'watchtower', 'farm'].includes(b.kind)) return null;
+  return { x: b.x + b.w - 2, y: (b.y ?? v.y) + 1, z: b.kind === 'smith' ? b.z + 1 : b.z + b.d - 2 };
+}
+export function villageLootKindAt(v: Village, x: number, y: number, z: number): ChestLootKind | null {
+  for (const b of v.buildings) {
+    const chest = villageChestPosition(v, b);
+    if (chest && chest.x === x && chest.y === y && chest.z === z) return b.kind as ChestLootKind;
+  }
+  return null;
 }
 
 /** Czy ściana w tym miejscu jest w połowie długości (miejsce na okno). */
@@ -497,6 +535,9 @@ function farm(v: Village, b: VillageBuilding, set: SetBlock) {
       const roll = hash(b.x + x, 5, b.z + z, v.gx * 31 + v.gz);
       set(b.x + x, floor + 1, b.z + z, roll < 0.72 ? B.CROP3 : roll < 0.86 ? B.CROP2 : B.CROP1);
     }
+  const chest = villageChestPosition(v, b)!;
+  set(chest.x, floor, chest.z, B.PLANKS);
+  set(chest.x, chest.y, chest.z, B.LOOT_CHEST);
   // siano w narożniku
   set(b.x + 1, floor + 1, b.z + b.d - 2, B.HAY);
   set(b.x + 2, floor + 1, b.z + b.d - 2, B.HAY);
@@ -588,6 +629,11 @@ function writeBuilding(v: Village, b: VillageBuilding, set: SetBlock) {
       break;
     case 'smith':
       house(v, b, set, 'smith');
+      break;
+    case 'bakery':
+    case 'apothecary':
+    case 'watchtower':
+      house(v, b, set, b.kind);
       break;
     case 'farm':
       farm(v, b, set);
