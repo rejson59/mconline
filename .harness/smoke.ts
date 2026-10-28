@@ -1,3 +1,8 @@
+import { isDoor } from '../src/game/blocks';
+import { structuresOverlapping, ADVENTURE_RADIUS, nearestStructure, structureKindFromName } from '../src/game/structures';
+import { villageChestPosition, doorCell, villagesOverlapping } from '../src/game/village';
+import { explorationLootKind } from '../src/game/explorationLoot';
+import type { ChestLootKind } from '../src/game/chest';
 import { arraySlots, quickMove, swapSlots, collectStacks } from '../src/game/inventoryNavigation';
 import { cacheProfile, loadCachedProfile } from '../src/game/profile';
 import { structureInCell, structureBlocks, applyStructures, type StructureKind } from '../src/game/structures';
@@ -1586,14 +1591,14 @@ section('update 1.6: villages');
     eq('village has exactly one well', village.buildings.filter((v) => v.kind === 'well').length, 1);
     check('village has houses', village.buildings.some((v) => v.kind === 'house'));
     check('village has roads/plaza', village.yards.length > 0);
-    check('village radius is sane', village.radius >= 20 && village.radius <= 28);
+    check('village radius is sane', village.radius >= 34 && village.radius <= 40);
     check('village stands on dry land', village.y > SEA + 2);
 
     // wygeneruj okolicę i sprawdź, co stanęło
-    const cx0 = Math.floor((village.x - 34) / CS);
-    const cx1 = Math.floor((village.x + 34) / CS);
-    const cz0 = Math.floor((village.z - 34) / CS);
-    const cz1 = Math.floor((village.z + 34) / CS);
+    const cx0 = Math.floor((village.x - village.radius - 4) / CS);
+    const cx1 = Math.floor((village.x + village.radius + 4) / CS);
+    const cz0 = Math.floor((village.z - village.radius - 4) / CS);
+    const cz1 = Math.floor((village.z + village.radius + 4) / CS);
     let doors = 0;
     let paths = 0;
     let planks = 0;
@@ -3166,8 +3171,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('4.2'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Naturalne osady i struktury', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION.startsWith('4.3'), GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Osady i niebezpieczne wyprawy', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -7243,6 +7248,215 @@ section('4.2.2: Minecraft-style quick inventory actions');
   inv.grid[8] = { id: B.STONE, count: 2 };
   inv.craftGrid(false);
   eq('2x2 crafting does not consume hidden 3x3 cells', inv.grid[8]?.count, 2);
+}
+
+section('4.3: larger villages, profession supplies and safe streets');
+{
+  const ctx: VillageContext = { seed: 12453, flat: false, sea: SEA, surface: () => ({ h: 80, biome: 'Równiny' }) };
+  const villages: Village[] = [];
+  for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) {
+    const v = villageInCell(x, z, ctx); if (v) villages.push(v);
+  }
+  check('larger settlements still generate reliably', villages.length > 10);
+  const jobs = ['smith', 'library', 'bakery', 'apothecary', 'watchtower', 'farm'] as const;
+  check('every suitable settlement includes the core professions', villages.every(v => jobs.every(kind => v.buildings.some(b => b.kind === kind))));
+  check('settlements have at least four residential houses', villages.every(v => v.buildings.filter(b => b.kind === 'house').length >= 4));
+  check('settlements retain a bounded footprint and building count', villages.every(v => v.radius >= 34 && v.radius <= 40 && v.buildings.length < 28));
+  let crossed = 0, overlapping = 0;
+  for (const v of villages) for (const b of v.buildings) {
+    if (['lamp', 'well', 'hay', 'plaza'].includes(b.kind)) continue;
+    if (v.yards.some(r => r.x0 <= b.x + b.w - 2 && r.x1 >= b.x + 1 && r.z0 <= b.z + b.d - 2 && r.z1 >= b.z + 1)) crossed++;
+    if (v.buildings.some(o => o !== b && o.x < b.x + b.w && o.x + o.w > b.x && o.z < b.z + b.d && o.z + o.d > b.z)) overlapping++;
+  }
+  eq('no street or entrance path cuts through an interior', crossed, 0);
+  eq('plots never overlap neighbouring buildings', overlapping, 0);
+  const v = villages[0];
+  const chunks = new Map<string, Uint16Array>();
+  const block = (x: number, y: number, z: number) => {
+    const cx = Math.floor(x / CS), cz = Math.floor(z / CS), key = `${cx},${cz}`;
+    if (!chunks.has(key)) {
+      const data = new Uint16Array(CS * CS * CH); applyVillages(data, cx, cz, ctx); chunks.set(key, data);
+    }
+    return chunks.get(key)![(y * CS + z - cz * CS) * CS + x - cx * CS];
+  };
+  for (const b of v.buildings) {
+    const pos = villageChestPosition(v, b);
+    if (!pos) continue;
+    check(`${b.kind} generates an actual loot marker`, isLootChest(block(pos.x, pos.y, pos.z)));
+    eq(`${b.kind} chest resolves its profession`, explorationLootKind(ctx, pos.x, pos.y, pos.z), b.kind);
+    eq(`${b.kind} underground cave chest is not misclassified`, explorationLootKind(ctx, pos.x, pos.y - 20, pos.z), 'cave');
+    if (b.kind === 'farm') continue;
+    const door = doorCell(b), inward = [[0, 1], [-1, 0], [0, -1], [1, 0]][b.face];
+    check(`${b.kind} has a complete two-part door`, isDoor(block(door.x, b.y! + 1, door.z)) && isDoorTop(block(door.x, b.y! + 2, door.z)));
+    check(`${b.kind} doorway opens into a clear two-block-high corridor`, [1, 2].every(n => [1, 2].every(h => block(door.x + inward[0] * n, b.y! + h, door.z + inward[1] * n) === B.AIR)));
+    if (b.kind === 'smith') eq('smith still has a working anvil', block(b.x + b.w - 2, b.y! + 1, b.z + b.d - 2), B.ANVIL);
+    if (b.kind === 'bakery') eq('bakery has a real furnace', block(b.x + 1, b.y! + 1, b.z + 1), B.FURNACE);
+    if (b.kind === 'apothecary') eq('apothecary has a brewing stand', block(b.x + 1, b.y! + 1, b.z + 1), B.BREWING);
+    if (b.kind === 'watchtower') {
+      eq('watchtower ladder crosses the upper floor', block(b.x + 1, b.y! + 4, b.z + 1), B.LADDER_W);
+      eq('watchtower ladder opens onto the roof', block(b.x + 1, b.y! + 8, b.z + 1), B.LADDER_W);
+      eq('watchtower upper interior is not filled with window glass', block(b.x + 3, b.y! + 5, b.z + 3), B.AIR);
+    }
+  }
+}
+
+section('4.3: weighted contextual loot, legal stack sizes and one-time generation');
+{
+  const kinds: ChestLootKind[] = ['house', 'smith', 'library', 'farm', 'bakery', 'apothecary', 'watchtower', 'mine', 'crater', 'portal', 'temple', 'swamp'];
+  for (const kind of kinds) {
+    const seen = new Set<number>(); let invalid = 0, diamond = 0;
+    for (let n = 0; n < 120; n++) {
+      const loot = chestLoot(531 + n, -137 + n, 70, 240, kind);
+      if (loot.length < 5 || loot.length > 8 || new Set(loot.map(s => s.id)).size !== loot.length || loot.some(s => !(BLOCKS[s.id] || ITEMS[s.id]) || s.count < 1 || s.count > stackLimit(s.id))) invalid++;
+      for (const s of loot) { seen.add(s.id); if (s.id === I.DIAMOND) diamond++; }
+    }
+    eq(`${kind} always supplies 5-8 distinct legal stacks`, invalid, 0);
+    check(`${kind} varies across seeds instead of repeating one kit`, seen.size >= 9, String(seen.size));
+    check(`${kind} does not flood chests with diamonds`, diamond < 20, String(diamond));
+    eq(`${kind} is deterministic at the same location`, JSON.stringify(chestLoot(531, -137, 70, 240, kind)), JSON.stringify(chestLoot(531, -137, 70, 240, kind)));
+  }
+  const mine = Array.from({ length: 120 }, (_, n) => chestLoot(n, 1, 70, 3, 'mine')).flat();
+  const bakery = Array.from({ length: 120 }, (_, n) => chestLoot(n, 1, 70, 3, 'bakery')).flat();
+  check('mine loot includes rails and tools', mine.some(s => s.id === B.RAIL) && mine.some(s => s.id === I.IRON_PICK));
+  check('bakery loot includes bread and wheat, not diamonds', bakery.some(s => s.id === I.BREAD) && bakery.some(s => s.id === I.WHEAT) && !bakery.some(s => s.id === I.DIAMOND));
+  const ctx: VillageContext = { seed: 12453, flat: false, sea: SEA, surface: () => ({ h: 80, biome: 'Równiny' }) };
+  let village: Village | null = null;
+  for (let n = 0; n < 20 && !village; n++) village = villageInCell(n, 0, ctx);
+  const smith = village!.buildings.find(b => b.kind === 'smith')!;
+  const p = villageChestPosition(village!, smith)!;
+  let id = B.LOOT_CHEST as number;
+  const drops: Stack[] = [];
+  const world = { seed: ctx.seed, isNether: false, villageContext: () => ctx, getBlock: () => id, setBlock: (_x: number, _y: number, _z: number, value: number) => { id = value; } };
+  const g = Object.assign(Object.create(Game.prototype), { world, chests: new Map(), setUI() {}, unlock() {},
+    spawnDrop: (item: number, count: number) => drops.push({ id: item, count }),
+  });
+  const expected = chestLoot(ctx.seed, p.x, p.y, p.z, 'smith');
+  g.openChest(p.x, p.y, p.z);
+  eq('opening a smith chest uses contextual loot', JSON.stringify(g.currentChest().slots.filter(Boolean)), JSON.stringify(expected));
+  check('opening consumes the loot marker', !isLootChest(id));
+  g.currentChest().slots.fill(null);
+  g.openChest(p.x, p.y, p.z);
+  eq('reopening an emptied chest never refills it', g.currentChest().slots.filter(Boolean).length, 0);
+  g.chests.clear(); id = B.CHEST;
+  g.openChest(p.x, p.y, p.z);
+  eq('player-placed plain chests in a village remain empty', g.currentChest().slots.filter(Boolean).length, 0);
+  g.chests.clear(); id = B.LOOT_CHEST;
+  g.spillChest(p.x, p.y, p.z);
+  eq('breaking unopened chest gives exactly the same loot as opening', JSON.stringify(drops), JSON.stringify(expected));
+}
+
+section('4.3: mineshafts, craters, denser portals and chunk seams');
+{
+  const ctx: VillageContext = { seed: 81551, flat: false, sea: SEA, surface: () => ({ h: 82, biome: 'Las' }) };
+  const sites = structuresOverlapping(-600, -600, 600, 600, ctx);
+  const adventures = sites.filter(s => s.kind === 'mineshaft' || s.kind === 'crater');
+  check('exploration layer contains many mines and craters', adventures.length > 15, String(adventures.length));
+  check('additional portals increase exploration density', sites.filter(s => s.kind === 'ruined_portal').length > 25);
+  for (const kind of ['mineshaft', 'crater'] as const) {
+    const s = sites.find(s => s.kind === kind)!;
+    check(`${kind} generates on dry natural terrain`, !!s);
+    if (!s) continue;
+    const blocks = structureBlocks(s, ctx);
+    eq(`${kind} has no duplicate voxel writes`, blocks.length, new Set(blocks.map(b => `${b.x},${b.y},${b.z}`)).size);
+    check(`${kind} stays inside its declared bounds`, blocks.every(b => Math.abs(b.x - s.x) <= ADVENTURE_RADIUS && Math.abs(b.z - s.z) <= ADVENTURE_RADIUS && b.y > 0 && b.y < CH && BLOCKS[b.id]));
+    const chests = blocks.filter(b => isLootChest(b.id));
+    check(`${kind} has discoverable treasure`, chests.length > 0);
+    check(`${kind} resolves the new loot profile`, chests.every(b => explorationLootKind(ctx, b.x, b.y, b.z) === (kind === 'mineshaft' ? 'mine' : 'crater')));
+    const chunks = new Map<string, Uint16Array>();
+    const keys = [...new Set(blocks.map(b => `${Math.floor(b.x / CS)},${Math.floor(b.z / CS)}`))].reverse();
+    for (const key of keys) {
+      const [cx, cz] = key.split(',').map(Number), data = new Uint16Array(CS * CS * CH);
+      applyStructures(data, cx, cz, ctx, new Uint8Array(CS * CS)); chunks.set(key, data);
+    }
+    let mismatch = 0;
+    for (const b of blocks) {
+      const cx = Math.floor(b.x / CS), cz = Math.floor(b.z / CS);
+      if (chunks.get(`${cx},${cz}`)![(b.y * CS + b.z - cz * CS) * CS + b.x - cx * CS] !== b.id) mismatch++;
+    }
+    eq(`${kind} has no chunk seams when generated in reverse order`, mismatch, 0);
+    for (let rotation = 0; rotation < 4; rotation++) {
+      const rotated = structureBlocks({ ...s, rotation }, ctx);
+      eq(`${kind} rotation preserves template volume`, rotated.length, blocks.length);
+      if (kind === 'mineshaft') {
+        const voxels = new Map(rotated.map(b => [`${b.x},${b.y},${b.z}`, b.id]));
+        const terrain = { peekBlock: (x: number, y: number, z: number) => voxels.get(`${x},${y},${z}`) ?? (y <= 82 ? B.STONE : B.AIR) } as World;
+        const dir = [[0, 1], [-1, 0], [0, -1], [1, 0]][rotation];
+        const body: Body = { pos: new THREE.Vector3(s.x + 0.5 - dir[0] * 17, s.y + 1.01, s.z + 0.5 - dir[1] * 17), vel: new THREE.Vector3(), w: 0.6, h: 1.8, onGround: true, hitWall: false };
+        for (let t = 0; t < 330; t++) { body.vel.x = dir[0] * 4; body.vel.z = dir[1] * 4; body.vel.y -= 28 / 60; stepBody(terrain, body, 1 / 60); }
+        const progress = (body.pos.x - s.x - 0.5) * dir[0] + (body.pos.z - s.z - 0.5) * dir[1];
+        check(`mine stairs can be descended without digging, rotation ${rotation}`, progress > 2 && body.pos.y < s.y - 9, `${progress.toFixed(2)}, y=${body.pos.y}`);
+        for (let t = 0; t < 350; t++) { body.vel.x = -dir[0] * 4; body.vel.z = -dir[1] * 4; body.vel.y -= 28 / 60; stepBody(terrain, body, 1 / 60); }
+        const back = (body.pos.x - s.x - 0.5) * dir[0] + (body.pos.z - s.z - 0.5) * dir[1];
+        check(`mine stairs can be climbed back to safety, rotation ${rotation}`, back < -16.5 && body.pos.y >= s.y + 0.99, `${back.toFixed(2)}, y=${body.pos.y}`);
+      }
+    }
+    if (kind === 'mineshaft') {
+      check('mine includes rails, supports and ore veins', [B.RAIL, B.FENCE, B.IRON_ORE, B.COAL_ORE].every(id => blocks.some(b => b.id === id)));
+      eq('mine has two supply caches', chests.length, 2);
+      const [dx, dz] = [[10, 8], [-8, 10], [-10, -8], [8, -10]][s.rotation];
+      const x = s.x + dx, z = s.z + dz, cx = Math.floor(x / CS), cz = Math.floor(z / CS);
+      const mask = new Uint8Array(CS * CS), occupied = new Uint8Array(CS * CS);
+      applyStructures(new Uint16Array(CS * CS * CH), cx, cz, ctx, mask, occupied);
+      eq('underground mine does not clear vegetation on the surface', mask[(z - cz * CS) * CS + x - cx * CS], 0);
+      eq('underground mine remains protected from cave-chest decoration', occupied[(z - cz * CS) * CS + x - cx * CS], 1);
+    } else {
+      check('crater excavates a real depression', blocks.some(b => b.id === B.AIR && b.y <= s.y - 4));
+      check('crater has varied basalt, blackstone and gravel surfaces', [B.BASALT, B.BLACKSTONE, B.GRAVEL].every(id => blocks.some(b => b.id === id)));
+    }
+  }
+  const craters = sites.filter(s => s.kind === 'crater');
+  check('hot craters include real lava hazards', craters.some(s => structureBlocks(s, ctx).some(b => b.id === B.LAVA)));
+  check('some craters are dry rather than repeating the same hazard', craters.some(s => !structureBlocks(s, ctx).some(b => b.id === B.LAVA)));
+  const natural = new World(81551);
+  const actual = structuresOverlapping(-1024, -1024, 1024, 1024, natural.villageContext());
+  console.log(`  natural seed 81551: ${actual.length} sites, ${actual.filter(s => s.kind === 'mineshaft').length} mines, ${actual.filter(s => s.kind === 'crater').length} craters, ${actual.filter(s => s.kind === 'ruined_portal').length} portals`);
+  for (const kind of ['mineshaft', 'crater'] as const) {
+    const site = actual.find(s => s.kind === kind);
+    check(`real natural terrain contains ${kind}`, !!site);
+    if (!site) continue;
+    const blocks = structureBlocks(site, natural.villageContext());
+    const other = new World(81551);
+    const coords = [...new Set(blocks.map(b => `${Math.floor(b.x / CS)},${Math.floor(b.z / CS)}`))];
+    for (const key of coords) { const [x, z] = key.split(',').map(Number); natural.getChunk(x, z); }
+    for (const key of [...coords].reverse()) { const [x, z] = key.split(',').map(Number); other.getChunk(x, z); }
+    let changed = 0, seams = 0;
+    for (const b of blocks) {
+      if (natural.getBlock(b.x, b.y, b.z) !== b.id) changed++;
+      if (natural.getBlock(b.x, b.y, b.z) !== other.getBlock(b.x, b.y, b.z)) seams++;
+    }
+    eq(`${kind} survives full terrain, cave and decoration passes`, changed, 0);
+    eq(`${kind} full world generation is order-independent`, seams, 0);
+    const chest = blocks.find(b => isLootChest(b.id))!;
+    natural.setBlock(chest.x, chest.y, chest.z, B.AIR);
+    const restored = new World(81551); restored.loadMods(natural.serializeMods());
+    eq(`${kind} opened/destroyed markers stay consumed after world reload`, restored.getBlock(chest.x, chest.y, chest.z), B.AIR);
+  }
+  const flat = { ...ctx, flat: true };
+  eq('superflat is not carved by exploration structures', structuresOverlapping(-300, -300, 300, 300, flat).length, 0);
+  for (const biome of ['Ocean', 'Plaża', 'Nether']) {
+    const bad = { ...ctx, surface: () => ({ h: 82, biome }) };
+    eq(`no exploration structures in ${biome}`, structuresOverlapping(-300, -300, 300, 300, bad).length, 0);
+  }
+  const villages = { ...ctx, surface: () => ({ h: 82, biome: 'Równiny' }) };
+  check('adventures stay clear of village bounds', structuresOverlapping(-500, -500, 500, 500, villages).every(s => { const r = s.kind === 'mineshaft' || s.kind === 'crater' ? ADVENTURE_RADIUS : 13; return !villagesOverlapping(s.x - r, s.z - r, s.x + r, s.z + r, villages).length; }));
+  eq('Polish locate aliases accept accents', structureKindFromName('ŚWIĄTYNIA'), 'desert_temple');
+  eq('unknown locate type is rejected', structureKindFromName('toString'), null);
+  const near = nearestStructure(0, 0, ctx, 'mineshaft');
+  check('locate finds the nearest mine within a bounded range', !!near && near.dist <= 768 && near.site.kind === 'mineshaft');
+  const world = new World(81551), before = world.mods.size;
+  nearestStructure(0, 0, world.villageContext(), 'crater');
+  eq('locate metadata search never edits the world', world.mods.size, before);
+  check('locate is advertised in the command catalogue', !!commandByName('locate') && !!commandByName('znajdz'));
+  const target = actual.find(s => s.kind === 'mineshaft')!;
+  const commandGame = Object.assign(Object.create(Game.prototype), { world: natural, messages: [], emitHud() {},
+    body: { pos: new THREE.Vector3(target.x + 10, target.y + 1, target.z), vel: new THREE.Vector3() },
+  });
+  const position = commandGame.body.pos.clone();
+  commandGame.command('/locate kopalnia');
+  check('locate command prints mine coordinates', commandGame.messages.some((m: { text: string }) => m.text.includes('Opuszczona kopalnia:')));
+  check('locate never teleports the player into a hazard', commandGame.body.pos.equals(position));
+  commandGame.command('/locate unknown');
+  check('invalid locate input shows available choices', commandGame.messages.some((m: { text: string }) => m.text.includes('Użycie: /locate')));
 }
 
 // =================================================================== report

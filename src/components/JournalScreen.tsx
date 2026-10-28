@@ -9,7 +9,7 @@ export const JOURNAL_CHAPTERS = [
   { title: 'Pierwsze kroki', text: 'Zdobądź podstawowe surowce i przygotuj narzędzia.', goals: ['wood', 'craft', 'pick'] },
   { title: 'Bezpieczna przystań', text: 'Zadbaj o światło i miejsce na noc.', goals: ['torch', 'home', 'stash'] },
   { title: 'Wyprawa pod ziemię', text: 'Zejdź głębiej, wydobądź rudy i rozpal piec.', goals: ['cave', 'coal', 'iron', 'diamond'] },
-  { title: 'Życie w osadzie', text: 'Odkryj wioskę, poznaj mieszkańców i rozpocznij handel.', goals: ['village', 'trade', 'emerald', 'bell'] },
+  { title: 'Życie w osadzie', text: 'Odkryj kuźnię, bibliotekę, piekarnię i dom alchemika. Skrzynie kryją zapasy pasujące do profesji. Poznaj mieszkańców i rozpocznij handel.', goals: ['village', 'trade', 'emerald', 'bell'] },
   { title: 'Sztuka zaklinania', text: 'Zbierz składniki i ulepsz wyposażenie magią.', goals: ['lapis', 'book', 'table', 'enchant'] },
   { title: 'Za portalem', text: 'Zbuduj przejście i poznaj niebezpieczeństwa Netheru.', goals: ['portal', 'nether', 'quartz', 'ghast'] },
   { title: 'Dalsze horyzonty', text: 'Staw czoła Endermanowi i wykorzystaj moc jego perły.', goals: ['enderman', 'pearl'] },
