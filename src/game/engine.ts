@@ -3,7 +3,7 @@ import { explorationLootKind } from './explorationLoot';
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, chestLidGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
-import { B, BLOCKS, IS_SOLID, OCCLUDES, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
+import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -50,7 +50,7 @@ import {
 import { PUBLIC_POS_HZ } from './online';
 import { REMOTE_DELAY_LOCAL, REMOTE_DELAY_PUBLIC, RemoteTrack } from './netSmooth';
 import { fallbackSkin, loadSkinId, skinById } from './skins';
-import { loadPlayerId, spreadSpawn, type PlayerProfile } from './profile';
+import { loadPlayerId, spreadSpawn, cleanStacks, type PlayerProfile } from './profile';
 import { AVATAR_KINDS, avatarMaterial } from './mobTextures';
 import { hasPackSkin, isSlimSkin, playerSkinTexture, skinnedBox, skinnedHat } from './skinArt';
 import {
@@ -182,6 +182,7 @@ export interface HUDState {
   xpFrac: number;
   /** Four equipped armor pieces (head, chest, legs, feet). */
   armor: (Stack | null)[];
+  offhand?: Stack | null;
   /** 2.28: profil automatu wydajności (widoczny w debug-HUD). */
   perf: 'oszczędny' | 'zrównoważony' | 'pełny';
   /** 2.28: zasięg terenu w oddali w blokach (0 = LOD wyłączony). */
@@ -236,6 +237,7 @@ export interface SaveData {
   yaw: number;
   pitch: number;
   inv: (Stack | null)[];
+  offhand?: Stack | null;
   time: number;
   health: number;
   day: number;
@@ -579,6 +581,10 @@ function makeCanvasTex(size: number, draw: (ctx: CanvasRenderingContext2D) => vo
 
 const FACING = ['Północ (-Z)', 'Zachód (-X)', 'Południe (+Z)', 'Wschód (+X)'];
 
+const USE_ITEMS: ReadonlySet<number> = new Set([I.BUCKET, I.WATER_BUCKET, I.LAVA_BUCKET, I.BOTTLE, I.FLINT_STEEL, I.SEEDS, I.BOW, I.FISHING_ROD, I.SPYGLASS, I.ENDER_PEARL]);
+// Stateful ranged/zoom actions use the main hand; F always transfers them.
+const MAIN_HAND_USE_ITEMS: ReadonlySet<number> = new Set([I.BOW, I.FISHING_ROD, I.SPYGLASS]);
+
 export class Game {
   container: HTMLElement;
   renderer: THREE.WebGLRenderer;
@@ -713,6 +719,10 @@ export class Game {
   crackMesh: THREE.Mesh;
   crackTex: THREE.Texture[];
   hand = new THREE.Group();
+  offHand = new THREE.Group();
+  offHandMesh: THREE.Mesh | null = null;
+  offHandId = -2;
+  private usingOffhand = false;
   handMesh: THREE.Mesh | null = null;
   handId = -2;
   handMat: THREE.MeshBasicMaterial;
@@ -1152,8 +1162,8 @@ export class Game {
     this.scene.add(this.stormClouds);
 
     // hand
-    this.handMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, depthTest: false, alphaTest: 0.3, side: THREE.FrontSide });
-    this.camera.add(this.hand);
+    this.handMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, depthTest: false, depthWrite: false, alphaTest: 0.3, side: THREE.FrontSide });
+    this.camera.add(this.hand, this.offHand);
     this.tntGeo = blockGeometry(B.TNT);
     this.arrowGeo = new THREE.BoxGeometry(0.09, 0.09, 0.78);
     this.arrowMat = new THREE.MeshBasicMaterial({ color: 0x9a7a4a });
@@ -1171,6 +1181,7 @@ export class Game {
       this.health = opts.save.health > 0 ? opts.save.health : 20;
       this.hunger = opts.save.hunger ?? 20;
       this.day = opts.save.day || 1;
+      this.inventory.offhand = cleanStacks([opts.save.offhand], 1)[0];
       opts.save.inv.forEach((s, i) => (this.inventory.slots[i] = s ? { ...s } : null));
       for (const f of opts.save.furnaces ?? []) this.furnaces.set((f.dim ? 'n:' : '') + furnaceKey(f.x, f.y, f.z), { ...f, input: f.input ? { ...f.input } : null, fuel: f.fuel ? { ...f.fuel } : null, output: f.output ? { ...f.output } : null });
       for (const c of opts.save.chests ?? []) this.chests.set((c.dim ? 'n:' : '') + chestKey(c.x, c.y, c.z), { x: c.x, y: c.y, z: c.z, dim: c.dim, slots: (c.slots ?? []).slice(0, 27).map((s) => (s ? { ...s } : null)) });
@@ -1405,6 +1416,7 @@ export class Game {
     this.fallStart = p.y;
     if (Array.isArray(p.inv)) for (let i = 0; i < this.inventory.slots.length; i++) this.inventory.slots[i] = p.inv[i] ?? null;
     if (Array.isArray(p.armor)) for (let i = 0; i < this.armor.length; i++) this.armor[i] = p.armor[i] ?? null;
+    this.inventory.offhand = cleanStacks([p.offhand], 1)[0];
     this.inventory.cursor = p.cursor ?? null;
     this.inventory.grid = p.grid?.slice() ?? new Array(9).fill(null);
     this.enchantItem = p.enchantItem ?? null;
@@ -1466,6 +1478,7 @@ export class Game {
       cursor: this.inventory.cursor ? structuredClone(this.inventory.cursor) : null,
       grid: this.inventory.grid.map((st) => st ? structuredClone(st) : null),
       enchantItem: this.enchantItem ? structuredClone(this.enchantItem) : null,
+      offhand: this.inventory.offhand ? structuredClone(this.inventory.offhand) : null,
       inv: this.inventory.slots.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
       armor: this.armor.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
     };
@@ -2464,13 +2477,34 @@ export class Game {
       // wcześniej W→S→W w krótkim odstępie uruchamiało sprint.
       if (e.code === 'KeyW') this.lastW = 0;
     }) as EventListener);
+    this.on(window, 'blur', () => this.cancelActions());
+    this.on(window, 'pointercancel', () => this.cancelActions());
+    this.on(window, 'mousemove', ((e: MouseEvent) => {
+      if (!this.touchInput && this.ui === 'playing') this.reconcileMouseButtons(e.buttons);
+    }) as EventListener);
     this.on(document, 'visibilitychange', () => {
       if (document.hidden) {
-        this.keys.clear();
-        this.mouseLeft = this.mouseRight = false;
+        this.cancelActions();
         this.save();
       }
     });
+  }
+
+  /** A missing mouseup (Alt-Tab, cancelled capture) must not keep mining
+   * the floor while the player walks. Never infer a new press from movement. */
+  private cancelActions() {
+    this.keys.clear();
+    this.mouseLeft = this.mouseRight = false;
+    this.breakProgress = 0;
+    this.breakKey = '';
+    this.bowDraw = -1;
+    this.zooming = false;
+    this.touchAim = this.aimDir = null;
+  }
+
+  private reconcileMouseButtons(buttons: number) {
+    if (!(buttons & 1)) { this.mouseLeft = false; this.breakProgress = 0; this.breakKey = ''; }
+    if (!(buttons & 2)) this.mouseRight = false;
   }
 
   /** Klawisze ruchu – powtórzenia (e.repeat) mają je po prostu utrzymywać. */
@@ -2625,7 +2659,7 @@ export class Game {
     if (e.code === 'KeyT' || e.code === 'Slash') { e.preventDefault(); this.setUI('chat'); return; }
     // 2.5: Ctrl+Q wyrzuca cały stos (Q – pojedynczy przedmiot, jak w klasyku).
     if (e.code === 'KeyQ') { this.dropItem(e.ctrlKey); }
-    if (e.code === 'KeyF' && this.mode === 'creative') { this.toggleFly(); }
+    if (e.code === 'KeyF' && !e.repeat) { e.preventDefault(); this.swapHands(); }
     if (e.code === 'Space') {
       const now = performance.now();
       if (this.mode === 'creative' && now - this.lastSpace < 300) { this.toggleFly(); }
@@ -2970,6 +3004,7 @@ export class Game {
   /** Shared keyboard/Shift navigation for the backpack and container screens. */
   private navigationSlots(area: SlotArea): StackSlot[] {
     if (area === 'inventory') return arraySlots(this.inventory.slots);
+    if (area === 'offhand') return [{ get: () => this.inventory.offhand, set: (s) => { this.inventory.offhand = s; } }];
     if (area === 'grid') return arraySlots(this.inventory.grid);
     if (area === 'armor') return arraySlots(this.armor).map((slot, i) => ({ ...slot, limit: 1, accepts: (s: Stack) => armorSlotOf(s.id) === i }));
     if (area === 'chest') return arraySlots(this.currentChest()?.slots ?? []);
@@ -3009,12 +3044,14 @@ export class Game {
         if (this.ui === 'inventory' && armor !== null && !this.armor[armor]) quickMove(source, [this.navigationSlots('armor')[armor]]);
         else quickMove(source, index < 9 ? inventory.slice(9) : inventory.slice(0, 9));
       }
+    } else if (action.type === 'offhand') {
+      swapSlots(source, this.navigationSlots('offhand')[0]);
     } else if (action.type === 'hotbar') {
       if (action.index >= 0 && action.index < 9) swapSlots(source, inventory[action.index]);
     } else if (action.type === 'collect') {
       if (!this.inventory.cursor) { this.inventory.cursor = source.get(); source.set(null); }
       const grid = this.ui === 'inventory' ? this.navigationSlots('grid').filter((_, i) => !!this.craftingTable || [0, 1, 3, 4].includes(i)) : [];
-      collectStacks(this.inventory.cursor, [...inventory, ...container, ...grid]);
+      collectStacks(this.inventory.cursor, [...inventory, ...container, ...grid, ...this.navigationSlots('offhand')]);
     } else if (action.type === 'drop') {
       const stack = source.get();
       if (stack) {
@@ -3024,10 +3061,28 @@ export class Game {
         if (!stack.count) source.set(null);
       }
     }
-    if (action.type !== 'drop' && area !== 'inventory' && area !== 'grid' && area !== 'armor' && previous && (source.get() !== previous || previousCount > (source.get()?.count ?? 0))) {
+    if (action.type !== 'drop' && area !== 'inventory' && area !== 'grid' && area !== 'armor' && area !== 'offhand' && previous && (source.get() !== previous || previousCount > (source.get()?.count ?? 0))) {
       this.notePickup(previous.id);
       if (area === 'furnace' && index === 2 && previous.id === I.IRON) this.unlock('iron');
     }
+    this.saveProfileNow(false);
+  }
+
+  clickOffhand(right: boolean) {
+    this.transfer(() => this.inventory.offhand, (s) => { this.inventory.offhand = s; }, right);
+    this.updateHand();
+    this.emitHud();
+    this.saveProfileNow(false);
+  }
+
+  swapHands() {
+    swapSlots(this.navigationSlots('inventory')[this.selected], this.navigationSlots('offhand')[0]);
+    this.bowDraw = -1;
+    this.zooming = false;
+    this.breakProgress = 0;
+    this.breakKey = '';
+    this.updateHand();
+    this.emitHud();
     this.saveProfileNow(false);
   }
 
@@ -3434,12 +3489,33 @@ export class Game {
     if (id === B.SUGARCANE) this.unlock('cane');
   }
 
+  private setSelectedStack(stack: Stack | null) {
+    if (this.usingOffhand) this.inventory.offhand = stack;
+    else this.inventory.slots[this.selected] = stack;
+  }
+
+  /** Reserve the result before modifying the world. A singleton frees its
+   * own hand slot, even when all 36 backpack slots are occupied. */
+  private exchangeContainer(result: number): boolean {
+    const source = this.selectedStack();
+    if (!source) return false;
+    if (source.count === 1) this.setSelectedStack({ id: result, count: 1 });
+    else {
+      if (!this.inventory.canAdd(result, 1)) return false;
+      this.inventory.add(result, 1);
+      source.count--;
+    }
+    this.updateHand();
+    this.emitHud();
+    return true;
+  }
+
   private consumeSelected(n = 1) {
     if (this.mode !== 'survival') return;
     const s = this.selectedStack();
     if (!s) return;
     s.count -= n;
-    if (s.count <= 0) this.inventory.slots[this.selected] = null;
+    if (s.count <= 0) this.setSelectedStack(null);
     this.emitHud();
   }
 
@@ -3459,7 +3535,7 @@ export class Game {
     if (s.dur === undefined) s.dur = max;
     s.dur--;
     if (s.dur <= 0) {
-      this.inventory.slots[this.selected] = null;
+      this.setSelectedStack(null);
       Sfx.playBreak('wood');
       this.message(`${displayName(s.id)} się zniszczyło.`);
     }
@@ -3598,24 +3674,25 @@ export class Game {
   /** Shield takes durability damage; used by parried hits and blocked arrows. */
   private wearShield(n: number) {
     if (this.mode !== 'survival') return;
-    const s = this.selectedStack();
-    if (!s || ITEMS[s.id]?.tool !== 'shield') return;
+    const main = this.inventory.slots[this.selected];
+    const inMain = main?.id === I.SHIELD;
+    const s = inMain ? main : this.inventory.offhand;
+    if (!s || s.id !== I.SHIELD) return;
     const lvl = enchLevel(s, 'unbreaking');
     if (lvl > 0 && Math.random() > wearChance(lvl)) return;
-    const max = ITEMS[s.id]?.durability ?? 1;
-    if (s.dur === undefined) s.dur = max;
-    s.dur -= n;
+    s.dur = (s.dur ?? ITEMS[s.id]?.durability ?? 1) - n;
     if (s.dur <= 0) {
-      this.inventory.slots[this.selected] = null;
+      if (inMain) this.inventory.slots[this.selected] = null;
+      else this.inventory.offhand = null;
       Sfx.playBreak('wood');
       this.message('Tarcza się zniszczyła.');
+      this.updateHand();
     }
     this.emitHud();
   }
 
   private holdingShield(): boolean {
-    const s = this.selectedStack();
-    return !!s && ITEMS[s.id]?.tool === 'shield';
+    return this.inventory.slots[this.selected]?.id === I.SHIELD || this.inventory.offhand?.id === I.SHIELD;
   }
 
   private tryEat(s: Stack) {
@@ -3676,17 +3753,16 @@ export class Game {
       }
       const filled = t.id === B.WATER ? I.WATER_BUCKET : I.LAVA_BUCKET;
       if (this.mode === 'survival') {
-        if (!this.inventory.add(filled, 1)) {
+        if (!this.exchangeContainer(filled)) {
           this.message('Brak miejsca na wiadro.');
           return;
         }
         this.world.setBlock(t.x, t.y, t.z, B.AIR);
         Sfx.playSplash();
-        this.consumeSelected();
       } else {
         // 2.4 fix: w trybie kreatywnym wiadro nie rozbierało już źródła wody
         // ani lawy – a samo zamieniało się w pełne wiadro.
-        s.id = filled;
+        this.setSelectedStack({ id: filled, count: 1 });
         Sfx.playSplash();
         this.updateHand();
         this.emitHud();
@@ -3699,13 +3775,14 @@ export class Game {
     const cur = this.world.getBlock(px, py, pz);
     if (cur !== B.AIR && RENDER[cur] !== 1 && cur !== B.WATER && cur !== B.LAVA) return;
     if (py < 0 || py >= CH) return;
+    if (this.mode === 'survival' && !this.exchangeContainer(I.BUCKET)) {
+      this.message('Brak miejsca na puste wiadro.');
+      return;
+    }
     this.world.setBlock(px, py, pz, fluid);
     Sfx.playSplash();
     this.swingT = 0;
-    if (this.mode === 'survival') {
-      this.consumeSelected();
-      this.inventory.add(I.BUCKET, 1);
-    }
+
   }
 
   private facingOf(nx: number, ny: number, nz: number): number {
@@ -4350,6 +4427,7 @@ export class Game {
         break;
       case 'clear':
         this.inventory.slots.fill(null);
+        this.inventory.offhand = null;
         this.message('Wyczyszczono ekwipunek.');
         break;
       default: {
@@ -4445,6 +4523,7 @@ export class Game {
         pos: [this.body.pos.x, this.body.pos.y, this.body.pos.z],
         yaw: this.yaw,
         pitch: this.pitch,
+        offhand: this.inventory.offhand ? structuredClone(this.inventory.offhand) : null,
         inv: this.inventory.slots.map((s) => (s ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null)),
         time: this.time,
         health: this.health,
@@ -4475,12 +4554,16 @@ export class Game {
   // ---------- Chunks ----------
   buildChunk(cx: number, cz: number) {
     const c = this.world.getChunk(cx, cz);
-    for (const m of c.meshes) {
-      this.scene.remove(m);
-      m.geometry.dispose();
+    let geos: THREE.BufferGeometry[];
+    try { geos = this.world.buildMesh(c); }
+    catch (error) {
+      // Preserve the last valid floor instead of leaving an invisible chunk.
+      this.world.dirty.add(World.key(cx, cz));
+      console.warn(`Chunk ${cx},${cz} mesh rebuild failed; keeping previous geometry`, error);
+      return;
     }
-    c.meshes = [];
-    const geos = this.world.buildMesh(c);
+    const previous = c.meshes;
+    const next: THREE.Mesh[] = [];
     // 2.32: nowy chunk od razu dostaje widoczność zgodną z zasięgiem
     // rysowania – inaczej po zwolnieniu jakości „wskakiwałyby” siatki
     // spoza horyzontu, dopóki gracz nie zmieni chunka.
@@ -4493,8 +4576,10 @@ export class Game {
       m.renderOrder = i;
       m.visible = vis;
       this.scene.add(m);
-      c.meshes.push(m);
+      next.push(m);
     });
+    c.meshes = next;
+    for (const m of previous) { this.scene.remove(m); m.geometry.dispose(); }
     c.built = true;
   }
 
@@ -4568,7 +4653,7 @@ export class Game {
   }
 
   selectedStack(): Stack | null {
-    return this.inventory.slots[this.selected];
+    return this.usingOffhand ? this.inventory.offhand : this.inventory.slots[this.selected];
   }
 
   /** Biome under the player, cached per chunk so noise runs once per chunk, not per frame. */
@@ -4707,42 +4792,45 @@ export class Game {
 
   // ---------- Hand ----------
   updateHand() {
-    const s = this.selectedStack();
-    const id = s ? s.id : -1;
-    if (id === this.handId) return;
-    this.handId = id;
-    if (this.handMesh) {
-      this.hand.remove(this.handMesh);
-      this.handMesh.geometry.dispose();
-      const mat = this.handMesh.material;
-      if (mat !== this.handMat && !Array.isArray(mat)) mat.dispose();
+    const main = this.inventory.slots[this.selected];
+    for (const off of [false, true]) {
+      const stack = off ? this.inventory.offhand : main;
+      const id = stack?.id ?? -1;
+      if (id === (off ? this.offHandId : this.handId)) continue;
+      const group = off ? this.offHand : this.hand;
+      const previous = off ? this.offHandMesh : this.handMesh;
+      if (previous) {
+        group.remove(previous);
+        previous.geometry.dispose();
+        if (previous.material !== this.handMat && !Array.isArray(previous.material)) previous.material.dispose();
+      }
+      if (off) { this.offHandId = id; this.offHandMesh = null; }
+      else { this.handId = id; this.handMesh = null; }
+      if (off && id < 0) continue;
+      const side = off ? -1 : 1;
+      let mesh: THREE.Mesh;
+      if (isItem(id)) {
+        mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3),
+          new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, depthTest: false, depthWrite: false, alphaTest: 0.12, side: THREE.DoubleSide }));
+        mesh.position.set(side * 0.42, -0.3, -0.62);
+        mesh.rotation.set(0.15, side * -0.55, side * 0.2);
+      } else if (id < 0) {
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.58), new THREE.MeshBasicMaterial({ color: 0xc89a78, depthTest: false, depthWrite: false }));
+        mesh.position.set(0.46, -0.36, -0.55);
+        mesh.rotation.set(0.2, 0.15, 0);
+      } else {
+        mesh = new THREE.Mesh(blockGeometry(id), this.handMat);
+        const cross = RENDER[id] === 1;
+        mesh.scale.setScalar(cross ? 0.3 : 0.2);
+        mesh.position.set(side * 0.42, -0.32, -0.62);
+        mesh.rotation.set(0.1, side * (cross ? -0.3 : Math.PI / 4 + 0.12), 0);
+      }
+      mesh.renderOrder = 1000;
+      if (off) this.offHandMesh = mesh;
+      else this.handMesh = mesh;
+      group.add(mesh);
     }
-    let mesh: THREE.Mesh;
-    if (isItem(id)) {
-      mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.3, 0.3),
-        new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, depthTest: false, alphaTest: 0.12, side: THREE.DoubleSide })
-      );
-      mesh.position.set(0.42, -0.3, -0.62);
-      mesh.rotation.set(0.15, -0.55, 0.2);
-    } else if (id < 0) {
-      mesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.58), new THREE.MeshBasicMaterial({ color: 0xc89a78, depthTest: false }));
-      mesh.position.set(0.46, -0.36, -0.55);
-      mesh.rotation.set(0.2, 0.15, 0);
-    } else {
-      mesh = new THREE.Mesh(blockGeometry(id), this.handMat);
-      const cross = RENDER[id] === 1;
-      // 2.20: blok w ręce był za duży (0,36 przy kamerze 0,72) i ucinał się
-      // o krawędź ekranu. Teraz zajmuje ~1/4 wysokości, jak w Minecrafcie.
-      mesh.scale.setScalar(cross ? 0.3 : 0.2);
-      mesh.position.set(0.42, -0.32, -0.62);
-      mesh.rotation.set(0.1, cross ? -0.3 : Math.PI / 4 + 0.12, 0);
-    }
-    mesh.renderOrder = 1000;
-    this.handMesh = mesh;
-    this.hand.add(mesh);
   }
-
   // ---------- Interaction ----------
   private findMobTarget(maxDist: number) {
     const o = this.eyePos();
@@ -4755,12 +4843,21 @@ export class Game {
     for (const m of this.mobs) {
       if (m.dead) continue;
       const t = m.rayHit(o, d, maxDist);
-      if (t !== null && t < bd) { bd = t; best = m; }
+      if (t !== null && t < bd && this.clearShot(o.x, o.y, o.z, d.x, d.y, d.z, t)) { bd = t; best = m; }
     }
     return { mob: best, dist: bd };
   }
 
+  private raycastTarget(fluids = false) {
+    const eye = this.eyePos(), dir = this.aimDir ?? this.lookDir();
+    return this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z,
+      this.mode === 'creative' ? 7 : 5, { fluids });
+  }
+
   tryAttack() {
+    // Mouse movement can arrive between frames: never destroy a cached floor
+    // voxel after the player has already turned towards another block.
+    this.target = this.raycastTarget();
     this.swingT = 0;
     const blockDist = this.target ? this.target.dist : 99;
     const { mob, dist } = this.findMobTarget(3.5);
@@ -4857,7 +4954,7 @@ export class Game {
       if (len > max || len < 0.001) continue;
       // Inna kondygnacja (mob na dachu albo pod podłogą) – nie bijemy.
       if (Math.abs(m.body.pos.y - p.y) > 2.6) continue;
-      // Blok po drodze = brak ciosu. Szyba, liście i rośliny nie zasłaniają.
+      // Fizyczna przeszkoda zatrzymuje cios, także szkło i liście.
       if (!this.clearShot(eye.x, eye.y, eye.z, tx / len, ty / len, tz / len, Math.max(0.4, len - 0.45))) continue;
       const d = Math.hypot(m.body.pos.x - p.x, m.body.pos.z - p.z);
       if (d < bd) { bd = d; best = m; }
@@ -4866,18 +4963,11 @@ export class Game {
   }
 
   /**
-   * 2.14: czy od oczu do celu nic nie zasłania. Chodzimy po odcinku co 0,2
-   * klocka i sprawdzamy tylko bloki, które naprawdę kryją widok – dzięki temu
-   * auto-bicie działa przez szybę i wysoką trawę, a nie przez ścianę.
+   * Shared physical line of attack. DDA visits every crossed voxel and tests
+   * its collision boxes, independent of opacity and frame sampling.
    */
   private clearShot(ex: number, ey: number, ez: number, dx: number, dy: number, dz: number, len: number): boolean {
-    const steps = Math.max(2, Math.ceil(len / 0.2));
-    for (let i = 1; i < steps; i++) {
-      const f = (i / steps) * len;
-      const id = this.world.peekBlock(Math.floor(ex + dx * f), Math.floor(ey + dy * f), Math.floor(ez + dz * f));
-      if (OCCLUDES[id] !== 0) return false;
-    }
-    return true;
+    return World.prototype.raycast.call(this.world, ex, ey, ez, dx, dy, dz, len, { solidOnly: true }) === null;
   }
 
   /** 2.14: delikatne obracanie na dotyku w stronę celu auto-bicia. */
@@ -5252,7 +5342,20 @@ export class Game {
   }
 
   tryUse() {
-    const t = this.target;
+    const main = this.inventory.slots[this.selected];
+    const off = this.inventory.offhand;
+    const usable = (id: number) => !isItem(id) || ITEMS[id]?.tool === 'shovel' || id === I.SHIELD || isFood(id) || isPotion(id) || isHoe(id) ||
+      USE_ITEMS.has(id);
+    this.usingOffhand = !!off && (!main || !usable(main.id)) &&
+      !MAIN_HAND_USE_ITEMS.has(off.id);
+    try { this.tryUseHeld(); }
+    finally { this.usingOffhand = false; }
+  }
+
+  private tryUseHeld() {
+    const held = this.selectedStack();
+    // Only container use targets fluids; ordinary mining/placing ignores them.
+    const t = this.raycastTarget(held?.id === I.BUCKET || held?.id === I.BOTTLE);
     this.placeCooldown = 0.22;
     const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     // Mieszkaniec ma pierwszeństwo – PPM otwiera okno handlu.
@@ -5289,7 +5392,10 @@ export class Game {
     if (!s) return;
     // 2.4: fiolka nad wodą staje się fiolką z wodą (źródło wody zostaje).
     if (s.id === I.BOTTLE && t && t.id === B.WATER) {
-      s.id = I.WATER_BOTTLE;
+      if (this.mode === 'survival' && !this.exchangeContainer(I.WATER_BOTTLE)) {
+        this.message('Brak miejsca na fiolkę z wodą.'); return;
+      }
+      if (this.mode === 'creative') this.setSelectedStack({ id: I.WATER_BOTTLE, count: 1 });
       Sfx.playSplash();
       this.message('Napełniono fiolkę wodą.');
       this.updateHand();
@@ -5525,7 +5631,7 @@ export class Game {
     if (this.mode === 'survival') {
       this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
       s.count -= n;
-      if (s.count <= 0) this.inventory.slots[this.selected] = null;
+      if (s.count <= 0) this.setSelectedStack(null);
     } else {
       this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
       this.inventory.slots[this.selected] = null;
@@ -5860,7 +5966,7 @@ export class Game {
         const y = deathPos.y + 0.4;
         const x = deathPos.x;
         const z = deathPos.z;
-        for (const s of this.inventory.slots) {
+        for (const s of [...this.inventory.slots, this.inventory.offhand]) {
           if (s) this.spawnDrop(s.id, s.count, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench, s.name);
         }
         for (const s of this.armor) {
@@ -5869,6 +5975,7 @@ export class Game {
         this.armor.fill(null);
       }
       this.inventory.slots.fill(null);
+      this.inventory.offhand = null;
       this.inventory.cursor = null;
       this.setUI('dead');
     }
@@ -5881,8 +5988,13 @@ export class Game {
    */
   private tryTotem(): boolean {
     if (this.mode !== 'survival' || this.totemHeal > 0) return false;
-    if (this.inventory.countOf(I.TOTEM) <= 0) return false;
-    this.inventory.remove(I.TOTEM, 1);
+    if (this.inventory.offhand?.id === I.TOTEM) {
+      if (--this.inventory.offhand.count <= 0) this.inventory.offhand = null;
+      this.updateHand();
+    } else {
+      if (this.inventory.countOf(I.TOTEM) <= 0) return false;
+      this.inventory.remove(I.TOTEM, 1);
+    }
     this.health = 6;
     this.hunger = Math.min(20, this.hunger + 4);
     this.totemHeal = 6;
@@ -6477,9 +6589,13 @@ export class Game {
             }
           }
         }
+      } else {
+        this.breakProgress = 0;
+        this.breakKey = '';
       }
     } else {
       this.breakProgress = 0;
+      this.breakKey = '';
     }
     if (this.breakProgress > 0 && t) {
       this.crackMesh.visible = true;
@@ -6523,6 +6639,13 @@ export class Game {
    */
   private mobAttackPlayer = (dmg: number, mob: Mob) => {
     if (this.ui === 'dead') return;
+    const from = mob.body.pos.clone().add(new THREE.Vector3(0, mob.body.h * 0.75, 0));
+    const to = this.body.pos.clone().add(new THREE.Vector3(0, this.body.h * 0.5, 0)).sub(from);
+    const distance = to.length();
+    if (distance > 0) {
+      to.divideScalar(distance);
+      if (!this.clearShot(from.x, from.y, from.z, to.x, to.y, to.z, distance)) return;
+    }
     // A raised shield halves the hit and absorbs most of the knockback.
     const shielded = this.holdingShield();
     if (shielded) {
@@ -6759,6 +6882,7 @@ export class Game {
     const sw = Math.sin(this.swingT * Math.PI);
     this.hand.position.set(bobX - sw * 0.25, -Math.abs(bob) * 0.6 + sw * 0.12, -sw * 0.15);
     this.hand.rotation.set(-sw * 0.9, sw * 0.4, 0);
+    this.offHand.position.set(-bobX, -Math.abs(bob) * 0.6, 0);
   }
 
   /** 2.8: kolory nieba trzymane raz, bez alokacji w każdej klatce. */
@@ -6776,7 +6900,7 @@ export class Game {
    */
   private updateHeldLight() {
     const stack = this.selectedStack();
-    const power = stack && HELD_LIGHT_ITEMS.has(stack.id) ? HELD_POWER : 0;
+    const power = (stack && HELD_LIGHT_ITEMS.has(stack.id)) || (this.inventory.offhand && HELD_LIGHT_ITEMS.has(this.inventory.offhand.id)) ? HELD_POWER : 0;
     if (power > 0) {
       const t = performance.now();
       const flicker = 0.93 + Math.sin(t * 0.006) * 0.045 + Math.sin(t * 0.017) * 0.025;
@@ -6971,6 +7095,7 @@ export class Game {
       level: this.xp.info().level,
       xpFrac: (() => { const i = this.xp.info(); return i.need > 0 ? i.inLevel / i.need : 0; })(),
       armor: this.armor.map((s) => (s ? { ...s } : null)),
+      offhand: this.inventory.offhand ? { ...this.inventory.offhand } : null,
       perf: this.perfLabel as 'oszczędny' | 'zrównoważony' | 'pełny',
       lodRange: Math.round(this.lodFar()),
       armorPoints: armorPoints(this.armor),
@@ -7659,6 +7784,12 @@ export class Game {
     this.arrows = [];
     for (const o of this.orbs) this.scene.remove(o.mesh);
     this.orbs = [];
+    for (const mesh of [this.handMesh, this.offHandMesh]) {
+      if (!mesh) continue;
+      mesh.geometry.dispose();
+      if (mesh.material !== this.handMat && !Array.isArray(mesh.material)) mesh.material.dispose();
+    }
+    this.handMat.dispose();
     this.orbGeo.dispose();
     this.orbMat.dispose();
     for (const f of this.falling) this.scene.remove(f.mesh);

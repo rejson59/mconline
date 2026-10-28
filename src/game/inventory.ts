@@ -299,6 +299,7 @@ addTools(I.IRON, I.IRON_PICK, I.IRON_AXE, I.IRON_SHOVEL, I.IRON_SWORD, I.IRON_HO
 addTools(I.DIAMOND, I.DIAMOND_PICK, I.DIAMOND_AXE, I.DIAMOND_SHOVEL, I.DIAMOND_SWORD, I.DIAMOND_HOE);
 
 export class Inventory {
+  offhand: Stack | null = null;
   slots: (Stack | null)[] = new Array(36).fill(null);
   cursor: Stack | null = null;
   /** 3x3 crafting grid; only the top-left 2x2 is used without a table. */

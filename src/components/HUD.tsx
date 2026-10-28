@@ -92,10 +92,10 @@ function Drumstick({ fill }: { fill: 0 | 1 | 2 }) {
   );
 }
 
-export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<number, string>; onSelect?: (i: number) => void }) {
+export function Hotbar({ hud, icons, onSelect, onSwapHands }: { hud: HUDState; icons: Record<number, string>; onSelect?: (i: number) => void; onSwapHands?: () => void }) {
   return (
     <div
-      className="hotbar flex"
+      className="hotbar relative flex"
       style={{
         background: guiSprite('hotbar') ? undefined : 'rgba(0,0,0,0.35)',
         backgroundImage: guiSprite('hotbar') ? `url(${guiSprite('hotbar')})` : undefined,
@@ -106,6 +106,18 @@ export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<
         pointerEvents: onSelect ? 'auto' : undefined,
       }}
     >
+      <button type="button" className="hotbar-slot hotbar-offhand flex items-center justify-center"
+        aria-label="Druga ręka — zamień ręce (F)" title="Druga ręka · F"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={onSwapHands ? (e) => { e.preventDefault(); e.stopPropagation(); onSwapHands(); } : undefined}
+        style={{ background: 'rgba(0,0,0,0.4)', border: '2px solid #777', touchAction: 'none', pointerEvents: onSwapHands ? 'auto' : undefined }}>
+        {hud.offhand && <img src={icons[hud.offhand.id]} width={30} height={30} className="pixelated" draggable={false} alt="" />}
+        {hud.offhand && hud.offhand.count > 1 && <span className="mc-count">{hud.offhand.count}</span>}
+        {hud.offhand?.ench && <span className="ench-glint" />}
+        {hud.offhand?.dur !== undefined && durabilityMax(hud.offhand.id) > 0 &&
+          <span className="dur-bar"><i style={{ width: `${Math.max(0, Math.min(1, hud.offhand.dur / durabilityMax(hud.offhand.id))) * 100}%`, background: '#3dba3d' }} /></span>}
+        <span className="absolute bottom-0 left-0 text-[9px] text-white/70">F</span>
+      </button>
       {hud.hotbar.map((s, i) => {
         const max = s ? durabilityMax(s.id) : 0;
         const frac = s && max && s.dur !== undefined ? Math.max(0, s.dur / max) : 1;
@@ -139,12 +151,13 @@ export function Hotbar({ hud, icons, onSelect }: { hud: HUDState; icons: Record<
   );
 }
 
-export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, onTpaAccept, onTpaDeny }: {
+export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, onSwapHands, onTpaAccept, onTpaDeny }: {
   hud: HUDState;
   icons: Record<number, string>;
   minimap?: HTMLCanvasElement | null;
   touchControls?: boolean;
   onSelectSlot?: (i: number) => void;
+  onSwapHands?: () => void;
   /** 2.19: przyciski zgody na teleportację (działają też na telefonie). */
   onTpaAccept?: () => void;
   onTpaDeny?: () => void;
@@ -468,7 +481,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
             {hud.level}
           </span>
         </div>
-        <Hotbar hud={hud} icons={icons} onSelect={onSelectSlot} />
+        <Hotbar hud={hud} icons={icons} onSelect={onSelectSlot} onSwapHands={onSwapHands} />
       </div>
 
       {hud.loading < 0.5 && (

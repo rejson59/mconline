@@ -131,6 +131,17 @@ export default function InventoryScreen({
   // Siatka: 2×2 w plecaku (komórki 0,1,3,4) albo pełne 3×3 przy stole.
   const cells = atTable ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [0, 1, 3, 4];
 
+  const offhandSlot = (
+    <div className="mb-2 flex items-center gap-2" data-offhand-slot>
+      <Slot stack={inv.offhand} icons={icons}
+        onClick={(right) => { game.clickOffhand(right); refresh(); }}
+        onAction={(a) => { game.inventoryAction('offhand', 0, a); refresh(); }}
+        onHover={(name) => setHover(name || 'Druga ręka · F zamienia ręce')}
+        showCount={!creative} />
+      <span className="text-xs text-[#444]">Druga ręka <b>F</b></span>
+    </div>
+  );
+
   return (
     <div
       className="absolute inset-0 flex items-center justify-center"
@@ -161,6 +172,7 @@ export default function InventoryScreen({
               </button>
             </div>
 
+            {offhandSlot}
             <div className="mc-inv-body">
               {!atTable && (
                 <div className="mc-inv-side">
@@ -260,6 +272,7 @@ export default function InventoryScreen({
             <div className="mc-inv-head">
               <span className="mc-inv-title">Ekwipunek <span className="mc-inv-mode">· kreatywny</span></span>
             </div>
+            {offhandSlot}
             <div className="mc-inv-body">
               <div className="mc-inv-main">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
