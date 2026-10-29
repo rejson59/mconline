@@ -1,3 +1,4 @@
+import { DropLedger, cleanDrop, type SharedDrop } from './sharedDrops';
 /**
  * BlockCraft 2.10 „Gra razem” – multiplayer bez serwera.
  *
@@ -89,6 +90,22 @@ export interface NetTeleport {
 
 type Envelope = { from: string; to?: string; /** Gospodarz przekazuje dalej. */ relay?: boolean };
 
+export interface CombatEvent {
+  uid: string;
+  d: 'o' | 'n';
+  kind: 'melee' | 'arrow';
+  at: number;
+  origin: [number, number, number];
+  direction: [number, number, number];
+  weapon: number;
+  sharpness: number;
+  knockback: number;
+  strength: boolean;
+  sprint: boolean;
+  speed?: number;
+  power?: number;
+}
+
 export type NetMessage =
   | ({ t: 'hello'; name: string; hue: number; skin?: string } & Envelope)
   | ({ t: 'welcome'; world: WorldHandshake; players: NetPlayer[] } & Envelope)
@@ -104,11 +121,17 @@ export type NetMessage =
       pitch: number;
       /** Id bloku w ręce (do rąk awatara); brak = puste ręce. */
       held?: number;
+      mode?: 'survival' | 'creative';
+      alive?: boolean;
       name: string;
       hue: number;
       /** 2.12: skórka gracza – widzą ją pozostali. */
       skin?: string;
     } & Envelope)
+  | ({ t: 'drop-op'; op: 'put' | 'claim' | 'ack' | 'sync'; drop?: SharedDrop; uid?: string; d?: 'o' | 'n' } & Envelope)
+  | ({ t: 'drops'; list: SharedDrop[]; snapshot?: boolean } & Envelope)
+  | ({ t: 'pickup'; drop: SharedDrop } & Envelope)
+  | ({ t: 'pvp'; hit: CombatEvent } & Envelope)
   | ({ t: 'chat'; name: string; text: string } & Envelope)
   | ({ t: 'state'; time: number; day: number; weather: NetWeather } & Envelope)
   | ({ t: 'start' } & Envelope)
@@ -203,6 +226,8 @@ export const MAX_SNAPSHOT_EDITS = 20_000;
 
 /** Pozycja gracza wysyłana do innych (10 razy na sekundę). */
 export interface NetPos {
+  mode?: 'survival' | 'creative';
+  alive?: boolean;
   d: 'o' | 'n';
   x: number;
   y: number;
@@ -249,6 +274,12 @@ export interface NetLike {
   setWorld(patch: Partial<WorldHandshake>): void;
   sendEdits(list: NetEdit[]): void;
   sendPos(p: NetPos): void;
+  publishDrop?(drop: SharedDrop, profile?: PlayerProfile): void;
+  claimDrop?(uid: string, d: 'o' | 'n'): void;
+  acknowledgeDrop?(uid: string): void;
+  syncDrops?(): void;
+  sendCombat?(hit: CombatEvent, to?: string): void;
+  checkpointPickup?(profile: PlayerProfile): boolean;
   pushState(state: { time: number; day: number; weather: NetWeather }): void;
   /** Nagła zmiana pogody (gospodarz pokoju); serwer publiczny jej nie potrzebuje. */
   sendState?(state: { time: number; day: number; weather: NetWeather }): void;
@@ -328,6 +359,7 @@ export class NetSession implements NetLike {
   /** Gospodarz uruchomił świat (gość może wejść). */
   onStart?: () => void;
 
+  private dropLedger = new DropLedger();
   private link: NetLink | null = null;
   /** Gospodarz: id → ostatnio widziany czas (ms) i kanał. */
   private peers = new Map<string, { name: string; hue: number; seen: number; ping: number; skin: string }>();
@@ -483,12 +515,45 @@ export class NetSession implements NetLike {
       m.to !== '*' &&
       m.to !== this.id &&
       !(m.to === 'host' && this.role === 'host') &&
-      !(m.t === 'tpa' && this.role === 'host')
+      !(['tpa', 'pvp'].includes(m.t) && this.role === 'host')
     )
       return;
     if (m.from === this.id && !local && m.t !== 'hello') return;
 
     switch (m.t) {
+      case 'drop-op': {
+        if (this.role !== 'host') return;
+        if (!local && !this.peers.has(m.from)) return;
+        if (m.op === 'put') {
+          const drop = this.dropLedger.put(m.drop, m.from);
+          if (drop && !drop.claimedBy) this.send({ t: 'drops', from: this.id, to: '*', list: [drop] });
+        } else if (m.op === 'claim' && typeof m.uid === 'string' && (m.d === 'o' || m.d === 'n')) {
+          const drop = this.dropLedger.claim(m.uid, m.from, m.d);
+          if (drop) {
+            this.send({ t: 'drops', from: this.id, to: '*', list: [drop] });
+            this.send({ t: 'pickup', from: this.id, to: m.from, drop });
+          }
+        } else if (m.op === 'ack' && typeof m.uid === 'string') this.dropLedger.ack(m.uid, m.from);
+        else if (m.op === 'sync') {
+          const list = this.dropLedger.list(m.from);
+          this.send({ t: 'drops', from: this.id, to: m.from, list, snapshot: true });
+          for (const drop of list) if (drop.claimedBy === m.from) this.send({ t: 'pickup', from: this.id, to: m.from, drop });
+        }
+        return;
+      }
+      case 'drops':
+      case 'pickup':
+        if (m.to && m.to !== '*' && m.to !== this.id) return;
+        if (this.role === 'guest' && m.from !== this.hostId) return;
+        this.onMessage?.(m);
+        return;
+      case 'pvp':
+        if (!local && this.role === 'host') {
+          if (!this.peers.has(m.from)) return;
+          this.raw(m);
+        }
+        if (!m.to || m.to === '*' || m.to === this.id) this.onMessage?.(m);
+        return;
       case 'hello': {
         if (this.role !== 'host') return;
         if (m.from === this.id) return;
@@ -798,7 +863,13 @@ export class NetSession implements NetLike {
     this.raw({ t: 'start', from: this.id, to: '*' });
   }
 
-  /** Wysyła wiadomość czatu do wszystkich. */
+  /** Shared loot is arbitrated by the room host, not the dropping client. */
+  publishDrop(drop: SharedDrop) { if (cleanDrop(drop)) this.send({ t: 'drop-op', op: 'put', from: this.id, to: 'host', drop }); }
+  claimDrop(uid: string, d: 'o' | 'n') { this.send({ t: 'drop-op', op: 'claim', from: this.id, to: 'host', uid, d }); }
+  acknowledgeDrop(uid: string) { this.send({ t: 'drop-op', op: 'ack', from: this.id, to: 'host', uid }); }
+  syncDrops() { this.send({ t: 'drop-op', op: 'sync', from: this.id, to: 'host' }); }
+  sendCombat(hit: CombatEvent, to = '*') { this.send({ t: 'pvp', from: this.id, to, hit }, false); }
+
   /** 2.19: prośba o teleportację – leci tylko do wybranego gracza. */
   sendTeleport(to: string, t: NetTeleport) {
     if (!to) return;

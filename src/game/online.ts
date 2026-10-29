@@ -1,3 +1,4 @@
+import { cleanDrop, type SharedDrop } from './sharedDrops';
 /**
  * BlockCraft 2.11 „Serwer publiczny” – jeden wspólny świat dla wszystkich.
  *
@@ -28,6 +29,7 @@ import {
   publicWeather,
   randomId,
   sortPlayers,
+  type CombatEvent,
   type NetEdit,
   type NetLike,
   type NetMessage,
@@ -175,6 +177,14 @@ export class PublicServer implements NetLike {
   private catchingUp = false;
   private hue: number;
 
+  private dropJournal: PlayerProfile | null = null;
+  private dropOutbox = new Map<string, SharedDrop>();
+  private uploadingDrops = false;
+  private syncingDrops = false;
+  private dropSyncAt = 0;
+  private warnedDrops = false;
+  private pickupRequests = new Set<string>();
+
   private worldId: string = PUBLIC_WORLD_ID;
   private channelName: string = PUBLIC_CHANNEL;
 
@@ -191,6 +201,16 @@ export class PublicServer implements NetLike {
     // korzystamy z jednego współdzielonego połączenia.
     this.client = opts.client ?? supabaseClient();
     this.world = this.baseWorld(opts.worldName);
+    try {
+      const journal = JSON.parse(localStorage.getItem(this.dropOutboxKey()) || '{}');
+      const rows: unknown = Array.isArray(journal) ? journal : journal.drops;
+      const saved = sanitizeProfile(journal.profile);
+      if (saved?.pid === this.pid) this.dropJournal = saved;
+      if (Array.isArray(rows)) for (const row of rows) {
+        const d = cleanDrop(row);
+        if (d && d.owner === this.id && d.expires > Date.now()) this.dropOutbox.set(d.uid, d);
+      }
+    } catch { /* no local storage or corrupt outbox */ }
   }
 
   private baseWorld(overrideName?: string): WorldHandshake {
@@ -255,7 +275,8 @@ export class PublicServer implements NetLike {
 
   /** 2.19: postęp tego gracza z bazy (albo `null` przy pierwszej wizycie). */
   private async loadProfile(): Promise<PlayerProfile | null> {
-    const cached = loadCachedProfile(this.worldId, this.pid);
+    const local = loadCachedProfile(this.worldId, this.pid);
+    const cached = this.dropJournal && (!local || this.dropJournal.updated >= local.updated) ? this.dropJournal : local;
     try {
       const { data, error } = await this.client.from(PROFILE_TABLE).select('*')
         .eq('world', this.worldId).eq('pid', this.pid).limit(1);
@@ -376,6 +397,13 @@ export class PublicServer implements NetLike {
       case 'edits':
         if (Array.isArray(m.list)) this.onMessage?.(m);
         break;
+      case 'pvp':
+        this.onMessage?.(m);
+        break;
+      case 'drops':
+        // Broadcast is only a wake-up hint. Claims and grants come from SQL.
+        this.syncDrops();
+        break;
       case 'pos':
         this.onMessage?.(m);
         break;
@@ -402,6 +430,79 @@ export class PublicServer implements NetLike {
       /* kanał mógł właśnie się przebudowywać – zmiany i tak pójdą z bazy */
     });
   }
+
+  private dropOutboxKey() { return `blockcraft-drops:${this.worldId}:${this.pid}`; }
+  private persistDropOutbox() {
+    try { localStorage.setItem(this.dropOutboxKey(), JSON.stringify({ drops: [...this.dropOutbox.values()], profile: this.dropJournal })); }
+    catch { this.dropWarning(); }
+  }
+  private dropWarning() {
+    if (!this.warnedDrops) this.onChat?.('Sieć', 'Nie udało się zsynchronizować przedmiotów. Ponowimy próbę; niepotwierdzone przedmioty pozostają w kolejce.');
+    this.warnedDrops = true;
+  }
+  private async dropOp(op: string, uid?: string, drop?: SharedDrop, dimension?: 'o' | 'n'): Promise<SharedDrop[]> {
+    const { data, error } = await this.client.rpc('blockcraft_drop_op', {
+      p_world: this.worldId, p_actor: this.pid, p_op: op, p_uid: uid ?? null, p_drop: drop ?? null, p_dim: dimension ?? null,
+    });
+    if (error) throw new Error(error.message);
+    return (Array.isArray(data) ? data : []).map(cleanDrop).filter((d): d is SharedDrop => !!d);
+  }
+  publishDrop(raw: SharedDrop, profile?: PlayerProfile) {
+    const d = cleanDrop(raw);
+    if (!d || d.owner !== this.id || d.claimedBy) return;
+    this.dropOutbox.set(d.uid, d);
+    const saved = sanitizeProfile(profile);
+    if (saved?.pid === this.pid) this.dropJournal = saved;
+    // One localStorage write journals the consumed inventory AND its outbox.
+    this.persistDropOutbox();
+    if (saved) this.saveProfile(saved, true);
+    void this.flushDrops();
+  }
+  private async flushDrops() {
+    if (this.uploadingDrops || this.closed || this.status !== 'connected') return;
+    this.uploadingDrops = true;
+    try {
+      await Promise.all([...this.dropOutbox.values()].slice(0, 32).map(async d => {
+        if (d.expires <= Date.now()) { this.dropOutbox.delete(d.uid); return; }
+        try {
+          const rows = await this.dropOp('put', undefined, d);
+          this.dropOutbox.delete(d.uid);
+          if (!this.closed && rows.length) this.onMessage?.({ t: 'drops', from: 'database', list: rows });
+          this.send({ t: 'drops', from: this.id, to: '*', list: [] });
+        } catch { this.dropWarning(); }
+      }));
+      this.persistDropOutbox();
+    } finally { this.uploadingDrops = false; }
+  }
+  syncDrops() {
+    if (this.syncingDrops || this.closed || this.status !== 'connected' || Date.now() - this.dropSyncAt < 500) return;
+    this.syncingDrops = true;
+    this.dropSyncAt = Date.now();
+    void this.dropOp('list').then(list => {
+      if (this.closed) return;
+      this.onMessage?.({ t: 'drops', from: 'database', list, snapshot: true });
+      for (const drop of list) if (drop.claimedBy === this.id) this.onMessage?.({ t: 'pickup', from: 'database', to: this.id, drop });
+    }).catch(() => this.dropWarning()).finally(() => { this.syncingDrops = false; });
+  }
+  claimDrop(uid: string, d: 'o' | 'n') {
+    if (this.closed || this.pickupRequests.has(uid)) return;
+    this.pickupRequests.add(uid);
+    void this.dropOp('claim', uid, undefined, d).then(rows => {
+      if (this.closed) return;
+      for (const drop of rows) if (drop.claimedBy === this.id) this.onMessage?.({ t: 'pickup', from: 'database', to: this.id, drop });
+      this.send({ t: 'drops', from: this.id, to: '*', list: [] });
+      this.dropSyncAt = 0; this.syncDrops();
+    }).catch(() => this.dropWarning()).finally(() => { this.pickupRequests.delete(uid); });
+  }
+  acknowledgeDrop(uid: string) {
+    void this.dropOp('ack', uid).catch(() => this.dropWarning());
+  }
+  checkpointPickup(profile: PlayerProfile): boolean {
+    if (!cacheProfile(this.worldId, profile)) return false;
+    this.saveProfile(profile, true);
+    return true;
+  }
+  sendCombat(hit: CombatEvent, to = '*') { this.send({ t: 'pvp', from: this.id, to, hit }); }
 
   sendEdits(list: NetEdit[]) {
     if (!list.length || this.closed) return;
@@ -462,6 +563,7 @@ export class PublicServer implements NetLike {
   tick() {
     if (this.closed) return;
     const now = Date.now();
+    if (now - this.dropSyncAt > 2500) { this.syncDrops(); void this.flushDrops(); }
     if (now - this.lastFlush >= SAVE_EVERY_MS) {
       this.lastFlush = now;
       void this.flush();

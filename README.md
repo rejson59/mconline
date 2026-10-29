@@ -1,6 +1,14 @@
-# BlockCraft 4.3.1 🌍
+# BlockCraft 4.4.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.4.0 „Wspólne przedmioty i PvP”
+
+- **Przedmioty naprawdę wspólne.** Wyrzucanie przez Q/Ctrl+Q, ekwipunek i śmierć tworzą obiekty sieciowe, widoczne i możliwe do zebrania przez innych. Zachowują liczbę sztuk, nazwy, zaklęcia oraz wytrzymałość. Przedmioty należą do swojego wymiaru, znikają po 5 minutach i są odtwarzane dla dołączających graczy. Fizyka używa wspólnych kroków 25 ms, niezależnie od FPS; nadrabia również długie tonięcie w wodzie i czeka na niezaładowany teren.
+- **Jeden przedmiot, jeden odbiorca.** W pokojach decyduje gospodarz; na serwerze publicznym transakcyjne RPC w Postgresie. Powtórzone żądania i jednoczesne zbieranie nie przyznają dodatkowej kopii. Pełny plecak nie zabiera przedmiotu. Przyznanie czekające na miejsce/odrodzenie jest ponawiane; publiczny profil zapisuje przedmiot razem z potwierdzeniem odbioru przed zamknięciem transakcji dostawy. Lokalny dziennik zachowuje też wyrzucony przedmiot razem z pomniejszonym ekwipunkiem, zanim zacznie się wysyłka.
+- **PvP wręcz i z łuku.** Ręczny LPM, przytrzymanie i przycisk dotykowy wybierają bliższego gracza lub moba. Odbiorca sprawdza zasięg, widoczność, wymiar, świeżość pozycji, cooldown i powtórzenia zdarzeń; krótka historia ruchu kompensuje interpolację awatarów. Strzały mają fizyczny lot i kolizje ze ścianami, szkłem oraz pośrednimi celami. Pancerz, tarcza, zaklęcia, totem i odrzut korzystają ze zwykłej logiki walki. Creative jest odporny, a wejście/odrodzenie daje 3 sekundy ochrony. Automatyczne wspomaganie walki nadal atakuje tylko wrogie moby.
+- **Śmierć i menu.** Łup obejmuje również kursor, siatkę craftingu, przedmiot w zaklinaniu i nazwaną zbroję. Menu nie pauzuje wspólnego świata ani strzał; w trybie offline pauza działa jak wcześniej.
+- **Baza dla serwera publicznego.** Migracja `supabase/migrations/202610290001_shared_drops.sql` tworzy chronioną tabelę i RPC `blockcraft_drop_op`; jest wymagana przed wdrożeniem klienta. Test transakcyjny w `supabase/tests/shared_drops.sql` działa jako `anon` i wycofuje swoje dane. Pokoje lokalne/WebRTC nie potrzebują tej bazy. To nadal dotychczasowy model anonimowych klientów: walidacja utrudnia błędne komunikaty, ale nie zastępuje autorytatywnego serwera fizyki ani pełnego systemu anty-cheat.
 
 ## Wersja 4.3.1 „Wiadra i druga ręka”
 

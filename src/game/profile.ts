@@ -40,6 +40,7 @@ export interface PlayerProfile {
   grid?: (Stack | null)[];
   enchantItem?: Stack | null;
   offhand?: Stack | null;
+  pickupReceipts?: string[];
 }
 
 const PID_ALPHABET = '0123456789abcdef';
@@ -169,6 +170,7 @@ export function sanitizeProfile(raw: unknown): PlayerProfile | null {
     xp: Math.max(0, Math.trunc(num(r.xp, 0))),
     inv: cleanStacks(inv, 36),
     offhand: cleanStacks([r.offhand ?? (Array.isArray(inv) ? inv[47] : null)], 1)[0],
+    pickupReceipts: (Array.isArray(r.pickupReceipts) ? r.pickupReceipts : Array.isArray(inv) && Array.isArray(inv[48]) ? inv[48] : []).filter((v: unknown): v is string => typeof v === 'string' && /^[\w:-]{1,160}$/.test(v)).slice(-10000),
     armor: cleanStacks(armor, 4),
     cursor: cleanStacks([r.cursor ?? (Array.isArray(inv) ? inv[36] : null)], 1)[0],
     grid: cleanStacks(r.grid ?? (Array.isArray(inv) ? inv.slice(37, 46) : []), 9),
@@ -192,8 +194,8 @@ export function profileRow(p: PlayerProfile, world: string) {
     health: p.health,
     hunger: p.hunger,
     xp: p.xp,
-    // Keep the legacy first 36 slots; tail stores UI items and offhand (index 47).
-    inv: JSON.stringify([...p.inv, p.cursor ?? null, ...cleanStacks(p.grid, 9), p.enchantItem ?? null, p.offhand ?? null]),
+    // Keep the legacy first 36 slots; tail stores UI items, offhand (47), pickup receipts (48).
+    inv: JSON.stringify([...p.inv, p.cursor ?? null, ...cleanStacks(p.grid, 9), p.enchantItem ?? null, p.offhand ?? null, p.pickupReceipts ?? []]),
     armor: JSON.stringify(p.armor),
     updated_at: new Date(p.updated || Date.now()).toISOString(),
   };
