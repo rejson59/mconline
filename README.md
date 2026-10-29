@@ -1,6 +1,13 @@
-# BlockCraft 4.4.0 🌍
+# BlockCraft 4.4.1 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.4.1 „Zbroja, głód i rudy”
+
+- **Widoczna zbroja (d1e3313e).** Cztery sloty wyposażenia są przesyłane razem z pozycją w publicznym multiplayerze i pokojach local/WebRTC. Awatar ma bryłowe nakładki hełmu, napierśnika z naramiennikami, nogawic i butów; kolory rozróżniają skórę, żelazo, złoto i diament. Zbroja podąża za animacją głowy i kończyn, przeżywa zmianę skórki i znika po zdjęciu/zniszczeniu. Podgląd w plecaku pokazuje te same elementy. Nie są to importowane tekstury zbroi 1:1.
+- **Głód (9559da6e).** Zamiast ciągłego odejmowania paska: zapas nasycenia (domyślnie 5) i licznik wyczerpania. Każde 4 punkty wyczerpania zużywają najpierw 1 punkt nasycenia, potem jedzenia. Zwykły marsz i stanie nic nie kosztują; sprint kosztuje 0,1/blok, pływanie 0,01/blok, skok 0,05 (sprintowy 0,2), kopanie 0,005, atak/otrzymany cios 0,1. Ruch w ścianę nie jest naliczany jako przebyty dystans. Posiłki uzupełniają jedzenie i właściwe nasycenie, nie leczą natychmiast. Naturalne leczenie działa przy co najmniej 18 punktach jedzenia co 4 s, szybciej przy pełnym pasku i nasyceniu; kosztuje wyczerpanie. Głodzenie w normalnym poziomie zatrzymuje się na 1 HP i nie uszkadza pancerza. Zapasy zapisują się lokalnie i w profilu publicznym (kompatybilny ogon JSON, bez migracji bazy).
+- **Rudy (d13cc6c3): potwierdzony exploit XP naprawiony.** Kopanie żelaza/złota zwracało ten sam blok oraz kolejne XP. Również Jedwabny dotyk dawał XP za odzyskane rudy. Teraz odzyskanie bloku nie daje doświadczenia, a wydobycie surowca zwykłym kilofem nadal daje XP. Jedwabny dotyk zachowuje też kwarc i redstone, które wcześniej ginęły. Testy ośmiu cykli stawiania/kopania wszystkich ośmiu rud potwierdzają zużycie przy stawianiu, brak dodatkowych sztuk i brak odnawialnego XP.
+- **Granica ustaleń.** Zgłoszenie rud nie zawiera kroków, trybu gry ani wskazania konkretnej rudy. Nie odtworzono klonowania samych sztuk w sprawdzonym lokalnym cyklu; nie uznajemy tej części za definitywnie wyjaśnioną. Potrzebne są dokładne kroki lub nagranie (szczególnie jeśli dotyczy równoczesnych działań multiplayer). Samo stawianie rud i nieograniczone zasoby creative są zamierzone i nie zostały zablokowane. Wcześniej wdrożonego PvP i wspólnych przedmiotów nie implementowano ponownie.
 
 ## Wersja 4.4.0 „Wspólne przedmioty i PvP”
 

@@ -122,7 +122,8 @@ export interface ItemDef {
   tier?: 1 | 2 | 3 | 4;
   durability?: number;
   hunger?: number;
-  heal?: number;
+  /** Saturation modifier: nutrition × modifier × 2. */
+  saturation?: number;
   /** Armor metadata: which slot it occupies and how many armor points it adds. */
   armor?: { slot: 0 | 1 | 2 | 3; points: number };
   /** 2.4: which buff the bottle carries (brewing.ts holds durations/values). */
@@ -161,14 +162,14 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.GUNPOWDER, name: 'Proch', keys: ['proch', 'gunpowder'], kind: 'material', color: '#6d6d72' },
   { id: I.SEEDS, name: 'Nasiona pszenicy', keys: ['nasiona', 'seeds'], kind: 'material', color: '#6ea84a' },
   { id: I.WHEAT, name: 'Pszenica', keys: ['pszenica', 'wheat'], kind: 'material', color: '#e2c04a' },
-  { id: I.APPLE, name: 'Jabłko', keys: ['jablko', 'jabłko', 'apple'], kind: 'food', hunger: 4, heal: 1, color: '#d4372a' },
-  { id: I.BREAD, name: 'Chleb', keys: ['chleb', 'bread'], kind: 'food', hunger: 5, heal: 1, color: '#d7a15a' },
-  { id: I.RAW_PORK, name: 'Surowa wieprzowina', keys: ['wieprzowina', 'pork'], kind: 'food', hunger: 3, color: '#e08a8a' },
-  { id: I.COOKED_PORK, name: 'Pieczona wieprzowina', keys: ['pieczona_wieprzowina', 'cooked_pork'], kind: 'food', hunger: 8, heal: 2, color: '#c46a45' },
-  { id: I.RAW_BEEF, name: 'Surowa wołowina', keys: ['wolowina', 'wołowina', 'beef'], kind: 'food', hunger: 3, color: '#c45a5a' },
-  { id: I.COOKED_BEEF, name: 'Stek', keys: ['stek', 'steak'], kind: 'food', hunger: 8, heal: 2, color: '#8a4030' },
-  { id: I.RAW_CHICKEN, name: 'Surowy kurczak', keys: ['kurczak', 'chicken'], kind: 'food', hunger: 2, color: '#f0c9b0' },
-  { id: I.COOKED_CHICKEN, name: 'Pieczony kurczak', keys: ['pieczony_kurczak', 'cooked_chicken'], kind: 'food', hunger: 6, heal: 1, color: '#e0a060' },
+  { id: I.APPLE, name: 'Jabłko', keys: ['jablko', 'jabłko', 'apple'], kind: 'food', hunger: 4, saturation: 0.3, color: '#d4372a' },
+  { id: I.BREAD, name: 'Chleb', keys: ['chleb', 'bread'], kind: 'food', hunger: 5, saturation: 0.6, color: '#d7a15a' },
+  { id: I.RAW_PORK, name: 'Surowa wieprzowina', keys: ['wieprzowina', 'pork'], kind: 'food', hunger: 3, saturation: 0.3, color: '#e08a8a' },
+  { id: I.COOKED_PORK, name: 'Pieczona wieprzowina', keys: ['pieczona_wieprzowina', 'cooked_pork'], kind: 'food', hunger: 8, saturation: 0.8, color: '#c46a45' },
+  { id: I.RAW_BEEF, name: 'Surowa wołowina', keys: ['wolowina', 'wołowina', 'beef'], kind: 'food', hunger: 3, saturation: 0.3, color: '#c45a5a' },
+  { id: I.COOKED_BEEF, name: 'Stek', keys: ['stek', 'steak'], kind: 'food', hunger: 8, saturation: 0.8, color: '#8a4030' },
+  { id: I.RAW_CHICKEN, name: 'Surowy kurczak', keys: ['kurczak', 'chicken'], kind: 'food', hunger: 2, saturation: 0.3, color: '#f0c9b0' },
+  { id: I.COOKED_CHICKEN, name: 'Pieczony kurczak', keys: ['pieczony_kurczak', 'cooked_chicken'], kind: 'food', hunger: 6, saturation: 0.6, color: '#e0a060' },
   { id: I.BUCKET, name: 'Wiadro', keys: ['wiadro', 'bucket'], kind: 'bucket', color: '#8e8e92' },
   { id: I.WATER_BUCKET, name: 'Wiadro wody', keys: ['wiadro_wody', 'water_bucket'], kind: 'bucket', color: '#3a6ad4' },
   { id: I.LAVA_BUCKET, name: 'Wiadro lawy', keys: ['wiadro_lawy', 'lava_bucket'], kind: 'bucket', color: '#e07020' },
@@ -221,17 +222,17 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.GLOWSTONE_DUST, name: 'Jasnogłazowy pył', keys: ['glowstone_dust', 'jasnoglazowy_pyl'], kind: 'material', color: '#e8c85a' },
   // 2.3 „Wyprawa i ratunek”
   { id: I.FISHING_ROD, name: 'Wędka', keys: ['wedka', 'fishing_rod'], kind: 'tool', tool: 'rod', durability: 64, color: '#9a6a34' },
-  { id: I.RAW_FISH, name: 'Surowa ryba', keys: ['surowa_ryba', 'ryba', 'raw_fish', 'cod'], kind: 'food', hunger: 2, color: '#c9ab84' },
-  { id: I.COOKED_FISH, name: 'Pieczona ryba', keys: ['pieczona_ryba', 'cooked_fish'], kind: 'food', hunger: 5, heal: 1, color: '#d29a58' },
-  { id: I.RAW_SALMON, name: 'Surowy łosoś', keys: ['surowy_losos', 'losos', 'raw_salmon', 'salmon'], kind: 'food', hunger: 2, color: '#e08a6a' },
-  { id: I.COOKED_SALMON, name: 'Pieczony łosoś', keys: ['pieczony_losos', 'cooked_salmon'], kind: 'food', hunger: 6, heal: 2, color: '#e0703a' },
+  { id: I.RAW_FISH, name: 'Surowa ryba', keys: ['surowa_ryba', 'ryba', 'raw_fish', 'cod'], kind: 'food', hunger: 2, saturation: 0.1, color: '#c9ab84' },
+  { id: I.COOKED_FISH, name: 'Pieczona ryba', keys: ['pieczona_ryba', 'cooked_fish'], kind: 'food', hunger: 5, saturation: 0.6, color: '#d29a58' },
+  { id: I.RAW_SALMON, name: 'Surowy łosoś', keys: ['surowy_losos', 'losos', 'raw_salmon', 'salmon'], kind: 'food', hunger: 2, saturation: 0.1, color: '#e08a6a' },
+  { id: I.COOKED_SALMON, name: 'Pieczony łosoś', keys: ['pieczony_losos', 'cooked_salmon'], kind: 'food', hunger: 6, saturation: 0.8, color: '#e0703a' },
   { id: I.SPYGLASS, name: 'Lorneta', keys: ['lorneta', 'spyglass'], kind: 'tool', tool: 'spyglass', color: '#c8a43c' },
   { id: I.TOTEM, name: 'Totem Ratowania', keys: ['totem', 'totem_ratowania', 'totem_ratownictwa'], kind: 'material', stack: 1, color: '#e8c85a' },
   // 2.4 „Godzina alchemika” – cukier, fiolki i napoje
   { id: I.SUGAR, name: 'Cukier', keys: ['cukier', 'sugar'], kind: 'material', color: '#f6f4ee' },
   { id: I.BOTTLE, name: 'Szklana fiolka', keys: ['fiolka', 'szklana_fiolka', 'bottle', 'glass_bottle'], kind: 'material', color: '#bfe4f2' },
   { id: I.WATER_BOTTLE, name: 'Fiolka z wodą', keys: ['fiolka_z_woda', 'water_bottle', 'woda_fiolka'], kind: 'material', color: '#4a8ae0' },
-  { id: I.HONEY_BOTTLE, name: 'Butelka miodu', keys: ['butelka_miodu', 'honey_bottle', 'miodek'], kind: 'food', hunger: 6, heal: 1, color: '#e8a020' },
+  { id: I.HONEY_BOTTLE, name: 'Butelka miodu', keys: ['butelka_miodu', 'honey_bottle', 'miodek'], kind: 'food', hunger: 6, saturation: 0.1, color: '#e8a020' },
   { id: I.POTION_AWKWARD, name: 'Zaczarowany napój', keys: ['zaczarowany_napoj', 'potion_awkward', 'awkward'], kind: 'potion', potion: 'none', color: '#c8b8a8' },
   { id: I.POTION_HEAL, name: 'Napój leczący', keys: ['napoj_leczacy', 'potion_heal', 'healing'], kind: 'potion', potion: 'heal', color: '#d44a5a' },
   { id: I.POTION_FIRE, name: 'Napój ognioodporności', keys: ['napoj_ognioodpornosci', 'potion_fire', 'fire_resistance'], kind: 'potion', potion: 'fire', color: '#e07820' },
@@ -384,8 +385,9 @@ const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE,
 /** Experience orbs dropped when an ore block is mined. 0 = no experience. */
 const ORE_XP: Record<number, number> = {
   [B.COAL_ORE]: 2,
-  [B.IRON_ORE]: 5,
-  [B.GOLD_ORE]: 6,
+  // These ores are recovered as blocks; XP here would be infinitely renewable.
+  [B.IRON_ORE]: 0,
+  [B.GOLD_ORE]: 0,
   [B.DIAMOND_ORE]: 7,
   [B.LAPIS_ORE]: 4,
   [B.REDSTONE_ORE]: 5,
@@ -536,7 +538,7 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
       return [{ id: blockId, count: 1 }];
     }
     if (blockId === B.COAL_ORE || blockId === B.DIAMOND_ORE || blockId === B.IRON_ORE || blockId === B.GOLD_ORE ||
-        blockId === B.LAPIS_ORE || blockId === B.EMERALD_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.ICE ||
+        blockId === B.LAPIS_ORE || blockId === B.EMERALD_ORE || blockId === B.REDSTONE_ORE || blockId === B.QUARTZ_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.ICE ||
         blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
         blockId === B.FARMLAND || (blockId >= B.CROP0 && blockId <= B.CROP3)) {
       return [{ id: blockId, count: 1 }];

@@ -1,3 +1,4 @@
+import { foodState } from './hunger';
 /**
  * BlockCraft 2.19 – „niewidzialna sesja” gracza na serwerze publicznym.
  *
@@ -32,6 +33,8 @@ export interface PlayerProfile {
   pitch: number;
   health: number;
   hunger: number;
+  saturation?: number;
+  exhaustion?: number;
   xp: number;
   /** Ekwipunek: 36 slotów (9 × hotbar + 27 plecaka). */
   inv: (Stack | null)[];
@@ -166,7 +169,7 @@ export function sanitizeProfile(raw: unknown): PlayerProfile | null {
     yaw: num(r.yaw, 0),
     pitch: num(r.pitch, 0),
     health: Math.max(1, Math.min(20, num(r.health, 20))),
-    hunger: Math.max(0, Math.min(20, num(r.hunger, 20))),
+    ...foodState(num(r.hunger, 20), r.saturation ?? (Array.isArray(inv) ? inv[49]?.saturation : undefined), r.exhaustion ?? (Array.isArray(inv) ? inv[49]?.exhaustion : undefined)),
     xp: Math.max(0, Math.trunc(num(r.xp, 0))),
     inv: cleanStacks(inv, 36),
     offhand: cleanStacks([r.offhand ?? (Array.isArray(inv) ? inv[47] : null)], 1)[0],
@@ -194,8 +197,8 @@ export function profileRow(p: PlayerProfile, world: string) {
     health: p.health,
     hunger: p.hunger,
     xp: p.xp,
-    // Keep the legacy first 36 slots; tail stores UI items, offhand (47), pickup receipts (48).
-    inv: JSON.stringify([...p.inv, p.cursor ?? null, ...cleanStacks(p.grid, 9), p.enchantItem ?? null, p.offhand ?? null, p.pickupReceipts ?? []]),
+    // Keep the legacy first 36 slots; tail stores UI items, offhand (47), pickup receipts (48), food state (49).
+    inv: JSON.stringify([...p.inv, p.cursor ?? null, ...cleanStacks(p.grid, 9), p.enchantItem ?? null, p.offhand ?? null, p.pickupReceipts ?? [], { saturation: p.saturation ?? 5, exhaustion: p.exhaustion ?? 0 }]),
     armor: JSON.stringify(p.armor),
     updated_at: new Date(p.updated || Date.now()).toISOString(),
   };

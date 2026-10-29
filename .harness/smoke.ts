@@ -29,7 +29,7 @@ const ctx2d = {
   fillRect() {}, strokeRect() {}, clearRect() {}, beginPath() {}, closePath() {}, moveTo() {}, lineTo() {},
   arc() {}, arcTo() {}, quadraticCurveTo() {}, bezierCurveTo() {}, fill() {}, stroke() {}, clip() {},
   drawImage() {}, save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, setTransform() {},
-  resetTransform() {}, putImageData() {},
+  resetTransform() {}, putImageData() {}, fillText() {},
   createImageData: (a: number, b: number) => ({ width: a, height: b, data: new Uint8ClampedArray(a * b * 4) }),
   getImageData: (_x: number, _y: number, w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
   measureText: () => ({ width: 10 }),
@@ -2539,7 +2539,7 @@ section('2.3: fishing tables and timing');
   check('the bite window is short', BITE_WINDOW <= 2, String(BITE_WINDOW));
   check('the hook is patient but not forever', PATIENCE > 20 && PATIENCE < 90);
   eq('a cooked fish is worth more than a raw one', (ITEMS[I.COOKED_FISH]?.hunger ?? 0) > (ITEMS[I.RAW_FISH]?.hunger ?? 0), true);
-  eq('salmon heals a little extra', ITEMS[I.COOKED_SALMON]?.heal ?? 0, 2);
+  eq('salmon provides a strong saturation reserve', ITEMS[I.COOKED_SALMON]?.saturation, 0.8);
   // surowa ryba w piecu -> pieczona
   eq('raw fish smelts into cooked fish', smeltResult(I.RAW_FISH), I.COOKED_FISH);
   eq('raw salmon smelts into cooked salmon', smeltResult(I.RAW_SALMON), I.COOKED_SALMON);
@@ -3178,8 +3178,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.4.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Wspólne przedmioty i PvP', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.4.1', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Zbroja, głód i rudy', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -5034,6 +5034,8 @@ section('2.18: moby 1:1 z Minecrafta');
   // 2.27: ciało przypięte do miejsca, a gracz stoi pod kątem 0,5 rad względem
   // kierunku ciała. Wcześniej wynik zależał od losowego spaceru krowy.
   const cow = new Mob('cow', 4.5, gy + 2, 4.5);
+  // Keep this head-animation fixture idle: random wandering changes body yaw.
+  cow.aiTimer = 100; cow.walking = false;
   const player = new THREE.Vector3(
     4.5 + Math.sin(0.5) * 6,
     gy + 1,
@@ -7952,6 +7954,140 @@ section('4.4: addressed PvP relay with two room guests');
   for (let n = 0; n < 8; n++) await Promise.resolve();
   check('bow launch broadcasts reach the host and other guests without self echoes', got[0].length === 1 && got[1].length === 1 && got[2].length === 1);
   host.close(); guests.forEach(g => g.close());
+}
+
+section('4.4.1: equipped armor geometry, animation, skin replacement and network');
+{
+  const { armorIds, armorColor } = await import('../src/game/armorVisual');
+  const set = [I.IRON_HELMET, I.GOLD_CHEST, I.DIAMOND_LEGS, I.LEATHER_BOOTS];
+  eq('wrong-slot equipment cannot create armor', JSON.stringify(armorIds([I.IRON_CHEST, NaN, I.STONE_PICK, -1])), '[0,0,0,0]');
+  check('all four armor materials are visually distinct', new Set([I.LEATHER_HELMET, I.IRON_HELMET, I.GOLD_HELMET, I.DIAMOND_HELMET].map(armorColor)).size === 4);
+  const make = (net: any) => Object.assign(Object.create(Game.prototype), {
+    net, netPlayers: [], remotes: new Map(), remoteGroup: new THREE.Group(), spawnPoint: new THREE.Vector3(),
+    combatPlayers: new Map(), isInNether: false, body: { pos: new THREE.Vector3(4.5, 65, 4.5) }, inventory: new Inventory(), armor: set.map(id => ({ id, count: 1 })),
+    yaw: 0, pitch: 0, netName: 'Armor', netHue: 0, health: 20, ui: 'playing', mode: 'survival',
+  });
+  const host = new NetSession({ role: 'host', name: 'Armor', id: 'armor-host', transport: 'local' });
+  const guest = new NetSession({ role: 'guest', name: 'Viewer', id: 'armor-viewer', transport: 'local' });
+  host.setWorld({ seed: 1, name: 'Armor', mode: 'survival', worldType: 'flat' });
+  host.attach({ connected: true, close() {}, send: raw => queueMicrotask(() => guest.ingest(raw)) });
+  guest.attach({ connected: true, close() {}, send: raw => queueMicrotask(() => host.ingest(raw)) });
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  const sender = make(host), receiver = make(guest);
+  guest.onMessage = m => receiver.onNetMessage(m);
+  const pose = sender.combatPosition(); host.sendPos(pose);
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  let avatar = receiver.remotes.get(host.id);
+  eq('room positions carry actual equipped pieces to the rendered avatar', JSON.stringify(avatar.armor.ids), JSON.stringify(set));
+  const meshes: THREE.Mesh[] = []; avatar.group.traverse((o: THREE.Object3D) => { if (o instanceof THREE.Mesh && o.parent?.name.startsWith('armor:')) meshes.push(o); });
+  check('equipped armor creates real nontransparent 3D meshes', meshes.length === 12 && meshes.every(m => (m.material as THREE.Material).visible && !(m.material as THREE.Material).transparent));
+  check('helmet and boots follow the animated head/leg joints', meshes.some(m => m.parent?.name === 'armor:0' && m.parent.parent === avatar.head) && meshes.some(m => m.parent?.name === 'armor:3' && m.parent.parent === avatar.legL));
+  const chest = meshes.find(m => m.parent?.name === 'armor:1')!;
+  avatar.armor.update(set); const unchanged: THREE.Mesh[] = [];
+  avatar.group.traverse((o: THREE.Object3D) => { if (o === chest) unchanged.push(chest); });
+  eq('unchanged position packets do not rebuild armor meshes', unchanged.length, 1);
+  receiver.setRemoteSkin(host.id, 'alex'); avatar = receiver.remotes.get(host.id);
+  eq('changing to a slim skin preserves equipped armor', JSON.stringify(avatar.armor.ids), JSON.stringify(set));
+  let freed = false; const helmetMesh = avatar.head.getObjectByName('armor:0').children[0] as THREE.Mesh;
+  helmetMesh.geometry.addEventListener('dispose', () => { freed = true; });
+  host.sendPos({ ...pose, armor: [0, set[1], set[2], set[3]] });
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  check('unequipping a helmet removes it and releases its geometry', avatar.armor.ids[0] === 0 && !avatar.head.getObjectByName('armor:0') && freed);
+  const srv = new PublicServer({ name: 'Public', pid: 'p1234567890abcdef123', worldId: 'armor-test', client: {} as never }) as any;
+  srv.onMessage = (m: NetMessage) => receiver.onNetMessage(m);
+  srv.onPacket({ t: 'pos', from: host.id, ...pose, armor: set });
+  eq('public broadcast positions update armor through the same engine path', JSON.stringify(avatar.armor.ids), JSON.stringify(set));
+  srv.onPacket({ t: 'pos', from: host.id, ...pose, armor: undefined });
+  eq('legacy clients without equipment do not leave ghost armor', JSON.stringify(avatar.armor.ids), '[0,0,0,0]');
+  receiver.dropRemote(host.id); host.close(); guest.close(); srv.close();
+}
+
+section('4.4.1: exhaustion, saturation, food, regeneration and profile persistence');
+{
+  const { foodState, exhaust, eat } = await import('../src/game/hunger');
+  let food = foodState();
+  for (let i = 0; i < 39; i++) food = exhaust(food, 0.1);
+  eq('actions do not deduct food directly', food.hunger, 20);
+  food = exhaust(food, 0.11);
+  eq('four exhaustion spends saturation before hunger', food.saturation, 4);
+  eq('spending saturation keeps the food bar full', food.hunger, 20);
+  food = exhaust(foodState(20, 0), 4);
+  eq('without saturation four exhaustion spends one food point', food.hunger, 19);
+  food = eat(foodState(10, 0), ITEMS[I.COOKED_BEEF]!.hunger!, ITEMS[I.COOKED_BEEF]!.saturation!);
+  check('steak restores eight food and 12.8 saturation', food.hunger === 18 && Math.abs(food.saturation - 12.8) < 1e-8);
+  eq('saturation never exceeds the current food level', eat(foodState(1, 0), 1, 10).saturation, 2);
+  eq('malformed saved food is safely normalized', JSON.stringify(foodState(NaN, Infinity, -5)), JSON.stringify({ hunger: 20, saturation: 5, exhaustion: 0 }));
+  const world = new World(4411, true); for (let z = -24; z <= 0; z++) world.getChunk(0, z);
+  const make = () => Object.assign(Object.create(Game.prototype), { world, mode: 'survival', ui: 'playing', health: 20, hunger: 20, saturation: 5, exhaustion: 0,
+    body: { pos: new THREE.Vector3(4.5, FLAT_H + 1, 4.5), vel: new THREE.Vector3(), onGround: true, hitWall: false, w: 0.6, h: 1.8 },
+    keys: new Set<string>(), yaw: 0, eyeHeight: 1.62, autoJump: false, sprinting: false, flying: false, fallStart: FLAT_H + 1,
+    air: 10, maxAir: 10, bobAmp: 0, bobPhase: 0, stepDist: 0, lastHurt: 0, hurtCount: 0, shake: 0,
+    hasEffect: () => false, emitHud() {}, buzz() {}, message() {}, unlock() {}, inventory: new Inventory(), armor: Array(4).fill(null), selected: 0,
+  });
+  const walking = make(); walking.keys.add('KeyW');
+  for (let n = 0; n < 1200; n++) walking.updatePlayer(1 / 60);
+  check('twenty seconds of actual walking consumes neither hunger nor saturation', walking.hunger === 20 && walking.saturation === 5 && walking.exhaustion === 0 && walking.body.pos.z < -30, JSON.stringify({ hunger: walking.hunger, saturation: walking.saturation, exhaustion: walking.exhaustion, position: walking.body.pos.toArray(), health: walking.health }));
+  const sprinting = make(); sprinting.keys.add('KeyW'); sprinting.keys.add('ControlLeft');
+  const from = sprinting.body.pos.z;
+  for (let n = 0; n < 1200; n++) sprinting.updatePlayer(1 / 60);
+  const used = (5 - sprinting.saturation + 20 - sprinting.hunger) * 4 + sprinting.exhaustion;
+  check('sprint exhaustion follows actual distance at 0.1 per block', Math.abs(used - Math.abs(sprinting.body.pos.z - from) * 0.1) < 1e-6);
+  const jumping = make(); jumping.keys.add('Space');
+  for (let n = 0; n < 10; n++) jumping.updatePlayer(1 / 60);
+  check('holding jump charges one jump, not every frame', Math.abs(jumping.exhaustion - 0.05) < 1e-8);
+  const wall = make(); wall.keys.add('KeyW'); wall.keys.add('ControlLeft'); world.setBlock(4, FLAT_H + 1, 3, B.STONE); world.setBlock(4, FLAT_H + 2, 3, B.STONE);
+  for (let n = 0; n < 60; n++) wall.updatePlayer(1 / 60);
+  const atWall = wall.exhaustion; for (let n = 0; n < 120; n++) wall.updatePlayer(1 / 60);
+  check('pressing movement against a wall does not spend extra exhaustion', Math.abs(atWall - wall.exhaustion) < 1e-8);
+  const regen = make(); regen.health = 10; regen.hunger = 18; regen.saturation = 0; regen.updateFood(4);
+  check('ordinary natural regeneration heals one health per four seconds', regen.health === 11 && regen.hunger === 17 && regen.exhaustion === 2);
+  const full = make(); full.health = 10; full.saturation = 6; full.updateFood(0.5);
+  check('full-food saturated regeneration heals through the exhaustion reserve', full.health === 11 && full.hunger === 20 && full.saturation === 5 && full.exhaustion === 2);
+  const starve = make(); starve.hunger = starve.saturation = 0; starve.armor = [I.DIAMOND_HELMET, I.DIAMOND_CHEST, I.DIAMOND_LEGS, I.DIAMOND_BOOTS].map(id => ({ id, count: 1, dur: 42 })); starve.updateFood(4);
+  check('normal starvation bypasses armor without wearing it', starve.health === 19 && starve.armor.every((s: Stack) => s.dur === 42));
+  starve.health = 1; starve.updateFood(4); eq('normal starvation does not kill at half a heart', starve.health, 1);
+  const creative = make(); creative.mode = 'creative'; creative.addExhaustion(40); eq('creative does not accumulate exhaustion', creative.exhaustion, 0);
+  const eating = make(); eating.hunger = 12; eating.saturation = 0; eating.health = 10; eating.eatCooldown = 0; eating.inventory.slots[0] = { id: I.BREAD, count: 2 };
+  eating.tryEat(eating.inventory.slots[0]);
+  check('eating adds saturation instead of directly healing', eating.hunger === 17 && eating.saturation === 6 && eating.health === 10 && eating.inventory.slots[0].count === 1);
+  const saved = sanitizeProfile({ pid: 'p1234567890abcdef123', x: 0, y: 65, z: 0, hunger: 17, saturation: 4.25, exhaustion: 3.5, inv: [], armor: [] })!;
+  const restored = sanitizeProfile(profileRow(saved, 'food-test'))!;
+  check('public profile roundtrip preserves saturation and exhaustion without new columns', restored.saturation === 4.25 && restored.exhaustion === 3.5);
+  eq('legacy profiles gain the initial five saturation reserve', sanitizeProfile({ pid: saved.pid, x: 0, y: 65, z: 0, inv: [], armor: [] })?.saturation, 5);
+  const code = readSource('src/game/engine.ts');
+  check('local saves also persist and restore the food reserve', /saturation: this.saturation, exhaustion: this.exhaustion/.test(code) && /foodState\(opts.save.hunger \?\? 20, opts.save.saturation, opts.save.exhaustion\)/.test(code));
+}
+
+section('4.4.1: ore placement/mining cycle has no item or XP gain');
+{
+  const ores = [B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE];
+  for (const ore of ores) {
+    const world = new World(4412, true); world.getChunk(0, 0); world.setBlock(4, FLAT_H, 4, B.STONE);
+    let xp = 0;
+    const g = Object.assign(Object.create(Game.prototype), { world, mode: 'survival', ui: 'playing', selected: 0, inventory: new Inventory(),
+      body: { pos: new THREE.Vector3(10, FLAT_H + 1, 10), w: 0.6, h: 1.8 }, keys: new Set(), mobs: [], growables: new Map(),
+      raycastTarget: () => ({ x: 4, y: FLAT_H, z: 4, nx: 0, ny: 1, nz: 0, id: B.STONE }), findMobTarget: () => ({ mob: null }),
+      spawnParticles() {}, emitHud() {}, message() {}, unlock() {}, fallGravity() {}, onBlockChanged() {},
+      spawnOrb(_x: number, _y: number, _z: number, value: number) { xp += value; },
+    });
+    g.spawnDrop = (id: number, count: number) => g.inventory.add(id, count);
+    g.inventory.slots[0] = { id: ore, count: 1 };
+    g.inventory.slots[1] = { id: I.DIAMOND_PICK, count: 1, ench: { silktouch: 1, fortune: 3 } };
+    for (let repeat = 0; repeat < 8; repeat++) {
+      g.selected = 0; g.tryUse();
+      if (repeat === 0) check(`placing ore ${ore} consumes its source item`, !g.inventory.slots[0] && world.getBlock(4, FLAT_H + 1, 4) === ore);
+      g.selected = 1; g.breakBlock(4, FLAT_H + 1, 4);
+    }
+    eq(`eight silk/fortune cycles conserve ore ${ore}`, g.inventory.countOf(ore), 1);
+    eq(`eight silk cycles cannot farm XP for ore ${ore}`, xp, 0);
+    if (ore === B.IRON_ORE || ore === B.GOLD_ORE) {
+      delete g.inventory.slots[1].ench;
+      for (let repeat = 0; repeat < 8; repeat++) { g.selected = 0; g.tryUse(); g.selected = 1; g.breakBlock(4, FLAT_H + 1, 4); }
+      check(`ordinary repeat mining of ore ${ore} cannot farm XP or items`, xp === 0 && g.inventory.countOf(ore) === 1);
+    }
+    g.inventory.slots[1].ench = undefined; world.setBlock(4, FLAT_H + 1, 4, ore); g.breakBlock(4, FLAT_H + 1, 4);
+    if (ore !== B.IRON_ORE && ore !== B.GOLD_ORE) check(`ordinary resource mining still grants XP for ore ${ore}`, xp > 0);
+  }
 }
 
 // =================================================================== report

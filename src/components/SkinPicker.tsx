@@ -1,3 +1,5 @@
+import type { Stack } from '../game/inventory';
+import { armorIds, armorColor } from '../game/armorVisual';
 import { SKINS, skinById, type Skin } from '../game/skins';
 import { skinFace, skinPortrait } from '../game/skinArt';
 
@@ -71,6 +73,22 @@ export function SkinAvatar({ skin, size = 56, label }: { skin: Skin | string; si
       <div style={{ position: 'absolute', right: px(27), bottom: 0, width: px(20), height: px(14), background: `#${s.shoes.toString(16).padStart(6, '0')}` }} />
     </div>
   );
+}
+
+/** Inventory preview uses the same equipment validation/palette as world avatars. */
+export function EquippedSkinAvatar({ skin, size = 54, armor }: { skin: string; size?: number; armor: (Stack | null)[] }) {
+  const ids = armorIds(armor.map(s => s?.id ?? 0));
+  return <div style={{ position: 'relative', width: size, height: size * 2 }} data-testid="equipped-avatar">
+    <SkinAvatar skin={skin} size={size} />
+    <svg viewBox="0 0 16 32" aria-hidden="true" shapeRendering="crispEdges" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+      {ids.map((id, slot) => id ? <g key={slot} data-armor-slot={slot} fill={armorColor(id)} stroke="#000" strokeOpacity="0.22" strokeWidth="0.2">
+        {slot === 0 ? <path d="M3.5 0H12.5V8H11V2H5V8H3.5Z" /> : null}
+        {slot === 1 ? <path d="M0 8H16V14H12V19H4V14H0Z" /> : null}
+        {slot === 2 ? <><rect x="4" y="19" width="8" height="3" /><rect x="4" y="22" width="3.8" height="7" /><rect x="8.2" y="22" width="3.8" height="7" /></> : null}
+        {slot === 3 ? <><rect x="3.8" y="28" width="4.2" height="4" /><rect x="8.2" y="28" width="4.2" height="4" /></> : null}
+      </g> : null)}
+    </svg>
+  </div>;
 }
 
 /** 2.12: sama głowa – do listy graczy w HUD i w pauzie (mała, czytelna). */
