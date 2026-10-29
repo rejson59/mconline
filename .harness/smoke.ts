@@ -1,3 +1,4 @@
+import type { NetMessage } from '../src/game/net';
 import { isDoor } from '../src/game/blocks';
 import { structuresOverlapping, ADVENTURE_RADIUS, nearestStructure, structureKindFromName } from '../src/game/structures';
 import { villageChestPosition, doorCell, villagesOverlapping } from '../src/game/village';
@@ -3177,8 +3178,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION.startsWith('4.3'), GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Wiadra i druga ręka', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.4.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Wspólne przedmioty i PvP', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -4458,6 +4459,7 @@ section('2.10: multiplayer wpięty w grę');
   netg.message = (t: string) => netg.messages.push(t);
   netg.netPlayers = [{ id: 'host-1', name: 'Ala', hue: 0, ping: 5 }];
   netg.remotes = new Map();
+  netg.combatPlayers = new Map();
   netg.netName = 'Bob';
   const sentChat: string[] = [];
   netg.net = { id: 'guest-9', role: 'guest', name: 'Bob', say: (t: string) => sentChat.push(t) };
@@ -6954,7 +6956,7 @@ section('4.2.1: door thresholds and intentional chest opening');
     world, body: { pos: new THREE.Vector3(5.5, y, 5.5) }, scene: new THREE.Scene(), materials: [material],
     ui: 'playing', chestPos: null, chestLids: new Map(),
     chests: new Map(), isInNether: false,
-    setUI(state: string) { this.ui = state; }, unlock() {},
+    setUI(this: any, state: string) { this.ui = state; }, unlock() {},
   }) as Record<string, any>;
   g.updateChestLids(0.25);
   eq('walking near chests never animates their lids', g.chestLids.size, 0);
@@ -7689,6 +7691,267 @@ section('4.3.1: floor safety, cancelled input and atomic chunk rebuilding');
     eq(`walking away and returning never removes mine floors, rotation ${rotation}`, floors.filter(b => w.getBlock(b.x, b.y, b.z) !== B.PLANKS).length, 0);
     eq(`saved mine floors survive reload, rotation ${rotation}`, floors.filter(b => reload.getBlock(b.x, b.y, b.z) !== B.PLANKS).length, 0);
   }
+}
+
+section('4.4: shared item authority, idempotency and durable delivery');
+{
+  const { DropLedger, cleanDrop, DROP_LIFETIME } = await import('../src/game/sharedDrops');
+  const alice = 'p1111111111111111111', bob = 'p2222222222222222222';
+  const drop = (uid: string, owner = alice): import('../src/game/sharedDrops').SharedDrop => ({ uid, owner, d: 'o',
+    stack: { id: I.IRON_PICK, count: 1, dur: 19, ench: { efficiency: 2 }, name: 'Shared pick' },
+    pos: [4.5, FLAT_H + 2, 4.5], vel: [0, 0, 0], created: Date.now(), expires: Date.now() + DROP_LIFETIME - 1 });
+  const ledger = new DropLedger(); const source = drop('test-drop');
+  check('shared stack validation preserves every item field', !!cleanDrop(source));
+  eq('invalid count is rejected', cleanDrop({ ...source, stack: { id: I.IRON_PICK, count: 2 } }), null);
+  eq('NaN coordinates are rejected', cleanDrop({ ...source, pos: [NaN, 0, 0] }), null);
+  eq('a client cannot publish under another owner', ledger.put(source, bob), null);
+  ledger.put(source, alice); ledger.put(source, alice);
+  eq('retrying a spawn never creates another item', ledger.list(bob).length, 1);
+  eq('other dimension cannot claim a drop', ledger.claim(source.uid, bob, 'n'), null);
+  const [a, b] = await Promise.all([Promise.resolve(ledger.claim(source.uid, alice, 'o')), Promise.resolve(ledger.claim(source.uid, bob, 'o'))]);
+  eq('simultaneous collectors receive exactly one ownership grant', Number(!!a) + Number(!!b), 1);
+  check('a lost grant can be replayed to its original winner', !!ledger.claim(source.uid, alice, 'o'));
+  eq('claim removes the item from everyone else’s snapshot', ledger.list(bob).length, 0);
+  ledger.ack(source.uid, bob); eq('wrong winner cannot acknowledge somebody else’s delivery', ledger.list(alice).length, 1);
+  ledger.ack(source.uid, alice); ledger.put(source, alice);
+  eq('acknowledged item cannot be resurrected by an old spawn retry', ledger.list(alice).length, 0);
+  const expired = drop('expired'); expired.created -= DROP_LIFETIME + 1; expired.expires -= DROP_LIFETIME + 1;
+  eq('expired active items do not reappear', ledger.put(expired, alice), null);
+
+  const createGame = (net: any) => {
+    const world = new World(440, true); world.getChunk(0, 0);
+    const g = Object.assign(Object.create(Game.prototype), {
+      net, world, inventory: new Inventory(), drops: [], scene: new THREE.Scene(), renderDistance: 3, isInNether: false,
+      body: { pos: new THREE.Vector3(4.5, FLAT_H + 1, 4.5), vel: new THREE.Vector3(), w: 0.6, h: 1.8 },
+      pickupReceipts: new Set<string>(), pendingPickups: new Map(), dropGeos: new Map(), dropIconMats: new Map(),
+      dropIconGeo: new THREE.PlaneGeometry(0.3, 0.3), dropMat: new THREE.MeshBasicMaterial(), itemTexture: () => new THREE.Texture(),
+      netPlayers: [], remotes: new Map(), combatPlayers: new Map(), dropRemote() {}, message() {},
+      selected: 0, mode: 'survival', ui: 'playing', eyeHeight: 1.62, yaw: 0, pitch: 0,
+      emitHud() {}, notePickup() {},
+    });
+    g.buildProfile = () => ({ pid: net.id, name: 'Test', skin: 'steve', updated: Date.now(), x: 4.5, y: FLAT_H + 1, z: 4.5,
+      dim: 'o', yaw: 0, pitch: 0, health: 20, hunger: 20, xp: 0, inv: structuredClone(g.inventory.slots), armor: [], pickupReceipts: [...g.pickupReceipts] });
+    net.onMessage = (m: NetMessage) => g.onNetMessage(m);
+    return g;
+  };
+  // Actual room routing over a two-client wire, with a host-only ledger.
+  const host = new NetSession({ role: 'host', name: 'A', transport: 'local', id: alice });
+  const guest = new NetSession({ role: 'guest', name: 'B', transport: 'local', id: bob });
+  host.setWorld({ seed: 440, mode: 'survival', worldType: 'flat', name: 'Drops' });
+  host.attach({ connected: true, close() {}, send: raw => queueMicrotask(() => guest.ingest(raw)) });
+  guest.attach({ connected: true, close() {}, send: raw => queueMicrotask(() => host.ingest(raw)) });
+  for (let n = 0; n < 8; n++) await Promise.resolve();
+  const hg = createGame(host), gg = createGame(guest);
+  hg.spawnDrop(I.IRON_PICK, 1, 4.5, FLAT_H + 2, 4.5, 19, 0, 0, 0, { efficiency: 2 }, 'Shared pick');
+  for (let n = 0; n < 8; n++) await Promise.resolve();
+  eq('another player actually renders the thrown item', gg.drops.length, 1);
+  eq('local spawn is not duplicated by its authoritative echo', hg.drops.length, 1);
+  eq('both renders use the same shared identity', hg.drops[0].shared.uid, gg.drops[0].shared.uid);
+  const uid = hg.drops[0].shared.uid;
+  guest.claimDrop(uid, 'o'); host.claimDrop(uid, 'o');
+  for (let n = 0; n < 8; n++) await Promise.resolve();
+  hg.deliverPickups(); gg.deliverPickups();
+  for (let n = 0; n < 8; n++) await Promise.resolve();
+  eq('two collecting clients never duplicate the stack', hg.inventory.countOf(I.IRON_PICK) + gg.inventory.countOf(I.IRON_PICK), 1);
+  check('pickup removes both players’ world renders', hg.drops.length === 0 && gg.drops.length === 0);
+  const winner = hg.inventory.countOf(I.IRON_PICK) ? hg : gg;
+  eq('received tool keeps name, enchantment and wear', JSON.stringify(winner.inventory.slots.find((s: Stack | null) => s?.id === I.IRON_PICK)), JSON.stringify(source.stack));
+  const won = { ...source, uid, claimedBy: winner.net.id };
+  winner.onNetMessage({ t: 'pickup', from: alice, to: winner.net.id, drop: won }); winner.deliverPickups();
+  eq('duplicate grant cannot credit inventory twice', winner.inventory.countOf(I.IRON_PICK), 1);
+  host.syncDrops(); guest.syncDrops();
+  for (let n = 0; n < 8; n++) await Promise.resolve();
+  eq('late snapshot cannot revive the collected item', hg.drops.length + gg.drops.length, 0);
+  // A checkpoint failure must roll back the inventory, not acknowledge a loss.
+  let acknowledgements = 0, checkpoint = false;
+  const failing = createGame({ id: bob, public: true, checkpointPickup: () => checkpoint, acknowledgeDrop: () => acknowledgements++ });
+  failing.onNetMessage({ t: 'pickup', from: 'database', drop: { ...source, uid: 'durable', claimedBy: bob } });
+  failing.deliverPickups();
+  eq('failed durable checkpoint rolls back the tentative credit', failing.inventory.countOf(I.IRON_PICK), 0);
+  eq('failed durable checkpoint never acknowledges delivery', acknowledgements, 0);
+  checkpoint = true; failing.inventory.slots = Array.from({ length: 36 }, () => ({ id: B.STONE, count: 64 })); failing.deliverPickups();
+  eq('full inventory keeps the reserved delivery pending', failing.pendingPickups.size, 1);
+  failing.inventory.slots[9] = null; failing.deliverPickups();
+  eq('freeing space delivers the reserved item exactly once', acknowledgements, 1);
+  const restored = sanitizeProfile(profileRow(failing.buildProfile(), 'drops-test'))!;
+  check('pickup receipt and inventory survive the same profile roundtrip', restored.pickupReceipts?.includes('durable') && restored.inv[9]?.id === I.IRON_PICK);
+  // Public transport exercises RPC arbitration, persistence and outbox retry.
+  const sql = new DropLedger(); let offline = false;
+  const client = {
+    rpc: async (_name: string, args: any) => {
+      if (offline) return { data: null, error: { message: 'offline' } };
+      let data: unknown[] = [];
+      if (args.p_op === 'put') { const r = sql.put(args.p_drop, args.p_actor); if (r) data = [r]; }
+      if (args.p_op === 'claim') { const r = sql.claim(args.p_uid, args.p_actor, args.p_dim); if (r) data = [r]; }
+      if (args.p_op === 'ack') sql.ack(args.p_uid, args.p_actor);
+      if (args.p_op === 'list') data = sql.list(args.p_actor);
+      return { data, error: null };
+    },
+    from: () => ({ upsert: async () => ({ error: null }), select: () => ({ eq: () => ({ eq: () => ({ limit: async () => ({ data: [], error: null }) }) }) }) }),
+  };
+  const pa = new PublicServer({ name: 'A', pid: alice, client: client as never, worldId: 'drops-test' }) as any;
+  const pb = new PublicServer({ name: 'B', pid: bob, client: client as never, worldId: 'drops-test' }) as any;
+  pa.status = pb.status = 'connected'; const pga = createGame(pa), pgb = createGame(pb);
+  pga.spawnDrop(I.IRON_PICK, 1, 4.5, FLAT_H + 2, 4.5, 19, 0, 0, 0, { efficiency: 2 }, 'Shared pick');
+  for (let n = 0; n < 12; n++) await Promise.resolve();
+  pb.syncDrops(); for (let n = 0; n < 8; n++) await Promise.resolve();
+  eq('public client catches up a drop without needing its spawn broadcast', pgb.drops.length, 1);
+  const publicId = pgb.drops[0].shared.uid; pa.close();
+  pb.claimDrop(publicId, 'o'); for (let n = 0; n < 8; n++) await Promise.resolve();
+  pgb.deliverPickups(); for (let n = 0; n < 8; n++) await Promise.resolve();
+  eq('public item can be collected after its owner disconnects', pgb.inventory.countOf(I.IRON_PICK), 1);
+  eq('confirmed public delivery is absent from SQL snapshots', sql.list(bob).length, 0);
+  const before = pgb.inventory.countOf(I.IRON_PICK);
+  pb.onPacket({ t: 'pickup', from: alice, drop: { ...source, uid: 'forged-grant', claimedBy: bob } }); pgb.deliverPickups();
+  eq('a broadcast cannot forge a public pickup grant', pgb.inventory.countOf(I.IRON_PICK), before);
+  offline = true;
+  pgb.inventory.slots[0] = { id: B.STONE, count: 3 }; pgb.dropItem();
+  for (let n = 0; n < 8; n++) await Promise.resolve();
+  const journal = JSON.parse(localStorage.getItem(pb.dropOutboxKey())!);
+  eq('outbox journals the inventory AFTER the thrown item is consumed', journal.profile.inv[0].count, 2);
+  eq('failed upload retains the item in its durable outbox', journal.drops.length, 1);
+  const reconnect = new PublicServer({ name: 'B', pid: bob, client: client as never, worldId: 'drops-test' }) as any;
+  const recovered = await reconnect.loadProfile();
+  eq('reconnect restores the consumed source inventory, not a duplicate', recovered.inv[0].count, 2);
+  eq('reconnect retains the exact original pending drop identity', reconnect.dropOutbox.size, 1);
+  offline = false; reconnect.status = 'connected'; await reconnect.flushDrops();
+  eq('outbox retries publish the original item once', sql.list(alice).length, 1);
+  host.close(); guest.close(); pb.close(); reconnect.close();
+}
+
+section('4.4: player combat validation, glass, cooldowns and arrows');
+{
+  const { playerRay, validCombat } = await import('../src/game/playerCombat');
+  const attacker = 'attacker', target = 'victim'; const y = FLAT_H + 1;
+  const makeHit = (uid: string): import('../src/game/net').CombatEvent => ({ uid, d: 'o', kind: 'melee', at: Date.now(), origin: [4.5, y + 1.62, 6.5], direction: [0, 0, -1], weapon: I.IRON_SWORD, sharpness: 0, knockback: 0, strength: false, sprint: false });
+  const world = new World(441, true); world.getChunk(0, 0);
+  const g = Object.assign(Object.create(Game.prototype), { world, net: { id: target }, ui: 'playing', mode: 'survival', health: 20, hunger: 20,
+    body: { pos: new THREE.Vector3(4.5, y, 4.5), vel: new THREE.Vector3(), h: 1.8, w: 0.6 }, isInNether: false,
+    pvpProtectedUntil: 0, combatSeen: new Map(), combatCooldowns: new Map(), combatPlayers: new Map([[attacker, { d: 'o', x: 4.5, y, z: 6.5, held: I.IRON_SWORD, seen: performance.now(), alive: true }]]),
+    inventory: new Inventory(), selected: 0, armor: Array(4).fill(null), hurtCount: 0, shake: 0,
+    emitHud() {}, buzz() {}, saveProfileNow() {}, wearTool() {},
+  });
+  check('a valid melee event is accepted', validCombat(makeHit('first')));
+  check('ray targeting uses the actual player body', Math.abs(playerRay([4.5, y + 1.62, 6.5], [0, 0, -1], [4.5, y, 4.5], 3.5)! - 1.6) < 1e-8);
+  g.receiveCombat(attacker, makeHit('first'), target);
+  check('PvP actually removes victim health', g.health < 20);
+  const hp = g.health; g.receiveCombat(attacker, makeHit('first'), target);
+  eq('replaying a hit cannot apply damage twice', g.health, hp);
+  g.receiveCombat(attacker, makeHit('too-soon'), target); eq('new IDs cannot bypass the attack cooldown', g.health, hp);
+  const attempt = (uid: string, mutate?: (h: import('../src/game/net').CombatEvent) => void) => { g.combatCooldowns.clear(); const h = makeHit(uid); mutate?.(h); g.receiveCombat(attacker, h, target); };
+  world.setBlock(4, y + 1, 5, B.GLASS); attempt('glass'); eq('glass blocks melee damage on the victim as well', g.health, hp);
+  world.setBlock(4, y + 1, 5, B.AIR);
+  attempt('wrong-dimension', h => { h.d = 'n'; }); eq('other dimensions cannot attack this player', g.health, hp);
+  attempt('wrong-direction', h => { h.direction = [0, 0, 1]; }); eq('a missed crosshair cannot hit the player', g.health, hp);
+  attempt('too-far', h => { h.origin[2] = 10; }); eq('remote origin spoofing is rejected', g.health, hp);
+  attempt('nan', h => { h.direction[0] = NaN; }); eq('invalid numeric payloads cannot damage', g.health, hp);
+  attempt('old', h => { h.at -= 5000; }); eq('delayed hits expire', g.health, hp);
+  g.mode = 'creative'; attempt('creative'); eq('creative players are immune', g.health, hp); g.mode = 'survival';
+  g.pvpProtectedUntil = performance.now() + 3000; attempt('spawn'); eq('spawn grace period protects newly respawned players', g.health, hp); g.pvpProtectedUntil = 0;
+  g.inventory.offhand = { id: I.SHIELD, count: 1, dur: 50 }; attempt('shield');
+  check('offhand shield reduces damage and loses durability', g.health > hp - attackDamage(I.IRON_SWORD, false) && g.inventory.offhand.dur === 42);
+  g.health = 20; g.inventory.offhand = null; g.armor = [{ id: I.IRON_HELMET, count: 1 }, { id: I.IRON_CHEST, count: 1 }, { id: I.IRON_LEGS, count: 1 }, { id: I.IRON_BOOTS, count: 1 }];
+  attempt('armor'); check('PvP goes through the existing armor reduction and wear', g.health > 20 - attackDamage(I.IRON_SWORD, false) && g.armor[0].dur < 165);
+  let arrows = 0; g.spawnArrow = (_o: unknown, _d: unknown, _s: unknown, _m: unknown, _p: unknown, owner: string) => { if (owner === attacker) arrows++; };
+  attempt('arrow', h => { h.kind = 'arrow'; h.weapon = I.BOW; h.speed = 48; h.power = 9; });
+  eq('a remote bow shot creates a physical victim-side projectile', arrows, 1);
+  attempt('fake-arrow', h => { h.kind = 'arrow'; h.weapon = I.BOW; h.speed = 100000; h.power = 999; });
+  eq('unbounded arrow damage and speed are rejected', arrows, 1);
+  // Exercise real projectile movement/collisions, not just the launch event.
+  delete g.spawnArrow;
+  Object.assign(g, { arrows: [], mobs: [], scene: new THREE.Scene(), arrowGeo: new THREE.BoxGeometry(), arrowMat: new THREE.MeshBasicMaterial(), armor: Array(4).fill(null),
+    health: 20, unlock() {}, message() {}, spawnParticles() {}, updateHand() {}, spawnPoint: g.body.pos.clone(), addWaypoint() {}, setUI(this: any, state: string) { this.ui = state; } });
+  let savedHits = 0; g.saveProfileNow = () => savedHits++;
+  const fire = (uid: string) => attempt(uid, h => { h.kind = 'arrow'; h.weapon = I.BOW; h.speed = 48; h.power = 9; });
+  fire('physical-arrow'); g.updateArrows(0.05);
+  eq('a physically colliding remote arrow removes nine health', g.health, 11);
+  check('a spent PvP arrow is removed and its damage immediately saved', g.arrows.length === 0 && savedHits === 1);
+  g.health = 20; g.inventory.offhand = { id: I.SHIELD, count: 1, dur: 50 };
+  fire('physical-shield'); g.updateArrows(0.05);
+  check('the offhand shield parries physical PvP arrows and wears', g.health === 20 && g.inventory.offhand.dur === 38);
+  g.inventory.offhand = null;
+  world.setBlock(4, y + 1, 5, B.GLASS); fire('physical-glass'); g.updateArrows(0.05);
+  check('glass stops physical PvP arrows before they reach a player', g.health === 20 && g.arrows.length === 0);
+  world.setBlock(4, y + 1, 5, B.AIR);
+  g.combatPlayers.set('intervening', { d: 'o', x: 4.5, y, z: 5.5, seen: performance.now(), alive: true });
+  fire('physical-intervening'); g.updateArrows(0.05);
+  check('one broadcast arrow stops at an intervening player', g.health === 20 && g.arrows.length === 0);
+  g.combatPlayers.delete('intervening');
+  let mobDamage = 0;
+  g.mobs = [{ body: { pos: new THREE.Vector3(4.5, y, 5.5), w: 0.8, h: 1.8 }, damage() { mobDamage++; return true; } }];
+  fire('physical-mob'); g.updateArrows(0.05);
+  check('remote PvP replicas stop at mobs without duplicating mob damage', mobDamage === 0 && g.health === 20 && g.arrows.length === 0);
+  g.mobs = [];
+  // The crosshair follows the interpolated avatar, not a newer invisible pose.
+  g.body.pos.x = 5.5; g.playerHistory = [{ at: Date.now() - 200, pos: [4.5, y, 4.5] }];
+  attempt('interpolated-hit'); check('recent local poses compensate avatar interpolation for melee', g.health < 20);
+  g.health = 20; g.body.pos.x = 14.5; attempt('old-teleport'); eq('lag compensation cannot hit an old teleport location', g.health, 20);
+  g.body.pos.x = 5.5; g.playerHistory = [{ at: Date.now() - 1000, pos: [4.5, y, 4.5] }];
+  attempt('expired-history'); eq('expired position history does not extend melee reach', g.health, 20);
+  g.body.pos.x = 4.5; g.playerHistory = []; g.health = 1; g.totemHeal = 0;
+  g.inventory.offhand = { id: I.TOTEM, count: 1 }; attempt('pvp-totem');
+  check('lethal PvP consumes a totem through the normal survival pipeline', g.health === 6 && g.ui === 'playing' && g.inventory.offhand === null);
+  const deathDrops: any[][] = []; g.spawnDrop = (...args: any[]) => deathDrops.push(args);
+  g.health = 1; g.inventory.slots[0] = { id: B.STONE, count: 4 };
+  g.inventory.cursor = { id: I.IRON_PICK, count: 1, dur: 19, name: 'Cursor pick' };
+  g.inventory.grid[0] = { id: B.PLANKS, count: 3 };
+  g.enchantItem = { id: I.IRON_SWORD, count: 1, ench: { sharpness: 1 }, name: 'Enchant sword' };
+  g.armor[0] = { id: I.IRON_HELMET, count: 1, name: 'Named helmet' };
+  attempt('pvp-death');
+  check('PvP death drops hotbar, cursor, crafting, enchanting and armor exactly once', g.ui === 'dead' && deathDrops.length === 5 && g.inventory.slots.every((v: unknown) => !v) && g.inventory.grid.every((v: unknown) => !v) && !g.inventory.cursor && !g.enchantItem);
+  check('PvP death loot preserves tool wear, armor names and enchantments', deathDrops.some(d => d[0] === I.IRON_PICK && d[5] === 19 && d[10] === 'Cursor pick') && deathDrops.some(d => d[0] === I.IRON_HELMET && d[10] === 'Named helmet') && deathDrops.some(d => d[0] === I.IRON_SWORD && d[9]?.sharpness === 1));
+  const shooter = Object.assign(Object.create(Game.prototype), { world, net: { id: attacker, sendCombat() {} }, ui: 'playing', isInNether: false,
+    eyePos: () => new THREE.Vector3(4.5, y + 1.62, 6.5), lookDir: () => new THREE.Vector3(0, 0, -1),
+    combatPlayers: new Map([[target, { d: 'o', x: 4.5, y, z: 4.5, seen: performance.now(), alive: true, mode: 'survival' }]]) });
+  eq('manual PvP target is a real player, not a mob', shooter.findPlayerTarget(3.5)?.id, target);
+  world.setBlock(4, y + 1, 5, B.GLASS); eq('manual targeting never selects a player behind glass', shooter.findPlayerTarget(3.5), null);
+}
+
+section('4.4: frame-independent shared physics and unloaded terrain');
+{
+  const realNow = Date.now, start = realNow(); let clock = start;
+  const make = () => {
+    const world = new World(442, true); world.getChunk(0, 0);
+    for (let y = FLAT_H + 1; y < FLAT_H + 70; y++) world.setBlock(4, y, 4, B.WATER);
+    return Object.assign(Object.create(Game.prototype), { world });
+  };
+  const drop = () => ({ pos: new THREE.Vector3(4.5, FLAT_H + 65, 4.5), vel: new THREE.Vector3(), shared: { created: start } });
+  const fast = make(), slow = make(), late = make(), a = drop(), b = drop(), c = drop();
+  try {
+    Date.now = () => clock;
+    for (let ms = 25; ms <= 20_000; ms += 25) { clock = start + ms; fast.advanceSharedDrop(a); if (ms % 200 === 0) slow.advanceSharedDrop(b); }
+    late.advanceSharedDrop(c);
+    check('shared physics is independent of rendering FPS', a.pos.distanceTo(b.pos) < 1e-8);
+    check('late join catches up water motion beyond fifteen seconds', a.pos.distanceTo(c.pos) < 1e-8 && c.pos.y < FLAT_H + 30);
+    const unloaded = drop(); unloaded.pos.x = 32.5;
+    late.advanceSharedDrop(unloaded);
+    eq('an unloaded chunk cannot swallow a shared item', unloaded.pos.y, FLAT_H + 65);
+    late.world.getChunk(2, 0); late.advanceSharedDrop(unloaded);
+    check('loading the chunk resumes the saved physics cursor', unloaded.pos.y < FLAT_H + 65 && unloaded.pos.y >= FLAT_H + 1);
+    const g = Object.assign(Object.create(Game.prototype), { body: { pos: new THREE.Vector3() }, inventory: new Inventory(), armor: [], xp: { total: 0 } });
+    const first = g.buildProfile(), second = g.buildProfile();
+    check('same-millisecond inventory journals have strictly ordered revisions', second.updated > first.updated);
+  } finally { Date.now = realNow; }
+}
+
+section('4.4: addressed PvP relay with two room guests');
+{
+  const host = new NetSession({ role: 'host', name: 'Host', transport: 'p2p', id: 'pvp-host' });
+  const guests = ['one', 'two'].map(id => new NetSession({ role: 'guest', name: id, transport: 'p2p', id }));
+  host.setWorld({ seed: 443, mode: 'survival', worldType: 'flat', name: 'PvP' });
+  host.attach({ connected: true, close() {}, send: raw => guests.forEach(g => queueMicrotask(() => g.ingest(raw))) });
+  for (const guest of guests) guest.attach({ connected: true, close() {}, send: raw => queueMicrotask(() => host.ingest(raw)) });
+  for (let n = 0; n < 10; n++) await Promise.resolve();
+  const got: NetMessage[][] = [[], [], []];
+  [host, ...guests].forEach((g, i) => { g.onMessage = m => { if (m.t === 'pvp') got[i].push(m); }; });
+  const hit: import('../src/game/net').CombatEvent = { uid: 'relayed-melee', kind: 'melee', at: Date.now(), d: 'o', origin: [0, 66, 0], direction: [0, 0, 1], weapon: I.IRON_SWORD, sharpness: 0, knockback: 0, strength: false, sprint: false };
+  guests[0].sendCombat(hit, guests[1].id);
+  for (let n = 0; n < 8; n++) await Promise.resolve();
+  check('guest-to-guest melee reaches only its addressed victim through the host', got[0].length === 0 && got[1].length === 0 && got[2].length === 1 && got[2][0].from === guests[0].id);
+  guests[1].sendCombat({ ...hit, uid: 'relayed-arrow', kind: 'arrow', weapon: I.BOW, speed: 48, power: 9 });
+  for (let n = 0; n < 8; n++) await Promise.resolve();
+  check('bow launch broadcasts reach the host and other guests without self echoes', got[0].length === 1 && got[1].length === 1 && got[2].length === 1);
+  host.close(); guests.forEach(g => g.close());
 }
 
 // =================================================================== report

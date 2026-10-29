@@ -1,3 +1,5 @@
+import { playerRay, validCombat } from './playerCombat';
+import { cleanDrop, DROP_LIFETIME, validVector, type SharedDrop } from './sharedDrops';
 import { nearestStructure, structureKindFromName, STRUCTURE_LABELS } from './structures';
 import { explorationLootKind } from './explorationLoot';
 import * as THREE from 'three';
@@ -42,6 +44,8 @@ import {
   publicDay,
   publicTime,
   publicWeather,
+  type CombatEvent,
+  type NetPos,
   type NetEdit,
   type NetLike,
   type NetMessage,
@@ -368,6 +372,7 @@ interface TNTEntity {
 }
 
 interface ArrowEntity {
+  pvpOwner?: string;
   mesh: THREE.Mesh;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
@@ -380,6 +385,9 @@ interface ArrowEntity {
 }
 
 interface DropEntity {
+  shared?: SharedDrop;
+  claimAt?: number;
+  simulated?: number;
   id: number;
   count: number;
   dur?: number;
@@ -780,6 +788,15 @@ export class Game {
   mobs: Mob[] = [];
   tntGeo: THREE.BufferGeometry;
   drops: DropEntity[] = [];
+  private pickupReceipts = new Set<string>();
+  private pendingPickups = new Map<string, SharedDrop>();
+  private dropSyncTimer = 0;
+  private combatPlayers = new Map<string, NetPos & { seen: number }>();
+  private combatSeen = new Map<string, number>();
+  private combatCooldowns = new Map<string, number>();
+  private profileRevision = 0;
+  private playerHistory: { at: number; pos: [number, number, number] }[] = [];
+  private pvpProtectedUntil = performance.now() + 3000;
   furnaces = new Map<string, FurnaceState>();
   furnacePos: { x: number; y: number; z: number } | null = null;
   chests = new Map<string, ChestState>();
@@ -1302,7 +1319,7 @@ export class Game {
         // Nowy gracz w trakcie gry – warto go przywitać w czacie.
         if (before.size > 0 && !before.has(p.id)) this.message(`${p.name} dołączył do gry.`);
       }
-      for (const id of [...this.remotes.keys()]) if (!players.some((p) => p.id === id)) this.dropRemote(id);
+      for (const id of [...this.remotes.keys()]) if (!players.some((p) => p.id === id)) { this.dropRemote(id); this.combatPlayers.delete(id); }
       this.emitHud();
     };
     net.onChat = (name, text) => this.message(`<${name}> ${text}`);
@@ -1395,6 +1412,7 @@ export class Game {
    * co gracz zostawił po wyjściu.
    */
   private applyProfile(p: PlayerProfile) {
+    this.profileRevision = p.updated;
     const nether = p.dim === 'n';
     if (nether !== this.isInNether) this.switchDimension(nether ? this.netherWorld : this.homeWorld);
     this.body.pos.set(p.x, p.y, p.z);
@@ -1417,6 +1435,7 @@ export class Game {
     if (Array.isArray(p.inv)) for (let i = 0; i < this.inventory.slots.length; i++) this.inventory.slots[i] = p.inv[i] ?? null;
     if (Array.isArray(p.armor)) for (let i = 0; i < this.armor.length; i++) this.armor[i] = p.armor[i] ?? null;
     this.inventory.offhand = cleanStacks([p.offhand], 1)[0];
+    this.pickupReceipts = new Set(p.pickupReceipts ?? []);
     this.inventory.cursor = p.cursor ?? null;
     this.inventory.grid = p.grid?.slice() ?? new Array(9).fill(null);
     this.enchantItem = p.enchantItem ?? null;
@@ -1461,11 +1480,12 @@ export class Game {
   /** 2.19: bieżący stan gracza do zapisu na serwerze. */
   buildProfile(): PlayerProfile {
     const p = this.body.pos;
+    this.profileRevision = Math.max(Date.now(), (this.profileRevision ?? 0) + 1);
     return {
       pid: this.playerId,
       name: this.netName,
       skin: this.netSkin,
-      updated: Date.now(),
+      updated: this.profileRevision,
       x: p.x,
       y: p.y,
       z: p.z,
@@ -1479,6 +1499,7 @@ export class Game {
       grid: this.inventory.grid.map((st) => st ? structuredClone(st) : null),
       enchantItem: this.enchantItem ? structuredClone(this.enchantItem) : null,
       offhand: this.inventory.offhand ? structuredClone(this.inventory.offhand) : null,
+      pickupReceipts: [...(this.pickupReceipts ?? [])].slice(-10000),
       inv: this.inventory.slots.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
       armor: this.armor.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
     };
@@ -1597,6 +1618,17 @@ export class Game {
 
   private onNetMessage(m: NetMessage) {
     switch (m.t) {
+      case 'drops':
+        this.receiveSharedDrops(m.list, !!m.snapshot);
+        break;
+      case 'pickup': {
+        const drop = cleanDrop(m.drop);
+        if (drop && drop.claimedBy === this.net?.id) this.pendingPickups.set(drop.uid, drop);
+        break;
+      }
+      case 'pvp':
+        this.receiveCombat(m.from, m.hit, m.to);
+        break;
       case 'edits':
         this.netApplying = true;
         try {
@@ -1607,6 +1639,8 @@ export class Game {
         break;
       case 'pos': {
         if (m.from === this.net?.id) break;
+        if (!validVector([m.x, m.y, m.z]) || !Number.isFinite(m.yaw) || !Number.isFinite(m.pitch)) break;
+        this.combatPlayers.set(m.from, { ...m, seen: performance.now() });
         const player = this.netPlayers.find((p) => p.id === m.from);
         const avatar = this.ensureRemote(player ?? { id: m.from, name: m.name, hue: m.hue, ping: -1 });
         // Awatara widać tylko wtedy, gdy gracz jest w tym samym wymiarze.
@@ -1637,6 +1671,7 @@ export class Game {
         const who = this.netPlayers.find((p) => p.id === m.from);
         if (who && !who.self) this.message(`${who.name} opuścił grę.`);
         this.dropRemote(m.from);
+        this.combatPlayers.delete(m.from);
         break;
       }
       default:
@@ -1705,6 +1740,14 @@ export class Game {
     // ekwipunku. Wcześniej gracz, który otworzył plecak, skrzynię albo mapę,
     // przestawał nadawać i po 9 sekundach znikał innym z sesji („zniknął
     // z sesji”), a jego awatar zamarzał w miejscu.
+    this.dropSyncTimer += dt;
+    if (this.dropSyncTimer >= 2.5) { this.dropSyncTimer = 0; net.syncDrops?.(); }
+    const wallNow = Date.now();
+    this.playerHistory ??= [];
+    if (!this.playerHistory.length || wallNow - this.playerHistory[this.playerHistory.length - 1].at >= 40) {
+      this.playerHistory.push({ at: wallNow, pos: this.body.pos.toArray() });
+      this.playerHistory = this.playerHistory.filter(sample => wallNow - sample.at <= 500);
+    }
     this.netPosTimer += dt;
     // Publiczny serwer ma limit wiadomości Realtime – 4 pozycje na sekundę
     // w zupełności wystarczą, bo awatary są interpolowane (netSmooth).
@@ -1717,6 +1760,7 @@ export class Game {
         x: p.x, y: p.y, z: p.z,
         yaw: this.yaw, pitch: this.pitch,
         held: this.selectedStack()?.id ?? 0,
+        mode: this.mode, alive: this.ui !== 'dead' && this.health > 0,
         name: net.name,
         hue: this.netHue,
         skin: this.netSkin,
@@ -2309,6 +2353,12 @@ export class Game {
     const { mob, dist } = this.findMobTarget(3.5);
     const blockDist = this.target ? this.target.dist : Infinity;
     const held = this.selectedStack();
+    const player = this.findPlayerTarget(3.5);
+    if (player && (!mob || player.dist < dist)) {
+      if (this.attackCooldown <= 0) this.attackPlayer(player.id);
+      this.touchAim = prev;
+      return;
+    }
     if (mob && dist < blockDist && mob.type === 'villager' && !mob.dead) {
       this.openTrade(mob);
     } else if (mob && dist < blockDist && mob.type === 'wolf' && !mob.tamed && !mob.dead && (held?.id === I.RAW_PORK || held?.id === I.RAW_BEEF || held?.id === I.RAW_CHICKEN)) {
@@ -3979,6 +4029,7 @@ export class Game {
   private switchDimension(next: World) {
     const prev = this.world;
     if (prev === next) return;
+    this.playerHistory = [];
 
     // Restore hidden static lids before changing their owning world.
     this.clearChestLids();
@@ -4184,10 +4235,23 @@ export class Game {
     return t;
   }
 
-  spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2, ench?: Record<string, number>, name?: string) {
+  spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2, ench?: Record<string, number>, name?: string, shared?: SharedDrop) {
     if (count <= 0) return;
+    let publish = false;
+    if (!shared && this.net?.publishDrop) {
+      const limit = stackLimit(id);
+      if (count > limit) {
+        for (let n = count; n > 0; n -= limit) this.spawnDrop(id, Math.min(n, limit), x, y, z, dur, vx, vy, vz, ench, name);
+        return;
+      }
+      const created = Date.now();
+      shared = cleanDrop({ uid: `${this.net.id}:${crypto.randomUUID()}`, owner: this.net.id, d: this.isInNether ? 'n' : 'o',
+        stack: { id, count, dur, ench, name }, pos: [x, y, z], vel: [vx, vy, vz], created, expires: created + DROP_LIFETIME }) ?? undefined;
+      if (!shared) return;
+      publish = true;
+    }
     // The oldest drop makes room instead of silently eating the new item.
-    while (this.drops.length >= 120) {
+    while (this.drops.length >= (this.net ? 512 : 120)) {
       const victim = this.drops.shift();
       if (!victim) break;
       // 2.8: materiały i geometrie są współdzielone – usuwamy tylko obiekt.
@@ -4211,7 +4275,13 @@ export class Game {
     }
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
-    this.drops.push({ id, count, dur, ench, name, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0 });
+    this.drops.push({ id, count, dur, ench, name, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0, ...(shared ? { shared } : {}) });
+    if (publish && shared) {
+      const net = this.net, drop = shared;
+      // Inventory/death mutations finish in this JS turn. Publish together
+      // with the resulting profile, not the pre-drop inventory snapshot.
+      queueMicrotask(() => net?.publishDrop?.(drop, net.public ? this.buildProfile() : undefined));
+    }
   }
 
   // ---------- Messages & commands ----------
@@ -4848,6 +4918,79 @@ export class Game {
     return { mob: best, dist: bd };
   }
 
+  private findPlayerTarget(reach: number) {
+    if (!this.net?.sendCombat || this.ui === 'dead') return null;
+    const eye = this.eyePos(), dir = this.aimDir ?? this.lookDir();
+    let best: { id: string; dist: number } | null = null;
+    for (const [id, p] of this.combatPlayers) {
+      if (id === this.net.id || p.d !== (this.isInNether ? 'n' : 'o') || p.mode === 'creative' || p.alive === false || performance.now() - p.seen > 2500) continue;
+      const avatar = this.remotes?.get(id);
+      const pos = avatar?.group.visible ? avatar.group.position.toArray() : [p.x, p.y, p.z];
+      const t = playerRay(eye.toArray(), dir.toArray(), pos, reach);
+      if (t !== null && (!best || t < best.dist) && this.clearShot(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, t)) best = { id, dist: t };
+    }
+    return best;
+  }
+  private combatPosition(): NetPos {
+    return { d: this.isInNether ? 'n' : 'o', x: this.body.pos.x, y: this.body.pos.y, z: this.body.pos.z,
+      yaw: this.yaw, pitch: this.pitch, held: this.selectedStack()?.id ?? 0,
+      name: this.netName, hue: this.netHue, mode: this.mode, alive: this.ui !== 'dead' && this.health > 0 };
+  }
+  private combatEvent(kind: 'melee' | 'arrow', origin: THREE.Vector3, direction: THREE.Vector3): CombatEvent {
+    const stack = this.selectedStack();
+    return { uid: `${this.net!.id}:${crypto.randomUUID()}`, d: this.isInNether ? 'n' : 'o', kind, at: Date.now(),
+      origin: origin.toArray(), direction: direction.toArray(), weapon: stack?.id ?? 0,
+      sharpness: Math.min(5, enchLevel(stack, 'sharpness')), knockback: Math.min(2, enchLevel(stack, 'knockback')),
+      strength: this.hasEffect('strength'), sprint: this.sprinting };
+  }
+  private attackPlayer(id: string) {
+    if (!this.net?.sendCombat || this.attackCooldown > 0 || this.ui === 'dead') return;
+    const hit = this.combatEvent('melee', this.eyePos(), this.aimDir ?? this.lookDir());
+    this.attackCooldown = attackCooldown(hit.weapon);
+    this.net.sendPos(this.combatPosition());
+    this.net.sendCombat(hit, id);
+    this.wearTool(); this.swingT = 0;
+    if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
+    Sfx.playHurt();
+  }
+  private receiveCombat(from: string, hit: CombatEvent, to?: string) {
+    const net = this.net;
+    if (!net || from === net.id || (to && to !== '*' && to !== net.id) || !validCombat(hit) ||
+        hit.d !== (this.isInNether ? 'n' : 'o') || this.ui === 'dead' || this.mode === 'creative' || performance.now() < this.pvpProtectedUntil) return;
+    const p = this.combatPlayers.get(from);
+    if (!p || p.d !== hit.d || p.alive === false || performance.now() - p.seen > 2500 ||
+        Math.hypot(hit.origin[0] - p.x, hit.origin[1] - p.y - 1.62, hit.origin[2] - p.z) > 1.75) return;
+    for (const [key, at] of this.combatSeen) if (performance.now() - at > 5000) this.combatSeen.delete(key);
+    if (this.combatSeen.has(hit.uid)) return;
+    const cooldownKey = `${from}:${hit.kind}`;
+    const cooldown = hit.kind === 'arrow' ? 150 : attackCooldown(hit.weapon) * 800;
+    if (performance.now() - (this.combatCooldowns.get(cooldownKey) ?? -Infinity) < cooldown) return;
+    const o = new THREE.Vector3(...hit.origin), dir = new THREE.Vector3(...hit.direction);
+    if (hit.kind === 'melee') {
+      // Rendering intentionally lags network poses by 120–320 ms. Accept a
+      // recent local body position too, but never an old teleport location.
+      const positions = [this.body.pos.toArray(), ...(this.playerHistory ?? []).filter(sample =>
+        Math.abs(hit.at - sample.at) <= 500 && this.body.pos.distanceTo(new THREE.Vector3(...sample.pos)) < 3).map(sample => sample.pos)];
+      const visible = positions.some(pos => {
+        const dist = playerRay(hit.origin, hit.direction, pos, 4.25, this.body.h);
+        return dist !== null && this.clearShot(o.x, o.y, o.z, dir.x, dir.y, dir.z, dist);
+      });
+      if (!visible) return;
+    } else if (hit.weapon !== I.BOW) return;
+    this.combatSeen.set(hit.uid, performance.now());
+    this.combatCooldowns.set(cooldownKey, performance.now());
+    if (hit.kind === 'arrow') { this.spawnArrow(o, dir, hit.speed!, null, hit.power!, from); return; }
+    const shielded = this.holdingShield();
+    let amount = attackDamage(hit.weapon, hit.sprint, sharpnessDamage(hit.sharpness)) + (hit.strength ? STRENGTH_DAMAGE : 0);
+    if (shielded) { amount = Math.ceil(amount / 2); this.wearShield(8); Sfx.playShield(); }
+    this.damage(amount);
+    if (this.health > 0) {
+      const kb = (shielded ? 2 : 5) * knockbackFactor(hit.knockback);
+      this.body.vel.x += dir.x * kb; this.body.vel.z += dir.z * kb; this.body.vel.y = shielded ? 2 : 4;
+    }
+    this.saveProfileNow();
+  }
+
   private raycastTarget(fluids = false) {
     const eye = this.eyePos(), dir = this.aimDir ?? this.lookDir();
     return this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z,
@@ -4861,6 +5004,11 @@ export class Game {
     this.swingT = 0;
     const blockDist = this.target ? this.target.dist : 99;
     const { mob, dist } = this.findMobTarget(3.5);
+    const player = this.findPlayerTarget(3.5);
+    if (player && (!mob || player.dist < dist)) {
+      if (this.attackCooldown <= 0) this.attackPlayer(player.id);
+      return; // a player in the crosshair must never turn into floor mining
+    }
     if (mob && dist < blockDist && this.attackCooldown <= 0) {
       this.attackMob(mob);
       // 2.5: NIE zwalniamy LPM – trzymany przycisk bije dalej z cooldownem
@@ -5232,12 +5380,16 @@ export class Game {
   }
 
   /** Spawns a flying arrow. `from` is the mob that shot it (null = player). */
-  spawnArrow(origin: THREE.Vector3, dir: THREE.Vector3, speed: number, from: Mob | null, power: number) {
+  spawnArrow(origin: THREE.Vector3, dir: THREE.Vector3, speed: number, from: Mob | null, power: number, pvpOwner?: string) {
     if (this.arrows.length > 48) return;
     const mesh = new THREE.Mesh(this.arrowGeo, this.arrowMat);
     mesh.position.copy(origin);
     this.scene.add(mesh);
-    this.arrows.push({ mesh, pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), life: 0, power, from });
+    this.arrows.push({ mesh, pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), life: 0, power, from, pvpOwner });
+    if (!from && !pvpOwner && this.net?.sendCombat) {
+      const hit = this.combatEvent('arrow', origin, dir); hit.speed = speed; hit.power = Math.min(22.5, power);
+      this.net.sendPos(this.combatPosition()); this.net.sendCombat(hit);
+    }
   }
 
   private updateArrows(dt: number) {
@@ -5257,7 +5409,7 @@ export class Game {
         a.pos.addScaledVector(dir, stepLen);
         const block = this.world.peekBlock(Math.floor(a.pos.x), Math.floor(a.pos.y), Math.floor(a.pos.z));
         if (block !== B.AIR && RENDER[block] !== 2 && IS_SOLID[block]) { spent = true; break; }
-        if (a.from) {
+        if (a.from || a.pvpOwner) {
           // 2.30: strzała szkieletu leci dalej, aż w coś trafi – tak jak
           // w wanilii rani też inne moby (wcześniej przelatywała przez golema
           // i mieszkańca, więc nikt nie miał za co oddać).
@@ -5271,6 +5423,7 @@ export class Game {
               a.pos.y > mb.pos.y - 0.1 && a.pos.y < mb.pos.y + mb.h + 0.1 &&
               a.pos.z > mb.pos.z - r && a.pos.z < mb.pos.z + r
             ) {
+              if (a.pvpOwner) { mobHit = spent = true; break; }
               if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2, a.from)) {
                 mb.vel.x += dir.x * 4;
                 mb.vel.z += dir.z * 4;
@@ -5282,6 +5435,18 @@ export class Game {
             }
           }
           if (mobHit) break;
+          // Each viewer must stop the shot at an intervening player too;
+          // otherwise one broadcast arrow could hurt everyone along its line.
+          if (a.pvpOwner) {
+            const ownDistance = playerRay(prev.toArray(), dir.toArray(), this.body.pos.toArray(), stepLen, this.body.h);
+            let blocked = false;
+            for (const [id, other] of this.combatPlayers) {
+              if (id === a.pvpOwner || id === this.net?.id || other.d !== (this.isInNether ? 'n' : 'o') || other.alive === false || other.mode === 'creative' || performance.now() - other.seen > 2500) continue;
+              const dist = playerRay(prev.toArray(), dir.toArray(), [other.x, other.y, other.z], stepLen);
+              if (dist !== null && (ownDistance === null || dist < ownDistance)) { blocked = true; break; }
+            }
+            if (blocked) { spent = true; break; }
+          }
           // hostile arrow vs player – a shield in hand parries it
           const p = this.body.pos;
           if (
@@ -5289,6 +5454,7 @@ export class Game {
             a.pos.y > p.y - 0.1 && a.pos.y < p.y + this.body.h + 0.1 &&
             a.pos.z > p.z - 0.45 && a.pos.z < p.z + 0.45
           ) {
+            if (a.pvpOwner && (this.ui === 'dead' || this.mode === 'creative' || performance.now() < this.pvpProtectedUntil)) { spent = true; break; }
             if (this.holdingShield()) {
               Sfx.playShield();
               this.wearShield(12);
@@ -5298,10 +5464,16 @@ export class Game {
               this.body.vel.x += dir.x * 2.5;
               this.body.vel.z += dir.z * 2.5;
             }
+            if (a.pvpOwner) this.saveProfileNow();
             spent = true;
             break;
           }
         } else {
+          if (!a.pearl && this.net) for (const p of this.combatPlayers.values()) {
+            if (p.d !== (this.isInNether ? 'n' : 'o') || p.alive === false || p.mode === 'creative' || performance.now() - p.seen > 2500) continue;
+            if (playerRay(prev.toArray(), dir.toArray(), [p.x, p.y, p.z], stepLen) !== null) { spent = true; break; }
+          }
+          if (spent) break;
           // player arrow vs mobs
           for (const m of this.mobs) {
             if (m.dead) continue;
@@ -5966,17 +6138,19 @@ export class Game {
         const y = deathPos.y + 0.4;
         const x = deathPos.x;
         const z = deathPos.z;
-        for (const s of [...this.inventory.slots, this.inventory.offhand]) {
+        for (const s of [...this.inventory.slots, ...this.inventory.grid, this.inventory.cursor, this.enchantItem, this.inventory.offhand]) {
           if (s) this.spawnDrop(s.id, s.count, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench, s.name);
         }
         for (const s of this.armor) {
-          if (s) this.spawnDrop(s.id, 1, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench);
+          if (s) this.spawnDrop(s.id, 1, x + (Math.random() - 0.5), y, z + (Math.random() - 0.5), s.dur, (Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3, s.ench, s.name);
         }
         this.armor.fill(null);
       }
       this.inventory.slots.fill(null);
       this.inventory.offhand = null;
       this.inventory.cursor = null;
+      this.inventory.grid.fill(null);
+      this.enchantItem = null;
       this.setUI('dead');
     }
     this.emitHud();
@@ -6020,6 +6194,8 @@ export class Game {
   }
 
   respawn() {
+    this.pvpProtectedUntil = performance.now() + 3000;
+    this.playerHistory = [];
     // Śmierć w Netherze odsyła do nadświatu (punkt odrodzenia jest zawsze tam).
     if (this.isInNether) this.switchDimension(this.homeWorld);
     this.health = 20;
@@ -6106,7 +6282,7 @@ export class Game {
     }
     if (this.governor.tier !== this.appliedTier) this.applyPerfProfile(this.governor.profile);
 
-    const active = this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
+    const active = !!this.net || this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);
@@ -6548,7 +6724,11 @@ export class Game {
       // klikania, a mob wchodzący w celownik przerywał kopanie bloku.
       const { mob, dist } = this.findMobTarget(3.5);
       const blockDist = t ? t.dist : Infinity;
-      if (mob && dist < blockDist) {
+      const player = this.findPlayerTarget(3.5);
+      if (player && (!mob || player.dist < dist)) {
+        this.breakProgress = 0; this.breakKey = '';
+        if (this.attackCooldown <= 0) this.attackPlayer(player.id);
+      } else if (mob && dist < blockDist) {
         this.breakProgress = 0;
         this.breakKey = '';
         if (this.attackCooldown <= 0) this.tryAttack();
@@ -7365,41 +7545,143 @@ export class Game {
     this.mobXp(m, x, y, z);
   }
 
+  private allDropLists(): DropEntity[][] {
+    return [this.drops, ...(this.dimStash ? [this.dimStash.home.drops, this.dimStash.nether.drops] : [])];
+  }
+  private removeSharedDrop(uid: string) {
+    for (const list of this.allDropLists()) for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].shared?.uid !== uid) continue;
+      this.scene.remove(list[i].mesh); list.splice(i, 1);
+    }
+  }
+  private receiveSharedDrops(rows: SharedDrop[], snapshot: boolean) {
+    if (!Array.isArray(rows) || rows.length > 2048) return;
+    const clean = rows.map(cleanDrop).filter((d): d is SharedDrop => !!d);
+    if (snapshot) {
+      const active = new Set(clean.filter(d => !d.claimedBy).map(d => d.uid));
+      for (const list of this.allDropLists()) for (const d of [...list]) if (d.shared && !active.has(d.shared.uid)) this.removeSharedDrop(d.shared.uid);
+    }
+    for (const d of clean) {
+      if (d.claimedBy) { this.removeSharedDrop(d.uid); continue; }
+      if (d.expires <= Date.now() || this.pickupReceipts.has(d.uid) || this.allDropLists().some(list => list.some(item => item.shared?.uid === d.uid))) continue;
+      if ((d.d === 'n') !== this.isInNether || Math.hypot(d.pos[0] - this.body.pos.x, d.pos[2] - this.body.pos.z) > (this.renderDistance + 2) * CS) continue;
+      const st = d.stack;
+      this.spawnDrop(st.id, st.count, ...d.pos, st.dur, ...d.vel, st.ench, st.name, d);
+      const entity = this.drops.at(-1);
+      if (!entity || entity.shared?.uid !== d.uid) continue;
+      const age = Math.max(0, (Date.now() - d.created) / 1000);
+      // Deterministic catch-up for late joiners. No player-specific magnets
+      // affect the authoritative pickup position of a shared item.
+      this.advanceSharedDrop(entity);
+      entity.age = age;
+    }
+  }
+  private deliverPickups() {
+    const net = this.net;
+    if (!net || this.ui === 'dead') return;
+    for (const d of this.pendingPickups.values()) {
+      if (d.claimedBy !== this.net?.id) { this.pendingPickups.delete(d.uid); continue; }
+      if (!this.pickupReceipts.has(d.uid)) {
+        const s = d.stack;
+        if (!this.inventory.canAdd(s.id, s.count, s.dur, s.ench, s.name)) continue;
+        const before = structuredClone(this.inventory.slots);
+        if (!this.inventory.add(s.id, s.count, s.dur, s.ench, s.name)) continue;
+        this.pickupReceipts.add(d.uid);
+        // Save inventory + receipt together BEFORE acknowledging delivery.
+        // A lost response or refresh can replay the grant, not the inventory.
+        if (net.public && !net.checkpointPickup?.(this.buildProfile())) {
+          this.inventory.slots = before;
+          this.pickupReceipts.delete(d.uid);
+          continue;
+        }
+        Sfx.playPop(); this.notePickup(s.id); this.emitHud();
+      }
+      this.removeSharedDrop(d.uid);
+      net.acknowledgeDrop?.(d.uid);
+      this.pendingPickups.delete(d.uid);
+    }
+  }
+  private advanceSharedDrop(d: DropEntity) {
+    const target = Math.floor(Math.max(0, Date.now() - d.shared!.created) / 25);
+    for (let tick = d.simulated ?? 0; tick < target; tick++) {
+      // Never fall through terrain that has not been loaded yet. Keep the
+      // simulation cursor so the next loaded frame can resume the catch-up.
+      if (!this.world.hasChunk(Math.floor(d.pos.x / CS), Math.floor(d.pos.z / CS))) return;
+      this.stepSharedDrop(d, 0.025);
+      d.simulated = tick + 1;
+      // Resting items need just one support check, even after a long pause.
+      if (d.vel.lengthSq() < 1e-8) break;
+    }
+    d.simulated = target;
+  }
+  private stepSharedDrop(d: DropEntity, dt: number) {
+    for (let left = dt; left > 0; left -= 0.025) {
+      const step = Math.min(0.025, left);
+      const water = this.world.peekBlock(Math.floor(d.pos.x), Math.floor(d.pos.y + 0.1), Math.floor(d.pos.z)) === B.WATER;
+      d.vel.y = Math.max(water ? -2.2 : -50, d.vel.y - (water ? 4 : 22) * step);
+      if (water) { d.vel.x *= 1 - 3.5 * step; d.vel.z *= 1 - 3.5 * step; }
+      const distance = d.vel.length() * step;
+      if (distance === 0) continue;
+      const dir = d.vel.clone().normalize();
+      const hit = this.world.raycast(d.pos.x, d.pos.y, d.pos.z, dir.x, dir.y, dir.z, distance, { solidOnly: true });
+      if (hit) {
+        d.pos.addScaledVector(dir, hit.dist).add(new THREE.Vector3(hit.nx, hit.ny, hit.nz).multiplyScalar(0.025));
+        if (hit.ny) { d.vel.y = 0; d.vel.x *= 0.8; d.vel.z *= 0.8; }
+        if (hit.nx) d.vel.x = 0;
+        if (hit.nz) d.vel.z = 0;
+      } else d.pos.addScaledVector(d.vel, step);
+    }
+  }
+
   private updateDrops(dt: number) {
+    if (this.net) this.deliverPickups();
     const p = this.body.pos;
     this.drops = this.drops.filter((d) => {
       d.age += dt;
-      if (d.age > 300) {
+      if (d.shared ? d.shared.expires <= Date.now() : d.age > 300) {
         this.scene.remove(d.mesh);
         return false;
       }
       // 2.25: przedmioty w wodzie toną powoli i wyhamowują (wcześniej spadały
       // jak kamień, mimo że w grze unoszą się na wodzie).
-      const fluid = this.world.peekBlock(Math.floor(d.pos.x), Math.floor(d.pos.y + 0.1), Math.floor(d.pos.z)) === B.WATER;
-      if (fluid) {
-        d.vel.y -= 4 * dt;
-        if (d.vel.y < -2.2) d.vel.y = -2.2;
-        const drag = Math.max(0, 1 - dt * 3.5);
-        d.vel.x *= drag;
-        d.vel.z *= drag;
-      } else {
-        d.vel.y -= 22 * dt;
-      }
-      d.pos.addScaledVector(d.vel, dt);
-      const bx = Math.floor(d.pos.x), by = Math.floor(d.pos.y), bz = Math.floor(d.pos.z);
-      if (this.world.isSolid(bx, by, bz)) {
-        d.pos.y = by + 1.02;
-        d.vel.y = Math.max(0, -d.vel.y * 0.25);
-        d.vel.x *= 0.82;
-        d.vel.z *= 0.82;
+      if (d.shared) this.advanceSharedDrop(d);
+      else {
+        const fluid = this.world.peekBlock(Math.floor(d.pos.x), Math.floor(d.pos.y + 0.1), Math.floor(d.pos.z)) === B.WATER;
+        if (fluid) {
+          d.vel.y -= 4 * dt;
+          if (d.vel.y < -2.2) d.vel.y = -2.2;
+          const drag = Math.max(0, 1 - dt * 3.5);
+          d.vel.x *= drag;
+          d.vel.z *= drag;
+        } else {
+          d.vel.y -= 22 * dt;
+        }
+        d.pos.addScaledVector(d.vel, dt);
+        const bx = Math.floor(d.pos.x), by = Math.floor(d.pos.y), bz = Math.floor(d.pos.z);
+        if (this.world.isSolid(bx, by, bz)) {
+          d.pos.y = by + 1.02;
+          d.vel.y = Math.max(0, -d.vel.y * 0.25);
+          d.vel.x *= 0.82;
+          d.vel.z *= 0.82;
+        }
       }
       const dist = Math.hypot(d.pos.x - p.x, d.pos.z - p.z, d.pos.y - (p.y + 0.9));
-      if (d.age > 0.55 && dist < 3.4 && dist > 0.2) {
+      if (!d.shared && d.age > 0.55 && dist < 3.4 && dist > 0.2) {
         d.vel.x += ((p.x - d.pos.x) / dist) * dt * 14;
         d.vel.z += ((p.z - d.pos.z) / dist) * dt * 14;
         d.vel.y += ((p.y + 0.6 - d.pos.y) / dist) * dt * 10;
       }
-      if (d.age > 0.4 && dist < 1.35 && this.ui !== 'dead') {
+      if (d.shared && d.age > 0.4 && dist < 1.35 && this.ui !== 'dead' &&
+          this.inventory.canAdd(d.id, d.count, d.dur, d.ench, d.name) && this.clearShot(p.x, p.y + 0.9, p.z,
+            (d.pos.x - p.x) / (dist || 1), (d.pos.y - p.y - 0.9) / (dist || 1), (d.pos.z - p.z) / (dist || 1), dist) &&
+          Date.now() - (d.claimAt ?? 0) > 1500) {
+        d.claimAt = Date.now();
+        const net = this.net, uid = d.shared.uid, dimension = this.isInNether ? 'n' : 'o';
+        // A room host grants synchronously; do not mutate this filter's source
+        // array while it is traversing the drops.
+        queueMicrotask(() => { if (this.net === net) net?.claimDrop?.(uid, dimension); });
+      }
+      if (!d.shared && d.age > 0.4 && dist < 1.35 && this.ui !== 'dead') {
         if (this.inventory.add(d.id, d.count, d.dur, d.ench, d.name)) {
           Sfx.playPop();
           this.notePickup(d.id);

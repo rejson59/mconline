@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.3.1';
-export const GAME_RELEASE_NAME = 'Wiadra i druga ręka';
+export const GAME_VERSION = '4.4.0';
+export const GAME_RELEASE_NAME = 'Wspólne przedmioty i PvP';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: 'Wspólne wyrzucane przedmioty', text: 'Inni gracze widzą rzeczy wyrzucone przez Q, z ekwipunku i po śmierci; mogą je też zebrać. Nazwy, zaklęcia i zużycie zostają zachowane. Jeden przedmiot trafia do jednego plecaka, również przy jednoczesnym zbieraniu i ponowieniu połączenia.' },
+  { title: 'PvP: miecze, pięści i łuki', text: 'LPM lub dotykowy przycisk ataku pozwala walczyć z graczami. Szkło i ściany zatrzymują ciosy i strzały; działają pancerz, tarcza, totem i odrzut. Creative nie otrzymuje obrażeń, a po odrodzeniu chronią cię 3 sekundy. Multiplayer nie zatrzymuje się w menu.' },
   { title: 'Woda i lawa trafiają do wiadra', text: 'PPM na płynie napełnia puste wiadro lub fiolkę. Pojedyncze wiadro zamienia się w pełne we własnym slocie, nawet gdy plecak jest pełny; nieudana wymiana nie usuwa płynu ani przedmiotu.' },
   { title: 'Druga ręka: F', text: 'Nowy slot w plecaku i na HUD. F zamienia ręce, także nad slotem ekwipunku. Pochodnia świeci obok kilofa, tarcza chroni, a totem ratuje. Zapis zachowuje przedmiot, nazwę, zaklęcia i wytrzymałość.' },
   { title: 'Szkło zatrzymuje ciosy', text: 'Ataki sprawdzają fizyczną bryłę przeszkody zamiast jej przezroczystości. Automatyczne bicie nie przechodzi przez szyby; trawa i wolne części otwartych przejść nie stają się niewidzialną ścianą.' },
