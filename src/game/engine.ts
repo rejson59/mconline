@@ -1,3 +1,5 @@
+import { ArmorVisual } from './armorVisual';
+import { foodState, exhaust, eat } from './hunger';
 import { playerRay, validCombat } from './playerCombat';
 import { cleanDrop, DROP_LIFETIME, validVector, type SharedDrop } from './sharedDrops';
 import { nearestStructure, structureKindFromName, STRUCTURE_LABELS } from './structures';
@@ -114,6 +116,7 @@ export interface Waypoint {
 
 /** 2.10: awatar zdalnego gracza w scenie (bloki + sprite z nazwą). */
 interface RemoteAvatar {
+  armor: ArmorVisual;
   group: THREE.Group;
   /** 2.30: zawias szyi – obraca całą głowę razem z czapką, włosami i oczami. */
   head: THREE.Object3D;
@@ -250,6 +253,8 @@ export interface SaveData {
   worldType?: 'normal' | 'flat';
   updated?: number;
   hunger?: number;
+  saturation?: number;
+  exhaustion?: number;
   spawn?: [number, number, number];
   furnaces?: FurnaceState[];
   chests?: ChestState[];
@@ -672,6 +677,9 @@ export class Game {
   pitch = 0;
   health = 20;
   hunger = 20;
+  saturation = 5;
+  exhaustion = 0;
+  private foodRegenAcc = 0;
   air = 12;
   maxAir = 12;
   flying = false;
@@ -1196,7 +1204,7 @@ export class Game {
       this.pitch = opts.save.pitch;
       this.time = opts.save.time;
       this.health = opts.save.health > 0 ? opts.save.health : 20;
-      this.hunger = opts.save.hunger ?? 20;
+      Object.assign(this, foodState(opts.save.hunger ?? 20, opts.save.saturation, opts.save.exhaustion));
       this.day = opts.save.day || 1;
       this.inventory.offhand = cleanStacks([opts.save.offhand], 1)[0];
       opts.save.inv.forEach((s, i) => (this.inventory.slots[i] = s ? { ...s } : null));
@@ -1440,7 +1448,7 @@ export class Game {
     this.inventory.grid = p.grid?.slice() ?? new Array(9).fill(null);
     this.enchantItem = p.enchantItem ?? null;
     if (Number.isFinite(p.health)) this.health = Math.max(1, Math.min(20, p.health));
-    if (Number.isFinite(p.hunger)) this.hunger = Math.max(0, Math.min(20, p.hunger));
+    Object.assign(this, foodState(p.hunger, p.saturation, p.exhaustion));
     if (Number.isFinite(p.xp)) this.xp = new Xp(Math.max(0, p.xp));
     this.world.getChunk(Math.floor(p.x / CS), Math.floor(p.z / CS));
   }
@@ -1494,6 +1502,7 @@ export class Game {
       pitch: this.pitch,
       health: this.health,
       hunger: this.hunger,
+      saturation: this.saturation, exhaustion: this.exhaustion,
       xp: this.xp.total,
       cursor: this.inventory.cursor ? structuredClone(this.inventory.cursor) : null,
       grid: this.inventory.grid.map((st) => st ? structuredClone(st) : null),
@@ -1651,6 +1660,7 @@ export class Game {
         avatar.group.visible = true;
         // 2.30: pakiet trafia do bufora, a nie do „celu” lerpa.
         avatar.track.push(performance.now(), { x: m.x, y: m.y, z: m.z, yaw: m.yaw, pitch: m.pitch });
+        avatar.armor?.update(m.armor);
         avatar.yaw = m.yaw;
         avatar.pitch = m.pitch;
         avatar.held = m.held ?? 0;
@@ -1760,6 +1770,7 @@ export class Game {
         x: p.x, y: p.y, z: p.z,
         yaw: this.yaw, pitch: this.pitch,
         held: this.selectedStack()?.id ?? 0,
+        armor: this.armor.map(s => s?.id ?? 0),
         mode: this.mode, alive: this.ui !== 'dead' && this.health > 0,
         name: net.name,
         hue: this.netHue,
@@ -1950,6 +1961,7 @@ export class Game {
 
     return {
       group, head: neck, armL, legL, legR, hand,
+      armor: new ArmorVisual({ head: neck, body, armL, armR, legL, legR }),
       track: new RemoteTrack(),
       yaw: 0, pitch: 0, held: 0, heldId: -1,
       name, walk: 0, swing: 0, headPitch: 0, seen: performance.now(), skinId: skin.id,
@@ -1967,6 +1979,7 @@ export class Game {
     const player = this.netPlayers.find((p) => p.id === id);
     const fresh = this.makeAvatar(old.name, player?.hue ?? 0, skinId);
     fresh.group.position.copy(old.group.position);
+    fresh.armor.update(old.armor?.ids);
     fresh.track = old.track;
     fresh.yaw = old.yaw;
     fresh.pitch = old.pitch;
@@ -3745,16 +3758,50 @@ export class Game {
     return this.inventory.slots[this.selected]?.id === I.SHIELD || this.inventory.offhand?.id === I.SHIELD;
   }
 
+  private addExhaustion(amount: number) {
+    if (this.mode !== 'survival' || this.health <= 0 || this.ui === 'dead') return;
+    Object.assign(this, exhaust(foodState(this.hunger, this.saturation, this.exhaustion), amount));
+  }
+
+  private updateFood(dt: number) {
+    if (this.health <= 0 || this.ui === 'dead') return;
+    if (this.mode === 'creative') {
+      if (this.health < 20 && performance.now() - this.lastHurt > 4000) {
+        this.foodRegenAcc = (this.foodRegenAcc ?? 0) + dt;
+        if (this.foodRegenAcc >= 2.5) { this.foodRegenAcc -= 2.5; this.health = Math.min(20, this.health + 1); }
+      } else this.foodRegenAcc = 0;
+      return;
+    }
+    Object.assign(this, foodState(this.hunger, this.saturation, this.exhaustion));
+    if (this.health < 20 && this.hunger >= 18) {
+      this.foodRegenAcc = (this.foodRegenAcc ?? 0) + dt;
+      const saturated = this.hunger >= 20 && this.saturation > 0;
+      const interval = saturated ? 0.5 : 4;
+      if (this.foodRegenAcc >= interval) {
+        this.foodRegenAcc -= interval;
+        const heal = Math.min(20 - this.health, saturated ? Math.min(this.saturation, 6) / 6 : 1);
+        this.health += heal;
+        this.addExhaustion(heal * 6);
+      }
+    } else this.foodRegenAcc = 0;
+    if (this.hunger <= 0) {
+      this.starveAcc = (this.starveAcc ?? 0) + dt;
+      if (this.starveAcc >= 4) {
+        this.starveAcc -= 4;
+        if (this.health > 1) this.damage(Math.min(1, this.health - 1), false, true);
+      }
+    } else this.starveAcc = 0;
+  }
+
   private tryEat(s: Stack) {
     const food = ITEMS[s.id];
     if (!food || food.kind !== 'food') return;
     if (this.eatCooldown > 0) return;
-    if (this.hunger >= 20 && (food.heal ?? 0) <= 0) {
+    if (this.hunger >= 20 && s.id !== I.HONEY_BOTTLE) {
       this.message('Nie jesteś głodny.');
       return;
     }
-    this.hunger = Math.min(20, this.hunger + (food.hunger ?? 0));
-    this.health = Math.min(20, this.health + (food.heal ?? 0));
+    Object.assign(this, eat(foodState(this.hunger, this.saturation, this.exhaustion), food.hunger ?? 0, food.saturation ?? 0.6));
     this.eatCooldown = 0.7;
     this.swingT = 0;
     Sfx.playEat();
@@ -4422,6 +4469,7 @@ export class Game {
       case 'heal':
         this.health = 20;
         this.hunger = 20;
+        this.saturation = 5; this.exhaustion = 0; this.foodRegenAcc = 0; this.starveAcc = 0;
         this.air = this.maxAir;
         this.message('Uleczono.');
         break;
@@ -4598,6 +4646,7 @@ export class Game {
         time: this.time,
         health: this.health,
         hunger: this.hunger,
+        saturation: this.saturation, exhaustion: this.exhaustion,
         day: this.day,
         spawn: [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z],
         furnaces: [...this.furnaces.values()],
@@ -4934,6 +4983,7 @@ export class Game {
   private combatPosition(): NetPos {
     return { d: this.isInNether ? 'n' : 'o', x: this.body.pos.x, y: this.body.pos.y, z: this.body.pos.z,
       yaw: this.yaw, pitch: this.pitch, held: this.selectedStack()?.id ?? 0,
+      armor: this.armor.map(s => s?.id ?? 0),
       name: this.netName, hue: this.netHue, mode: this.mode, alive: this.ui !== 'dead' && this.health > 0 };
   }
   private combatEvent(kind: 'melee' | 'arrow', origin: THREE.Vector3, direction: THREE.Vector3): CombatEvent {
@@ -4950,7 +5000,7 @@ export class Game {
     this.net.sendPos(this.combatPosition());
     this.net.sendCombat(hit, id);
     this.wearTool(); this.swingT = 0;
-    if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
+    this.addExhaustion(0.1);
     Sfx.playHurt();
   }
   private receiveCombat(from: string, hit: CombatEvent, to?: string) {
@@ -5071,7 +5121,7 @@ export class Game {
       // 2.31: głos moba niesie się w przestrzeni (ciszej z oddali, z panoramą).
       Sfx.playMob(mob.type, 'hurt', mob.body.pos.x, mob.body.pos.y + mob.body.h * 0.8, mob.body.pos.z);
       this.wearTool();
-      if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.08);
+      this.addExhaustion(0.1);
       // Grabież: remember the level so mobLoot() can roll extras once
       mob.bonusLoot = Math.max(mob.bonusLoot, enchLevel(held, 'looting'));
       // 1.6: krzywda mieszkańca budzi okoliczne golemy
@@ -6030,7 +6080,7 @@ export class Game {
       if (isDoorTop(id)) this.spawnDrop(B.DOOR_N, 1, x + 0.5, y + 0.2, z + 0.5);
       // ores that actually yielded something also drop XP
       const xp = oreXp(id);
-      if (drops.length > 0 && xp > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, xp);
+      if (!enchLevel(this.selectedStack(), 'silktouch') && drops.some(drop => drop.id !== id) && xp > 0) this.spawnOrb(x + 0.5, y + 0.4, z + 0.5, xp);
     }
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
@@ -6106,16 +6156,17 @@ export class Game {
     });
   }
 
-  damage(amount: number, force = false) {
+  damage(amount: number, force = false, bypassArmor = false) {
     if (amount <= 0) return;
     if (this.mode === 'creative' && !force) return;
     if (this.ui === 'dead') return;
     // Armor soaks damage; force kills (void, /kill) ignore it and don't break the gear.
     // Zaklęcie Ochrona dodaje 3% redukcji za każdy poziom (do 90% łącznie).
     const reduction = Math.min(0.9, damageReduction(armorPoints(this.armor)) + totalProtection(this.armor) * 0.03);
-    const dealt = force ? amount : Math.max(0, Math.round(amount * (1 - reduction)));
+    const dealt = force || bypassArmor ? amount : Math.max(0, Math.round(amount * (1 - reduction)));
     if (dealt > 0) {
-      if (!force) this.wearArmor(dealt);
+      if (!force && !bypassArmor) this.wearArmor(dealt);
+      if (!force && !bypassArmor) this.addExhaustion(0.1);
       this.health -= dealt;
       this.hurtCount++;
       this.lastHurt = performance.now();
@@ -6200,6 +6251,7 @@ export class Game {
     if (this.isInNether) this.switchDimension(this.homeWorld);
     this.health = 20;
     this.hunger = 20;
+    this.saturation = 5; this.exhaustion = 0; this.foodRegenAcc = 0; this.starveAcc = 0;
     this.air = this.maxAir;
     this.body.pos.copy(this.spawnPoint);
     this.body.vel.set(0, 0, 0);
@@ -6436,13 +6488,21 @@ export class Game {
       b.vel.y -= 32 * dt;
       if (b.vel.y < -78) b.vel.y = -78;
       if (jump && b.onGround) {
+        this.addExhaustion(this.sprinting ? 0.2 : 0.05);
         b.vel.y = 9.1;
         if (this.sprinting) { b.vel.x += -sin * 2; b.vel.z += -cos * 2; }
       }
     }
 
     const wasGround = b.onGround;
+    const previousPosition = b.pos.clone();
     stepBody(this.world, b, dt, sneaking);
+    if (playing && !this.flying) {
+      const dx = b.pos.x - previousPosition.x, dz = b.pos.z - previousPosition.z;
+      const distance = inWater ? Math.hypot(dx, b.pos.y - previousPosition.y, dz) : Math.hypot(dx, dz);
+      if (inWater) this.addExhaustion(distance * 0.01);
+      else if (wasGround && this.sprinting && !onLadder) this.addExhaustion(distance * 0.1);
+    }
     if (this.flying && b.onGround && this.mode === 'creative' && b.vel.y <= 0 && !jump) {
       this.flying = false;
     }
@@ -6455,6 +6515,7 @@ export class Game {
     if (this.autoJump && playing && hasInput && b.onGround && !this.flying && !inWater && !inLava && !onLadder && !sneaking) {
       const mvx = Math.sign(wx), mvz = Math.sign(wz);
       if (this.autoJumpCd <= 0 && this.canAutoStep(b.pos, mvx, mvz)) {
+        this.addExhaustion(this.sprinting ? 0.2 : 0.05);
         b.vel.y = 8.6;
         this.autoJumpCd = 0.35;
       }
@@ -6544,31 +6605,8 @@ export class Game {
     if (inWater && !this.wasInWater) Sfx.playSplash();
     this.wasInWater = inWater;
 
-    // hunger – only survival, and only while actually doing something
-    if (this.mode === 'survival' && this.health > 0 && playing) {
-      let drain = 0;
-      if (hasInput && (b.onGround || inWater)) drain += this.sprinting ? 0.085 : 0.028;
-      if (jump && b.onGround) drain += 0.04;
-      this.hunger = Math.max(0, this.hunger - drain * dt);
-      if (this.hunger <= 0) {
-        this.starveAcc += dt;
-        if (this.starveAcc > 4 && this.health > 1) { this.starveAcc = 0; this.damage(1); this.message('Umierasz z głodu!'); }
-      } else this.starveAcc = 0;
-    }
+    this.updateFood(dt);
     if (b.pos.y < 36) this.unlock('cave');
-
-    // regen only when well fed
-    if (this.mode === 'survival' && this.health < 20 && this.health > 0 && this.hunger >= 17 && performance.now() - this.lastHurt > 4000) {
-      this.regenAcc += dt;
-      if (this.regenAcc > 3.2) {
-        this.regenAcc = 0;
-        this.health = Math.min(20, this.health + 1);
-        this.hunger = Math.max(0, this.hunger - 0.4);
-      }
-    } else if (this.mode === 'creative' && this.health < 20 && this.health > 0 && performance.now() - this.lastHurt > 4000) {
-      this.regenAcc += dt;
-      if (this.regenAcc > 2.5) { this.regenAcc = 0; this.health = Math.min(20, this.health + 1); }
-    }
 
     // steps
     const hs = Math.hypot(b.vel.x, b.vel.z);
@@ -6763,7 +6801,7 @@ export class Game {
               this.breakBlock(t.x, t.y, t.z);
               if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && toolHelps(broken, this.selectedStack()?.id ?? 0)) this.wearTool();
               else if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && ITEMS[this.selectedStack()?.id ?? 0]?.tool) this.wearTool();
-              if (this.mode === 'survival') this.hunger = Math.max(0, this.hunger - 0.015);
+              this.addExhaustion(0.005);
               this.breakProgress = 0;
               this.breakKey = '';
             }

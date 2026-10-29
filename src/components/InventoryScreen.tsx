@@ -8,7 +8,7 @@ import { TooltipBody } from '../utils/tooltip';
 import { ARMOR, armorPoints, ARMOR_SLOT_NAMES } from '../game/armor';
 import Slot from './Slot';
 import CloseButton from './CloseButton';
-import { SkinAvatar } from './SkinPicker';
+import { EquippedSkinAvatar } from './SkinPicker';
 
 /** Player inventory: standard mouse buttons, Shift transfer/crafting and hovered-slot keys. */
 export default function InventoryScreen({
@@ -200,7 +200,7 @@ export default function InventoryScreen({
                     ))}
                   </div>
                   <div className="mc-inv-preview" aria-hidden="true">
-                    <SkinAvatar skin={skinId} size={54} />
+                    <EquippedSkinAvatar skin={skinId} size={54} armor={game.armor} />
                     <div className="mc-inv-armor-pts">🛡 {armorPoints(game.armor)}</div>
                   </div>
                 </div>

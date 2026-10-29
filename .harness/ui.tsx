@@ -27,7 +27,7 @@ import ChestScreen from '../src/components/ChestScreen';
 import InventoryScreen from '../src/components/InventoryScreen';
 import ChatScreen from '../src/components/ChatScreen';
 import MultiplayerScreen from '../src/components/MultiplayerScreen';
-import { SkinPicker, SkinAvatar, SkinHead } from '../src/components/SkinPicker';
+import { SkinPicker, SkinAvatar, EquippedSkinAvatar, SkinHead } from '../src/components/SkinPicker';
 import { SKINS, DEFAULT_SKIN_ID } from '../src/game/skins';
 import { COMMANDS, COMMAND_CATEGORIES, commandByName, applyCommandSuggestion } from '../src/game/commands';
 import { anvilResult } from '../src/game/anvil';
@@ -1025,6 +1025,18 @@ try {
   fail++;
   failures.push(`jsdom mount threw: ${(e as Error)?.message ?? e}`);
   console.log((e as Error)?.stack);
+}
+
+section('4.4.1: inventory armor preview');
+{
+  const armor = [I.IRON_HELMET, I.GOLD_CHEST, I.DIAMOND_LEGS, I.LEATHER_BOOTS].map(id => ({ id, count: 1 }));
+  const html = renderToStaticMarkup(<EquippedSkinAvatar skin="alex" armor={armor} />);
+  check('the actual player preview includes all four equipped armor layers', [0, 1, 2, 3].every(i => html.includes(`data-armor-slot="${i}"`)));
+  check('mixed armor materials have different visible colors', ['#d8e1e5', '#edca45', '#55d9d0', '#9c623b'].every(color => html.includes(color)));
+  const empty = renderToStaticMarkup(<EquippedSkinAvatar skin="alex" armor={[null, null, null, null]} />);
+  check('unequipped preview shows the original skin without armor', !empty.includes('data-armor-slot') && empty.includes('Podgląd skórki'));
+  const invalid = renderToStaticMarkup(<EquippedSkinAvatar skin="steve" armor={[{ id: I.DIAMOND_CHEST, count: 1 }]} />);
+  check('an item in the wrong slot cannot paint a helmet', !invalid.includes('data-armor-slot'));
 }
 
 // =================================================================== report

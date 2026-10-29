@@ -121,6 +121,7 @@ export type NetMessage =
       pitch: number;
       /** Id bloku w ręce (do rąk awatara); brak = puste ręce. */
       held?: number;
+      armor?: number[];
       mode?: 'survival' | 'creative';
       alive?: boolean;
       name: string;
@@ -235,6 +236,7 @@ export interface NetPos {
   yaw: number;
   pitch: number;
   held?: number;
+  armor?: number[];
   name: string;
   hue: number;
   /** 2.12: skórka gracza. */
@@ -842,17 +844,7 @@ export class NetSession implements NetLike {
   }
 
   /** Wysyła pozycję i obrót gracza. */
-  sendPos(p: {
-    d: 'o' | 'n';
-    x: number;
-    y: number;
-    z: number;
-    yaw: number;
-    pitch: number;
-    held?: number;
-    name: string;
-    hue: number;
-  }) {
+  sendPos(p: NetPos) {
     this.send({ t: 'pos', from: this.id, to: this.role === 'host' ? '*' : 'host', ...p }, false);
   }
 
