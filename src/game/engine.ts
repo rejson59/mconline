@@ -1,3 +1,6 @@
+import { isWater, waterHeight } from './blocks';
+import { submerged, waterCurrent } from './water';
+import { FirstPersonView } from './firstPersonView';
 import { ArmorVisual } from './armorVisual';
 import { foodState, exhaust, eat } from './hunger';
 import { playerRay, validCombat } from './playerCombat';
@@ -736,6 +739,7 @@ export class Game {
   crackTex: THREE.Texture[];
   hand = new THREE.Group();
   offHand = new THREE.Group();
+  private firstPerson = new FirstPersonView(this.hand, this.offHand);
   offHandMesh: THREE.Mesh | null = null;
   offHandId = -2;
   private usingOffhand = false;
@@ -1187,8 +1191,8 @@ export class Game {
     this.scene.add(this.stormClouds);
 
     // hand
-    this.handMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, depthTest: false, depthWrite: false, alphaTest: 0.3, side: THREE.FrontSide });
-    this.camera.add(this.hand, this.offHand);
+    this.handMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, depthTest: true, depthWrite: true, alphaTest: 0.3, side: THREE.FrontSide });
+    // Held meshes belong to the final viewmodel pass, never the world pass.
     this.tntGeo = blockGeometry(B.TNT);
     this.arrowGeo = new THREE.BoxGeometry(0.09, 0.09, 0.78);
     this.arrowMat = new THREE.MeshBasicMaterial({ color: 0x9a7a4a });
@@ -1433,7 +1437,7 @@ export class Game {
         Math.floor(this.body.pos.y + 0.2),
         Math.floor(this.body.pos.z)
       );
-      if (under === B.AIR || under === B.WATER) break;
+      if (under === B.AIR || isWater(under)) break;
       this.body.pos.y += 1;
     }
     this.yaw = Number.isFinite(p.yaw) ? p.yaw : 0;
@@ -1462,7 +1466,7 @@ export class Game {
     const ok = (sx: number, sz: number) => {
       const s = this.homeWorld.surface(sx, sz);
       if (s.biome === 'Ocean' || s.h <= SEA + 1) return false;
-      if (this.homeWorld.getBlock(sx, s.h, sz) === B.WATER) return false;
+      if (isWater(this.homeWorld.getBlock(sx, s.h, sz))) return false;
       return true;
     };
     if (ok(x, z)) return { x, z };
@@ -2084,7 +2088,7 @@ export class Game {
           }
           while (y > 1 && !IS_SOLID[this.world.getBlock(x, y, z)]) y--;
           // Nie startuj w wodzie ani pod nią.
-          if (this.world.getBlock(x, y, z) === B.WATER) continue;
+          if (isWater(this.world.getBlock(x, y, z))) continue;
           this.spawnPoint.set(x + 0.5, y + 1, z + 0.5);
           return;
         }
@@ -3870,7 +3874,7 @@ export class Game {
     let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
     if (RENDER[t.id] === 1) { px = t.x; py = t.y; pz = t.z; }
     const cur = this.world.getBlock(px, py, pz);
-    if (cur !== B.AIR && RENDER[cur] !== 1 && cur !== B.WATER && cur !== B.LAVA) return;
+    if (cur !== B.AIR && RENDER[cur] !== 1 && !isWater(cur) && cur !== B.LAVA) return;
     if (py < 0 || py >= CH) return;
     if (this.mode === 'survival' && !this.exchangeContainer(I.BUCKET)) {
       this.message('Brak miejsca na puste wiadro.');
@@ -3947,8 +3951,8 @@ export class Game {
     if (hx < 0 || hx >= CS || hz < 0 || hz >= CS) { this.message('Łóżko nie mieści się – brakuje miejsca na wezgłowie.'); return false; }
     const ground = this.world.getBlock(x, y - 1, z);
     const groundHead = this.world.getBlock(hx, y - 1, hz);
-    if (ground === B.AIR || ground === B.WATER || ground === B.LAVA || !IS_SOLID[ground] ||
-        groundHead === B.AIR || groundHead === B.WATER || groundHead === B.LAVA || !IS_SOLID[groundHead]) {
+    if (ground === B.AIR || isWater(ground) || ground === B.LAVA || !IS_SOLID[ground] ||
+        groundHead === B.AIR || isWater(groundHead) || groundHead === B.LAVA || !IS_SOLID[groundHead]) {
       this.message('Łóżko musi stać na solidnym podłożu.');
       return false;
     }
@@ -4930,11 +4934,11 @@ export class Game {
       let mesh: THREE.Mesh;
       if (isItem(id)) {
         mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3),
-          new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, depthTest: false, depthWrite: false, alphaTest: 0.12, side: THREE.DoubleSide }));
+          new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.12, side: THREE.DoubleSide }));
         mesh.position.set(side * 0.42, -0.3, -0.62);
         mesh.rotation.set(0.15, side * -0.55, side * 0.2);
       } else if (id < 0) {
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.58), new THREE.MeshBasicMaterial({ color: 0xc89a78, depthTest: false, depthWrite: false }));
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.58), new THREE.MeshBasicMaterial({ color: 0xc89a78, depthTest: true, depthWrite: true }));
         mesh.position.set(0.46, -0.36, -0.55);
         mesh.rotation.set(0.2, 0.15, 0);
       } else {
@@ -5041,7 +5045,7 @@ export class Game {
     this.saveProfileNow();
   }
 
-  private raycastTarget(fluids = false) {
+  private raycastTarget(fluids: boolean | 'sources' = false) {
     const eye = this.eyePos(), dir = this.aimDir ?? this.lookDir();
     return this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z,
       this.mode === 'creative' ? 7 : 5, { fluids });
@@ -5350,9 +5354,9 @@ export class Game {
         this.removeBobber();
         return;
       }
-      if (block === B.WATER) {
+      if (isWater(block)) {
         b.state = 'water';
-        b.pos.y = y + 0.9;
+        b.pos.y = y + Math.min(0.9, waterHeight(block)) + 0.01;
         b.vel.set(0, 0, 0);
         b.wait = 0;
         b.biteAt = biteDelay();
@@ -5367,7 +5371,11 @@ export class Game {
     }
     // spławik leży w wodzie, na ziemi albo właśnie bierze
     const x = Math.floor(b.pos.x), y = Math.floor(b.pos.y), z = Math.floor(b.pos.z);
-    const inWater = this.world.peekBlock(x, y, z) === B.WATER;
+    const inWater = isWater(this.world.peekBlock(x, y, z));
+    if ((b.state === 'water' || b.state === 'bite') && !inWater) {
+      b.state = 'flying'; b.wait = 0; b.vel.set(0, 0, 0);
+      return; // Receding water cannot leave a fishing spot hanging in midair.
+    }
     b.wait += dt;
     if (b.state === 'bite') {
       b.window -= dt;
@@ -5380,7 +5388,7 @@ export class Game {
     }
     if (b.state === 'rest' && inWater) {
       b.state = 'water';
-      b.pos.y = y + 0.9;
+      b.pos.y = y + Math.min(0.9, waterHeight(this.world.peekBlock(x, y, z))) + 0.01;
       b.wait = 0;
       b.biteAt = biteDelay();
       this.message('Przynęta w wodzie. Czekaj na brań…');
@@ -5395,7 +5403,7 @@ export class Game {
       return;
     }
     // water
-    b.pos.y = y + 0.9 - Math.sin(b.wait * 2.2) * 0.06;
+    b.pos.y = y + Math.min(0.9, waterHeight(this.world.peekBlock(x, y, z))) + 0.01 - Math.sin(b.wait * 2.2) * 0.06;
     b.mesh.position.set(b.pos.x, b.pos.y, b.pos.z);
     if (this.bobberMat) this.bobberMat.color.setHex(0xd83a3a);
     if (b.wait >= b.biteAt) {
@@ -5577,7 +5585,7 @@ export class Game {
   private tryUseHeld() {
     const held = this.selectedStack();
     // Only container use targets fluids; ordinary mining/placing ignores them.
-    const t = this.raycastTarget(held?.id === I.BUCKET || held?.id === I.BOTTLE);
+    const t = this.raycastTarget(held?.id === I.BUCKET ? 'sources' : held?.id === I.BOTTLE);
     this.placeCooldown = 0.22;
     const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     // Mieszkaniec ma pierwszeństwo – PPM otwiera okno handlu.
@@ -5613,7 +5621,7 @@ export class Game {
     const s = this.selectedStack();
     if (!s) return;
     // 2.4: fiolka nad wodą staje się fiolką z wodą (źródło wody zostaje).
-    if (s.id === I.BOTTLE && t && t.id === B.WATER) {
+    if (s.id === I.BOTTLE && t && isWater(t.id)) {
       if (this.mode === 'survival' && !this.exchangeContainer(I.WATER_BOTTLE)) {
         this.message('Brak miejsca na fiolkę z wodą.'); return;
       }
@@ -5760,7 +5768,7 @@ export class Game {
       }
     } else if (id === B.LILY_PAD) {
       // 2.21: lilia rośnie tylko na tafli wody, jak w wanilii.
-      if (below !== B.WATER && below !== B.ICE) { this.message('Lilię kładzie się na wodzie.'); return; }
+      if (!isWater(below) && below !== B.ICE) { this.message('Lilię kładzie się na wodzie.'); return; }
     } else if (isBed(id)) {
       if (!this.placeBed(px, py, pz)) return;
       Sfx.playPlace('cloth');
@@ -6019,13 +6027,11 @@ export class Game {
     const id = this.world.getBlock(x, y, z);
     if (id === B.AIR || BLOCKS[id].hardness < 0) return;
     const def = BLOCKS[id];
-    // water fills in
-    let fill: number = B.AIR;
-    const nbs = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]];
-    for (const [dx, dy, dz] of nbs) {
-      const n = this.world.getBlock(x + dx, y + dy, z + dz);
-      if (n === B.WATER) { fill = B.WATER; break; }
-      if (n === B.LAVA) fill = B.LAVA;
+    // Derived flow, not a newly-created source, fills an opened cavity.
+    let fill = B.AIR as number;
+    // Lava behavior is unchanged by the water simulation.
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]]) {
+      if (this.world.getBlock(x + dx, y + dy, z + dz) === B.LAVA) fill = B.LAVA;
     }
     if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
     if (isChestBlock(id)) this.spillChest(x, y, z);
@@ -6119,7 +6125,7 @@ export class Game {
           if (d > power * (0.7 + Math.random() * 0.35)) continue;
           const x = Math.floor(cx + dx), y = Math.floor(cy + dy), z = Math.floor(cz + dz);
           const id = this.world.getBlock(x, y, z);
-          if (id === B.AIR || id === B.BEDROCK || id === B.OBSIDIAN || id === B.WATER || id === B.LAVA) continue;
+          if (id === B.AIR || id === B.BEDROCK || id === B.OBSIDIAN || isWater(id) || id === B.LAVA) continue;
           if (id === B.TNT) { this.igniteTNT(x, y, z, 0.3 + Math.random() * 0.6, source); continue; }
           if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
           if (isChestBlock(id)) this.spillChest(x, y, z);
@@ -6345,6 +6351,7 @@ export class Game {
       this.autoAttackTick(dt);
       this.updateEntities(dt);
       this.updateFalling(dt);
+      this.world.water.tick(dt);
       this.updateLeafDecay(dt);
       this.updateArrows(dt);
       this.updateDrops(dt);
@@ -6390,11 +6397,12 @@ export class Game {
       this.emitHud();
     }
 
-    this.renderer.render(this.scene, this.camera);
+    this.firstPerson.render(this.renderer, this.scene, this.camera);
   }
 
   private blockAt(p: THREE.Vector3, yoff: number) {
-    return this.world.peekBlock(Math.floor(p.x), Math.floor(p.y + yoff), Math.floor(p.z));
+    const id = this.world.peekBlock(Math.floor(p.x), Math.floor(p.y + yoff), Math.floor(p.z));
+    return isWater(id) && !submerged(this.world, p.x, p.y + yoff, p.z) ? B.AIR : id;
   }
 
   /**
@@ -6419,11 +6427,11 @@ export class Game {
     if (this.autoJumpCd > 0) this.autoJumpCd -= dt;
     const feet = this.blockAt(b.pos, 0.1);
     const mid = this.blockAt(b.pos, 0.8);
-    const inWater = feet === B.WATER || mid === B.WATER;
+    const inWater = isWater(feet) || isWater(mid);
     const inLava = feet === B.LAVA || mid === B.LAVA;
     const onLadder = isLadder(feet) || isLadder(mid) || isLadder(this.blockAt(b.pos, 1.4));
     const eyeBlock = this.blockAt(b.pos, this.eyeHeight);
-    const eyeInWater = eyeBlock === B.WATER;
+    const eyeInWater = isWater(eyeBlock);
 
     let fx = 0, fz = 0;
     if (playing) {
@@ -6494,6 +6502,10 @@ export class Game {
       }
     }
 
+    if (inWater && !this.flying) {
+      const flow = waterCurrent(this.world, b.pos.x, b.pos.y + 0.1, b.pos.z);
+      b.vel.x += flow[0] * dt * 3; b.vel.y += flow[1] * dt * 3; b.vel.z += flow[2] * dt * 3;
+    }
     const wasGround = b.onGround;
     const previousPosition = b.pos.clone();
     stepBody(this.world, b, dt, sneaking);
@@ -6786,7 +6798,7 @@ export class Game {
           const time = mineSeconds(t.id, held?.id ?? 0, enchLevel(held, 'efficiency'));
           if (def.hardness >= 0 && Number.isFinite(time)) {
             let mult = 1;
-            if (this.blockAt(this.body.pos, this.eyeHeight) === B.WATER) mult *= 0.25;
+            if (isWater(this.blockAt(this.body.pos, this.eyeHeight))) mult *= 0.25;
             if (!this.body.onGround && !this.flying) mult *= 0.4;
             this.breakProgress += (dt / time) * mult;
             this.digSoundTimer -= dt;
@@ -7157,7 +7169,7 @@ export class Game {
       fog.near = this.viewDistance() * 0.4;
       fog.far = this.viewDistance() * 0.95;
       this.scene.background = fog.color;
-    } else if (eyeBlock === B.WATER) {
+    } else if (isWater(eyeBlock)) {
       fog.color.setRGB(0.05 * dl, 0.15 * dl, 0.5 * dl);
       fog.near = 0.1;
       fog.far = 18;
@@ -7214,7 +7226,7 @@ export class Game {
     // 2.8: gradientowa kopuła nieba podąża za kamerą i dostaje kolor pory dnia.
     if (this.skyDome) {
       const domeMat = this.skyDome.material as THREE.MeshBasicMaterial;
-      const inLiquid = eyeBlock === B.WATER || eyeBlock === B.LAVA;
+      const inLiquid = isWater(eyeBlock) || eyeBlock === B.LAVA;
       this.skyDome.visible = !nether && !inLiquid;
       this.skyDome.position.copy(cp);
       domeMat.color.copy(sky).multiplyScalar(1.06);
@@ -7288,7 +7300,7 @@ export class Game {
       chunks: this.world.chunks.size,
       time: this.time,
       target: this.target ? `${BLOCKS[this.target.id].name} (${this.target.x}, ${this.target.y}, ${this.target.z})` : '-',
-      underwater: this.blockAt(p, this.eyeHeight) === B.WATER,
+      underwater: isWater(this.blockAt(p, this.eyeHeight)),
       inLava: this.blockAt(p, this.eyeHeight) === B.LAVA,
       flying: this.flying,
       debug: this.debug,
@@ -7655,9 +7667,13 @@ export class Game {
   private stepSharedDrop(d: DropEntity, dt: number) {
     for (let left = dt; left > 0; left -= 0.025) {
       const step = Math.min(0.025, left);
-      const water = this.world.peekBlock(Math.floor(d.pos.x), Math.floor(d.pos.y + 0.1), Math.floor(d.pos.z)) === B.WATER;
+      const water = submerged(this.world, d.pos.x, d.pos.y + 0.1, d.pos.z);
       d.vel.y = Math.max(water ? -2.2 : -50, d.vel.y - (water ? 4 : 22) * step);
-      if (water) { d.vel.x *= 1 - 3.5 * step; d.vel.z *= 1 - 3.5 * step; }
+      if (water) {
+        const flow = waterCurrent(this.world, d.pos.x, d.pos.y, d.pos.z);
+        d.vel.x = d.vel.x * (1 - 3.5 * step) + flow[0] * step * 1.8;
+        d.vel.z = d.vel.z * (1 - 3.5 * step) + flow[2] * step * 1.8;
+      }
       const distance = d.vel.length() * step;
       if (distance === 0) continue;
       const dir = d.vel.clone().normalize();
@@ -7684,13 +7700,15 @@ export class Game {
       // jak kamień, mimo że w grze unoszą się na wodzie).
       if (d.shared) this.advanceSharedDrop(d);
       else {
-        const fluid = this.world.peekBlock(Math.floor(d.pos.x), Math.floor(d.pos.y + 0.1), Math.floor(d.pos.z)) === B.WATER;
+        const fluid = submerged(this.world, d.pos.x, d.pos.y + 0.1, d.pos.z);
         if (fluid) {
           d.vel.y -= 4 * dt;
           if (d.vel.y < -2.2) d.vel.y = -2.2;
           const drag = Math.max(0, 1 - dt * 3.5);
           d.vel.x *= drag;
           d.vel.z *= drag;
+          const flow = waterCurrent(this.world, d.pos.x, d.pos.y, d.pos.z);
+          d.vel.x += flow[0] * dt * 1.8; d.vel.z += flow[2] * dt * 1.8;
         } else {
           d.vel.y -= 22 * dt;
         }
@@ -7825,14 +7843,14 @@ export class Game {
   /** Water within one block horizontally (used by sugar cane). */
   private waterNear(x: number, y: number, z: number): boolean {
     return (
-      this.world.peekBlock(x + 1, y, z) === B.WATER ||
-      this.world.peekBlock(x - 1, y, z) === B.WATER ||
-      this.world.peekBlock(x, y, z + 1) === B.WATER ||
-      this.world.peekBlock(x, y, z - 1) === B.WATER ||
-      this.world.peekBlock(x + 1, y - 1, z) === B.WATER ||
-      this.world.peekBlock(x - 1, y - 1, z) === B.WATER ||
-      this.world.peekBlock(x, y - 1, z + 1) === B.WATER ||
-      this.world.peekBlock(x, y - 1, z - 1) === B.WATER
+      isWater(this.world.peekBlock(x + 1, y, z)) ||
+      isWater(this.world.peekBlock(x - 1, y, z)) ||
+      isWater(this.world.peekBlock(x, y, z + 1)) ||
+      isWater(this.world.peekBlock(x, y, z - 1)) ||
+      isWater(this.world.peekBlock(x + 1, y - 1, z)) ||
+      isWater(this.world.peekBlock(x - 1, y - 1, z)) ||
+      isWater(this.world.peekBlock(x, y - 1, z + 1)) ||
+      isWater(this.world.peekBlock(x, y - 1, z - 1))
     );
   }
 

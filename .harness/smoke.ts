@@ -3178,8 +3178,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.4.1', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Zbroja, głód i rudy', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.5.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Płynąca woda i czyste dłonie', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -8088,6 +8088,205 @@ section('4.4.1: ore placement/mining cycle has no item or XP gain');
     g.inventory.slots[1].ench = undefined; world.setBlock(4, FLAT_H + 1, 4, ore); g.breakBlock(4, FLAT_H + 1, 4);
     if (ore !== B.IRON_ORE && ore !== B.GOLD_ORE) check(`ordinary resource mining still grants XP for ore ${ore}`, xp > 0);
   }
+}
+
+
+section('4.5.0: bounded water flow, drainage, currents, chunks and persistence');
+{
+  const { WaterSimulation, submerged, waterCurrent } = await import('../src/game/water');
+  const { isWater, waterHeight, waterLevel, CREATIVE_BLOCKS } = await import('../src/game/blocks');
+  const make = () => {
+    const blocks = new Map<string, number>(); let notifications = 0;
+    const world = {
+      hasChunk: (_cx: number, _cz: number) => true,
+      peekBlock(x: number, y: number, z: number): number { return blocks.get(`${x},${y},${z}`) ?? (y <= 0 ? B.STONE : B.AIR); },
+      setBlock(x: number, y: number, z: number, id: number, notify = true) {
+        const old = world.peekBlock(x, y, z); if (old === id) return;
+        blocks.set(`${x},${y},${z}`, id); if (notify) notifications++;
+        water.changed(x, y, z, old);
+      },
+    };
+    const water = new WaterSimulation(world);
+    return { world, water, blocks, notifications: () => notifications };
+  };
+  const settle = (water: InstanceType<typeof WaterSimulation>) => {
+    for (let i = 0; i < 1500 && water.size; i++) water.tick(0.2);
+    check('water queue reaches a stable state', water.size === 0, String(water.size));
+  };
+  for (let id = B.WATER_FLOW_1 as number; id <= B.WATER_FALL; id++) {
+    check(`flow ${id} is water but never a creative source item`, isWater(id) && !CREATIVE_BLOCKS.includes(id));
+    check(`flow ${id} has a positive liquid surface`, waterHeight(id) > 0 && waterHeight(id) <= 1);
+  }
+  const flat = make(); flat.world.setBlock(0, 1, 0, B.WATER);
+  eq('water respects its tick interval', flat.water.tick(0.19), 0);
+  check('water spreads on the next fluid tick', flat.water.tick(0.01) > 0);
+  settle(flat.water);
+  for (let distance = 1; distance <= 7; distance++) eq(`flat stream level ${distance}`, waterLevel(flat.world.peekBlock(distance, 1, 0)), distance);
+  eq('water stops after seven horizontal cells', flat.world.peekBlock(8, 1, 0), B.AIR);
+  eq('one source covers a finite diamond, not the entire plane', [...flat.blocks.values()].filter(isWater).length, 113);
+  eq('flow never creates new sources', [...flat.blocks.values()].filter(id => id === B.WATER).length, 1);
+  eq('derived flow never floods the network edit hook', flat.notifications(), 1);
+  check('shallow flow submerges feet but not the air above its surface', submerged(flat.world, 7.5, 1.05, 0.5) && !submerged(flat.world, 7.5, 1.5, 0.5));
+  flat.world.setBlock(0, 1, 0, B.AIR); settle(flat.water);
+  eq('removing the source drains the entire stream', [...flat.blocks.values()].filter(isWater).length, 0);
+  eq('drainage also avoids network edit spam', flat.notifications(), 2);
+
+  const falling = make(); falling.world.setBlock(0, 8, 0, B.WATER); settle(falling.water);
+  eq('falling water fills the column below the source', falling.world.peekBlock(0, 4, 0), B.WATER_FALL);
+  eq('falling water does not spread sideways in midair', falling.world.peekBlock(1, 4, 0), B.AIR);
+  eq('water spreads when its column reaches the ground', falling.world.peekBlock(1, 1, 0), B.WATER_FLOW_1);
+  eq('falling water resets the horizontal range on landing', waterLevel(falling.world.peekBlock(7, 1, 0)), 7);
+  check('falling column creates a downward current', waterCurrent(falling.world, 0, 4, 0)[1] < 0);
+  falling.world.setBlock(0, 8, 0, B.AIR); settle(falling.water);
+  eq('a waterfall drains too, without self-sustaining flow loops', [...falling.blocks.values()].filter(isWater).length, 0);
+
+  const wall = make(); wall.world.setBlock(0, 1, 0, B.WATER); settle(wall.water);
+  for (let z = -8; z <= 8; z++) wall.world.setBlock(1, 1, z, B.STONE);
+  settle(wall.water); eq('blocking a stream drains its disconnected side', wall.world.peekBlock(2, 1, 0), B.AIR);
+  wall.world.setBlock(1, 1, 0, B.AIR); settle(wall.water);
+  eq('opening a channel restarts flow, not a new source', wall.world.peekBlock(1, 1, 0), B.WATER_FLOW_1);
+  eq('reopened water reaches downstream cells', waterLevel(wall.world.peekBlock(2, 1, 0)), 2);
+  wall.world.setBlock(-2, 1, 0, B.WATER); settle(wall.water);
+  wall.world.setBlock(0, 1, 0, B.AIR); settle(wall.water);
+  check('a remaining independent source keeps feeding the stream', isWater(wall.world.peekBlock(0, 1, 0)) && wall.world.peekBlock(0, 1, 0) !== B.WATER);
+
+  const bounded = make(); bounded.world.setBlock(0, 1, 0, B.WATER);
+  bounded.water.tick(NaN); bounded.water.tick(0.2, 0);
+  eq('invalid time / zero budget cannot advance the simulation', [...bounded.blocks.values()].filter(isWater).length, 1);
+  check('a one-cell budget cannot change more than one cell', bounded.water.tick(0.2, 1) <= 1 && bounded.water.size > 0);
+  settle(bounded.water);
+
+  const channel = make();
+  for (let x = -8; x <= 8; x++) for (const z of [-1, 1]) channel.world.setBlock(x, 1, z, B.STONE);
+  channel.world.setBlock(-1, 1, 0, B.STONE); channel.world.setBlock(0, 1, 0, B.WATER); settle(channel.water);
+  check('channel current follows the lower downstream water level', waterCurrent(channel.world, 2, 1, 0)[0] > 0.9);
+  const drop = { pos: new THREE.Vector3(2.5, 1.02, 0.5), vel: new THREE.Vector3() };
+  const dropGame = Object.assign(Object.create(Game.prototype), { world: { ...channel.world, raycast: () => null } });
+  dropGame.stepSharedDrop(drop, 0.025);
+  check('shared ground items are carried by a stream', drop.vel.x > 0 && drop.pos.x > 2.5);
+  const swimmer = Object.assign(Object.create(Game.prototype), { world: channel.world, mode: 'survival', ui: 'playing', health: 20, hunger: 20, saturation: 5, exhaustion: 0,
+    body: { pos: new THREE.Vector3(3.5, 1, 0.5), vel: new THREE.Vector3(), onGround: true, hitWall: false, w: 0.6, h: 1.8 },
+    keys: new Set<string>(['Space']), yaw: 0, eyeHeight: 1.62, autoJump: false, sprinting: false, flying: false, fallStart: 1,
+    air: 10, maxAir: 10, bobAmp: 0, bobPhase: 0, stepDist: 0, lastHurt: 0, hurtCount: 0, shake: 0,
+    hasEffect: () => false, emitHud() {}, buzz() {}, message() {}, unlock() {}, inventory: new Inventory(), armor: Array(4).fill(null), selected: 0,
+  });
+  swimmer.updatePlayer(1 / 60);
+  check('player can swim up in flowing water and is pushed downstream', swimmer.body.vel.y > 0 && swimmer.body.vel.x > 0);
+  eq('shallow stream does not consume air above its actual surface', swimmer.air, 10);
+  channel.world.setBlock(3, 2, 0, B.WATER_FALL); swimmer.keys.clear(); swimmer.updatePlayer(1 / 60);
+  check('eyes immersed in falling water consume air', swimmer.air < 10);
+  const { isHydrated } = await import('../src/game/farmland');
+  check('flowing water hydrates farmland', isHydrated(channel.world as unknown as World, 3, 1, 0));
+  const bobber = { state: 'water', pos: new THREE.Vector3(6.5, 1.5, 0.5), vel: new THREE.Vector3(), mesh: new THREE.Object3D(), wait: 0, biteAt: 100 };
+  const fisher = Object.assign(Object.create(Game.prototype), { world: channel.world, bobber, ui: 'playing', eyePos: () => new THREE.Vector3(), message() {} });
+  fisher.updateFishing(0.01);
+  check('bobber follows the shallow stream surface', Math.abs(bobber.pos.y - 1 - waterHeight(channel.world.peekBlock(6, 1, 0))) < 0.08);
+  channel.world.setBlock(6, 1, 0, B.AIR); fisher.updateFishing(0.01);
+  eq('receding water stops fishing in midair', bobber.state, 'flying');
+
+
+  const world = new World(4242, true), y = FLAT_H + 1;
+  world.getChunk(0, 0); let published = 0; world.onEdit = () => { published++; };
+  world.setBlock(15, y, 8, B.WATER); settle(world.water);
+  eq('fluid processing never generates unloaded chunks', world.chunks.size, 1);
+  eq('only the player source edit is published', published, 1);
+  world.getChunk(1, 0);
+  eq('test seam has a free downstream cell', world.peekBlock(16, y, 8), B.AIR);
+  settle(world.water);
+  eq('loading a chunk wakes the old side of its seam', world.peekBlock(16, y, 8), B.WATER_FLOW_1);
+  eq('crossing a seam still publishes no derived edits', published, 1);
+  const saved = world.serializeMods(), restored = new World(4242, true); restored.loadMods(saved);
+  restored.getChunk(0, 0); restored.getChunk(1, 0); settle(restored.water);
+  eq('saved source and flow levels survive reload', restored.peekBlock(16, y, 8), B.WATER_FLOW_1);
+  restored.setBlock(15, y, 8, B.AIR); settle(restored.water);
+  eq('restored flow does not become a permanent source', restored.peekBlock(16, y, 8), B.AIR);
+  world.releaseChunk(1, 0); world.getChunk(1, 0); settle(world.water);
+  eq('chunk unload/reload preserves the live stream', world.peekBlock(16, y, 8), B.WATER_FLOW_1);
+  const remote = new World(4242, true); remote.getChunk(0, 0);
+  remote.seedMods([{ x: 4, y: y + 2, z: 4, id: B.WATER }]); settle(remote.water);
+  eq('public initial edits wake water in already-loaded terrain', remote.peekBlock(4, y, 4), B.WATER_FALL);
+  remote.seedMods([{ x: 4, y: y + 2, z: 4, id: B.AIR }]); settle(remote.water);
+  eq('remote source removal also drains derived water', remote.peekBlock(4, y, 4), B.AIR);
+
+  // Two peers can use different budgets and queue orders and still converge;
+  // only source/block edits are inputs, not simulated flow packets.
+  const peerA = make(), peerB = make();
+  for (const peer of [peerA, peerB]) peer.world.setBlock(0, 1, 0, B.WATER);
+  for (let n = 0; n < 2000 && (peerA.water.size || peerB.water.size); n++) {
+    peerA.water.tick(0.2, 64); peerB.water.tick(0.2, 11);
+  }
+  const snapshot = (peer: ReturnType<typeof make>) => JSON.stringify([...peer.blocks].filter(([, id]) => isWater(id)).sort());
+  eq('peers converge despite different frame budgets', snapshot(peerA), snapshot(peerB));
+  for (const peer of [peerA, peerB]) peer.world.setBlock(0, 1, 0, B.AIR);
+  settle(peerA.water); settle(peerB.water);
+  eq('both peers drain without forwarding fluid edits', snapshot(peerA), snapshot(peerB));
+  eq('peer B only publishes source placement and removal', peerB.notifications(), 2);
+}
+
+section('4.5.0: fluid surfaces, stepped side faces and source-only bucket ray');
+{
+  const { waterHeight } = await import('../src/game/blocks');
+  const world = new World(4242, true), y = 96;
+  world.setBlock(4, y, 4, B.WATER); world.setBlock(5, y, 4, B.WATER_FLOW_1);
+  world.setBlock(6, y, 4, B.WATER_FLOW_7); world.setBlock(7, y, 4, B.WATER_FALL);
+  const geometries = world.buildMesh(world.getChunk(0, 0)), geometry = geometries[2];
+  const pos = geometry.getAttribute('position'), wave = geometry.getAttribute('aWave');
+  for (const [x, id] of [[4, B.WATER], [5, B.WATER_FLOW_1], [6, B.WATER_FLOW_7], [7, B.WATER_FALL]]) {
+    let surface = NaN;
+    for (let i = 0; i < pos.count; i += 4) {
+      const xs = [0, 1, 2, 3].map(k => pos.getX(i + k)), zs = [0, 1, 2, 3].map(k => pos.getZ(i + k));
+      if (wave.getX(i) === 1 && Math.min(...xs) === x && Math.max(...xs) === x + 1 && Math.min(...zs) === 4 && Math.max(...zs) === 5) surface = pos.getY(i);
+    }
+    check(`water ${id} renders its actual level`, Math.abs(surface - y - waterHeight(id)) < 1e-5, String(surface));
+  }
+  let stepFace = false;
+  for (let i = 0; i < pos.count; i += 4) {
+    const ys = [0, 1, 2, 3].map(k => pos.getY(i + k));
+    if ([0, 1, 2, 3].every(k => pos.getX(i + k) === 5) && Math.abs(Math.min(...ys) - y - waterHeight(B.WATER_FLOW_1)) < 1e-5 && Math.abs(Math.max(...ys) - y - waterHeight(B.WATER)) < 1e-5) stepFace = true;
+  }
+  check('different water heights have a side face instead of a transparent gap', stepFace);
+  eq('ordinary fluid ray can select a stream', world.raycast(8.5, y + 0.1, 4.5, -1, 0, 0, 8, { fluids: true })?.id, B.WATER_FALL);
+  eq('empty bucket ray passes streams and selects only the source', world.raycast(8.5, y + 0.1, 4.5, -1, 0, 0, 8, { fluids: 'sources' })?.id, B.WATER);
+  geometries.forEach(g => g.dispose());
+}
+
+section('4.5.0: both first-person hands render after transparent water/clouds');
+{
+  const { FirstPersonView } = await import('../src/game/firstPersonView');
+  const main = new THREE.Group(), off = new THREE.Group(), world = new THREE.Scene();
+  main.add(new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()));
+  off.add(new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshBasicMaterial({ transparent: true })));
+  const camera = new THREE.PerspectiveCamera(70, 1.7, 0.05, 512); camera.position.set(100, 80, -50); camera.rotation.y = 1.3;
+  world.add(camera); world.background = new THREE.Color('blue'); world.fog = new THREE.Fog('blue', 10, 100);
+  const water = new THREE.Mesh(), clouds = new THREE.Mesh();
+  water.material = new THREE.MeshBasicMaterial({ transparent: true }); clouds.material = water.material; world.add(water, clouds);
+  const view = new FirstPersonView(main, off), trace: string[] = [];
+  const renderer = {
+    autoClear: true,
+    clearDepth() { trace.push('depth'); },
+    render(scene: THREE.Scene, cam: THREE.PerspectiveCamera) {
+      if (scene === world) {
+        trace.push('world'); check('world pass contains water and clouds but no held meshes', scene.children.includes(water) && scene.children.includes(clouds) && !camera.children.includes(main) && !camera.children.includes(off));
+      } else {
+        trace.push('hands'); check('final pass contains both hands and keeps world color', scene.children.includes(main) && scene.children.includes(off) && !renderer.autoClear && scene.background === null && scene.fog === null);
+        check('viewmodel camera uses the current aspect/FOV projection', cam.projectionMatrix.equals(camera.projectionMatrix));
+        check('viewmodel stays camera-relative when player turns/moves', cam.position.lengthSq() === 0 && cam.quaternion.equals(new THREE.Quaternion()));
+      }
+    },
+  };
+  view.render(renderer as unknown as THREE.WebGLRenderer, world, camera);
+  eq('render order is world, clear world depth, then held objects', trace.join(','), 'world,depth,hands');
+  check('renderer and world background/fog survive the extra pass', renderer.autoClear && world.background instanceof THREE.Color && !!world.fog);
+  off.visible = false; view.render(renderer as unknown as THREE.WebGLRenderer, world, camera);
+  eq('empty offhand visibility is not changed by rendering', off.visible, false);
+  const failing = { autoClear: true, clearDepth() {}, render(scene: THREE.Scene) { if (scene === view.scene) throw new Error('test viewmodel failure'); } };
+  try { view.render(failing as unknown as THREE.WebGLRenderer, world, camera); } catch { /* expected */ }
+  check('a failed viewmodel pass still restores renderer state', failing.autoClear);
+  const code = readSource('src/game/engine.ts');
+  check('engine actually calls the final viewmodel renderer', code.includes('this.firstPerson.render(this.renderer, this.scene, this.camera)') && !code.includes('this.camera.add(this.hand, this.offHand)'));
+  main.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); o.material.dispose(); } });
+  off.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); o.material.dispose(); } });
+  water.geometry.dispose(); clouds.geometry.dispose(); water.material.dispose();
 }
 
 // =================================================================== report

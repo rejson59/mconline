@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.4.1';
-export const GAME_RELEASE_NAME = 'Zbroja, głód i rudy';
+export const GAME_VERSION = '4.5.0';
+export const GAME_RELEASE_NAME = 'Płynąca woda i czyste dłonie';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: 'Woda spływa i rozlewa się', text: 'Źródło zasila strumień do siedmiu bloków po ziemi. Woda najpierw spada, rozlewa się po dotarciu do podłoża i cofa po zabraniu źródła. Pływanie, prąd, łowienie i podlewanie działają też w strumieniu; puste wiadro zbiera tylko źródła.' },
+  { title: 'Chmury i woda nie zasłaniają dłoni', text: 'Obie ręce i trzymane przedmioty są renderowane po całym świecie, również po przezroczystej wodzie i chmurach. Reset głębokości przed dłońmi zachowuje kształt brył i przezroczystość ikon.' },
   { title: 'Założona zbroja jest widoczna', text: 'Hełm, napierśnik, nogawice i buty pojawiają się na awatarze multiplayer i w podglądzie plecaka. Skóra, żelazo, złoto i diament mają różne kolory; elementy poruszają się razem z ciałem i znikają po zdjęciu.' },
   { title: 'Głód z zapasem nasycenia', text: 'Zwykły marsz nie zabiera jedzenia. Sprint, pływanie, skoki, kopanie i walka naliczają wyczerpanie, które najpierw zużywa nasycenie z posiłków. Regeneracja korzysta z tego samego zapasu; stan zapisuje się również po wyjściu z gry.' },
   { title: 'Rudy bez odnawialnego XP', text: 'Odzyskanie tego samego bloku rudy nie daje doświadczenia. Dotyczy to żelaza, złota i Jedwabnego dotyku; legalne stawianie rud nadal działa. Jedwabny dotyk zachowuje też rudy kwarcu i czerwonego kamienia.' },

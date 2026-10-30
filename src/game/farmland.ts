@@ -1,3 +1,4 @@
+import { isWater } from './blocks';
 /**
  * BlockCraft 2.26 – nawadnianie grządek, jak `FarmBlock` z Minecrafta.
  *
@@ -35,8 +36,8 @@ export function isHydrated(world: World, x: number, y: number, z: number): boole
       // Wanilia nie liczy rogów kwadratu: w linii prostej 4 blokdy, na skos
       // maksymalnie ~4,24 (dx² + dz² ≤ 18).
       if (dx * dx + dz * dz > MAX_DIAGONAL) continue;
-      if (world.peekBlock(x + dx, y, z + dz) === B.WATER) return true;
-      if (world.peekBlock(x + dx, y + 1, z + dz) === B.WATER) return true;
+      if (isWater(world.peekBlock(x + dx, y, z + dz))) return true;
+      if (isWater(world.peekBlock(x + dx, y + 1, z + dz))) return true;
     }
   }
   return false;
