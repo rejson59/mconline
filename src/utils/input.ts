@@ -63,7 +63,7 @@ export function resolveControlMode(settings: Pick<Settings, 'controlMode'>): Inp
 export type HardwareKind = 'keyboard' | 'mouse';
 
 /** Klawisze, których dotknięcie naprawdę oznacza „chcę grać na klawiaturze”. */
-const GAME_KEYS = /^(Key[WASDQE]|Key[EIFTK]|KeyC|Space|Arrow(Up|Down|Left|Right)|Shift(Left|Right)|Control(Left|Right)|Digit[1-9]|Escape|Tab)$/;
+const GAME_KEYS = /^(Key[WASDQER]|Key[EIFTK]|KeyC|Space|Arrow(Up|Down|Left|Right)|Shift(Left|Right)|Control(Left|Right)|Digit[1-9]|Escape|Tab)$/;
 
 interface HardwareEvent {
   type: string;

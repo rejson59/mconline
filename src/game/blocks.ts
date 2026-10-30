@@ -11,7 +11,7 @@ export const T = {
   wool_yellow: 45, wool_black: 46, lava: 47, sandstone_side: 48, sandstone_top: 49,
   pumpkin_side: 50, pumpkin_top: 51, pumpkin_face: 52, mossy: 53, clay: 54, torch: 55, sapling: 56, birch_sapling: 57, farmland: 58,
   wheat0: 59, wheat1: 60, wheat2: 61, wheat3: 62, bed_top: 63, bed_side: 64,
-  furnace_lit: 65,
+  furnace_lit: 65, furnace_top: 175,
   chest_top: 66, chest_side: 67, chest_front: 68, door: 69, door_top: 70,
   ladder: 71, fence: 72, trapdoor: 73, campfire: 74, campfire_side: 75,
   iron_block: 76, gold_block: 77, diamond_block: 78,
@@ -213,7 +213,7 @@ def(B.BOOKSHELF, 'Biblioteczka', [T.planks, T.planks, T.bookshelf], { hardness: 
 def(B.WOOL_WHITE, 'Biała wełna', T.wool_white, { hardness: 0.8, sound: 'cloth' });
 def(B.WOOL_RED, 'Czerwona wełna', T.wool_red, { hardness: 0.8, sound: 'cloth' });
 def(B.CRAFTING, 'Stół rzemieślniczy', [T.crafting_top, T.planks, T.crafting_side], { hardness: 2.5, sound: 'wood' });
-def(B.FURNACE, 'Piec', [T.furnace_side, T.furnace_side, T.furnace_side, T.furnace_front], { hardness: 3.5 });
+def(B.FURNACE, 'Piec', [T.furnace_top, T.furnace_top, T.furnace_side, T.furnace_front], { hardness: 3.5 });
 def(B.OBSIDIAN, 'Obsydian', T.obsidian, { hardness: 50 });
 def(B.CRYING_OBSIDIAN, 'Płaczący obsydian', T.crying_obsidian, { hardness: 50 });
 def(B.STONE_BRICKS, 'Kamienne cegły', T.stone_bricks, { hardness: 1.5 });
@@ -268,7 +268,7 @@ for (const [id, name] of BED_FACES) {
     hardness: 0.2, sound: 'cloth', render: 'bed', opaque: false, layer: 1, drop: B.BED,
   });
 }
-def(B.FURNACE_ON, 'Rozpalony piec', [T.furnace_side, T.furnace_side, T.furnace_side, T.furnace_lit], { hardness: 3.5, drop: B.FURNACE });
+def(B.FURNACE_ON, 'Rozpalony piec', [T.furnace_top, T.furnace_top, T.furnace_side, T.furnace_lit], { hardness: 3.5, drop: B.FURNACE });
 const FACE_PL = ['północ', 'wschód', 'południe', 'zachód'];
 def(B.CHEST, 'Skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', render: 'chest' });
 def(B.LOOT_CHEST, 'Stara skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', drop: B.CHEST, render: 'chest' });

@@ -426,6 +426,7 @@ const BLOCK_TILES = {
   crafting_side: B + 'crafting_table_side.png',
   furnace_front: B + 'furnace_front.png',
   furnace_side: B + 'furnace_side.png',
+  furnace_top: B + 'furnace_top.png',
   obsidian: B + 'obsidian.png',
   stone_bricks: B + 'stone_bricks.png',
   ice: B + 'ice.png',

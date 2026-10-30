@@ -845,6 +845,8 @@ export class World {
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
   readonly water = new WaterSimulation(this);
+  canEdit?: (x: number, z: number) => boolean;
+  allowFluid?: (x: number, z: number, nx: number, nz: number) => boolean;
   /**
    * 2.10: wywoływane po każdej zmianie bloku w czasie gry (nie przy
    * generowaniu terenu ani przy odtwarzaniu zapisu). Multiplayer wysyła
@@ -1500,7 +1502,7 @@ export class World {
   }
 
   setBlock(x: number, y: number, z: number, id: number, notify = true) {
-    if (y < 0 || y >= CH) return;
+    if (y < 0 || y >= CH || (notify && this.canEdit && !this.canEdit(x, z))) return;
     const cx = Math.floor(x / CS), cz = Math.floor(z / CS);
     const c = this.getChunk(cx, cz);
     const lx = x - cx * CS, lz = z - cz * CS;
@@ -1550,6 +1552,12 @@ export class World {
    * ma właściwe bloki – bez tysiąca `setBlock` i przebudów siatki przy wejściu.
    * Chunki już wczytane aktualizujemy od razu.
    */
+  wakeWater() {
+    for (const c of this.chunks.values()) for (let y = 0; y <= c.maxY; y++) for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
+      if (isWater(c.data[idx(x, y, z)])) this.water.wake(c.cx * CS + x, y, c.cz * CS + z);
+    }
+  }
+
   seedMods(list: { x: number; y: number; z: number; id: number }[]) {
     for (const e of list) {
       if (!Number.isFinite(e.x) || !Number.isFinite(e.y) || !Number.isFinite(e.z) || !Number.isFinite(e.id)) continue;

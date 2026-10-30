@@ -2,6 +2,7 @@ import { B, isWater, waterHeight, waterLevel } from './blocks';
 import { CH, CS } from './constants';
 
 interface WaterWorld {
+  allowFluid?: (x: number, z: number, nx: number, nz: number) => boolean;
   peekBlock(x: number, y: number, z: number): number;
   hasChunk(cx: number, cz: number): boolean;
   setBlock(x: number, y: number, z: number, id: number, notify?: boolean): void;
@@ -60,6 +61,7 @@ export class WaterSimulation {
       else {
         let best = 8;
         for (const [dx, dz] of SIDES) {
+          if (this.world.allowFluid && !this.world.allowFluid(x, z, x + dx, z + dz)) continue;
           const id = this.world.peekBlock(x + dx, y, z + dz);
           if (!isWater(id) || fallsInto(this.world.peekBlock(x + dx, y - 1, z + dz))) continue;
           best = Math.min(best, waterLevel(id) + 1);

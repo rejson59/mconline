@@ -3057,16 +3057,16 @@ section('2.5: wielka naprawa sterowania');
   g3b.swingT = 1;
   g3b.body = { pos: new THREE.Vector3(), vel: new THREE.Vector3() };
   g3b.findMobTarget = () => ({ mob: wolfie, dist: 1.5 });
-  g3b.selectedStack = () => ({ id: I.RAW_PORK, count: 3 });
+  g3b.selectedStack = () => ({ id: I.BONE, count: 3 });
   g3b.attackCooldown = 0;
   let tryUseCalled = false;
   g3b.tryUse = () => { tryUseCalled = true; };
   g3b.touchTap(0.2, 0.2);
-  check('tapping a wild wolf with raw meat tames instead of hitting', tryUseCalled && wolfHits === 0);
+  check('tapping a wild wolf with a bone tames instead of hitting', tryUseCalled && wolfHits === 0);
   g3b.selectedStack = () => null;
   g3b.tryUse = () => {};
   g3b.touchTap(0.2, 0.2);
-  eq('without meat in hand the tap attacks the wolf', wolfHits, 1);
+  eq('without a bone in hand the tap attacks the wolf', wolfHits, 1);
 
   // (3c) strzała z łuku na dotyku leci w kierunku palca (touchAim)
   const g3c = Object.create(Game.prototype) as G;
@@ -3178,8 +3178,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.5.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Płynąca woda i czyste dłonie', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.6.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Działki i trwałe osiągnięcia', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -4282,8 +4282,8 @@ section('2.11: publiczny serwer – zegar, dane i integracja');
   const mp = readSource('src/components/MultiplayerScreen.tsx');
   const world = readSource('src/game/world.ts');
   check('serwer publiczny używa Supabase Realtime', /client\.channel\(PUBLIC_CHANNEL/.test(online));
-  check('zmiany bloków trafiają do tabeli', /from\(PUBLIC_TABLE\)\s*\n?\s*\.upsert/.test(online));
-  check('baza jest zabezpieczona RLS na poziomie zapytań', /upsert\(rows/.test(online));
+  check('zmiany bloków trafiają do chronionego RPC', online.includes("rpc('blockcraft_write_blocks'"));
+  check('bezpośredni zapis nie omija ochrony działek', readSource('supabase/migrations/202610300001_plots.sql').includes('revoke insert, update, delete on public.blockcraft_blocks from anon, authenticated'));
   check('nieudany zapis wraca do kolejki', /pending\.set\(key, edit\)/.test(online));
   check('wejście pobiera zmiany z bazy', /loadBlocks/.test(online));
   check('zmiany są dociągane po awarii transmisji', /catchUp/.test(online));
@@ -4318,6 +4318,12 @@ section('2.11: PublicServer – pobieranie, wysyłka i zapis (atrapa klienta)');
       },
     };
     const client = {
+      rpc(name: string, args: { p_world: string; p_edits: NetEdit[] }) {
+        if (name === 'blockcraft_plot') return Promise.resolve({ data: { owner: 'a'.repeat(64), plots: [] }, error: null });
+        log.push({ op: 'rpc-write', payload: args });
+        if (failNext) { failNext = false; return Promise.resolve({ error: { message: 'network down' }, data: null }); }
+        return Promise.resolve({ data: { accepted: args.p_edits.map((e, i) => ({ ...e, version: i + 1 })), rejected: [] }, error: null });
+      },
       from() {
         const q = {
           _order: null as null | string,
@@ -4382,17 +4388,17 @@ section('2.11: PublicServer – pobieranie, wysyłka i zapis (atrapa klienta)');
   srv.sendEdits([{ x: 10, y: 70, z: 10, id: 5, d: 'o' }]);
   eq('zmiana czeka na zapis', srv.pendingEdits, 1);
   const bc = fake.log.filter((l) => l.op === 'broadcast');
-  eq('zmiana leci też przez Realtime', bc.length, 1);
+  eq('niezatwierdzona zmiana nie jest rozsyłana jako wiarygodny blok', bc.length, 0);
 
   srv.sendEdits([{ x: 10, y: 70, z: 10, id: 7, d: 'o' }]);
   eq('ten sam blok nie dubluje wpisu', srv.pendingEdits, 1);
 
   await srv.flush();
-  const ups = fake.log.filter((l) => l.op === 'upsert');
-  eq('zapis poszedł jednym upsertem', ups.length, 1);
-  const payload = ups[0].payload as { x: number; block: number; world: string }[];
-  eq('w upsercie jest najnowszy blok', payload[0].block, 7);
-  eq('wiersz trafia do świata publicznego', payload[0].world, PUBLIC_WORLD_ID);
+  const ups = fake.log.filter((l) => l.op === 'rpc-write');
+  eq('zapis poszedł jednym chronionym RPC', ups.length, 1);
+  const payload = ups[0].payload as { p_edits: NetEdit[]; p_world: string };
+  eq('RPC zapisuje najnowszy blok', payload.p_edits[0].id, 7);
+  eq('wiersz trafia do świata publicznego', payload.p_world, PUBLIC_WORLD_ID);
   eq('kolejka zapisu wyczyszczona', srv.pendingEdits, 0);
 
   // Błąd sieci nie gubi budowli.
@@ -4682,8 +4688,8 @@ section('2.17: tekstury z paczki w całej grze');
     colors.add((blocks.data[i] << 16) | (blocks.data[i + 1] << 8) | blocks.data[i + 2]);
   }
   check('atlas bloków jest wielobarwny', colors.size > 800, `${colors.size} kolorów`);
-  eq('wszystkie 175 kafelków pochodzi z paczki', officialTileCount(), 175);
-  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 175 && OFFICIAL_TILES[174] === 174);
+  eq('wszystkie 176 kafelków pochodzi z paczki', officialTileCount(), 176);
+  check('oficjalne kafelki pokrywają cały atlas', OFFICIAL_TILES.length === 176 && OFFICIAL_TILES[175] === 175);
   check('kafelek spoza listy nie jest oficjalny', !isOfficialTile(999) && isOfficialTile(0));
   const cached = officialBlockAtlas();
   check('atlas bloków dekoduje się w grze', cached != null && cached.width === 256);
@@ -4691,7 +4697,7 @@ section('2.17: tekstury z paczki w całej grze');
   // --- podmiana kafelków w atlasie gry
   const fake = { data: new Uint8ClampedArray(256 * 256 * 4) };
   const copied = applyOfficialTiles(fake as unknown as ImageData);
-  eq('applyOfficialTiles podmienia 175 kafelków', copied, 175);
+  eq('applyOfficialTiles podmienia 176 kafelków', copied, 176);
   let nonZero = 0;
   for (let i = 0; i < fake.data.length; i += 4) if (fake.data[i + 3] > 0) nonZero++;
   check('po podmianie atlas ma niepuste piksele', nonZero > 155 * 16 * 16 * 0.5, `${nonZero} px`);
@@ -8287,6 +8293,121 @@ section('4.5.0: both first-person hands render after transparent water/clouds');
   main.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); o.material.dispose(); } });
   off.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); o.material.dispose(); } });
   water.geometry.dispose(); clouds.geometry.dispose(); water.material.dispose();
+}
+
+
+section('4.6: furnace texture, bone taming, persisted achievements and safe sprint');
+{
+  const { tileFor, T } = await import('../src/game/blocks');
+  const { isOfficialTile } = await import('../src/game/packArt');
+  for (const id of [B.FURNACE, B.FURNACE_ON]) {
+    eq(`furnace ${id} has its own top`, tileFor(id, 3), T.furnace_top);
+    eq(`furnace ${id} has its own bottom`, tileFor(id, 2), T.furnace_top);
+    eq(`furnace ${id} retains stone sides`, tileFor(id, 0), T.furnace_side);
+    eq(`furnace ${id} retains the appropriate front`, tileFor(id, 5), id === B.FURNACE ? T.furnace_front : T.furnace_lit);
+  }
+  check('furnace top is in the real texture atlas, before entity regions', isOfficialTile(T.furnace_top) && T.furnace_top < 176);
+  const inventory = new Inventory(); inventory.slots[0] = { id: I.BONE, count: 3 };
+  let wolf = new Mob('wolf', 4, 65, 4), saves = 0;
+  const g = Object.assign(Object.create(Game.prototype), { worldId: 'achievement-regression', inventory, mode: 'survival', ui: 'playing', selected: 0, keys: new Set(), unlocked: new Set(),
+    raycastTarget: () => null, findMobTarget: () => ({ mob: wolf, dist: 2 }), message() {}, emitHud() {}, save() { saves++; }, hunger: 20,
+  });
+  g.tryUseHeld();
+  check('a bone actually tames a wild wolf through the use action', wolf.tamed && wolf.health === wolf.maxHealth);
+  eq('taming consumes exactly one bone', inventory.slots[0]?.count, 2);
+  check('taming awards and immediately saves the wolf achievement', g.unlocked.has('wolf') && saves === 1);
+  g.tryUseHeld(); eq('already tamed wolves do not consume another bone', inventory.slots[0]?.count, 2);
+  wolf.dispose(); wolf = new Mob('wolf', 4, 65, 4); inventory.slots[0] = { id: I.RAW_PORK, count: 2 }; g.tryUseHeld();
+  check('raw meat no longer tames a wild wolf', !wolf.tamed && inventory.slots[0]?.count === 2);
+  inventory.slots[0] = { id: I.BONE, count: 2 }; inventory.offhand = { id: B.COBBLE, count: 12 }; g.mode = 'creative'; g.tryUse();
+  check('creative taming keeps the bone', wolf.tamed && inventory.slots[0]?.count === 2); wolf.dispose();
+  const p = sanitizeProfile({ pid: 'p1234567890abcdef123', x: 1, y: 65, z: 1, inv: [], armor: [], unlocked: ['wolf', 'wood', 'wolf', 'made-up', 123] })!;
+  eq('achievement input is validated and deduplicated', JSON.stringify(p.unlocked), '["wolf","wood"]');
+  const restored = sanitizeProfile(profileRow(p, 'public'))!;
+  eq('public profile JSON roundtrip keeps achievements', JSON.stringify(restored.unlocked), JSON.stringify(p.unlocked));
+  cacheProfile('achievement-test', restored);
+  eq('synchronous exit cache also keeps achievements', JSON.stringify(loadCachedProfile('achievement-test', p.pid)?.unlocked), JSON.stringify(p.unlocked));
+  eq('old profiles remain compatible', sanitizeProfile({ pid: p.pid, x: 0, y: 65, z: 0, inv: [] })?.unlocked?.length, 0);
+  g.unlocked.clear(); g.unlock('wood'); g.unlock('wood'); eq('repeated achievement does not resave or toast twice', saves, 2);
+  g.unlock('not-an-achievement'); check('unknown achievements are not persisted', !g.unlocked.has('not-an-achievement'));
+  const keyGame = Object.assign(Object.create(Game.prototype), { ui: 'playing', mode: 'survival', keys: new Set(), lastW: 0, lastSpace: 0, message() {} });
+  for (const code of ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyR']) for (const repeat of [false, true]) {
+    let prevented = false;
+    keyGame.onKeyDown({ code, ctrlKey: true, repeat, target: null, preventDefault() { prevented = true; } });
+    check(`movement event ${code} repeat=${repeat} cancels browser default`, prevented && keyGame.keys.has(code));
+  }
+  let prevented = false;
+  keyGame.onKeyDown({ code: 'KeyW', ctrlKey: true, repeat: false, target: { tagName: 'INPUT' }, preventDefault() { prevented = true; } });
+  check('typing shortcuts remain untouched', !prevented);
+  keyGame.ui = 'paused'; keyGame.onKeyDown({ code: 'KeyW', ctrlKey: true, repeat: false, target: null, preventDefault() { prevented = true; } });
+  check('paused browser shortcuts remain untouched', !prevented);
+  check('controls advertise a sprint without reserved Ctrl shortcuts', readSource('src/components/Menus.tsx').includes('W x2 lub R'));
+}
+
+section('4.6: skeleton bow draw, release, interruption and equipment disposal');
+{
+  const world = new World(4242, true), skeleton = new Mob('skeleton', 4.5, FLAT_H + 1, 4.5);
+  world.getChunk(0, 0);
+  const player = new THREE.Vector3(4.5, FLAT_H + 1, 13.5); let shots = 0;
+  const update = (dt: number, peaceful = false) => skeleton.update(dt, world, player, () => {}, () => { shots++; }, peaceful);
+  update(0.1);
+  check('skeleton starts a visible draw before firing', skeleton.bowDraw > 0 && shots === 0);
+  const bow = skeleton.group.getObjectByName('skeleton-bow')!;
+  check('bow is held by an arm, not floating beside the body', !!bow && skeleton.arms.includes(bow.parent!));
+  check('draw displays a nocked arrow', bow.getObjectByName('nocked-arrow')?.visible);
+  const first = skeleton.arms[1].rotation.y; update(0.2);
+  check('pulling changes the arm pose', skeleton.arms[1].rotation.y !== first);
+  for (let i = 0; i < 7; i++) update(0.1);
+  eq('draw completion releases exactly one projectile', shots, 1);
+  check('release hides the held arrow', !bow.getObjectByName('nocked-arrow')?.visible);
+  update(0.1); eq('cooldown does not release an extra projectile', shots, 1);
+  skeleton.attackCooldown = 0; update(0.1); update(0.1, true);
+  check('peaceful mode interrupts the drawn bow', skeleton.bowDraw === 0 && shots === 1);
+  skeleton.attackCooldown = 0; update(0.1);
+  world.setBlock(4, FLAT_H + 2, 8, B.STONE); update(0.1);
+  check('a blocked line of sight cancels the draw', skeleton.bowDraw === 0 && shots === 1);
+  let disposed = false; (bow.children[0] as THREE.Mesh).geometry.addEventListener('dispose', () => { disposed = true; }); skeleton.dispose();
+  check('bow equipment geometry is disposed with the skeleton', disposed);
+}
+
+section('4.6: plot permissions, negative coordinates, fluid borders and public trust');
+{
+  const { PlotAccess } = await import('../src/game/plots');
+  const a = 'a'.repeat(64), b = 'b'.repeat(64), access = new PlotAccess();
+  check('building fails closed until plot rights are loaded', !access.canEdit(0, 0, 'o'));
+  access.update(a, [{ cx: -1, cz: -1, owner: a, name: 'A' }, { cx: 0, cz: 0, owner: b, name: 'B' }]);
+  check('negative coordinates resolve the correct plot', access.at(-1, -1)?.owner === a && access.at(-16, -16)?.owner === a && !access.at(-17, -17));
+  check('owner can build on their plot', access.canEdit(-1, -1, 'o'));
+  check('foreign plots are protected', !access.canEdit(0, 0, 'o'));
+  check('wilderness and Nether remain buildable', access.canEdit(32, 32, 'o') && access.canEdit(0, 0, 'n'));
+  check('water can move within, but not across a protected boundary', access.canFlow(0, 0, 1, 0) && !access.canFlow(15, 0, 16, 0));
+  const revision = access.revision; access.update(a, [{ cx: 0, cz: 0, owner: b, name: 'B' }, { cx: -1, cz: -1, owner: a, name: 'A' }]);
+  eq('reordering the same plots does not wake all water again', access.revision, revision);
+  const world = new World(4242, true); world.canEdit = (x, z) => access.canEdit(x, z, 'o'); let published = 0;
+  world.onEdit = () => { published++; }; world.setBlock(2, 100, 2, B.STONE);
+  eq('central block guard prevents foreign edits before chunk generation', world.chunks.size, 0);
+  eq('denied local writes do not publish events', published, 0);
+  const g = Object.assign(Object.create(Game.prototype), { world, net: { public: true, canEdit: (x: number, z: number) => access.canEdit(x, z, 'o') }, message() {} });
+  g.breakBlock(2, 100, 2); g.openChest(2, 100, 2); g.openFurnace(2, 100, 2);
+  eq('protected mining and container opening stop before drops/loot', world.chunks.size, 0);
+  const client = { from() { throw new Error('network unavailable'); } };
+  const srv = new PublicServer({ name: 'Test', client: client as never }) as any;
+  let applied = 0; srv.onMessage = () => { applied++; };
+  srv.catchUp = async () => {}; srv.refreshPlots = async () => {};
+  srv.onPacket({ t: 'edits', from: 'spoofed-owner', list: [{ x: 2, y: 100, z: 2, id: B.AIR }] });
+  eq('public broadcast cannot forge a committed protected edit', applied, 0);
+  // A rejected optimistic edit is restored from SQL (not retried indefinitely).
+  const rpc = { rpc: async () => ({ data: { accepted: [], rejected: [{ x: 2, y: 100, z: 2, d: 'o', id: B.STONE }] }, error: null }) };
+  const rejected = new PublicServer({ name: 'Test', client: rpc as never }) as any;
+  rejected.refreshPlots = async () => {}; let rollback = 0;
+  rejected.onMessage = (m: any) => { rollback = m.list?.[0]?.id; };
+  rejected.sendEdits([{ x: 2, y: 100, z: 2, d: 'o', id: B.AIR }]); await rejected.flush();
+  check('SQL rejection restores the block and clears the queue', rollback === B.STONE && rejected.pendingEdits === 0);
+  const waterWorld = new World(4242, true); waterWorld.getChunk(0, 0); waterWorld.getChunk(1, 0);
+  waterWorld.allowFluid = (x, z, nx, nz) => access.canFlow(x, z, nx, nz);
+  waterWorld.setBlock(15, FLAT_H + 1, 8, B.WATER);
+  for (let i = 0; i < 100 && waterWorld.water.size; i++) waterWorld.water.tick(0.2);
+  eq('water simulation cannot invade another plot from outside', waterWorld.peekBlock(16, FLAT_H + 1, 8), B.AIR);
 }
 
 // =================================================================== report
