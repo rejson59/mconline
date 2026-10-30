@@ -275,6 +275,11 @@ export interface NetLike {
   ingest?(raw: string): void;
   setWorld(patch: Partial<WorldHandshake>): void;
   sendEdits(list: NetEdit[]): void;
+  canEdit?(x: number, z: number, d: 'o' | 'n'): boolean;
+  plotAt?(x: number, z: number): import('./plots').Plot | undefined;
+  canFlow?(x: number, z: number, nx: number, nz: number): boolean;
+  onPlotsChanged?: () => void;
+  plotCommand?(op: string, x: number, z: number): Promise<void>;
   sendPos(p: NetPos): void;
   publishDrop?(drop: SharedDrop, profile?: PlayerProfile): void;
   claimDrop?(uid: string, d: 'o' | 'n'): void;

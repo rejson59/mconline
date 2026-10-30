@@ -1,3 +1,5 @@
+import { PlotAccess, plotKey } from './plots';
+import { World } from './world';
 import { cleanDrop, type SharedDrop } from './sharedDrops';
 /**
  * BlockCraft 2.11 „Serwer publiczny” – jeden wspólny świat dla wszystkich.
@@ -12,7 +14,7 @@ import { cleanDrop, type SharedDrop } from './sharedDrops';
  * Podział odpowiedzialności:
  *  • **Postgres** – trwały zapis zmian bloków (jeden wiersz na współrzędną,
  *    upsert nadpisuje starszy wpis),
- *  • **Realtime broadcast** – natychmiastowe zmiany, pozycje i czat,
+ *  • **Realtime broadcast** – sygnały o zatwierdzonych zmianach, pozycje i czat,
  *  • **Presence** – lista graczy i ich kolory.
  *
  * Czas i pogoda nie potrzebują serwera: obie wartości wynikają z zegara
@@ -72,7 +74,7 @@ export const PUBLIC_POS_HZ = 4;
 /** Co ile ms zapisujemy zmiany bloków do bazy. */
 export const SAVE_EVERY_MS = 2500;
 /** Co ile ms dociągamy zmiany, które mogły zginąć w transmisji. */
-export const CATCHUP_EVERY_MS = 45_000;
+export const CATCHUP_EVERY_MS = 3000;
 
 export interface BlockRow {
   x: number;
@@ -80,6 +82,7 @@ export interface BlockRow {
   z: number;
   block: number;
   dim: string | null;
+  version?: number;
 }
 
 /** Wiersz z bazy → zmiana bloku dla silnika. */
@@ -166,7 +169,13 @@ export class PublicServer implements NetLike {
   private pending = new Map<string, NetEdit>();
   private lastFlush = 0;
   private lastCatchup = 0;
-  private lastSyncIso = new Date().toISOString();
+  private lastRevision = 0;
+  readonly plots = new PlotAccess();
+  onPlotsChanged?: () => void;
+  private plotSecret = '';
+  private refreshingPlots = false;
+  private versions = new Map<string, number>();
+  private inFlight = new Set<string>();
   private lastProfile: PlayerProfile | null = null;
   private lastProfileSave = 0;
   private pendingProfile: PlayerProfile | null = null;
@@ -236,6 +245,7 @@ export class PublicServer implements NetLike {
     this.setStatus('connecting');
     this.onProgress?.('Łączę z serwerem publicznym…');
     try {
+      await this.refreshPlots();
       const [edits, profile] = await Promise.all([this.loadBlocks(), this.loadProfile()]);
       if (this.closed) return;
       this.world = { ...this.baseWorld(), edits, profile: profile ?? undefined };
@@ -256,6 +266,11 @@ export class PublicServer implements NetLike {
 
   private async loadBlocks(): Promise<NetEdit[]> {
     const out: NetEdit[] = [];
+    // Capture a server revision BEFORE paging. Catch-up includes everything
+    // committed after that point, even an update to an earlier page.
+    const head = await this.client.from(PUBLIC_TABLE).select('version').eq('world', this.worldId).order('version', { ascending: false }).limit(1);
+    if (head.error) throw new Error(head.error.message);
+    this.lastRevision = Number(head.data?.[0]?.version ?? 0);
     const PAGE = 1000;
     for (let from = 0; out.length < MAX_PUBLIC_EDITS; from += PAGE) {
       const to = Math.min(from + PAGE - 1, MAX_PUBLIC_EDITS - 1);
@@ -284,7 +299,10 @@ export class PublicServer implements NetLike {
       const remote = data?.length ? sanitizeProfile(data[0]) : null;
       if (data?.length && (!remote || remote.pid !== this.pid)) throw new Error('Nieprawidłowy zapis gracza');
       const newest = cached && (!remote || cached.updated >= remote.updated) ? cached : remote;
-      if (newest) cacheProfile(this.worldId, newest);
+      if (newest) {
+        newest.unlocked = [...new Set([...(cached?.unlocked ?? []), ...(remote?.unlocked ?? [])])];
+        cacheProfile(this.worldId, newest);
+      }
       return newest;
     } catch (error) {
       if (cached) return cached;
@@ -358,7 +376,7 @@ export class PublicServer implements NetLike {
           void channel.track({ id: this.id, name: this.name, hue: this.hue, skin: this.skin });
           // Pierwsza obsada od razu – na pełne `presence sync` nie ma co czekać.
           this.syncRoster();
-          this.lastSyncIso = new Date().toISOString();
+
           this.lastCatchup = Date.now();
           this.setStatus('connected');
           this.onProgress?.('Połączono z serwerem publicznym.');
@@ -395,7 +413,10 @@ export class PublicServer implements NetLike {
     if (m.to && m.to !== '*' && m.to !== this.id) return;
     switch (m.t) {
       case 'edits':
-        if (Array.isArray(m.list)) this.onMessage?.(m);
+        // Untrusted broadcasts are hints only; protected edits must come
+        // from committed SQL rows, never from a claimed nickname or pid.
+        void this.catchUp();
+        void this.refreshPlots().catch(() => {});
         break;
       case 'pvp':
         this.onMessage?.(m);
@@ -521,8 +542,43 @@ export class PublicServer implements NetLike {
       this.pending.set(`${edit.d}:${edit.x},${edit.y},${edit.z}`, edit);
     }
     if (!clean.length) return;
-    this.send({ t: 'edits', from: this.id, to: '*', list: clean });
     if (this.pending.size >= 300) void this.flush();
+  }
+
+  private secret() { return this.plotSecret ||= plotKey(); }
+  private async refreshPlots() {
+    if (this.refreshingPlots) return;
+    this.refreshingPlots = true;
+    try {
+      const { data, error } = await this.client.rpc('blockcraft_plot', { p_world: this.worldId, p_key: this.secret(), p_op: 'list' });
+      if (error) throw new Error(error.message);
+      this.updatePlots(data);
+    } finally { this.refreshingPlots = false; }
+  }
+  private updatePlots(data: { owner: string; plots: import('./plots').Plot[] }) {
+    const previous = this.plots.revision;
+    this.plots.update(data.owner, data.plots);
+    if (previous !== this.plots.revision) this.onPlotsChanged?.();
+  }
+  canEdit(x: number, z: number, d: 'o' | 'n') { return this.plots.canEdit(x, z, d); }
+  plotAt(x: number, z: number) { return this.plots.at(x, z); }
+  canFlow(x: number, z: number, nx: number, nz: number) { return this.plots.canFlow(x, z, nx, nz); }
+  async plotCommand(op: string, x: number, z: number) {
+    try {
+      await this.flush();
+      if (this.pending.size || this.flushing) throw new Error('Poczekaj na zapis zmian świata.');
+      const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+      const action = op === 'zajmij' ? 'claim' : op === 'zwolnij' ? 'release' : 'list';
+      const { data, error } = await this.client.rpc('blockcraft_plot', { p_world: this.worldId, p_key: this.secret(), p_op: action, p_cx: cx, p_cz: cz, p_name: this.name });
+      if (error) throw new Error(error.message);
+      this.updatePlots(data);
+      if (action !== 'list') this.send({ t: 'edits', from: this.id, to: '*', list: [] });
+      const plot = this.plots.at(x, z);
+      const text = op === 'lista' ? `Twoje działki (${this.plots.own().length}/4): ${this.plots.own().map(p => `[${p.cx * 16}, ${p.cz * 16}]`).join(', ') || 'brak'}`
+        : action === 'release' ? 'Zwolniono działkę. Budowle pozostają.'
+        : plot ? `Działka ${plot.name}: X ${cx * 16}…${cx * 16 + 15}, Z ${cz * 16}…${cz * 16 + 15}, Y 0…255. ${plot.owner === this.plots.owner ? 'Twoja.' : 'Chroniona.'}` : 'Wolny teren. /dzialka zajmij — 16×16, maks. 4; /dzialka lista; /dzialka zwolnij.';
+      this.onChat?.('Działki', text);
+    } catch (e) { this.onChat?.('Działki', e instanceof Error ? e.message : 'Operacja nie powiodła się.'); }
   }
 
   sendPos(p: NetPos) {
@@ -571,6 +627,7 @@ export class PublicServer implements NetLike {
     if (this.status === 'connected' && now - this.lastCatchup >= CATCHUP_EVERY_MS) {
       this.lastCatchup = now;
       void this.catchUp();
+      void this.refreshPlots().catch(() => {});
     }
   }
 
@@ -581,19 +638,26 @@ export class PublicServer implements NetLike {
     const batch = [...this.pending.entries()].slice(0, 300);
     for (const [key] of batch) this.pending.delete(key);
     try {
-      const rows = batch.map(([, e]) => ({
-        world: this.worldId,
-        dim: e.d ?? 'o',
-        x: e.x,
-        y: e.y,
-        z: e.z,
-        block: e.id,
-        updated_at: new Date().toISOString(),
-      }));
-      const { error } = await this.client
-        .from(PUBLIC_TABLE)
-        .upsert(rows, { onConflict: 'world,dim,x,y,z' });
+      for (const [key] of batch) this.inFlight.add(key);
+      const { data, error } = await this.client.rpc('blockcraft_write_blocks', {
+        p_world: this.worldId, p_key: this.secret(), p_edits: batch.map(([, e]) => e),
+      });
       if (error) throw new Error(error.message);
+      if (!data || !Array.isArray(data.accepted) || !Array.isArray(data.rejected)) throw new Error('Nieprawidłowe potwierdzenie zapisu.');
+      for (const e of data.accepted) this.versions.set(`${e.d}:${e.x},${e.y},${e.z}`, Number(e.version));
+      if (data.rejected.length) {
+        const bases = new Map<string, World>();
+        const list = data.rejected.map((e: NetEdit & { id: number | null }) => {
+          if (e.id !== null) return e as NetEdit;
+          const d = e.d ?? 'o'; let base = bases.get(d);
+          if (!base) { base = new World(PUBLIC_SEED, false, d === 'n'); bases.set(d, base); }
+          return { ...e, id: base.getBlock(e.x, e.y, e.z) };
+        });
+        this.onMessage?.({ t: 'edits', from: 'server', to: this.id, list });
+        this.onChat?.('Działki', 'Serwer odrzucił zmianę chronionego terenu i przywrócił jego bloki.');
+        await this.refreshPlots().catch(() => {});
+      }
+      if (data.accepted.length) this.send({ t: 'edits', from: this.id, to: '*', list: [] });
     } catch (e) {
       // Nie gubimy budowli: zmiany wracają do kolejki i spróbujemy za chwilę.
       for (const [key, edit] of batch) if (!this.pending.has(key)) this.pending.set(key, edit);
@@ -601,6 +665,7 @@ export class PublicServer implements NetLike {
       this.onProgress?.('Nie udało się zapisać zmian, ponawiam…');
       if (!this.everConnected) this.error = friendlyError(e instanceof Error ? e.message : '');
     } finally {
+      for (const [key] of batch) this.inFlight.delete(key);
       this.flushing = false;
     }
   }
@@ -609,18 +674,22 @@ export class PublicServer implements NetLike {
   private async catchUp(): Promise<void> {
     if (this.catchingUp || this.closed) return;
     this.catchingUp = true;
-    const since = this.lastSyncIso;
-    this.lastSyncIso = new Date().toISOString();
+    const since = this.lastRevision;
     try {
       const { data, error } = await this.client
         .from(PUBLIC_TABLE)
-        .select('x,y,z,block,dim')
+        .select('x,y,z,block,dim,version')
         .eq('world', this.worldId)
-        .gt('updated_at', since)
-        .order('id', { ascending: true })
+        .gt('version', since)
+        .order('version', { ascending: true })
         .limit(5000);
       if (error) return;
-      const list = ((data ?? []) as BlockRow[]).map(rowToEdit);
+      const rows = (data ?? []) as BlockRow[];
+      const list = rows.filter(row => {
+        const key = `${row.dim ?? 'o'}:${row.x},${row.y},${row.z}`;
+        return !this.pending.has(key) && !this.inFlight.has(key) && Number(row.version) > (this.versions.get(key) ?? 0);
+      }).map(rowToEdit);
+      if (rows.length) this.lastRevision = Math.max(this.lastRevision, ...rows.map(r => Number(r.version) || 0));
       if (list.length) this.onMessage?.({ t: 'edits', from: 'server', to: '*', list });
     } catch {
       /* następna próba za CATCHUP_EVERY_MS */

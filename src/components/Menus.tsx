@@ -147,7 +147,7 @@ export function Controls() {
     ['Spacja', 'Skok / pływanie w górę'],
     ['Spacja x2', 'Latanie (tryb kreatywny)'],
     ['Shift', 'Skradanie / lot w dół (lewy lub prawy)'],
-    ['W x2 lub Ctrl', 'Sprint'],
+    ['W x2 lub R', 'Sprint bez skrótów przeglądarki'],
     ['LPM (przytrzymaj)', 'Kopanie · atak mobów i graczy (PvP) z cooldownem'],
     ['PPM', 'Stawianie bloku / użycie stołu'],
     ['ŚPM', 'Wybierz blok'],

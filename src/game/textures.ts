@@ -778,6 +778,7 @@ export function buildAtlas(): AtlasResult {
   // Furnace
   { const r = R(36); noiseFill(T.furnace_side, [120, 120, 120], 0.15, r);
     for (let i = 0; i < 16; i++) { setPx(T.furnace_side, i, 0, 90, 90, 90); setPx(T.furnace_side, i, 15, 90, 90, 90); } }
+  { copyTile(T.furnace_side, T.furnace_top); }
   { copyTile(T.furnace_side, T.furnace_front);
     for (let y = 8; y < 14; y++) for (let x = 4; x < 12; x++) setPx(T.furnace_front, x, y, 30, 25, 25);
     for (let x = 4; x < 12; x++) setPx(T.furnace_front, x, 13, 200, 90, 30);

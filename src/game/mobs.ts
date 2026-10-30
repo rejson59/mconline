@@ -120,6 +120,12 @@ export class Mob {
   private headBaseY = 0;
   /** Tamed wolves follow the player and fight hostiles for them. */
   tamed = false;
+  bowDraw = 0;
+  private bowRecoil = 0;
+  private bowPitch = 0;
+  private bowRig: THREE.Group | null = null;
+  private bowString: THREE.Mesh[] = [];
+  private nockedArrow: THREE.Mesh | null = null;
   /** Grabież (Looting): extra drops rolled when this mob's loot is collected. */
   bonusLoot = 0;
   /** True while a spider crawls up a wall (drives the leg animation). */
@@ -244,6 +250,7 @@ export class Mob {
     this.profession = type === 'villager' ? professionFor(profession) : 0;
     if (type === 'villager') this.trade = createVillagerState(this.profession, 0);
     this.build();
+    if (type === 'skeleton') this.installBow();
   }
 
   /** Marks a wild wolf as tamed (friendly coat, full health). */
@@ -273,6 +280,23 @@ export class Mob {
       mesh.userData.mobTint = next;
     });
     return true;
+  }
+
+  /** Held equipment is shared by the textured and fallback skeleton models. */
+  private installBow() {
+    if (!this.arms[0]) return;
+    const rig = this.bowRig = new THREE.Group(); rig.name = 'skeleton-bow';
+    rig.position.set(0, -0.55, 0);
+    this.arms[0].add(rig);
+    const mesh = (w: number, h: number, d: number, color: number) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
+    for (const sign of [-1, 1]) {
+      const limb = mesh(0.05, 0.34, 0.05, 0x7a5230);
+      limb.position.set(0.07, sign * 0.15, 0); limb.rotation.z = sign * 0.35; rig.add(limb);
+      const string = mesh(0.012, 0.3, 0.012, 0xdedad2);
+      string.position.y = sign * 0.15; rig.add(string); this.bowString.push(string);
+    }
+    const arrow = this.nockedArrow = mesh(0.025, 0.025, 0.65, 0xc6ac75);
+    arrow.name = 'nocked-arrow'; arrow.visible = false; rig.add(arrow);
   }
 
   /** Czy mob dostał model 1:1 z paczki (a nie stary, kolorowy). */
@@ -592,17 +616,6 @@ export class Mob {
       const a2 = this.addLeg(0.3, 1.36, 0.1, 0.16, 0.68, 0.16, bone, this.arms);
       a1.rotation.x = -1.15;
       a2.rotation.x = -1.15;
-      // bow held in front
-      const bow1 = box(0.05, 0.62, 0.05, 0x7a5230, sharedMats);
-      bow1.position.set(0.34, 1.0, 0.3);
-      bow1.rotation.z = 0.35;
-      const bow2 = box(0.05, 0.62, 0.05, 0x7a5230, sharedMats);
-      bow2.position.set(0.5, 1.0, 0.3);
-      bow2.rotation.z = -0.35;
-      const string = box(0.03, 0.6, 0.03, 0xdedad2, sharedMats);
-      string.position.set(0.42, 1.0, 0.3);
-      g.add(bow1, bow2, string);
-      this.meshes.push(bow1, bow2, string);
     } else if (this.type === 'wolf') {
       const fur = 0x7a8089;
       const furDk = 0x5d626b;
@@ -1185,6 +1198,8 @@ export class Mob {
       this.group.rotation.z = Math.min(Math.PI / 2, this.deathTime * 6);
       return;
     }
+    this.bowRecoil = Math.max(0, this.bowRecoil - dt);
+    let drawing = false;
     this.attackCooldown -= dt;
     this.soundTimer -= dt;
 
@@ -1225,8 +1240,21 @@ export class Mob {
         this.walking = dist > (this.type === 'ghast' ? 18 : 12) || tooClose;
         if (tooClose) this.yaw = Math.atan2(-dx, -dz);
         if (dist < (this.type === 'ghast' ? 28 : 16) && this.attackCooldown <= 0 && this.hasLineOfSight(world, player.x, player.y + 0.9, player.z)) {
-          this.attackCooldown = this.type === 'ghast' ? 3 + Math.random() * 1.5 : 2 + Math.random() * 1.2;
-          onShoot(this);
+          if (this.type === 'skeleton') {
+            drawing = true;
+            this.walking = false;
+            this.yaw = Math.atan2(dx, dz);
+            this.bowPitch = Math.atan2(player.y + 0.9 - (b.pos.y + 1.45), Math.max(0.1, dist));
+            this.bowDraw = Math.min(1, this.bowDraw + dt / 0.8);
+            if (this.bowDraw >= 1) {
+              this.bowDraw = 0; this.bowRecoil = 0.22;
+              this.attackCooldown = 2 + Math.random() * 1.2;
+              onShoot(this);
+            }
+          } else {
+            this.attackCooldown = 3 + Math.random() * 1.5;
+            onShoot(this);
+          }
         }
       } else {
         this.walking = this.type === 'creeper' ? dist > 2.1 : dist > 0.9;
@@ -1293,6 +1321,7 @@ export class Mob {
       }
     }
 
+    if (!drawing) this.bowDraw = 0;
     this.moveAndAnimate(dt, world, player, this.walking && this.hurtTime < 0.3 ? speed : 0);
   }
 
@@ -1333,6 +1362,21 @@ export class Mob {
         if (this.type === 'zombie') {
           this.pose(this.arms[0], Math.sin(this.walkPhase * 0.5) * 0.08, 0, 0);
           this.pose(this.arms[1], -Math.sin(this.walkPhase * 0.5) * 0.08, 0, 0);
+        } else if (this.type === 'skeleton' && this.bowRig) {
+          const sign = this.hasVanillaModel() ? -1 : 1;
+          const aim = this.bowDraw > 0 || this.bowRecoil > 0 ? 1 : 0;
+          const recoil = this.bowRecoil / 0.22;
+          this.pose(this.arms[0], -sign * (1.4 + this.bowPitch) * aim + sign * recoil * 0.18, 0, -0.12 * aim);
+          this.pose(this.arms[1], -sign * (1.35 + this.bowPitch) * aim, this.bowDraw * 0.45, 0.18 * aim);
+          this.bowRig.rotation.x = sign * 1.4 * aim;
+          const pull = this.bowDraw * 0.18;
+          for (let i = 0; i < this.bowString.length; i++) {
+            const string = this.bowString[i];
+            string.position.z = -sign * pull / 2;
+            string.rotation.x = (i ? -1 : 1) * sign * Math.atan2(pull, 0.3);
+            string.scale.y = Math.hypot(0.3, pull) / 0.3;
+          }
+          if (this.nockedArrow) { this.nockedArrow.visible = this.bowDraw > 0; this.nockedArrow.position.z = sign * (0.2 - pull); }
         } else {
           const armSwing = swing * 0.55;
           this.pose(this.arms[0], -armSwing, 0, 0);

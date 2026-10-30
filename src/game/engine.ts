@@ -597,7 +597,7 @@ function makeCanvasTex(size: number, draw: (ctx: CanvasRenderingContext2D) => vo
 
 const FACING = ['Północ (-Z)', 'Zachód (-X)', 'Południe (+Z)', 'Wschód (+X)'];
 
-const USE_ITEMS: ReadonlySet<number> = new Set([I.BUCKET, I.WATER_BUCKET, I.LAVA_BUCKET, I.BOTTLE, I.FLINT_STEEL, I.SEEDS, I.BOW, I.FISHING_ROD, I.SPYGLASS, I.ENDER_PEARL]);
+const USE_ITEMS: ReadonlySet<number> = new Set([I.BONE, I.BUCKET, I.WATER_BUCKET, I.LAVA_BUCKET, I.BOTTLE, I.FLINT_STEEL, I.SEEDS, I.BOW, I.FISHING_ROD, I.SPYGLASS, I.ENDER_PEARL]);
 // Stateful ranged/zoom actions use the main hand; F always transfers them.
 const MAIN_HAND_USE_ITEMS: ReadonlySet<number> = new Set([I.BOW, I.FISHING_ROD, I.SPYGLASS]);
 
@@ -1310,6 +1310,11 @@ export class Game {
 
   private bindNet(net: NetLike) {
     this.net = net;
+    if (net.public) for (const [world, dim] of [[this.homeWorld, 'o'], [this.netherWorld, 'n']] as const) {
+      world.canEdit = (x, z) => this.netApplying || !net.canEdit || net.canEdit(x, z, dim);
+      if (dim === 'o') world.allowFluid = (x, z, nx, nz) => !net.canFlow || net.canFlow(x, z, nx, nz);
+    }
+    if (net.public) net.onPlotsChanged = () => this.homeWorld.wakeWater();
     this.netName = net.name;
     this.netSkin = loadSkinId();
     net.name = this.netName;
@@ -1448,6 +1453,7 @@ export class Game {
     if (Array.isArray(p.armor)) for (let i = 0; i < this.armor.length; i++) this.armor[i] = p.armor[i] ?? null;
     this.inventory.offhand = cleanStacks([p.offhand], 1)[0];
     this.pickupReceipts = new Set(p.pickupReceipts ?? []);
+    for (const id of p.unlocked ?? []) if (achievementById(id)) this.unlocked.add(id);
     this.inventory.cursor = p.cursor ?? null;
     this.inventory.grid = p.grid?.slice() ?? new Array(9).fill(null);
     this.enchantItem = p.enchantItem ?? null;
@@ -1513,6 +1519,7 @@ export class Game {
       enchantItem: this.enchantItem ? structuredClone(this.enchantItem) : null,
       offhand: this.inventory.offhand ? structuredClone(this.inventory.offhand) : null,
       pickupReceipts: [...(this.pickupReceipts ?? [])].slice(-10000),
+      unlocked: [...(this.unlocked ?? [])],
       inv: this.inventory.slots.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
       armor: this.armor.map((st) => (st ? { ...st, ench: st.ench ? { ...st.ench } : undefined } : null)),
     };
@@ -2378,7 +2385,7 @@ export class Game {
     }
     if (mob && dist < blockDist && mob.type === 'villager' && !mob.dead) {
       this.openTrade(mob);
-    } else if (mob && dist < blockDist && mob.type === 'wolf' && !mob.tamed && !mob.dead && (held?.id === I.RAW_PORK || held?.id === I.RAW_BEEF || held?.id === I.RAW_CHICKEN)) {
+    } else if (mob && dist < blockDist && mob.type === 'wolf' && !mob.tamed && !mob.dead && held?.id === I.BONE) {
       this.placeCooldown = 0;
       this.tryUse();
     } else if (mob && dist < blockDist && this.attackCooldown <= 0) {
@@ -2575,7 +2582,7 @@ export class Game {
   }
 
   /** Klawisze ruchu – powtórzenia (e.repeat) mają je po prostu utrzymywać. */
-  static readonly HOLD_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight']);
+  static readonly HOLD_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight']);
 
   /**
    * 2.32: zapisuje sygnał sprzętu i ewentualnie przełącza tryb sterowania.
@@ -2707,6 +2714,9 @@ export class Game {
     // do rozglądania się myszą. Wcześniej całe sterowanie „zamierało”,
     // dopóki gracz nie kliknął ponownie w ekran.
     if (this.ui !== 'playing') return;
+    // Prevent browser shortcuts before the repeat branch too (Ctrl+W closes
+    // tabs, Ctrl+S saves the page). Do not intercept typing or menu shortcuts.
+    if (Game.HOLD_KEYS.has(e.code) || (e.ctrlKey && ['KeyQ', 'KeyE', 'KeyF'].includes(e.code))) e.preventDefault();
     if (e.repeat) {
       // Przytrzymane klawisze pozostają wciśnięte, ale akcje jednorazowe
       // (E, Q, J…) nie mogą odpalać się wielokrotnie – wcześniej trzymanie
@@ -2714,6 +2724,7 @@ export class Game {
       if (Game.HOLD_KEYS.has(e.code)) this.keys.add(e.code);
       return;
     }
+    if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.message('Sprint: R lub dwa razy W. Ctrl+W bywa zarezerwowane przez przeglądarkę.');
     if (e.code === 'F3') { e.preventDefault(); this.debug = !this.debug; this.emitHud(); return; }
     if (e.code === 'KeyM') { this.showMinimap = !this.showMinimap; this.emitHud(); return; }
     if (e.code === 'KeyJ') { e.preventDefault(); this.setUI('journal'); return; }
@@ -2967,6 +2978,7 @@ export class Game {
   }
 
   openFurnace(x: number, y: number, z: number) {
+    if (!this.canModify(x, z)) { this.message('Ten pojemnik jest na chronionej działce.'); return; }
     const key = this.fKey(x, y, z);
     if (!this.furnaces.has(key)) {
       const f = emptyFurnace(x, y, z);
@@ -2978,7 +2990,7 @@ export class Game {
   }
 
   currentFurnace(): FurnaceState | null {
-    if (!this.furnacePos) return null;
+    if (!this.furnacePos || !this.canModify(this.furnacePos.x, this.furnacePos.z)) return null;
     return this.furnaces.get(this.fKey(this.furnacePos.x, this.furnacePos.y, this.furnacePos.z)) ?? null;
   }
 
@@ -3042,6 +3054,7 @@ export class Game {
   }
 
   openChest(x: number, y: number, z: number) {
+    if (!this.canModify(x, z)) { this.message('Ten pojemnik jest na chronionej działce.'); return; }
     const key = this.cKey(x, y, z);
     let chest = this.chests.get(key);
     if (!chest) {
@@ -3064,7 +3077,7 @@ export class Game {
   }
 
   currentChest(): ChestState | null {
-    if (!this.chestPos) return null;
+    if (!this.chestPos || !this.canModify(this.chestPos.x, this.chestPos.z)) return null;
     return this.chests.get(this.cKey(this.chestPos.x, this.chestPos.y, this.chestPos.z)) ?? null;
   }
 
@@ -3537,12 +3550,15 @@ export class Game {
 
   private unlock(id: string) {
     if (this.unlocked.has(id)) return;
-    this.unlocked.add(id);
     const a = achievementById(id);
     if (!a) return;
+    this.unlocked.add(id);
     this.toast = { title: a.title, text: a.text, at: performance.now() };
     this.message(`Osiągnięcie: ${a.title}`);
     this.emitHud();
+    // Synchronous public fallback plus queued cloud save; offline progress is
+    // saved immediately rather than waiting for the 30-second autosave.
+    if (this.worldId) this.save();
   }
 
   private notePickup(id: number) {
@@ -4357,6 +4373,14 @@ export class Game {
     }
     const [cmd, ...args] = txt.slice(1).split(/\s+/);
     switch (cmd.toLowerCase()) {
+      case 'dzialka': case 'działka': case 'plot': {
+        if (!this.net?.public || !this.net.plotCommand) { this.message('Działki są dostępne na serwerze publicznym.'); return; }
+        if (this.isInNether) { this.message('Działki są dostępne w świecie głównym.'); return; }
+        const op = args[0]?.toLowerCase() ?? 'info';
+        if (!['info', 'lista', 'zajmij', 'zwolnij'].includes(op)) { this.message('/dzialka info|lista|zajmij|zwolnij'); return; }
+        this.flushNetEdits();
+        void this.net.plotCommand(op, this.body.pos.x, this.body.pos.z); return;
+      }
       case 'help': {
         // 2.9: pomoc pochodzi z tego samego katalogu, co lista w czacie.
         const wanted = commandByName(args[0] || '');
@@ -4658,7 +4682,7 @@ export class Game {
         anvils: this.anvils ? [...this.anvils.values()] : [],
         brewings: this.brewings ? [...this.brewings.values()] : [],
         potionsDrunk: this.potionsDrunk ? [...this.potionsDrunk] : [],
-        unlocked: [...this.unlocked],
+        unlocked: [...(this.unlocked ?? [])],
         weather: this.weather,
         xp: this.xp.total,
         trades: this.trades,
@@ -5582,11 +5606,16 @@ export class Game {
     finally { this.usingOffhand = false; }
   }
 
+  private canModify(x: number, z: number): boolean {
+    return !this.net?.public || !this.net.canEdit || this.net.canEdit(x, z, this.isInNether ? 'n' : 'o');
+  }
+
   private tryUseHeld() {
     const held = this.selectedStack();
     // Only container use targets fluids; ordinary mining/placing ignores them.
     const t = this.raycastTarget(held?.id === I.BUCKET ? 'sources' : held?.id === I.BOTTLE);
     this.placeCooldown = 0.22;
+    if (t && (!this.canModify(t.x, t.z) || !this.canModify(t.x + t.nx, t.z + t.nz))) { this.message('Ten teren jest chroniony działką.'); return; }
     const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     // Mieszkaniec ma pierwszeństwo – PPM otwiera okno handlu.
     const vt = this.findMobTarget(4.5);
@@ -5653,15 +5682,15 @@ export class Game {
       }
     }
     if (t && t.id === B.CAMPFIRE && this.cookOnCampfire(s)) return;
-    // Taming: right-click a wild wolf while holding raw meat.
-    if (s.id === I.RAW_PORK || s.id === I.RAW_BEEF || s.id === I.RAW_CHICKEN) {
+    // Taming uses bones, not food. Target selection also enforces reach/occlusion.
+    if (s.id === I.BONE) {
       const wt = this.findMobTarget(4.5);
-      if (wt.mob && wt.mob.type === 'wolf' && !wt.mob.tamed) {
+      if (wt.mob && wt.mob.type === 'wolf' && !wt.mob.tamed && !wt.mob.dead) {
         if (this.mode === 'survival') this.consumeSelected();
         wt.mob.tame();
         Sfx.playEat();
         Sfx.playPop();
-        this.message('Wilk przyjął mięso i od tej pory jest posłuszny.');
+        this.message('Wilk przyjął kość i od tej pory jest posłuszny.');
         this.unlock('wolf');
         this.swingT = 0;
         return;
@@ -6024,6 +6053,7 @@ export class Game {
   }
 
   breakBlock(x: number, y: number, z: number, silent = false) {
+    if (!this.canModify(x, z)) return;
     const id = this.world.getBlock(x, y, z);
     if (id === B.AIR || BLOCKS[id].hardness < 0) return;
     const def = BLOCKS[id];
@@ -6095,6 +6125,7 @@ export class Game {
   }
 
   igniteTNT(x: number, y: number, z: number, fuse: number, owner: Mob | 'player' | null = null) {
+    if (!this.canModify(x, z)) return;
     this.world.setBlock(x, y, z, B.AIR);
     const mesh = new THREE.Mesh(this.tntGeo, new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true }));
     mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
@@ -6124,6 +6155,7 @@ export class Game {
           const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
           if (d > power * (0.7 + Math.random() * 0.35)) continue;
           const x = Math.floor(cx + dx), y = Math.floor(cy + dy), z = Math.floor(cz + dz);
+          if (this.net?.public && !this.isInNether && this.net.plotAt?.(x, z)) continue;
           const id = this.world.getBlock(x, y, z);
           if (id === B.AIR || id === B.BEDROCK || id === B.OBSIDIAN || isWater(id) || id === B.LAVA) continue;
           if (id === B.TNT) { this.igniteTNT(x, y, z, 0.3 + Math.random() * 0.6, source); continue; }
@@ -6443,7 +6475,7 @@ export class Game {
     const forward = fz < 0;
     // 2.5: sprint działa też na prawym Ctrl, skradanie na prawym Shifcie
     // (wcześniej tylko lewe modyfikatory – niewygodne na niektórych klawiaturach).
-    if (playing && (k.has('ControlLeft') || k.has('ControlRight')) && forward) this.sprinting = true;
+    if (playing && (k.has('KeyR') || k.has('ControlLeft') || k.has('ControlRight')) && forward) this.sprinting = true;
     if (!forward || (b.hitWall && !this.flying)) this.sprinting = false;
     const sneakHeld = k.has('ShiftLeft') || k.has('ShiftRight');
     const sneaking = playing && sneakHeld && !this.flying;

@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.5.0';
-export const GAME_RELEASE_NAME = 'Płynąca woda i czyste dłonie';
+export const GAME_VERSION = '4.6.0';
+export const GAME_RELEASE_NAME = 'Działki i trwałe osiągnięcia';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,10 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: 'Działki na serwerze publicznym', text: '/dzialka zajmij chroni teren 16×16 na pełną wysokość. Maksymalnie cztery działki na klucz przeglądarki. /dzialka info, lista i zwolnij. Nie można przejąć cudzej budowli; klucz właściciela pozostaje prywatny.' },
+  { title: 'Osiągnięcia zostają po powrocie', text: 'Publiczny profil i lokalna kopia zapisują odblokowane osiągnięcia. Nowe osiągnięcie zapisuje się od razu, a zapis z innej karty nie kasuje wcześniejszych odznak.' },
+  { title: 'Kości dla wilków, łuki dla szkieletów', text: 'PPM z kością oswaja dzikiego wilka; mięso nie zastępuje kości. Szkielet trzyma łuk, napina cięciwę, pokazuje strzałę i zwalnia ją po przygotowaniu. Zasłonięcie celu przerywa strzał.' },
+  { title: 'Sprint bez Ctrl+W', text: 'Używaj R albo dwa razy W. Zdarzenia ruchu przekazane grze anulują skróty przeglądarki, także przy przytrzymaniu. Skrótów zarezerwowanych przez system nie da się zawsze przechwycić.' },
   { title: 'Woda spływa i rozlewa się', text: 'Źródło zasila strumień do siedmiu bloków po ziemi. Woda najpierw spada, rozlewa się po dotarciu do podłoża i cofa po zabraniu źródła. Pływanie, prąd, łowienie i podlewanie działają też w strumieniu; puste wiadro zbiera tylko źródła.' },
   { title: 'Chmury i woda nie zasłaniają dłoni', text: 'Obie ręce i trzymane przedmioty są renderowane po całym świecie, również po przezroczystej wodzie i chmurach. Reset głębokości przed dłońmi zachowuje kształt brył i przezroczystość ikon.' },
   { title: 'Założona zbroja jest widoczna', text: 'Hełm, napierśnik, nogawice i buty pojawiają się na awatarze multiplayer i w podglądzie plecaka. Skóra, żelazo, złoto i diament mają różne kolory; elementy poruszają się razem z ciałem i znikają po zdjęciu.' },
