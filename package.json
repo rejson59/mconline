@@ -16,10 +16,10 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node --test scripts/portal-bootstrap.test.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node .harness/run.mjs",
+    "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs",
     "test:engine": "node .harness/run.mjs smoke",
     "test:ui": "node .harness/run.mjs ui",
     "deploy:branch": "npm run build && npx --yes gh-pages -d dist"
