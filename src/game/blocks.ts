@@ -126,6 +126,8 @@ export const B = {
   // stoją dokładnie tak, jak stały; nowe stawianie wybiera stronę gracza.
   CHEST_E: 438, CHEST_N: 439, CHEST_W: 440,
   LOOT_CHEST_E: 441, LOOT_CHEST_N: 442, LOOT_CHEST_W: 443,
+  // Derived water levels, append-only and excluded from creative inventory.
+  WATER_FLOW_1: 444, WATER_FLOW_7: 450, WATER_FALL: 451,
 } as const;
 
 export type RenderType =
@@ -188,6 +190,9 @@ def(B.LEAVES, 'Liście dębu', T.leaves, { opaque: true, layer: 1, hardness: 0.2
 def(B.PLANKS, 'Deski dębowe', T.planks, { hardness: 2, sound: 'wood' });
 def(B.SAND, 'Piasek', T.sand, { hardness: 0.5, sound: 'sand' });
 def(B.WATER, 'Woda', T.water, { solid: false, opaque: false, layer: 2, render: 'liquid', hardness: -1, drop: -1 });
+for (let id = B.WATER_FLOW_1 as number; id <= B.WATER_FALL; id++) {
+  def(id, 'Płynąca woda', T.water, { solid: false, opaque: false, layer: 2, render: 'liquid', hardness: -1, drop: -1 });
+}
 def(B.GLASS, 'Szkło', T.glass, { opaque: false, layer: 1, hardness: 0.3, drop: -1, sound: 'glass' });
 def(B.BEDROCK, 'Skała macierzysta', T.bedrock, { hardness: -1, drop: -1 });
 def(B.GRAVEL, 'Żwir', T.gravel, { hardness: 0.6, sound: 'sand' });
@@ -561,6 +566,7 @@ export function tileFor(id: number, face: number): number {
 
 // Blocks available in creative inventory
 function creativeVisible(id: number): boolean {
+  if (isWater(id) && id !== B.WATER) return false;
   if (id === B.AIR || id === B.WATER || id === B.LAVA || id === B.FURNACE_ON || id === B.CROP1 || id === B.CROP2 || id === B.LOOT_CHEST) return false;
   // 2.26: wariant hydracji zmienia się sam – nie jest osobnym blokiem do postawienia.
   if (id === B.FARMLAND_WET) return false;
@@ -858,4 +864,15 @@ export function isRedstoneSource(id: number): boolean {
 }
 export function isNetherBlock(id: number): boolean {
   return id === B.NETHERRACK || id === B.SOUL_SAND || id === B.SOUL_SOIL || id === B.NETHER_BRICKS || id === B.BASALT || id === B.BLACKSTONE || id === B.MAGMA || id === B.SHROOMLIGHT || id === B.CRYING_OBSIDIAN || id === B.QUARTZ_BLOCK || id === B.QUARTZ_PILLAR || id === B.QUARTZ_ORE;
+}
+
+/** Source identity is intentionally distinct from derived flow. */
+export function isWater(id: number): boolean {
+  return id === B.WATER || (id >= B.WATER_FLOW_1 && id <= B.WATER_FALL);
+}
+export function waterLevel(id: number): number {
+  return id >= B.WATER_FLOW_1 && id <= B.WATER_FLOW_7 ? id - B.WATER_FLOW_1 + 1 : 0;
+}
+export function waterHeight(id: number): number {
+  return id === B.WATER_FALL ? 1 : isWater(id) ? (8 - waterLevel(id)) / 9 : 0;
 }

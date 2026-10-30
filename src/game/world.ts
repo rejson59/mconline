@@ -1,3 +1,5 @@
+import { WaterSimulation } from './water';
+import { isWater, waterHeight } from './blocks';
 import { applyStructures } from './structures';
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
@@ -842,6 +844,7 @@ export class World {
   chunks = new Map<string, Chunk>();
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
+  readonly water = new WaterSimulation(this);
   /**
    * 2.10: wywoływane po każdej zmianie bloku w czasie gry (nie przy
    * generowaniu terenu ani przy odtwarzaniu zapisu). Multiplayer wysyła
@@ -993,6 +996,23 @@ export class World {
       c.nether = this.isNether;
       this.generate(c);
       this.chunks.set(k, c);
+      // Only exposed sources / saved flow need work; oceans must not enqueue
+      // every submerged cell. Newly loaded seams also wake their loaded side.
+      for (let y = 0; y <= c.maxY; y++) for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
+        const id = c.data[idx(x, y, z)];
+        if (!isWater(id)) continue;
+        const wx = cx * CS + x, wz = cz * CS + z;
+        this.water.wake(wx, y, wz);
+      }
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const neighbor = this.chunks.get(World.key(cx + dx, cz + dz));
+        if (!neighbor) continue;
+        for (let y = 0; y <= neighbor.maxY; y++) for (let t = 0; t < CS; t++) {
+          const x = dx ? (dx > 0 ? 0 : CS - 1) : t;
+          const z = dz ? (dz > 0 ? 0 : CS - 1) : t;
+          if (isWater(neighbor.data[idx(x, y, z)])) this.water.wake((cx + dx) * CS + x, y, (cz + dz) * CS + z);
+        }
+      }
       this.lastCx = cx;
       this.lastCz = cz;
       this.lastChunk = c;
@@ -1479,7 +1499,7 @@ export class World {
     return c.heightMap[(z - cz * CS) * CS + (x - cx * CS)];
   }
 
-  setBlock(x: number, y: number, z: number, id: number) {
+  setBlock(x: number, y: number, z: number, id: number, notify = true) {
     if (y < 0 || y >= CH) return;
     const cx = Math.floor(x / CS), cz = Math.floor(z / CS);
     const c = this.getChunk(cx, cz);
@@ -1494,7 +1514,8 @@ export class World {
     // przy stawianiu zwykłego bloku).
     if (EMIT[previous] || EMIT[id]) c.refreshEmitters();
     c.revision++;
-    this.onEdit?.(x, y, z, id);
+    if (notify) this.onEdit?.(x, y, z, id);
+    this.water.changed(x, y, z, previous);
     const k = World.key(cx, cz);
     let m = this.mods.get(k);
     if (!m) { m = new Map(); this.mods.set(k, m); }
@@ -1546,7 +1567,10 @@ export class World {
       const c = this.chunks.get(k);
       if (!c) continue;
       if (c.data[i] === e.id) continue;
+      const previous = c.data[i];
       c.data[i] = e.id;
+      c.maxY = Math.min(CH - 1, Math.max(c.maxY, e.y + 2));
+      this.water.changed(e.x, e.y, e.z, previous);
       c.recomputeHeight(lx, lz);
       c.revision++;
       this.dirty.add(k);
@@ -1984,7 +2008,10 @@ export class World {
             continue;
           }
           const isLiquid = rt === 2;
-          const liquidTopLow = isLiquid && get(x, y + 1, z) !== id;
+          const water = isWater(id);
+          const above = isLiquid ? get(x, y + 1, z) : B.AIR;
+          const fluidHeight = water ? (isWater(above) ? 1 : waterHeight(id)) : 0.88;
+          const liquidTopLow = isLiquid && (water ? !isWater(above) : above !== id);
           for (let f = 0; f < 6; f++) {
             const F = FACES[f];
             const nx = x + F.dir[0], ny = y + F.dir[1], nz = z + F.dir[2];
@@ -1993,8 +2020,13 @@ export class World {
             // sąsiad 15/16-bloku (ścieżka, grządka, skrzynia) rysuje swoją
             // ścianę i znika 1-pikselowa szpara „x-ray” nad jego krawędzią.
             if (CULLS[nb]) continue;
-            if (nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
-            if (isLiquid && (RENDER[nb] === 2)) continue;
+            if (!water && nb === id && id !== B.LEAVES && id !== B.BIRCH_LEAVES && id !== B.ACACIA_LEAVES && id !== B.JUNGLE_LEAVES) continue;
+            let neighborHeight = 0;
+            if (water && isWater(nb)) {
+              if (F.dir[1] !== 0) continue;
+              neighborHeight = isWater(get(nx, ny + 1, nz)) ? 1 : waterHeight(nb);
+              if (neighborHeight >= fluidHeight) continue;
+            } else if (isLiquid && RENDER[nb] === 2) continue;
             const t = tileFor(id, f);
             const sky = skyLight(nx, ny, nz);
             const blk = Math.max(blockLight(nx, ny, nz), EMIT[id] / 15);
@@ -2025,7 +2057,8 @@ export class World {
               }
               ao[k] = aoF;
               let vy = y + py;
-              if (liquidTopLow && py === 1) vy -= 0.12;
+              if (water) vy = y + (py === 1 ? fluidHeight : neighborHeight);
+              else if (liquidTopLow && py === 1) vy -= 0.12;
               // 2.32: narożniki (u,v) to zawsze 0/1, więc UV czytamy z tabeli.
               const uvi = (t * 4 + ((cr[3] ? 1 : 0) | (cr[4] ? 2 : 0))) * 2;
               const uv0 = TILE_UV4[uvi];
@@ -2048,7 +2081,7 @@ export class World {
   }
 
   // Voxel raycast (DDA)
-  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, options: { fluids?: boolean; solidOnly?: boolean } = {}) {
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, options: { fluids?: boolean | 'sources'; solidOnly?: boolean } = {}) {
     if (![ox, oy, oz, dx, dy, dz, maxDist].every(Number.isFinite) || maxDist < 0 || dx * dx + dy * dy + dz * dz === 0) return null;
     let x = Math.floor(ox), y = Math.floor(oy), z = Math.floor(oz);
     const stepX = dx > 0 ? 1 : -1, stepY = dy > 0 ? 1 : -1, stepZ = dz > 0 ? 1 : -1;
@@ -2092,7 +2125,7 @@ export class World {
           }
         }
         if (nearest) return nearest;
-      } else if (id !== 0 && (options.fluids || RENDER[id] !== 2)) return { x, y, z, nx, ny, nz, id, dist: t };
+      } else if (id !== 0 && (RENDER[id] !== 2 || (options.fluids && (options.fluids !== 'sources' || id === B.WATER || id === B.LAVA)))) return { x, y, z, nx, ny, nz, id, dist: t };
       if (tMaxX < tMaxY && tMaxX < tMaxZ) { x += stepX; t = tMaxX; tMaxX += tDeltaX; nx = -stepX; ny = 0; nz = 0; }
       else if (tMaxY < tMaxZ) { y += stepY; t = tMaxY; tMaxY += tDeltaY; nx = 0; ny = -stepY; nz = 0; }
       else { z += stepZ; t = tMaxZ; tMaxZ += tDeltaZ; nx = 0; ny = 0; nz = -stepZ; }

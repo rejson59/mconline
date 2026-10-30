@@ -1,3 +1,4 @@
+import { isWater } from './blocks';
 import * as THREE from 'three';
 import type { World } from './world';
 import { stepBody, type Body } from './physics';
@@ -1443,7 +1444,7 @@ export class Mob {
       const cfy = Math.floor(b.pos.y);
       const below = world.peekBlock(cfx, cfy - 1, cfz);
       const below2 = world.peekBlock(cfx, cfy - 2, cfz);
-      if (below === B.WATER || below === B.LAVA || (!IS_SOLID[below] && !IS_SOLID[below2])) {
+      if (isWater(below) || below === B.LAVA || (!IS_SOLID[below] && !IS_SOLID[below2])) {
         this.yaw += (Math.random() < 0.5 ? -1 : 1) * (Math.PI / 2 + Math.random() * 0.5);
         this.turnCooldown = 0.8;
       }

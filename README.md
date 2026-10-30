@@ -1,6 +1,15 @@
-# BlockCraft 4.4.1 🌍
+# BlockCraft 4.5.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.5.0 „Płynąca woda i czyste dłonie”
+
+- **Fizyka wody (65a36235).** Źródła pozostają źródłami; osobne poziomy strumienia spływają w dół, rozlewają się do siedmiu bloków po podłożu, omijają przeszkody i cofają po usunięciu źródła lub zablokowaniu dopływu. Po spadku zasięg poziomy zaczyna się od nowa. Otwarta kopaniem wnęka dostaje przepływ, nie kolejne sztuczne źródło. Puste wiadro ignoruje strumienie i zbiera tylko źródło; fiolka działa także w strumieniu.
+- **Poziomy i prąd.** Mesher rysuje rzeczywistą wysokość płynu oraz boczne ścianki pomiędzy poziomami. Pływanie, oddychanie, mgła i HUD sprawdzają również wysokość tafli; prąd porusza gracza i przedmioty. Nawadnianie, trzcina, łowienie i omijanie wody przez moby rozpoznają strumienie. Spławik dopasowuje się do poziomu i opada, gdy woda odpłynie.
+- **Ograniczony koszt i zgodność.** Symulacja co 0,2 s przetwarza maksymalnie 256 oczekujących kratek. Nie generuje terenu: działa w załadowanych chunkach i wznawia przepływ po wczytaniu sąsiada. Stare źródła/zapisy zachowują ID; nowe ID 444–451 zapisują poziomy offline. W multiplayerze przesyłane są dotychczasowe zmiany graczy/źródeł, a przepływ każdy klient odtwarza lokalnie — bez zapisu każdego kroku do Supabase i bez migracji bazy. Stan przejściowy może różnić się przy różnym czasie ładowania chunków; to nie autorytatywny serwer płynów.
+- **Dłonie ponad przezroczystym światem (53d456a7).** Przyczyną był podział renderera na kolejkę brył nieprzezroczystych i przezroczystości: wysokie `renderOrder` bryły w dłoni nie przenosiło jej za wodę/chmury. Obie dłonie mają teraz osobną scenę renderowaną na końcu, po wyczyszczeniu wyłącznie głębokości. Świat pozostaje widoczny, a bryły i przezroczyste ikony mają własny poprawny test głębokości.
+- **Weryfikacja.** 105 nowych regresji silnika obejmuje przepływ, cofanie, przeszkody, prąd, pływanie, spławik, wysokości siatki, zapis, granice chunków, odtwarzanie zmian publicznych oraz zbieżność klientów z różnymi budżetami pracy. Dodatkowa próba w Chromium 153 z programowym WebGL odtworzyła stare zabarwienie bryły, po poprawce sprawdziła piksele obu dłoni i otwory przezroczystej ikony; uruchomienie świata creative/flat nie zgłosiło błędów JS. To nie test konkretnego Edge/Chrome 156 ani wydajności na komputerze zgłaszającego.
+- **Zakres.** Ogólne „dodaj fizykę” zinterpretowano jako przepływ i prąd. To nie pełna zgodność płynów z Minecraftem: bez waterloggingu, automatycznej produkcji źródeł, wypłukiwania roślin i nowych reakcji z lawą. Nie zmieniano fizyki lawy ani zamkniętych zgłoszeń 4.4.1. Zgłoszenie warstw nie miało zrzutu ekranu, więc naprawa dotyczy potwierdzonej przyczyny w kodzie i testowanego przypadku renderowania, nie identycznego odtworzenia sesji zgłaszającego.
 
 ## Wersja 4.4.1 „Zbroja, głód i rudy”
 
