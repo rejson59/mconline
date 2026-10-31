@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import GameView from './components/GameView';
 import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
 import Launcher from './components/Launcher';
 import { type GameMode, type SaveData } from './game/engine';
 import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
 import OrientationGuard from './components/OrientationGuard';
+import CommunityAccount from './components/CommunityAccount';
 import type { NetLike } from './game/net';
 import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
 import { onViewportChange } from './utils/viewport';
@@ -73,6 +74,8 @@ export default function App() {
   const [saves, setSaves] = useState<WorldCard[]>(cards);
   const [shared, setShared] = useState(readSharedWorld);
   const [multiplayer, setMultiplayer] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const closeAccount = useCallback(() => setAccountOpen(false), []);
   // 2.24.1: pierwszym ekranem znów jest klasyczne menu gry. Launcher został
   // w projekcie, ale domyślnie się nie pokazuje – wchodzi się do niego tylko
   // pod adresem #launcher (i wychodzi „Klasycznym menu”).
@@ -216,6 +219,7 @@ export default function App() {
       <OrientationGuard variant="menu" />
       <div className="relative min-h-0 w-full flex-1">
         <MainMenu
+          onAccount={() => setAccountOpen(true)}
           onMultiplayer={() => setMultiplayer(true)}
           saves={saves}
           sharedSeed={shared.seed}
@@ -241,6 +245,7 @@ export default function App() {
           onPlay={playWorld}
           onNew={newWorld}
         />
+        {accountOpen && <CommunityAccount onClose={closeAccount} />}
       </div>
     </div>
   );

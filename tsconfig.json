@@ -27,5 +27,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vite.config.ts", ".harness/smoke.ts", ".harness/ui.tsx", ".harness/bench.ts", ".harness/jsdom.d.ts"]
+  "include": ["src", "vite.config.ts", ".harness/smoke.ts", ".harness/ui.tsx", ".harness/account.tsx", ".harness/bench.ts", ".harness/jsdom.d.ts"]
 }

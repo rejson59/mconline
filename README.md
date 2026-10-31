@@ -803,3 +803,9 @@ Projekt inspirowany grą *Minecraft* (Mojang Studios); nie jest z nią powiązan
 ## Przejście z portalu Rejson
 
 Na `https://rejson59.github.io` dokument rozpoznaje jednorazowy znacznik przejścia i wczytuje animację wyjścia przed startem aplikacji — również wtedy, gdy projekt ma własny service worker. Bez znacznika, w ramce, na innych domenach i przy niedostępnej pamięci sesji kod nie pobiera zasobów portalu. Skrypt nie przenosi kont ani danych między domenami; na innych originach wyjście z portalu nie jest gwarantowane.
+
+## Wspólne konto Rejson
+
+W menu można zalogować się lub założyć konto bez opuszczania gry. To opcjonalne konto używa istniejącego Supabase Rejsona, hasła albo dotychczasowego PIN-u. Na tym samym originie sesja jest wspólna ze stroną główną i innymi zgodnymi projektami; na innej domenie trzeba się zalogować osobno. Zmiana PIN-u/hasła jest dostępna na stronie konta Rejsona. Bez e-maila nie ma automatycznego odzyskania zapomnianego hasła.
+
+**Konto nie synchronizuje jeszcze światów.** Światy jednoosobowe pozostają w lokalnej przeglądarce, a profil multiplayer jest niezależny. Nie importujemy, nie usuwamy i nie łączymy żadnych zapisów przy logowaniu; transfer na inne urządzenie wymaga obecnie ręcznej kopii plikowej. Import może zastąpić zapis o tym samym identyfikatorze i ograniczyć listę do 8 światów, dlatego przed importem zachowaj osobną kopię istniejących światów. Gra nadal działa bez konta, również bez połączenia. Dostęp do serwera kont, gdy sieć nie działa, nie jest możliwy. Wylogowanie usuwa lokalną sesję, ale nie unieważnia jej po stronie serwera.
