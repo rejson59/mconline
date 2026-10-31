@@ -25,6 +25,7 @@ const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 const SUITES = [
   { name: 'smoke', entry: path.join(here, 'smoke.ts'), label: 'Silnik (headless)' },
   { name: 'ui', entry: path.join(here, 'ui.tsx'), label: 'Interfejs (React)' },
+  { name: 'account', entry: path.join(here, 'account.tsx'), label: 'Konto społeczności' },
 ];
 
 const wanted = process.argv.slice(2).filter((a) => !a.startsWith('-'));

@@ -300,10 +300,13 @@ export function MainMenu({
   onToggleFavorite,
   onImported,
   onMultiplayer,
+  onAccount,
 }: {
   saves: WorldCard[];
   /** 2.10: otwiera poczekalnię multiplayer. */
   onMultiplayer?: () => void;
+  /** Opcjonalne wspólne konto; nie jest wymagane do gry. */
+  onAccount?: () => void;
   /** called after a save file was imported so the list can refresh */
   onImported?: () => void;
   /** seed / mode taken from the URL hash (shareable world links) */
@@ -422,6 +425,7 @@ export function MainMenu({
                     Gra razem · multiplayer
                   </button>
                 )}
+                {onAccount && <button className="mc-btn" type="button" onClick={onAccount}>Konto Rejson</button>}
                 <div className="grid grid-cols-2 gap-2.5">
                   <button className="mc-btn !px-2" onClick={() => setView('controls')}>
                     Sterowanie
