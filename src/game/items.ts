@@ -1,4 +1,4 @@
-import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, isChestBlock } from './blocks';
+import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase } from './blocks';
 import type { Stack } from './inventory';
 
 /** Item ids sit above block ids so a stack can hold either. */
@@ -370,10 +370,12 @@ const PICK_BLOCKS = new Set<number>([
   B.BASALT, B.BLACKSTONE, B.CRYING_OBSIDIAN, B.ANVIL, B.BREWING, B.TARGET,
   B.CONCRETE_WHITE, B.CONCRETE_RED, B.CONCRETE_BLUE, B.CONCRETE_GREEN, B.CONCRETE_YELLOW, B.CONCRETE_BLACK,
   B.TERRACOTTA, B.OBSERVER, B.DISPENSER, B.PISTON, B.STICKY_PISTON, B.NOTE_BLOCK,
-  B.OAK_STAIRS_N, B.COBBLE_STAIRS_N, B.BRICK_STAIRS_N, B.STONE_BRICK_STAIRS_N, B.SANDSTONE_STAIRS_N, B.NETHER_BRICK_STAIRS_N, B.QUARTZ_STAIRS_N,
-  B.OAK_SLAB, B.STONE_SLAB, B.COBBLE_SLAB, B.BRICK_SLAB, B.SANDSTONE_SLAB, B.NETHER_BRICK_SLAB, B.QUARTZ_SLAB,
+  B.COBBLE_STAIRS_N, B.BRICK_STAIRS_N, B.STONE_BRICK_STAIRS_N, B.SANDSTONE_STAIRS_N, B.NETHER_BRICK_STAIRS_N, B.QUARTZ_STAIRS_N,
+  B.STONE_SLAB, B.COBBLE_SLAB, B.BRICK_SLAB, B.SANDSTONE_SLAB, B.NETHER_BRICK_SLAB, B.QUARTZ_SLAB,
 ]);
+const materialBlock = (id: number) => slabBase(stairsBase(id));
 const AXE_BLOCKS = new Set<number>([
+  B.OAK_STAIRS_N, B.OAK_SLAB,
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED, B.CHEST, B.LOOT_CHEST,
   B.HAY, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG,
 ]);
@@ -428,7 +430,7 @@ export function requiredPickTier(blockId: number): number {
   if (blockId === B.IRON_BLOCK) return 2;
   if (blockId === B.ANVIL) return 2;
   if (blockId === B.NETHER_BRICKS || blockId === B.BLACKSTONE || blockId === B.BASALT) return 1;
-  if (PICK_BLOCKS.has(blockId)) return 1;
+  if (PICK_BLOCKS.has(materialBlock(blockId))) return 1;
   return 0;
 }
 
@@ -462,11 +464,11 @@ export function mineSeconds(blockId: number, toolId: number, eff = 0): number {
   const need = requiredPickTier(blockId);
   const tier = pickTier(toolId);
   const woodish = (id: number) =>
-    AXE_BLOCKS.has(id) || isDoor(id) || isLadder(id) || isTrap(id) ||
+    AXE_BLOCKS.has(materialBlock(id)) || isDoor(id) || isLadder(id) || isTrap(id) ||
     id === B.FENCE || isChestBlock(id) || id === B.CAMPFIRE;
   let correct = false;
   let speed = 1;
-  if (PICK_BLOCKS.has(blockId)) {
+  if (PICK_BLOCKS.has(materialBlock(blockId))) {
     correct = tier > 0 && tier >= Math.min(need, 1);
     if (tier > 0) speed = TIER_SPEED[tier];
   } else if (woodish(blockId)) {
@@ -491,8 +493,8 @@ export function mineSeconds(blockId: number, toolId: number, eff = 0): number {
 export function toolHelps(blockId: number, toolId: number): boolean {
   const tool = ITEMS[toolId];
   if (!tool?.tool) return false;
-  if (tool.tool === 'pick') return PICK_BLOCKS.has(blockId);
-  if (tool.tool === 'axe') return AXE_BLOCKS.has(blockId) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || blockId === B.FENCE || isChestBlock(blockId) || blockId === B.CAMPFIRE;
+  if (tool.tool === 'pick') return PICK_BLOCKS.has(materialBlock(blockId));
+  if (tool.tool === 'axe') return AXE_BLOCKS.has(materialBlock(blockId)) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || blockId === B.FENCE || isChestBlock(blockId) || blockId === B.CAMPFIRE;
   if (tool.tool === 'shovel') return SHOVEL_BLOCKS.has(blockId);
   if (tool.tool === 'sword') return RENDER[blockId] === 1 || blockId === B.LEAVES || blockId === B.BIRCH_LEAVES;
   if (tool.tool === 'shears') return blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.TALLGRASS;
@@ -538,7 +540,7 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
       return [{ id: blockId, count: 1 }];
     }
     if (blockId === B.COAL_ORE || blockId === B.DIAMOND_ORE || blockId === B.IRON_ORE || blockId === B.GOLD_ORE ||
-        blockId === B.LAPIS_ORE || blockId === B.EMERALD_ORE || blockId === B.REDSTONE_ORE || blockId === B.QUARTZ_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.ICE ||
+        blockId === B.LAPIS_ORE || blockId === B.EMERALD_ORE || blockId === B.REDSTONE_ORE || blockId === B.QUARTZ_ORE || blockId === B.STONE || blockId === B.GLASS || blockId === B.GLASS_PANE || blockId === B.ICE ||
         blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.GRASS || blockId === B.SNOW ||
         blockId === B.FARMLAND || (blockId >= B.CROP0 && blockId <= B.CROP3)) {
       return [{ id: blockId, count: 1 }];

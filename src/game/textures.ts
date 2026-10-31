@@ -1332,6 +1332,11 @@ export function buildAtlas(): AtlasResult {
   // subtelny skos — górna krawędź jaśniejsza, dolna ciemniejsza. Bloki
   // przestają zlewać się w jedną plamę, a atlas pozostaje w 100% pikselowy.
   polishTiles();
+  // The narrow, opaque rim keeps a pane readable from above/at its ends.
+  // Reserved block tile, outside the entity atlas and official block tiles.
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    setPx(T.glass_pane_edge, x, y, 177, 211, 216, 255);
+  }
 
   // 2.8.2: dopiero teraz cały obraz trafia do atlasu – wszystkie kafelki są
   // narysowane, dziury w liściach wypełnione, a krawędzie wygładzone.
@@ -1510,7 +1515,7 @@ function makeIcon(atlas: HTMLCanvasElement, id: number): string {
     const sx = (tile % ATLAS_TILES) * TILE, sy = Math.floor(tile / ATLAS_TILES) * TILE;
     ctx.drawImage(atlas, sx, sy, 16, 16, 0, 0, 16, 16);
   };
-  if (RENDER[id] === 1) {
+  if (RENDER[id] === 1 || RENDER[id] === 16) {
     ctx.setTransform(2.6, 0, 0, 2.6, 3, 3);
     drawTile(tileFor(id, 0));
   } else {

@@ -1,8 +1,10 @@
 import { isWater } from './blocks';
+import { submerged } from './water';
+import { findShore, type Shore } from './mobSwimming';
 import * as THREE from 'three';
 import type { World } from './world';
 import { stepBody, type Body } from './physics';
-import { IS_SOLID, IS_OPAQUE, RENDER, B, isDoor } from './blocks';
+import { IS_SOLID, IS_OPAQUE, B, isDoor } from './blocks';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 import { kindForColor, mobMaterial, setMobPalette, snapToPalette, type MobTexKind } from './mobTextures';
 import { MOB_MODELS, buildMobModel, type BuiltMob } from './mobModels';
@@ -193,6 +195,8 @@ export class Mob {
    */
   jumpCooldown = 0;
   turnCooldown = 0;
+  private shoreTimer = 0;
+  private shore: Shore | null = null;
   /** 2.27: kierunek ucieczki mieszkańca (stały, wygładzany sinusem). */
   private fleeYaw = 0;
   private wiggle = 0;
@@ -1393,6 +1397,16 @@ export class Mob {
    */
   private moveAndAnimate(dt: number, world: World, player: THREE.Vector3, speed = 0): void {
     const b = this.body;
+    const inWater = submerged(world, b.pos.x, b.pos.y + 0.1, b.pos.z);
+    const inLava = world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y + 0.4), Math.floor(b.pos.z)) === B.LAVA;
+    // Keep the search budget across brief surface/air transitions.
+    this.shoreTimer = Math.max(0, this.shoreTimer - dt);
+    if (inWater && this.type !== 'ghast' && this.kbTime <= 0) {
+      if (this.shoreTimer <= 0) { this.shore = findShore(world, b); this.shoreTimer = 0.5; }
+      if (this.shore) this.yaw = Math.atan2(this.shore.x - b.pos.x, this.shore.z - b.pos.z);
+      speed = Math.max(speed, 1.6);
+      this.walking = true;
+    } else if (!inWater && b.onGround) { this.shore = null; }
     // 2.26: odrzut. Przez ~0,45 s mob leci i NIE steruje ruchem – inaczej
     // pościg natychmiast zjadał prędkość ciosu i „odepchnięcie” było
     // ledwo widoczne (zombie wracał na gracza w kilku klatkach).
@@ -1409,16 +1423,16 @@ export class Mob {
       b.vel.x *= Math.max(0, 1 - dt * 10);
       b.vel.z *= Math.max(0, 1 - dt * 10);
     }
-    const inWater = RENDER[world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y + 0.4), Math.floor(b.pos.z))] === 2;
-    if (inWater) {
-      b.vel.y = Math.min(b.vel.y + 20 * dt, 2.5);
+    if (inWater || inLava) {
+      // Do not erase a shore jump (or knockback) with the buoyancy speed cap.
+      b.vel.y = inWater && b.vel.y > 2.5 ? b.vel.y - 12 * dt : Math.min(b.vel.y + 20 * dt, 2.5);
     } else {
       b.vel.y -= 28 * dt;
       if (b.vel.y < -40) b.vel.y = -40;
     }
     const wasWall = b.hitWall;
     stepBody(world, b, dt);
-    if (this.type === 'spider' && !inWater && (b.hitWall || wasWall) && this.walking) {
+    if (this.type === 'spider' && !inWater && !inLava && (b.hitWall || wasWall) && this.walking) {
       // Spiders climb: a low ledge is a hop, a real wall is crawled up while the
       // player is above it (the body stays flush against the face, so rising is
       // free) – `climbing` keeps the crawl going between frames.
@@ -1450,6 +1464,12 @@ export class Mob {
     // mieszkaniec podskakiwał i trząsł się przy ścianie.
     this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
     this.turnCooldown = Math.max(0, this.turnCooldown - dt);
+    if (inWater && this.shore && this.kbTime <= 0 && (b.hitWall || wasWall) && this.jumpCooldown <= 0 &&
+        this.shore.y > b.pos.y && this.shore.y <= b.pos.y + 1.3 &&
+        Math.hypot(this.shore.x - b.pos.x, this.shore.z - b.pos.z) < b.w / 2 + 1.1) {
+      b.vel.y = 8.2;
+      this.jumpCooldown = 0.65;
+    }
     const reach = b.w / 2 + 0.3;
     const fx = Math.floor(b.pos.x + Math.sin(this.yaw) * reach);
     const fz = Math.floor(b.pos.z + Math.cos(this.yaw) * reach);
@@ -1458,7 +1478,7 @@ export class Mob {
     // Wanilia: mieszkaniec i żelazny golem nie skaczą – omijają przeszkodę.
     const canHop = this.type !== 'villager' && this.type !== 'golem';
     // A climbing spider keeps its heading: it must not turn away mid-wall.
-    if ((b.hitWall || wasWall) && b.onGround && this.walking && !(this.type === 'spider' && this.climbing)) {
+    if (!inWater && (b.hitWall || wasWall) && b.onGround && this.walking && !(this.type === 'spider' && this.climbing)) {
       if (!canHop) {
         // Mieszkaniec i golem nie skaczą – po prostu zawracają, i to łagodnie
         // (ok. 90–110°), żeby obrót nie wyglądał jak szarpnięcie.
@@ -1482,7 +1502,7 @@ export class Mob {
     }
     // avoid walking into water / cliffs (passive mobs) – najwyżej raz na 0,8 s,
     // inaczej losowy obrót co klatkę wyglądał jak drżenie modelu.
-    if (this.type !== 'zombie' && this.type !== 'creeper' && this.type !== 'skeleton' && this.walking && b.onGround && this.turnCooldown <= 0) {
+    if (!inWater && this.type !== 'zombie' && this.type !== 'creeper' && this.type !== 'skeleton' && this.walking && b.onGround && this.turnCooldown <= 0) {
       const cfx = Math.floor(b.pos.x + Math.sin(this.yaw) * (b.w / 2 + 0.4));
       const cfz = Math.floor(b.pos.z + Math.cos(this.yaw) * (b.w / 2 + 0.4));
       const cfy = Math.floor(b.pos.y);

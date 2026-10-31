@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.6.0';
-export const GAME_RELEASE_NAME = 'Działki i trwałe osiągnięcia';
+export const GAME_VERSION = '4.7.0';
+export const GAME_RELEASE_NAME = 'Szyby i wyjście na brzeg';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,9 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: 'Cienkie, łączące się szyby', text: 'Szyby grubości 2/16 łączą się z sąsiadami, także przez granice chunków. Sześć bloków szkła w dwóch rzędach na stole daje 16 szyb. Dostępne też w creative; Jedwabny Dotyk pozwala je odzyskać.' },
+  { title: 'Moby wychodzą na brzeg', text: 'Naziemne moby płyną do pobliskiego suchego brzegu i pokonują niski stopień. Sprawdzają miejsce na całe ciało — bez wspinania na płoty, wysokie ściany i pod za niskie sufity.' },
+  { title: 'Wygodniejsze zbieranie i budowanie', text: 'Przedmioty podnosisz z 2,5 bloku, bez zbierania przez ściany. Siekiera przyspiesza wszystkie kierunki drewnianych schodów i obie połówki płyty. Łóżka działają daleko od początku mapy i przez granice chunków, z ochroną obu połówek na działkach.' },
   { title: 'Działki na serwerze publicznym', text: '/dzialka zajmij chroni teren 16×16 na pełną wysokość. Maksymalnie cztery działki na klucz przeglądarki. /dzialka info, lista i zwolnij. Nie można przejąć cudzej budowli; klucz właściciela pozostaje prywatny.' },
   { title: 'Osiągnięcia zostają po powrocie', text: 'Publiczny profil i lokalna kopia zapisują odblokowane osiągnięcia. Nowe osiągnięcie zapisuje się od razu, a zapis z innej karty nie kasuje wcześniejszych odznak.' },
   { title: 'Kości dla wilków, łuki dla szkieletów', text: 'PPM z kością oswaja dzikiego wilka; mięso nie zastępuje kości. Szkielet trzyma łuk, napina cięciwę, pokazuje strzałę i zwalnia ją po przygotowaniu. Zasłonięcie celu przerywa strzał.' },
