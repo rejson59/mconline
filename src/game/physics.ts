@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { World } from './world';
-import { collisionBoxes } from './blocks';
+import { collisionBoxesAt } from './blocks';
 
 const EPS = 0.001;
 /**
@@ -32,7 +32,7 @@ function hitsBlock(
   px: number, py: number, pz: number,
   hw: number, h: number
 ): boolean {
-  const boxes = collisionBoxes(world.peekBlock(x, y, z));
+  const boxes = collisionBoxesAt(world, x, y, z);
   if (!boxes) return false;
   for (let i = 0; i < boxes.length; i += 6) {
     if (
@@ -82,7 +82,7 @@ function supportTop(world: World, px: number, py: number, pz: number, w: number)
   for (let y = yTop; y >= yTop - 2; y--)
     for (let x = x0; x <= x1; x++)
       for (let z = z0; z <= z1; z++) {
-        const boxes = collisionBoxes(world.peekBlock(x, y, z));
+        const boxes = collisionBoxesAt(world, x, y, z);
         if (!boxes) continue;
         for (let i = 0; i < boxes.length; i += 6) {
           if (px + hw <= x + boxes[i] || px - hw >= x + boxes[i + 3]) continue;
@@ -104,7 +104,7 @@ function ceilingBottom(world: World, px: number, py: number, pz: number, w: numb
   for (let y = y0; y <= y1; y++)
     for (let x = x0; x <= x1; x++)
       for (let z = z0; z <= z1; z++) {
-        const boxes = collisionBoxes(world.peekBlock(x, y, z));
+        const boxes = collisionBoxesAt(world, x, y, z);
         if (!boxes) continue;
         for (let i = 0; i < boxes.length; i += 6) {
           if (px + hw <= x + boxes[i] || px - hw >= x + boxes[i + 3]) continue;
@@ -143,7 +143,7 @@ export function surfaceTopBetween(
   for (let y = y0; y <= y1; y++)
     for (let x = x0; x <= x1; x++)
       for (let z = z0; z <= z1; z++) {
-        const boxes = collisionBoxes(world.peekBlock(x, y, z));
+        const boxes = collisionBoxesAt(world, x, y, z);
         if (!boxes) continue;
         for (let i = 0; i < boxes.length; i += 6) {
           if (px + hw <= x + boxes[i] || px - hw >= x + boxes[i + 3]) continue;
@@ -263,7 +263,7 @@ function hasGroundBelow(world: World, px: number, py: number, pz: number, w: num
   for (let y = Math.floor(py - 1); y <= Math.floor(py); y++)
     for (let x = x0; x <= x1; x++)
       for (let z = z0; z <= z1; z++) {
-        const boxes = collisionBoxes(world.peekBlock(x, y, z));
+        const boxes = collisionBoxesAt(world, x, y, z);
         if (!boxes) continue;
         for (let i = 0; i < boxes.length; i += 6) {
           const top = y + boxes[i + 4];
@@ -305,4 +305,17 @@ export function stepBody(world: World, b: Body, dt: number, sneak = false) {
   if (!b.onGround && b.vel.y <= 0 && hasGroundBelow(world, b.pos.x, b.pos.y + 0.04, b.pos.z, b.w) && b.pos.y - Math.floor(b.pos.y) < 0.01) {
     b.onGround = true;
   }
+}
+
+/** Entire body clearance, shared by shoreline navigation and physical movement. */
+export function bodyFits(world: World, x: number, y: number, z: number, w: number, h: number): boolean {
+  if (collidesAt(world, x, y, z, w, h)) return false;
+  // Fences extend above their voxel: also check the row below the feet.
+  const by = Math.floor(y) - 1;
+  for (let bx = Math.floor(x - w / 2 + EPS); bx <= Math.floor(x + w / 2 - EPS); bx++) {
+    for (let bz = Math.floor(z - w / 2 + EPS); bz <= Math.floor(z + w / 2 - EPS); bz++) {
+      if (hitsBlock(world, bx, by, bz, x, y, z, w / 2, h)) return false;
+    }
+  }
+  return true;
 }

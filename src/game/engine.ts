@@ -10,7 +10,7 @@ import { explorationLootKind } from './explorationLoot';
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, chestLidGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
-import { B, BLOCKS, IS_SOLID, RENDER, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
+import { B, BLOCKS, IS_SOLID, RENDER, collisionBoxesAt, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -441,7 +441,7 @@ function blockGeometry(id: number): THREE.BufferGeometry {
   // 2.21: w ręce trzymamy ten sam kształt, co w świecie – płot to słupek,
   // pochodnia patyczek, skrzynia korpus 14/16, a lilia to płaski liść.
   const rt = RENDER[id];
-  const shape = rt === 7
+  const shape = rt === 16 ? [0, 7 / 16, 1, 9 / 16, 0, 1] : rt === 7
     ? [1 / 16, 1 / 16, 15 / 16, 15 / 16, 0, 1]
     : rt === 8
       ? [0, 0, 1, 1, 0, 0.5625]
@@ -492,7 +492,7 @@ function blockGeometry(id: number): THREE.BufferGeometry {
   const uv = g.attributes.uv as THREE.BufferAttribute;
   const cols = new Float32Array(uv.count * 3);
   for (let f = 0; f < 6; f++) {
-    const tile = tileFor(id, faceMap[f]);
+    const tile = tileFor(id, rt === 16 && f < 2 ? 2 : faceMap[f]);
     for (let v = 0; v < 4; v++) {
       const i = f * 4 + v;
       const [U, V] = handCrop
@@ -3964,7 +3964,8 @@ export class Game {
     const dz = facing === 2 ? 1 : facing === 0 ? -1 : 0;
     const hx = x + dx;
     const hz = z + dz;
-    if (hx < 0 || hx >= CS || hz < 0 || hz >= CS) { this.message('Łóżko nie mieści się – brakuje miejsca na wezgłowie.'); return false; }
+    if (y <= 0 || y >= CH) { this.message('Łóżko nie mieści się na tej wysokości.'); return false; }
+    if (!this.canModify(x, z) || !this.canModify(hx, hz)) { this.message('Ten teren jest chroniony działką.'); return false; }
     const ground = this.world.getBlock(x, y - 1, z);
     const groundHead = this.world.getBlock(hx, y - 1, hz);
     if (ground === B.AIR || isWater(ground) || ground === B.LAVA || !IS_SOLID[ground] ||
@@ -6788,7 +6789,16 @@ export class Game {
     if (t) {
       this.selection.visible = true;
       const id = t.id;
-      if (RENDER[id] === 1) {
+      if (id === B.GLASS_PANE) {
+        const boxes = collisionBoxesAt(this.world, t.x, t.y, t.z)!;
+        let x0 = 1, z0 = 1, x1 = 0, z1 = 0;
+        for (let i = 0; i < boxes.length; i += 6) {
+          x0 = Math.min(x0, boxes[i]); z0 = Math.min(z0, boxes[i + 2]);
+          x1 = Math.max(x1, boxes[i + 3]); z1 = Math.max(z1, boxes[i + 5]);
+        }
+        this.selection.scale.set(x1 - x0, 1, z1 - z0);
+        this.selection.position.set(t.x + (x0 + x1) / 2, t.y + 0.5, t.z + (z0 + z1) / 2);
+      } else if (RENDER[id] === 1) {
         this.selection.scale.set(0.7, 0.95, 0.7);
         this.selection.position.set(t.x + 0.5, t.y + 0.475, t.z + 0.5);
       } else {
@@ -7754,14 +7764,16 @@ export class Game {
         }
       }
       const dist = Math.hypot(d.pos.x - p.x, d.pos.z - p.z, d.pos.y - (p.y + 0.9));
-      if (!d.shared && d.age > 0.55 && dist < 3.4 && dist > 0.2) {
+      const reachable = d.age > 0.4 && dist < 4.5 && this.ui !== 'dead' &&
+        this.clearShot(p.x, p.y + 0.9, p.z, (d.pos.x - p.x) / (dist || 1),
+          (d.pos.y - p.y - 0.9) / (dist || 1), (d.pos.z - p.z) / (dist || 1), dist);
+      if (!d.shared && reachable && d.age > 0.55 && dist > 0.2) {
         d.vel.x += ((p.x - d.pos.x) / dist) * dt * 14;
         d.vel.z += ((p.z - d.pos.z) / dist) * dt * 14;
         d.vel.y += ((p.y + 0.6 - d.pos.y) / dist) * dt * 10;
       }
-      if (d.shared && d.age > 0.4 && dist < 1.35 && this.ui !== 'dead' &&
-          this.inventory.canAdd(d.id, d.count, d.dur, d.ench, d.name) && this.clearShot(p.x, p.y + 0.9, p.z,
-            (d.pos.x - p.x) / (dist || 1), (d.pos.y - p.y - 0.9) / (dist || 1), (d.pos.z - p.z) / (dist || 1), dist) &&
+      if (d.shared && reachable && dist < 2.5 &&
+          this.inventory.canAdd(d.id, d.count, d.dur, d.ench, d.name) &&
           Date.now() - (d.claimAt ?? 0) > 1500) {
         d.claimAt = Date.now();
         const net = this.net, uid = d.shared.uid, dimension = this.isInNether ? 'n' : 'o';
@@ -7769,7 +7781,7 @@ export class Game {
         // array while it is traversing the drops.
         queueMicrotask(() => { if (this.net === net) net?.claimDrop?.(uid, dimension); });
       }
-      if (!d.shared && d.age > 0.4 && dist < 1.35 && this.ui !== 'dead') {
+      if (!d.shared && reachable && dist < 2.5) {
         if (this.inventory.add(d.id, d.count, d.dur, d.ench, d.name)) {
           Sfx.playPop();
           this.notePickup(d.id);

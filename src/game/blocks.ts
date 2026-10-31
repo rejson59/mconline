@@ -1,5 +1,8 @@
+import { CS } from './constants';
+
 // Tile indices in the texture atlas
 export const T = {
+  glass_pane_edge: 252,
   grass_top: 0, grass_side: 1, dirt: 2, stone: 3, cobble: 4, log_side: 5, log_top: 6,
   leaves: 7, planks: 8, sand: 9, water: 10, glass: 11, bedrock: 12, gravel: 13,
   coal_ore: 14, iron_ore: 15, gold_ore: 16, diamond_ore: 17, brick: 18, snow: 19,
@@ -128,12 +131,13 @@ export const B = {
   LOOT_CHEST_E: 441, LOOT_CHEST_N: 442, LOOT_CHEST_W: 443,
   // Derived water levels, append-only and excluded from creative inventory.
   WATER_FLOW_1: 444, WATER_FLOW_7: 450, WATER_FALL: 451,
+  GLASS_PANE: 452,
 } as const;
 
 export type RenderType =
   | 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail'
   | 'cactus' | 'bed' | 'fence' | 'torch' | 'lily' | 'chest'
-  | 'lantern' | 'bell' | 'brewing';
+  | 'lantern' | 'bell' | 'brewing' | 'pane';
 
 export interface BlockDef {
   id: number;
@@ -194,6 +198,7 @@ for (let id = B.WATER_FLOW_1 as number; id <= B.WATER_FALL; id++) {
   def(id, 'Płynąca woda', T.water, { solid: false, opaque: false, layer: 2, render: 'liquid', hardness: -1, drop: -1 });
 }
 def(B.GLASS, 'Szkło', T.glass, { opaque: false, layer: 1, hardness: 0.3, drop: -1, sound: 'glass' });
+def(B.GLASS_PANE, 'Szyba', [T.glass_pane_edge, T.glass_pane_edge, T.glass], { opaque: false, layer: 1, hardness: 0.3, drop: -1, sound: 'glass', render: 'pane' });
 def(B.BEDROCK, 'Skała macierzysta', T.bedrock, { hardness: -1, drop: -1 });
 def(B.GRAVEL, 'Żwir', T.gravel, { hardness: 0.6, sound: 'sand' });
 def(B.COAL_ORE, 'Ruda węgla', T.coal_ore, { hardness: 3 });
@@ -421,7 +426,8 @@ export const OCCLUDES = new Uint8Array(512);
 export const CULLS = new Uint8Array(512);
 export const LAYER = new Uint8Array(512);
 // 0 cube, 1 cross, 2 liquid, 3 slab, 4 stairs, 5 portal, 6 rail,
-// 7 cactus, 8 bed, 9 fence, 10 torch, 11 lily pad, 12 chest
+// 7 cactus, 8 bed, 9 fence, 10 torch, 11 lily pad, 12 chest,
+// 13 lantern, 14 bell, 15 brewing stand, 16 connecting glass pane
 export const RENDER = new Uint8Array(512);
 for (const d of defs) {
   if (!d) continue;
@@ -446,6 +452,7 @@ for (const d of defs) {
   else if (d.render === 'lantern') RENDER[d.id] = 13;
   else if (d.render === 'bell') RENDER[d.id] = 14;
   else if (d.render === 'brewing') RENDER[d.id] = 15;
+  else if (d.render === 'pane') RENDER[d.id] = 16;
   else RENDER[d.id] = 0;
 }
 
@@ -479,6 +486,7 @@ const FULL_BOX = new Float32Array([0, 0, 0, 1, 1, 1]);
 
 function collisionFor(d: BlockDef): Float32Array | null {
   if (!d.solid) return null;
+  if (d.render === 'pane') return new Float32Array([0, 0, 7 / 16, 1, 1, 9 / 16, 7 / 16, 0, 0, 9 / 16, 1, 1]);
   if (d.render === 'slab') {
     return isSlabTop(d.id)
       ? new Float32Array([0, 0.5, 0, 1, 1, 1])
@@ -540,6 +548,32 @@ for (const d of defs) {
 /** Pudełka kolizji bloku albo `null`, gdy da się przez niego przejść. */
 export function collisionBoxes(id: number): Float32Array | null {
   return COLLISION[id] ?? null;
+}
+
+/** N/E/S/W connection bits. Only full cubes, glass and other panes join. */
+export function paneConnects(id: number): boolean {
+  return id === B.GLASS_PANE || id === B.GLASS || (!!CULLS[id] && !IS_LEAFY[id]);
+}
+const PANE_BOXES: Float32Array[] = [];
+export function paneBoxes(mask: number): Float32Array {
+  mask &= 15;
+  if (PANE_BOXES[mask]) return PANE_BOXES[mask];
+  const links = mask || 15; // isolated panes form a cross
+  const boxes: number[] = [];
+  if (links & 10) boxes.push(links & 8 ? 0 : 7 / 16, 0, 7 / 16, links & 2 ? 1 : 9 / 16, 1, 9 / 16);
+  if (links & 5) boxes.push(7 / 16, 0, links & 1 ? 0 : 7 / 16, 9 / 16, 1, links & 4 ? 1 : 9 / 16);
+  return PANE_BOXES[mask] = new Float32Array(boxes);
+}
+interface ShapeWorld {
+  peekBlock(x: number, y: number, z: number): number;
+  hasChunk(cx: number, cz: number): boolean;
+}
+/** Same derived geometry for physics, selection and raycasts; never loads terrain. */
+export function collisionBoxesAt(world: ShapeWorld, x: number, y: number, z: number): Float32Array | null {
+  const id = world.peekBlock(x, y, z);
+  if (id !== B.GLASS_PANE) return collisionBoxes(id);
+  const joins = (nx: number, nz: number) => world.hasChunk(Math.floor(nx / CS), Math.floor(nz / CS)) && paneConnects(world.peekBlock(nx, y, nz));
+  return paneBoxes((joins(x, z - 1) ? 1 : 0) | (joins(x + 1, z) ? 2 : 0) | (joins(x, z + 1) ? 4 : 0) | (joins(x - 1, z) ? 8 : 0));
 }
 
 export function isFence(id: number): boolean {

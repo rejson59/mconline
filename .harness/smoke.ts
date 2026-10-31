@@ -3178,8 +3178,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.6.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Działki i trwałe osiągnięcia', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.7.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Szyby i wyjście na brzeg', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -8408,6 +8408,197 @@ section('4.6: plot permissions, negative coordinates, fluid borders and public t
   waterWorld.setBlock(15, FLAT_H + 1, 8, B.WATER);
   for (let i = 0; i < 100 && waterWorld.water.size; i++) waterWorld.water.tick(0.2);
   eq('water simulation cannot invade another plot from outside', waterWorld.peekBlock(16, FLAT_H + 1, 8), B.AIR);
+}
+
+
+section('4.7.0: wooden shapes use the same tool in every orientation');
+{
+  for (const id of [B.OAK_STAIRS_N, B.OAK_STAIRS_N + 1, B.OAK_STAIRS_N + 2, B.OAK_STAIRS_N + 3, B.OAK_SLAB, B.OAK_SLAB_TOP]) {
+    eq(`wooden shape ${id} never requires a pick`, requiredPickTier(id), 0);
+    check(`axe helps wooden shape ${id}`, toolHelps(id, I.IRON_AXE));
+    check(`pick does not help wooden shape ${id}`, !toolHelps(id, I.IRON_PICK));
+    check(`axe is faster than hand and pick for wooden shape ${id}`, mineSeconds(id, I.IRON_AXE) < mineSeconds(id, 0) && mineSeconds(id, I.IRON_AXE) < mineSeconds(id, I.IRON_PICK));
+    check(`wooden shape ${id} can drop without a pick`, blockDrops(id, 0).length === 1);
+  }
+  for (const base of [B.COBBLE_STAIRS_N, B.BRICK_STAIRS_N, B.STONE_BRICK_STAIRS_N, B.SANDSTONE_STAIRS_N, B.NETHER_BRICK_STAIRS_N, B.QUARTZ_STAIRS_N]) {
+    for (let facing = 0; facing < 4; facing++) {
+      const id = base + facing;
+      check(`stone stairs ${id} retain pick speed and harvest tier`, requiredPickTier(id) === 1 && toolHelps(id, I.IRON_PICK) && !toolHelps(id, I.IRON_AXE) && mineSeconds(id, I.IRON_PICK) < mineSeconds(id, I.IRON_AXE));
+    }
+  }
+  for (const id of [B.STONE_SLAB, B.STONE_SLAB_TOP, B.COBBLE_SLAB, B.COBBLE_SLAB_TOP, B.BRICK_SLAB_TOP, B.QUARTZ_SLAB_TOP]) {
+    check(`stone slab ${id} retains pick speed and harvest tier`, requiredPickTier(id) === 1 && toolHelps(id, I.IRON_PICK));
+  }
+}
+
+section('4.7.0: beds use world coordinates and protect both halves atomically');
+{
+  const w = new World(470, true), y = FLAT_H + 1;
+  const g = Object.assign(Object.create(Game.prototype), { world: w, yaw: 0,
+    body: { pos: new THREE.Vector3(1000, y, 1000), w: 0.6, h: 1.8 }, message() {} });
+  for (const [x, z] of [[48, 48], [-48, -48], [15, 16], [16, 0], [-16, -16]]) {
+    for (let facing = 0; facing < 4; facing++) {
+      const dx = facing === 1 ? 1 : facing === 3 ? -1 : 0;
+      const dz = facing === 2 ? 1 : facing === 0 ? -1 : 0;
+      w.setBlock(x, y - 1, z, B.STONE); w.setBlock(x + dx, y - 1, z + dz, B.STONE);
+      w.setBlock(x, y, z, B.AIR); w.setBlock(x + dx, y, z + dz, B.AIR);
+      g.yaw = [0, -Math.PI / 2, Math.PI, Math.PI / 2][facing];
+      check(`bed places at ${x},${z} facing ${facing}`, g.placeBed(x, y, z));
+      eq(`bed foot ${x},${z}/${facing}`, w.getBlock(x, y, z), bedPart(facing, false));
+      eq(`bed head ${x},${z}/${facing}`, w.getBlock(x + dx, y, z + dz), bedPart(facing, true));
+      w.setBlock(x, y, z, B.AIR); w.setBlock(x + dx, y, z + dz, B.AIR);
+    }
+  }
+  g.yaw = -Math.PI / 2;
+  for (const blockedX of [15, 16]) {
+    w.setBlock(15, y, 8, B.AIR); w.setBlock(16, y, 8, B.AIR);
+    w.setBlock(15, y - 1, 8, B.STONE); w.setBlock(16, y - 1, 8, B.STONE);
+    g.net = { public: true, canEdit: (x: number) => x !== blockedX };
+    let writes = 0; w.onEdit = () => writes++;
+    check(`protected bed half ${blockedX} rejects placement`, !g.placeBed(15, y, 8));
+    eq(`denial writes neither half ${blockedX}`, writes, 0);
+    check(`denial leaves both cells empty ${blockedX}`, w.getBlock(15, y, 8) === B.AIR && w.getBlock(16, y, 8) === B.AIR);
+    w.onEdit = null;
+  }
+  g.net = undefined;
+  w.setBlock(16, y, 8, B.STONE);
+  check('occupied bed head is still rejected', !g.placeBed(15, y, 8));
+  w.setBlock(16, y, 8, B.AIR); w.setBlock(16, y - 1, 8, B.AIR);
+  check('unsupported head is still rejected', !g.placeBed(15, y, 8));
+  check('bed outside world height is rejected', !g.placeBed(15, CH, 8));
+}
+
+section('4.7.0: glass panes connect, collide, target, craft and persist');
+{
+  const { paneBoxes, paneConnects, collisionBoxesAt, CREATIVE_BLOCKS } = await import('../src/game/blocks');
+  const { bodyFits } = await import('../src/game/physics');
+  check('pane is exposed in creative inventory', CREATIVE_BLOCKS.includes(B.GLASS_PANE));
+  check('pane joins glass, panes and full cubes but not doors, water or leaves',
+    [B.GLASS, B.GLASS_PANE, B.STONE].every(paneConnects) && [B.AIR, B.WATER, B.LEAVES, B.OAK_SLAB, B.DOOR_N].every(id => !paneConnects(id)));
+  for (let mask = 0; mask < 16; mask++) {
+    const boxes = paneBoxes(mask);
+    check(`pane shape ${mask} stays thin and within its cell`, boxes.length >= 6 && boxes.every(v => v >= 0 && v <= 1) &&
+      Array.from({ length: boxes.length / 6 }, (_, n) => (boxes[n * 6 + 3] - boxes[n * 6] <= 2 / 16 || boxes[n * 6 + 5] - boxes[n * 6 + 2] <= 2 / 16)).every(Boolean));
+    eq(`pane shape ${mask} uses cached geometry`, paneBoxes(mask), boxes);
+  }
+  const w = new World(471, true), y = FLAT_H + 8;
+  w.getChunk(0, 0); w.getChunk(1, 0);
+  w.setBlock(15, y, 5, B.GLASS_PANE); w.setBlock(16, y, 5, B.GLASS_PANE); w.setBlock(14, y, 5, B.GLASS);
+  eq('pane crosses the chunk boundary with the right shape', collisionBoxesAt(w, 15, y, 5), paneBoxes(10));
+  w.dirty.clear(); w.setBlock(16, y, 5, B.AIR);
+  check('removing a neighbour dirties both chunks', w.dirty.has(World.key(0, 0)) && w.dirty.has(World.key(1, 0)));
+  eq('removing a neighbour immediately changes the collision geometry', collisionBoxesAt(w, 15, y, 5), paneBoxes(8));
+  w.setBlock(16, y, 5, B.GLASS_PANE);
+  check('body can fit in the empty half of a pane cell', bodyFits(w, 15.5, y, 5.15, 0.2, 0.8));
+  check('pane centre physically blocks a body', !bodyFits(w, 15.5, y, 5.5, 0.2, 0.8));
+  eq('target ray misses the empty half of the cell', w.raycast(15.9, y + 0.5, 5.15, -1, 0, 0, 0.8), null);
+  eq('collision ray misses the same empty half', w.raycast(15.9, y + 0.5, 5.15, -1, 0, 0, 0.8, { solidOnly: true }), null);
+  const hit = w.raycast(15.5, y + 0.5, 6.5, 0, 0, -1, 2);
+  check('target ray hits the thin face, not the whole cube', hit?.id === B.GLASS_PANE && Math.abs(hit.dist - 0.9375) < 1e-6 && hit.nz === 1);
+  check('pane also blocks combat/pickup LOS', !Object.assign(Object.create(Game.prototype), { world: w }).clearShot(15.5, y + 0.5, 6.5, 0, 0, -1, 2));
+  const geometry = w.buildMesh(w.getChunk(0, 0))[1], p = geometry.attributes.position as THREE.BufferAttribute;
+  const zs: number[] = [];
+  for (let i = 0; i < p.count; i++) if (p.getY(i) >= y && p.getY(i) <= y + 1 && p.getX(i) >= 15 && p.getX(i) <= 16 && p.getZ(i) > 5 && p.getZ(i) < 6) zs.push(p.getZ(i));
+  check('rendered straight pane is 2/16 thick, not a cube', zs.length === 24 && Math.min(...zs) === 5 + 7 / 16 && Math.max(...zs) === 5 + 9 / 16);
+  geometry.dispose();
+  const save = w.serializeMods(), restored = new World(471, true); restored.loadMods(save);
+  eq('pane survives save/reload without storing neighbour variants', restored.getBlock(15, y, 5), B.GLASS_PANE);
+  eq('ordinary pane breaking drops nothing', blockDrops(B.GLASS_PANE, I.IRON_PICK).length, 0);
+  eq('silk touch recovers a pane', blockDrops(B.GLASS_PANE, I.IRON_PICK, { silk: true })[0]?.id, B.GLASS_PANE);
+  const inv = new Inventory(); inv.grid.fill(null);
+  for (let i = 0; i < 6; i++) inv.grid[i] = { id: B.GLASS, count: 1 };
+  const result = inv.craftGrid(true);
+  check('six glass in two rows craft sixteen panes', result?.id === B.GLASS_PANE && result.count === 16);
+  check('pane recipe consumes all six glass', inv.grid.every(s => !s));
+  const unloaded = { peekBlock: (x: number) => x === 15 ? B.GLASS_PANE : B.STONE, hasChunk: (cx: number) => cx === 0 };
+  eq('unloaded chunk sentinel cannot become a false pane connection', collisionBoxesAt(unloaded, 15, y, 5), paneBoxes(13));
+}
+
+section('4.7.0: water escape uses real mob AI, body clearance and shore impulses');
+{
+  const { findShore } = await import('../src/game/mobSwimming');
+  const world = new World(472, true), y = FLAT_H + 1;
+  for (let x = -7; x <= 13; x++) for (let z = -8; z <= 8; z++) for (let dy = 0; dy < 8; dy++) {
+    world.setBlock(x, y + dy, z, dy === 0 ? (x >= 4 ? B.STONE : B.WATER) : B.AIR);
+  }
+  const random = Math.random; Math.random = () => 0.5;
+  try {
+    for (const type of ['pig', 'cow', 'sheep', 'chicken', 'wolf', 'villager', 'golem', 'zombie', 'skeleton', 'creeper', 'spider', 'enderman', 'slime'] as const) {
+      const mob = new Mob(type, 1.5, y + 0.6, 0.5), target = new THREE.Vector3(12, y + 1, 0.5);
+      mob.walking = false; mob.yaw = -Math.PI / 2;
+      check(`${type} finds reachable dry land despite facing away`, !!findShore(world, mob.body));
+      let escaped = false;
+      for (let i = 0; i < 600; i++) {
+        mob.update(1 / 60, world, target, () => {}, () => {}, true);
+        if (mob.body.pos.x > 4 + mob.body.w / 2 && mob.body.pos.y >= y + 0.99) { escaped = true; break; }
+      }
+      check(`${type} actually exits the pool with real collision physics`, escaped, mob.body.pos.toArray().join(','));
+    }
+    for (const water of [B.WATER, B.WATER_FLOW_1, B.WATER_FLOW_7, B.WATER_FALL]) {
+      for (let x = -7; x < 4; x++) for (let z = -8; z <= 8; z++) {
+        world.setBlock(x, y, z, water);
+        for (let dy = -2; dy < 0; dy++) world.setBlock(x, y + dy, z, water === B.WATER ? B.WATER : B.STONE);
+      }
+      const startY = water === B.WATER ? y - 1.5 : y + 0.02;
+      const mob = new Mob('villager', 1.5, startY, 0.5); mob.yaw = -Math.PI / 2;
+      let escaped = false;
+      for (let i = 0; i < 900; i++) {
+        mob.update(1 / 60, world, new THREE.Vector3(12, y + 1, 0.5), () => {}, () => {}, true);
+        if (mob.body.pos.x > 4.3 && mob.body.pos.y >= y + 0.99) { escaped = true; break; }
+      }
+      check(`villager escapes deep/source or flowing water ${water}`, escaped, mob.body.pos.toArray().join(','));
+    }
+    for (let x = -7; x < 4; x++) for (let z = -8; z <= 8; z++) world.setBlock(x, y, z, B.WATER);
+    // Water-specific navigation must not turn every tall wall/fence into a ladder.
+    const m = new Mob('villager', 1.5, y + 0.6, 0.5);
+    for (let x = 4; x <= 13; x++) for (let z = -8; z <= 8; z++) world.setBlock(x, y + 1, z, B.STONE);
+    eq('two-block high bank is not an exit', findShore(world, m.body), null);
+    for (let x = 4; x <= 13; x++) for (let z = -8; z <= 8; z++) {
+      world.setBlock(x, y, z, B.FENCE); world.setBlock(x, y + 1, z, B.AIR);
+    }
+    eq('fence tops are not shore landing pads', findShore(world, m.body), null);
+    for (let x = 4; x <= 13; x++) for (let z = -8; z <= 8; z++) {
+      world.setBlock(x, y, z, B.STONE); world.setBlock(x, y + 2, z, B.STONE);
+    }
+    eq('low ceiling rejects a landing that cannot fit the mob', findShore(world, m.body), null);
+    const hit = new Mob('pig', 1.5, y + 0.6, 0.5); hit.kbTime = 0.3; hit.body.vel.set(-4, 5, 0);
+    hit.update(1 / 60, world, new THREE.Vector3(12, y + 1, 0.5), () => {}, () => {}, true);
+    check('swimming preserves horizontal and vertical knockback', hit.body.vel.x < 0 && hit.body.vel.y > 2.5);
+  } finally { Math.random = random; }
+}
+
+section('4.7.0: 2.5-block pickups share range and obstruction checks');
+{
+  const world = new World(473, true), y = FLAT_H + 8;
+  world.getChunk(0, 0);
+  const make = (shared: boolean, distance: number) => {
+    let claims = 0;
+    const g = Object.assign(Object.create(Game.prototype), { world, inventory: new Inventory(), ui: 'playing', scene: new THREE.Scene(),
+      body: { pos: new THREE.Vector3(4.5, y, 4.5) }, isInNether: false, deliverPickups() {}, notePickup() {},
+      advanceSharedDrop() {}, net: shared ? { claimDrop: () => claims++ } : undefined });
+    const d = { id: B.GLASS_PANE, count: 1, age: 1, pos: new THREE.Vector3(4.5 + distance, y + 0.9, 4.5),
+      vel: new THREE.Vector3(), mesh: new THREE.Mesh(), shared: shared ? { uid: 'range', expires: Date.now() + 60000 } : undefined };
+    g.drops = [d];
+    return { g, d, claims: () => claims };
+  };
+  for (const shared of [false, true]) {
+    for (const distance of [1.4, 2.4, 2.6]) {
+      const { g, claims } = make(shared, distance); g.updateDrops(0);
+      await Promise.resolve();
+      eq(`pickup ${shared ? 'shared' : 'offline'} at ${distance} blocks`, shared ? claims() : g.inventory.countOf(B.GLASS_PANE), distance < 2.5 ? 1 : 0);
+      if (shared) { g.updateDrops(0); await Promise.resolve(); eq(`shared pickup retry is throttled at ${distance}`, claims(), distance < 2.5 ? 1 : 0); }
+    }
+    world.setBlock(5, y, 4, B.STONE);
+    const wall = make(shared, 2); wall.g.updateDrops(0.01); await Promise.resolve();
+    eq(`wall prevents ${shared ? 'shared' : 'offline'} pickup`, shared ? wall.claims() : wall.g.inventory.countOf(B.GLASS_PANE), 0);
+    check(`wall prevents local magnet ${shared}`, wall.d.vel.x <= 0);
+    world.setBlock(5, y, 4, B.AIR);
+    const dead = make(shared, 2); dead.g.ui = 'dead'; dead.g.updateDrops(0); await Promise.resolve();
+    eq(`dead player cannot collect ${shared}`, shared ? dead.claims() : dead.g.inventory.countOf(B.GLASS_PANE), 0);
+    const full = make(shared, 2); full.g.inventory.slots.fill({ id: B.STONE, count: 64 }); full.g.updateDrops(0); await Promise.resolve();
+    eq(`full inventory cannot collect ${shared}`, shared ? full.claims() : full.g.inventory.countOf(B.GLASS_PANE), 0);
+    eq(`full inventory retains drop ${shared}`, full.g.drops.length, 1);
+  }
 }
 
 // =================================================================== report
