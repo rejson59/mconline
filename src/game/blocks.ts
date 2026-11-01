@@ -2,7 +2,7 @@ import { CS } from './constants';
 
 // Tile indices in the texture atlas
 export const T = {
-  glass_pane_edge: 252,
+  glass_pane_edge: 252, rail_corner: 253,
   grass_top: 0, grass_side: 1, dirt: 2, stone: 3, cobble: 4, log_side: 5, log_top: 6,
   leaves: 7, planks: 8, sand: 9, water: 10, glass: 11, bedrock: 12, gravel: 13,
   coal_ore: 14, iron_ore: 15, gold_ore: 16, diamond_ore: 17, brick: 18, snow: 19,
@@ -132,6 +132,8 @@ export const B = {
   // Derived water levels, append-only and excluded from creative inventory.
   WATER_FLOW_1: 444, WATER_FLOW_7: 450, WATER_FALL: 451,
   GLASS_PANE: 452,
+  // Persist an isolated rail's east/west axis; old IDs remain north/south.
+  RAIL_EW: 453, POWERED_RAIL_EW: 454, DETECTOR_RAIL_EW: 455,
 } as const;
 
 export type RenderType =
@@ -387,6 +389,9 @@ def(B.TERRACOTTA, 'Terakota', T.terracotta, { hardness: 1.25 });
 def(B.RAIL, 'Tory', T.rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'metal' });
 def(B.POWERED_RAIL, 'Zasilane tory', T.powered_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'metal' });
 def(B.DETECTOR_RAIL, 'Tory detekcyjne', T.detector_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'metal' });
+for(const [id,base] of [[B.RAIL_EW,B.RAIL],[B.POWERED_RAIL_EW,B.POWERED_RAIL],[B.DETECTOR_RAIL_EW,B.DETECTOR_RAIL]]) {
+  def(id, defs[base].name, defs[base].side, {solid:false,opaque:false,layer:1,render:'rail',hardness:.7,sound:'metal',drop:base});
+}
 def(B.ANVIL, 'Kowadło', T.anvil, { hardness: 5, sound: 'metal' });
 def(B.BREWING, 'Statyw alchemiczny', T.brewing_top, { hardness: 0.5, sound: 'stone', solid: false, opaque: false, layer: 1, render: 'brewing' });
 def(B.SHROOMLIGHT, 'Shroomlight', T.shroomlight, { hardness: 1, sound: 'wood' });
@@ -600,6 +605,7 @@ export function tileFor(id: number, face: number): number {
 
 // Blocks available in creative inventory
 function creativeVisible(id: number): boolean {
+  if (id === B.RAIL_EW || id === B.POWERED_RAIL_EW || id === B.DETECTOR_RAIL_EW) return false;
   if (isWater(id) && id !== B.WATER) return false;
   if (id === B.AIR || id === B.WATER || id === B.LAVA || id === B.FURNACE_ON || id === B.CROP1 || id === B.CROP2 || id === B.LOOT_CHEST) return false;
   // 2.26: wariant hydracji zmienia się sam – nie jest osobnym blokiem do postawienia.
@@ -891,7 +897,7 @@ export function isPortal(id: number): boolean {
   return id === B.NETHER_PORTAL;
 }
 export function isRail(id: number): boolean {
-  return id === B.RAIL || id === B.POWERED_RAIL || id === B.DETECTOR_RAIL;
+  return id === B.RAIL || id === B.POWERED_RAIL || id === B.DETECTOR_RAIL || id === B.RAIL_EW || id === B.POWERED_RAIL_EW || id === B.DETECTOR_RAIL_EW;
 }
 export function isRedstoneSource(id: number): boolean {
   return id === B.REDSTONE_BLOCK || id === B.LEVER_ON || id === B.BUTTON_ON || id === B.REDSTONE_TORCH;

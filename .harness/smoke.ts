@@ -1,3 +1,10 @@
+import { railShape, railCorner, railPlacement } from '../src/game/rails';
+import { isRail, CREATIVE_BLOCKS } from '../src/game/blocks';
+import { buildSkyLight, skyLevel, lightLevel } from '../src/game/lightMap';
+import { chestLidAngle, CHEST_BODY, CHEST_LID, chestFaceRect } from '../src/game/chestModel';
+import { entityImage } from '../src/game/packArt';
+import { JAVA_CHEST_TEXTURES, JAVA_RAIL_TEXTURES } from '../src/game/art/javaBlocks.generated';
+import { blockGeometry } from '../src/game/engine';
 import { JAVA_SOUND_EVENTS, JAVA_SOUND_FILES } from '../src/game/art/javaSounds.generated';
 import { setListener, placeAt } from '../src/game/audio';
 import { smoothAlpha, movementFov, mousePitch, damageRoll } from '../src/game/cameraEffects';
@@ -3184,8 +3191,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.9.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Oryginalne dźwięki i płynny widok', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.10.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Tory, skrzynie i światło', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -3620,7 +3627,7 @@ section('2.8.1: model światła');
   const night = lightFactor(1, 0, 0.16);
   // 2.8.2: noc ma księżycówkę (shade * MOON_SKY), więc jest czytelna,
   // ale nadal wyraźnie ciemniejsza od dnia.
-  check('night is dim but never black', night > 0.3 && night < 0.5, night.toFixed(3));
+  check('night is dim but never black', night > 0.2 && night < 0.3, night.toFixed(3));
   // korona drzew rzuca cień: atrybut ~0.09 (sky ≈ 0.3) nie może dać czerni
   const canopy = lightFactor(0.09, 0, 1);
   check('shadow under a canopy stays readable', canopy > 0.25, canopy.toFixed(3));
@@ -3767,6 +3774,11 @@ section('2.8.1: światło nieba pod koroną');
 
   // pełny strop kamienia w tym samym miejscu = ciemna jaskinia
   for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) w.setBlock(4 + dx, gy + 4, 4 + dz, B.STONE);
+  const porch = topShade(w, 4, 4, gy);
+  check('open-sided overhang receives indirect daylight',porch>.1 && porch<open,porch.toFixed(3));
+  // A roof alone is not a cave: enclose the room before requiring darkness.
+  for(let yy=gy+1;yy<gy+4;yy++)for(let dz=-2;dz<=2;dz++)for(let dx=-2;dx<=2;dx++)
+    if(Math.abs(dx)===2||Math.abs(dz)===2)w.setBlock(4+dx,yy,4+dz,B.STONE);
   const cave = topShade(w, 4, 4, gy);
   check('a solid roof leaves the cave dark', cave < 0.05, cave.toFixed(3));
   check('a cave is darker than a forest floor', cave < under * 0.2);
@@ -3954,7 +3966,7 @@ section('2.8.2: kierunkowe słońce');
   check('the fragment shader has a face normal helper', shader.fragmentShader.includes('faceNormal'));
   check('sunlight uses a dot product', shader.fragmentShader.includes('dot(faceNormal(vFace), uSunDir)'));
   check('sunlight is gated by sky exposure', shader.fragmentShader.includes('clamp(sky * 4.0, 0.0, 1.0)'));
-  check('light materials use a fresh cache key', mat.customProgramCacheKey() === 'blockcraft-light-5');
+  check('light materials use a fresh cache key', mat.customProgramCacheKey() === 'blockcraft-light-6');
 
   // Światło trzymane w dłoni jest mocniejsze i sięga dalej niż w 2.8.1.
   check('the held torch reaches further than before', HELD_RANGE >= 12);
@@ -8744,6 +8756,198 @@ section('4.9: real settings, camera damping, brightness, safe tree generation');
   grow.call(terrain,c,8,8,base,false);
   eq('generated trunk cannot overwrite solid hillside',c.data[at(8,base+2,8)],B.STONE);
   eq('unobstructed trunk still generates',c.data[at(8,base,8)],B.LOG);
+}
+
+section('4.10: directional rails, native chest items and propagated skylight');
+{
+  for(const id of [B.RAIL,B.POWERED_RAIL,B.DETECTOR_RAIL]) {
+    const east=railPlacement(id,1,0);
+    eq(`rail ${id} retains north/south placement`,railPlacement(id,0,1),id);
+    check(`rail ${id} stores east/west placement`,east!==id&&isRail(east));
+    eq(`rail ${id} has canonical drop`,blockDrops(east,0)[0]?.id,id);
+    eq(`rail ${id} silk touch also drops canonical item`,blockDrops(east,I.DIAMOND_PICK,{silk:true})[0]?.id,id);
+    check(`rail ${id} axis state is hidden in creative`,!CREATIVE_BLOCKS.includes(east));
+    const cells=new Map<string,number>();const key=(x:number,y:number,z:number)=>`${x},${y},${z}`;
+    const get=(x:number,y:number,z:number)=>cells.get(key(x,y,z))??B.AIR;
+    cells.set(key(0,2,0),east);
+    eq(`isolated ${id} east/west survives without neighbours`,railShape(get,0,2,0),'east_west');
+    cells.set(key(1,2,0),id);cells.set(key(-1,2,0),id);
+    eq(`rail ${id} joins east/west line`,railShape(get,0,2,0),'east_west');
+    cells.delete(key(1,2,0));cells.delete(key(-1,2,0));cells.set(key(0,2,-1),id);cells.set(key(0,2,1),id);
+    eq(`rail ${id} follows north/south neighbours`,railShape(get,0,2,0),'north_south');
+    for(const [dx,dz,expected] of [[1,0,'ascending_east'],[-1,0,'ascending_west'],[0,1,'ascending_south'],[0,-1,'ascending_north']] as const) {
+      cells.clear();cells.set(key(0,2,0),id);cells.set(key(dx,3,dz),id);
+      eq(`rail ${id} slope ${dx}/${dz}`,railShape(get,0,2,0),expected);
+      const high=railCorner(expected,Math.max(dx,0),Math.max(dz,0));
+      check(`rail ${id} slope rises a complete block`,Math.abs(high.height-17/16)<1e-8);
+    }
+    for(const [a,b,expected] of [[0,1,'south_east'],[0,-1,'north_east']] as const) {
+      cells.clear();cells.set(key(0,2,0),id);cells.set(key(1,2,0),id);cells.set(key(a,2,b),id);
+      const shape=railShape(get,0,2,0);
+      check(`only ordinary rail can bend (${id}/${expected})`,id===B.RAIL?shape===expected:shape==='north_south'||shape==='east_west');
+    }
+  }
+  for(const [dx,dz,expected] of [[-1,1,'south_west'],[-1,-1,'north_west'],[1,1,'south_east'],[1,-1,'north_east']] as const) {
+    const get=(x:number,y:number,z:number)=>y===5&&((x===0&&z===0)||(x===dx&&z===0)||(x===0&&z===dz))?B.RAIL:B.AIR;
+    eq(`normal rail corner ${expected}`,railShape(get,0,5,0),expected);
+    const uv=railCorner(expected,0,0);check(`corner ${expected} selects curved texture`,uv.curved);
+  }
+  const ns=railCorner('north_south',0,1),ew=railCorner('east_west',0,1);
+  check('east/west geometry really rotates the original texture',ns.u!==ew.u||ns.v!==ew.v);
+  for(const name of ['rail','rail_corner','powered_rail','detector_rail']) {
+    const image=decodePng(JAVA_RAIL_TEXTURES[name]);
+    eq(`original ${name} texture is 16 px`,image.width,16);
+    check(`original ${name} retains transparent cutout pixels`,image.data.some((v,i)=>i%4===3&&v===0));
+    const tile=T[name as keyof typeof T],pixels=getAtlas().pixels;let mismatch=0;
+    for(let y=0;y<16;y++)for(let x=0;x<16;x++)for(let c=0;c<4;c++)if(pixels[((Math.floor(tile/16)*16+y)*256+(tile%16)*16+x)*4+c]!==image.data[(y*16+x)*4+c])mismatch++;
+    eq(`atlas preserves every native ${name} pixel after polish`,mismatch,0);
+  }
+  for(const name of ['chest','chest_left','chest_right']) {
+    const image=entityImage(name as 'chest');
+    check(`${name} uses pinned original Java texture`,!!image && image.width===64 && image.height===64);
+    const native=decodePng(JAVA_CHEST_TEXTURES[name].png);
+    check(`${name} does not fall back to old resource-pack artwork`,!!image&&image.data.every((v,i)=>v===native.data[i]));
+  }
+  for(const [shape,expected]of[
+    ['north_south','north,south'],['east_west','east,west'],['ascending_east','east,west'],['ascending_west','east,west'],
+    ['ascending_north','north,south'],['ascending_south','north,south'],['south_east','east,south'],['south_west','south,west'],['north_west','north,west'],['north_east','east,north']
+  ] as const) {
+    const corner=railCorner(shape,0,0),image=decodePng(JAVA_RAIL_TEXTURES[corner.curved?'rail_corner':'rail']);
+    const edges:string[]=[];
+    for(const side of['north','east','south','west']) {
+      let count=0;
+      for(let i=0;i<16;i++) {
+        const t=(i+.5)/16,x=side==='west'?0:side==='east'?1:t,z=side==='north'?0:side==='south'?1:t;
+        const uv=railCorner(shape,x,z),px=Math.min(15,Math.floor(uv.u*16)),py=Math.min(15,Math.floor((1-uv.v)*16));
+        if(image.data[(py*16+px)*4+3]>0)count++;
+      }
+      if(count>=2)edges.push(side);
+    }
+    eq(`native textured rail endpoints really meet ${shape} neighbours`,edges.sort().join(','),expected);
+  }
+  const placeWorld=new World(37,true),placeY=FLAT_H+1;
+  let look=new THREE.Vector3(1,0,0);
+  const placer=Object.assign(Object.create(Game.prototype),{world:placeWorld,inventory:new Inventory(),selected:0,mode:'creative',keys:new Set(),growables:new Map(),
+    body:{pos:new THREE.Vector3(100,placeY,100),w:.6,h:1.8},mobs:[],
+    raycastTarget:()=>({x:5,y:placeY-1,z:5,nx:0,ny:1,nz:0,id:B.GRASS}),findMobTarget:()=>({mob:null}),lookDir:()=>look,
+    fallGravity(){},onBlockChanged(){},consumeSelected(){},message(){},updateHand(){},emitHud(){},unlock(){}});
+  for(const id of[B.RAIL,B.POWERED_RAIL,B.DETECTOR_RAIL])for(const[dx,dz]of[[1,0],[-1,0],[0,1],[0,-1]]) {
+    placeWorld.setBlock(5,placeY,5,B.AIR);look.set(dx,0,dz);placer.inventory.slots[0]={id,count:64};placer.tryUse();
+    eq(`actual use places rail ${id} looking ${dx}/${dz}`,placeWorld.getBlock(5,placeY,5),railPlacement(id,dx,dz));
+  }
+  placer.inventory.slots.fill(null);placer.inventory.slots[0]={id:B.RAIL,count:64};placer.selected=3;placer.target={id:B.RAIL_EW};placer.pickBlock();
+  eq('pick block selects existing canonical rail stack',placer.selected,0);
+  placer.selected=3;placer.target={id:B.DETECTOR_RAIL_EW};placer.pickBlock();
+  eq('creative pick block creates canonical rail item',placer.inventory.slots[3]?.id,B.DETECTOR_RAIL);
+  placeWorld.setBlock(5,placeY,5,B.RAIL_EW);placer.breakBlock(5,placeY-1,5,true);
+  eq('removing ground also removes unsupported rail variant',placeWorld.getBlock(5,placeY,5),B.AIR);
+  const model=blockGeometry(B.CHEST);model.computeBoundingBox();
+  eq('held chest has body, lid and protruding latch (18 quads)',model.getAttribute('position').count,72);
+  check('held chest has native width 14/16',Math.abs(model.boundingBox!.max.x-model.boundingBox!.min.x-14/16)<1e-8);
+  check('held chest has native height 14/16 instead of a cube',Math.abs(model.boundingBox!.max.y-model.boundingBox!.min.y-14/16)<1e-8);
+  eq('chest front uses non-hinged original front UV',chestFaceRect(CHEST_BODY,5)[0],14);
+  eq('chest top uses external lid, not dark interior',chestFaceRect(CHEST_LID,3)[0],28);
+  eq('closed chest lid has no rotation',chestLidAngle(0),0);
+  check('half-open chest uses native cubic easing',Math.abs(chestLidAngle(.5)+.875*Math.PI/2)<1e-10);
+  check('fully open chest lid reaches 90 degrees',Math.abs(chestLidAngle(1)+Math.PI/2)<1e-10);
+  const heldRail=blockGeometry(B.RAIL);heldRail.computeBoundingBox();
+  check('rail item is a flat sprite, not a metal cube',Math.abs(heldRail.boundingBox!.max.y-heldRail.boundingBox!.min.y)<1e-6);
+  let door=false;
+  const room=(x:number,y:number,z:number):number=>{
+    if(y===0)return B.STONE;
+    if(x>=5&&x<=19&&z>=5&&z<=19) {
+      if(y===8)return B.STONE;
+      if(y<8&&(x===5||x===19||z===5||z===19)) {
+        if(door&&x===5&&z===12&&y>=2&&y<=4)return B.AIR;
+        return B.STONE;
+      }
+    }
+    return B.AIR;
+  };
+  const sealed=buildSkyLight(room,25,25,16);
+  eq('sealed room has no invented skylight',skyLevel(sealed,12,3,12),0);
+  eq('solid roof blocks direct skylight',skyLevel(sealed,12,8,12),0);
+  eq('outside keeps skylight level 15',skyLevel(sealed,1,3,1),15);
+  door=true;const opened=buildSkyLight(room,25,25,16);
+  const near=skyLevel(opened,6,3,12),middle=skyLevel(opened,12,3,12),far=skyLevel(opened,18,3,12);
+  check('light enters sideways through an actual doorway',near>0);
+  check('indirect light fades with distance inside a room',near>middle&&middle>far&&far>=0,`${near}/${middle}/${far}`);
+  door=false;const closed=buildSkyLight(room,25,25,16,0,0,opened.data);
+  check('light-map storage is reused',closed.data===opened.data);
+  eq('closing the opening removes stale light',skyLevel(closed,12,3,12),0);
+  const leaves=buildSkyLight((_x,y,_z)=>y>=6&&y<=8?B.LEAVES:B.AIR,25,25,16);
+  check('stacked leaf canopy attenuates skylight gradually',skyLevel(leaves,12,8,12)>skyLevel(leaves,12,7,12)&&skyLevel(leaves,12,7,12)>skyLevel(leaves,12,6,12));
+  eq('attenuated light continues fading downward through air',skyLevel(leaves,12,5,12),11);
+  const water=buildSkyLight((_x,y,_z)=>y===8?B.WATER:B.AIR,25,25,16);
+  check('water blocks attenuate direct skylight before it fades below',skyLevel(water,12,8,12)===14&&skyLevel(water,12,6,12)===12);
+  eq('maximum light level maps to full brightness',lightLevel(15),1);eq('level zero maps to darkness before ambient/gamma',lightLevel(0),0);
+  check('lightmap uses native nonlinear level response',Math.abs(lightLevel(8)-8/36)<1e-9);
+  const seamRoom=(x:number,y:number,z:number)=>room(x-6,y,z);
+  door=true;
+  const left=buildSkyLight(seamRoom,46,46,16,-15,-15),right=buildSkyLight(seamRoom,46,46,16,1,-15);
+  let mismatch=0;for(let y=0;y<16;y++)for(let z=0;z<16;z++)if(skyLevel(left,16,y,z)!==skyLevel(right,16,y,z))mismatch++;
+  eq('skylight agrees on both sides of a chunk seam',mismatch,0);
+  const world=new World(2468,true);world.getChunk(0,0);world.getChunk(1,0);world.dirty.clear();
+  world.setBlock(22,FLAT_H+1,8,B.GLOWSTONE);
+  check('emitter edit dirties neighbouring chunk beyond the one-block border',world.dirty.has(World.key(0,0)));
+  const geos=world.buildMesh(world.getChunk(0,0));let received=0;
+  for(const geo of geos) {
+    const p=geo.getAttribute('position'),a=geo.getAttribute('aBlock');
+    if(!p||!a){geo.dispose();continue;}
+    for(let i=0;i<p.count;i++)if(p.getX(i)>=9&&p.getX(i)<=10&&p.getZ(i)>=8&&p.getZ(i)<=9&&p.getY(i)===FLAT_H+1)received=Math.max(received,a.getX(i));
+    geo.dispose();
+  }
+  check('emitter 13 blocks away across chunk border reaches actual mesh',received>0,`${received}`);
+  world.dirty.clear();world.seedMods([{x:22,y:FLAT_H+1,z:8,id:B.TORCH}]);
+  check('network edit refreshes emitter index and adjacent lighting',world.getChunk(1,0).emitters.includes((FLAT_H+1)*CS*CS+8*CS+6)&&world.dirty.has(World.key(0,0)));
+  world.seedMods([{x:22,y:FLAT_H+1,z:8,id:B.AIR}]);
+  check('removing a network emitter clears its index',!world.getChunk(1,0).emitters.includes((FLAT_H+1)*CS*CS+8*CS+6));
+  let remaining=0;
+  for(const geo of world.buildMesh(world.getChunk(0,0))) {
+    const p=geo.getAttribute('position'),a=geo.getAttribute('aBlock');
+    if(p&&a)for(let i=0;i<p.count;i++)if(p.getX(i)>=9&&p.getX(i)<=10&&p.getZ(i)>=8&&p.getZ(i)<=9)remaining=Math.max(remaining,a.getX(i));
+    geo.dispose();
+  }
+  eq('removing a network emitter removes old light from neighbour mesh',remaining,0);
+  const partial=new World(2468,true);partial.getChunk(0,0);partial.dirty.clear();
+  partial.seedMods([{x:22,y:FLAT_H+1,z:8,id:B.GLOWSTONE}]);
+  check('edit in unloaded neighbour still invalidates lighting',partial.dirty.has('0,0'));
+  eq('network invalidation never generates unloaded chunks',partial.chunks.size,1);
+  const lidWorld=new World(20,true),ly=FLAT_H+1;
+  lidWorld.setBlock(5,ly,5,B.CHEST);
+  for(const geo of lidWorld.buildMesh(lidWorld.getChunk(0,0)))geo.dispose();
+  const material=new THREE.MeshBasicMaterial();
+  const game=Object.assign(Object.create(Game.prototype),{world:lidWorld,scene:new THREE.Scene(),materials:[material],ui:'chest',chestPos:{x:5,y:ly,z:5},chestLids:new Map()});
+  game.updateChestLids(.25);
+  const liveLid=game.chestLids.get(`5,${ly},5`),initialGeo=liveLid.group.children[0].geometry;
+  check('open lid uses cubic easing at half openness',Math.abs(liveLid.group.rotation.x-chestLidAngle(.5))<1e-10);
+  check('open outdoor chest is initially sky-lit',liveLid.sky>0);
+  let freed=0;initialGeo.addEventListener('dispose',()=>freed++);
+  for(let z=2;z<=8;z++)for(let x=2;x<=8;x++)for(let y=ly;y<=ly+4;y++) {
+    if(y===ly+4||x===2||x===8||z===2||z===8)lidWorld.setBlock(x,y,z,B.STONE);
+  }
+  for(const geo of lidWorld.buildMesh(lidWorld.getChunk(0,0)))geo.dispose();
+  game.updateChestLids(0);
+  eq('already open lid updates when the room becomes sealed',liveLid.sky,0);
+  eq('relighting disposes the outdated lid geometry',freed,1);
+  check('relighting does not reset openness',Math.abs(liveLid.open-.5)<1e-10);
+  lidWorld.setBlock(6,ly,5,B.TORCH);
+  for(const geo of lidWorld.buildMesh(lidWorld.getChunk(0,0)))geo.dispose();
+  game.updateChestLids(0);
+  check('already open lid receives newly placed torch light',liveLid.blk>0);
+  const torchGeo=liveLid.group.children[0].geometry;
+  game.updateChestLids(0);
+  eq('unchanged lighting reuses animated lid geometry',liveLid.group.children[0].geometry,torchGeo);
+  game.ui='playing';game.chestPos=null;game.updateChestLids(1);
+  check('closing after relighting frees the lid and restores static mesh',game.chestLids.size===0&&lidWorld.hiddenChestLids.size===0);
+  material.dispose();
+  const trackWorld=new World(33,true);trackWorld.setBlock(15,FLAT_H+1,8,B.RAIL_EW);trackWorld.setBlock(16,FLAT_H+1,8,B.RAIL_EW);
+  const copy=new World(33,true);copy.loadMods(trackWorld.serializeMods());
+  eq('rail axis survives save and reload',copy.getBlock(15,FLAT_H+1,8),B.RAIL_EW);
+  eq('rail connects across chunk seam after reload',railShape((x,y,z)=>copy.getBlock(x,y,z),15,FLAT_H+1,8),'east_west');
+  trackWorld.dirty.clear();trackWorld.setBlock(16,FLAT_H+1,8,B.AIR);
+  check('removing adjacent rail dirties both chunk meshes',trackWorld.dirty.has('0,0')&&trackWorld.dirty.has('1,0'));
+  for(const g of [model,heldRail])g.dispose();
 }
 
 // =================================================================== report

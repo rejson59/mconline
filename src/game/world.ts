@@ -1,3 +1,6 @@
+import { LIGHT_RADIUS, buildSkyLight, skyLevel, lightLevel, type SkyField } from './lightMap';
+import { CHEST_BODY, CHEST_LID, chestBoxFor, chestLockFor, chestSeamSkip, chestFaceRect, type ChestBox } from './chestModel';
+import { railShape, railCorner } from './rails';
 import { rememberDecorationMask, treeRootReserved } from './decorationMask';
 import { WaterSimulation } from './water';
 import { isWater, waterHeight } from './blocks';
@@ -109,12 +112,10 @@ const FACES = [
 // Shared BFS scratch for buildMesh (single-threaded, never nested).
 let lightScratch: Uint8Array | null = null;
 // 2.8.1: bufor światła nieba – jedna kolumna na x/z z jednym blokiem zapasu.
-const SKY_PAD = 1;
+const SKY_PAD = LIGHT_RADIUS;
 const SKY_W = CS + SKY_PAD * 2;
-const LEAF_SHADE = 0.9; // ile światła przechodzi przez jeden blok liści
-const MIN_SKY = 0.16; // pod gęstą koroną zostaje resztka światła
 const MIN_CAVE_SKY = 0.04; // pod pełnym blokiem zostaje tylko mrok jaskini
-let skyScratch: Float32Array | null = null;
+let skyScratch: Uint8Array | null = null;
 const qx: number[] = [];
 const qy: number[] = [];
 const qz: number[] = [];
@@ -234,95 +235,6 @@ class MeshBuffer {
  * góra (u+d, v), dół (u+d+w, v), wschód (u, v+d), północ (u+d, v+d),
  * zachód (u+d+w, v+d), południe (u+d+w+d, v+d).
  * ------------------------------------------------------------------------ */
-interface ChestBox {
-  /** Pudełko w pikselach modelu (0–16) – tak jak w JSON-ie encji. */
-  x0: number; y0: number; z0: number; x1: number; y1: number; z1: number;
-  /** Początek UV w teksturze 64×64. */
-  u: number; v: number;
-}
-
-const CHEST_BODY: ChestBox = { x0: 1, y0: 0, z0: 1, x1: 15, y1: 10, z1: 15, u: 0, v: 19 };
-const CHEST_LID: ChestBox = { x0: 1, y0: 9, z0: 1, x1: 15, y1: 14, z1: 15, u: 0, v: 0 };
-const CHEST_LOCK: ChestBox = { x0: 7, y0: 7, z0: 15, x1: 9, y1: 11, z1: 16, u: 0, v: 0 };
-// 2.32: w podwójnej skrzyni zamek jest dzielony na dwie połówki – każda
-// przy swoim brzegu styku, więc razem dają jedną klamrę na środku, jak w grze.
-const CHEST_LOCK_LEFT: ChestBox = { x0: 15, y0: 7, z0: 15, x1: 16, y1: 11, z1: 16, u: 0, v: 0 };
-const CHEST_LOCK_RIGHT: ChestBox = { x0: 0, y0: 7, z0: 15, x1: 1, y1: 11, z1: 16, u: 0, v: 0 };
-
-/**
- * 2.32: lewa i prawa połowa podwójnej skrzyni.
- *
- * W wanilii `ChestModel` dla `doubleLeft` przesuwa początek na x = 0 i zwęża
- * pudełko do 15 px, a dla `doubleRight` zaczyna na x = 1 i kończy na 16.
- * Ścianki stykowe dwóch połówek leżą dokładnie w tej samej płaszczyźnie, ale
- * mają przeciwne normalne, więc z zewnątrz nigdy nie widać żadnej z nich –
- * dlatego podwójna skrzynia wygląda jak jedna bryła bez szwu.
- */
-function chestBoxFor(region: 'chest' | 'chest_left' | 'chest_right', box: ChestBox): ChestBox {
-  if (region === 'chest') return box;
-  // `chest_left` to połówka bliżej −x (dla przodu na +z) i rysuje się od
-  // 1 do 16, a `chest_right` od 0 do 15. Dzięki temu bryła jest ciągła bez
-  // szczeliny, a ciemne obramowanie z `normal_left/right.png` wypada tylko
-  // na zewnętrznych krawędziach – dokładnie jak w Minecrafcie.
-  // 2.32: połówki zachodzą na siebie o 1 px przy styku, więc podwójna
-  // skrzynia jest jedną bryłą bez szczeliny: lewa zajmuje 1–16 px swojej
-  // kratki, prawa 0–15 px. Razem dają 30 px szerokości – tyle, ile ma
-  // waniliowa podwójna skrzynia. Ciemne obramowanie z `normal_left.png`
-  // wypada na zewnętrznej krawędzi lewej połówki, a z `normal_right.png` na
-  // zewnętrznej krawędzi prawej – na styku zostaje czyste drewno.
-  return region === 'chest_left' ? { ...box, x0: 1, x1: 16 } : { ...box, x0: 0, x1: 15 };
-}
-
-/**
- * 2.32: która ścianka połówki jest schowana w styku.
- *
- * `chest_left` sięga krawędzi kratki od strony sąsiada (x = +16 px), więc
- * jego ściana +x jest w środku podwójnej skrzyni; `chest_right` ma taką
- * samą ścianę −x. Dla obrotu o 90° te osie zamieniają się miejscami.
- */
-function chestSeamSkip(region: 'chest' | 'chest_left' | 'chest_right', _yaw?: number): number {
-  // 1 = pomiń +x, −1 = pomiń −x (w układzie modelu).
-  return region === 'chest_left' ? 1 : -1;
-}
-
-/** Zamek dla danej połówki – pojedyncza skrzynia ma jeden, szeroki. */
-function chestLockFor(region: 'chest' | 'chest_left' | 'chest_right'): ChestBox {
-  if (region === 'chest_left') return CHEST_LOCK_LEFT;
-  if (region === 'chest_right') return CHEST_LOCK_RIGHT;
-  return CHEST_LOCK;
-}
-
-/** Prostokąt UV jednej ściany pudełka w pikselach tekstury encji. */
-function chestFaceRect(box: ChestBox, f: number): [number, number, number, number] {
-  const w = box.x1 - box.x0, h = box.y1 - box.y0, d = box.z1 - box.z0;
-  const { u, v } = box;
-  // 0 −x, 1 +x, 2 −y (spód), 3 +y (góra), 4 −z, 5 +z.
-  // W waniliowym `ModelPart.Cube` górna ściana bierze (u+d, v), a dolna
-  // (u+d+w, v). W `normal.png` to drugie jest jasną deską (zewnętrzna góra
-  // wieka), a pierwsze ciemnym wnętrzem – dlatego góra czyta się poprawnie
-  // tylko przy tej kolejności. Wnętrze korpusu (28,19) jest czarne, więc po
-  // otwarciu wieka widać dokładnie taką ciemność jak w grze.
-  switch (f) {
-    case 0: return [u + d + w, v + d, d, h];
-    case 1: return [u, v + d, d, h];
-    // 2.32: w `normal.png` zewnętrzna góra wieka leży pod (28,0), a ciemne
-    // wnętrze pod (14,0) – dlatego +y bierze prawe pudełko, a −y lewe.
-    case 2: return [u + d, v, w, d];
-    case 3: return [u + d + w, v, w, d];
-    case 4: return [u + d, v + d, w, h];
-    default: return [u + d + w + d, v + d, w, h];
-  }
-}
-
-/**
- * 2.32: geometria samego wieka skrzyni (wieko + zamek), w układzie lokalnym
- * z zawiasem w punkcie (0, 0, 0).
- *
- * W wanilii `ChestModel` obraca wieko wokół linii y = 9, z = 1 px – czyli
- * przedniej krawędzi TYLNEJ ściany. Dzięki temu po otwarciu klapa staje
- * pionowo i odchyla się do tyłu, a nie „unosi” w powietrzu. Silnik stawia
- * tę siatkę w świecie i animuje `rotation.x` od 0 do −π/2.
- */
 export function chestLidGeometry(
   region: 'chest' | 'chest_left' | 'chest_right' = 'chest',
   sky = 1,
@@ -343,6 +255,17 @@ export function chestLidGeometry(
  * Rysuje skrzynię obróconą o `yaw` × 90° wokół środka kratki
  * (0 = przód na +z, 1 = +x, 2 = −z, 3 = −x).
  */
+export function closedChestGeometry(): THREE.BufferGeometry {
+  const buffer = new MeshBuffer(80);
+  for (const box of [CHEST_BODY, CHEST_LID, chestLockFor('chest')]) addChestBox(buffer,0,0,0,box,0,1,0);
+  const geometry = buffer.geometry();
+  geometry.translate(-.5,-.5,-.5);
+  // Item materials consume vertex colours directly (the world shader takes sqrt).
+  const colours = geometry.getAttribute('color');
+  for(let i=0;i<colours.count;i++) colours.setXYZ(i,Math.sqrt(colours.getX(i)),Math.sqrt(colours.getY(i)),Math.sqrt(colours.getZ(i)));
+  return geometry;
+}
+
 function addChestBox(
   buf: MeshBuffer, ox: number, oy: number, oz: number, box: ChestBox,
   yaw: number, sky: number, blk: number,
@@ -1519,6 +1442,7 @@ export class World {
     // 2.8: utrzymuje indeks świateł w zgodzie z terenem (bez pełnego skanu
     // przy stawianiu zwykłego bloku).
     if (EMIT[previous] || EMIT[id]) c.refreshEmitters();
+    if (this.lightChanged(previous,id)) this.markLightDirty(x,z);
     c.revision++;
     if (notify) this.onEdit?.(x, y, z, id);
     this.water.changed(x, y, z, previous);
@@ -1577,7 +1501,13 @@ export class World {
       }
       m.set(i, e.id);
       const c = this.chunks.get(k);
-      if (!c) continue;
+      if (!c) {
+        // An unloaded edited neighbour can still illuminate a loaded mesh.
+        // Invalidate conservatively without generating its terrain.
+        this.markLightDirty(e.x,e.z);
+        this.markBlockDirty(e.x,e.y,e.z);
+        continue;
+      }
       if (c.data[i] === e.id) continue;
       const previous = c.data[i];
       c.data[i] = e.id;
@@ -1585,6 +1515,9 @@ export class World {
       this.water.changed(e.x, e.y, e.z, previous);
       c.recomputeHeight(lx, lz);
       c.revision++;
+      if (EMIT[previous] || EMIT[e.id]) c.refreshEmitters();
+      if (this.lightChanged(previous,e.id)) this.markLightDirty(e.x,e.z);
+      this.markBlockDirty(e.x,e.y,e.z);
       this.dirty.add(k);
     }
   }
@@ -1624,8 +1557,7 @@ export class World {
   }
 
   /**
-   * 2.32: tekstura skrzyni dla danej kratki. Na razie każda skrzynia używa
-   * `normal.png` – lewa/prawa połowa czeka na podwójne skrzynie.
+   * Native single/left/right texture region for a facing-compatible pair.
    */
   chestRegionAt(x: number, y: number, z: number): 'chest' | 'chest_left' | 'chest_right' {
     const id = this.peekBlock(x, y, z);
@@ -1656,6 +1588,14 @@ export class World {
    * `setBlock` nie zadziała. Ta metoda robi dokładnie to, co potrzeba,
    * razem z sąsiadami (AO i światło na krawędziach).
    */
+  private lightChanged(previous:number,next:number):boolean {
+    return EMIT[previous]!==EMIT[next] || IS_OPAQUE[previous]!==IS_OPAQUE[next] || IS_LEAFY[previous]!==IS_LEAFY[next] || isWater(previous)!==isWater(next);
+  }
+  private markLightDirty(x:number,z:number) {
+    for(let cz=Math.floor((z-LIGHT_RADIUS)/CS);cz<=Math.floor((z+LIGHT_RADIUS)/CS);cz++)
+      for(let cx=Math.floor((x-LIGHT_RADIUS)/CS);cx<=Math.floor((x+LIGHT_RADIUS)/CS);cx++)this.markDirtyChunk(cx,cz);
+  }
+
   markDirtyChunk(cx: number, cz: number) {
     const k = World.key(cx, cz);
     if (this.chunks.has(k)) this.dirty.add(k);
@@ -1667,7 +1607,8 @@ export class World {
    * Wieko skrzyni znika z siatki chunka, gdy pojawia się animowany model.
    * Wcześniej oznaczaliśmy chunk i czterech sąsiadów (5 × ~5 ms = klatka
    * zamarzała), choć sąsiedzi zmieniają się tylko wtedy, gdy blok leży
-   * dokładnie na krawędzi – bo tylko tam dochodzi do zmian AO i światła.
+   * dokładnie na krawędzi (geometria i AO). Zmiana okluzji/emisji światła
+   * osobno wywołuje markLightDirty() z pełnym promieniem 15 bloków.
    */
   markBlockDirty(x: number, y: number, z: number) {
     void y;
@@ -1707,7 +1648,7 @@ export class World {
     // Block light (torches, lava, lit furnaces) spread a few blocks across chunk borders.
     // The BFS scratch is module-level: buildMesh never runs re-entrantly, so a
     // rebuild only fills the buffer instead of allocating 128 KB every time.
-    const PAD = 8;
+    const PAD = LIGHT_RADIUS;
     const LW = CS + PAD * 2;
     const need = LW * LW * CH;
     if (!lightScratch || lightScratch.length < need) lightScratch = new Uint8Array(need);
@@ -1762,17 +1703,21 @@ export class World {
     }
     const blockLight = (x: number, y: number, z: number): number => {
       if (y < 0 || y >= CH || x < -PAD || x >= CS + PAD || z < -PAD || z >= CS + PAD) return 0;
-      return Lmap[lat(x, y, z)] / 15;
+      return lightLevel(Lmap[lat(x, y, z)]);
     };
-    // 2.8.1: światło nieba liczone kolumnowo, z góry na dół. Liście tłumią je
-    // stopniowo, więc pod koroną jest miękkie, zielone półcienie zamiast
-    // czarnego pnia; pełny blok odcina światło całkowicie (jaskinie).
-    const skyNeed = SKY_W * SKY_W * CH;
-    if (!skyScratch || skyScratch.length < skyNeed) skyScratch = new Float32Array(skyNeed);
-    else skyScratch.fill(0, 0, skyNeed);
+    // 4.10: direct vertical skylight plus attenuated lateral propagation.
+    // Full blocks block light; leaf/water columns gradually attenuate it.
+    // Air above every neighbour's highest model is uniformly full sky;
+    // don't scan/store those empty layers. maxY is conservative after edits.
+    let skyHeight = c.nether ? CH : 1;
+    if (!c.nether) for (const neighbour of neigh) skyHeight = Math.max(skyHeight, Math.min(CH, neighbour.maxY + 2));
+    const skyNeed = SKY_W * SKY_W * skyHeight;
+    if (!skyScratch || skyScratch.length < skyNeed) skyScratch = new Uint8Array(skyNeed);
     const skyMap = skyScratch;
-    const skyIndex = (x: number, y: number, z: number) => (y * SKY_W + (z + SKY_PAD)) * SKY_W + (x + SKY_PAD);
+    const skyIndex = (x:number,y:number,z:number) => (y*SKY_W+z+SKY_PAD)*SKY_W+x+SKY_PAD;
+    let skyField:SkyField={data:skyMap,width:SKY_W,depth:SKY_W,height:skyHeight,x0:-SKY_PAD,z0:-SKY_PAD};
     if (c.nether) {
+      skyMap.fill(0,0,skyNeed);
       // 2.8.1: w Netherze nie ma nieba – otwarta jaskinia między podłogą
       // a stropem liczy się jako „na zewnątrz”, inaczej strop gasi cały wymiar.
       const floorLocal = (x: number, z: number): number => {
@@ -1785,39 +1730,18 @@ export class World {
         for (let x = -SKY_PAD; x < CS + SKY_PAD; x++) {
           const fh = floorLocal(x, z);
           for (let y = 0; y < CH; y++) {
-            skyMap[skyIndex(x, y, z)] = y >= fh ? 1 : Math.max(MIN_CAVE_SKY, Math.pow(0.72, fh - y));
-          }
-        }
-      }
-    } else {
-      for (let z = -SKY_PAD; z < CS + SKY_PAD; z++) {
-        for (let x = -SKY_PAD; x < CS + SKY_PAD; x++) {
-          let sky = 1;
-          for (let y = CH - 1; y >= 0; y--) {
-            skyMap[skyIndex(x, y, z)] = sky;
-            const id = get(x, y, z);
-            if (IS_OPAQUE[id]) {
-              if (IS_LEAFY[id]) {
-                sky *= LEAF_SHADE;
-                if (sky < MIN_SKY) sky = MIN_SKY;
-              } else {
-                // Poniżej pełnego bloku nie ma bezpośredniego nieba. Bufor
-                // zostaje wyzerowany (szybkie `fill` na starcie), a `skyLight`
-                // zamienia zero na nikłą poświatę jaskiń – bez zapisywania
-                // setek komórek na kolumnę.
-                break;
-              }
-            }
+            skyMap[skyIndex(x, y, z)] = y >= fh ? 15 : Math.round(Math.max(MIN_CAVE_SKY, Math.pow(0.72, fh - y))*15);
           }
         }
       }
     }
-    const skyLight = (x: number, y: number, z: number): number => {
-      if (y < 0) return 0;
-      if (y >= CH) return 1;
-      const v = skyMap[skyIndex(x, y, z)];
-      return v > 0 ? v : MIN_CAVE_SKY;
-    };
+    else skyField=buildSkyLight(get,SKY_W,SKY_W,skyHeight,-SKY_PAD,-SKY_PAD,skyMap);
+    const skyLight = (x:number,y:number,z:number):number => lightLevel(skyLevel(skyField,x,y,z));
+    // Non-full models may retain opaque legacy IDs. Light their surfaces from
+    // surrounding air, not from the zero-light voxel inside the solid model.
+    const modelSkyLight=(x:number,y:number,z:number)=>!IS_OPAQUE[get(x,y,z)]?skyLight(x,y,z):Math.max(skyLight(x,y,z),skyLight(x,y+1,z),skyLight(x+1,y,z),skyLight(x-1,y,z),skyLight(x,y,z+1),skyLight(x,y,z-1));
+    const modelBlockLight=(x:number,y:number,z:number)=>!IS_OPAQUE[get(x,y,z)]?blockLight(x,y,z):Math.max(blockLight(x,y,z),blockLight(x,y+1,z),blockLight(x+1,y,z),blockLight(x-1,y,z),blockLight(x,y,z+1),blockLight(x,y,z-1));
+
 
     const maxY = Math.min(CH - 1, c.maxY);
     for (let y = 0; y <= maxY; y++)
@@ -1830,8 +1754,8 @@ export class World {
           const buf = bufs[layer];
           const special = specialOf(id);
           if (special) {
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             for (const sb of special) {
               addBox(
                 buf, ox + x, y, oz + z,
@@ -1856,8 +1780,8 @@ export class World {
           if (rt === 1) {
             // cross plant
             const t = tileFor(id, 0);
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             const skyB = sky * sky * 0.85;
             const blkB = blk * blk * 0.85;
             const wx = ox + x, wz = oz + z;
@@ -1883,16 +1807,16 @@ export class World {
             const top = isSlabTop(id);
             const y0 = top ? 0.5 : 0;
             const y1 = top ? 1 : 0.5;
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             addBox(buf, ox + x, y, oz + z, 0, y0, 0, 1, y1, 1, tileFor(id, 0), sky, blk);
             continue;
           }
           if (rt === 4) {
             // stairs – bottom slab + top quarter
             const facing = stairsFacing(id);
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             // bottom half
             addBox(buf, ox + x, y, oz + z, 0, 0, 0, 1, 0.5, 1, tileFor(id, 0), sky, blk);
             // top quarter depending on facing
@@ -1907,8 +1831,8 @@ export class World {
           }
           if (rt === 5) {
             // portal – thin, wobble
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             // check orientation by neighbors: if obsidian on X sides, portal plane is Z, else X
             const obsX = IS_OPAQUE[get(x - 1, y, z)] || IS_OPAQUE[get(x + 1, y, z)];
             const obsZ = IS_OPAQUE[get(x, y, z - 1)] || IS_OPAQUE[get(x, y, z + 1)];
@@ -1922,18 +1846,17 @@ export class World {
           if (rt === 6) {
             // 2.21: waniliowa szyna to płaski model na wysokości 1/16 bloku –
             // wcześniej była bryłą 0,1 z rozciągniętym kafelkiem.
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             const sh = sky * sky;
-            const t = tileFor(id, 0);
+            const shape = railShape(get, x, y, z);
             const base = buf.count;
-            const yy = y + 1 / 16;
-            const quadUV: [number, number][] = [[0, 1], [1, 1], [0, 0], [1, 0]];
             const xs = [ox + x, ox + x + 1, ox + x, ox + x + 1];
             const zs = [oz + z + 1, oz + z + 1, oz + z, oz + z];
             for (let k = 0; k < 4; k++) {
-              const uv = tileUV(t, quadUV[k][0], quadUV[k][1]);
-              buf.vertex(xs[k], yy, zs[k], uv[0], uv[1], sh, sh, sh, blk * blk, 0, 3);
+              const corner = railCorner(shape, xs[k] - ox - x, zs[k] - oz - z);
+              const uv = tileUV(corner.curved ? T.rail_corner : tileFor(id, 0), corner.u, corner.v);
+              buf.vertex(xs[k], y + corner.height, zs[k], uv[0], uv[1], sh, sh, sh, blk * blk, 0, 3);
             }
             buf.quad(base);
             continue;
@@ -1941,8 +1864,8 @@ export class World {
           if (rt === 9) {
             // Płot: słupek 4×16×4 + po dwa poziome szczeble w stronę każdego
             // płotu lub pełnego bloku (waniliowe 1,5 bloku wysokości).
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             const t = tileFor(id, 0);
             const wx = ox + x, wz = oz + z;
             addBoxPx(buf, wx, y, wz, 6 / 16, 0, 6 / 16, 10 / 16, 1, 10 / 16, t, sky, blk);
@@ -1974,8 +1897,8 @@ export class World {
           if (rt === 10) {
             // Pochodnia: dokładnie 2×10 px patyczka z kafelka. Na ścianie
             // (brak podłoża) przesuwamy ją do ściany, w którą jest wbita.
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             const t = tileFor(id, 0);
             const crop: [number, number, number, number] = [7, 0, 9, 10];
             const wx = ox + x, wz = oz + z;
@@ -1993,8 +1916,8 @@ export class World {
           }
           if (rt === 11) {
             // Lilia wodna: płaski liść tuż nad taflą wody (jak w wanilii).
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             const sh = sky * sky * 0.95;
             const t = tileFor(id, 0);
             const base = buf.count;
@@ -2014,8 +1937,8 @@ export class World {
             // z dokładnymi UV z `entity/chest/normal.png`. Wcześniej była to
             // bryła z trzech przeskalowanych kafelków 16×16 (piksele się
             // gubiły, a przód z klamrą nie zgadzał się z grą).
-            const sky = skyLight(x, y, z);
-            const blk = Math.max(blockLight(x, y, z), EMIT[id] / 15);
+            const sky = modelSkyLight(x, y, z);
+            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
             const yaw = chestFacing(id);
             // 2.32: `hiddenChestLids` trzyma klucze w koordynatach ŚWIATA.
             const wx = ox + x, wz = oz + z;
@@ -2053,7 +1976,7 @@ export class World {
             } else if (isLiquid && RENDER[nb] === 2) continue;
             const t = tileFor(id, f);
             const sky = skyLight(nx, ny, nz);
-            const blk = Math.max(blockLight(nx, ny, nz), EMIT[id] / 15);
+            const blk = Math.max(blockLight(nx, ny, nz), lightLevel(EMIT[id]));
             // 2.8: fala wody – tylko górna tafla porusza się w shaderze.
             const wave = isLiquid && F.dir[1] === 1 ? 1 : 0;
             const base = buf.count;
@@ -2061,7 +1984,7 @@ export class World {
             for (let k = 0; k < 4; k++) {
               const cr = F.c[k];
               let px = cr[0], py = cr[1], pz = cr[2];
-              let aoF = 1;
+              let aoF = 1, vertexSky=sky, vertexBlock=blk;
               if (!isLiquid) {
                 // compute AO
                 const d = F.dir;
@@ -2078,6 +2001,13 @@ export class World {
                 const cc = occ(get(nx + s1x + s2x, ny + s1y + s2y, nz + s1z + s2z));
                 const occl = a > 0 && b > 0 ? 1 : Math.min(1, a + b + cc);
                 aoF = 1 - 0.42 * occl;
+                const sx=nx+s1x,sy=ny+s1y,sz=nz+s1z,tx=nx+s2x,ty=ny+s2y,tz=nz+s2z;
+                const blocked=a===1&&b===1;
+                const cornerSky=blocked?0:skyLight(sx+s2x,sy+s2y,sz+s2z);
+                const cornerBlock=blocked?0:blockLight(sx+s2x,sy+s2y,sz+s2z);
+                vertexSky=(sky+skyLight(sx,sy,sz)+skyLight(tx,ty,tz)+cornerSky)/4;
+                vertexBlock=Math.max(lightLevel(EMIT[id]),(blk+blockLight(sx,sy,sz)+blockLight(tx,ty,tz)+cornerBlock)/4);
+
               }
               ao[k] = aoF;
               let vy = y + py;
@@ -2088,9 +2018,9 @@ export class World {
               const uv0 = TILE_UV4[uvi];
               const uv1 = TILE_UV4[uvi + 1];
               const shadeAo = F.shade * aoF;
-              const skyB = shadeAo * sky;
+              const skyB = shadeAo * vertexSky;
               const br = skyB * skyB;
-              const bb = shadeAo * blk;
+              const bb = shadeAo * vertexBlock;
               buf.vertex(ox + x + px, vy, oz + z + pz, uv0, uv1, br, br, br, bb * bb, wave, f);
             }
             buf.quad(base, ao[0] + ao[3] > ao[1] + ao[2]);

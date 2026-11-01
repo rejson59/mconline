@@ -1,3 +1,4 @@
+import { JAVA_CHEST_TEXTURES, JAVA_RAIL_TEXTURES } from './art/javaBlocks.generated';
 /**
  * 2.17: grafika z paczki „Pixel Perfection CE” wkomponowana w atlas gry.
  *
@@ -46,7 +47,7 @@ export type EntityAtlasKey = keyof typeof ENTITY_ATLAS;
 /** Obraz tekstury encji z paczki (albo null, gdy jej nie ma). */
 export function entityImage(key: EntityAtlasKey): DecodedImage | null {
   if (entityImages.has(key)) return entityImages.get(key) ?? null;
-  const entry = ENTITY_TEXTURES[key];
+  const entry = JAVA_CHEST_TEXTURES[key] ?? ENTITY_TEXTURES[key];
   if (!entry) {
     entityImages.set(key, null);
     return null;
@@ -178,4 +179,16 @@ export function hasOfficialItemIcon(id: number): boolean {
 /** Ile przedmiotów ma oficjalną ikonę. */
 export function officialItemCount(): number {
   return Object.keys(ITEM_TILE).length;
+}
+
+/** Original Java rail sprites; reserved corner tile stays outside chest regions. */
+export function applyJavaRailTextures(img: ImageData, tiles: Record<string,number>): void {
+  for(const [name,tile] of Object.entries(tiles)) {
+    const png=JAVA_RAIL_TEXTURES[name];if(!png)continue;
+    const source=decodePng(png), ox=(tile%16)*16,oz=Math.floor(tile/16)*16;
+    for(let z=0;z<16;z++)for(let x=0;x<16;x++) {
+      const si=(z*source.width+x)*4,di=((oz+z)*img.width+ox+x)*4;
+      for(let channel=0;channel<4;channel++)img.data[di+channel]=source.data[si+channel];
+    }
+  }
 }

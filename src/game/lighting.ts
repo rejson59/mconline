@@ -28,13 +28,13 @@ export const HELD_RANGE = 14;
 /** Maksymalny blask trzymanego źródła światła. */
 export const HELD_POWER = 0.72;
 /** Podłoga światła otoczenia – dzięki niej noc nie jest czarna. */
-export const AMBIENT = 0.13;
+export const AMBIENT = 0.04;
 /**
  * 2.8.2: „księżycówka”. Nocą otwarte niebo dostaje odrobinę światła więcej,
  * ale jaskinie (mała ekspozycja na niebo) zostają ciemne. Bez tego nocne
  * korony drzew zlewały się w czarne plamy.
  */
-export const MOON_SKY = 0.22;
+export const MOON_SKY = 0.10;
 /** Jak mocno słońce rozjaśnia ścianę ustawioną prostopadle do niego. */
 export const SUN_GAIN = 0.45;
 /** Bazowy poziom światła nieba, zanim dojdzie słońce (1.0 = bez zmian). */
@@ -119,7 +119,7 @@ export function patchChunkMaterial(
   mat.userData.uHeldStrength = uHeldStrength;
   mat.userData.uSun = uSun;
   mat.color.setRGB(1, 1, 1);
-  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-5-water' : 'blockcraft-light-5');
+  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-6-water' : 'blockcraft-light-6');
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uBrightness = uBrightness;
     shader.uniforms.uDay = uDay;

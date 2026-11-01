@@ -1,6 +1,7 @@
+import { CHEST_BODY, CHEST_LID, chestLockFor, chestFaceRect } from './chestModel';
 import { T, BLOCKS, RENDER, tileFor } from './blocks';
 import { mulberry32 } from './noise';
-import { applyEntityTextures, applyOfficialTiles, ENTITY_ATLAS, isOfficialTile, type EntityAtlasKey } from './packArt';
+import { applyJavaRailTextures, applyEntityTextures, applyOfficialTiles, ENTITY_ATLAS, isOfficialTile, type EntityAtlasKey } from './packArt';
 
 export const TILE = 16;
 export const ATLAS_TILES = 16; // tiles per row
@@ -1338,6 +1339,8 @@ export function buildAtlas(): AtlasResult {
     setPx(T.glass_pane_edge, x, y, 177, 211, 216, 255);
   }
 
+  applyJavaRailTextures(img, { rail:T.rail, rail_corner:T.rail_corner, powered_rail:T.powered_rail, detector_rail:T.detector_rail });
+
   // 2.8.2: dopiero teraz cały obraz trafia do atlasu – wszystkie kafelki są
   // narysowane, dziury w liściach wypełnione, a krawędzie wygładzone.
   ctx.putImageData(img, 0, 0);
@@ -1515,7 +1518,22 @@ function makeIcon(atlas: HTMLCanvasElement, id: number): string {
     const sx = (tile % ATLAS_TILES) * TILE, sy = Math.floor(tile / ATLAS_TILES) * TILE;
     ctx.drawImage(atlas, sx, sy, 16, 16, 0, 0, 16, 16);
   };
-  if (RENDER[id] === 1 || RENDER[id] === 16) {
+  if (RENDER[id] === 12) {
+    // Project the actual 14×14 chest plus lid and protruding latch, not a cube.
+    const project = (x:number,y:number,z:number):[number,number] => [24+(x-z)*1.3, 38+(x+z-16)*.65-y*1.5];
+    const {x:ax,y:ay}=ENTITY_ATLAS.chest;
+    for(const box of [CHEST_BODY,CHEST_LID,chestLockFor('chest')]) {
+      for(const face of [3,5,1]) {
+        const [rx,ry,rw,rh]=chestFaceRect(box,face);
+        const {x0,y0,z0,x1,y1,z1}=box;
+        const points=face===3 ? [[x0,y1,z0],[x1,y1,z0],[x0,y1,z1]] : face===5 ? [[x0,y1,z1],[x1,y1,z1],[x0,y0,z1]] : [[x1,y1,z1],[x1,y1,z0],[x1,y0,z1]];
+        const [p,q,r]=points.map(p=>project(p[0],p[1],p[2]));
+        ctx.setTransform((q[0]-p[0])/rw,(q[1]-p[1])/rw,(r[0]-p[0])/rh,(r[1]-p[1])/rh,p[0],p[1]);
+        ctx.drawImage(atlas,ax+rx,ay+ry,rw,rh,0,0,rw,rh);
+        if(face!==3) {ctx.fillStyle=face===1?'rgba(0,0,0,.3)':'rgba(0,0,0,.12)';ctx.fillRect(0,0,rw,rh);}
+      }
+    }
+  } else if (RENDER[id] === 1 || RENDER[id] === 16 || RENDER[id] === 6) {
     ctx.setTransform(2.6, 0, 0, 2.6, 3, 3);
     drawTile(tileFor(id, 0));
   } else {

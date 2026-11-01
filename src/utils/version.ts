@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.9.0';
-export const GAME_RELEASE_NAME = 'Oryginalne dźwięki i płynny widok';
+export const GAME_VERSION = '4.10.0';
+export const GAME_RELEASE_NAME = 'Tory, skrzynie i światło';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,9 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.10: tory w obu kierunkach', text: 'Stawianie według spojrzenia, zakręty zwykłych torów i podjazdy. Oryginalne tekstury Java 1.20.4, płaskie modele przedmiotów, zachowanie osi po zapisaniu świata.' },
+  { title: '4.10: skrzynie i modele przedmiotów', text: 'Oryginalne tekstury skrzyń Java 1.20.4 i poprawiony przód/tył. Model korpusu, wieka i zamka także w dłoni, dropie i ikonie. Wygładzona animacja reaguje na zmianę oświetlenia.' },
+  { title: '4.10: światło przez wejścia i pod okapami', text: 'Światło rozchodzi się bokiem i słabnie w głębi pomieszczeń. Płynniejsze narożniki bloków, ciemniejsze zamknięte pokoje, poprawne doświetlenie sąsiednich chunków po zmianie źródła lub przesłony.' },
   { title:'Interfejs Java 1.20.4',text:'Oryginalne grafiki GUI i bitmapowa czcionka, panorama z sześciu ścian, natywne menu, opcje, pauza i ekran śmierci. Własny silnik przeglądarkowy, nie oficjalny klient Minecrafta.' },
   { title:'Ekwipunek i książka receptur',text:'Stały układ slotów, podgląd postaci 3D, osobne zakładki creative i ekwipunek przetrwania. Książka układa składniki; wynik odbierasz ze slotu. Przeciąganie dzieli stosy, PPM rozkłada po jednej sztuce, klik poza oknem wyrzuca trzymany przedmiot.' },
   { title:'Skala GUI i klasyczny HUD',text:'Wspólna całkowita skala interfejsu, serca, głód, pancerz, powietrze, doświadczenie i hotbar. Lista graczy tylko pod Tab; minimapa i automatyczny atak są opcjonalnymi rozszerzeniami.' },
