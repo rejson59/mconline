@@ -1,6 +1,14 @@
-# BlockCraft 4.9.0 🌍
+# BlockCraft 4.10.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.10.0 „Tory, skrzynie i światło”
+
+- **Tory:** oba kierunki stawiania zależnie od spojrzenia, połączenia z sąsiadami, cztery zakręty zwykłych torów i cztery podjazdy. Tekstura obraca się razem z torem; zasilane i detekcyjne pozostają proste lub pochyłe. Kierunek samotnego toru zapisuje się w świecie i przesyła istniejącym protokołem. Nowe warianty nie zaśmiecają creative ani dropów, również przy Jedwabnym Dotyku i ŚPM. Po zniszczeniu podłoża tor nie zostaje zawieszony. W dłoni i jako drop tory są płaskie.
+- **Skrzynie:** oryginalne tekstury Java 1.20.4 dla pojedynczej i obu połówek podwójnej skrzyni, poprawione mapowanie przodu/tyłu, wspólny model korpusu, wieka i zamka w świecie, dłoni, dropie i ikonie. Wieko otwiera się z sześciennym wygładzeniem w około pół sekundy; już otwarta skrzynia reaguje na zmianę światła.
+- **Oświetlenie:** 16 poziomów światła, boczne doświetlanie przez wejścia i pod okapami, wygaszanie z odległością, stopniowe tłumienie przez liście/wodę, nieliniowa krzywa jasności i wygładzone narożniki bloków. Zamknięte pokoje nie dostają sztucznego światła nieba. Źródła i zmiany przesłon przebudowują oświetlenie również w sąsiednich chunkach, do 15 bloków — także po zmianach sieciowych i usunięciu źródła.
+- **Zgodność:** istniejące ID i zapisy pozostają bez zmian; warianty osi to dopisane ID 453–455. Bez migracji bazy, bez zmiany ustawionej wcześniej skali GUI (domyślnie 2). Starszych klientów należy odświeżyć.
+- **Zakres:** to poprawki własnego silnika, nie pełna symulacja Minecrafta, wagoników, zasilania torów czy przełączania rozjazdów. [Szczegóły, pochodzenie grafik i testy](docs/BLOCKS-LIGHTING-4.10.md). Oryginalne grafiki nie podlegają MIT projektu — [informacja o prawach](public/Minecraft-NOTICE.txt).
 
 ## Wersja 4.9.0 „Oryginalne dźwięki i płynny widok”
 

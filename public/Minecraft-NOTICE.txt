@@ -34,3 +34,12 @@ Embedded original recordings: src/game/art/javaSounds.generated.ts
 These recordings are third-party assets, NOT MIT-licensed project code.
 No Minecraft soundtrack recordings are bundled. The quiet procedural music
 interlude is project-generated and must not be described as original music.
+
+Chest/rail artwork reference: Minecraft Java Edition 1.20.4.
+Pinned source mirror commit: 90d256dfee7b6fd8014e1bc3b107e64a530c5f9b
+Compiler: scripts/compile-java-blocks.py
+Embedded original artwork: src/game/art/javaBlocks.generated.ts
+Textures: entity/chest/{normal,normal_left,normal_right}.png and
+block/{rail,rail_corner,powered_rail,detector_rail}.png.
+These are third-party Mojang/Microsoft assets, NOT MIT-licensed project code.
+The mirror and this notice do not grant a redistribution license.

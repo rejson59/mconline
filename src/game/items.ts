@@ -1,3 +1,4 @@
+import { railBase } from './rails';
 import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase } from './blocks';
 import type { Stack } from './inventory';
 
@@ -526,6 +527,7 @@ export function attackCooldown(toolId: number): number {
  *  (Jedwabny dotyk) makes the block drop in its original form. */
 export interface DropOpts { fortune?: number; silk?: boolean }
 export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {}): Stack[] {
+  blockId = railBase(blockId);
   const tier = pickTier(toolId);
   const shears = ITEMS[toolId]?.tool === 'shears';
   const fortune = Math.max(0, Math.floor(opts.fortune ?? 0));

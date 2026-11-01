@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "4.9.0",
-  "description": "BlockCraft – oryginalne efekty Java 1.20.4, ustawienia dźwięku i płynny widok",
+  "version": "4.10.0",
+  "description": "BlockCraft – kierunki torów, skrzynie Java 1.20.4 i przestrzenne oświetlenie",
   "type": "module",
   "license": "MIT",
   "keywords": [

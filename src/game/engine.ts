@@ -1,3 +1,5 @@
+import { chestLidAngle } from './chestModel';
+import { railPlacement, railBase } from './rails';
 import { smoothAlpha, movementFov, mousePitch, damageRoll } from './cameraEffects';
 import { isWater, waterHeight } from './blocks';
 import { submerged, waterCurrent } from './water';
@@ -9,7 +11,7 @@ import { cleanDrop, DROP_LIFETIME, validVector, type SharedDrop } from './shared
 import { nearestStructure, structureKindFromName, STRUCTURE_LABELS } from './structures';
 import { explorationLootKind } from './explorationLoot';
 import * as THREE from 'three';
-import { World, CS, CH, SEA, plantTree, chestLidGeometry, type Biome, type Chunk } from './world';
+import { World, CS, CH, SEA, plantTree, chestLidGeometry, closedChestGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
 import { B, BLOCKS, IS_SOLID, RENDER, collisionBoxesAt, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
@@ -423,7 +425,8 @@ interface Bobber {
   window: number;
 }
 
-function blockGeometry(id: number): THREE.BufferGeometry {
+export function blockGeometry(id: number): THREE.BufferGeometry {
+  if (isChestBlock(id)) return closedChestGeometry();
   if (RENDER[id] === 1) {
     const g = new THREE.PlaneGeometry(1, 1);
     const uv = g.attributes.uv as THREE.BufferAttribute;
@@ -466,7 +469,7 @@ function blockGeometry(id: number): THREE.BufferGeometry {
   // (latarnia – korpus, statyw – słupek), a nie rozciągnięty kafelek.
   const handCrop: readonly [number, number, number, number] | null =
     rt === 10 ? [7, 0, 9, 10] : rt === 13 ? [0, 2, 6, 9] : rt === 15 ? [7, 2, 9, 16] : null;
-  if (rt === 11) {
+  if (rt === 11 || rt === 6) {
     const g = new THREE.PlaneGeometry(1, 1);
     g.rotateX(-Math.PI / 2);
     const planeUv = g.attributes.uv as THREE.BufferAttribute;
@@ -827,7 +830,7 @@ export class Game {
    * rysuje tylko korpus, a wieko z zamkiem to osobny model z zawiasem
    * w punkcie (0, 9/16, 1/16), obracany o `rotation.x` od 0 do −π/2.
    */
-  private chestLids = new Map<string, { group: THREE.Group; open: number; target: number; x: number; y: number; z: number }>();
+  private chestLids = new Map<string, { group: THREE.Group; open: number; target: number; x: number; y: number; z: number; sky:number; blk:number }>();
   /** 2.3: kowadła – PPM otwiera ekran scalania i przemianowywania. */
   anvils = new Map<string, AnvilState>();
   anvilPos: { x: number; y: number; z: number } | null = null;
@@ -5786,8 +5789,10 @@ export class Game {
     } else if (id === B.LEVER || id === B.BUTTON || id === B.REDSTONE_TORCH || id === B.REDSTONE_TORCH_OFF) {
       const attached = this.world.getBlock(px - t.nx, py - t.ny, pz - t.nz);
       if (!IS_SOLID[attached]) { this.message('Dźwignia/przycisk musi być na solidnej ścianie.'); return; }
-    } else if (id === B.RAIL || id === B.POWERED_RAIL || id === B.DETECTOR_RAIL) {
+    } else if (RENDER[id] === 6) {
       if (!IS_SOLID[below]) { this.message('Tory kładzie się na solidnym podłożu.'); return; }
+      const direction = this.lookDir();
+      placeId = railPlacement(id, direction.x, direction.z);
     } else if (isStairs(id)) {
       // schody stawiane tyłem do gracza
       const dir = this.lookDir();
@@ -5893,7 +5898,7 @@ export class Game {
 
   pickBlock() {
     if (!this.target) return;
-    const id = this.target.id;
+    const id = railBase(this.target.id);
     const hot = this.inventory.slots.findIndex((s, i) => i < 9 && s && s.id === id);
     if (hot >= 0) { this.selected = hot; this.emitHud(); return; }
     // 2.3: ŚPM działa też dla przedmiotu leżącego poza paskiem – przenosimy
@@ -6155,7 +6160,7 @@ export class Game {
     }
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
-    if (RENDER[above] === 1 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
+    if (RENDER[above] === 1 || RENDER[above] === 6 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
     this.fallGravity(x, y + 1, z);
   }
 
@@ -6734,9 +6739,16 @@ export class Game {
     }
     for (const [key, lid] of this.chestLids) {
       lid.target = selected.has(key) ? 1 : 0;
-      const speed = 5.5; // waniliowe `openNess` dochodzi w ~0,25 s
+      const speed = 2; // Java: 0.1 openness per 20 Hz tick, cubic angular easing
       lid.open += Math.sign(lid.target - lid.open) * Math.min(Math.abs(lid.target - lid.open), speed * dt);
-      lid.group.rotation.x = -lid.open * (Math.PI / 2);
+      lid.group.rotation.x = chestLidAngle(lid.open);
+      const light=this.world.chestLightAt(lid.x,lid.y,lid.z);
+      const mesh=lid.group.children[0] as THREE.Mesh | undefined;
+      if(mesh?.isMesh && (light.sky!==lid.sky || light.blk!==lid.blk)) {
+        mesh.geometry.dispose();
+        mesh.geometry=chestLidGeometry(this.world.chestRegionAt(lid.x,lid.y,lid.z),light.sky,light.blk);
+        lid.sky=light.sky;lid.blk=light.blk;
+      }
       if (lid.target === 0 && lid.open <= 0.001) {
         this.removeChestLid(key, lid);
       }
@@ -6791,7 +6803,7 @@ export class Game {
     mesh.frustumCulled = true;
     group.add(mesh);
     this.scene.add(group);
-    return { group, open: 0, target: 1, x, y, z };
+    return { group, open: 0, target: 1, x, y, z, sky:light.sky, blk:light.blk };
   }
 
   private markChestDirty(x: number, y: number, z: number) {
