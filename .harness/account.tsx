@@ -59,7 +59,8 @@ test('the game menu opens an optional in-place login, verifies it and leaves wor
   const root = createRoot(container);
   try {
     await act(async () => { root.render(<App />); });
-    const accountButton = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Konto Rejson'));
+    await act(async () => { [...container.querySelectorAll('button')].find(b => b.textContent?.includes('Informacje'))?.click(); });
+    const accountButton = [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Konto społeczności'));
     assert.ok(accountButton, 'konto dostępne w menu bez zakładania konta');
     await act(async () => { accountButton.click(); });
     const dialog = container.querySelector('[role="dialog"][aria-labelledby="community-title"]');

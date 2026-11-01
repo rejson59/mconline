@@ -4,7 +4,7 @@ import { structuresOverlapping, ADVENTURE_RADIUS, nearestStructure, structureKin
 import { villageChestPosition, doorCell, villagesOverlapping } from '../src/game/village';
 import { explorationLootKind } from '../src/game/explorationLoot';
 import type { ChestLootKind } from '../src/game/chest';
-import { arraySlots, quickMove, swapSlots, collectStacks } from '../src/game/inventoryNavigation';
+import { arraySlots, quickMove, swapSlots, collectStacks, distributeCursor } from '../src/game/inventoryNavigation';
 import { cacheProfile, loadCachedProfile, type PlayerProfile } from '../src/game/profile';
 import { structureInCell, structureBlocks, applyStructures, type StructureKind } from '../src/game/structures';
 /**
@@ -18,6 +18,7 @@ import { structureInCell, structureBlocks, applyStructures, type StructureKind }
  */
 import * as THREE from 'three';
 import { PRESETS, detectDeviceProfile, recommendPreset, describeProfile, type DeviceProfile } from '../src/utils/performance';
+import { javaGuiScale } from '../src/utils/guiScale';
 import { DEFAULT_SETTINGS, applyPreset, effectiveSettings, loadSettings, normalizeSettings, SETTINGS_KEY } from '../src/utils/settings';
 import { visibleViewport, onViewportChange, applyViewportHeight, pokeLayout } from '../src/utils/viewport';
 
@@ -85,7 +86,7 @@ import { kindForColor, partTexture, texturePixels, textureCount, avatarMaterial,
 import { decodePng } from '../src/game/art/miniPng';
 import { MOB_MODELS, boxFaces, buildMobModel, mobSkinTexture, mobModelCount } from '../src/game/mobModels';
 import { MOB_SKINS, GUI_SPRITES } from '../src/game/art/vanillaArt.generated';
-import { guiSprite, hasGuiSprite, heartSprite, foodSprite, armorSprite, airSprite, guiSpriteCount } from '../src/game/art/uiSprites';
+import { guiSprite, hasGuiSprite, heartSprite, foodSprite, armorSprite, airSprite, guiSpriteCount, GUI_SPRITE_NAMES } from '../src/game/art/uiSprites';
 import { spriteTexture } from '../src/game/art/spriteTex';
 import { installPackTheme } from '../src/utils/packTheme';
 import { BLOCK_ATLAS_PNG, ITEM_ATLAS_PNG, ITEM_TILE, OFFICIAL_TILES, MOB_PALETTES, PLAYER_SKIN_PNG } from '../src/game/art/vanillaArt.generated';
@@ -1364,11 +1365,11 @@ section('update 1.5: lapis, sugar cane, table, drops');
   for (const i of [3, 4, 5]) inv3.grid[i] = { id: I.BOOK, count: 1 };
   eq('6 planks + 3 books craft a bookshelf', inv3.gridMatch(true)?.out.id, B.BOOKSHELF);
 
-  // [' D ', 'DBD', 'OOO']
+  // Vanilla: book, diamond/obsidian/diamond, three obsidian.
   const inv4 = new Inventory();
-  inv4.grid[1] = { id: I.DIAMOND, count: 1 };
+  inv4.grid[1] = { id: I.BOOK, count: 1 };
   inv4.grid[3] = { id: I.DIAMOND, count: 1 };
-  inv4.grid[4] = { id: I.BOOK, count: 1 };
+  inv4.grid[4] = { id: B.OBSIDIAN, count: 1 };
   inv4.grid[5] = { id: I.DIAMOND, count: 1 };
   inv4.grid[6] = { id: B.OBSIDIAN, count: 1 };
   inv4.grid[7] = { id: B.OBSIDIAN, count: 1 };
@@ -2499,7 +2500,7 @@ section('2.0: automatic graphics and settings');
   eq('unknown control mode falls back safely', recovered.controlMode, 'auto');
   eq('unknown touch mode falls back safely', recovered.touchMode, 'tap');
   eq('unsupported FPS cap falls back safely', recovered.fpsCap, 0);
-  eq('non-boolean toggle uses the default', recovered.minimap, true);
+  eq('non-boolean toggle uses the default', recovered.minimap, false);
   eq('normalizer preserves supported settings', normalizeSettings({ fov: 90, volume: 0.25, fpsCap: 60 }).fov, 90);
   store.set(SETTINGS_KEY, '{broken');
   eq('malformed settings JSON recovers to defaults', loadSettings().renderDistance, DEFAULT_SETTINGS.renderDistance);
@@ -3178,8 +3179,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.7.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Szyby i wyjście na brzeg', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.8.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Interfejs Java 1.20.4', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -3313,22 +3314,22 @@ section('2.13: ekwipunek i crafting jak w Minecrafcie');
   eq('piąte pole poza 2×2 jest ignorowane', table.gridMatch(false)?.out.id, B.CRAFTING);
 
   const screen = readSource('src/components/InventoryScreen.tsx');
-  check('plecak ma siatkę 2×2 i 3×3', screen.includes('mc-craft-grid') && screen.includes('is-3') && screen.includes('is-2'));
-  check('LPM/PPM w siatce działa tak samo jak w plecaku', screen.includes('inv.clickGrid(i, right)'));
-  check('są skróty „Deski” i „Stół rzemieślniczy”', screen.includes('Deski (') && screen.includes("label: 'Stół rzemieślniczy'"));
+  check('plecak ma siatkę 2×2 i 3×3', screen.includes('mc-craft-grid') && screen.includes("atTable ? '3' : '2'"));
+  check('LPM/PPM w siatce działa tak samo jak w plecaku', screen.includes('inv.clickGrid(i, r)'));
+  check('książka układa składniki, a nie craftuje skrótem', screen.includes('inv.placeRecipe(r, atTable)') && !screen.includes('inv.craftRecipe('));
   check('książka przepisów jest domyślna na dużym ekranie', screen.includes('initialBookOpen'));
-  check('plecak pokazuje podgląd postaci', screen.includes('SkinAvatar') && screen.includes('getSkinId'));
-  check('okno przy stole ma własny tytuł', screen.includes("atTable ? 'Stół rzemieślniczy' : 'Ekwipunek'"));
+  check('plecak pokazuje podgląd postaci', screen.includes('JavaPlayerPreview') && screen.includes('getSkinId'));
+  check('okno przy stole ma własny tytuł', screen.includes("atTable ? 'Stół rzemieślniczy' : 'Wytwarzanie'"));
 }
 
 section('2.14: auto-skok i auto-bicie');
 {
   // Ustawienia: jedno i drugie ma być domyślnie włączone i odporne na śmieci.
-  eq('auto-bicie jest domyślnie włączone', DEFAULT_SETTINGS.autoAttack, true);
+  eq('auto-bicie jest domyślnie wyłączone jak w Java', DEFAULT_SETTINGS.autoAttack, false);
   eq('auto-skok jest domyślnie włączony', DEFAULT_SETTINGS.autoJump, true);
   eq('wyłączenie auto-bicia jest pamiętane', normalizeSettings({ autoAttack: false }).autoAttack, false);
-  eq('śmieci w auto-biciu wracają do domyślnego', normalizeSettings({ autoAttack: 'tak' }).autoAttack, true);
-  eq('stare zapisy dostają auto-bicie', normalizeSettings({ sensitivity: 1 }).autoAttack, true);
+  eq('śmieci w auto-biciu wracają do domyślnego', normalizeSettings({ autoAttack: 'tak' }).autoAttack, false);
+  eq('stare zapisy bez preferencji nie dostają auto-bicia', normalizeSettings({ sensitivity: 1 }).autoAttack, false);
 
   const engine = readSource('src/game/engine.ts');
   const settingsScreen = readSource('src/components/SettingsScreen.tsx');
@@ -3506,7 +3507,7 @@ section('2.15: pełny ekran nie psuje sterowania');
   // Sterowanie dotykowe mierzy własną warstwę, a nie okno.
   check('drążek i przyciski liczą się z warstwy gry', /getBoundingClientRect\(\)/.test(touch) && !/setVh\(window\.innerHeight\)/.test(touch));
   check('warstwa gry jest mierzona obserwatorem rozmiaru', /ResizeObserver/.test(touch) && /ro\.observe\(el\)/.test(touch));
-  check('panele nie wychodzą poza powłokę', !/max-h-\[9\ddvh\]/.test(inventory) && /max-h-full/.test(inventory));
+  check('panele nie wychodzą poza powłokę', !/max-h-\[9\ddvh\]/.test(inventory) && /useJavaScale/.test(inventory));
 
   // Sam moduł viewportu: bezpieczny poza przeglądarką i zawsze sensowny.
   check('pomiar ekranu poza przeglądarką nie rzuca', visibleViewport().width >= 0 && visibleViewport().height >= 0);
@@ -4293,12 +4294,12 @@ section('2.11: publiczny serwer – zegar, dane i integracja');
   check('publiczny świat wchodzi bez setBlock na każdy blok', /seedMods\(net\.world\.edits/.test(engine));
   check('silnik synchronizuje zegar publiczny', /syncPublicClock/.test(engine));
   check('pozycje na serwerze publicznym są rzadsze', /PUBLIC_POS_HZ/.test(engine));
-  check('ekran gry ma przycisk serwera publicznego', /Graj online/.test(mp));
+  check('ekran gry ma przycisk serwera publicznego', /Dołącz do serwera/.test(mp));
   check('ekran nie wymaga już kodów do gry online', /joinPublic/.test(mp));
   check('stary błąd P2P ma czytelny komunikat', /wrong state/.test(readSource('src/game/net.ts')));
   check('P2P sprawdza stan połączenia przed odpowiedzią', /signalingState !== 'have-local-offer'/.test(readSource('src/game/net.ts')));
-  check('HUD pokazuje tryb publiczny', /netPublic/.test(readSource('src/components/HUD.tsx')));
-  check('HUD pokazuje kolejkę zapisu', /netSaving/.test(readSource('src/components/HUD.tsx')));
+  check('HUD trzyma listę graczy pod Tab zamiast stałej plakietki serwera', /tabList/.test(readSource('src/components/HUD.tsx')));
+  check('silnik nadal emituje kolejkę zapisu bez nowoczesnej plakietki w HUD', /netSaving:/.test(engine));
 }
 
 section('2.11: PublicServer – pobieranie, wysyłka i zapis (atrapa klienta)');
@@ -4630,12 +4631,13 @@ section('2.16: nowe przepisy rzemieślnicze');
     [B.SANDSTONE_SLAB, 'piaskowcowa płyta'], [B.NETHER_BRICK_SLAB, 'netherowa płyta'],
     [B.HAY, 'snop siana'], [B.LANTERN, 'latarnia'], [B.BELL, 'dzwon'],
     [B.EMERALD_BLOCK, 'blok szmaragdu'], [B.HONEY_BLOCK, 'blok miodu'],
-    [B.TERRACOTTA, 'terakota'], [B.CONCRETE_BLUE, 'niebieski beton'],
+    [B.CONCRETE_BLUE, 'niebieski beton'],
     [B.CONCRETE_GREEN, 'zielony beton'], [B.CONCRETE_YELLOW, 'żółty beton'],
     [B.CONCRETE_BLACK, 'czarny beton'], [B.MUD, 'błoto'],
   ];
   const missing = wanted.filter(([id]) => !out(id)).map(([, name]) => name);
   eq('wszystkie nowe przepisy istnieją', missing.length, 0);
+  eq('terakota powstaje z gliny w piecu, bez kolizji przepisu z cegłą', smeltResult(B.CLAY), B.TERRACOTTA);
   check('liczba przepisów wzrosła powyżej 150', RECIPES.length >= 150, `${RECIPES.length}`);
 
   // Ilości jak w Minecrafcie.
@@ -5242,7 +5244,7 @@ section('2.25: fizyka spadających bloków');
 
 section('2.18: interfejs i niebo z paczki');
 {
-  const sprites = Object.keys(GUI_SPRITES);
+  const sprites = GUI_SPRITE_NAMES;
   check('co najmniej 40 grafik interfejsu z paczki', sprites.length >= 40, `${sprites.length}`);
   check('serce pełne pochodzi z paczki', (heartSprite(2) ?? '').startsWith('data:image/png;base64,'));
   eq('adres grafiki ma dokładnie jeden prefiks data:', (heartSprite(2) ?? '').split('data:image/png').length - 1, 1);
@@ -8599,6 +8601,74 @@ section('4.7.0: 2.5-block pickups share range and obstruction checks');
     eq(`full inventory cannot collect ${shared}`, shared ? full.claims() : full.g.inventory.countOf(B.GLASS_PANE), 0);
     eq(`full inventory retains drop ${shared}`, full.g.drops.length, 1);
   }
+}
+
+section('4.8: Java logical pixels, exact assets, atomic recipe-book placement and cursor gestures');
+{
+  eq('Java auto scale at 1280×800 is integer 3', javaGuiScale(1280,800), 3);
+  eq('Java auto scale at 1920×1080 is integer 4', javaGuiScale(1920,1080), 4);
+  eq('Java requested scale is respected', javaGuiScale(1920,1080,2), 2);
+  eq('Java requested scale cannot clip the minimum logical canvas', javaGuiScale(844,390,4), 1);
+  eq('Java tiny portrait viewport scales down only below minimum', javaGuiScale(280,600), .875);
+  eq('GUI scale normalization rejects invalid preference', normalizeSettings({ guiScale: 'huge' }).guiScale, 0);
+  eq('GUI scale normalization clamps maximum', normalizeSettings({ guiScale: 99 }).guiScale, 4);
+  eq('minimap is opt-in', DEFAULT_SETTINGS.minimap, false);
+  eq('auto attack is opt-in', DEFAULT_SETTINGS.autoAttack, false);
+  eq('stored auto attack is retained', normalizeSettings({ autoAttack: true }).autoAttack, true);
+  for (const [name,w,h] of [['inventory_gui',176,166],['crafting_gui',176,166],['creative_gui',195,136],['hotbar',182,22],['hotbar_selection',24,23]] as const) {
+    const png = decodePng(guiSprite(name)!.split(',')[1]);
+    check(`Java native dimensions: ${name}`, png.width === w && png.height === h);
+  }
+  for (let i=0;i<6;i++) check(`Java panorama face ${i} embedded`, hasGuiSprite(`panorama_${i}`));
+  const plankRecipe = RECIPES.find(r => r.out.id === B.PLANKS && r.inputs[0].id === B.LOG)!;
+  for (const [index,r] of RECIPES.entries()) {
+    const inv = new Inventory(); for (const input of r.inputs) inv.add(input.id,input.count);
+    check(`recipe ${index}: placement succeeds with exact ingredients`, inv.placeRecipe(r,true));
+    eq(`recipe ${index}: placed grid has the real result`, inv.gridMatch(true)?.out.id, r.out.id);
+    eq(`recipe ${index}: clicking book consumes no output`, inv.slots.filter(s => s?.id === r.out.id).reduce((n,s)=>n+(s?.count??0),0), 0);
+  }
+  const inv = new Inventory(); inv.add(B.LOG,2,undefined,undefined,'Pamiątka');
+  check('recipe placement accepts a named input', inv.placeRecipe(plankRecipe,false));
+  check('recipe placement keeps ingredient metadata until actually crafted', inv.grid[0]?.name === 'Pamiątka');
+  eq('book does not put a crafted result on the cursor', inv.cursor, null);
+  eq('book does not award output inventory items', inv.countOf(B.PLANKS), 0);
+  eq('taking result crafts four planks', inv.craftGrid(false)?.count, 4);
+  const blocked = new Inventory(); blocked.cursor = { id:B.LOG,count:1 };
+  const before = JSON.stringify(blocked);
+  check('held cursor rejects recipe placement', !blocked.placeRecipe(plankRecipe,false));
+  eq('rejected placement leaves cursor/grid/inventory untouched', JSON.stringify(blocked), before);
+  const missing = new Inventory(); missing.grid[0]={id:I.IRON_PICK,count:1,dur:5,ench:{efficiency:2},name:'Kilof'};
+  const oldMissing = JSON.stringify(missing);
+  check('unavailable recipe does not destroy existing grid', !missing.placeRecipe(plankRecipe,false));
+  eq('unavailable recipe is atomic including metadata', JSON.stringify(missing), oldMissing);
+  const full = new Inventory(); full.slots=Array.from({length:36},()=>({id:B.STONE,count:64}));full.slots[0]={id:B.LOG,count:1}; full.grid[0]={id:I.IRON_PICK,count:1,dur:13,name:'Mój'};
+  const oldFull=JSON.stringify(full);
+  check('recipe return-grid overflow fails safely', !full.placeRecipe(plankRecipe,false));
+  eq('overflow cannot duplicate or delete ingredients', JSON.stringify(full),oldFull);
+  const tableRecipe=RECIPES.find(r=>r.table)!;
+  check('table-only recipe is not placed in personal grid', !new Inventory().placeRecipe(tableRecipe,false));
+  const hidden = new Inventory(); hidden.grid[0]={id:B.LOG,count:1}; hidden.grid[6]={id:B.STONE,count:1}; hidden.grid[7]={id:B.STONE,count:1};
+  eq('personal crafting ignores invisible third row',hidden.gridMatch(false)?.out.id,B.PLANKS);
+  hidden.craftGrid(false);eq('personal crafting never consumes invisible third row',hidden.grid[6]?.count,1);
+  const cells: (Stack|null)[] = [null,null,null];
+  let cursor = distributeCursor({id:B.PLANKS,count:10,name:'Nazwa'},arraySlots(cells),false);
+  eq('left drag distributes equal shares',cells.map(s=>s?.count).join(','),'3,3,3');
+  eq('left drag leaves remainder held',cursor?.count,1);
+  check('left drag preserves names',cells.every(s=>s?.name==='Nazwa'));
+  cells.fill(null);cursor=distributeCursor({id:B.PLANKS,count:2},arraySlots(cells),true);
+  eq('right drag places one each until empty',cells.map(s=>s?.count??0).join(','),'1,1,0');eq('right drag clears exhausted cursor',cursor,null);
+  cells[0]={id:B.STONE,count:64};cells[1]={id:B.PLANKS,count:63};cells[2]=null;
+  cursor=distributeCursor({id:B.PLANKS,count:10},arraySlots(cells),false);
+  eq('drag does not swap incompatible stacks',cells[0]?.id,B.STONE);eq('drag respects stack cap',cells[1]?.count,64);eq('capped shares leave remainder rather than disappearing',cursor?.count,4);
+  const drops:unknown[][]=[];
+  const g=Object.assign(Object.create(Game.prototype),{inventory:new Inventory(),armor:Array(4).fill(null),body:{pos:{x:1,y:70,z:2}},spawnDrop:(...args:unknown[])=>drops.push(args),saveProfileNow(){}}) as Game;
+  g.inventory.cursor={id:B.LOG,count:8};g.distributeInventoryCursor([{area:'inventory',index:0},{area:'inventory',index:0},{area:'inventory',index:1}],false);
+  eq('engine drag de-duplicates crossed slots',g.inventory.slots[0]?.count,4);eq('engine drag conserves all eight items',g.inventory.countOf(B.LOG),8);
+  g.inventory.cursor={id:I.IRON_PICK,count:1,dur:13,ench:{efficiency:2},name:'Mój kilof'};
+  g.dropInventoryCursor(true);
+  check('outside cursor drop preserves durability, enchantments and name',drops[0][5]===13 && (drops[0][9] as Record<string,number>).efficiency===2 && drops[0][10]==='Mój kilof');
+  eq('outside drop removes held item once',g.inventory.cursor,null);
+  g.inventory.cursor={id:B.PLANKS,count:5};g.dropInventoryCursor(true);eq('outside RMB drops only one',g.inventory.cursor?.count,4);g.dropInventoryCursor(false);eq('outside LMB drops remaining stack',g.inventory.cursor,null);
 }
 
 // =================================================================== report

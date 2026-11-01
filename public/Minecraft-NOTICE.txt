@@ -1,0 +1,27 @@
+Minecraft GUI and font artwork — third-party notice
+
+Minecraft is a trademark of Mojang AB. Minecraft artwork, including GUI
+textures, title artwork, panorama images and bitmap font glyphs, is copyright
+Mojang AB / Microsoft. These assets and glyph-derived font outlines are NOT
+covered by this project's MIT code license. All underlying rights remain
+with their respective owners; this notice does not grant a redistribution
+license or imply that the artwork has been released as open source.
+
+This is an unofficial browser project. NOT AN OFFICIAL MINECRAFT PRODUCT.
+NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+It is not the commercial Minecraft client and cannot connect to original
+Minecraft Java Edition or Bedrock Edition servers.
+
+GUI reference: Minecraft Java Edition 1.20.4.
+Build-time source mirror:
+https://github.com/InventivetalentDev/minecraft-assets/tree/1.20.4/assets/minecraft
+Compiler: scripts/compile-java-gui.py
+Embedded artwork: src/game/art/javaGui.generated.ts
+Bitmap-outline derivative: src/assets/java-bitmap.woff2
+The project also has previously embedded Minecraft artwork in
+src/game/art/vanillaArt.generated.ts; it has the same third-party ownership,
+not the project's MIT code license.
+
+See Minecraft's current EULA and usage guidelines:
+https://www.minecraft.net/eula
+https://www.minecraft.net/usage-guidelines

@@ -1,6 +1,25 @@
-# BlockCraft 4.7.0 🌍
+# BlockCraft 4.8.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.8.0 „Interfejs Java 1.20.4”
+
+Przebudowa aktywnego GUI według **Minecraft Java 1.20.4**: oryginalne grafiki,
+bitmapowy font, animowana panorama, menu światów i opcji, pauza, śmierć,
+klasyczny HUD i lista graczy pod Tab. Ekwipunek ma stałe waniliowe współrzędne,
+podgląd postaci 3D oraz osobne zakładki creative. Książka układa składniki w
+siatce — wynik odbierasz osobno. Przeciąganie rozdziela stosy; klik poza panelem
+wyrzuca przedmiot z kursora. Skala GUI jest wspólna dla menu, slotów i HUD.
+
+Minimapa i auto-atak są domyślnie wyłączone, ale zachowujemy zapisane wybory.
+Konto jest dostępne przez **Informacje → Konto społeczności**, a dodatkowe
+transporty przez **Tryb wieloosobowy → Połączenia przeglądarkowe**.
+Istniejące światy i profile pozostają bez zmian.
+
+To nadal nieoficjalny własny silnik, **nie oryginalny Minecraft ani zgodny z nim
+klient sieciowy**. Nieobsługiwane funkcje nie są udawane nieczynnymi przyciskami.
+[Szczegóły, zachowania i weryfikacja GUI](docs/GUI-JAVA-1.20.4.md).
+[Prawa do grafik i fontu Minecraft](public/Minecraft-NOTICE.txt).
 
 ## Wersja 4.7.0 „Szyby i wyjście na brzeg”
 
@@ -638,7 +657,7 @@ npm run preview  # podgląd produkcyjnego builda
 npm run typecheck
 ```
 
-Build jest **pojedynczym plikiem `dist/index.html`** (JavaScript, CSS i font są wbudowane w HTML). Pozostałe pliki to lokalne tło `dist/menu-bg.jpg`, licencja fontu `dist/OFL-Pixelify-Sans.txt` oraz techniczny znacznik `dist/.nojekyll` dla GitHub Pages.
+Build jest **pojedynczym plikiem `dist/index.html`** (JavaScript, CSS i font są wbudowane w HTML). Pozostałe pliki to lokalne tło `dist/menu-bg.jpg`, informacje o prawach `dist/Minecraft-NOTICE.txt` i historyczna licencja `dist/OFL-Pixelify-Sans.txt` oraz techniczny znacznik `dist/.nojekyll` dla GitHub Pages.
 Dzięki temu grę można otworzyć nawet bezpośrednio z dysku (`file://`) albo wrzucić na dowolny hosting statyczny – po zbudowaniu nie są potrzebne Google Fonts ani inne zewnętrzne zasoby.
 
 ---
@@ -807,7 +826,7 @@ Od 2.11 dochodzi **publiczny serwer**: zegar dnia i pogody, mapowanie wierszy ba
 ## 📜 Licencja
 
 Kod gry: **MIT** – rób z nim, co chcesz.
-Projekt inspirowany grą *Minecraft* (Mojang Studios); nie jest z nią powiązany i nie zawiera jej zasobów – wszystkie tekstury rysowane są proceduralnie w przeglądarce.
+Projekt jest nieoficjalny i nie jest zatwierdzony ani powiązany z Mojang / Microsoft. Zawiera osadzone grafiki Minecraft oraz font z jego bitmapowych glifów; **nie obejmuje ich licencja MIT kodu**. Wszystkie prawa do tych zasobów pozostają przy właścicielach. Szczegóły i źródła: [Minecraft-NOTICE.txt](public/Minecraft-NOTICE.txt).
 
 ## Przejście z portalu Rejson
 

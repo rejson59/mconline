@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useJavaScale } from '../utils/guiScale';
 import {
   COMMANDS,
   COMMAND_CATEGORIES,
@@ -32,6 +33,7 @@ export function ChatInput({
   /** Od razu otwiera pełną listę komend (np. z przycisku „Komendy”). */
   showListInitially?: boolean;
 }) {
+  const scale = useJavaScale();
   const [text, setText] = useState('');
   const [showList, setShowList] = useState(showListInitially);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -111,8 +113,8 @@ export function ChatInput({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex flex-col justify-end"
-      style={{ background: 'rgba(0,0,0,0.35)', paddingBottom: keyboard > 0 ? keyboard : undefined }}
+      className="java-chat fixed inset-0 z-[70] flex flex-col justify-end"
+      style={{ '--java-chat-scale': scale, background: 'rgba(0,0,0,0.35)', paddingBottom: keyboard > 0 ? keyboard : undefined } as CSSProperties}
       role="dialog"
       aria-label="Czat i komendy"
       onPointerDown={(e) => {
@@ -222,7 +224,7 @@ export function ChatInput({
 
         {/* Szybkie skróty – widoczne od razu, bez rozwijania listy. */}
         {!showList && (
-          <div className="flex gap-1 overflow-x-auto px-2 pt-2 [scrollbar-width:none]">
+          <div className="java-chat-quick flex gap-1 overflow-x-auto px-2 pt-2 [scrollbar-width:none]">
             {quick.map((cmd) => (
               <button
                 key={cmd.name}
@@ -238,7 +240,7 @@ export function ChatInput({
 
         {/* Podpowiedzi dopasowane do tego, co już wpisano. */}
         {!showList && suggestions.length > 0 && (
-          <div className="mx-2 mt-2 overflow-hidden border border-white/10">
+          <div className="java-chat-suggestions mx-2 mt-2 overflow-hidden border border-white/10">
             {suggestions.map((cmd, i) => (
               <button
                 key={cmd.name}

@@ -6,6 +6,8 @@ export type TouchMode = 'tap' | 'buttons';
 export type ControlMode = 'auto' | 'desktop' | 'touch';
 
 export interface Settings {
+  /** 0 = Auto; Java-style integer logical GUI scale. */
+  guiScale: number;
   renderDistance: number;
   sensitivity: number;
   fov: number;
@@ -53,11 +55,12 @@ export interface Settings {
 export const SETTINGS_KEY = 'blockcraft-settings';
 
 export const DEFAULT_SETTINGS: Settings = {
+  guiScale: 0,
   renderDistance: 6,
   sensitivity: 1,
   fov: 72,
   volume: 0.5,
-  minimap: true,
+  minimap: false,
 
   controlMode: 'auto',
 
@@ -76,7 +79,7 @@ export const DEFAULT_SETTINGS: Settings = {
   joystickFixed: true,
   haptics: true,
   autoJump: true,
-  autoAttack: true,
+  autoAttack: false,
   touchScale: 1,
 };
 
@@ -135,6 +138,7 @@ export function normalizeSettings(value: unknown): Settings {
 
   return {
     ...DEFAULT_SETTINGS,
+    guiScale: Math.round(boundedNumber(stored.guiScale, 0, 0, 4)),
     renderDistance: Math.round(boundedNumber(stored.renderDistance, DEFAULT_SETTINGS.renderDistance, 2, 14)),
     sensitivity: boundedNumber(stored.sensitivity, DEFAULT_SETTINGS.sensitivity, 0.2, 3),
     fov: Math.round(boundedNumber(stored.fov, DEFAULT_SETTINGS.fov, 50, 110)),
@@ -172,6 +176,7 @@ export function loadSettings(): Settings {
 export function saveSettings(s: Settings) {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('gui-scale'));
   } catch {
     /* storage full or blocked */
   }

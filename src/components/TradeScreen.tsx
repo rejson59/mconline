@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useJavaScale } from '../utils/guiScale';
+import { useState, type CSSProperties } from 'react';
 import type { Game, TradeRow } from '../game/engine';
 import { displayName } from '../game/items';
 import { VILLAGER_LEVEL_NAMES } from '../game/trading';
 import { guiSprite } from '../game/art/uiSprites';
 import {
   MERCHANT, merchantInvSlot, merchantMaxScroll, merchantRowTop, merchantRowVisible,
-  merchantScale, merchantThumbHeight, merchantThumbOffset,
+  merchantThumbHeight, merchantThumbOffset,
 } from '../game/merchantLayout';
 import type { Stack } from '../game/inventory';
-import { stackTooltip } from '../utils/tooltip';
+import { GuiSlot, GuiOverlay, useCursorPos } from './GuiContainer';
+import { useGuiInteractions } from './useGuiInteractions';
 import CloseButton from './CloseButton';
 
 /**
@@ -26,95 +28,6 @@ import CloseButton from './CloseButton';
  */
 
 const FONT = 8; // bazowy rozmiar tekstu GUI (skalowany razem z panelem)
-const LONG_PRESS_MS = 350;
-
-/**
- * Slot narysowany na teksturze panelu – bez własnej ramki, żeby nie zasłaniać
- * waniliowej grafiki. `x`/`y` to lewy górny róg 16-pikselowej kratki na
- * przedmiot, a `hit` powiększa obszar kliknięcia do całej ramki slotu.
- */
-function GuiSlot({
-  x, y, stack, icons, dim, hit = 1, onClick, onHover,
-}: {
-  x: number; y: number;
-  stack: Stack | null;
-  icons: Record<number, string>;
-  dim?: boolean;
-  hit?: number;
-  onClick?: (right: boolean) => void;
-  onHover?: (text: string | null) => void;
-}) {
-  const timer = useRef<number | null>(null);
-  const held = useRef(false);
-  const clear = () => {
-    if (timer.current !== null) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-  };
-  useEffect(() => clear, []);
-  return (
-    <div
-      style={{
-        position: 'absolute', left: x - hit, top: y - hit, width: 16 + hit * 2, height: 16 + hit * 2,
-        cursor: onClick ? 'pointer' : 'default', touchAction: 'none',
-      }}
-      onPointerDown={(e) => {
-        if (e.pointerType === 'mouse') {
-          if (e.button !== 0 && e.button !== 2) return;
-          e.preventDefault();
-          onClick?.(e.button === 2);
-          return;
-        }
-        e.preventDefault();
-        held.current = false;
-        try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* starsze Safari */ }
-        clear();
-        timer.current = window.setTimeout(() => {
-          timer.current = null;
-          held.current = true;
-          onClick?.(true);
-        }, LONG_PRESS_MS);
-      }}
-      onPointerUp={(e) => {
-        if (e.pointerType === 'mouse') return;
-        const wasHeld = held.current;
-        clear();
-        held.current = false;
-        if (!wasHeld) onClick?.(false);
-      }}
-      onPointerCancel={() => { clear(); held.current = false; }}
-      onPointerLeave={() => { clear(); held.current = false; }}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseEnter={() => onHover?.(stack ? stackTooltip(stack) : null)}
-      onMouseLeave={() => onHover?.(null)}
-    >
-      {stack && (
-        <img
-          src={icons[stack.id]}
-          alt=""
-          title={displayName(stack.id)}
-          draggable={false}
-          style={{
-            position: 'absolute', left: hit, top: hit, width: 16, height: 16,
-            imageRendering: 'pixelated', opacity: dim ? 0.4 : 1,
-          }}
-        />
-      )}
-      {stack && stack.count > 1 && (
-        <span
-          style={{
-            position: 'absolute', left: hit, top: hit + 7, width: 16, textAlign: 'right',
-            fontSize: FONT, lineHeight: '8px', color: '#fff', textShadow: '1px 1px 0 #3f3f3f',
-          }}
-        >
-          {stack.count > 99 ? '99' : stack.count}
-        </span>
-      )}
-    </div>
-  );
-}
-
 /** Ikonka przedmiotu wewnątrz wiersza oferty. */
 function RowItem({ stack, icons, x, bad }: { stack: Stack; icons: Record<number, string>; x: number; bad?: boolean }) {
   return (
@@ -150,35 +63,19 @@ function BlockedCross({ x, y, size }: { x: number; y: number; size: number }) {
 
 export default function TradeScreen({ game, icons, onChange }: { game: Game; icons: Record<number, string>; onChange: () => void }) {
   const [, setTick] = useState(0);
-  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const mouse = useCursorPos();
   const [hover, setHover] = useState<string | null>(null);
   const [scroll, setScroll] = useState(0);
   const [selected, setSelected] = useState(0);
-  const [scale, setScale] = useState(2);
+  const scale = useJavaScale();
   const inv = game.inventory;
-
-  useEffect(() => {
-    const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    // 2.9: na dotyku nie ma „mousemove” – ikona trzymanego przedmiotu
-    // zostawała w lewym górnym rogu. Tapnięcie też ustawia jej pozycję.
-    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    const fit = () => setScale(merchantScale(window.innerWidth, window.innerHeight));
-    fit();
-    window.addEventListener('mousemove', mm);
-    window.addEventListener('pointerdown', pt, true);
-    window.addEventListener('resize', fit);
-    return () => {
-      window.removeEventListener('mousemove', mm);
-      window.removeEventListener('pointerdown', pt, true);
-      window.removeEventListener('resize', fit);
-    };
-  }, []);
 
   const refresh = () => {
     setTick((t) => t + 1);
     onChange();
   };
 
+  const interact = useGuiInteractions(game, refresh);
   const level = game.tradeLevel();
   const rows = game.tradeRows();
   const restock = Math.ceil(game.tradeRestockIn());
@@ -208,9 +105,8 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
       className="absolute inset-0 flex flex-col items-center justify-center gap-2"
       style={{ background: 'rgba(0,0,0,0.55)' }}
       onContextMenu={(e) => e.preventDefault()}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) game.closeTrade();
-      }}
+      onPointerDownCapture={interact}
+      onPointerDown={e => { if (e.target === e.currentTarget && (e.button === 0 || e.button === 2)) { game.dropInventoryCursor(e.button === 2); refresh(); } }}
     >
       <CloseButton onClose={() => game.closeTrade()} className="mc-close-safe absolute z-50" />
 
@@ -224,7 +120,7 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
             backgroundSize: '100% 100%',
             backgroundColor: '#c6c6c6',
             imageRendering: 'pixelated',
-            boxShadow: '0 10px 28px rgba(0,0,0,0.45)',
+            fontSize: 8, lineHeight: '9px',
             userSelect: 'none',
           }}
           onMouseDown={(e) => e.stopPropagation()}
@@ -235,7 +131,7 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
           }}
         >
           {/* Tytuł okna i nazwa rozmówcy (jak pasek nagłówka w wanilii). */}
-          <span style={{ ...guiText('#3f3f3f'), position: 'absolute', left: MERCHANT.title.x, top: MERCHANT.title.y - 1, fontWeight: 700 }}>
+          <span style={{ ...guiText('#3f3f3f'), position: 'absolute', left: MERCHANT.title.x, top: MERCHANT.title.y - 1, fontWeight: 400 }}>
             Handel
           </span>
           <span
@@ -408,7 +304,8 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
             const p = merchantInvSlot(i);
             return (
               <GuiSlot
-                key={i}
+                key={i} slotArea="inventory" slotIndex={i}
+                onAction={a => { game.inventoryAction('inventory', i, a); refresh(); }}
                 x={p.x}
                 y={p.y}
                 stack={s}
@@ -424,22 +321,9 @@ export default function TradeScreen({ game, icons, onChange }: { game: Game; ico
         </div>
       </div>
 
-      <span className="mc-text text-sm opacity-80" style={{ position: 'relative' }}>E / Esc – zamknij</span>
+      <span className="java-touch-only mc-text text-sm opacity-80" style={{ position: 'relative' }}>E / Esc – zamknij</span>
 
-      {hover && !inv.cursor && (
-        <div
-          className="pointer-events-none fixed z-50 max-w-[320px] px-2 py-1 text-sm"
-          style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', whiteSpace: 'pre-line' }}
-        >
-          {hover}
-        </div>
-      )}
-      {inv.cursor && (
-        <div className="pointer-events-none fixed z-50" style={{ left: mouse.x - 17, top: mouse.y - 17 }}>
-          <img src={icons[inv.cursor.id]} width={34} height={34} className="pixelated" alt="" />
-          {inv.cursor.count > 1 && <span className="mc-count">{inv.cursor.count}</span>}
-        </div>
-      )}
+      <GuiOverlay game={game} icons={icons} hover={hover} mouse={mouse} />
     </div>
   );
 }

@@ -1,9 +1,3 @@
-@import "@fontsource/pixelify-sans/latin-400.css";
-@import "@fontsource/pixelify-sans/latin-ext-400.css";
-@import "@fontsource/pixelify-sans/latin-600.css";
-@import "@fontsource/pixelify-sans/latin-ext-600.css";
-@import "@fontsource/pixelify-sans/latin-700.css";
-@import "@fontsource/pixelify-sans/latin-ext-700.css";
 @import "tailwindcss";
 
 *,
@@ -54,7 +48,7 @@ html, body {
 }
 
 body {
-  font-family: 'Pixelify Sans', monospace;
+  font-family: 'Java Bitmap', monospace;
   color: #fff;
   -webkit-tap-highlight-color: transparent;
 }
@@ -82,7 +76,7 @@ body {
   display: block;
   width: 100%;
   padding: 11px 18px;
-  font-family: 'Pixelify Sans', monospace;
+  font-family: 'Java Bitmap', monospace;
   font-size: 18px;
   line-height: 1.2;
   color: #f0f0f0;
@@ -412,7 +406,7 @@ body {
   border: 2px solid #a0a0a0;
   color: #fff;
   padding: 8px 10px;
-  font-family: 'Pixelify Sans', monospace;
+  font-family: 'Java Bitmap', monospace;
   font-size: 18px;
   outline: none;
   width: 100%;
@@ -982,4 +976,133 @@ button,
 .hotbar-offhand { position: absolute; right: calc(100% + 8px); bottom: 0; }
 @media (max-width: 550px) {
   .hotbar-offhand { right: auto; left: 0; bottom: calc(100% + 64px); }
+}
+
+/* Java 1.20.4 GUI: logical pixels; no modern easing, glow, pills or raised cards. */
+@font-face { font-family: 'Java Bitmap'; src: url('./assets/java-bitmap.woff2') format('woff2'); font-display: swap; }
+body, button, input, select, textarea, .mc-btn, .mc-input { font-family: 'Java Bitmap', monospace; font-synthesis: none; }
+.mc-btn, .mc-btn-primary, .mc-btn:hover:not(:disabled), .mc-btn-primary:hover:not(:disabled) {
+  border-radius: 0; box-shadow: none; transition: none; transform: none; letter-spacing: 0;
+  color: #fff; background-color: #777; background-image: var(--mc-btn-img); background-size: 100% 100%; text-shadow: 1px 1px #3f3f3f;
+}
+.mc-btn:hover:not(:disabled), .mc-btn-primary:hover:not(:disabled) { background-image: var(--mc-btn-hover-img); }
+.mc-btn:disabled { background-image: var(--mc-btn-disabled-img); color: #a0a0a0; }
+.java-screen { position: absolute; inset: 0; z-index: 45; font-size: 8px; line-height: 10px; color: white; text-shadow: 1px 1px #3f3f3f; }
+.java-dirt { background-color: #30251e; background-size: 64px 64px; image-rendering: pixelated; background-blend-mode: multiply; }
+.java-screen-overlay { background: linear-gradient(#101010a0, #202030b0); }
+.java-page { position: absolute; top: 0; left: 50%; transform-origin: top center; }
+.java-page > h1 { position: absolute; margin: 0; top: 18px; left: 0; width: 100%; text-align: center; font-size: 8px; font-weight: 400; line-height: 10px; }
+.java-page-content { position: absolute; top: 40px; bottom: 65px; left: 5px; right: 5px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.java-page-footer { position: absolute; bottom: 8px; left: 0; right: 0; display: flex; gap: 4px; align-items: center; flex-direction: column; }
+.java-btn { display: inline-flex; flex: none; align-items: center; justify-content: center; position: relative; height: 20px; min-height: 20px; padding: 0 3px; border: 2px solid #000; border-image: var(--mc-btn-img) 2 fill / 2px / 0 stretch; border-radius: 0; background: #777; color: white; font-size: 8px; font-weight: 400; line-height: 9px; text-shadow: 1px 1px #3f3f3f; cursor: pointer; white-space: nowrap; }
+.java-btn:hover:not(:disabled), .java-btn:focus-visible { border-image-source: var(--mc-btn-hover-img); outline: 1px solid #fff; outline-offset: -1px; }
+.java-btn:disabled { border-image-source: var(--mc-btn-disabled-img); color: #a0a0a0; cursor: default; }
+.java-button-row { display: flex; justify-content: center; gap: 4px; }
+.java-centered { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.java-muted { color: #aaa; margin: 4px 0; line-height: 11px; }
+.java-input { box-sizing: border-box; display: block; width: 100%; height: 20px; padding: 2px 3px; border: 1px solid #a0a0a0; color: #e0e0e0; background: black; border-radius: 0; font-size: 8px; outline: none; }
+.java-input:focus { border-color: white; }
+.java-field { display: block; color: #aaa; margin: 4px 5px 10px; }
+.java-field > input { margin-top: 3px; }
+.java-options-grid { display: grid; grid-template-columns: 150px 150px; gap: 4px 10px; align-items: start; }
+.java-slider { display: grid; place-items: center; position: relative; width: 150px; height: 20px; border: 1px solid black; background: #0008; text-align: center; font-size: 8px; }
+.java-slider > span { pointer-events: none; z-index: 1; }
+.java-slider input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; appearance: none; background: none; cursor: pointer; }
+.java-slider input::-webkit-slider-thumb { appearance: none; width: 8px; height: 18px; background: #aaa; border: 1px solid white; box-shadow: inset -1px -1px #555; }
+.java-slider input::-moz-range-thumb { width: 8px; height: 18px; background: #aaa; border: 1px solid white; border-radius: 0; }
+.java-key-list { grid-column: 1 / -1; background: #0008; padding: 4px 8px; color: #ddd; }
+.java-key-list p { margin: 3px 0; }
+.java-world-list { margin-top: 5px; padding: 2px 0; background: #0008; }
+.java-world { display: flex; width: 100%; min-height: 38px; text-align: left; padding: 2px; border: 1px solid transparent; color: white; background: transparent; font-size: 8px; line-height: 10px; }
+.java-world[aria-selected=true] { border-color: #aaa; background: #0008; }
+.java-world strong { font-weight: 400; display: block; }
+.java-world small { font-size: 8px; display: block; color: #808080; }
+.java-world-icon { flex: none; width: 32px; height: 32px; margin-right: 4px; background: #222; display: grid; place-items: center; font-size: 24px; color: #888; }
+.java-confirm { text-align: center; margin: 30px 0; }
+.java-pause-buttons { display: flex; align-items: center; flex-direction: column; gap: 4px; padding-top: 30px; }
+.java-title-screen { position: absolute; inset: 0; background-size: cover; background-position: center; background-color: #8baca8; image-rendering: pixelated; overflow: hidden; }
+.java-panorama-shade { position: absolute; inset: 0; background: linear-gradient(#fff2, #0003); backdrop-filter: blur(2px); }
+.java-title-canvas { position: absolute; left: 50%; top: 50%; width: 320px; height: 240px; }
+.java-title-logo { position: absolute; left: 23px; top: 22px; width: 274px; }
+.java-title-logo > img { image-rendering: pixelated; }
+.java-title-logo .java-edition { position: absolute; width: 128px; height: 16px; left: 73px; top: 45px; }
+.java-splash { position: absolute; color: #ffff00; right: -8px; top: 49px; font-size: 10px; white-space: nowrap; text-shadow: 1px 1px #3f3f00; transform: rotate(-20deg); animation: java-splash .5s alternate infinite ease-in-out; }
+@keyframes java-splash { to { transform: rotate(-20deg) scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .java-splash { animation: none; } }
+.java-title-buttons { position: absolute; left: 60px; top: 118px; display: flex; flex-direction: column; gap: 4px; }
+.java-title-buttons > .java-button-row { margin-top: 8px; }
+.java-title-footer { position: absolute; bottom: 3px; left: 4px; right: 4px; font-size: 12px; color: white; text-shadow: 1px 1px #3f3f3f; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
+.java-death { position: absolute; inset: 0; z-index: 50; color: white; background: linear-gradient(#60000080, #400000b0); text-shadow: 1px 1px #3f3f3f; }
+.java-death h1 { font-weight: 400; }
+.java-slot:hover::after, .java-slot:focus-visible::after { content: ''; position: absolute; inset: 1px; background: #ffffff80; pointer-events: none; }
+.java-slot img { pointer-events: none; }
+.java-inventory .mc-craft-grid, .java-inventory .mc-inv-storage { display: contents; }
+.java-inventory .java-player-preview { border: 0; background: none; padding: 0; box-shadow: none; min-width: 0; min-height: 0; }
+.java-recipe-toggle { border: 0; background-size: 100% 100%; image-rendering: pixelated; cursor: pointer; }
+.java-search { position: absolute; border: 0; padding: 0; height: 10px; background: transparent; color: #3f3f3f; font-size: 8px; line-height: 9px; outline: none; }
+.java-recipe { position: absolute; width: 25px; height: 25px; border: 1px solid #555; background: #aaa; box-shadow: inset 1px 1px #eee, inset -1px -1px #555; display: grid; place-items: center; }
+.java-recipe[data-ready=true] { background: #ced0ca; }
+.java-recipe:hover { border-color: white; }
+.java-recipe img, .java-tab img { image-rendering: pixelated; pointer-events: none; }
+.java-filter { position: absolute; width: 25px; height: 16px; background: #aaa; border: 1px solid #555; color: #333; }
+.java-filter[aria-pressed=true] { background: #9a9; }
+.java-page-arrow { position: absolute; top: 137px; font-size: 10px; color: #333; border: 0; background: transparent; }
+.java-page-arrow:disabled { color: #888; }
+.java-scrollbar { writing-mode: vertical-lr; direction: ltr; appearance: slider-vertical; margin: 0; accent-color: #bbb; }
+.java-tab { width: 28px; height: 32px; border: 1px solid #555; background: #c6c6c6; box-shadow: inset 1px 1px white; display: grid; place-items: center; }
+.java-tab[aria-pressed=true] { background: #eee; border-bottom-color: #eee; }
+.mc-close-btn { background: #777; border: 2px solid black; box-shadow: none; border-radius: 0; }
+@media not all and (pointer: coarse) { .mc-close-btn, .java-touch-only { display: none !important; } }
+.java-vitals [data-java-health] > *, .java-vitals [data-java-food] > * { flex: none; width: 9px !important; height: 9px !important; margin-right: -1px; filter: none !important; }
+.java-vitals [data-java-health] img, .java-vitals [data-java-food] img { width: 9px !important; height: 9px !important; filter: none !important; }
+.java-vitals svg { width: 9px; height: 9px; }
+.java-vitals img { image-rendering: pixelated; }
+.java-count { position: absolute; right: -1px; bottom: -2px; color: white; font-size: 8px; line-height: 9px; text-shadow: 1px 1px #3f3f3f; }
+.java-player-preview > div, .java-player-preview > img { max-width: 48px; max-height: 68px; }
+@media not all and (pointer: coarse) {
+  .java-chat { background: transparent !important; max-width: none !important; width: auto !important; left: 2px !important; right: 2px !important; padding: 0 !important; }
+  .java-chat > div { max-width: none !important; margin: 0 !important; border: 0 !important; box-shadow: none !important; background: transparent !important; padding-bottom: 0 !important; }
+  .java-chat > div > div:first-child, .java-chat > div > div:last-child { display: none; }
+  .java-chat form { padding: 0 !important; gap: 0 !important; }
+  .java-chat form input { border: 0 !important; padding: 2px !important; height: calc(12px * var(--java-chat-scale, 2)); background: #0008 !important; font-size: calc(8px * var(--java-chat-scale, 2)); }
+  .java-chat form > button { display: none; }
+}
+.java-network-advanced { background-color: #30251e !important; }
+.java-network-advanced .mc-window { background: #0007; border: 0; box-shadow: none; border-radius: 0; }
+.java-network-advanced .rounded { border-radius: 0; }
+.java-slot.mc-slot { border: 0 !important; box-shadow: none; background: none !important; padding: 0; margin: 0; min-width: 0; min-height: 0; display: block; }
+.java-panorama { position: absolute; inset: 0; filter: blur(2px); }
+.java-panorama canvas { display: block; width: 100%; height: 100%; }
+.mc-btn:active { transform: none; }
+.java-world-tabs { margin-bottom: 12px; }
+.java-slot[data-drag-selected] { background: rgba(255,255,255,.5); }
+.java-slot.mc-slot > img { max-width: none; max-height: none; }
+.java-recipe-book .java-search, .java-recipe-book .java-page-arrow { color: white; }
+.java-recipe-book .java-search::placeholder { color: #aaa; }
+.java-recipe-book { color: white !important; }
+.java-recipe { border: none; box-shadow: none; background-color: transparent !important; background-size: 100% 100%; image-rendering: pixelated; }
+.java-filter { width: 26px; height: 16px; border: none; background-size: 100% 100%; background-color: transparent !important; image-rendering: pixelated; }
+.java-page-arrow { width: 12px; height: 17px; background-size: 100% 100%; image-rendering: pixelated; }
+.java-page-arrow:disabled { visibility: hidden; }
+.mc-close-btn, .java-touch-only { display: none; }
+@media (pointer: coarse) { .mc-close-btn { display: flex; } .java-touch-only { display: block; } }
+.mc-btn:active:not(:disabled) { transform: none; }
+.java-tab { border: none; box-shadow: none; background-color: transparent !important; background-size: 100% 100%; image-rendering: pixelated; }
+.java-tab img { margin-top: 3px; }
+.java-slot.mc-slot[data-drag-selected] { background: rgba(255,255,255,.5) !important; }
+.java-tooltip .mc-text { font-size: inherit; }
+.java-player-preview canvas { max-width: none; max-height: none; }
+.java-vitals [data-java-air] img { width: 9px; height: 9px; margin-right: -1px; }
+.java-chat-log { display: flex; flex-direction: column; gap: 0; }
+.java-scrollbar { appearance: none; background: transparent; }
+.java-scrollbar::-webkit-slider-runnable-track { background: transparent; }
+.java-scrollbar::-webkit-slider-thumb { appearance: none; width: 12px; height: 15px; border: 0; background: var(--mc-creative-scroller) center/100% 100%; image-rendering: pixelated; }
+.java-scrollbar::-moz-range-track { background: transparent; }
+.java-scrollbar::-moz-range-thumb { width: 12px; height: 15px; border: 0; border-radius: 0; background: var(--mc-creative-scroller) center/100% 100%; image-rendering: pixelated; }
+@media not all and (pointer: coarse) {
+  .java-chat .java-chat-quick { display: none; }
+  .java-chat .java-chat-suggestions { margin: 0; border: none; width: max-content; max-width: 100%; background: #000a; }
+  .java-chat-suggestions button { padding: 0 calc(2px * var(--java-chat-scale, 2)); font-size: calc(8px * var(--java-chat-scale, 2)); line-height: calc(9px * var(--java-chat-scale, 2)); background: transparent !important; }
+  .java-chat-suggestions button > span { display: none; }
+  .java-chat-suggestions code { font-family: inherit; font-weight: 400; }
 }

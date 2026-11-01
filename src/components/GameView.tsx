@@ -12,7 +12,8 @@ import AnvilScreen from './AnvilScreen';
 import BrewingScreen from './BrewingScreen';
 import JournalScreen from './JournalScreen';
 import WaypointsScreen from './WaypointsScreen';
-import { DeathScreen, PauseMenu, worldShareUrl, type WorldType } from './Menus';
+import { worldShareUrl, type WorldType } from './Menus';
+import { JavaPauseMenu as PauseMenu, JavaDeathScreen as DeathScreen, JavaPage, JavaButton } from './JavaMenus';
 import { ChatInput } from './ChatScreen';
 import TouchControls from './TouchControls';
 import OrientationGuard from './OrientationGuard';
@@ -222,19 +223,7 @@ export default function GameView({
     };
   }, [ui, touch]);
 
-  if (fatal) {
-    return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <div className="text-3xl mc-text">Błąd</div>
-        <div className="max-w-[520px] text-gray-200 mc-text">{fatal}</div>
-        <div className="w-[280px]">
-          <button className="mc-btn" onClick={onQuit}>
-            Powrót do menu
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (fatal) return <JavaPage title="Błąd" footer={<JavaButton onClick={onQuit}>Powrót do menu</JavaButton>}><p style={{ textAlign:'center', marginTop:25 }}>{fatal}</p></JavaPage>;
 
   const game = gameRef.current;
   const icons = game?.icons ?? {};
@@ -331,24 +320,9 @@ export default function GameView({
         />
       )}
       {game && ui === 'paused' && !started && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-6" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="text-4xl font-bold mc-text">Świat gotowy!</div>
-          <div className="px-6 text-center text-gray-200 mc-text">
-            {game.mode === 'creative'
-              ? 'Tryb kreatywny – buduj bez ograniczeń. Grafika dopasowana do twojego urządzenia.'
-              : 'Tryb przetrwania – zetnij drzewo, wytwórz kilof, znajdź wioskę i handluj z mieszkańcami.'}
-          </div>
-          <div className="w-[360px] max-w-[86vw]">
-            <button className="mc-btn" onClick={resume}>
-              {touch ? 'Dotknij, aby grać' : 'Kliknij, aby grać'}
-            </button>
-          </div>
-          <div className="px-6 text-center text-sm text-gray-300 mc-text">
-            {touch
-              ? 'Drążek – ruch (pchnij do oporu = sprint) · tapnij – postaw / użyj · przytrzymaj – kop · ⬆ – skok (2× = latanie)'
-              : 'Esc – pauza · J – dziennik · E – ekwipunek · T – czat · M – minimapa · F3 – debug'}
-          </div>
-        </div>
+        <JavaPage title="Dołączanie do świata" overlay>
+          <div className="java-centered" style={{ paddingTop: 45 }}><JavaButton onClick={resume}>{touch ? 'Dotknij, aby grać' : 'Dołącz do świata'}</JavaButton><p className="java-muted">{touch ? 'Sterowanie dotykowe' : 'Kliknięcie jest wymagane przez przeglądarkę do przechwycenia myszy.'}</p></div>
+        </JavaPage>
       )}
       {game && ui === 'paused' && started && (
         <PauseMenu

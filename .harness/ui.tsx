@@ -15,6 +15,8 @@ import HUD from '../src/components/HUD';
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS, applyPreset } from '../src/utils/settings';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../src/utils/version';
+import { JavaMainMenu, JavaPauseMenu } from '../src/components/JavaMenus';
+import JavaSettings from '../src/components/JavaSettings';
 import SettingsScreen from '../src/components/SettingsScreen';
 import JournalScreen, { JOURNAL_CHAPTERS, journalProgress } from '../src/components/JournalScreen';
 import EnchantScreen from '../src/components/EnchantScreen';
@@ -147,17 +149,17 @@ section('inventory screen: recipe finder');
   const html = renderToStaticMarkup(<InventoryScreen game={fake as unknown as Game} icons={{}} onChange={noop} />);
   // 2.9: na telefonie nie ma klawisza E/Esc – okno musi mieć własne wyjście.
   check('inventory has a visible close button', html.includes('aria-label="Zamknij"'));
-  check('inventory has a big bottom close button', html.includes('Gotowe – zamknij ekwipunek'));
+  check('inventory has no oversized non-Java footer', !html.includes('Gotowe – zamknij ekwipunek'));
   // 2.13: układ jak w Minecrafcie – siatka 2×2 w plecaku i książka przepisów.
   check('2.13 backpack shows the 2x2 crafting grid', html.includes('mc-craft-grid is-2'));
   check('2.13 backpack has no 3x3 without a table', !html.includes('mc-craft-grid is-3'));
   check('2.13 inventory shows the player preview', html.includes('Podgląd skórki'));
-  check('2.13 recipe book is one tap away', html.includes('📖 Receptury'));
+  check('2.13 recipe book is one tap away', html.includes('aria-label="Książka receptur"'));
 
   const withBook = renderToStaticMarkup(<InventoryScreen game={fake as unknown as Game} icons={{}} onChange={noop} initialBookOpen />);
   check('crafting screen includes recipe search', withBook.includes('Szukaj receptur po nazwie lub składniku'));
   check('crafting screen can filter craftable recipes', withBook.includes('aria-pressed="false"') && withBook.includes('Możliwe'));
-  check('2.13 recipe book explains one-tap crafting', /Tapnij recepturę/i.test(withBook));
+  check('Java recipe book offers placement rather than instant crafting', withBook.includes('aria-label="Ułóż:') && !/Tapnij recepturę/i.test(withBook));
 
   // Przy stole zamiast 2×2 jest pełna siatka 3×3 i nie ma podglądu postaci.
   const tableInv = new Inventory();
@@ -172,13 +174,13 @@ section('inventory screen: recipe finder');
   const logInv = new Inventory();
   logInv.add(B.LOG, 1);
   const logGame = { ...fake, inventory: logInv };
-  const logHtml = renderToStaticMarkup(<InventoryScreen game={logGame as unknown as Game} icons={{}} onChange={noop} />);
-  check('2.13 a log offers a one-tap planks shortcut', /Deski \(dąb\)/.test(logHtml) && logHtml.includes('1 pień → 4 deski'));
+  const logHtml = renderToStaticMarkup(<InventoryScreen game={logGame as unknown as Game} icons={{}} onChange={noop} initialBookOpen />);
+  check('Java a log enables planks placement in the recipe book', /Ułóż: Deski dębowe/.test(logHtml) && logHtml.includes('data-ready="true"'));
   const planksInv = new Inventory();
   planksInv.add(B.PLANKS, 4);
   const planksGame = { ...fake, inventory: planksInv };
-  const planksHtml = renderToStaticMarkup(<InventoryScreen game={planksGame as unknown as Game} icons={{}} onChange={noop} />);
-  check('2.13 four planks offer a one-tap table shortcut', planksHtml.includes('Stół rzemieślniczy') && planksHtml.includes('4 deski → stół'));
+  const planksHtml = renderToStaticMarkup(<InventoryScreen game={planksGame as unknown as Game} icons={{}} onChange={noop} initialBookOpen />);
+  check('Java four planks enable table placement', planksHtml.includes('Ułóż: Stół rzemieślniczy') && planksHtml.includes('data-ready="true"'));
 }
 
 // =============================================== 2.9: czat z listą komend
@@ -243,19 +245,19 @@ section('world list: search and sorting');
 section('2.11: ekran „Gra razem” – serwer publiczny');
 {
   const mp = renderToStaticMarkup(<MultiplayerScreen onStart={noop} onClose={noop} />);
-  check('ekran multiplayera ma tytuł', mp.includes('Gra razem'));
-  check('główny przycisk to gra online', mp.includes('Graj online'));
-  check('ekran tłumaczy wspólny świat', /wspólnego świata|wspólny świat/i.test(mp));
+  check('ekran multiplayera ma tytuł', mp.includes('Tryb wieloosobowy'));
+  check('główny przycisk to gra online', mp.includes('Dołącz do serwera'));
+  check('ekran tłumaczy wspólny świat', /Publiczny świat przetrwania/i.test(mp));
   check('widać zakładkę serwera publicznego', mp.includes('Serwer publiczny'));
-  check('zostały dodatkowe tryby', mp.includes('Ta przeglądarka') && mp.includes('Przez internet'));
-  check('jest pole nazwy gracza', mp.includes('Twoja nazwa'));
+  check('zostały dodatkowe tryby', mp.includes('Połączenia przeglądarkowe...'));
+  check('jest pole nazwy gracza', mp.includes('Nazwa gracza'));
   check('serwer publiczny opisuje zapis w chmurze', /zapis|chmur/i.test(mp));
-  check('ekran mówi o porze dnia i pogodzie', /pora dnia|pogoda/i.test(mp));
+  check('server list makes cloud persistence explicit', /zapis w chmurze/i.test(mp));
 
   // Dodatkowe tryby nadal mają swoje ustawienia.
   const local = renderToStaticMarkup(<MultiplayerScreen onStart={noop} onClose={noop} defaultMode="local" />);
-  check('2.12 poczekalnia pozwala wybrać skórkę', mp.includes('Skórka') && SKINS.some((s) => mp.includes(s.name)));
-  check('2.12 poczekalnia pokazuje podgląd postaci', mp.includes('Podgląd skórki'));
+  check('server list is not a skin-picker screen', !mp.includes('Podgląd skórki'));
+  check('server list does not claim original-server compatibility', mp.includes('nie są obsługiwane'));
   check('tryb lokalny ma kod pokoju', local.includes('Kod pokoju'));
   check('tryb lokalny pozwala utworzyć sesję', local.includes('Utwórz sesję') && local.includes('Dołącz'));
   check('gospodarz ustawia świat', local.includes('Ziarno świata') && local.includes('Tryb / teren'));
@@ -266,6 +268,20 @@ section('2.11: ekran „Gra razem” – serwer publiczny');
   check('menu główne prowadzi do multiplayera', menu.includes('Gra razem · multiplayer'));
   const noMp = renderToStaticMarkup(<MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />);
   check('bez obsługi multiplayera przycisk się nie pojawia', !noMp.includes('Gra razem · multiplayer'));
+}
+
+section('4.8: active Java screens, not legacy menu exports');
+{
+  const title = renderToStaticMarkup(<JavaMainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} onMultiplayer={noop} />);
+  check('Java title uses the actual logo and bitmap layout', title.includes('alt="Minecraft"') && title.includes('java-title-canvas'));
+  check('Java title separates singleplayer and multiplayer', title.includes('Tryb jednoosobowy') && title.includes('Tryb wieloosobowy'));
+  check('Java title has no old shortcut crafting or launcher cards', !title.includes('Co nowego') && !title.includes('Witaj w BlockCraft'));
+  const pause = renderToStaticMarkup(<JavaPauseMenu settings={DEFAULT_SETTINGS} shareUrl="" onSettings={noop} onResume={noop} onQuit={noop} onJournal={noop} onSave={noop} />);
+  check('Java pause has native resume/save-and-quit actions', pause.includes('Powrót do gry') && pause.includes('Zapisz i wyjdź do menu'));
+  check('Java pause relegates non-native tools to extensions', pause.includes('Rozszerzenia...') && !pause.includes('Auto-bicie'));
+  const settings = renderToStaticMarkup(<JavaSettings settings={DEFAULT_SETTINGS} onChange={noop} onClose={noop} />);
+  check('Java options have actual FOV slider', settings.includes('aria-label="Pole widzenia"') && settings.includes('type="range"'));
+  check('Java options expose native categories', ['Ustawienia grafiki', 'Sterowanie', 'Muzyka i dźwięki', 'Dostosowanie skórki'].every(s => settings.includes(s)));
 }
 
 section('menus: static render');
@@ -318,8 +334,8 @@ section('menus: static render');
   check('pause menu opens the adventure journal', pause.includes('Dziennik przygód'));
   check('pause menu counts achievements', pause.includes(`/${ACHIEVEMENTS.length}`));
   check('pause menu announces the new release', pause.includes(`Nowości w ${GAME_VERSION}`) && pause.includes(GAME_RELEASE_NAME));
-  check('2.14 pause menu has quick auto-jump toggle', pause.includes('Auto-skok: wł.') && pause.includes('Auto-bicie: wł.'));
-  check('2.14 quick toggles expose aria-pressed', (pause.match(/aria-pressed="true"/g) ?? []).length >= 2);
+  check('2.14 pause menu has quick auto-jump toggle', pause.includes('Auto-skok: wł.') && pause.includes('Auto-bicie: wył.'));
+  check('2.14 quick toggles expose aria-pressed', (pause.match(/aria-pressed="true"/g) ?? []).length >= 1 && pause.includes('aria-pressed="false"'));
 
   const pauseMp = renderToStaticMarkup(
     <PauseMenu
@@ -374,7 +390,7 @@ section('menus: static render');
   check('2.12 settings show the skin picker', settingsHtml.includes('Skórka') && settingsHtml.includes('aria-pressed'));
   check('2.12 settings offer a touch button size', settingsHtml.includes('Rozmiar przycisków dotykowych'));
   // 2.14: automatyczny skok i auto-bicie wrogich mobów.
-  check('2.14 settings switch auto-attack on', settingsHtml.includes('Auto-bicie potworów: włączone'));
+  check('2.14 settings switch auto-attack on', settingsHtml.includes('Auto-bicie potworów: wyłączone'));
   check('2.14 settings explain auto-attack', settingsHtml.includes('wrogie moby w zasięgu ręki') || settingsHtml.includes('w zasięgu ręki'));
   check('2.14 settings keep the auto-jump switch', settingsHtml.includes('Auto-skok na schodki: włączony'));
   check('2.14 settings group both aids on every device', settingsHtml.includes('Ułatwienia – także na komputerze'));
@@ -737,7 +753,13 @@ async function mountWithJsdom(): Promise<boolean> {
     const e = new dom.window.MouseEvent(eventType, { bubbles: true, cancelable: true, button, shiftKey });
     Object.defineProperty(e, 'pointerType', { value: type });
     Object.defineProperty(e, 'pointerId', { value: 1 });
-    await React.act(async () => { el.dispatchEvent(e); });
+    await React.act(async () => {
+      el.dispatchEvent(e);
+      if (type === 'mouse' && eventType === 'pointerdown') {
+        const up = new dom.window.MouseEvent('pointerup', { bubbles: true, button });
+        Object.defineProperty(up, 'pointerType', { value: 'mouse' }); el.dispatchEvent(up);
+      }
+    });
   };
   const leave = (el: Element) => el.dispatchEvent(new dom.window.MouseEvent('mouseout', { bubbles: true, relatedTarget: w.document.body }));
   const hotbarSlot = (i = 0) => container.querySelector(`[data-hotbar-slot="${i}"] .mc-slot`)!;
@@ -810,7 +832,9 @@ async function mountWithJsdom(): Promise<boolean> {
   await pointer(secondary(), 0, true); leave(secondary());
   check('UI: Shift removes an offhand stack without loss', inv.offhand === null && inv.slots.some(s => s?.name === 'Named pick'));
   game.mode = 'creative'; await renderInventory();
-  check('UI: creative inventory also exposes the offhand slot', !!secondary());
+  check('UI: creative catalog is distinct from survival inventory', !secondary());
+  await React.act(async () => { (container.querySelector('[aria-label="Ekwipunek przetrwania"]') as HTMLButtonElement).click(); });
+  check('UI: creative survival tab exposes the offhand slot', !!secondary());
   inv.cursor = { id: B.TORCH, count: 9 }; await renderInventory();
   await pointer(secondary()); leave(secondary());
   check('UI: creative offhand accepts a whole stack', inv.offhand?.count === 9 && inv.cursor === null);
@@ -819,6 +843,48 @@ async function mountWithJsdom(): Promise<boolean> {
   await React.act(async () => { input.focus(); input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { code: 'KeyF', key: 'f', bubbles: true, cancelable: true })); });
   check('UI: typing F in search never swaps the offhand', inv.offhand?.count === 9);
   inv.offhand = null;
+  // Real capture/bubble/window pointer sequence, not direct engine calls.
+  inv.slots.fill(null); inv.grid.fill(null); inv.cursor = { id:B.PLANKS,count:10 }; game.mode='survival';
+  await renderInventory();
+  const gesture = (el: Element | Window, type: string, button=0, buttons=1) => {
+    const e=new dom.window.MouseEvent(type,{bubbles:true,cancelable:true,button,buttons});
+    Object.defineProperty(e,'pointerType',{value:'mouse'}); el.dispatchEvent(e);
+  };
+  await React.act(async()=>{
+    gesture(hotbarSlot(1),'pointerdown');gesture(hotbarSlot(2),'pointermove');gesture(hotbarSlot(3),'pointermove');gesture(dom.window as unknown as Window,'pointerup',0,0);
+  });
+  check('UI: left drag distributes across three actual slots',inv.slots.slice(1,4).map(s=>s?.count).join(',')==='3,3,3' && inv.cursor?.count===1);
+  inv.cursor={id:B.PLANKS,count:8}; await renderInventory();
+  await React.act(async()=>{
+    gesture(hotbarSlot(4),'pointerdown');gesture(hotbarSlot(5),'pointermove');dom.window.dispatchEvent(new dom.window.Event('blur'));gesture(dom.window as unknown as Window,'pointerup',0,0);
+  });
+  check('UI: blur cancels a pending drag without consuming held items',inv.cursor?.count===8 && !inv.slots[4] && !inv.slots[5]);
+  await pointer(container.querySelector('.java-inventory')!,2);
+  check('UI: outside RMB drops exactly one rather than closing the window',inv.cursor?.count===7 && dropped.at(-1)?.[1]===1);
+  inv.slots.fill(null);inv.grid.fill(null);inv.cursor=null;inv.add(B.LOG,1);await renderInventory();
+  const planksButton=container.querySelector('[aria-label="Ułóż: Deski dębowe"]') as HTMLButtonElement;
+  await React.act(async()=>{planksButton.click();});
+  check('UI: book click moves a log into the real grid without crafting',inv.grid[0]?.id===B.LOG && inv.countOf(B.PLANKS)===0 && inv.cursor===null);
+  await pointer(container.querySelector('[data-craft-result] .java-slot')!);
+  check('UI: output click, not book click, produces the four planks',(inv.cursor as Stack|null)?.id===B.PLANKS && cursorCount()===4 && inv.grid[0]===null);
+  inv.returnCursor(); const beforeGhost=JSON.stringify(inv);
+  await React.act(async()=>{(container.querySelector('[aria-label="Ułóż: Piaskowiec"]') as HTMLButtonElement).click();});
+  check('UI: unavailable recipe is only a ghost preview and does not consume items',JSON.stringify(inv)===beforeGhost);
+  game.mode='creative';await renderInventory();
+  await React.act(async()=>{(container.querySelector('[aria-label="Bloki budowlane"]') as HTMLButtonElement).click();});
+  const catalog=()=>container.querySelector('.java-slot:not([data-slot-area])')!;
+  inv.cursor=null;await pointer(catalog());leave(catalog());
+  check('UI: creative left click takes a single item',cursorCount()===1);
+  inv.cursor=null;await pointer(catalog(),1);leave(catalog());
+  check('UI: creative middle click clones a full stack',cursorCount()===64);
+  inv.cursor=null;await pointer(catalog(),0,true);leave(catalog());
+  check('UI: creative Shift click takes a full stack',cursorCount()===64);
+  await React.act(async()=>{(container.querySelector('[aria-label="Ekwipunek przetrwania"]') as HTMLButtonElement).click();});
+  check('UI: creative survival tab uses its own native panel without crafting grid',!container.querySelector('[data-craft-cell]') && !!container.querySelector('[aria-label="Usuń przedmiot"]'));
+  await React.act(async()=>{(container.querySelector('[aria-label="Usuń przedmiot"]') as HTMLButtonElement).click();});
+  check('UI: creative trash deletes the held stack',inv.cursor===null);
+  game.mode='survival';inv.slots.fill(null);inv.grid.fill(null);await renderInventory();
+
   // Exercise the registered DOM listeners, not only the reset helper.
   const eventGame = Object.assign(Object.create(RealGame.prototype), {
     renderer: { domElement: w.document.createElement('canvas') }, listeners: [], bindViewport() {}, noteHardware() {},
@@ -848,98 +914,51 @@ async function mountWithJsdom(): Promise<boolean> {
   const buttons = () => [...container.querySelectorAll('button')] as HTMLButtonElement[];
   const byText = (label: string) => buttons().find((b) => (b.textContent ?? '').includes(label));
 
-  check('app renders the title screen', text().includes('BLOCKCRAFT'));
-
-  // 2.24.1: pierwszy ekran to znów klasyczne menu – launcher nie wychodzi na wierzch.
-  check('classic menu is the first screen', text().includes('BLOCKCRAFT') && !text().includes('Co nowego'));
-  check('classic menu still names the release', text().includes('WERSJA ' + GAME_VERSION));
-
-  // Launcher jest dostępny tylko pod #launcher – remount, bo adres czytamy raz.
+  check('app renders the Java title screen', !!container.querySelector('img[alt="Minecraft"]') && text().includes('Tryb jednoosobowy'));
+  check('title retains honest project and release attribution', text().includes('BlockCraft ' + GAME_VERSION) && text().includes('Nieoficjalny projekt'));
+  check('title does not render the old launcher panels', !text().includes('Co nowego'));
   dom.window.location.hash = '#launcher';
-  await React.act(async () => { root.unmount(); });
-  root = createRoot(container);
+  await React.act(async () => { root.unmount(); }); root = createRoot(container);
   await React.act(async () => { root.render(<App />); });
-  check('launcher opens from #launcher', text().includes('GRAJ') && text().includes('Co nowego'));
-  await React.act(async () => {
-    byText('Światy')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
-  check('launcher: zakładka światów', text().includes('Każdy świat to osobna instancja'));
-  await React.act(async () => {
-    byText('Serwery')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
-  check('launcher: zakładka serwerów', text().includes('Dołącz do serwera'));
-  await React.act(async () => {
-    byText('Paczki i mody')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
-  check('launcher: zakładka paczek', text().includes('26.2.x Template'));
-  await React.act(async () => {
-    byText('Skórki')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
-  check('launcher: zakładka skórek', text().includes('Wybierz postać'));
-  await React.act(async () => {
-    byText('Konsola')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
-  check('launcher: konsola zbiera wpisy', text().includes('Dziennik launchera') && text().includes('Launcher BlockCraft'));
-  await React.act(async () => {
-    byText('Klasyczne menu')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
-  check('classic menu is reachable from the launcher', text().includes('BLOCKCRAFT') && !text().includes('Co nowego'));
-  check('leaving the launcher clears the hash', dom.window.location.hash === '');
-
-  // 2.10: wejście do poczekalni multiplayer i powrót bez uruchamiania świata.
-  await React.act(async () => {
-    byText('Gra razem · multiplayer')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
-  check('multiplayer screen opens from the menu', text().includes('Gra razem') && text().includes('Graj online'));
-  check('multiplayer screen offers both transports', text().includes('Ta przeglądarka') && text().includes('Przez internet'));
-
-  await React.act(async () => {
-    byText('Ta przeglądarka')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
+  check('obsolete launcher hash still opens the Java title', !!container.querySelector('img[alt="Minecraft"]') && !text().includes('Co nowego'));
+  check('obsolete launcher hash is cleared', dom.window.location.hash === '');
+  const click = async (label: string) => {
+    const button = byText(label); check('navigation action exists: ' + label, !!button);
+    await React.act(async () => { button?.click(); });
+  };
+  await click('Opcje...');
+  check('native options open from title', text().includes('Pole widzenia') && !!byText('Ustawienia grafiki'));
+  await click('Ustawienia grafiki');
+  check('video settings expose actual GUI scaling', text().includes('Skala interfejsu:'));
+  await React.act(async () => { dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  check('Escape returns from video to options', text().includes('Dostosowanie skórki...'));
+  await click('Gotowe');
+  await click('Tryb wieloosobowy');
+  check('multiplayer screen opens from the menu', text().includes('Dołącz do serwera') && text().includes('Serwer przeglądarkowy'));
+  await click('Połączenia przeglądarkowe...');
+  check('advanced multiplayer preserves both browser transports', text().includes('Ta przeglądarka') && text().includes('Przez internet'));
   check('local mode shows the room code', text().includes('Kod pokoju'));
-
-  await React.act(async () => {
-    byText('Dołącz')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
+  await click('Dołącz');
   check('joining asks for the room code', text().includes('Dołącz do pokoju'));
-
-  await React.act(async () => {
-    byText('Przez internet')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
+  await click('Przez internet');
   check('internet mode explains the invite code', /kod zaproszenia/i.test(text()));
-
+  await click('Wróć');
+  check('back from multiplayer returns to title', !!container.querySelector('img[alt="Minecraft"]'));
+  await click('Tryb jednoosobowy');
+  check('singleplayer opens world selection, not the creation form', !!byText('Stwórz nowy świat') && text().includes('Wybierz świat'));
+  await click('Stwórz nowy świat');
+  check('creation form opens', text().includes('Nazwa świata'));
+  const nameInput = container.querySelector('input') as HTMLInputElement;
   await React.act(async () => {
-    byText('Wróć')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
+    Object.getOwnPropertyDescriptor((w.HTMLInputElement as typeof HTMLInputElement).prototype, 'value')!.set!.call(nameInput, 'Testowy świat');
+    nameInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   });
-  check('back from multiplayer returns to the menu', text().includes('BLOCKCRAFT'));
-
-  await React.act(async () => {
-    byText('Nowy świat')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
-  check('creation form opened', text().includes('Utwórz nowy świat'));
-  check('world type toggle exists', !!byText('Typ świata'));
-
-  await React.act(async () => {
-    byText('Typ świata')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
-  check('flat world selectable', text().includes('Płaski'));
-
-  const nameInput = container.querySelector('input') as HTMLInputElement | null;
-  if (nameInput) {
-    await React.act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(
-        (w as unknown as { HTMLInputElement: { prototype: HTMLInputElement } }).HTMLInputElement.prototype,
-        'value'
-      )?.set;
-      setter?.call(nameInput, 'Testowy świat');
-      nameInput.dispatchEvent(new (w.Event as unknown as new (t: string, o?: object) => Event)('input', { bubbles: true }));
-    });
-    check('world name is editable', nameInput.value === 'Testowy świat');
-  }
-
-  await React.act(async () => {
-    byText('Stwórz świat')?.dispatchEvent(new (w.MouseEvent as unknown as new (t: string, o?: object) => Event)('click', { bubbles: true }));
-  });
+  check('world name is editable', nameInput.value === 'Testowy świat');
+  await click('Świat');
+  check('world tab exposes the seed and generator', text().includes('Ziarno generatora') && !!byText('Typ świata'));
+  await click('Typ świata');
+  check('flat world selectable', text().includes('Superpłaski'));
+  await click('Stwórz nowy świat');
 
   // jsdom has no WebGL, so the game view must fall back to a readable message.
   const afterStart = text();
@@ -988,7 +1007,7 @@ section('2.18: HUD rysuje grafiki z paczki');
   check('hotbar ma tło z paczki', html.includes('url(data:image/png'));
   check('pasek doświadczenia ma tło i postęp', (html.match(/url\(data:image\/png/g) ?? []).length >= 2);
   check('celownik jest obrazkiem, nie divem', /translate\(-50%,\s?-50%\)/.test(html));
-  check('poziom życia nadal jest wypisany', html.includes('14/20'), html.slice(-400));
+  check('Java health uses hearts without a numeric label', !html.includes('14/20') && html.includes('data-java-health'));
 }
 
 section('2.19: teleportacja i skórki 1:1 w interfejsie');

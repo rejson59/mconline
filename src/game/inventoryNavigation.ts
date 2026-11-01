@@ -57,3 +57,22 @@ export function collectStacks(cursor: Stack | null, sources: StackSlot[]): numbe
   }
   return moved;
 }
+
+/** Java quick-craft: equal shares with LMB, one per cell with RMB. Remainder stays held. */
+export function distributeCursor(cursor: Stack | null, targets: StackSlot[], right: boolean): Stack | null {
+  if (!cursor) return null;
+  let eligible = targets.filter(slot => {
+    const s = slot.get();
+    return (!s || mergeable(s, cursor)) && slotLimit(slot, cursor) > (s?.count ?? 0);
+  });
+  if (!right) eligible = eligible.slice(0, cursor.count);
+  const share = right ? 1 : Math.floor(cursor.count / Math.max(1, eligible.length));
+  for (const slot of eligible) {
+    const s = slot.get();
+    const n = Math.min(share, cursor.count, slotLimit(slot, cursor) - (s?.count ?? 0));
+    if (n <= 0) continue;
+    slot.set({ ...cursor, count: (s?.count ?? 0) + n, ...(cursor.ench ? { ench: { ...cursor.ench } } : {}) });
+    cursor.count -= n;
+  }
+  return cursor.count ? cursor : null;
+}

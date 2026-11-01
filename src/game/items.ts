@@ -610,7 +610,7 @@ export function smeltResult(id: number): number | null {
     case B.COBBLE:
       return B.STONE;
     case B.CLAY:
-      return B.BRICK;
+      return B.TERRACOTTA;
     case B.COAL_ORE:
       return I.COAL;
     case B.NETHERRACK:

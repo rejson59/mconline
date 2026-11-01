@@ -28,7 +28,7 @@ export default function ChestScreen({ game, icons, onChange }: { game: Game; ico
 
   return (
     <>
-      <GuiWindow
+      <GuiWindow game={game} onChange={refresh}
         sprite={CHEST.sprite}
         title={CHEST.title}
         scale={scale}
@@ -38,7 +38,7 @@ export default function ChestScreen({ game, icons, onChange }: { game: Game; ico
         {chest.slots.map((s, i) => {
           const p = chestSlot(i);
           return (
-            <GuiSlot
+            <GuiSlot slotArea="chest" slotIndex={i}
               key={i}
               x={p.x}
               y={p.y}

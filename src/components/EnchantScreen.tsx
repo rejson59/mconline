@@ -106,8 +106,8 @@ export default function EnchantScreen({ game, icons, onChange }: { game: Game; i
 
   return (
     <>
-      <GuiWindow sprite={ENCHANT.sprite} title={ENCHANT.title} scale={scale} onClose={() => game.closeInventory()}>
-        <GuiSlot
+      <GuiWindow game={game} onChange={refresh} sprite={ENCHANT.sprite} title={ENCHANT.title} scale={scale} onClose={() => game.closeInventory()}>
+        <GuiSlot slotArea="enchant" slotIndex={0}
           x={ENCHANT.item.x}
           y={ENCHANT.item.y}
           stack={item}
