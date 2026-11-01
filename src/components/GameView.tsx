@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Game, type GameMode, type HUDState, type SaveData, type UIState } from '../game/engine';
-import { setVolume } from '../game/audio';
+import { setVolume, setSoundLevels } from '../game/audio';
 import HUD from './HUD';
 import type { NetLike } from '../game/net';
 import InventoryScreen from './InventoryScreen';
@@ -114,10 +114,15 @@ export default function GameView({
     game.autoControl = s.controlMode === 'auto';
     game.sensitivity = s.sensitivity;
     game.fovBase = s.fov;
+    game.invertMouse = s.invertMouse;
+    game.brightness.value = s.brightness;
+    game.fovEffects = s.fovEffects;
+    game.damageTilt = s.damageTilt;
     game.showMinimap = s.minimap;
     game.viewBobbing = s.viewBobbing;
     game.showFps = s.showFps;
     setVolume(s.volume);
+    setSoundLevels(s.soundVolumes);
     gameRef.current = game;
     // handy for debugging from the browser console: blockcraft.game.…
     (window as unknown as { blockcraft?: { game: Game } }).blockcraft = { game };
@@ -169,8 +174,13 @@ export default function GameView({
     });
     g.sensitivity = effective.sensitivity;
     g.fovBase = effective.fov;
+    g.invertMouse = effective.invertMouse;
+    g.brightness.value = effective.brightness;
+    g.fovEffects = effective.fovEffects;
+    g.damageTilt = effective.damageTilt;
     g.showMinimap = effective.minimap;
     setVolume(effective.volume);
+    setSoundLevels(effective.soundVolumes);
     saveSettings(settings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effective]);

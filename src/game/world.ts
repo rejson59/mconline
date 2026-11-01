@@ -1,3 +1,4 @@
+import { rememberDecorationMask, treeRootReserved } from './decorationMask';
 import { WaterSimulation } from './water';
 import { isWater, waterHeight } from './blocks';
 import { applyStructures } from './structures';
@@ -1129,6 +1130,8 @@ export class World {
     const lootMask = vmask.slice();
     maxY = Math.max(maxY, applyStructures(d, c.cx, c.cz, this.villageContext(), vmask, lootMask));
 
+    rememberDecorationMask(c.cx, c.cz, this.villageContext(), vmask);
+
     // Surface decoration (pomija kolumny zajęte przez wioskę)
     for (let z = 0; z < CS; z++)
       for (let x = 0; x < CS; x++) {
@@ -1176,9 +1179,9 @@ export class World {
     for (let tz = oz - 3; tz < oz + CS + 3; tz++)
       for (let tx = ox - 3; tx < ox + CS + 3; tx++) {
         const r = hash(tx, 1, tz, s + 3);
-        if (r > 0.04) continue;
+        if (r > 0.045) continue;
         const inside = tx >= ox && tx < ox + CS && tz >= oz && tz < oz + CS;
-        if (inside && vmask[(tz - oz) * CS + (tx - ox)]) continue;
+        if (inside ? vmask[(tz - oz) * CS + (tx - ox)] : treeRootReserved(tx, tz, this.villageContext())) continue;
         const info = inside ? surf[(tz - oz) * CS + (tx - ox)] : this.surface(tx, tz);
         let chance = 0;
         if (info.biome === 'Las') chance = 0.035;
@@ -1247,10 +1250,9 @@ export class World {
       if (y < 0 || y >= CH) continue;
       const i = idx(lx, y, lz);
       const cur = d[i];
-      const isLog = b.id === B.LOG || b.id === B.BIRCH_LOG || b.id === B.ACACIA_LOG;
-      // Pień zawsze zajmuje swoje miejsce, liście tylko wolne przestrzenie
-      // (nie zamalowują sąsiedniego drzewa, wody ani domów).
-      if (!isLog && !(cur === B.AIR || RENDER[cur] === 1 || IS_LEAFY[cur])) continue;
+      // Both logs and leaves may replace vegetation, never solid terrain,
+      // water, or buildings on an adjacent slope.
+      if (!(cur === B.AIR || RENDER[cur] === 1 || IS_LEAFY[cur])) continue;
       d[i] = b.id;
       if (y > maxY) maxY = y;
     }
@@ -1314,12 +1316,14 @@ export class World {
         else if (r > 0.9995) d[idx(x, FLAT_H + 1, z)] = B.PUMPKIN;
       }
 
+    rememberDecorationMask(c.cx, c.cz, this.villageContext(), vmask);
+
     // sparse trees so wood is still obtainable
     for (let tz = oz - 2; tz < oz + CS + 2; tz++)
       for (let tx = ox - 2; tx < ox + CS + 2; tx++) {
         if (hash(tx, 1, tz, s + 3) > 0.006) continue;
         const inside = tx >= ox && tx < ox + CS && tz >= oz && tz < oz + CS;
-        if (inside && vmask[(tz - oz) * CS + (tx - ox)]) continue;
+        if (inside ? vmask[(tz - oz) * CS + (tx - ox)] : treeRootReserved(tx, tz, this.villageContext())) continue;
         const top = this.growTree(c, tx, tz, FLAT_H + 1, hash(tx, 2, tz, s) < 0.3, vmask);
         if (top > maxY) maxY = top;
       }

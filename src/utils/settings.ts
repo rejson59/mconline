@@ -1,3 +1,4 @@
+import { DEFAULT_SOUND_LEVELS, SOUND_CATEGORIES, type SoundLevels } from './soundSettings';
 import { PRESETS, recommendPreset, type DeviceProfile, type PresetName } from './performance';
 
 export type QualityMode = 'auto' | PresetName;
@@ -12,6 +13,11 @@ export interface Settings {
   sensitivity: number;
   fov: number;
   volume: number;
+  soundVolumes: SoundLevels;
+  invertMouse: boolean;
+  brightness: number;
+  fovEffects: number;
+  damageTilt: number;
   minimap: boolean;
 
   // ——— 2.5: wersja komputerowa albo dotykowa ———
@@ -60,6 +66,11 @@ export const DEFAULT_SETTINGS: Settings = {
   sensitivity: 1,
   fov: 72,
   volume: 0.5,
+  soundVolumes: { ...DEFAULT_SOUND_LEVELS },
+  invertMouse: false,
+  brightness: 0.5,
+  fovEffects: 1,
+  damageTilt: 1,
   minimap: false,
 
   controlMode: 'auto',
@@ -136,8 +147,17 @@ export function normalizeSettings(value: unknown): Settings {
   const fps = stored.fpsCap === 0 || stored.fpsCap === 30 || stored.fpsCap === 60 ? stored.fpsCap : DEFAULT_SETTINGS.fpsCap;
   const bool = (key: keyof Settings) => typeof stored[key] === 'boolean' ? stored[key] as boolean : DEFAULT_SETTINGS[key] as boolean;
 
+  const soundVolumes = { ...DEFAULT_SOUND_LEVELS };
+  const savedVolumes = stored.soundVolumes && typeof stored.soundVolumes === 'object' ? stored.soundVolumes as Partial<SoundLevels> : {};
+  for (const category of SOUND_CATEGORIES) soundVolumes[category] = boundedNumber(savedVolumes[category], 1, 0, 1);
+
   return {
     ...DEFAULT_SETTINGS,
+    soundVolumes,
+    invertMouse: bool('invertMouse'),
+    brightness: boundedNumber(stored.brightness, DEFAULT_SETTINGS.brightness, 0, 1),
+    fovEffects: boundedNumber(stored.fovEffects, 1, 0, 1),
+    damageTilt: boundedNumber(stored.damageTilt, 1, 0, 1),
     guiScale: Math.round(boundedNumber(stored.guiScale, 0, 0, 4)),
     renderDistance: Math.round(boundedNumber(stored.renderDistance, DEFAULT_SETTINGS.renderDistance, 2, 14)),
     sensitivity: boundedNumber(stored.sensitivity, DEFAULT_SETTINGS.sensitivity, 0.2, 3),

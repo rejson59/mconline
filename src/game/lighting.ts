@@ -73,6 +73,12 @@ export function heldFalloff(distance: number, strength: number, range = HELD_RAN
   return strength * Math.pow(t, 1.6);
 }
 
+/** Java-style light-map gamma: lift shadows without washing out full daylight. */
+export function brightnessFactor(light: number, brightness: number): number {
+  const low = Math.max(0, Math.min(1, light));
+  return light + ((1 - Math.pow(1 - low, 4)) - low) * Math.max(0, Math.min(1, brightness));
+}
+
 export interface HeldLightState {
   /** Pozycja światła (zwykle oczy gracza) – współdzielona z uniformem. */
   pos: THREE.Vector3;
@@ -96,7 +102,7 @@ export interface SunState {
 export function patchChunkMaterial(
   mat: THREE.MeshBasicMaterial,
   uDay: { value: number },
-  opts: { water?: boolean; time?: { value: number }; held?: HeldLightState; sun?: SunState } = {}
+  opts: { water?: boolean; time?: { value: number }; held?: HeldLightState; sun?: SunState; brightness?: { value: number } } = {}
 ) {
   const water = !!opts.water;
   const uTime = opts.time ?? { value: 0 };
@@ -106,13 +112,16 @@ export function patchChunkMaterial(
   const sunDir = { value: opts.sun?.dir ?? new THREE.Vector3(0.35, 1, 0.2).normalize() };
   const uSun = { value: opts.sun?.power ?? 1 };
 
+  const uBrightness = opts.brightness ?? { value: 0 };
+  mat.userData.uBrightness = uBrightness;
   mat.userData.uDay = uDay;
   mat.userData.uTime = uTime;
   mat.userData.uHeldStrength = uHeldStrength;
   mat.userData.uSun = uSun;
   mat.color.setRGB(1, 1, 1);
-  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-4-water' : 'blockcraft-light-4');
+  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-5-water' : 'blockcraft-light-5');
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uBrightness = uBrightness;
     shader.uniforms.uDay = uDay;
     shader.uniforms.uHeldPos = { value: heldPos };
     shader.uniforms.uHeldStrength = uHeldStrength;
@@ -139,6 +148,7 @@ export function patchChunkMaterial(
         '#include <common>',
         `#include <common>
 uniform float uDay;
+uniform float uBrightness;
 uniform vec3 uHeldPos;
 uniform float uHeldStrength;
 uniform float uHeldRange;
@@ -192,7 +202,10 @@ vec3 faceNormal(float f) {
 		float warm = clamp(block + held - sky, 0.0, 1.0);
 		vec3 tint = mix(vec3(1.0), vec3(1.06, 0.86, 0.62), warm * 0.85);
 		tint = mix(tint, vec3(1.06, 1.0, 0.9), sun * 0.45);
-		vec3 lightColor = tint * min(lit + ${AMBIENT.toFixed(3)} + moon, 2.4);
+		float baseLight = min(lit + ${AMBIENT.toFixed(3)} + moon, 2.4);
+        float low = clamp(baseLight, 0.0, 1.0);
+        float gammaLight = baseLight + ((1.0 - pow(1.0 - low, 4.0)) - low) * clamp(uBrightness, 0.0, 1.0);
+        vec3 lightColor = tint * gammaLight;
 		diffuseColor.rgb *= lightColor;
 	}`
       );

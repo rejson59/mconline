@@ -1,6 +1,15 @@
-# BlockCraft 4.8.0 🌍
+# BlockCraft 4.9.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.9.0 „Oryginalne dźwięki i płynny widok”
+
+- **Oryginalne efekty Java 1.20.4:** 232 nagrania OGG dla 117 zdarzeń, w tym bloki, kroki, moby, obrażenia, skrzynie, drzwi, łuk, przedmioty, deszcz, grzmoty, jaskinie i instrumenty bloków dźwiękowych. Osadzone lokalnie — bez CDN i pobierania w czasie gry. Creeper nie wydaje wymyślonego głosu bezczynności. Usunięto też sztuczne odgłosy łóżka, ptaków i wiatru oraz pogłos nakładany na wszystkie efekty.
+- **Prawdziwy mikser:** głośność główna oraz muzyka, bloki dźwiękowe, pogoda, bloki, wrogie/przyjazne stworzenia, gracze i otoczenie. Zmiany dotyczą także już grającego deszczu. Kliknięcia interfejsu podlegają głównej głośności. Muzyka pozostaje własną syntezą, **nie** ścieżką Minecrafta; szaf grających jeszcze nie zaimplementowano.
+- **Dodatkowe działające ustawienia:** odwrócenie myszy (Pointer Lock i tryb awaryjny), jasność mapy światła terenu, siła efektów FOV oraz przechylenia przy obrażeniach. Zachowanie starych preferencji i światów, bez migracji bazy.
+- **Kamera i animacje:** tłumienie FOV, kołysania, wysokości oczu i obrotów mobów niezależne od FPS; obrażenia przechylają widok deterministycznie zamiast losowo przesuwać oczy. Słuchacz otrzymuje aktualne współrzędne kamery, także przy X/Z równym zero. Bloki dźwiękowe dobierają instrument do podłoża i obsługują pełne 25 wysokości.
+- **Generowanie:** korony nie powstają od drzew, których korzeń w sąsiednim chunku zajmuje zabudowa; wspólna dokładna maska nie generuje rekurencyjnie sąsiadów i nie usuwa lasu nad podziemnymi kopalniami. Pnie nie nadpisują litego terenu ani wody. W dżungli usunięto sprzeczny limit losowania drzew 4% przy zadanej szansie 4,5%.
+- **Zakres:** kolejny testowany etap własnego silnika, a nie deklaracja pełnej zgodności z Minecraftem. Prawa do oryginalnych nagrań pozostają przy właścicielach — [Minecraft-NOTICE.txt](public/Minecraft-NOTICE.txt); kod MIT nie obejmuje tych plików. Reprodukcja i szczegóły: [dźwięki i ustawienia](docs/SOUNDS-JAVA-1.20.4.md).
 
 ## Wersja 4.8.0 „Interfejs Java 1.20.4”
 

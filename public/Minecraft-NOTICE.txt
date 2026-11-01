@@ -1,8 +1,8 @@
 Minecraft GUI and font artwork — third-party notice
 
-Minecraft is a trademark of Mojang AB. Minecraft artwork, including GUI
+Minecraft is a trademark of Mojang AB. Minecraft sound recordings and artwork, including GUI
 textures, title artwork, panorama images and bitmap font glyphs, is copyright
-Mojang AB / Microsoft. These assets and glyph-derived font outlines are NOT
+Mojang AB / Microsoft. These recordings, assets and glyph-derived font outlines are NOT
 covered by this project's MIT code license. All underlying rights remain
 with their respective owners; this notice does not grant a redistribution
 license or imply that the artwork has been released as open source.
@@ -25,3 +25,12 @@ not the project's MIT code license.
 See Minecraft's current EULA and usage guidelines:
 https://www.minecraft.net/eula
 https://www.minecraft.net/usage-guidelines
+
+Sound reference: Minecraft Java Edition 1.20.4.
+Pinned source mirror commit: 90d256dfee7b6fd8014e1bc3b107e64a530c5f9b
+Compiler: scripts/compile-java-sounds.py
+Embedded original recordings: src/game/art/javaSounds.generated.ts
+232 OGG effect/instrument samples, mapped to 117 original events.
+These recordings are third-party assets, NOT MIT-licensed project code.
+No Minecraft soundtrack recordings are bundled. The quiet procedural music
+interlude is project-generated and must not be described as original music.
