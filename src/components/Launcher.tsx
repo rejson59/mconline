@@ -980,7 +980,7 @@ function ServersTab({ onMultiplayer, onSolo }: { onMultiplayer: () => void; onSo
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-black tracking-tight">Serwery</h1>
-        <p className="text-[12px] text-white/45">Jeden publiczny świat dla wszystkich – bez kodów, bez gospodarza.</p>
+        <p className="text-[12px] text-white/45">Dwa osobne światy: survival i Miasto budowniczych Creative — bez kodów i gospodarza.</p>
       </div>
 
       <section className={`${PANEL} relative overflow-hidden p-5`}>
@@ -993,14 +993,14 @@ function ServersTab({ onMultiplayer, onSolo }: { onMultiplayer: () => void; onSo
               </span>
               <span className={CHIP}>publiczny</span>
             </div>
-            <h2 className="mt-2 text-[17px] font-extrabold">BlockCraft – świat wspólny</h2>
+            <h2 className="mt-2 text-[17px] font-extrabold">BlockCraft — survival i miasto Creative</h2>
             <p className="mt-1 max-w-lg text-[12px] leading-relaxed text-white/50">
               Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po odświeżeniu i po
               wyjściu. Wchodzisz jednym kliknięciem z dowolnego urządzenia.
             </p>
             <ul className="mt-3 grid gap-1.5 text-[11.5px] text-white/55 sm:grid-cols-2">
               {[
-                'wspólny świat bez hosta',
+                'survival + miasto Creative z działkami',
                 'zapis w chmurze',
                 '/tpa – teleportacja za zgodą',
                 'czat i lista graczy',

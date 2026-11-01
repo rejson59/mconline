@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.11.0';
-export const GAME_RELEASE_NAME = 'Schody i płyty';
+export const GAME_VERSION = '4.12.0';
+export const GAME_RELEASE_NAME = 'Miasto budowniczych';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.12: Miasto budowniczych', text: 'Osobny publiczny świat Creative, działki 32×32 i chronione ulice. Wpisz /dzialka zajmij na trawiastym kwadracie. Survival i jego ekwipunek pozostają osobno.' },
+  { title: '4.12: więcej prawdziwych opcji', text: 'Osobny ekran czatu: widoczność powiadomień, tekst, tło, skala, szerokość i wiersze. Zasięg istot i limity FPS do 240 — także z ręcznym wyborem w trybie Auto.' },
   { title: '4.11: narożniki i odwrócone schody', text: 'Siedem materiałów schodów, oba położenia i automatyczne narożniki wewnętrzne oraz zewnętrzne. Wygląd, chodzenie, celowanie i obrys korzystają z tego samego kształtu.' },
   { title: '4.11: płyty stawiane precyzyjnie', text: 'Kliknięcie dolnej lub górnej części boku wybiera połowę płyty. Połówki tego samego materiału łączą się w podwójną płytę, która oddaje dwa przedmioty. Bez łączenia przez gracza ani tracenia stosu.' },
   { title: '4.11: prawdziwe modele schodów i płyt', text: 'Te same bryły w świecie, dłoni, dropie i ikonach. Wycięte, nierozciągnięte tekstury i usunięte wewnętrzne powierzchnie. Celownik i pęknięcia podążają za kształtem bloku.' },

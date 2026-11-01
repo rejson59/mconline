@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS, type Settings } from '../utils/settings';
 import { useJavaScale } from '../utils/guiScale';
 import { useEffect, useRef, useState } from 'react';
 import type { HUDState } from '../game/engine';
@@ -107,8 +108,10 @@ function JavaVitals({ hud, icons, onSelect, onSwapHands }: { hud: HUDState; icon
   </div>;
 }
 
-export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, onSwapHands, onTpaAccept, onTpaDeny }: {
+export default function HUD({ hud, chatSettings = DEFAULT_SETTINGS, chatOpen = false, icons, minimap, touchControls, onSelectSlot, onSwapHands, onTpaAccept, onTpaDeny }: {
   hud: HUDState;
+  chatSettings?: Pick<Settings, 'chatVisible'|'chatOpacity'|'chatBackground'|'chatWidth'|'chatScale'|'chatLines'>;
+  chatOpen?: boolean;
   icons: Record<number, string>;
   minimap?: HTMLCanvasElement | null;
   touchControls?: boolean;
@@ -308,9 +311,9 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
       )}
 
       {/* chat messages */}
-      <div className="hud-chat java-chat-log absolute" style={{left:2*scale,bottom:40*scale,width:320*scale,maxWidth:'calc(100vw - 4px)'}}>
-        {hud.messages.map((m, i) => (
-          <div key={i + '-' + m.t} className="mc-text" style={{ padding: `0 ${2*scale}px`, fontSize:8*scale,lineHeight:`${9*scale}px`,background: 'rgba(0,0,0,0.45)' }}>
+      <div className="hud-chat java-chat-log absolute" aria-hidden={!(chatSettings.chatVisible || chatOpen)} style={{display:(chatSettings.chatVisible || chatOpen) ? undefined : 'none',opacity:chatSettings.chatOpacity,left:2*scale,bottom:40*scale,width:320*scale*chatSettings.chatWidth,maxWidth:'calc(100vw - 4px)'}}>
+        {hud.messages.slice(-chatSettings.chatLines).map((m, i) => (
+          <div key={i + '-' + m.t} className="mc-text" style={{ padding: `0 ${2*scale}px`, fontSize:8*scale*chatSettings.chatScale,lineHeight:`${9*scale*chatSettings.chatScale}px`,background: `rgba(0,0,0,${chatSettings.chatBackground})` }}>
             {m.text}
           </div>
         ))}

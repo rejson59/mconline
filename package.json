@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "4.11.0",
-  "description": "BlockCraft – narożniki i odwrócone schody, precyzyjne płyty i wspólne modele",
+  "version": "4.12.0",
+  "description": "BlockCraft – osobne miasto Creative, chronione działki i rozbudowane opcje",
   "type": "module",
   "license": "MIT",
   "keywords": [

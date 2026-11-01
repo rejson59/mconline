@@ -1,6 +1,14 @@
-# BlockCraft 4.11.0 🌍
+# BlockCraft 4.12.0 🌍
 
-Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.12.0 „Miasto budowniczych”
+
+- **Osobny publiczny Creative:** wybierz „Miasto budowniczych” na ekranie multiplayera. Osobne ziarno, kanał sieciowy, bloki, działki oraz zapis pozycji i ekwipunku; istniejący survival i lokalne światy pozostają bez zmian.
+- **Prywatne działki 32×32:** płaska siatka miejska z oświetlonymi alejami, chodnikami i pasami. Na trawiastym kwadracie wpisz `/dzialka zajmij`. Maksymalnie cztery działki na prywatny klucz przeglądarki. Ulice, wolne działki, cudze działki i teren poza miastem są chronione **również w Postgresie**. Nie kasuj danych strony — bez prywatnego klucza tracisz uprawnienia właściciela.
+- **Spokojne budowanie:** stały Creative, lot, brak naturalnych/przyzywanych mobów i przejścia do Netheru; wybuchy nie niszczą miasta. Ochrona obejmuje także lokalne zmiany mechaniczne oraz przepływ wody przez granice działek.
+- **Działające opcje:** nowy ekran czatu (powiadomienia, krycie tekstu i tła, skala, szerokość, liczba wierszy), zasięg wyświetlania istot 50–150%, limity 30/60/90/120/144/165/240 FPS i bez limitu. Ręcznie wybrany FPS nie jest nadpisywany przez automatyczny preset urządzenia. Ustawienia zapisują się i działają w czasie gry; GUI nadal domyślnie 2, zapisane Auto pozostaje Auto.
+- **Zakres i weryfikacja:** [instrukcja, ochrona i ograniczenia miasta](docs/CITY-4.12.md). To serwer tego przeglądarkowego projektu, nie obsługa protokołu oryginalnego klienta Minecraft.
 
 ## Wersja 4.11.0 „Schody i płyty”
 

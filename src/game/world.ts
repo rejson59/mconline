@@ -1,3 +1,4 @@
+import { cityLocal, CITY_ROAD } from './city';
 import { buildingFaces, buildingUV } from './buildingShapes';
 import { LIGHT_RADIUS, buildSkyLight, skyLevel, lightLevel, type SkyField } from './lightMap';
 import { CHEST_BODY, CHEST_LID, chestBoxFor, chestLockFor, chestSeamSkip, chestFaceRect, type ChestBox } from './chestModel';
@@ -858,9 +859,9 @@ export class World {
   private oz = 0;
   private vctx: VillageContext | null = null;
 
-  constructor(seed: number, flat = false, nether = false) {
+  constructor(seed: number, flat = false, nether = false, readonly city = false) {
     this.seed = seed;
-    this.flat = flat && !nether;
+    this.flat = (flat || city) && !nether;
     this.isNether = nether;
     this.n1 = new SimplexNoise(seed);
     this.n2 = new SimplexNoise(seed + 1);
@@ -1044,6 +1045,7 @@ export class World {
 
   private generateInner(c: Chunk) {
     if (this.isNether) { this.generateNether(c); return; }
+    if (this.city) { this.generateCity(c); return; }
     if (this.flat) { this.generateFlat(c); return; }
     const d = c.data;
     const ox = c.cx * CS, oz = c.cz * CS;
@@ -1257,6 +1259,23 @@ export class World {
     return maxY;
   }
 
+  /** No structures, caves or random decorations: streets and parcels are stable. */
+  private generateCity(c: Chunk) {
+    for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
+      const lx = cityLocal(c.cx * CS + x), lz = cityLocal(c.cz * CS + z);
+      const vertical = lx < CITY_ROAD, horizontal = lz < CITY_ROAD;
+      const road = vertical || horizontal;
+      const sidewalk = road && !(vertical && lx >= 4 && lx < 12) && !(horizontal && lz >= 4 && lz < 12);
+      const stripe = (vertical && lx === 7 && lz % 8 < 4 && !horizontal) || (horizontal && lz === 7 && lx % 8 < 4 && !vertical);
+      for (let y = 0; y <= FLAT_H; y++) c.data[idx(x,y,z)] = y === 0 ? B.BEDROCK : y < FLAT_H - 3 ? B.STONE : y < FLAT_H ? B.DIRT : !road ? B.GRASS : sidewalk ? B.STONE_BRICKS : stripe ? B.QUARTZ_BLOCK : B.CONCRETE_BLACK;
+      // Recessed street lighting cannot obstruct walking or cross parcel edges.
+      if (road && ((lx === 2 && lz % 16 === 2) || (lz === 2 && lx % 16 === 2))) c.data[idx(x,FLAT_H,z)] = B.GLOWSTONE;
+    }
+    c.maxY = FLAT_H + 1;
+    this.applyMods(c);
+    for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) c.recomputeHeight(x,z);
+  }
+
   /** Superflat: one grass layer at FLAT_H, ores below, no caves and a few trees. */
   private generateFlat(c: Chunk) {
     const d = c.data;
@@ -1353,19 +1372,19 @@ export class World {
 
   /** Wioska, na której terenie stoi punkt (albo null). */
   villageAt(x: number, z: number): Village | null {
-    if (this.isNether) return null; // osady nie istnieją w Netherze
+    if (this.isNether || this.city) return null; // osady nie istnieją w Netherze
     return villageAt(x, z, this.villageContext());
   }
 
   /** Wszystkie wioski, których obszar obejmuje prostokąt. */
   villagesIn(x0: number, z0: number, x1: number, z1: number): Village[] {
-    if (this.isNether) return [];
+    if (this.isNether || this.city) return [];
     return villagesOverlapping(x0, z0, x1, z1, this.villageContext());
   }
 
   /** Najbliższa wioska – używane przez komendę /village i spawn mieszkańców. */
   nearestVillage(x: number, z: number, cells = 3) {
-    if (this.isNether) return null;
+    if (this.isNether || this.city) return null;
     return nearestVillage(x, z, this.villageContext(), cells);
   }
 
@@ -1498,7 +1517,7 @@ export class World {
   }
 
   setBlock(x: number, y: number, z: number, id: number, notify = true) {
-    if (y < 0 || y >= CH || (notify && this.canEdit && !this.canEdit(x, z))) return;
+    if (y < 0 || y >= CH || (this.city && notify && y === 0) || (notify && this.canEdit && !this.canEdit(x, z))) return;
     const cx = Math.floor(x / CS), cz = Math.floor(z / CS);
     const c = this.getChunk(cx, cz);
     const lx = x - cx * CS, lz = z - cz * CS;
