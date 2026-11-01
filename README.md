@@ -1,6 +1,14 @@
-# BlockCraft 4.12.0 🌍
+# BlockCraft 4.13.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.13.0 „Kopanie i narzędzia”
+
+- **Właściwy rytm kopania:** postęp 20 razy na sekundę, szybkość skutecznego narzędzia oddzielona od prawa do zebrania dropu, Wydajność dodaje `poziom² + 1` zamiast procentowego mnożnika. Ziemia ręką zajmuje 0,75 s, pień 3 s, kamień drewnianym kilofem 1,15 s, a obsydian diamentowym 9,4 s (z Wydajnością V: 2,25 s) przy podparciu i bez zanurzenia.
+- **Praca pod wodą:** zanurzona głowa i brak podparcia dają niezależne kary ×5 (łącznie ×25). Nowa Wydajność pod wodą I na hełmie usuwa tylko karę za zanurzenie; dostępna w istniejącym systemie zaklinania i przez `/enchant aqua_affinity`.
+- **Narzędzia i trwałość:** motyki działają na liście, siano, tarczę i grzyboświatło; nożyce na wszystkie kolory wełny. Poprawione wymagania kilofów dla bloku lapisu, szmaragdów i kowadła oraz wydobycie kwarcu drewnianym kilofem. Miecz zużywa przy kopaniu dwa punkty, inne narzędzia według rodzaju; Niezniszczalność losuje każdy punkt osobno. Zmiana celu/narzędzia, puszczenie LPM i otwarcie menu zerują postęp.
+- **Mniej przypadkowych zniszczeń:** LPM wydobywa TNT, a krzesiwo nadal je podpala. W Creative miecz nie niszczy bloków, ale normalne narzędzie może usunąć bedrock poza fundamentem miasta. Kopanie cudzej działki nie zużywa narzędzi ani głodu. Światy, istniejące budowle, ID, GUI i prawa do działek pozostają bez migracji.
+- **Zakres i testy:** [wzory, źródła, ograniczenia i weryfikacja](docs/MINING-4.13.md). Kolejny etap własnego silnika — nie pełna zgodność z Minecraftem ani jego protokołem.
 
 ## Wersja 4.12.0 „Miasto budowniczych”
 
