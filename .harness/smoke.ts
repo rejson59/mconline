@@ -8616,8 +8616,13 @@ section('4.8: Java logical pixels, exact assets, atomic recipe-book placement an
   eq('Java requested scale is respected', javaGuiScale(1920,1080,2), 2);
   eq('Java requested scale cannot clip the minimum logical canvas', javaGuiScale(844,390,4), 1);
   eq('Java tiny portrait viewport scales down only below minimum', javaGuiScale(280,600), .875);
-  eq('GUI scale normalization rejects invalid preference', normalizeSettings({ guiScale: 'huge' }).guiScale, 0);
+  eq('GUI scale normalization rejects invalid preference', normalizeSettings({ guiScale: 'huge' }).guiScale, 2);
   eq('GUI scale normalization clamps maximum', normalizeSettings({ guiScale: 99 }).guiScale, 4);
+  eq('new installations default to GUI scale 2', DEFAULT_SETTINGS.guiScale, 2);
+  eq('missing settings default to GUI scale 2', normalizeSettings(undefined).guiScale, 2);
+  eq('older settings without GUI scale default to 2', normalizeSettings({ volume: .3 }).guiScale, 2);
+  eq('explicit saved Auto GUI scale is preserved', normalizeSettings({ guiScale: 0 }).guiScale, 0);
+  eq('explicit saved GUI scale 3 is preserved', normalizeSettings({ guiScale: 3 }).guiScale, 3);
   eq('minimap is opt-in', DEFAULT_SETTINGS.minimap, false);
   eq('auto attack is opt-in', DEFAULT_SETTINGS.autoAttack, false);
   eq('stored auto attack is retained', normalizeSettings({ autoAttack: true }).autoAttack, true);
