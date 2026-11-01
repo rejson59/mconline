@@ -1,8 +1,8 @@
 {
   "name": "blockcraft",
   "private": true,
-  "version": "4.10.0",
-  "description": "BlockCraft – kierunki torów, skrzynie Java 1.20.4 i przestrzenne oświetlenie",
+  "version": "4.11.0",
+  "description": "BlockCraft – narożniki i odwrócone schody, precyzyjne płyty i wspólne modele",
   "type": "module",
   "license": "MIT",
   "keywords": [

@@ -1,5 +1,5 @@
 import { railBase } from './rails';
-import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase } from './blocks';
+import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase, buildingItem, isSlabDouble } from './blocks';
 import type { Stack } from './inventory';
 
 /** Item ids sit above block ids so a stack can hold either. */
@@ -527,7 +527,11 @@ export function attackCooldown(toolId: number): number {
  *  (Jedwabny dotyk) makes the block drop in its original form. */
 export interface DropOpts { fortune?: number; silk?: boolean }
 export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {}): Stack[] {
-  blockId = railBase(blockId);
+  if(isSlabDouble(blockId)) {
+    const base=slabBase(blockId);
+    return canHarvest(base,toolId)?[{id:base,count:2}]:[];
+  }
+  blockId = buildingItem(railBase(blockId));
   const tier = pickTier(toolId);
   const shears = ITEMS[toolId]?.tool === 'shears';
   const fortune = Math.max(0, Math.floor(opts.fortune ?? 0));

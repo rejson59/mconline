@@ -1,3 +1,4 @@
+import { buildingFaces, buildingUV } from './buildingShapes';
 import { LIGHT_RADIUS, buildSkyLight, skyLevel, lightLevel, type SkyField } from './lightMap';
 import { CHEST_BODY, CHEST_LID, chestBoxFor, chestLockFor, chestSeamSkip, chestFaceRect, type ChestBox } from './chestModel';
 import { railShape, railCorner } from './rails';
@@ -7,7 +8,7 @@ import { isWater, waterHeight } from './blocks';
 import { applyStructures } from './structures';
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, paneBoxes, paneConnects, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, isSlabTop, stairsFacing, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
+import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, paneBoxes, paneConnects, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, stairsBoxesAt, isStairs, isSlab, collisionBoxes, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
 import { TILE_UV4, entityUV, tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
@@ -319,6 +320,74 @@ function addChestBox(
   }
 }
 
+/** Shared exposed building faces; UVs crop the full tile at block-space coordinates. */
+function addBuildingShape(
+  buf: MeshBuffer,
+  x: number,
+  y: number,
+  z: number,
+  id: number,
+  boxes: Float32Array,
+  sky: number,
+  blk: number
+) {
+  for (const face of buildingFaces(boxes)) {
+    const base = buf.count,
+      shade = FACES[face.face].shade,
+      br = (sky * shade) ** 2,
+      bl = (blk * shade) ** 2;
+    for (const p of face.points) {
+      const [u, v] = buildingUV(face.face, p[0], p[1], p[2]),
+        uv = tileUV(tileFor(id, face.face), u, v);
+      buf.vertex(
+        x + p[0],
+        y + p[1],
+        z + p[2],
+        uv[0],
+        uv[1],
+        br,
+        br,
+        br,
+        bl,
+        0,
+        face.face
+      );
+    }
+    buf.quad(base);
+  }
+}
+export function buildingBlockGeometry(
+  id: number,
+  boxes = collisionBoxes(id)!,
+  atlasUV = true
+): THREE.BufferGeometry {
+  const buf = new MeshBuffer();
+  addBuildingShape(buf, 0, 0, 0, id, boxes, 1, 0);
+  const geo = buf.geometry(),
+    colour = geo.getAttribute('color'),
+    uv = geo.getAttribute('uv'),
+    pos = geo.getAttribute('position'),
+    face = geo.getAttribute('aFace');
+  for (let i = 0; i < pos.count; i++) {
+    colour.setXYZ(
+      i,
+      Math.sqrt(colour.getX(i)),
+      Math.sqrt(colour.getY(i)),
+      Math.sqrt(colour.getZ(i))
+    );
+    if (!atlasUV) {
+      const [u, v] = buildingUV(
+        face.getX(i),
+        pos.getX(i),
+        pos.getY(i),
+        pos.getZ(i)
+      );
+      uv.setXY(i, u, v);
+    }
+  }
+  geo.translate(-0.5, -0.5, -0.5);
+  return geo;
+}
 /** Axis-aligned box in local 0–1 space, translated to world. Used for doors, ladders and hatches. */
 function addBox(
   buf: MeshBuffer,
@@ -1802,31 +1871,9 @@ export class World {
             }
             continue;
           }
-          if (rt === 3) {
-            // slab
-            const top = isSlabTop(id);
-            const y0 = top ? 0.5 : 0;
-            const y1 = top ? 1 : 0.5;
-            const sky = modelSkyLight(x, y, z);
-            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
-            addBox(buf, ox + x, y, oz + z, 0, y0, 0, 1, y1, 1, tileFor(id, 0), sky, blk);
-            continue;
-          }
-          if (rt === 4) {
-            // stairs – bottom slab + top quarter
-            const facing = stairsFacing(id);
-            const sky = modelSkyLight(x, y, z);
-            const blk = Math.max(modelBlockLight(x, y, z), lightLevel(EMIT[id]));
-            // bottom half
-            addBox(buf, ox + x, y, oz + z, 0, 0, 0, 1, 0.5, 1, tileFor(id, 0), sky, blk);
-            // top quarter depending on facing
-            let x0 = 0, x1 = 1, z0 = 0, z1 = 1;
-            if (facing === 0) z0 = 0; // north: top occupies north half (z 0-0.5)
-            if (facing === 0) { z0 = 0; z1 = 0.5; }
-            else if (facing === 2) { z0 = 0.5; z1 = 1; }
-            else if (facing === 1) { x0 = 0.5; x1 = 1; }
-            else if (facing === 3) { x0 = 0; x1 = 0.5; }
-            addBox(buf, ox + x, y, oz + z, x0, 0.5, z0, x1, 1, z1, tileFor(id, 0), sky, blk);
+          if (rt === 3 || rt === 4) {
+            const boxes=rt===4?stairsBoxesAt(get,x,y,z):collisionBoxes(id)!;
+            addBuildingShape(buf,ox+x,y,oz+z,id,boxes,modelSkyLight(x,y,z),Math.max(modelBlockLight(x,y,z),lightLevel(EMIT[id])));
             continue;
           }
           if (rt === 5) {
@@ -2047,7 +2094,7 @@ export class World {
     let t = 0;
     while (t <= maxDist) {
       const id = this.peekBlock(x, y, z);
-      if (options.solidOnly || id === B.GLASS_PANE) {
+      if (options.solidOnly || id === B.GLASS_PANE || isStairs(id) || isSlab(id)) {
         // Slab intersection, not opacity or coarse point samples: glass stops
         // melee, while the empty part of an open door/slab remains passable.
         // Fences can extend half a block above their own voxel.

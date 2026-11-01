@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.10.0';
-export const GAME_RELEASE_NAME = 'Tory, skrzynie i światło';
+export const GAME_VERSION = '4.11.0';
+export const GAME_RELEASE_NAME = 'Schody i płyty';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,9 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.11: narożniki i odwrócone schody', text: 'Siedem materiałów schodów, oba położenia i automatyczne narożniki wewnętrzne oraz zewnętrzne. Wygląd, chodzenie, celowanie i obrys korzystają z tego samego kształtu.' },
+  { title: '4.11: płyty stawiane precyzyjnie', text: 'Kliknięcie dolnej lub górnej części boku wybiera połowę płyty. Połówki tego samego materiału łączą się w podwójną płytę, która oddaje dwa przedmioty. Bez łączenia przez gracza ani tracenia stosu.' },
+  { title: '4.11: prawdziwe modele schodów i płyt', text: 'Te same bryły w świecie, dłoni, dropie i ikonach. Wycięte, nierozciągnięte tekstury i usunięte wewnętrzne powierzchnie. Celownik i pęknięcia podążają za kształtem bloku.' },
   { title: '4.10: tory w obu kierunkach', text: 'Stawianie według spojrzenia, zakręty zwykłych torów i podjazdy. Oryginalne tekstury Java 1.20.4, płaskie modele przedmiotów, zachowanie osi po zapisaniu świata.' },
   { title: '4.10: skrzynie i modele przedmiotów', text: 'Oryginalne tekstury skrzyń Java 1.20.4 i poprawiony przód/tył. Model korpusu, wieka i zamka także w dłoni, dropie i ikonie. Wygładzona animacja reaguje na zmianę oświetlenia.' },
   { title: '4.10: światło przez wejścia i pod okapami', text: 'Światło rozchodzi się bokiem i słabnie w głębi pomieszczeń. Płynniejsze narożniki bloków, ciemniejsze zamknięte pokoje, poprawne doświetlenie sąsiednich chunków po zmianie źródła lub przesłony.' },

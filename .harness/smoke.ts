@@ -1,3 +1,6 @@
+import { tileUV } from '../src/game/textures';
+import { stairBoxes, stairShape, buildingFaces, buildingUV, STAIR_DIRECTIONS, type StairState, upperHalf } from '../src/game/buildingShapes';
+import { stairsId, stairsBase, stairsFacing, isStairs, isStairsTop, collisionBoxesAt, slabDouble } from '../src/game/blocks';
 import { railShape, railCorner, railPlacement } from '../src/game/rails';
 import { isRail, CREATIVE_BLOCKS } from '../src/game/blocks';
 import { buildSkyLight, skyLevel, lightLevel } from '../src/game/lightMap';
@@ -2821,8 +2824,8 @@ section('2.3: bug fixes');
   eq('a name always has a fallback', cleanWorldName('   '), 'Świat');
 
   // (4) płyty łączą się w pełny blok bez osobnych przypadków
-  eq('two oak slabs become planks', slabFullBlock(B.OAK_SLAB), B.PLANKS);
-  eq('two quartz slabs become a quartz block', slabFullBlock(B.QUARTZ_SLAB), B.QUARTZ_BLOCK);
+  eq('oak slab material is planks', slabFullBlock(B.OAK_SLAB), B.PLANKS);
+  eq('quartz slab material is quartz block', slabFullBlock(B.QUARTZ_SLAB), B.QUARTZ_BLOCK);
   eq('an unknown block is left alone', slabFullBlock(B.STONE), B.STONE);
 
   // (5) blok szlamu naprawdę odbija
@@ -3191,8 +3194,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.10.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Tory, skrzynie i światło', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.11.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Schody i płyty', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -8948,6 +8951,176 @@ section('4.10: directional rails, native chest items and propagated skylight');
   trackWorld.dirty.clear();trackWorld.setBlock(16,FLAT_H+1,8,B.AIR);
   check('removing adjacent rail dirties both chunk meshes',trackWorld.dirty.has('0,0')&&trackWorld.dirty.has('1,0'));
   for(const g of [model,heldRail])g.dispose();
+}
+
+section('4.11: native stair corners, upside-down states and precise slab placement');
+{
+  const halfUv=tileUV(T.brick,.5,.5);
+  eq('interior half-tile U is not padded onto the wrong pixel',halfUv[0],(T.brick%16+.5)/16);
+  eq('interior half-tile V is not padded onto the wrong pixel',halfUv[1],1-(Math.floor(T.brick/16)+.5)/16);
+  const materials=[B.OAK_STAIRS_N,B.COBBLE_STAIRS_N,B.BRICK_STAIRS_N,B.STONE_BRICK_STAIRS_N,B.SANDSTONE_STAIRS_N,B.NETHER_BRICK_STAIRS_N,B.QUARTZ_STAIRS_N];
+  const volume=(boxes:Float32Array)=>{let n=0;for(let i=0;i<boxes.length;i+=6)n+=(boxes[i+3]-boxes[i])*(boxes[i+4]-boxes[i+1])*(boxes[i+5]-boxes[i+2]);return n;};
+  const inside=(boxes:Float32Array,p:number[])=>{for(let i=0;i<boxes.length;i+=6)if(p.every((v,d)=>v>boxes[i+d]&&v<boxes[i+d+3]))return true;return false;};
+  // Eight-cell occupancy from pinned Java 1.20.4 stairs/inner/outer models,
+  // transformed by oak_stairs.json x/y rotations (bottom then top, N/E/S/W).
+  const nativeMasks=[[63, 31, 47, 127, 191, 175, 47, 143, 191, 239, 207, 143, 79, 239, 223, 95, 79, 31, 223, 127], [243, 241, 242, 247, 251, 250, 242, 248, 251, 254, 252, 248, 244, 254, 253, 245, 244, 241, 253, 247]];
+  let nativeIndex=0;
+  for(const top of[false,true])for(let facing=0;facing<4;facing++)for(const shape of['straight','outer_left','outer_right','inner_left','inner_right'] as const) {
+    const boxes=stairBoxes(facing,top,shape),faces=buildingFaces(boxes),expected=shape.startsWith('outer')?.625:shape.startsWith('inner')?.875:.75;
+    eq(`stair volume ${facing}/${top}/${shape}`,volume(boxes),expected);
+    let nativeMask=0;for(let y=0;y<2;y++)for(let z=0;z<2;z++)for(let x=0;x<2;x++)if(inside(boxes,[(x+.5)/2,(y+.5)/2,(z+.5)/2]))nativeMask|=1<<(y*4+z*2+x);
+    eq(`Java 1.20.4 model occupancy ${facing}/${top}/${shape}`,nativeMask,nativeMasks[Math.floor(nativeIndex/20)][nativeIndex++%20]);
+    let area=0,badBoundary=0,badWinding=0;
+    for(const f of faces) {
+      const a=new THREE.Vector3(...f.points[0]),b=new THREE.Vector3(...f.points[1]),c=new THREE.Vector3(...f.points[2]);
+      const cross=b.sub(a).cross(c.sub(a));area+=cross.length();
+      const axis=Math.floor(f.face/2),sign=f.face%2?1:-1;if(cross.getComponent(axis)*sign<=0)badWinding++;
+      const mid=[0,1,2].map(d=>f.points.reduce((n,p)=>n+p[d],0)/4),before=[...mid],after=[...mid];before[axis]-=sign*.001;after[axis]+=sign*.001;
+      // Nudge midpoint off the internal half-grid seams used by box decomposition.
+      for(let d=0;d<3;d++)if(d!==axis&&before[d]===.5){before[d]+=.001;after[d]+=.001;}
+      if(!inside(boxes,before)||inside(boxes,after))badBoundary++;
+      check(`native UV range ${facing}/${top}/${shape}/${f.face}`,f.points.every(p=>buildingUV(f.face,p[0],p[1],p[2]).every(v=>v>=0&&v<=1)));
+    }
+    eq(`no hidden box faces ${facing}/${top}/${shape}`,badBoundary,0);
+    eq(`outward winding ${facing}/${top}/${shape}`,badWinding,0);
+    eq(`minimal exposed area ${facing}/${top}/${shape}`,area,shape.startsWith('outer')?5:shape.startsWith('inner')?6:5.5);
+    check(`stable cached stair boxes ${facing}/${top}/${shape}`,boxes===stairBoxes(facing,top,shape));
+  }
+  for(const top of[false,true])for(let f=0;f<4;f++) {
+    const cells=new Map<string,StairState>(),key=(x:number,z:number)=>`${x},${z}`,state={facing:f,top},[dx,dz]=STAIR_DIRECTIONS[f];
+    const get=(x:number,_y:number,z:number)=>cells.get(key(x,z))??null;
+    for(const [position,turn,expected]of[[1,3,'outer_left'],[1,1,'outer_right'],[-1,3,'inner_left'],[-1,1,'inner_right']] as const) {
+      cells.clear();const neighbour=(f+turn)%4;cells.set(key(dx*position,dz*position),{facing:neighbour,top});
+      eq(`native corner rule ${f}/${top}/${expected}`,stairShape(get,0,0,0,state),expected);
+      const guard=(neighbour+(position===1?2:0))%4,[gx,gz]=STAIR_DIRECTIONS[guard];cells.set(key(gx,gz),state);
+      eq(`continuing stair prevents false corner ${f}/${top}/${expected}`,stairShape(get,0,0,0,state),'straight');
+      cells.clear();cells.set(key(dx*position,dz*position),{facing:neighbour,top:!top});
+      eq(`opposite half cannot form corner ${f}/${top}/${expected}`,stairShape(get,0,0,0,state),'straight');
+    }
+  }
+  for(const base of materials)for(const top of[false,true])for(let f=0;f<4;f++) {
+    const id=stairsId(base,f,top);
+    check(`stored stair ${base}/${f}/${top} keeps material and orientation`,isStairs(id)&&stairsBase(id)===base&&stairsFacing(id)===f&&isStairsTop(id)===top);
+    eq(`normal stair drop ${id}`,blockDrops(id,I.DIAMOND_PICK)[0]?.id,base);
+    eq(`silk stair drop ${id}`,blockDrops(id,I.DIAMOND_PICK,{silk:true})[0]?.id,base);
+    check(`only canonical stairs appear in creative ${id}`,CREATIVE_BLOCKS.includes(id)===(!top&&f===0));
+    eq(`tool classification consistent ${id}`,requiredPickTier(id),base===B.OAK_STAIRS_N?0:1);
+    check(`correct tool speeds upper and rotated stairs ${id}`,toolHelps(id,base===B.OAK_STAIRS_N?I.IRON_AXE:I.IRON_PICK));
+  }
+  const w=new World(411,true),y=100;
+  w.setBlock(15,y,8,B.OAK_STAIRS_N+1);w.setBlock(16,y,8,B.BRICK_STAIRS_N);
+  eq('different materials form outer corner across chunk seam',volume(collisionBoxesAt(w,15,y,8)!),.625);
+  w.setBlock(16,y,8,B.AIR);w.setBlock(14,y,8,B.BRICK_STAIRS_N);
+  eq('back neighbour produces an inner corner',volume(collisionBoxesAt(w,15,y,8)!),.875);
+  w.setBlock(14,y,8,B.AIR);w.setBlock(16,y,8,stairsId(B.OAK_STAIRS_N,0,true));w.setBlock(16,y,7,stairsId(B.QUARTZ_STAIRS_N,3,true));
+  eq('upside-down corner uses the same geometry in physics',volume(collisionBoxesAt(w,16,y,8)!),.625);
+  const restored=new World(411,true);restored.loadMods(w.serializeMods());
+  eq('upper stair state survives save/reload',restored.getBlock(16,y,8),stairsId(B.OAK_STAIRS_N,0,true));
+  restored.getChunk(0,0);restored.getChunk(1,0);
+  eq('derived upper corner survives save/reload',volume(collisionBoxesAt(restored,16,y,8)!),.625);
+  restored.dirty.clear();restored.seedMods([{x:16,y,z:7,id:stairsId(B.QUARTZ_STAIRS_N,0,true)}]);
+  check('network corner edit refreshes neighbour mesh',restored.dirty.has('0,0')&&restored.dirty.has('1,0'));
+  eq('same-opacity network rotation recomputes corner',volume(collisionBoxesAt(restored,16,y,8)!),.75);
+  w.setBlock(0,y,0,B.OAK_STAIRS_N);const before=w.chunks.size;collisionBoxesAt(w,0,y,0);eq('derived shape never generates neighbours',w.chunks.size,before);
+  for(const x of[-17,-1,15]) {
+    const edge=new World(411,true);edge.setBlock(x,y,8,stairsId(B.OAK_STAIRS_N,1));edge.setBlock(x+1,y,8,B.BRICK_STAIRS_N);
+    check(`outer corner crosses positive/negative seam ${x}`,inside(collisionBoxesAt(edge,x,y,8)!,[.75,.75,.25]));
+    edge.seedMods([{x:x+1,y,z:8,id:B.BRICK_STAIRS_N+2}]);
+    check(`rotating neighbour updates collision across seam ${x}`,!inside(collisionBoxesAt(edge,x,y,8)!,[.75,.75,.25]));
+  }
+  check('half-height side tie chooses lower half',!upperHalf(0,.5));
+  check('underside always chooses upper half',upperHalf(-1,0));
+  check('top face always chooses lower half',!upperHalf(1,1));
+  for(let f=0;f<4;f++)for(const dt of[1/60,1/30,.1]) {
+    const path=new World(613,true),[dx,dz]=STAIR_DIRECTIONS[f];
+    for(let z=5;z<=11;z++)for(let x=5;x<=11;x++) {
+      path.setBlock(x,y-1,z,B.STONE);path.setBlock(x,y,z,(x-8)*dx+(z-8)*dz>.5?B.STONE:B.AIR);
+    }
+    path.setBlock(8,y,8,stairsId(B.OAK_STAIRS_N,f));
+    const body:Body={pos:new THREE.Vector3(8.5-dx*1.7,y,8.5-dz*1.7),vel:new THREE.Vector3(),w:.6,h:1.8,onGround:true,hitWall:false};
+    for(let i=0;i<Math.ceil(1.2/dt);i++){body.vel.set(dx*3,body.vel.y-28*dt,dz*3);stepBody(path,body,dt);}
+    check(`real physics climbs both stair rises without jumping ${f}/${dt}`,Math.abs(body.pos.y-(y+1))<.001&&(body.pos.x-8.5)*dx+(body.pos.z-8.5)*dz>1,`${body.pos.toArray()}`);
+  }
+  const inventory=new Inventory();let target:any,look=new THREE.Vector3(0,0,-1),eye=new THREE.Vector3(),consumed=0;
+  const game=Object.assign(Object.create(Game.prototype),{world:w,inventory,selected:0,mode:'creative',keys:new Set(),mobs:[],growables:new Map(),
+    body:{pos:new THREE.Vector3(1000,y,1000),w:.6,h:1.8},raycastTarget:()=>target,findMobTarget:()=>({mob:null}),lookDir:()=>look,eyePos:()=>eye,
+    consumeSelected(){consumed++;},fallGravity(){},onBlockChanged(){},message(){},updateHand(){},emitHud(){},unlock(){}});
+  for(const base of materials)for(let f=0;f<4;f++)for(const[ny,hit,top]of[[1,1,false],[-1,0,true],[0,.25,false],[0,.75,true]] as const) {
+    const [dx,dz]=STAIR_DIRECTIONS[f];look.set(dx,0,dz);eye.set(5.5,y+hit,5.5);
+    target={x:5,y,z:5,id:B.STONE,nx:ny===0?1:0,ny,nz:0,dist:0};const px=5+target.nx,py=y+ny;
+    w.setBlock(px,py,5,B.AIR);inventory.slots[0]={id:base,count:64};game.tryUse();
+    eq(`actual stair placement ${base}/${f}/${ny}/${hit}`,w.getBlock(px,py,5),stairsId(base,f,top));
+    w.setBlock(px,py,5,B.AIR);
+  }
+  const realRay=()=>{target=w.raycast(eye.x,eye.y,eye.z,look.x,look.y,look.z,7);};
+  for(const slab of[B.OAK_SLAB,B.STONE_SLAB,B.COBBLE_SLAB,B.BRICK_SLAB,B.SANDSTONE_SLAB,B.NETHER_BRICK_SLAB,B.QUARTZ_SLAB]) {
+    for(const top of[false,true]) {
+      w.setBlock(5,y,5,slab+(top?1:0));eye.set(5.5,top?y-1:y+2,5.5);look.set(0,top?1:-1,0);realRay();
+      eq(`precise slab ray hits its real half ${slab}/${top}`,target?.y,y);
+      inventory.slots[0]={id:slab,count:64};const old=consumed;game.tryUse();
+      eq(`two matching slabs merge in the clicked voxel ${slab}/${top}`,w.getBlock(5,y,5),slabDouble(slab));
+      eq(`slab merge consumes exactly once ${slab}/${top}`,consumed-old,1);w.setBlock(5,y,5,B.AIR);
+    }
+    for(const [height,top]of[[.25,false],[.75,true]] as const) {
+      w.setBlock(5,y,5,B.STONE);w.setBlock(4,y,5,B.AIR);eye.set(3.5,y+height,5.5);look.set(1,0,0);realRay();inventory.slots[0]={id:slab,count:64};game.tryUse();
+      eq(`side hit chooses native slab half ${slab}/${height}`,w.getBlock(4,y,5),slab+(top?1:0));w.setBlock(4,y,5,B.AIR);w.setBlock(5,y,5,B.AIR);
+    }
+    eq(`upper slab silk touch drops canonical item ${slab}`,blockDrops(slab+1,I.DIAMOND_PICK,{silk:true})[0]?.id,slab);
+  }
+  for(const slab of[B.OAK_SLAB,B.STONE_SLAB,B.COBBLE_SLAB,B.BRICK_SLAB,B.SANDSTONE_SLAB,B.NETHER_BRICK_SLAB,B.QUARTZ_SLAB]) {
+    const double=slabDouble(slab);
+    eq(`double slab has full collision ${double}`,volume(collisionBoxes(double)!),1);
+    eq(`double slab drops its two halves ${double}`,blockDrops(double,I.DIAMOND_PICK)[0]?.count,2);
+    eq(`double slab drop keeps correct material ${double}`,blockDrops(double,I.DIAMOND_PICK)[0]?.id,slab);
+    eq(`silk touch still drops two slabs ${double}`,blockDrops(double,I.DIAMOND_PICK,{silk:true})[0]?.count,2);
+    check(`double slab state is hidden in creative ${double}`,!CREATIVE_BLOCKS.includes(double));
+    eq(`double slab obeys harvest tools ${double}`,blockDrops(double,0)[0]?.count??0,slab===B.OAK_SLAB?2:0);
+    w.setBlock(5,y,5,double);inventory.slots[0]={id:slab,count:64};eye.set(5.5,y+2,5.5);look.set(0,-1,0);realRay();const old=consumed;game.tryUse();
+    eq(`double slab cannot consume a third slab in place ${double}`,w.getBlock(5,y,5),double);
+    const copy=new World(411,true);copy.loadMods(w.serializeMods());eq(`double slab survives save/reload ${double}`,copy.getBlock(5,y,5),double);
+    eq(`third slab is placed above rather than lost ${double}`,w.getBlock(5,y+1,5),slab);
+    eq(`third slab consumes once ${double}`,consumed-old,1);w.setBlock(5,y+1,5,B.AIR);
+  }
+  w.setBlock(5,y,5,B.OAK_SLAB);eye.set(5.5,y+2,5.5);look.set(0,-1,0);realRay();inventory.slots[0]={id:B.BRICK_SLAB,count:64};game.tryUse();
+  eq('different slab materials cannot be merged',w.getBlock(5,y,5),B.OAK_SLAB);
+  inventory.slots[0]={id:B.OAK_SLAB,count:64};game.body.pos.set(5.5,y+.5,5.5);const old=consumed;game.tryUse();
+  eq('slab merge cannot suffocate the player',w.getBlock(5,y,5),B.OAK_SLAB);eq('rejected slab merge spends nothing',consumed,old);
+  game.body.pos.set(5.5,y+.5,5.8);game.body.w=.2;
+  check('building placement permits the empty half of a stair',game.canPlaceBuilding(B.OAK_STAIRS_N,5,y,5));
+  check('building placement rejects its occupied half',!game.canPlaceBuilding(B.OAK_STAIRS_N+2,5,y,5));
+  game.body.pos.set(1000,y,1000);game.body.w=.6;
+  game.mobs=[{dead:false,body:{pos:new THREE.Vector3(5.5,y+.5,5.5),w:.6,h:1.8}}];
+  check('double slab placement also protects live mobs',!game.canPlaceBuilding(slabDouble(B.OAK_SLAB),5,y,5));
+  game.mobs[0].dead=true;check('dead mob does not prevent building',game.canPlaceBuilding(slabDouble(B.OAK_SLAB),5,y,5));game.mobs=[];
+  game.target={id:stairsId(B.OAK_STAIRS_N,3,true)};inventory.slots.fill(null);game.pickBlock();eq('pick block gives canonical stair',inventory.slots[game.selected]?.id,B.OAK_STAIRS_N);
+  w.setBlock(5,y,5,B.OAK_SLAB);
+  check('ray through missing half does not target slab',w.raycast(5.5,y+.75,7,0,0,-1,2)?.id!==B.OAK_SLAB);
+  eq('ray through actual slab half targets slab',w.raycast(5.5,y+.25,7,0,0,-1,2)?.id,B.OAK_SLAB);
+  for(const id of[B.OAK_SLAB,B.OAK_STAIRS_N]) {
+    const geo=blockGeometry(id);geo.computeBoundingBox();
+    if(id===B.OAK_SLAB)eq('held slab really has half height',geo.boundingBox!.max.y-geo.boundingBox!.min.y,.5);
+    else eq('held stairs reuse exposed non-cubic faces',geo.getAttribute('position').count,buildingFaces(collisionBoxes(id)!).length*4);
+    geo.dispose();
+  }
+  const meshWorld=new World(612,true),my=100;
+  meshWorld.setBlock(8,my,8,stairsId(B.OAK_STAIRS_N,1,true));
+  const shared=blockGeometry(stairsId(B.OAK_STAIRS_N,1,true)),itemPoints:string[]=[],worldPoints:string[]=[];
+  const key=(x:number,y:number,z:number,u:number,v:number)=>[x,y,z,u,v].map(n=>n.toFixed(5)).join('/');
+  const p=shared.getAttribute('position'),uv=shared.getAttribute('uv');
+  for(let i=0;i<p.count;i++)itemPoints.push(key(p.getX(i)+.5,p.getY(i)+.5,p.getZ(i)+.5,uv.getX(i),uv.getY(i)));
+  for(const geo of meshWorld.buildMesh(meshWorld.getChunk(0,0))) {
+    const p=geo.getAttribute('position'),uv=geo.getAttribute('uv');
+    if(p)for(let i=0;i<p.count;i++)if(p.getY(i)>=my)worldPoints.push(key(p.getX(i)-8,p.getY(i)-my,p.getZ(i)-8,uv.getX(i),uv.getY(i)));
+    geo.dispose();
+  }
+  eq('world and held upper stairs share exact geometry and cropped UV',worldPoints.sort().join(';'),itemPoints.sort().join(';'));shared.dispose();
+  game.selection=new THREE.LineSegments(new THREE.BufferGeometry(),new THREE.LineBasicMaterial());game.crackMesh=new THREE.Mesh(new THREE.BufferGeometry(),new THREE.MeshBasicMaterial());
+  game.updateBuildingTarget(B.OAK_SLAB,5,y,5);const outline=game.selection.geometry;outline.computeBoundingBox();
+  check('slab selection follows its half height',Math.abs(outline.boundingBox!.max.y-outline.boundingBox!.min.y-.502)<1e-6);
+  const overlay=game.crackMesh.geometry;game.updateBuildingTarget(B.OAK_SLAB,5,y,5);eq('unchanged target reuses shape geometry',game.crackMesh.geometry,overlay);
+  game.updateBuildingTarget(B.STONE,5,y,5);game.selection.geometry.computeBoundingBox();
+  check('leaving a shaped block restores cubic outline',Math.abs(game.selection.geometry.boundingBox!.max.y-game.selection.geometry.boundingBox!.min.y-1.004)<1e-6);
+  for(const mesh of[game.selection,game.crackMesh]){mesh.geometry.dispose();mesh.material.dispose();}
 }
 
 // =================================================================== report
