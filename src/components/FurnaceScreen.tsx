@@ -39,8 +39,8 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
 
   return (
     <>
-      <GuiWindow sprite={FURNACE.sprite} title={FURNACE.title} scale={scale} onClose={() => game.closeInventory()}>
-        <GuiSlot
+      <GuiWindow game={game} onChange={refresh} sprite={FURNACE.sprite} title={FURNACE.title} scale={scale} onClose={() => game.closeInventory()}>
+        <GuiSlot slotArea="furnace" slotIndex={0}
           x={FURNACE.input.x}
           y={FURNACE.input.y}
           stack={f.input}
@@ -49,7 +49,7 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
           onAction={(a) => { game.inventoryAction('furnace', 0, a); refresh(); }}
           onClick={(r) => { game.clickFurnace('input', r); refresh(); }}
         />
-        <GuiSlot
+        <GuiSlot slotArea="furnace" slotIndex={1}
           x={FURNACE.fuel.x}
           y={FURNACE.fuel.y}
           stack={f.fuel}
@@ -58,7 +58,7 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
           onAction={(a) => { game.inventoryAction('furnace', 1, a); refresh(); }}
           onClick={(r) => { game.clickFurnace('fuel', r); refresh(); }}
         />
-        <GuiSlot
+        <GuiSlot slotArea="furnace" slotIndex={2}
           x={FURNACE.output.x}
           y={FURNACE.output.y}
           stack={f.output}

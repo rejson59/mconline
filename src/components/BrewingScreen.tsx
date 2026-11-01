@@ -83,11 +83,11 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
 
   return (
     <>
-      <GuiWindow sprite={BREWING.sprite} title={BREWING.title} scale={scale} onClose={() => game.closeInventory()}>
+      <GuiWindow game={game} onChange={refresh} sprite={BREWING.sprite} title={BREWING.title} scale={scale} onClose={() => game.closeInventory()}>
         {stand.bottles.map((b, i) => {
           const p = BREWING.bottles[i];
           return (
-            <GuiSlot
+            <GuiSlot slotArea="brewing" slotIndex={i}
               key={i}
               x={p.x}
               y={p.y}
@@ -100,7 +100,7 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
             />
           );
         })}
-        <GuiSlot
+        <GuiSlot slotArea="brewing" slotIndex={3}
           x={BREWING.ingredient.x}
           y={BREWING.ingredient.y}
           stack={stand.ingredient}
@@ -109,7 +109,7 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
           onAction={(a) => { game.inventoryAction('brewing', 3, a); refresh(); }}
           onClick={(r) => { game.clickBrewing('ingredient', r); refresh(); }}
         />
-        <GuiSlot
+        <GuiSlot slotArea="brewing" slotIndex={4}
           x={BREWING.fuel.x}
           y={BREWING.fuel.y}
           stack={stand.fuel}

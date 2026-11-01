@@ -41,8 +41,8 @@ const HELD_LIGHT_ITEMS: ReadonlySet<number> = new Set<number>([
 
 /** Mobs that attack the player – used for the night/cave spawn cap. */
 const HOSTILE_MOBS: ReadonlySet<MobType> = new Set<MobType>(['zombie', 'creeper', 'skeleton', 'spider', 'enderman', 'slime', 'ghast']);
-import { Inventory, RECIPES, type Stack } from './inventory';
-import { arraySlots, quickMove, swapSlots, collectStacks, type StackSlot, type SlotArea, type SlotAction } from './inventoryNavigation';
+import { Inventory, RECIPES, mergeable, type Stack } from './inventory';
+import { arraySlots, quickMove, swapSlots, collectStacks, distributeCursor, slotLimit, type StackSlot, type SlotArea, type SlotAction } from './inventoryNavigation';
 import { COMMANDS, commandByName, searchCommands } from './commands';
 import {
   POS_HZ,
@@ -2875,6 +2875,7 @@ export class Game {
   }
 
   closeTrade() {
+    this.returnHeldStack();
     this.tradeMob = null;
     this.setUI('playing');
     this.emitHud();
@@ -3105,6 +3106,35 @@ export class Game {
       accepts: (s: Stack) => i < 3 ? !!POTIONS[s.id] : i === 3 ? BREWING_INGREDIENTS.has(s.id) : s.id === I.BLAZE_ROD,
     }));
     return [];
+  }
+
+  canPlaceInventoryCursor(area: SlotArea, index: number): boolean {
+    const slot = this.navigationSlots(area)[index], held = this.inventory.cursor;
+    return !!slot && !!held && slotLimit(slot, held) > 0;
+  }
+
+  placeInventoryCursor(area: SlotArea, index: number, right: boolean) {
+    const slot = this.navigationSlots(area)[index], held = this.inventory.cursor;
+    if (!slot || !held || !this.canPlaceInventoryCursor(area, index)) return;
+    const s = slot.get();
+    if (!s || mergeable(s, held)) this.inventory.cursor = distributeCursor(held, [slot], right);
+    else if (slotLimit(slot, held) >= held.count) { slot.set(held); this.inventory.cursor = s; }
+    this.saveProfileNow(false);
+  }
+
+  distributeInventoryCursor(targets: { area: SlotArea; index: number }[], right: boolean) {
+    const unique = [...new Map(targets.map(t => [`${t.area}:${t.index}`, t])).values()];
+    const slots = unique.map(t => this.navigationSlots(t.area)[t.index]).filter((s): s is StackSlot => !!s);
+    this.inventory.cursor = distributeCursor(this.inventory.cursor, slots, right);
+    this.saveProfileNow(false);
+  }
+
+  dropInventoryCursor(right = false) {
+    const s = this.inventory.cursor; if (!s) return;
+    const count = right ? 1 : s.count;
+    this.spawnDrop(s.id, count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, s.dur, undefined, undefined, undefined, s.ench, s.name);
+    s.count -= count; if (!s.count) this.inventory.cursor = null;
+    this.saveProfileNow(false);
   }
 
   inventoryAction(area: SlotArea, index: number, action: SlotAction) {

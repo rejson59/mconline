@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import GameView from './components/GameView';
-import { MainMenu, type WorldCard, type WorldType } from './components/Menus';
-import Launcher from './components/Launcher';
+import { type WorldCard, type WorldType } from './components/Menus';
+import { JavaMainMenu as MainMenu } from './components/JavaMenus';
 import { type GameMode, type SaveData } from './game/engine';
 import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
 import OrientationGuard from './components/OrientationGuard';
@@ -76,29 +76,6 @@ export default function App() {
   const [multiplayer, setMultiplayer] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const closeAccount = useCallback(() => setAccountOpen(false), []);
-  // 2.24.1: pierwszym ekranem znów jest klasyczne menu gry. Launcher został
-  // w projekcie, ale domyślnie się nie pokazuje – wchodzi się do niego tylko
-  // pod adresem #launcher (i wychodzi „Klasycznym menu”).
-  const [screen, setScreen] = useState<'launcher' | 'menu'>(() => {
-    try {
-      const hash = window.location.hash.replace(/^#/, '');
-      return hash === 'launcher' || hash === 'client' ? 'launcher' : 'menu';
-    } catch {
-      return 'menu';
-    }
-  });
-
-  // Zamknięcie launchera przywraca adres bez hasha, żeby odświeżenie strony
-  // nie wrzucało gracza z powrotem do klienta.
-  const leaveLauncher = () => {
-    setScreen('menu');
-    try {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
-    } catch {
-      /* ignore */
-    }
-  };
-
   const startMultiplayer = (s: NetStart) => {
     setMultiplayer(false);
     try {
@@ -180,39 +157,6 @@ export default function App() {
     );
   }
 
-  if (screen === 'launcher') {
-    return (
-      <div className="flex h-full w-full flex-col">
-        <OrientationGuard variant="menu" />
-        <div className="relative min-h-0 w-full flex-1">
-          <Launcher
-            saves={saves}
-            onPlayWorld={playWorld}
-            onNewWorld={newWorld}
-            onDeleteWorld={(id) => {
-              deleteSave(id);
-              refresh();
-            }}
-            onRenameWorld={(id, name) => {
-              renameSave(id, name);
-              refresh();
-            }}
-            onDuplicateWorld={(id) => {
-              const copied = duplicateSave(id) !== null;
-              if (copied) refresh();
-              return copied;
-            }}
-            onToggleFavoriteWorld={(id) => {
-              toggleFavoriteSave(id);
-              refresh();
-            }}
-            onMultiplayer={() => setMultiplayer(true)}
-            onClassicMenu={leaveLauncher}
-          />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-full w-full flex-col">

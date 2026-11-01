@@ -1,3 +1,4 @@
+import { JavaButton, JavaPage } from './JavaMenus';
 import { useEffect, useRef, useState } from 'react';
 import {
   createLocalLink,
@@ -92,6 +93,9 @@ export default function MultiplayerScreen({
   const tick = useRef(0);
   /** Po wejściu do świata sesja przechodzi do silnika – nie zamykamy jej. */
   const handedOff = useRef(false);
+  const active = useRef(true);
+  const attempt = useRef(0);
+  useEffect(() => { active.current = true; return () => { active.current = false; attempt.current++; }; }, []);
 
   useEffect(() => {
     try {
@@ -113,6 +117,7 @@ export default function MultiplayerScreen({
   );
 
   const reset = () => {
+    attempt.current++;
     clearInterval(tick.current);
     handedOff.current = false;
     session.current?.close('Nowa sesja');
@@ -162,6 +167,7 @@ export default function MultiplayerScreen({
   const joinPublic = async () => {
     reset();
     setMode('public');
+    const request = attempt.current;
     setBusy(true);
     setStatus('connecting');
     setMessage('Łączę z serwerem publicznym…');
@@ -176,10 +182,12 @@ export default function MultiplayerScreen({
     };
     try {
       await s.connect();
+      if (!active.current || request !== attempt.current) { s.close('Anulowano połączenie'); return; }
       setBusy(false);
       setMessage('Wchodzę do wspólnego świata…');
       handOff(s);
     } catch (e) {
+      if (!active.current || request !== attempt.current) return;
       setBusy(false);
       setStatus('error');
       setMessage(e instanceof Error ? e.message : 'Nie udało się połączyć z serwerem publicznym.');
@@ -323,9 +331,21 @@ export default function MultiplayerScreen({
   const isHost = role === 'host';
   const connected = status === 'connected';
 
+  if (mode === 'public') return <JavaPage title={busy ? 'Łączenie z serwerem...' : 'Tryb wieloosobowy'} footer={<>
+    <div className="java-button-row"><JavaButton width={150} disabled={busy} onClick={joinPublic}>Dołącz do serwera</JavaButton><JavaButton width={150} onClick={() => { reset(); setMode('local'); }}>Połączenia przeglądarkowe...</JavaButton></div>
+    <JavaButton onClick={() => { reset(); onClose(); }}>Anuluj</JavaButton>
+  </>}>
+    <label className="java-field">Nazwa gracza<input className="java-input" value={name} maxLength={20} onChange={e => setName(e.target.value)} /></label>
+    <div className="java-world-list" role="listbox" aria-label="Serwery"><button className="java-world" role="option" aria-selected="true" disabled={busy} onDoubleClick={joinPublic}>
+      <span className="java-world-icon">▦</span><span><strong>{PUBLIC_NAME}</strong><small>Publiczny świat przetrwania</small><small>Serwer przeglądarkowy · zapis w chmurze</small></span>
+    </button></div>
+    {message && <p role="status" style={{ color: status === 'error' ? '#ff5555' : '#aaa', margin: '10px 5px' }}>{message}</p>}
+    <p className="java-muted">To serwer tego projektu. Adresy oryginalnych serwerów Minecraft Java / Bedrock nie są obsługiwane.</p>
+  </JavaPage>;
+
   return (
     <div
-      className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto px-2 pb-[max(12px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))] sm:items-center sm:p-3"
+      className="java-network-advanced absolute inset-0 z-40 flex items-start justify-center overflow-y-auto px-2 pb-[max(12px,env(safe-area-inset-bottom))] pt-[max(12px,env(safe-area-inset-top))] sm:items-center sm:p-3"
       style={{ background: 'rgba(4,6,9,0.82)' }}
     >
       <CloseButton onClose={onClose} label="Wróć" className="mc-close-safe absolute z-10" />
@@ -371,7 +391,7 @@ export default function MultiplayerScreen({
         </div>
 
         <div className="mb-3 grid grid-cols-3 gap-1">
-          <button type="button" className={tabCls(mode === 'public')} aria-selected={mode === 'public'} onClick={() => { reset(); setMode('public'); }}>
+          <button type="button" className={tabCls(false)} aria-selected={false} onClick={() => { reset(); setMode('public'); }}>
             🌍 Serwer publiczny
           </button>
           <button type="button" className={tabCls(mode === 'local')} aria-selected={mode === 'local'} onClick={() => { reset(); setMode('local'); }}>
@@ -382,31 +402,7 @@ export default function MultiplayerScreen({
           </button>
         </div>
 
-        {mode === 'public' && (
-          <div className="mb-3 space-y-3">
-            <div className="border border-green-400/25 bg-green-900/20 p-3 text-sm">
-              <div className="mb-1 flex flex-wrap items-center gap-2">
-                <span className="text-green-300">● Publiczny świat</span>
-                <span className="text-white/50">
-                  ziarno {PUBLIC_SEED} · tryb przetrwania · zapis w chmurze
-                </span>
-              </div>
-              <p className="text-[12px] leading-snug text-white/70">
-                Zmiany bloków zapisują się na serwerze, więc budowle zostają po wyjściu i po odświeżeniu strony.
-                Pora dnia i pogoda są wspólne dla wszystkich, a lista graczy pokazuje, kto jest online.
-              </p>
-            </div>
-            <button type="button" className="mc-btn w-full !py-4 !text-lg" onClick={joinPublic} disabled={busy}>
-              {busy ? 'Łączę…' : '▶ Graj online (globalny survival)'}
-            </button>
-            <p className="text-[11px] leading-snug text-white/45">
-              Do gry wystarczy przeglądarka i internet. Serwer działa 24/7 – nie musisz nic otwierać ani nikogo zapraszać.
-            </p>
-          </div>
-        )}
-
-        {mode !== 'public' && (
-          <>
+        <>
             <div className="mb-3 flex gap-1">
               <button type="button" className={tabCls(isHost)} aria-selected={isHost} onClick={() => setRole('host')}>
                 Utwórz sesję
@@ -555,8 +551,7 @@ export default function MultiplayerScreen({
                   </button>
                 ))}
             </div>
-          </>
-        )}
+</>
 
         {message && (
           <div
@@ -586,12 +581,12 @@ export default function MultiplayerScreen({
           </div>
         )}
 
-        {mode !== 'public' && isHost && connected && (
+        {isHost && connected && (
           <button type="button" className="mc-btn w-full !py-3 !text-lg" onClick={enterWorld}>
             Wejdź do świata i zaproś graczy
           </button>
         )}
-        {mode !== 'public' && !isHost && (
+        {!isHost && (
           <p className="text-center text-sm text-white/60">
             {connected ? 'Czekam, aż gospodarz uruchomi świat…' : 'Po połączeniu świat uruchomi się automatycznie.'}
           </p>

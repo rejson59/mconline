@@ -125,7 +125,7 @@ export const RECIPES: Recipe[] = [
   // Papier i książka są bezpostaciowe – mieści się je także w siatce 2×2.
   { out: { id: I.PAPER, count: 3 }, inputs: [{ id: B.SUGARCANE, count: 3 }], table: false },
   { out: { id: I.BOOK, count: 1 }, inputs: [{ id: I.PAPER, count: 3 }, { id: I.LEATHER, count: 1 }], table: false },
-  { out: { id: B.ENCHANT, count: 1 }, inputs: [{ id: B.OBSIDIAN, count: 4 }, { id: I.DIAMOND, count: 2 }, { id: I.BOOK, count: 1 }], table: true, pattern: [' D ', 'DBD', 'OOO'], key: { D: I.DIAMOND, B: I.BOOK, O: B.OBSIDIAN } },
+  { out: { id: B.ENCHANT, count: 1 }, inputs: [{ id: B.OBSIDIAN, count: 4 }, { id: I.DIAMOND, count: 2 }, { id: I.BOOK, count: 1 }], table: true, pattern: [' B ', 'DOD', 'OOO'], key: { D: I.DIAMOND, B: I.BOOK, O: B.OBSIDIAN } },
   { out: { id: B.LAPIS_BLOCK, count: 1 }, inputs: [{ id: I.LAPIS, count: 9 }], table: true, pattern: ['LLL', 'LLL', 'LLL'], key: { L: I.LAPIS } },
   { out: { id: I.LAPIS, count: 9 }, inputs: [{ id: B.LAPIS_BLOCK, count: 1 }], table: false },
   { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.COAL, count: 5 }], table: true },
@@ -166,7 +166,7 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.DIAMOND, count: 9 }, inputs: [{ id: B.DIAMOND_BLOCK, count: 1 }], table: false },
   { out: { id: I.BOW, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 3 }], table: true, pattern: [' #S', '# S', ' #S'], key: { '#': I.STICK, S: I.STRING } },
   { out: { id: I.ARROW, count: 4 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.STICK, count: 1 }, { id: I.FEATHER, count: 1 }], table: false },
-  { out: { id: I.SHIELD, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.IRON, count: 1 }], table: true, pattern: ['PIP', 'PPP', 'PPP'], key: { P: B.PLANKS, I: I.IRON } },
+  { out: { id: I.SHIELD, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.IRON, count: 1 }], table: true, pattern: ['PIP', 'PPP', ' P '], key: { P: B.PLANKS, I: I.IRON } },
   // 1.7 „Nether & Redstone”
   { out: { id: B.REDSTONE_BLOCK, count: 1 }, inputs: [{ id: I.REDSTONE, count: 9 }], table: true, pattern: ['RRR', 'RRR', 'RRR'], key: { R: I.REDSTONE } },
   { out: { id: I.REDSTONE, count: 9 }, inputs: [{ id: B.REDSTONE_BLOCK, count: 1 }], table: false },
@@ -191,7 +191,7 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.RAIL, count: 16 }, inputs: [{ id: I.IRON, count: 6 }, { id: I.STICK, count: 1 }], table: true, pattern: ['I I', 'ISI', 'I I'], key: { I: I.IRON, S: I.STICK } },
   { out: { id: B.POWERED_RAIL, count: 6 }, inputs: [{ id: I.GOLD, count: 6 }, { id: I.STICK, count: 1 }, { id: I.REDSTONE, count: 1 }], table: true, pattern: ['G G', 'GSG', 'GRG'], key: { G: I.GOLD, S: I.STICK, R: I.REDSTONE } },
   { out: { id: B.DETECTOR_RAIL, count: 6 }, inputs: [{ id: I.IRON, count: 6 }, { id: B.STONE, count: 1 }, { id: I.REDSTONE, count: 1 }], table: true, pattern: ['I I', 'ISI', 'IRI'], key: { I: I.IRON, S: B.STONE, R: I.REDSTONE } },
-  { out: { id: B.ANVIL, count: 1 }, inputs: [{ id: B.IRON_BLOCK, count: 3 }, { id: I.IRON, count: 4 }], table: true, pattern: ['III', ' I ', 'III'], key: { I: B.IRON_BLOCK } },
+  { out: { id: B.ANVIL, count: 1 }, inputs: [{ id: B.IRON_BLOCK, count: 3 }, { id: I.IRON, count: 4 }], table: true, pattern: ['BBB', ' I ', 'III'], key: { B: B.IRON_BLOCK, I: I.IRON } },
   { out: { id: B.TARGET, count: 1 }, inputs: [{ id: I.REDSTONE, count: 4 }, { id: B.HAY, count: 1 }], table: true, pattern: [' R ', 'RHR', ' R '], key: { R: I.REDSTONE, H: B.HAY } },
   { out: { id: B.HONEYCOMB_BLOCK, count: 1 }, inputs: [{ id: I.HONEYCOMB, count: 4 }], table: true, pattern: ['HH', 'HH'], key: { H: I.HONEYCOMB } },
   // 1.9: netherowe surowce mają swoje receptury i źródła
@@ -214,7 +214,7 @@ export const RECIPES: Recipe[] = [
   // 2.4 „Godzina alchemika”: cukier, fiolki i miodek
   { out: { id: I.SUGAR, count: 1 }, inputs: [{ id: B.SUGARCANE, count: 1 }], table: false },
   { out: { id: B.GLASS_PANE, count: 16 }, inputs: [{ id: B.GLASS, count: 6 }], table: true, pattern: ['GGG', 'GGG'], key: { G: B.GLASS } },
-  { out: { id: I.BOTTLE, count: 3 }, inputs: [{ id: B.GLASS, count: 3 }], table: false, pattern: ['G G', ' G '], key: { G: B.GLASS } },
+  { out: { id: I.BOTTLE, count: 3 }, inputs: [{ id: B.GLASS, count: 3 }], table: true, pattern: ['G G', ' G '], key: { G: B.GLASS } },
   { out: { id: I.HONEY_BOTTLE, count: 1 }, inputs: [{ id: I.BOTTLE, count: 1 }, { id: I.HONEYCOMB, count: 1 }], table: false },
 
   // ==========================================================================
@@ -247,8 +247,7 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.EMERALD, count: 9 }, inputs: [{ id: B.EMERALD_BLOCK, count: 1 }], table: false },
   // Blok miodu z 4 butelek miodu (2×2), zgodnie z nowszymi wersjami.
   { out: { id: B.HONEY_BLOCK, count: 1 }, inputs: [{ id: I.HONEY_BOTTLE, count: 4 }], table: true, pattern: ['HH', 'HH'], key: { H: I.HONEY_BOTTLE } },
-  // Terakota: wypalona glina (u nas glina + węgiel, jak przy cegle).
-  { out: { id: B.TERRACOTTA, count: 4 }, inputs: [{ id: B.CLAY, count: 4 }, { id: I.COAL, count: 1 }], table: true },
+  // Terracotta is smelted from clay blocks; no ambiguous duplicate of the brick recipe.
   // Beton w pozostałych czterech kolorach – ten sam przepis co biały i czerwony.
   { out: { id: B.CONCRETE_BLUE, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: I.LAPIS, count: 1 }], table: true },
   { out: { id: B.CONCRETE_GREEN, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: B.CACTUS, count: 1 }], table: true },
@@ -369,6 +368,30 @@ export class Inventory {
     removeFromSlots(this.slots, id, count);
   }
 
+  /** Recipe-book placement is atomic and never crafts an output on click. */
+  placeRecipe(recipe: Recipe, table: boolean): boolean {
+    const cells = recipeCells(recipe, table);
+    if (!cells || this.cursor) return false;
+    const next = new Inventory(); next.slots = this.slots.map(s => s ? copyStack(s) : null);
+    for (const s of this.grid) if (s && !next.add(s.id, s.count, s.dur, s.ench, s.name)) return false;
+    const need = new Map<number, number>();
+    for (const id of cells) if (id) need.set(id, (need.get(id) ?? 0) + 1);
+    for (const [id, count] of need) if (next.countOf(id) < count) return false;
+    const placed: (Stack | null)[] = cells.map(id => {
+      if (!id) return null;
+      for (let i = next.slots.length - 1; i >= 0; i--) {
+        const source = next.slots[i]; if (!source || source.id !== id) continue;
+        const ingredient = { ...copyStack(source), count: 1 };
+        source.count--; if (!source.count) next.slots[i] = null;
+        return ingredient;
+      }
+      return null;
+    });
+    this.slots = next.slots;
+    this.grid = placed;
+    return true;
+  }
+
   /** Number of usable grid cells (2x2 without a table, 3x3 with one). */
   private gridSize(table: boolean): number {
     return table ? 9 : 4;
@@ -385,7 +408,7 @@ export class Inventory {
     const at = (x: number, y: number) => this.grid[y * 3 + x] ?? null;
     let minX = cols, minY = 3, maxX = -1, maxY = -1;
     const have = new Map<number, number>();
-    for (let y = 0; y < 3; y++) for (let x = 0; x < cols; x++) {
+    for (let y = 0; y < cols; y++) for (let x = 0; x < cols; x++) {
       const cell = at(x, y);
       if (!cell) continue;
       minX = Math.min(minX, x); maxX = Math.max(maxX, x);
@@ -562,4 +585,25 @@ export class Inventory {
     this.cursor = null;
     return true;
   }
+}
+
+/** Actual occupied recipe cells, using the inventory's three-column backing array. */
+export function recipeCells(recipe: Recipe, table: boolean): number[] | null {
+  if (recipe.table && !table) return null;
+  const cols = table ? 3 : 2, cells = new Array<number>(9).fill(0);
+  if (recipe.pattern) {
+    const p = trimPattern(recipe.pattern);
+    if (p.w > cols || p.h > cols) return null;
+    for (let y = 0; y < p.h; y++) for (let x = 0; x < p.w; x++) {
+      const ch = p.rows[y][x];
+      if (ch !== ' ' && ch !== '.') { const id = recipe.key?.[ch]; if (!id) return null; cells[y * 3 + x] = id; }
+    }
+  } else {
+    let i = 0;
+    for (const input of recipe.inputs) for (let n = 0; n < input.count; n++) {
+      if (i >= cols * cols) return null;
+      cells[Math.floor(i / cols) * 3 + i % cols] = input.id; i++;
+    }
+  }
+  return cells;
 }

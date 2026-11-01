@@ -1,7 +1,7 @@
+import { useJavaScale } from '../utils/guiScale';
 import { useEffect, useRef, useState } from 'react';
 import type { HUDState } from '../game/engine';
-import { displayName, durabilityMax } from '../game/items';
-import { enchList } from '../game/enchant';
+import { I, displayName, durabilityMax } from '../game/items';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import { SkinHead } from './SkinPicker';
 import { airSprite, armorSprite, foodSprite, guiSprite, heartSprite } from '../game/art/uiSprites';
@@ -58,18 +58,6 @@ function Bubble({ pop }: { pop: boolean }) {
   );
 }
 
-function ArmorPiece({ icon, frac, enchanted }: { icon: string; frac: number; enchanted?: boolean }) {
-  const plate = armorSprite(frac >= 0.66 ? 2 : frac >= 0.33 ? 1 : 0);
-  return (
-    <div className="relative flex items-center justify-center" style={{ width: 22, height: 22, background: 'rgba(40,40,40,0.5)', border: '1px solid #1a1a1a' }}>
-      {plate && <img src={plate} width={22} height={22} className="pixelated absolute inset-0 opacity-70" alt="" draggable={false} />}
-      <img src={icon} className="pixelated" width={18} height={18} draggable={false} />
-      {enchanted && <span className="ench-glint" />}
-      {frac < 1 && <span className="dur-bar"><i style={{ width: `${frac * 100}%`, background: frac < 0.25 ? '#e04040' : '#3dba3d' }} /></span>}
-    </div>
-  );
-}
-
 function Drumstick({ fill }: { fill: 0 | 1 | 2 }) {
   const src = foodSprite(fill);
   if (src) {
@@ -93,62 +81,30 @@ function Drumstick({ fill }: { fill: 0 | 1 | 2 }) {
 }
 
 export function Hotbar({ hud, icons, onSelect, onSwapHands }: { hud: HUDState; icons: Record<number, string>; onSelect?: (i: number) => void; onSwapHands?: () => void }) {
-  return (
-    <div
-      className="hotbar relative flex"
-      style={{
-        background: guiSprite('hotbar') ? undefined : 'rgba(0,0,0,0.35)',
-        backgroundImage: guiSprite('hotbar') ? `url(${guiSprite('hotbar')})` : undefined,
-        backgroundSize: '100% 100%',
-        imageRendering: 'pixelated',
-        border: guiSprite('hotbar') ? undefined : '2px solid #1a1a1a',
-        padding: 2,
-        pointerEvents: onSelect ? 'auto' : undefined,
-      }}
-    >
-      <button type="button" className="hotbar-slot hotbar-offhand flex items-center justify-center"
-        aria-label="Druga ręka — zamień ręce (F)" title="Druga ręka · F"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={onSwapHands ? (e) => { e.preventDefault(); e.stopPropagation(); onSwapHands(); } : undefined}
-        style={{ background: 'rgba(0,0,0,0.4)', border: '2px solid #777', touchAction: 'none', pointerEvents: onSwapHands ? 'auto' : undefined }}>
-        {hud.offhand && <img src={icons[hud.offhand.id]} width={30} height={30} className="pixelated" draggable={false} alt="" />}
-        {hud.offhand && hud.offhand.count > 1 && <span className="mc-count">{hud.offhand.count}</span>}
-        {hud.offhand?.ench && <span className="ench-glint" />}
-        {hud.offhand?.dur !== undefined && durabilityMax(hud.offhand.id) > 0 &&
-          <span className="dur-bar"><i style={{ width: `${Math.max(0, Math.min(1, hud.offhand.dur / durabilityMax(hud.offhand.id))) * 100}%`, background: '#3dba3d' }} /></span>}
-        <span className="absolute bottom-0 left-0 text-[9px] text-white/70">F</span>
-      </button>
-      {hud.hotbar.map((s, i) => {
-        const max = s ? durabilityMax(s.id) : 0;
-        const frac = s && max && s.dur !== undefined ? Math.max(0, s.dur / max) : 1;
-        return (
-          <div
-            key={i}
-            className={`hotbar-slot relative flex items-center justify-center ${i === hud.selected ? 'is-selected' : ''}`}
-            aria-current={i === hud.selected ? 'true' : undefined}
-            onPointerDown={onSelect ? (e) => { e.stopPropagation(); onSelect(i); } : undefined}
-            style={{
-              border: i === hud.selected ? '3px solid #fdfdfd' : '3px solid rgba(0,0,0,0.28)',
-              outline: i === hud.selected ? '2px solid #000' : undefined,
-              background: i === hud.selected
-                ? 'linear-gradient(180deg, rgba(255,255,255,0.22), rgba(90,90,90,0.45))'
-                : 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(20,20,20,0.35))',
-              margin: -1,
-              cursor: onSelect ? 'pointer' : undefined,
-              touchAction: onSelect ? 'none' : undefined,
-            }}
-          >
-            {s && <img src={icons[s.id]} className="pixelated" width={34} height={34} draggable={false} />}
-            {s && hud.mode === 'survival' && s.count > 1 && <span className="mc-count">{s.count}</span>}
-            {s?.ench && <span className="ench-glint" />}
-            {s && max > 0 && s.dur !== undefined && s.dur < max && (
-              <span className="dur-bar"><i style={{ width: `${frac * 100}%`, background: frac < 0.25 ? '#e04040' : '#3dba3d' }} /></span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
+  return <div className="java-hotbar" style={{ position: 'relative', width: 182, height: 22, backgroundImage: `url(${guiSprite('hotbar')})`, backgroundSize: '100% 100%', imageRendering: 'pixelated' }}>
+    <img alt="" src={guiSprite('hotbar_selection')!} style={{ position: 'absolute', left: hud.selected * 20 - 1, top: -1, width: 24, height: 23, imageRendering: 'pixelated' }} />
+    {hud.offhand && <button type="button" aria-label="Druga ręka — zamień ręce (F)" onClick={onSwapHands} onPointerDown={e => e.stopPropagation()} style={{ position: 'absolute', left: -29, top: -1, width: 29, height: 24, border: 0, background: `url(${guiSprite('hotbar_offhand')}) center/100% 100%`, pointerEvents: 'auto' }}><img src={icons[hud.offhand.id]} alt="" width={16} height={16} className="pixelated" />{hud.offhand.count > 1 && <span className="java-count">{hud.offhand.count}</span>}</button>}
+    {hud.hotbar.map((s, i) => <div key={i} aria-current={i === hud.selected ? 'true' : undefined} className="java-hotbar-slot" onPointerDown={onSelect ? e => { e.stopPropagation(); onSelect(i); } : undefined} style={{ position: 'absolute', left: 3 + i * 20, top: 3, width: 16, height: 16, pointerEvents: onSelect ? 'auto' : undefined }}>
+      {s && <img src={icons[s.id]} alt="" width={16} height={16} className="pixelated" />}{s && s.count > 1 && <span className="java-count">{s.count}</span>}
+      {s?.ench && <span className="ench-glint" />}
+      {s?.dur !== undefined && s.dur < durabilityMax(s.id) && <span className="dur-bar" style={{ height: 2, left: 1, right: 2, bottom: 1 }}><i style={{ width: `${s.dur / durabilityMax(s.id) * 100}%`, background: '#3dba3d' }} /></span>}
+    </div>)}
+  </div>;
+}
+
+function JavaVitals({ hud, icons, onSelect, onSwapHands }: { hud: HUDState; icons: Record<number, string>; onSelect?: (i: number) => void; onSwapHands?: () => void }) {
+  const scale = useJavaScale();
+  return <div className="java-vitals" style={{ position: 'absolute', bottom: 'env(safe-area-inset-bottom,0px)', left: '50%', width: 182, height: 60, transform: `translateX(-50%) scale(${scale})`, transformOrigin: 'bottom center', imageRendering: 'pixelated' }}>
+    {hud.mode === 'survival' && <>
+      <div data-java-health style={{ position: 'absolute', top: 21, left: 0, display: 'flex', width: 81 }}>{Array.from({ length: 10 }, (_, i) => <Heart key={i} fill={hud.health - i * 2 >= 2 ? 2 : hud.health - i * 2 >= 1 ? 1 : 0} />)}</div>
+      <div data-java-food style={{ position: 'absolute', top: 21, right: 0, display: 'flex', flexDirection: 'row-reverse', width: 81 }}>{Array.from({ length: 10 }, (_, i) => <Drumstick key={i} fill={hud.hunger - i * 2 >= 2 ? 2 : hud.hunger - i * 2 >= 1 ? 1 : 0} />)}</div>
+      {hud.armorPoints > 0 && <div data-java-armor style={{ position: 'absolute', top: 11, left: 0, display: 'flex' }}>{Array.from({ length: 10 }, (_, i) => <img key={i} alt="" src={armorSprite(hud.armorPoints - i * 2 >= 2 ? 2 : hud.armorPoints - i * 2 >= 1 ? 1 : 0)!} width={9} height={9} style={{ marginRight: -1 }} />)}</div>}
+      {(hud.underwater || hud.air < hud.maxAir) && <div data-java-air style={{ position: 'absolute', right: 0, top: 11, display: 'flex', flexDirection: 'row-reverse' }}>{Array.from({ length: Math.min(10, Math.ceil(hud.air / hud.maxAir * 10)) }, (_, i) => <Bubble key={i} pop={false} />)}</div>}
+      <div data-java-xp style={{ position: 'absolute', top: 31, width: 182, height: 5, backgroundImage: `url(${guiSprite('exp_background')})`, backgroundSize: '182px 5px' }}><div style={{ width: `${Math.max(0, Math.min(1, hud.xpFrac)) * 100}%`, height: 5, backgroundImage: `url(${guiSprite('exp_progress')})`, backgroundSize: '182px 5px' }} /></div>
+      {hud.level > 0 && <span style={{ position: 'absolute', top: 21, left: '50%', transform: 'translateX(-50%)', color: '#80ff20', fontSize: 8, lineHeight: '9px', textShadow: '1px 0 #000,-1px 0 #000,0 1px #000,0 -1px #000' }}>{hud.level}</span>}
+    </>}
+    <div style={{ position: 'absolute', top: 38 }}><Hotbar hud={hud} icons={icons} onSelect={onSelect} onSwapHands={onSwapHands} /></div>
+  </div>;
 }
 
 export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, onSwapHands, onTpaAccept, onTpaDeny }: {
@@ -162,6 +118,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
   onTpaAccept?: () => void;
   onTpaDeny?: () => void;
 }) {
+  const scale = useJavaScale();
   const [label, setLabel] = useState<{ text: string; key: number } | null>(null);
   const mapRef = useRef<HTMLCanvasElement>(null);
   const sel = hud.hotbar[hud.selected];
@@ -169,8 +126,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
 
   useEffect(() => {
     if (selId < 0) { setLabel(null); return; }
-    const list = sel ? enchList(sel) : [];
-    setLabel({ text: list.length ? `${displayName(selId)} · ${list.join(', ')}` : displayName(selId), key: Date.now() });
+    setLabel({ text: sel?.name || displayName(selId), key: Date.now() });
     const t = setTimeout(() => setLabel(null), 2600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,19 +141,14 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
     ctx.drawImage(minimap, 0, 0, dst.width, dst.height);
   });
 
-  const hearts = [];
-  for (let i = 0; i < 10; i++) {
-    const v = hud.health - i * 2;
-    hearts.push(<Heart key={i} fill={v >= 2 ? 2 : v >= 1 ? 1 : 0} />);
-  }
-  const drums = [];
-  for (let i = 0; i < 10; i++) {
-    const v = hud.hunger - i * 2;
-    drums.push(<Drumstick key={i} fill={v >= 2 ? 2 : v >= 1 ? 1 : 0} />);
-  }
-  const bubbles = [];
-  const airFrac = hud.air / hud.maxAir;
-  for (let i = 0; i < 10; i++) bubbles.push(<Bubble key={i} pop={airFrac * 10 < i + 0.5} />);
+  const [tabList, setTabList] = useState(false);
+  useEffect(() => {
+    if (!hud.locked) setTabList(false);
+    const key = (e: KeyboardEvent) => { if (e.code !== 'Tab' || !hud.locked) return; e.preventDefault(); setTabList(e.type === 'keydown'); };
+    const clear = () => setTabList(false);
+    window.addEventListener('keydown', key); window.addEventListener('keyup', key); window.addEventListener('blur', clear);
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener('keyup', key); window.removeEventListener('blur', clear); };
+  }, [hud.locked]);
 
   const hours = Math.floor(((hud.time * 24 + 6) % 24));
   const mins = Math.floor(((hud.time * 24 * 60) % 60));
@@ -246,10 +197,10 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
       {!hud.zoom && guiSprite('crosshair') && (
         <img
           src={guiSprite('crosshair')!}
-          width={18}
-          height={18}
+          width={15 * scale}
+          height={15 * scale}
           className="pixelated absolute left-1/2 top-1/2"
-          style={{ transform: 'translate(-50%,-50%)', filter: 'drop-shadow(0 0 2px rgba(0,0,0,0.9))' }}
+          style={{ transform: 'translate(-50%,-50%)', mixBlendMode: 'difference' }}
           alt=""
           draggable={false}
           aria-hidden="true"
@@ -266,7 +217,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
       )}
 
       {/* 2.3: stan wędkarstwa nad celownikiem (2.5: treść wg wersji sterowania) */}
-      {hud.fishing !== 'idle' && (
+      {touchControls && hud.fishing && hud.fishing !== 'idle' && (
         <div className="absolute left-1/2 top-[58%] -translate-x-1/2 px-2 py-0.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
           {hud.fishing === 'bite' ? (touchControls ? '🎣 Brań! Dotknij, aby zaciągnąć' : '🎣 Brań! Kliknij, aby zaciągnąć') : hud.fishing === 'waiting' ? '🎣 Przynęta czeka…' : '🎣 Przynęta leci…'}
         </div>
@@ -282,7 +233,7 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
       )}
 
       {/* wskazówka o istocie pod celownikiem (1.6) */}
-      {hud.mobHint && !hud.debug && (
+      {hud.mobHint && touchControls && !hud.debug && (
         <div className="absolute left-1/2 top-[54%] -translate-x-1/2 px-2 py-0.5 text-sm mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
           {hud.mobHint}
         </div>
@@ -320,47 +271,18 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
           <div>{hud.fps} FPS{hud.resScale < 1 ? ` · skala ${Math.round(hud.resScale * 100)}%` : ''}{hud.perf !== 'pełny' ? ` · ${hud.perf}` : ''}</div>
           <div className="opacity-70">chunki: {hud.chunks} · kresl.: {hud.drawCalls}</div>
         </div>
-      ) : (
-        <div className="absolute left-2 top-2 text-sm opacity-70 mc-text">{hud.fps} FPS</div>
-      )}
+      ) : null}
 
-      {hud.toast && (
-        <div className="absolute left-1/2 top-16 w-[min(420px,90vw)] -translate-x-1/2 px-4 py-2 text-center" style={{ background: 'rgba(0,0,0,0.72)', border: '2px solid #3a3a3a' }}>
-          <div className="text-sm text-yellow-300">Osiągnięcie zdobyte</div>
-          <div className="text-xl mc-text">{hud.toast.title}</div>
-          <div className="text-sm opacity-80">{hud.toast.text}</div>
-        </div>
-      )}
-
-      {/* 2.10: obsada sesji – widoczna tylko w multiplayerze. */}
-      {(hud.players?.length ?? 0) > 0 && (
-        <div className="absolute right-2 top-16 flex flex-col items-end gap-1 sm:left-2 sm:right-auto sm:top-9 sm:items-start">
-          <div className="px-2 py-1 text-[11px] leading-tight mc-text" style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.18)' }}>
-            <span className="text-green-300">● {hud.players!.length}</span> {hud.netPublic ? 'online' : 'w sesji'}
-            {hud.netPublic && <span className="ml-1 text-sky-200">· serwer publiczny</span>}
-            {!hud.netPublic && hud.netRole === 'host' && <span className="ml-1 text-yellow-200">· gospodarz</span>}
-          </div>
-          {hud.netPublic && (hud.netSaving ?? 0) > 0 && (
-            <div className="px-2 py-0.5 text-[10px] leading-tight text-amber-200 mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
-              zapisuję {(hud.netSaving ?? 0)} zmian…
-            </div>
-          )}
-          <div className="flex flex-col items-end gap-0.5 sm:items-start">
-            {hud.players!.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] leading-tight mc-text"
-                style={{ background: 'rgba(0,0,0,0.45)' }}
-                title={p.ping >= 0 ? `${p.ping} ms` : 'ping…'}
-              >
-                <SkinHead skin={p.skin || `hsl(${p.hue} 60% 55%)`} size={14} />
-                <span className={p.self ? 'text-yellow-200' : ''}>{p.name}{p.self ? ' (ty)' : ''}</span>
-                <span className="text-white/45">{p.ping >= 0 ? `${p.ping} ms` : '…'}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {hud.toast && <div className="java-advancement" style={{ position:'absolute',right:0,top:0,width:160,height:32,transform:`scale(${scale})`,transformOrigin:'top right',backgroundImage:`url(${guiSprite('toast_advancement')})`,backgroundSize:'100% 100%',imageRendering:'pixelated',fontSize:8,lineHeight:'9px',textShadow:'1px 1px #3f3f3f' }} title={hud.toast.text}>
+        <img src={icons[I.BOOK]} width={16} height={16} alt="" style={{position:'absolute',left:8,top:8}} />
+        <span style={{position:'absolute',left:30,top:7,color:'#ffff55'}}>Postęp osiągnięty!</span><span style={{position:'absolute',left:30,top:18,maxWidth:126,whiteSpace:'nowrap',overflow:'hidden'}}>{hud.toast.title}</span>
+      </div>}
+      {(hud.players?.length ?? 0) > 0 && hud.locked && tabList && <div className="java-player-list" style={{position:'absolute',left:'50%',top:10*scale,transform:`translateX(-50%) scale(${scale})`,transformOrigin:'top center',background:'#0008',padding:1,fontSize:8,lineHeight:'9px',display:'grid',gridAutoFlow:'column',gridTemplateRows:`repeat(${Math.min(20,hud.players!.length)},10px)`,gap:'0 4px'}}>
+        {hud.players!.map(p => <div key={p.id} style={{width:140,display:'flex',alignItems:'center',gap:2,background:'#ffffff18',padding:'0 1px',whiteSpace:'nowrap'}}>
+          <SkinHead skin={p.skin || 'steve'} size={8} /><span style={{flex:1,overflow:'hidden'}}>{p.name}</span>
+          <span aria-label={`Ping: ${p.ping} ms`} title={`${p.ping} ms`} style={{display:'flex',alignItems:'end',gap:1,height:7}}>{[2,3,4,5,6].map((h,i)=><i key={i} style={{width:1,height:h,background:p.ping>=0 && i<(p.ping<150?5:p.ping<300?4:p.ping<600?3:p.ping<1000?2:1)?'#00ff00':'#555'}} />)}</span>
+        </div>)}
+      </div>}
 
       {hud.minimap && (
         <div className="absolute right-3 top-3 hidden flex-col items-center gap-1 sm:flex">
@@ -386,113 +308,21 @@ export default function HUD({ hud, icons, minimap, touchControls, onSelectSlot, 
       )}
 
       {/* chat messages */}
-      <div className="hud-chat absolute left-2 max-w-[640px] space-y-0.5">
+      <div className="hud-chat java-chat-log absolute" style={{left:2*scale,bottom:40*scale,width:320*scale,maxWidth:'calc(100vw - 4px)'}}>
         {hud.messages.map((m, i) => (
-          <div key={i + '-' + m.t} className="px-2 py-0.5 text-[15px] mc-text" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div key={i + '-' + m.t} className="mc-text" style={{ padding: `0 ${2*scale}px`, fontSize:8*scale,lineHeight:`${9*scale}px`,background: 'rgba(0,0,0,0.45)' }}>
             {m.text}
           </div>
         ))}
       </div>
 
-      {/* bottom HUD */}
-      <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 flex-col items-center" style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        {label && (
-          <div key={label.key} className="mb-2 text-lg mc-text">
-            {label.text}
-          </div>
-        )}
-        {/* 2.4: aktywne wzmocnienia napojów */}
-        {hud.effects.length > 0 && (
-          <div className="mb-0.5 flex flex-wrap justify-center gap-1">
-            {hud.effects.map((e) => (
-              <div
-                key={e.id}
-                className="flex items-center gap-1 px-1.5 py-0.5 text-[12px] mc-text"
-                style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(120,220,120,0.5)' }}
-              >
-                <span className="text-[13px] leading-none">{e.icon}</span>
-                <span className="leading-none">{e.name}</span>
-                <span className="leading-none text-green-300">{Math.ceil(e.left)}s</span>
-              </div>
-            ))}
-          </div>
-        )}
-        {hud.armor.some((s) => s) && (
-          <div className="mb-0.5 flex justify-center gap-[2px]">
-            {hud.armor.map((s, i) => {
-              if (!s) return <div key={i} style={{ width: 22, height: 22, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(0,0,0,0.45)' }} />;
-              const max = durabilityMax(s.id);
-              const frac = s.dur !== undefined && max > 0 ? Math.max(0, s.dur / max) : 1;
-              return <ArmorPiece key={i} icon={icons[s.id]} frac={frac} enchanted={!!s.ench} />;
-            })}
-          </div>
-        )}
-        {hud.mode === 'survival' && (
-          <div className="mb-1 flex w-full flex-col gap-1" style={{ width: 'min(432px, calc(100vw - 16px))' }}>
-            <div className="hud-strip flex items-center justify-between" style={{ borderRadius: 1 }}>
-              <div className="flex gap-[2px]">{hearts}</div>
-              <div className="flex flex-row-reverse gap-[2px]">{hud.air < hud.maxAir - 0.01 ? bubbles : null}</div>
-            </div>
-            <div className="hud-strip flex items-center justify-between" style={{ borderRadius: 1 }}>
-              <div className="flex gap-[2px]">{drums}</div>
-              <span className="px-1 text-[10px] leading-none opacity-70">
-                {Math.round(hud.health)}/20
-              </span>
-            </div>
-          </div>
-        )}
-        {hud.heldHint && <div className="mb-1 text-sm text-yellow-200 mc-text">{hud.heldHint}</div>}
-        {hud.bow >= 0 && (
-          <div className="mb-1 flex items-center gap-2">
-            <span className="text-sm mc-text">Naciąg</span>
-            <div className="h-2.5 w-32 border-2 border-black bg-black/60">
-              <div className="h-full bg-yellow-300" style={{ width: `${Math.round(hud.bow * 100)}%` }} />
-            </div>
-          </div>
-        )}
-        {hud.sprinting && <div className="mb-1 text-sm opacity-80 mc-text">Sprint</div>}
-        {hud.mode === 'creative' && hud.flying && <div className="mb-1 text-sm opacity-80 mc-text">✈ Latanie</div>}
-        <div
-          className="relative mb-1 h-[14px] overflow-hidden"
-          style={{
-            width: 'min(432px, calc(100vw - 16px))',
-            background: guiSprite('exp_background')
-              ? `url(${guiSprite('exp_background')}) 0 0 / 100% 100% no-repeat, #101510`
-              : 'linear-gradient(180deg, #101510, #1d241d)',
-            imageRendering: 'pixelated',
-            border: guiSprite('exp_background') ? undefined : '2px solid #0a0a0a',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
-          }}
-        >
-          <div
-            className="h-full transition-[width] duration-200"
-            style={guiSprite('exp_progress')
-              ? {
-                width: `${Math.round(hud.xpFrac * 100)}%`,
-                background: `url(${guiSprite('exp_progress')}) 0 0 / 100% 100% no-repeat`,
-                imageRendering: 'pixelated',
-              }
-              : { width: `${Math.round(hud.xpFrac * 100)}%`, background: 'linear-gradient(180deg, #a6e86a, #5cae3a)' }}
-          />
-          <span
-            className="absolute inset-0 flex items-center justify-center text-[11px] font-bold"
-            style={{ color: '#f4ffcc', textShadow: '1px 1px 0 #000, -1px -1px 0 #000' }}
-          >
-            {hud.level}
-          </span>
-        </div>
-        <Hotbar hud={hud} icons={icons} onSelect={onSelectSlot} onSwapHands={onSwapHands} />
-      </div>
+      {label && <div key={label.key} className="java-held-label absolute left-1/2 -translate-x-1/2 text-center mc-text" style={{ bottom: 59*scale, fontSize: 8*scale }}>{label.text}</div>}
+      <JavaVitals hud={hud} icons={icons} onSelect={onSelectSlot} onSwapHands={onSwapHands} />
 
-      {hud.loading < 0.5 && (
-        <div className="absolute left-1/2 top-1/4 -translate-x-1/2 text-center mc-text">
-          <div className="text-lg">Przygotowuję świat… {Math.round(hud.loading * 100)}%</div>
-          <div className="mx-auto mt-1.5 h-2 w-72 overflow-hidden border border-black/60 bg-black/60">
-            <div className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-[width] duration-200" style={{ width: `${hud.loading * 100}%` }} />
-          </div>
-          <div className="mt-1 text-xs opacity-70">Chunki budują się w tle – możesz już się rozejrzeć</div>
-        </div>
-      )}
+      {hud.loading < .5 && <div style={{ position:'absolute',left:'50%',top:'50%',width:200,textAlign:'center',fontSize:8,lineHeight:'10px',transform:`translate(-50%,-50%) scale(${scale})` }}>
+        Wczytywanie terenu… {Math.round(hud.loading*100)}%
+        <div style={{ marginTop:8,height:5,border:'1px solid #808080',background:'#000' }}><div style={{ height:3,width:`${hud.loading*100}%`,background:'#fff' }} /></div>
+      </div>}
     </div>
   );
 }

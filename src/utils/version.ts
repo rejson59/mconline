@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.7.0';
-export const GAME_RELEASE_NAME = 'Szyby i wyjście na brzeg';
+export const GAME_VERSION = '4.8.0';
+export const GAME_RELEASE_NAME = 'Interfejs Java 1.20.4';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,9 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title:'Interfejs Java 1.20.4',text:'Oryginalne grafiki GUI i bitmapowa czcionka, panorama z sześciu ścian, natywne menu, opcje, pauza i ekran śmierci. Własny silnik przeglądarkowy, nie oficjalny klient Minecrafta.' },
+  { title:'Ekwipunek i książka receptur',text:'Stały układ slotów, podgląd postaci 3D, osobne zakładki creative i ekwipunek przetrwania. Książka układa składniki; wynik odbierasz ze slotu. Przeciąganie dzieli stosy, PPM rozkłada po jednej sztuce, klik poza oknem wyrzuca trzymany przedmiot.' },
+  { title:'Skala GUI i klasyczny HUD',text:'Wspólna całkowita skala interfejsu, serca, głód, pancerz, powietrze, doświadczenie i hotbar. Lista graczy tylko pod Tab; minimapa i automatyczny atak są opcjonalnymi rozszerzeniami.' },
   { title: 'Cienkie, łączące się szyby', text: 'Szyby grubości 2/16 łączą się z sąsiadami, także przez granice chunków. Sześć bloków szkła w dwóch rzędach na stole daje 16 szyb. Dostępne też w creative; Jedwabny Dotyk pozwala je odzyskać.' },
   { title: 'Moby wychodzą na brzeg', text: 'Naziemne moby płyną do pobliskiego suchego brzegu i pokonują niski stopień. Sprawdzają miejsce na całe ciało — bez wspinania na płoty, wysokie ściany i pod za niskie sufity.' },
   { title: 'Wygodniejsze zbieranie i budowanie', text: 'Przedmioty podnosisz z 2,5 bloku, bez zbierania przez ściany. Siekiera przyspiesza wszystkie kierunki drewnianych schodów i obie połówki płyty. Łóżka działają daleko od początku mapy i przez granice chunków, z ochroną obu połówek na działkach.' },

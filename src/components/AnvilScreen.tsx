@@ -39,7 +39,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
 
   return (
     <>
-    <GuiWindow sprite={ANVIL.sprite} title={ANVIL.title} scale={scale} onClose={() => game.closeInventory()}>
+    <GuiWindow game={game} onChange={refresh} sprite={ANVIL.sprite} title={ANVIL.title} scale={scale} onClose={() => game.closeInventory()}>
       {/* Tło pola nazwy – waniliowy sprite 110 × 16 z paczki. */}
       <div
         style={{
@@ -68,7 +68,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
       />
 
       {/* Sloty: przedmiot + drugi przedmiot + wynik. */}
-      <GuiSlot
+      <GuiSlot slotArea="anvil" slotIndex={0}
         x={ANVIL.slotA.x}
         y={ANVIL.slotA.y}
         stack={anvil.a}
@@ -77,7 +77,7 @@ export default function AnvilScreen({ game, icons, onChange }: { game: Game; ico
         onAction={(a) => { game.inventoryAction('anvil', 0, a); refresh(); }}
         onClick={(r) => { game.clickAnvilSlot('a', r); refresh(); }}
       />
-      <GuiSlot
+      <GuiSlot slotArea="anvil" slotIndex={1}
         x={ANVIL.slotB.x}
         y={ANVIL.slotB.y}
         stack={anvil.b}

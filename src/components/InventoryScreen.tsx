@@ -1,416 +1,105 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { Game } from '../game/engine';
-import { B, CREATIVE_BLOCKS } from '../game/blocks';
-import { LOG_IDS, RECIPES, mergeable, type Recipe } from '../game/inventory';
+import { CREATIVE_CATEGORIES, type CreativeCategory } from '../game/creativeCategories';
+import { RECIPES, mergeable, recipeCells, type Recipe } from '../game/inventory';
+import { displayName, stackLimit } from '../game/items';
 import { filterRecipes } from '../utils/recipeSearch';
-import { CREATIVE_ITEMS, displayName, stackLimit } from '../game/items';
-import { TooltipBody } from '../utils/tooltip';
-import { ARMOR, armorPoints, ARMOR_SLOT_NAMES } from '../game/armor';
-import Slot from './Slot';
+import { guiSprite } from '../game/art/uiSprites';
+import { useJavaScale } from '../utils/guiScale';
+import { GuiSlot, GuiOverlay, useCursorPos } from './GuiContainer';
 import CloseButton from './CloseButton';
-import { EquippedSkinAvatar } from './SkinPicker';
+import { useGuiInteractions } from './useGuiInteractions';
+import JavaPlayerPreview from './JavaPlayerPreview';
 
-/** Player inventory: standard mouse buttons, Shift transfer/crafting and hovered-slot keys. */
-export default function InventoryScreen({
-  game,
-  icons,
-  onChange,
-  /** Wymusza otwartą książkę przepisów (testy, duże ekrany). */
-  initialBookOpen,
-}: {
-  game: Game;
-  icons: Record<number, string>;
-  onChange: () => void;
-  initialBookOpen?: boolean;
+/** Java InventoryScreen/CraftingScreen coordinates, not a responsive HTML card. */
+export default function InventoryScreen({ game, icons, onChange, initialBookOpen }: {
+  game: Game; icons: Record<number, string>; onChange: () => void; initialBookOpen?: boolean;
 }) {
-  const [, setTick] = useState(0);
-  const [mouse, setMouse] = useState({ x: 0, y: 0 });
-  const [hover, setHover] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [recipeQuery, setRecipeQuery] = useState('');
-  const [tab, setTab] = useState<'blocks' | 'items'>('blocks');
-  const [onlyReady, setOnlyReady] = useState(false);
-  // Na komputerze książka przepisów jest otwarta od razu (jak w Minecrafcie),
-  // na telefonie chowamy ją, żeby plecak zmieścił się na ekranie.
-  const [book, setBook] = useState(
-    () => initialBookOpen ?? (typeof window !== 'undefined' && window.innerWidth >= 900)
-  );
-  const inv = game.inventory;
-  const creative = game.mode === 'creative';
-  const atTable = !!game.craftingTable;
-  const gridMatch = creative ? null : inv.gridMatch(atTable);
-  const skinId = game.getSkinId?.() ?? 'steve';
-
-  const refresh = () => {
-    setTick((t) => t + 1);
-    onChange();
-  };
-
-  useEffect(() => {
-    const mm = (e: MouseEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    // 2.9: na dotyku nie ma „mousemove” – ikona trzymanego przedmiotu
-    // zostawała w lewym górnym rogu. Tapnięcie też ustawia jej pozycję.
-    const pt = (e: PointerEvent) => setMouse({ x: e.clientX, y: e.clientY });
-    window.addEventListener('mousemove', mm);
-    window.addEventListener('pointerdown', pt, true);
-    return () => {
-      window.removeEventListener('mousemove', mm);
-      window.removeEventListener('pointerdown', pt, true);
-    };
-  }, []);
-
-  const clickSlot = (i: number, right: boolean) => {
-    inv.clickSlot(i, right);
-    refresh();
-  };
-
-  // The same LPM/PPM semantics as every other inventory slot.
-  const clickGrid = (i: number, right: boolean) => {
-    if (!inv.cursor && !inv.grid[i]) return;
-    inv.clickGrid(i, right);
-    refresh();
-  };
-
+  const [, tick] = useState(0), [book, setBook] = useState(() => { if (initialBookOpen !== undefined) return initialBookOpen; try { return localStorage.getItem('blockcraft-java-recipe-book') === 'true'; } catch { return false; } });
+  const [query, setQuery] = useState(''), [ready, setReady] = useState(false), [page, setPage] = useState(0);
+  const [tab, setTab] = useState<CreativeCategory>('blocks');
+  const [hover, setHover] = useState<string | null>(null), [ghost, setGhost] = useState<Recipe | null>(null);
+  const mouse = useCursorPos(), scale = useJavaScale(), inv = game.inventory;
+  const atTable = !!game.craftingTable, creative = game.mode === 'creative';
+  const catalog = creative && !atTable && tab !== 'inventory';
+  const creativeInventory = creative && !atTable && !catalog;
+  const refresh = () => { tick(n => n + 1); onChange(); };
+  const interact = useGuiInteractions(game, refresh);
+  const match = inv.gridMatch(atTable);
+  const canPlace = (r: Recipe) => !!recipeCells(r, atTable) && r.inputs.every(i => inv.countOf(i.id) + inv.grid.reduce((n, s) => n + (s?.id === i.id ? s.count : 0), 0) >= i.count);
+  const recipes = filterRecipes(RECIPES, query).filter(r => !!recipeCells(r, atTable) && (!ready || canPlace(r)));
+  const pages = Math.max(1, Math.ceil(recipes.length / 20));
+  const currentPage = Math.min(page, pages - 1);
+  const category = CREATIVE_CATEGORIES.find(c => c.id === tab)!;
+  const pool = category.items.filter(id => displayName(id).toLocaleLowerCase('pl').includes(query.toLocaleLowerCase('pl')));
+  const [scroll, setScroll] = useState(0), maxScroll = Math.max(0, Math.ceil(pool.length / 9) - 5);
+  const row = Math.min(scroll, maxScroll);
+  const ghostCells = ghost && recipeCells(ghost, atTable);
+  const width = creative && !atTable ? 195 : 176, height = creative && !atTable ? 136 : 166;
+  const wideBook = typeof window === 'undefined' || window.innerWidth / scale >= 379;
+  const bookVisible = book && (!creative || atTable);
   const takeResult = () => {
-    if (!gridMatch) return;
+    if (!match) return;
     const cur = inv.cursor;
-    if (cur && !mergeable(cur, gridMatch.out)) return;
-    const room = cur ? stackLimit(cur.id) - cur.count : stackLimit(gridMatch.out.id);
-    if (room < gridMatch.out.count) return;
-    const made = inv.craftGrid(atTable);
-    if (!made) return;
-    if (cur) cur.count += made.count;
-    else inv.cursor = { ...made, ...(made.ench ? { ench: { ...made.ench } } : {}) };
-    game.onCraft(made.id);
-    refresh();
+    if (cur && (!mergeable(cur, match.out) || cur.count + match.out.count > stackLimit(cur.id))) return;
+    const made = inv.craftGrid(atTable); if (!made) return;
+    if (cur) cur.count += made.count; else inv.cursor = { ...made };
+    game.onCraft(made.id); setGhost(null); refresh();
   };
-
-  const craftDirect = (recipe: Recipe) => {
-    if (!inv.craft(recipe)) return;
-    game.onCraft(recipe.out.id);
-    refresh();
-  };
-
-  // --- 2.13: szybkie przepisy, które rozwiązują „nie mogę zrobić desek”.
-  const plankRecipes = useMemo(
-    () => LOG_IDS.map((logId) => RECIPES.find((r) => r.out.id === B.PLANKS && !r.table && r.inputs.length === 1 && r.inputs[0].id === logId)).filter((r): r is Recipe => !!r),
-    []
-  );
-  const tableRecipe = useMemo(() => RECIPES.find((r) => r.out.id === B.CRAFTING), []);
-  // Bez `useMemo`: plecak zmienia się w miejscu, więc świeżość jest ważniejsza
-  // niż kilka tanich sprawdzeń przy każdym renderze.
-  const woodName = (id: number) => (
-    { [B.LOG]: 'dąb', [B.BIRCH_LOG]: 'brzoza', [B.ACACIA_LOG]: 'akacja' } as Record<number, string>
-  )[id] ?? 'drewno';
-  const quick: { recipe: Recipe; label: string; hint: string }[] = [];
-  for (const r of plankRecipes) {
-    if (inv.canCraftToInventory(r)) quick.push({ recipe: r, label: `Deski (${woodName(r.inputs[0].id)})`, hint: '1 pień → 4 deski' });
-  }
-  if (tableRecipe && inv.canCraftToInventory(tableRecipe)) {
-    quick.push({ recipe: tableRecipe, label: 'Stół rzemieślniczy', hint: '4 deski → stół' });
-  }
-
-  const hotbar = (
-    <div className="mc-inv-hotbar flex gap-0">
-      {inv.slots.slice(0, 9).map((s, i) => (
-        <div key={i} data-hotbar-slot={i} className="contents">
-          <Slot stack={s} icons={icons} onAction={(a) => { game.inventoryAction('inventory', i, a); refresh(); }} onClick={(r) => clickSlot(i, r)} onHover={setHover} showCount={!creative} highlight={i === game.selected} />
-        </div>
-      ))}
-    </div>
-  );
-
-  const pool = tab === 'blocks' ? CREATIVE_BLOCKS : CREATIVE_ITEMS;
-  const filtered = pool.filter((id) => displayName(id).toLowerCase().includes(search.toLowerCase()));
-  const recipeRows = filterRecipes(RECIPES, recipeQuery).filter((recipe) => {
-    if (!onlyReady) return true;
-    return inv.canCraftToInventory(recipe) && !(recipe.table && !atTable);
-  });
-  const readyCount = RECIPES.filter((r) => inv.canCraftToInventory(r) && !(r.table && !atTable)).length;
-
-  // Siatka: 2×2 w plecaku (komórki 0,1,3,4) albo pełne 3×3 przy stole.
-  const cells = atTable ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [0, 1, 3, 4];
-
-  const offhandSlot = (
-    <div className="mb-2 flex items-center gap-2" data-offhand-slot>
-      <Slot stack={inv.offhand} icons={icons}
-        onClick={(right) => { game.clickOffhand(right); refresh(); }}
-        onAction={(a) => { game.inventoryAction('offhand', 0, a); refresh(); }}
-        onHover={(name) => setHover(name || 'Druga ręka · F zamienia ręce')}
-        showCount={!creative} />
-      <span className="text-xs text-[#444]">Druga ręka <b>F</b></span>
-    </div>
-  );
-
-  return (
-    <div
-      className="absolute inset-0 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.55)' }}
-      onContextMenu={(e) => e.preventDefault()}
-      onPointerDown={(e) => {
-        // 2.9: na dotyku tapnięcie poza panelem zamyka ekwipunek. Trzymany
-        // przedmiot wraca do plecaka w `closeInventory()`, więc nic nie ginie.
-        if (e.target === e.currentTarget) game.closeInventory();
-      }}
-    >
-      <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
-
-      <div className="flex max-h-full max-w-[100vw] flex-wrap items-start justify-center gap-2 overflow-x-hidden overflow-y-auto px-1 pb-20 pt-1 sm:gap-3 sm:p-3 sm:pb-20">
-        {!creative ? (
-          <div className="mc-panel mc-inv">
-            <div className="mc-inv-head">
-              <span className="mc-inv-title">{atTable ? 'Stół rzemieślniczy' : 'Ekwipunek'}</span>
-              <button
-                type="button"
-                className="mc-inv-book-btn"
-                aria-pressed={book}
-                onClick={() => setBook((v) => !v)}
-                title="Książka przepisów – tapnij, aby wytworzyć przedmiot"
-              >
-                📖 Receptury
-                {readyCount > 0 && <span className="mc-inv-book-count">{readyCount}</span>}
-              </button>
-            </div>
-
-            {offhandSlot}
-            <div className="mc-inv-body">
-              {!atTable && (
-                <div className="mc-inv-side">
-                  <div className="mc-inv-armor">
-                    {game.armor.map((s, i) => (
-                      <Slot
-                        key={i}
-                        stack={s}
-                        onAction={(a) => { game.inventoryAction('armor', i, a); refresh(); }}
-                        icons={icons}
-                        onClick={() => {
-                          game.clickArmorSlot(i);
-                          refresh();
-                        }}
-                        onHover={(name) => {
-                          if (!name) {
-                            setHover(ARMOR_SLOT_NAMES[i]);
-                            return;
-                          }
-                          const [title, ...enchLines] = name.split('\n');
-                          const slot = `${title} · ${ARMOR_SLOT_NAMES[i]}${ARMOR[s!.id]?.points ? ` (+${ARMOR[s!.id]!.points} pkt pancerza)` : ''}`;
-                          setHover(enchLines.length ? `${slot}\n§5${enchLines.join('\n').replace(/^§5/, '')}` : slot);
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <div className="mc-inv-preview" aria-hidden="true">
-                    <EquippedSkinAvatar skin={skinId} size={54} armor={game.armor} />
-                    <div className="mc-inv-armor-pts">🛡 {armorPoints(game.armor)}</div>
-                  </div>
-                </div>
-              )}
-
-              <div className="mc-inv-main">
-                <div className={`mc-craft ${gridMatch ? 'is-ready' : ''}`}>
-                  <div className={`mc-craft-grid ${atTable ? 'is-3' : 'is-2'}`}>
-                    {cells.map((i) => (
-                      <div key={i} data-craft-cell={i} className="contents">
-                        <Slot
-                          stack={inv.grid[i]}
-                          icons={icons}
-                          onHover={setHover}
-                          onAction={(a) => { game.inventoryAction('grid', i, a); refresh(); }}
-                          onClick={(right) => clickGrid(i, right)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <span className="mc-craft-arrow" aria-hidden="true">➜</span>
-                  <div data-craft-result className="contents">
-                    <Slot
-                      stack={gridMatch ? { ...gridMatch.out } : null}
-                      icons={icons}
-                      showCount
-                      onHover={setHover}
-                      onAction={(a) => { if (a.type === 'quick') { game.quickCraft(); refresh(); } else if (a.type === 'collect') takeResult(); }}
-                      onClick={takeResult}
-                    />
-                  </div>
-                </div>
-
-                {quick.length > 0 && (
-                  <div className="mc-quick" aria-label="Szybkie przepisy">
-                    {quick.map((q) => (
-                      <button
-                        key={q.label}
-                        type="button"
-                        className="mc-quick-btn"
-                        title={q.hint}
-                        onClick={() => craftDirect(q.recipe)}
-                      >
-                        <img src={icons[q.recipe.out.id]} width={20} height={20} className="pixelated" alt="" />
-                        <span>{q.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mc-inv-storage">
-                  {inv.slots.slice(9, 36).map((s, i) => (
-                    <Slot key={i + 9} stack={s} icons={icons} onAction={(a) => { game.inventoryAction('inventory', i + 9, a); refresh(); }} onClick={(r) => clickSlot(i + 9, r)} onHover={setHover} />
-                  ))}
-                </div>
-                {hotbar}
-              </div>
-            </div>
-
-            <div className="mc-inv-hint">
-              Shift+klik: przenieś stos / wytwórz serię · 1–9: zamień z paskiem · Dwuklik: zbierz stos · Q / Ctrl+Q: wyrzuć.
-              {atTable
-                ? 'Ułóż wzór w siatce 3×3 i tapnij wynik. LPM / tapnięcie: cały stos; PPM / przytrzymanie: 1 sztuka.'
-                : 'Siatka 2×2: tapnij składnik, potem pole siatki. 1 pień → 4 deski, 4 deski w kwadracie → stół rzemieślniczy.'}
-            </div>
+  const slot = (i: number, x: number, y: number) => <GuiSlot key={i} slotArea="inventory" slotIndex={i} x={x} y={y} stack={inv.slots[i]} icons={icons} onHover={setHover}
+    onClick={r => { inv.clickSlot(i, r); refresh(); }} onAction={a => { game.inventoryAction('inventory', i, a); refresh(); }} />;
+  return <div className="java-inventory absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,.6)' }} onPointerDownCapture={interact} onPointerDown={e => { if (e.target === e.currentTarget && (e.button === 0 || e.button === 2)) { game.dropInventoryCursor(e.button === 2); refresh(); } }} onContextMenu={e => e.preventDefault()}>
+    <CloseButton onClose={() => game.closeInventory()} className="mc-close-safe absolute z-50" />
+    <div style={{ position: 'relative', width: (width + (bookVisible && wideBook ? 151 : 0)) * scale, height: height * scale }}>
+      <div style={{ position: 'absolute', left: bookVisible && wideBook ? 151 * scale : 0, top: 0, width, height, transform: `scale(${scale})`, transformOrigin: 'top left', fontSize: 8, lineHeight: '9px', color: '#404040', backgroundImage: `url(${guiSprite(catalog ? tab === 'search' ? 'creative_search_gui' : 'creative_gui' : creativeInventory ? 'creative_inventory_gui' : atTable ? 'crafting_gui' : 'inventory_gui')})`, backgroundSize: '100% 100%', imageRendering: 'pixelated', visibility: bookVisible && !wideBook ? 'hidden' : undefined }}>
+        {catalog ? <>
+          <span style={{ position: 'absolute', left: 8, top: 6 }}>{category.name}</span>
+          {tab === 'search' && <input aria-label="Szukaj przedmiotów" className="java-search" style={{ left: 82, top: 5, width: 89 }} value={query} onChange={e => { setQuery(e.target.value); setScroll(0); }} onKeyDown={e => e.stopPropagation()} />}
+          <div onWheel={e => setScroll(v => Math.max(0, Math.min(maxScroll, v + Math.sign(e.deltaY))))} style={{ position: 'absolute', inset: '17px 19px 28px 8px' }}>
+            {pool.slice(row * 9, row * 9 + 45).map((id, i) => <GuiSlot key={id} x={1 + i % 9 * 18} y={1 + Math.floor(i / 9) * 18} stack={{ id, count: 1 }} icons={icons} onHover={setHover} onClone={() => { inv.cursor = { id, count: stackLimit(id) }; refresh(); }} onAction={a => { if (a.type === 'quick') inv.cursor = { id, count: stackLimit(id) }; else if (a.type === 'hotbar') inv.slots[a.index] = { id, count: stackLimit(id) }; refresh(); }} onClick={right => {
+              const c = inv.cursor;
+              if (!c) inv.cursor = { id, count: 1 };
+              else if (c.id === id) { c.count = Math.min(stackLimit(id), c.count + (right ? -1 : 1)); if (c.count <= 0) inv.cursor = null; }
+              else if (right) { c.count--; if (!c.count) inv.cursor = null; } else inv.cursor = null;
+              refresh();
+            }} />)}
           </div>
-        ) : (
-          <div className="mc-panel mc-inv">
-            <div className="mc-inv-head">
-              <span className="mc-inv-title">Ekwipunek <span className="mc-inv-mode">· kreatywny</span></span>
-            </div>
-            {offhandSlot}
-            <div className="mc-inv-body">
-              <div className="mc-inv-main">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex gap-2 text-base font-semibold">
-                    <button type="button" className={tab === 'blocks' ? 'underline' : 'opacity-60'} onClick={() => setTab('blocks')}>Bloki</button>
-                    <button type="button" className={tab === 'items' ? 'underline' : 'opacity-60'} onClick={() => setTab('items')}>Przedmioty</button>
-                  </div>
-                  <input
-                    className="mc-input mc-inv-search"
-                    placeholder="Szukaj..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  />
-                </div>
-                <div className="mc-inv-creative">
-                  {filtered.map((id) => (
-                    <Slot
-                      key={id}
-                      stack={{ id, count: 64 }}
-                      icons={icons}
-                      showCount={false}
-                      onHover={setHover}
-                      onClick={() => {
-                        if (inv.cursor) inv.cursor = null;
-                        else inv.cursor = { id, count: stackLimit(id) === 1 ? 1 : 64 };
-                        refresh();
-                      }}
-                    />
-                  ))}
-                </div>
-                <div className="mc-inv-hint">
-                  Tapnij blok, a potem slot paska. Tap poza oknem odkłada trzymany przedmiot.
-                </div>
-                {hotbar}
-              </div>
-            </div>
+          <input aria-label="Przewijanie przedmiotów" type="range" className="java-scrollbar" min={0} max={maxScroll} value={row} onChange={e => setScroll(+e.target.value)} style={{ position: 'absolute', left: 175, top: 18, width: 12, height: 90 }} />
+          {inv.slots.slice(0, 9).map((_, i) => slot(i, 9 + i * 18, 112))}
+        </> : <>
+          {!atTable && <>
+            <div className="mc-inv-preview java-player-preview" aria-label="Podgląd skórki" style={{ position: 'absolute', left: creativeInventory ? 73 : 26, top: creativeInventory ? 6 : 8, width: creativeInventory ? 32 : 52, height: creativeInventory ? 44 : 70, overflow: 'hidden', display: 'grid', placeItems: 'center' }}><div style={{ transform: creativeInventory ? 'scale(.61)' : undefined, transformOrigin: 'top left' }}><JavaPlayerPreview skin={game.getSkinId?.() ?? 'steve'} scale={scale} armor={game.armor} /></div></div>
+            {game.armor.map((s, i) => <GuiSlot key={i} slotArea="armor" slotIndex={i} x={creativeInventory ? i % 2 ? 108 : 54 : 8} y={creativeInventory ? i < 2 ? 6 : 33 : 8 + i * 18} stack={s} icons={icons} onHover={setHover} onClick={() => { game.clickArmorSlot(i); refresh(); }} onAction={a => { game.inventoryAction('armor', i, a); refresh(); }} />)}
+            <div data-offhand-slot><GuiSlot slotArea="offhand" slotIndex={0} x={creativeInventory ? 35 : 77} y={creativeInventory ? 20 : 62} stack={inv.offhand} icons={icons} onHover={setHover} onClick={r => { game.clickOffhand(r); refresh(); }} onAction={a => { game.inventoryAction('offhand', 0, a); refresh(); }} /></div>
+          </>}
+          {!creativeInventory && <><span style={{ position: 'absolute', left: atTable ? 28 : 97, top: atTable ? 6 : 16 }}>{atTable ? 'Stół rzemieślniczy' : 'Wytwarzanie'}</span>
+          {atTable && <span style={{ position: 'absolute', left: 8, top: 72 }}>Ekwipunek</span>}
+          <div className={`mc-craft-grid is-${atTable ? '3' : '2'}`}>
+            {(atTable ? [0,1,2,3,4,5,6,7,8] : [0,1,3,4]).map(i => <div key={i} data-craft-cell={i}>
+              <GuiSlot slotArea="grid" slotIndex={i} x={(atTable ? 30 : 98) + i % 3 * 18} y={(atTable ? 17 : 26) + Math.floor(i / 3) * 18} stack={inv.grid[i] ?? (ghostCells?.[i] ? { id: ghostCells[i], count: 1 } : null)} dim={!inv.grid[i]} icons={icons} onHover={setHover} onClick={r => { setGhost(null); inv.clickGrid(i, r); refresh(); }} onAction={a => { game.inventoryAction('grid', i, a); refresh(); }} />
+            </div>)}
           </div>
-        )}
-
-        {!creative && book && (
-          <div className="mc-panel mc-recipe-book">
-            <div className="mc-inv-head">
-              <span className="mc-inv-title">📖 Receptury</span>
-              <span className="mc-recipe-count">{recipeRows.length}/{RECIPES.length}</span>
-            </div>
-            <div className="mb-2 flex gap-2">
-              <label className="sr-only" htmlFor="recipe-search">Szukaj receptur po nazwie lub składniku</label>
-              <input
-                id="recipe-search"
-                className="mc-input min-w-0 flex-1 !py-1 !text-sm"
-                type="search"
-                placeholder="Szukaj receptur po nazwie lub składniku"
-                value={recipeQuery}
-                onChange={(e) => setRecipeQuery(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
-              />
-              <button
-                type="button"
-                className={`mc-btn !w-auto !px-2 !py-1 !text-xs ${onlyReady ? 'ring-2 ring-inset ring-yellow-300' : ''}`}
-                aria-pressed={onlyReady}
-                onClick={() => setOnlyReady((v) => !v)}
-              >
-                {onlyReady ? 'Wszystkie' : 'Możliwe'}
-              </button>
-            </div>
-            <div className="mc-recipe-list">
-              {recipeRows.length === 0 && (
-                <div className="px-2 py-5 text-center text-sm text-[#444]" role="status">
-                  {recipeQuery.trim() ? 'Nie znaleziono takiej receptury.' : 'Brak receptur możliwych do wykonania. Zdobądź potrzebne składniki.'}
-                </div>
-              )}
-              {recipeRows.map((r) => {
-                const needTable = r.table && !atTable;
-                const hasInputs = inv.canCraft(r);
-                const can = hasInputs && !needTable && inv.canCraftToInventory(r);
-                const noRoom = hasInputs && !needTable && !inv.canCraftToInventory(r);
-                return (
-                  <button
-                    key={RECIPES.indexOf(r)}
-                    title={noRoom ? 'Zrób miejsce w ekwipunku na wynik.' : needTable ? 'Wymaga stołu rzemieślniczego.' : undefined}
-                    disabled={!can}
-                    onClick={() => craftDirect(r)}
-                    className="mc-recipe-row"
-                    style={{ background: can ? '#9fd39a' : '#a9a9a9', opacity: needTable ? 0.55 : 1, cursor: can ? 'pointer' : 'default' }}
-                    onMouseEnter={() => setHover(displayName(r.out.id))}
-                    onMouseLeave={() => setHover(null)}
-                  >
-                    <div className="flex items-center gap-1">
-                      {r.inputs.map((inp, j) => (
-                        <div key={j} className="relative">
-                          <img src={icons[inp.id]} width={24} height={24} className="pixelated" alt="" />
-                          <span className="absolute -bottom-1 right-0 text-xs font-bold text-white mc-text">{inp.count}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <span className="text-lg">→</span>
-                    <div className="relative">
-                      <img src={icons[r.out.id]} width={28} height={28} className="pixelated" alt="" />
-                      <span className="absolute -bottom-1 right-0 text-xs font-bold text-white mc-text">{r.out.count}</span>
-                    </div>
-                    <span className="ml-1 truncate text-sm text-[#222]">{displayName(r.out.id)}</span>
-                    {r.table && <span className="ml-auto text-xs" title="Wymaga stołu">🛠</span>}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="mc-inv-hint">
-              Tapnij recepturę, aby wytworzyć od razu – nie trzeba układać składników w siatce.
-            </div>
-          </div>
-        )}
+          <div data-craft-result><GuiSlot x={atTable ? 124 : 154} y={atTable ? 35 : 36} stack={match?.out ?? ghost?.out ?? null} dim={!match} icons={icons} onHover={setHover} onClick={takeResult} onAction={a => { if (a.type === 'quick') { game.quickCraft(); refresh(); } else if (a.type === 'collect') takeResult(); }} /></div>
+          <button className="java-recipe-toggle" title="Książka receptur" aria-label="Książka receptur" aria-pressed={book} onClick={() => { setBook(!book); if (initialBookOpen === undefined) try { localStorage.setItem('blockcraft-java-recipe-book', String(!book)); } catch { /* unavailable storage */ } }} style={{ position: 'absolute', left: atTable ? 5 : 104, top: atTable ? 35 : 62, width: 20, height: 18, backgroundImage: `url(${guiSprite('recipe_button')})` }} /></>}
+          {creativeInventory && <button aria-label="Usuń przedmiot" title="Usuń przedmiot (Shift: opróżnij ekwipunek)" style={{position:'absolute',left:173,top:112,width:16,height:16,background:'none',border:0}} onClick={e => { inv.cursor=null; if(e.shiftKey) { inv.slots.fill(null); game.armor.fill(null); inv.offhand=null; } refresh(); }} />}
+          <div className="mc-inv-storage">{inv.slots.slice(9, 36).map((_, n) => slot(n + 9, (creativeInventory ? 9 : 8) + n % 9 * 18, (creativeInventory ? 54 : 84) + Math.floor(n / 9) * 18))}</div>
+          {inv.slots.slice(0, 9).map((_, i) => <div key={i} data-hotbar-slot={i}>{slot(i, (creativeInventory ? 9 : 8) + i * 18, creativeInventory ? 112 : 142)}</div>)}
+        </>}
+        {creative && !atTable && CREATIVE_CATEGORIES.map((c, i) => {
+          const n = c.bottom ? i - 6 : i;
+          return <button key={c.id} aria-label={c.name} title={c.name} aria-pressed={tab === c.id} onClick={() => { setTab(c.id); setQuery(''); setScroll(0); }} className="java-tab" style={{ position: 'absolute', left: c.id === 'inventory' ? width - 28 : n * 28, top: c.bottom ? height - 4 : -28, backgroundImage: `url(${guiSprite(`creative_tab_${c.bottom ? 'bottom' : 'top'}_${tab === c.id ? 'selected' : 'unselected'}`)})` }}><img src={icons[c.icon]} width={16} height={16} alt="" /></button>;
+        })}
       </div>
-
-      {hover && !inv.cursor && (
-        <div className="pointer-events-none fixed z-50 max-w-[320px] px-2 py-1 text-sm" style={{ left: mouse.x + 14, top: mouse.y - 28, background: '#1a0a2a', border: '2px solid #2a0f5f', color: '#fff', whiteSpace: 'pre-line' }}>
-          <TooltipBody text={hover} />
-        </div>
-      )}
-      {inv.cursor && (
-        <div className="pointer-events-none fixed z-50" style={{ left: mouse.x - 17, top: mouse.y - 17 }}>
-          <img src={icons[inv.cursor.id]} width={34} height={34} className="pixelated" alt="" />
-          {!creative && inv.cursor.count > 1 && <span className="mc-count">{inv.cursor.count}</span>}
-        </div>
-      )}
-      {/* 2.9: przycisk na dole jest w zasięgu kciuka; skrót klawiszowy
-          zostaje jako podpowiedź na komputerze. */}
-      <div className="mc-panel-actions">
-        <button
-          type="button"
-          className="mc-btn !w-auto !px-5 !py-2 !text-base"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => game.closeInventory()}
-        >
-          Gotowe – zamknij ekwipunek
-        </button>
-        <span className="hidden self-center text-xs mc-text text-white/60 sm:inline">E / Esc – zamknij</span>
-      </div>
+      {bookVisible && <div className="java-recipe-book" style={{ position: 'absolute', left: 0, top: 0, width: 147, height: 166, transform: `scale(${scale})`, transformOrigin: 'top left', color: '#404040', fontSize: 8, lineHeight: '9px', backgroundImage: `url(${guiSprite('recipe_book')})`, backgroundSize: '256px 256px', imageRendering: 'pixelated' }}>
+        <input className="java-search" aria-label="Szukaj receptur po nazwie lub składniku" placeholder="Szukaj..." style={{ left: 25, top: 14, width: 80 }} value={query} onChange={e => { setQuery(e.target.value); setPage(0); }} onKeyDown={e => e.stopPropagation()} />
+        <button className="java-filter" title="Możliwe do wytworzenia" aria-label="Możliwe do wytworzenia" aria-pressed={ready} onClick={() => { setReady(!ready); setPage(0); }} style={{ left: 110, top: 12, backgroundImage: `url(${guiSprite(ready ? 'recipe_filter_enabled' : 'recipe_filter_disabled')})` }} />
+        {recipes.slice(currentPage * 20, currentPage * 20 + 20).map((r, i) => <button key={`${r.out.id}-${i}`} className="java-recipe" title={displayName(r.out.id)} aria-label={`Ułóż: ${displayName(r.out.id)}`} data-ready={canPlace(r)} onClick={() => { if (inv.placeRecipe(r, atTable)) setGhost(null); else setGhost(r); refresh(); }} style={{ left: 11 + i % 5 * 25, top: 32 + Math.floor(i / 5) * 25, backgroundImage: `url(${guiSprite(canPlace(r) ? 'recipe_slot_craftable' : 'recipe_slot_uncraftable')})` }}><img src={icons[r.out.id]} width={16} height={16} alt="" /></button>)}
+        <button className="java-page-arrow" aria-label="Poprzednia strona receptur" disabled={!currentPage} style={{ left: 30, backgroundImage: `url(${guiSprite('recipe_page_backward')})` }} onClick={() => setPage(currentPage - 1)} />
+        <span style={{ position: 'absolute', left: 59, top: 142 }}>{currentPage + 1}/{pages}</span>
+        <button className="java-page-arrow" aria-label="Następna strona receptur" disabled={currentPage + 1 >= pages} style={{ left: 102, backgroundImage: `url(${guiSprite('recipe_page_forward')})` }} onClick={() => setPage(currentPage + 1)} />
+        {!wideBook && <button className="java-btn" style={{ position: 'absolute', left: 10, top: 167, width: 127 }} onClick={() => setBook(false)}>Powrót do ekwipunku</button>}
+      </div>}
     </div>
-  );
+    <GuiOverlay game={game} icons={icons} hover={hover} mouse={mouse} />
+  </div>;
 }
