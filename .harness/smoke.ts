@@ -2710,8 +2710,8 @@ section('2.3: totem of undying');
   g.hunger = 12;
   g.inventory = new Inventory();
   g.inventory.slots[0] = { id: I.TOTEM, count: 1 };
+  g.selected = 0; g.updateHand = () => {};
   g.unlocked = new Set();
-  g.totemHeal = 0;
   g.armor = [null, null, null, null];
   g.messages = [];
   g.emitHud = () => {};
@@ -2728,7 +2728,7 @@ section('2.3: totem of undying');
   eq('the totem is consumed', g.inventory.countOf(I.TOTEM), 0);
   check('the undying achievement fired', (g.unlocked as Set<string>).has('undying'));
   eq('the player stays in the world', g.ui, 'playing');
-  check('healing starts right away', g.totemHeal > 0, String(g.totemHeal));
+  check('rescue grants Regeneration II and eight absorption HP', g.health === 1 && g.absorption === 8 && g.effectLeft('regen') === 45);
   // bez totemu śmier działa normalnie
   const plain = Object.create(Game.prototype) as unknown as Record<string, any>;
   plain.mode = 'survival';
@@ -2737,7 +2737,6 @@ section('2.3: totem of undying');
   plain.hunger = 12;
   plain.inventory = new Inventory();
   plain.unlocked = new Set();
-  plain.totemHeal = 0;
   plain.armor = [null, null, null, null];
   plain.emitHud = () => {};
   plain.body = { pos: new THREE.Vector3(1, 70, 1) };
@@ -2908,7 +2907,7 @@ section('2.4: potion effects inside the engine');
   const g = Object.create(Game.prototype) as unknown as Record<string, any>;
   g.mode = 'survival';
   g.effects = new Map();
-  g.potionRegenAcc = 0;
+  g.effectLevels = new Map();
   g.potionsDrunk = new Set();
   g.body = { pos: new THREE.Vector3(0, 64, 0) };
   g.health = 5;
@@ -2937,15 +2936,17 @@ section('2.4: potion effects inside the engine');
   g.updateEffects(20);
   check('the buff expires', g.hasEffect('speed') === false);
 
-  // regeneration heals on its own 2 s rhythm
+  // Regeneration I pulses on remaining duration at 50-tick boundaries.
   g.health = 6;
   g.applyEffect('regen', 10);
-  g.updateEffects(1.9);
-  eq('no heal before the 2 s mark', g.health, 6);
-  g.updateEffects(0.2);
-  eq('one heart after two seconds', g.health, 7);
+  g.updateEffects(.05);
+  eq('native regeneration can pulse on its first 200-tick duration', g.health, 7);
+  g.updateEffects(2.45);
+  eq('no extra pulse before the next 50-tick boundary', g.health, 7);
+  g.updateEffects(.05);
+  eq('next native regeneration pulse is one health point', g.health, 8);
   g.updateEffects(100);
-  check('the effect ends and the timer resets', g.hasEffect('regen') === false && g.potionRegenAcc < 2);
+  check('the effect expires without healing after its lifetime', g.hasEffect('regen') === false && g.health === 10);
 
   // the awkward brew is harmless but still drunk
   g.inventory.slots[0] = { id: I.POTION_AWKWARD, count: 1 };
@@ -3194,8 +3195,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.14.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Obrażenia i przetrwanie', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.15.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Totem i złote serca', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -7626,7 +7627,7 @@ section('4.3.1: functional offhand, metadata and persistence');
   g.wearShield(8); eq('the second-hand shield loses durability', inventory.offhand?.dur, 12);
   g.wearShield(12); eq('a broken offhand shield is removed from the correct slot', inventory.offhand, null);
   eq('breaking a shield never deletes the main tool', inventory.slots[0], tool);
-  inventory.offhand = { id: I.TOTEM, count: 1 }; g.totemHeal = 0; g.hunger = 10;
+  inventory.offhand = { id: I.TOTEM, count: 1 }; g.hunger = 10;
   g.body = { pos: new THREE.Vector3(1, 70, 1) }; g.spawnParticles = () => {}; g.unlock = () => {};
   check('the offhand totem prevents death', g.tryTotem()); eq('the offhand totem is consumed', inventory.offhand, null);
   const source: PlayerProfile = { pid: 'p1234567890123456789', name: 'Tester', skin: 'steve', updated: 100, x: 1, y: 70.25, z: 3, dim: 'o', yaw: 0, pitch: 0,
@@ -7919,9 +7920,10 @@ section('4.4: player combat validation, glass, cooldowns and arrows');
   g.health = 20; g.body.pos.x = 14.5; attempt('old-teleport'); eq('lag compensation cannot hit an old teleport location', g.health, 20);
   g.body.pos.x = 5.5; g.playerHistory = [{ at: Date.now() - 1000, pos: [4.5, y, 4.5] }];
   attempt('expired-history'); eq('expired position history does not extend melee reach', g.health, 20);
-  g.body.pos.x = 4.5; g.playerHistory = []; g.health = 1; g.totemHeal = 0;
+  g.body.pos.x = 4.5; g.playerHistory = []; g.health = 1;
   g.inventory.offhand = { id: I.TOTEM, count: 1 }; attempt('pvp-totem');
-  check('lethal PvP consumes a totem through the normal survival pipeline', g.health === 6 && g.ui === 'playing' && g.inventory.offhand === null);
+  check('lethal PvP consumes a totem through the normal survival pipeline', g.health === 1 && g.absorption === 8 && g.ui === 'playing' && g.inventory.offhand === null);
+  g.clearEffects(); // Let the rescue effects expire before testing an unrelated lethal hit.
   const deathDrops: any[][] = []; g.spawnDrop = (...args: any[]) => deathDrops.push(args);
   g.health = 1; g.inventory.slots[0] = { id: B.STONE, count: 4 };
   g.inventory.cursor = { id: I.IRON_PICK, count: 1, dur: 19, name: 'Cursor pick' };
@@ -9444,6 +9446,116 @@ section('4.14: actual landing physics, environmental damage and fractional regen
   }
   for(const amount of [NaN,Infinity,-1])small.damage(amount);check('nonfinite hits cannot corrupt player health',Number.isFinite(small.health));
   small.mode='creative';const before=small.health;small.damage(10,false,false,'fall');eq('creative remains immune to ordinary environmental damage',small.health,before);
+}
+
+section('4.15: held totems, absorption pipeline and native rescue effects');
+{
+  const {cleanStatus,regenerationPulses,effectClock}=await import('../src/game/statusEffects');
+  const make=()=>{
+    const g=Object.assign(Object.create(Game.prototype),{mode:'survival',ui:'playing',health:2,hunger:9,saturation:2,exhaustion:0,
+      inventory:new Inventory(),selected:0,armor:Array(4).fill(null),body:{pos:new THREE.Vector3(8.5,FLAT_H+1,8.5),vel:new THREE.Vector3()},spawnPoint:new THREE.Vector3(8.5,FLAT_H+1,8.5),
+      hurtCount:0,shake:0,unlocked:new Set<string>(),keys:new Set<string>(),
+      message(){},emitHud(){},spawnParticles(){},spawnDrop(){},updateHand(){},buzz(){},addWaypoint(){},
+      setUI(state:string){this.ui=state;},
+    }) as any;g.clearEffects();return g;
+  };
+  eq('totem uses its official Polish 1.20.4 item name',displayName(I.TOTEM),'Totem nieśmiertelności');
+  eq('native totem alias works',resolveId('totem_of_undying'),I.TOTEM);
+  eq('legacy totem alias remains compatible',resolveId('totem_ratowania'),I.TOTEM);
+  const main=make();main.inventory.slots[0]={id:I.TOTEM,count:1};main.applyEffect('speed',20);main.damage(10);
+  check('main hand totem restores exactly one HP and eight absorption HP',main.health===1 && main.absorption===8 && main.ui==='playing');
+  eq('only the held main item was consumed',main.inventory.slots[0],null);
+  eq('totem clears the old speed effect',main.effectLeft('speed'),0);
+  check('native rescue durations and amplifiers',main.effectLeft('regen')===45 && main.effectLevels.get('regen')===1 && main.effectLeft('fire')===40 && main.effectLeft('absorption')===5 && main.effectLevels.get('absorption')===1);
+  check('totem does not invent hunger or saturation restoration',main.hunger===9 && main.saturation===2);
+  main.damage(3);check('golden hearts absorb damage before red hearts',main.health===1 && main.absorption===5);
+  main.damage(5);check('fully absorbed hit leaves one HP, not a second activation',main.health===1 && main.absorption===0 && main.ui==='playing');
+  main.inventory.offhand={id:I.TOTEM,count:1};main.damage(2);
+  check('another held totem works immediately without an invented cooldown',main.health===1 && main.absorption===8 && main.inventory.offhand===null);
+  const both=make();both.inventory.slots[0]={id:I.TOTEM,count:1};both.inventory.offhand={id:I.TOTEM,count:1};both.damage(10);
+  check('main hand wins before offhand when both hold a totem',both.inventory.slots[0]===null && both.inventory.offhand?.id===I.TOTEM);
+  for(const slot of [1,8,9,35]){
+    const bag=make();bag.inventory.slots[slot]={id:I.TOTEM,count:1};bag.damage(10);
+    check('unselected hotbar/backpack totem cannot prevent death '+slot,bag.ui==='dead' && bag.health===0 && bag.absorption===0 && bag.effects.size===0);
+  }
+  for(const count of [0,NaN]){const invalid=make();invalid.inventory.offhand={id:I.TOTEM,count};invalid.damage(10);check('invalid totem count cannot grant a free rescue '+count,invalid.ui==='dead');}
+  const forced=make();forced.inventory.offhand={id:I.TOTEM,count:1};let used=0;forced.unlock=()=>used++;forced.damage(1000,true);
+  check('/kill/void force bypasses rescue without awarding activation',forced.ui==='dead' && used===0 && forced.absorption===0);
+  const creative=make();creative.mode='creative';creative.inventory.slots[0]={id:I.TOTEM,count:1};creative.damage(10);
+  check('creative immunity does not consume held totems',creative.health===2 && creative.inventory.slots[0]?.id===I.TOTEM);
+  const worn=make();worn.health=20;worn.armor=[I.IRON_HELMET,I.IRON_CHEST,I.IRON_LEGS,I.IRON_BOOTS].map(id=>({id,count:1,dur:100}));worn.applyEffect('absorption',5,1);worn.damage(4);
+  check('absorption occurs after armor and still wears armor from the raw hit',worn.health===20 && Math.abs(worn.absorption-6.08)<1e-9 && worn.armor.every((s:Stack)=>s.dur===99));
+  eq('fully absorbed hits do not add food exhaustion',worn.exhaustion,0);
+  const drowning=make();drowning.health=10;drowning.applyEffect('absorption',5,1);drowning.damage(2,false,false,'drown');
+  check('environmental damage also consumes absorption before health',drowning.health===10 && drowning.absorption===6);
+  const expiring=make();expiring.applyEffect('absorption',5,1);expiring.damage(3);expiring.updateEffects(5);
+  check('expiry removes only remaining golden hearts without damaging red hearts',expiring.health===2 && expiring.absorption===0 && !expiring.hasEffect('absorption'));
+  for(const fps of [20,30,60,144]){
+    const g=make();g.inventory.offhand={id:I.TOTEM,count:1};g.damage(10);
+    for(let n=0;n<fps*5;n++)g.updateEffects(1/fps);
+    check('totem effect rhythm and expiration independent of render FPS '+fps,g.health===5 && g.absorption===0 && g.effectLeft('regen')===40 && g.effectLeft('fire')===35);
+  }
+  eq('first Regeneration II pulse uses 900 remaining ticks',regenerationPulses(900,1,1),1);
+  eq('no repeated pulse while counting down to 875 ticks',regenerationPulses(899,24,1),0);
+  eq('next pulse occurs at duration 875',regenerationPulses(875,1,1),1);
+  eq('whole 45-second Regeneration II has exactly 36 potential pulses',regenerationPulses(900,9000,1),36);
+  eq('whole ten-second Regeneration I has four potential pulses',regenerationPulses(200,9000,0),4);
+  eq('zero elapsed ticks never produces a heal',regenerationPulses(900,0,1),0);
+  const half=effectClock(0,.025);eq('partial render frame waits for full effect tick',half.ticks,0);eq('two partial frames form one tick',effectClock(half.remainder,.025).ticks,1);
+  const levels=make();levels.applyEffect('regen',45,1);levels.updateEffects(1);levels.applyEffect('regen',100,0);
+  check('weak potion cannot extend strong regeneration at a stronger amplifier',levels.effectLevels.get('regen')===1 && levels.effectLeft('regen')===44);
+  levels.applyEffect('fire',40);levels.applyEffect('fire',2);eq('same-level refresh never shortens an effect',levels.effectLeft('fire'),40);
+  for(const bad of [NaN,Infinity,-1,0])levels.applyEffect('speed',bad);eq('invalid effect durations cannot poison the active map',levels.effectLeft('speed'),0);
+  const snapshot=main.statusSnapshot();snapshot.absorption=999;
+  eq('saved absorption is capped at the active effect capacity',cleanStatus(snapshot).absorption,8);
+  eq('golden hearts without a timed effect are rejected',cleanStatus({absorption:8,effects:[]}).absorption,0);
+  eq('expired effects cannot be restored with free absorption',cleanStatus({absorption:8,effects:[{id:'absorption',ticks:0,amplifier:1}]}).absorption,0);
+  check('unknown/nonfinite effects are discarded',cleanStatus({effects:[{id:'bogus',ticks:900},{id:'fire',ticks:Infinity}]}).effects.length===0);
+  eq('legacy saves have no active effects',JSON.stringify(cleanStatus(undefined)),JSON.stringify({effects:[],absorption:0}));
+}
+
+section('4.15: rescue persistence, profile application and no health/absorption refill');
+{
+  const world=new World(4152026,true);const base=FLAT_H+1;
+  for(let y=base;y<base+4;y++)world.setBlock(4,y,4,B.AIR);
+  const g=Object.assign(Object.create(Game.prototype),{world,homeWorld:world,mode:'survival',ui:'playing',body:{pos:new THREE.Vector3(4.5,base,4.5),vel:new THREE.Vector3()},
+    spawnPoint:new THREE.Vector3(4.5,base,4.5),inventory:new Inventory(),armor:Array(4).fill(null),selected:0,health:.25,hunger:10,saturation:0,exhaustion:0,
+    playerId:'p1234567890abcdef123',netName:'Tester',netSkin:'steve',xp:new Xp(0),unlocked:new Set<string>(),isInNether:false,
+    worldId:'rescue-save',worldName:'Rescue',worldType:'flat',yaw:0,pitch:0,time:.25,day:1,
+    furnaces:new Map(),chests:new Map(),weather:'clear',emitHud(){},message(){},updateHand(){},spawnParticles(){},
+  }) as any;
+  g.clearEffects();g.applyEffect('regen',45,1);g.applyEffect('absorption',5,1);g.applyEffect('fire',40);g.absorption=2.5;g.updateEffects(1);g.health=.25;
+  const p=g.buildProfile();const row=profileRow(p,'survival-rescue');
+  const restored=sanitizeProfile(row)!;
+  check('cloud tail preserves duration, amplifier and depleted absorption',restored.status?.absorption===2.5 && restored.status.effects.find(e=>e.id==='regen')?.ticks===880 && restored.status.effects.find(e=>e.id==='regen')?.amplifier===1);
+  eq('status metadata uses appended tail slot 51, not a real item slot',JSON.parse(row.inv)[51].absorption,2.5);
+  const before=JSON.stringify(p.inv);g.applyProfile(restored);
+  check('actual Game.applyProfile preserves red HP below one and never refills yellow HP',g.health===.25 && g.absorption===2.5 && g.effectLeft('absorption')===4);
+  eq('status roundtrip never changes the 36 inventory slots',JSON.stringify(g.inventory.slots),before);
+  g.save();const save=loadSaves().find(s=>s.id==='rescue-save') as any;
+  check('local save includes the same timed rescue state',save?.status?.absorption===2.5 && save.status.effects.some((e:any)=>e.id==='fire' && e.ticks===780));
+  g.restoreStatus(save.status);eq('local restore does not refill depleted absorption',g.absorption,2.5);
+  g.updateEffects(4);check('restored absorption expires on its remaining lifetime',g.absorption===0 && g.effectLeft('regen')===40);
+  g.restoreStatus(undefined);check('loading a legacy/different profile clears old effects',g.absorption===0 && g.effects.size===0);
+  const short=sanitizeProfile(profileRow({...p,inv:[]},'short'))!;eq('short legacy inventory input cannot shift metadata into real slots',short.status?.absorption,2.5);
+  g.restoreStatus(p.status);g.net=null;g.pvpProtectedUntil=0;g.keys=new Set();g.lockPointer=()=>{};g.onUI=()=>{};g.respawn();
+  check('respawn clears both active statuses and absorption',g.absorption===0 && g.effects.size===0 && g.health===20);
+}
+
+section('4.15: original rescue assets and effect icon timing');
+{
+  const {RESCUE_SPRITES,RESCUE_SOUND_FILES}=await import('../src/game/art/javaRescue.generated');
+  const {createHash}=await import('node:crypto');
+  const {effectIconOpacity}=await import('../src/game/statusEffects');
+  for(const [name,width,height] of [['heart_absorbing_full',9,9],['heart_absorbing_half',9,9],['effect_background',24,24],...['absorption','regen','fire','speed','night','strength'].map(id=>['effect_'+id,18,18])] as [string,number,number][]){
+    const bytes=Buffer.from(RESCUE_SPRITES[name].split(',')[1],'base64');
+    check('original PNG dimensions '+name,bytes.readUInt32BE(16)===width && bytes.readUInt32BE(20)===height);
+  }
+  eq('totem recording matches pinned original bytes',createHash('sha256').update(Buffer.from(RESCUE_SOUND_FILES['item/totem/use_totem'],'base64')).digest('hex'),'9d3a53dd9c6098021e87707a7942502ff35bb529efaed87b602030c201372674');
+  for(const [name,expected] of [['heart_absorbing_full','b052942e6992f2d5554d092245004c29c7ed81473174cc48394c0f02c3b8632b'],['heart_absorbing_half','590f3fe3d3f69bffe1feed59c37ee41d40705c735f4fab70c69177bfc0fdc800']])eq('original absorption sprite byte hash '+name,createHash('sha256').update(Buffer.from(RESCUE_SPRITES[name].split(',')[1],'base64')).digest('hex'),expected);
+  eq('effect icons remain opaque above ten seconds',effectIconOpacity(40),1);
+  check('native last-five-second opacity pulse',Math.abs(effectIconOpacity(5)-.625)<1e-9);
+  check('effect opacity always remains bounded',[0,.05,.1,1,3,9.95,10].every(s=>effectIconOpacity(s)>=0 && effectIconOpacity(s)<=1));
 }
 
 // =================================================================== report

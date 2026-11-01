@@ -112,7 +112,7 @@ export const I = {
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
 
 /** 2.4: effect a potion applies when drunk ('none' = base awkward brew). */
-export type PotionEffectId = 'none' | 'heal' | 'fire' | 'speed' | 'night' | 'strength' | 'regen';
+export type PotionEffectId = 'none' | 'heal' | 'fire' | 'speed' | 'night' | 'strength' | 'regen' | 'absorption';
 
 export interface ItemDef {
   id: number;
@@ -229,7 +229,7 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.RAW_SALMON, name: 'Surowy łosoś', keys: ['surowy_losos', 'losos', 'raw_salmon', 'salmon'], kind: 'food', hunger: 2, saturation: 0.1, color: '#e08a6a' },
   { id: I.COOKED_SALMON, name: 'Pieczony łosoś', keys: ['pieczony_losos', 'cooked_salmon'], kind: 'food', hunger: 6, saturation: 0.8, color: '#e0703a' },
   { id: I.SPYGLASS, name: 'Lorneta', keys: ['lorneta', 'spyglass'], kind: 'tool', tool: 'spyglass', color: '#c8a43c' },
-  { id: I.TOTEM, name: 'Totem Ratowania', keys: ['totem', 'totem_ratowania', 'totem_ratownictwa'], kind: 'material', stack: 1, color: '#e8c85a' },
+  { id: I.TOTEM, name: 'Totem nieśmiertelności', keys: ['totem', 'totem_ratowania', 'totem_ratownictwa', 'totem_of_undying', 'totem_niesmiertelnosci'], kind: 'material', stack: 1, color: '#e8c85a' },
   // 2.4 „Godzina alchemika” – cukier, fiolki i napoje
   { id: I.SUGAR, name: 'Cukier', keys: ['cukier', 'sugar'], kind: 'material', color: '#f6f4ee' },
   { id: I.BOTTLE, name: 'Szklana fiolka', keys: ['fiolka', 'szklana_fiolka', 'bottle', 'glass_bottle'], kind: 'material', color: '#bfe4f2' },

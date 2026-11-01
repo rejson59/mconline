@@ -43,3 +43,12 @@ Textures: entity/chest/{normal,normal_left,normal_right}.png and
 block/{rail,rail_corner,powered_rail,detector_rail}.png.
 These are third-party Mojang/Microsoft assets, NOT MIT-licensed project code.
 The mirror and this notice do not grant a redistribution license.
+
+4.15 rescue assets (same third-party ownership, NOT MIT):
+Pinned source mirror commit: 90d256dfee7b6fd8014e1bc3b107e64a530c5f9b
+Compiler: scripts/compile-java-rescue.py
+Embedded data: src/game/art/javaRescue.generated.ts
+Textures: hud/heart/absorbing_{full,half}.png, hud/effect_background.png,
+          mob_effect/{absorption,regeneration,fire_resistance,speed,night_vision,strength}.png
+Audio event: item.totem.use -> sounds/item/totem/use_totem.ogg (35,952 bytes).
+No ownership or redistribution rights are granted by the project's MIT license.

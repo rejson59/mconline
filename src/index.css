@@ -449,24 +449,6 @@ body {
   animation: splash 0.6s ease-in-out infinite;
 }
 
-@keyframes hurt {
-  0% { opacity: 0.55; }
-  100% { opacity: 0; }
-}
-.hurt-flash {
-  animation: hurt 0.45s ease-out forwards;
-}
-
-/* Red edges while the player is close to death – a classic danger cue. */
-.low-health {
-  animation: lowhp 1.1s ease-in-out infinite;
-}
-
-@keyframes lowhp {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 0.6; }
-}
-
 input[type=range].mc-range {
   -webkit-appearance: none;
   appearance: none;
@@ -1053,8 +1035,8 @@ body, button, input, select, textarea, .mc-btn, .mc-input { font-family: 'Java B
 .java-tab[aria-pressed=true] { background: #eee; border-bottom-color: #eee; }
 .mc-close-btn { background: #777; border: 2px solid black; box-shadow: none; border-radius: 0; }
 @media not all and (pointer: coarse) { .mc-close-btn, .java-touch-only { display: none !important; } }
-.java-vitals [data-java-health] > *, .java-vitals [data-java-food] > * { flex: none; width: 9px !important; height: 9px !important; margin-right: -1px; filter: none !important; }
-.java-vitals [data-java-health] img, .java-vitals [data-java-food] img { width: 9px !important; height: 9px !important; filter: none !important; }
+.java-vitals [data-java-health] > *, .java-vitals [data-java-absorption] > *, .java-vitals [data-java-food] > * { flex: none; width: 9px !important; height: 9px !important; margin-right: -1px; filter: none !important; }
+.java-vitals [data-java-health] img, .java-vitals [data-java-absorption] img, .java-vitals [data-java-food] img { width: 9px !important; height: 9px !important; filter: none !important; }
 .java-vitals svg { width: 9px; height: 9px; }
 .java-vitals img { image-rendering: pixelated; }
 .java-count { position: absolute; right: -1px; bottom: -2px; color: white; font-size: 8px; line-height: 9px; text-shadow: 1px 1px #3f3f3f; }

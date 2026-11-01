@@ -1,3 +1,4 @@
+import { cleanStatus, isTimedEffect, maxAmplifier, effectClock, regenerationPulses, type StatusSnapshot } from './statusEffects';
 import { landingDamage } from './landing';
 import { advanceMining, miningIdentity } from './mining';
 import { upperHalf } from './buildingShapes';
@@ -161,6 +162,7 @@ export interface HUDState {
   hotbar: (Stack | null)[];
   selected: number;
   health: number;
+  absorption?: number;
   air: number;
   maxAir: number;
   mode: GameMode;
@@ -256,6 +258,7 @@ export interface SaveData {
   offhand?: Stack | null;
   time: number;
   health: number;
+  status?: StatusSnapshot;
   day: number;
   id?: string;
   name?: string;
@@ -299,9 +302,10 @@ const EFFECT_META: Record<Exclude<PotionEffectId, 'none'>, { icon: string; name:
   heal: { icon: '❤', name: 'Leczenie' },
   fire: { icon: '🔥', name: 'Ognioodporność' },
   speed: { icon: '🏃', name: 'Szybkość' },
-  night: { icon: '👁', name: 'Nocne widzenie' },
+  night: { icon: '👁', name: 'Noktowizja' },
   strength: { icon: '💪', name: 'Siła' },
   regen: { icon: '✚', name: 'Regeneracja' },
+  absorption: { icon: '♥', name: 'Absorpcja' },
 };
 
 /** Polskie nazwy mobów – używane w podpowiedzi pod celownikiem. */
@@ -841,10 +845,11 @@ export class Game {
   /** 2.4: statywy alchemiczne – PPM otwiera ekran warzenia napojów. */
   brewings = new Map<string, BrewingState>();
   brewingPos: { x: number; y: number; z: number } | null = null;
-  /** 2.4: aktywne efekty napojów (id → pozostałe ms). Krótkie – nie zapisują się. */
+  /** Timed effects: remaining tick-aligned milliseconds, persisted with amplifier. */
   private effects = new Map<PotionEffectId, number>();
-  /** 2.4: odliczanie leczenia z napoju regeneracji. */
-  private potionRegenAcc = 0;
+  private effectLevels = new Map<PotionEffectId, number>();
+  private effectsTickRemainder = 0;
+  absorption = 0;
   /** 2.4: jakie butelki gracz kiedykolwiek wypił (osiągnięcie „Mistrz eliksirów”). */
   potionsDrunk = new Set<number>();
   /** 2.3: aktywna wędka (spławik w locie / w wodzie). */
@@ -859,8 +864,6 @@ export class Game {
   isZooming() {
     return this.zooming;
   }
-  /** 2.3: sekundy regeneracji po uratowaniu przez totem. */
-  private totemHeal = 0;
   private campfireHurt = 0;
   private arrows: ArrowEntity[] = [];
   private arrowGeo!: THREE.BufferGeometry;
@@ -1222,6 +1225,7 @@ export class Game {
       this.time = opts.save.time;
       this.health = opts.save.health > 0 ? opts.save.health : 20;
       Object.assign(this, foodState(opts.save.hunger ?? 20, opts.save.saturation, opts.save.exhaustion));
+      this.restoreStatus(opts.save.status);
       this.day = opts.save.day || 1;
       this.inventory.offhand = cleanStacks([opts.save.offhand], 1)[0];
       opts.save.inv.forEach((s, i) => (this.inventory.slots[i] = s ? { ...s } : null));
@@ -1471,7 +1475,8 @@ export class Game {
     this.inventory.cursor = p.cursor ?? null;
     this.inventory.grid = p.grid?.slice() ?? new Array(9).fill(null);
     this.enchantItem = p.enchantItem ?? null;
-    if (Number.isFinite(p.health)) this.health = Math.max(1, Math.min(20, p.health));
+    if (Number.isFinite(p.health)) this.health = p.health > 0 ? Math.min(20, p.health) : 1;
+    this.restoreStatus(p.status);
     Object.assign(this, foodState(p.hunger, p.saturation, p.exhaustion));
     if (Number.isFinite(p.xp)) this.xp = new Xp(Math.max(0, p.xp));
     this.world.getChunk(Math.floor(p.x / CS), Math.floor(p.z / CS));
@@ -1527,6 +1532,7 @@ export class Game {
       health: this.health,
       hunger: this.hunger,
       saturation: this.saturation, exhaustion: this.exhaustion,
+      status: this.statusSnapshot(),
       xp: this.xp.total,
       cursor: this.inventory.cursor ? structuredClone(this.inventory.cursor) : null,
       grid: this.inventory.grid.map((st) => st ? structuredClone(st) : null),
@@ -3433,43 +3439,60 @@ export class Game {
     }
   }
 
-  /** 2.4: applies (or refreshes) a potion buff. Durations never stack. */
-  applyEffect(id: PotionEffectId, seconds: number) {
-    if (id === 'none') return;
-    const cur = this.effects.get(id) ?? 0;
-    this.effects.set(id, Math.max(cur, seconds * 1000));
+  /** Timed effects keep their amplifier and do not extend a stronger effect via a weaker one. */
+  applyEffect(id: PotionEffectId, seconds: number, amplifier = 0) {
+    if (!isTimedEffect(id) || !Number.isFinite(seconds) || seconds <= 0) return;
+    const ticks = Math.min(72000, Math.floor(seconds * 20));
+    if (ticks <= 0) return;
+    const level = Number.isFinite(amplifier) ? Math.max(0, Math.min(maxAmplifier(id), Math.floor(amplifier))) : 0;
+    const current = this.effects.get(id) ?? 0;
+    const oldLevel = this.effectLevels.get(id) ?? 0;
+    if (current > 0 && level < oldLevel) return;
+    if (current > 0 && level === oldLevel && current >= ticks * 50) return;
+    this.effects.set(id, level > oldLevel ? ticks * 50 : Math.max(current, ticks * 50));
+    this.effectLevels.set(id, level);
+    if (id === 'absorption') this.absorption = 4 * (level + 1);
+  }
+
+  private clearEffects() {
+    this.effects = new Map(); this.effectLevels = new Map();
+    this.effectsTickRemainder = 0; this.absorption = 0;
+  }
+
+  private statusSnapshot(): StatusSnapshot {
+    return cleanStatus({ effects: [...(this.effects ?? [])].map(([id, ms]) => ({ id, ticks: Math.ceil(ms / 50), amplifier: this.effectLevels?.get(id) ?? 0 })), absorption: this.absorption ?? 0 });
+  }
+
+  private restoreStatus(raw: unknown) {
+    const snapshot = cleanStatus(raw); this.clearEffects();
+    for (const effect of snapshot.effects) {
+      this.effects.set(effect.id, effect.ticks * 50); this.effectLevels.set(effect.id, effect.amplifier);
+    }
+    this.absorption = snapshot.absorption; // Never refill depleted golden hearts on reload.
   }
 
   effectLeft(id: PotionEffectId): number {
     return Math.max(0, this.effects.get(id) ?? 0) / 1000;
   }
 
-  hasEffect(id: PotionEffectId): boolean {
-    return this.effectLeft(id) > 0;
-  }
+  hasEffect(id: PotionEffectId): boolean { return this.effectLeft(id) > 0; }
 
-  /** Ticks buffs down; regeneration heals on its own rhythm.
-   *  The HUD refresh rides on the main 10 Hz emit, no extra calls needed. */
+  /** Native regeneration pulses are based on remaining duration, before decrement. */
   private updateEffects(dt: number) {
-    if (!this.effects.size) {
-      if (this.potionRegenAcc > 0) this.potionRegenAcc = 0;
-      return;
-    }
-    for (const [id, ms] of [...this.effects.entries()]) {
-      const next = ms - dt * 1000;
-      if (next <= 0) this.effects.delete(id);
-      else this.effects.set(id, next);
-    }
-    if (this.hasEffect('regen') && this.mode === 'survival') {
-      this.potionRegenAcc += dt;
-      if (this.potionRegenAcc >= 2) {
-        this.potionRegenAcc = 0;
-        if (this.health < 20 && this.health > 0) {
-          this.health = Math.min(20, this.health + 1);
-          Sfx.playEat();
-          this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.4, this.body.pos.z, B.WOOL_RED, 8, 0.8);
-        }
+    const clock = effectClock(this.effectsTickRemainder ?? 0, dt);
+    this.effectsTickRemainder = clock.remainder;
+    if (!clock.ticks) return;
+    for (const [id, ms] of this.effects) {
+      const before = Math.ceil(ms / 50);
+      if (id === 'regen' && this.mode === 'survival' && this.health > 0) {
+        const pulses = regenerationPulses(before, clock.ticks, this.effectLevels.get(id) ?? 0);
+        this.health = Math.min(20, this.health + pulses);
       }
+      const next = Math.max(0, before - clock.ticks);
+      if (next === 0) {
+        this.effects.delete(id); this.effectLevels.delete(id);
+        if (id === 'absorption') this.absorption = 0;
+      } else this.effects.set(id, next * 50);
     }
   }
 
@@ -4721,6 +4744,7 @@ export class Game {
         health: this.health,
         hunger: this.hunger,
         saturation: this.saturation, exhaustion: this.exhaustion,
+        status: this.statusSnapshot(),
         day: this.day,
         spawn: [this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z],
         furnaces: [...this.furnaces.values()],
@@ -6317,20 +6341,23 @@ export class Game {
     if (!force && !bypassArmor && usesArmor(kind)) this.wearArmor(amount);
     const dealt = force || bypassArmor ? armored : damageAfterEnchantments(armored, this.armor, kind);
     if (dealt > 0) {
-      if (!force && !bypassArmor && usesArmor(kind)) this.addExhaustion(0.1);
-      this.health -= dealt;
+      if (!force && !bypassArmor && usesArmor(kind) && dealt > (this.absorption ?? 0)) this.addExhaustion(0.1);
+      const absorbed = force ? 0 : Math.min(Math.max(0, this.absorption ?? 0), dealt);
+      this.absorption = Math.max(0, (this.absorption ?? 0) - absorbed);
+      this.health -= dealt - absorbed;
       this.hurtCount++;
       this.lastHurt = performance.now();
       this.shake = Math.max(this.shake, 0.25);
       Sfx.playHurt();
       this.buzz(35);
     }
-    // 2.3: Totem Ratowania kupuje drugie życie – raz na 5 sekund.
+    // A held totem can rescue each lethal ordinary hit; no invented cooldown.
     if (this.health <= 0 && !force && this.tryTotem()) {
       this.emitHud();
       return;
     }
     if (this.health <= 0) {
+      this.clearEffects();
       this.health = 0;
       const voidDeath = this.body.pos.y < 1;
       const deathPos = voidDeath ? this.spawnPoint : this.body.pos;
@@ -6358,44 +6385,31 @@ export class Game {
     this.emitHud();
   }
 
-  /**
-   * 2.3: jeśli gracz ma totem ratowania, zużywa go zamiast umrzeć.
-   * Zwraca true, gdy śmierć została odwołana.
-   */
+  /** MAIN_HAND then OFF_HAND only: a totem in the backpack is not held. */
   private tryTotem(): boolean {
-    if (this.mode !== 'survival' || this.totemHeal > 0) return false;
-    if (this.inventory.offhand?.id === I.TOTEM) {
-      if (--this.inventory.offhand.count <= 0) this.inventory.offhand = null;
-      this.updateHand();
-    } else {
-      if (this.inventory.countOf(I.TOTEM) <= 0) return false;
-      this.inventory.remove(I.TOTEM, 1);
+    if (this.mode !== 'survival') return false;
+    const main = this.inventory.slots[this.selected];
+    const hand = main?.id === I.TOTEM ? main : this.inventory.offhand;
+    if (!hand || hand.id !== I.TOTEM || !Number.isFinite(hand.count) || hand.count < 1) return false;
+    if (--hand.count <= 0) {
+      if (hand === main) this.inventory.slots[this.selected] = null;
+      else this.inventory.offhand = null;
     }
-    this.health = 6;
-    this.hunger = Math.min(20, this.hunger + 4);
-    this.totemHeal = 6;
-    this.lastHurt = performance.now() - 4000;
-    Sfx.playEnchant();
-    Sfx.playLevelUp();
+    this.health = 1;
+    this.clearEffects();
+    this.applyEffect('regen', 45, 1);
+    this.applyEffect('absorption', 5, 1);
+    this.applyEffect('fire', 40);
+    this.updateHand();
+    Sfx.playTotem();
     this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, B.GLOWSTONE, 26, 0.9);
-    this.message('Totem Ratowania rozpadł się i ocalił cię!');
+    this.message('Totem nieśmiertelności ocalił cię!');
     this.unlock('undying');
     return true;
   }
 
-  /** Regeneracja po uratowaniu przez totem. */
-  private updateTotem(dt: number) {
-    if (this.totemHeal <= 0) return;
-    this.totemHeal = Math.max(0, this.totemHeal - dt);
-    if (this.health >= 20) return;
-    this.regenAcc += dt;
-    if (this.regenAcc >= 0.4) {
-      this.regenAcc = 0;
-      this.health = Math.min(20, this.health + 1);
-    }
-  }
-
   respawn() {
+    this.clearEffects();
     this.pvpProtectedUntil = performance.now() + 3000;
     this.playerHistory = [];
     // Śmierć w Netherze odsyła do nadświatu (punkt odrodzenia jest zawsze tam).
@@ -6508,7 +6522,6 @@ export class Game {
       this.updateEffects(dt);
       this.updateFishing(dt);
       this.updateRedstone(dt);
-      this.updateTotem(dt);
       this.updateWeather(dt);
       this.checkUnderground();
       this.villageCheck -= dt;
@@ -7453,6 +7466,7 @@ export class Game {
       hotbar: this.inventory.slots.slice(0, 9).map((s) => (s ? { ...s } : null)),
       selected: this.selected,
       health: this.health,
+      absorption: this.absorption,
       air: this.air,
       maxAir: this.maxAir,
       mode: this.mode,
@@ -7510,7 +7524,7 @@ export class Game {
         .filter(([id]) => id !== 'none')
         .map(([id, ms]) => {
           const def = EFFECT_META[id as Exclude<PotionEffectId, 'none'>];
-          return { id, icon: def.icon, name: def.name, left: ms / 1000 };
+          return { id, icon: def.icon, name: def.name + ((this.effectLevels.get(id) ?? 0) === 1 ? ' II' : ''), left: ms / 1000 };
         }),
       waypoint: (() => {
         const w = this.waypoints.find((point) => point.id === this.activeWaypointId);

@@ -1,6 +1,15 @@
-# BlockCraft 4.14.0 🌍
+# BlockCraft 4.15.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.15.0 „Totem i złote serca”
+
+- **Totem wymaga trzymania:** główna ręka ma pierwszeństwo przed drugą; przedmiot w plecaku lub niewybranym slocie nie ratuje. Bez wymyślonego cooldownu — kolejny trzymany totem może uratować przed następnym śmiertelnym trafieniem. `/kill` i pustka nadal go omijają.
+- **Właściwy ratunek:** 1 HP, wyczyszczenie wcześniejszych efektów, Regeneracja II na 45 s, Absorpcja II na 5 s (8 HP, cztery złote serca), Ognioodporność na 40 s. Totem nie dodaje głodu ani nasycenia.
+- **Wygląd i dźwięk:** oryginalne złote serca, sześć ikon aktywnych efektów i ich tło oraz dźwięk totemu z Java 1.20.4, osadzone bez pobierania podczas gry. Zbroja przesuwa się nad dodatkowy rząd serc. Usunięte sztuczne czerwone winiety po trafieniu i przy niskim zdrowiu; przechylenie kamery nadal respektuje opcje.
+- **Efekty działają, nie tylko wyglądają:** złote serca pochłaniają obrażenia po pancerzu i zaklęciach. Regeneracja I/II ma rytm 50/25 ticków i nie wydaje dźwięku jedzenia. Śmierć i odrodzenie czyszczą aktywne efekty.
+- **Bez odnawiania osłony odświeżeniem:** lokalny zapis i profil przechowują czas, poziom oraz pozostałe złote HP. Poprawiona również rzeczywista ścieżka odczytu profilu dla czerwonego zdrowia poniżej 1 HP. Bez nowych ID bloków/przedmiotów, kolumn SQL i zmiany praw miasta.
+- **Zakres i testy:** [szczegóły wydania](docs/RESCUE-4.15.md). Nie jest to jeszcze pełna zgodność całego silnika, wszystkich mikstur i animacji z oryginalnym klientem Minecrafta.
 
 ## Wersja 4.14.0 „Obrażenia i przetrwanie”
 

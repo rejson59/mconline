@@ -1037,6 +1037,18 @@ section('2.18: HUD rysuje grafiki z paczki');
     check(`fractional health ${health} uses Java ceiling in real HUD`,vitals.split(`src="${fullSrc}"`).length-1===full && vitals.split(`src="${halfSrc}"`).length-1===half);
   }
 
+  for(const [absorption,full,half] of [[8,4,0],[7,3,1],[.01,0,1]]){
+    const gold=renderToStaticMarkup(<HUD hud={{...state,absorption,armorPoints:20}} icons={{}} />);
+    const row=gold.split('data-java-absorption')[1].split('data-java-food')[0];
+    check(`native golden heart sprite count at ${absorption} absorption`,row.split(`src="${guiSprite('heart_absorbing_full')}"`).length-1===full && row.split(`src="${guiSprite('heart_absorbing_half')}"`).length-1===half);
+    check('armor moves above the absorption row',/data-java-armor[^>]*top:1px/.test(gold));
+  }
+  check('no empty absorption row when the shield is depleted',!renderToStaticMarkup(<HUD hud={{...state,absorption:0}} icons={{}} />).includes('data-java-absorption'));
+  const rescue=renderToStaticMarkup(<HUD hud={{...state,health:1,hurtCount:2,absorption:8,effects:[{id:'absorption',name:'Absorpcja II',left:5,icon:'x'},{id:'regen',name:'Regeneracja II',left:45,icon:'x'},{id:'fire',name:'Ognioodporność',left:40,icon:'x'}]}} icons={{}} />);
+  check('rescued player gets native positive effect icons',rescue.includes('data-java-effects') && rescue.includes(guiSprite('effect_regen')!) && rescue.includes(guiSprite('effect_fire')!) && rescue.includes(guiSprite('effect_absorption')!));
+  check('effect icons use native frame and 18 px art',rescue.includes(guiSprite('effect_background')!) && rescue.includes('width="18" height="18"'));
+  check('positive effects appear in descending-duration order',rescue.indexOf('data-effect="regen"')<rescue.indexOf('data-effect="fire"') && rescue.indexOf('data-effect="fire"')<rescue.indexOf('data-effect="absorption"'));
+  check('rescue never covers the screen with invented low-health red vignettes',!rescue.includes('hurt-flash') && !rescue.includes('low-health'));
   const messages=Array.from({length:6},(_,i)=>({text:`chat-line-${i}`,t:Date.now()}));
   const customChat={...DEFAULT_SETTINGS,chatLines:2,chatOpacity:.4,chatBackground:.7,chatScale:.6,chatWidth:.5};
   const custom=renderToStaticMarkup(<HUD hud={{...state,messages}} icons={{}} chatSettings={customChat} />);
