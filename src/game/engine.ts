@@ -1,3 +1,4 @@
+import { advanceMining, miningIdentity } from './mining';
 import { upperHalf } from './buildingShapes';
 import { chestLidAngle } from './chestModel';
 import { railPlacement, railBase } from './rails';
@@ -79,8 +80,8 @@ import { spriteTexture } from './art/spriteTex';
 import { buildItemIcons } from './itemIcons';
 import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
-  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, canHarvest, mineSeconds, attackDamage, attackCooldown,
-  blockDrops, toolHelps, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
+  ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, canHarvest, miningDamage, miningDurabilityCost, attackDamage, attackCooldown,
+  blockDrops, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
 } from './items';
 import { type FurnaceState, emptyFurnace, furnaceKey, tickFurnace } from './furnace';
 import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
@@ -730,6 +731,7 @@ export class Game {
   // interaction
   target: ReturnType<World['raycast']> = null;
   breakProgress = 0;
+  breakTickRemainder = 0;
   breakKey = '';
   breakCooldown = 0;
   placeCooldown = 0;
@@ -2511,7 +2513,7 @@ export class Game {
       else if (e.button === 1) { e.preventDefault(); this.pickBlock(); }
     }) as EventListener);
     this.on(window, 'mouseup', ((e: MouseEvent) => {
-      if (e.button === 0) { this.mouseLeft = false; this.breakProgress = 0; }
+      if (e.button === 0) { this.mouseLeft = false; this.breakProgress = 0; this.breakKey = ''; this.breakTickRemainder = 0; }
       if (e.button === 2) this.mouseRight = false;
     }) as EventListener);
     this.on(canvas, 'contextmenu', (e) => e.preventDefault());
@@ -2584,14 +2586,14 @@ export class Game {
     this.keys.clear();
     this.mouseLeft = this.mouseRight = false;
     this.breakProgress = 0;
-    this.breakKey = '';
+    this.breakKey = ''; this.breakTickRemainder = 0;
     this.bowDraw = -1;
     this.zooming = false;
     this.touchAim = this.aimDir = null;
   }
 
   private reconcileMouseButtons(buttons: number) {
-    if (!(buttons & 1)) { this.mouseLeft = false; this.breakProgress = 0; this.breakKey = ''; }
+    if (!(buttons & 1)) { this.mouseLeft = false; this.breakProgress = 0; this.breakKey = ''; this.breakTickRemainder = 0; }
     if (!(buttons & 2)) this.mouseRight = false;
   }
 
@@ -2806,6 +2808,7 @@ export class Game {
   setUI(s: UIState) {
     const prev = this.ui;
     this.ui = s;
+    this.breakProgress = 0; this.breakKey = ''; this.breakTickRemainder = 0;
     try {
       if (s === 'playing') {
         this.lockPointer();
@@ -3204,7 +3207,7 @@ export class Game {
     this.bowDraw = -1;
     this.zooming = false;
     this.breakProgress = 0;
-    this.breakKey = '';
+    this.breakKey = ''; this.breakTickRemainder = 0;
     this.updateHand();
     this.emitHud();
     this.saveProfileNow(false);
@@ -3646,21 +3649,16 @@ export class Game {
     this.emitHud();
   }
 
-  private wearTool() {
+  private wearTool(amount = 1) {
     if (this.mode !== 'survival') return;
     const s = this.selectedStack();
     if (!s) return;
     const max = ITEMS[s.id]?.durability;
     if (!max) return;
-    // Niezniszczalność: część użyć nie kosztuje wytrzymałości
     const lvl = enchLevel(s, 'unbreaking');
-    if (lvl > 0 && Math.random() > wearChance(lvl)) {
-      if (s.dur === undefined) s.dur = max;
-      this.emitHud();
-      return;
-    }
     if (s.dur === undefined) s.dur = max;
-    s.dur--;
+    // Roll Unbreaking separately for each durability point, not once for a sword's two.
+    for (let i = 0; i < amount; i++) if (lvl <= 0 || Math.random() <= wearChance(lvl)) s.dur--;
     if (s.dur <= 0) {
       this.setSelectedStack(null);
       Sfx.playBreak('wood');
@@ -4172,7 +4170,7 @@ export class Game {
     this.removeBobber();
     this.tradeMob = null;
     this.breakProgress = 0;
-    this.breakKey = '';
+    this.breakKey = ''; this.breakTickRemainder = 0;
     this.loadingProgress = 0;
     this.unloadTimer = 0;
   }
@@ -4687,6 +4685,7 @@ export class Game {
   setMode(m: GameMode) {
     if (this.net?.city && m !== 'creative') { this.message('Miasto budowniczych ma stały tryb Creative.'); return; }
     this.mode = m;
+    this.breakProgress = 0; this.breakKey = ''; this.breakTickRemainder = 0;
     if (m === 'survival') this.flying = false;
     this.health = 20;
     this.message(m === 'creative' ? 'Tryb gry: Kreatywny' : 'Tryb gry: Przetrwanie');
@@ -5143,13 +5142,7 @@ export class Game {
       // wejdzie w celownik.
       return;
     }
-    if (this.target && this.target.id === B.TNT) {
-      this.igniteTNT(this.target.x, this.target.y, this.target.z, 4, 'player');
-      this.unlock('boom');
-      this.mouseLeft = false; // podpalenie tylko na kliknięcie – bez trzymania
-      return;
-    }
-    if (this.mode === 'creative' && this.target) {
+    if (this.mode === 'creative' && this.target && ITEMS[this.selectedStack()?.id ?? 0]?.tool !== 'sword') {
       this.breakBlock(this.target.x, this.target.y, this.target.z);
       this.breakCooldown = 0.25;
     }
@@ -6172,9 +6165,9 @@ export class Game {
   }
 
   breakBlock(x: number, y: number, z: number, silent = false) {
-    if (!this.canModify(x, z)) return;
+    if (y < 0 || y >= CH || !this.canModify(x, z)) return false;
     const id = this.world.getBlock(x, y, z);
-    if (id === B.AIR || BLOCKS[id].hardness < 0) return;
+    if (id === B.AIR || !BLOCKS[id] || (BLOCKS[id].hardness < 0 && this.mode !== 'creative') || (this.world.city && y === 0)) return false;
     const def = BLOCKS[id];
     // Derived flow, not a newly-created source, fills an opened cavity.
     let fill = B.AIR as number;
@@ -6241,6 +6234,7 @@ export class Game {
     const above = this.world.getBlock(x, y + 1, z);
     if (RENDER[above] === 1 || RENDER[above] === 6 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
     this.fallGravity(x, y + 1, z);
+    return true;
   }
 
   igniteTNT(x: number, y: number, z: number, fuse: number, owner: Mob | 'player' | null = null) {
@@ -6893,6 +6887,7 @@ export class Game {
   }
 
   private updateInteraction(dt: number) {
+    const miningDelayed = this.breakCooldown > 1e-9;
     this.breakCooldown -= dt;
     this.placeCooldown -= dt;
     this.attackCooldown -= dt;
@@ -6935,7 +6930,7 @@ export class Game {
       }
     } else this.selection.visible = false;
 
-    if (this.ui !== 'playing') { this.crackMesh.visible = false; return; }
+    if (this.ui !== 'playing') { this.breakProgress = 0; this.breakKey = ''; this.breakTickRemainder = 0; this.crackMesh.visible = false; return; }
 
     if (this.mouseLeft) {
       // 2.5: trzymany LPM (albo palec w trybie kopania) najpierw sprawdza moba
@@ -6946,31 +6941,34 @@ export class Game {
       const blockDist = t ? t.dist : Infinity;
       const player = this.findPlayerTarget(3.5);
       if (player && (!mob || player.dist < dist)) {
-        this.breakProgress = 0; this.breakKey = '';
+        this.breakProgress = 0; this.breakKey = ''; this.breakTickRemainder = 0;
         if (this.attackCooldown <= 0) this.attackPlayer(player.id);
       } else if (mob && dist < blockDist) {
         this.breakProgress = 0;
-        this.breakKey = '';
+        this.breakKey = ''; this.breakTickRemainder = 0;
         if (this.attackCooldown <= 0) this.tryAttack();
       } else if (t) {
-        const key = `${t.x},${t.y},${t.z}`;
+        const held = this.selectedStack();
+        const key = miningIdentity(t.x,t.y,t.z,t.id,held);
+        if (!this.canModify(t.x,t.z)) { this.breakProgress = 0; this.breakKey = ''; this.breakTickRemainder = 0; this.crackMesh.visible = false; return; }
         if (this.mode === 'creative') {
-          if (this.breakCooldown <= 0) { this.breakBlock(t.x, t.y, t.z); this.breakCooldown = 0.25; this.swingT = 0; }
-        } else {
+          if (this.breakCooldown <= 0 && ITEMS[held?.id ?? 0]?.tool !== 'sword') { this.breakBlock(t.x, t.y, t.z); this.breakCooldown = 0.25; this.swingT = 0; }
+        } else if (!miningDelayed) {
           if (key !== this.breakKey) {
             this.breakKey = key;
-            this.breakProgress = 0;
+            this.breakProgress = 0; this.breakTickRemainder = 0;
             const hint = pickHint(t.id, this.selectedStack()?.id ?? 0);
             if (hint && !canHarvest(t.id, this.selectedStack()?.id ?? 0)) this.message(hint);
           }
           const def = BLOCKS[t.id];
-          const held = this.selectedStack();
-          const time = mineSeconds(t.id, held?.id ?? 0, enchLevel(held, 'efficiency'));
-          if (def.hardness >= 0 && Number.isFinite(time)) {
-            let mult = 1;
-            if (isWater(this.blockAt(this.body.pos, this.eyeHeight))) mult *= 0.25;
-            if (!this.body.onGround && !this.flying) mult *= 0.4;
-            this.breakProgress += (dt / time) * mult;
+          const damage = miningDamage(t.id, held?.id ?? 0, enchLevel(held, 'efficiency'), {
+            underwater: isWater(this.blockAt(this.body.pos, this.eyeHeight)),
+            onGround: this.body.onGround,
+            aquaAffinity: enchLevel(this.armor[0], 'aquaaffinity') > 0,
+          });
+          if (damage > 0) {
+            const next = advanceMining(this.breakProgress, this.breakTickRemainder ?? 0, dt, damage);
+            this.breakProgress = next.progress; this.breakTickRemainder = next.remainder;
             this.digSoundTimer -= dt;
             if (this.swingT >= 1) this.swingT = 0;
             if (this.digSoundTimer <= 0) {
@@ -6980,22 +6978,24 @@ export class Game {
             }
             if (this.breakProgress >= 1) {
               const broken = t.id;
-              this.breakBlock(t.x, t.y, t.z);
-              if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && toolHelps(broken, this.selectedStack()?.id ?? 0)) this.wearTool();
-              else if (BLOCKS[broken] && BLOCKS[broken].hardness > 0 && ITEMS[this.selectedStack()?.id ?? 0]?.tool) this.wearTool();
-              this.addExhaustion(0.005);
+              if (this.breakBlock(t.x, t.y, t.z)) {
+                const wear = miningDurabilityCost(broken, held?.id ?? 0);
+                if (wear) this.wearTool(wear);
+                this.addExhaustion(0.005);
+                if (damage < 1) this.breakCooldown = .25;
+              }
               this.breakProgress = 0;
-              this.breakKey = '';
+              this.breakKey = ''; this.breakTickRemainder = 0;
             }
           }
         }
       } else {
         this.breakProgress = 0;
-        this.breakKey = '';
+        this.breakKey = ''; this.breakTickRemainder = 0;
       }
     } else {
       this.breakProgress = 0;
-      this.breakKey = '';
+      this.breakKey = ''; this.breakTickRemainder = 0;
     }
     if (this.breakProgress > 0 && t) {
       this.crackMesh.visible = true;

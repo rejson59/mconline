@@ -1,3 +1,4 @@
+import { destroyProgress, efficiencyBonus, MINING_TICK, type MiningEnvironment } from './mining';
 import { railBase } from './rails';
 import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase, buildingItem, isSlabDouble } from './blocks';
 import type { Stack } from './inventory';
@@ -362,27 +363,35 @@ const TIER_SPEED = [0, 2, 4, 6, 8];
 
 const PICK_BLOCKS = new Set<number>([
   B.STONE, B.COBBLE, B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.BRICK, B.FURNACE,
-  B.FURNACE_ON, B.OBSIDIAN, B.STONE_BRICKS, B.SANDSTONE, B.MOSSY, B.ICE, B.GLOWSTONE, B.BEDROCK,
+  B.RAIL, B.POWERED_RAIL, B.DETECTOR_RAIL,
+  B.FURNACE_ON, B.OBSIDIAN, B.STONE_BRICKS, B.SANDSTONE, B.MOSSY, B.ICE, B.BEDROCK,
   B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK, B.LAPIS_ORE, B.LAPIS_BLOCK, B.ENCHANT,
   B.EMERALD_ORE, B.EMERALD_BLOCK, B.LANTERN, B.BELL,
-  B.REDSTONE_ORE, B.REDSTONE_BLOCK, B.REDSTONE_LAMP, B.REDSTONE_LAMP_ON,
+  B.REDSTONE_ORE, B.REDSTONE_BLOCK,
   B.NETHERRACK, B.NETHER_BRICKS, B.QUARTZ_ORE, B.QUARTZ_BLOCK, B.QUARTZ_PILLAR,
   B.MAGMA, B.END_STONE, B.END_BRICKS, B.PURPUR_BLOCK, B.PURPUR_PILLAR,
-  B.BASALT, B.BLACKSTONE, B.CRYING_OBSIDIAN, B.ANVIL, B.BREWING, B.TARGET,
+  B.BASALT, B.BLACKSTONE, B.CRYING_OBSIDIAN, B.ANVIL, B.BREWING,
   B.CONCRETE_WHITE, B.CONCRETE_RED, B.CONCRETE_BLUE, B.CONCRETE_GREEN, B.CONCRETE_YELLOW, B.CONCRETE_BLACK,
-  B.TERRACOTTA, B.OBSERVER, B.DISPENSER, B.PISTON, B.STICKY_PISTON, B.NOTE_BLOCK,
+  B.TERRACOTTA, B.OBSERVER, B.DISPENSER, B.PISTON, B.STICKY_PISTON,
   B.COBBLE_STAIRS_N, B.BRICK_STAIRS_N, B.STONE_BRICK_STAIRS_N, B.SANDSTONE_STAIRS_N, B.NETHER_BRICK_STAIRS_N, B.QUARTZ_STAIRS_N,
   B.STONE_SLAB, B.COBBLE_SLAB, B.BRICK_SLAB, B.SANDSTONE_SLAB, B.NETHER_BRICK_SLAB, B.QUARTZ_SLAB,
 ]);
-const materialBlock = (id: number) => slabBase(stairsBase(id));
+const materialBlock = (id: number) => slabBase(stairsBase(railBase(id)));
 const AXE_BLOCKS = new Set<number>([
   B.OAK_STAIRS_N, B.OAK_SLAB,
-  B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.BED, B.CHEST, B.LOOT_CHEST,
-  B.HAY, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG,
+  B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.CHEST, B.LOOT_CHEST,
+  B.NOTE_BLOCK, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG,
 ]);
 const SHOVEL_BLOCKS = new Set<number>([
-  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.PATH, B.SOUL_SAND, B.SOUL_SOIL, B.MUD,
+  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.FARMLAND_WET, B.PATH, B.SOUL_SAND, B.SOUL_SOIL, B.MUD,
 ]);
+const LEAF_BLOCKS = new Set<number>([B.LEAVES, B.BIRCH_LEAVES, B.ACACIA_LEAVES, B.JUNGLE_LEAVES]);
+const HOE_BLOCKS = new Set<number>([...LEAF_BLOCKS, B.HAY, B.TARGET, B.SHROOMLIGHT]);
+const SWORD_BLOCKS = new Set<number>([...LEAF_BLOCKS,B.SAPLING,B.BIRCH_SAPLING,B.FLOWER_RED,B.FLOWER_YELLOW,B.TALLGRASS,B.SUGARCANE,B.PUMPKIN,B.LILY_PAD,B.CROP0,B.CROP1,B.CROP2,B.CROP3]);
+const WOOL_BLOCKS = new Set<number>([B.WOOL_WHITE,B.WOOL_RED,B.WOOL_BLUE,B.WOOL_GREEN,B.WOOL_YELLOW,B.WOOL_BLACK,
+  B.WOOL_ORANGE,B.WOOL_MAGENTA,B.WOOL_LIGHT_BLUE,B.WOOL_LIME,B.WOOL_PINK,B.WOOL_GRAY,B.WOOL_LIGHT_GRAY,B.WOOL_CYAN,B.WOOL_PURPLE,B.WOOL_BROWN]);
+// Being faster with a pick does NOT imply requiring one for drops.
+const HAND_HARVESTABLE_PICK = new Set<number>([B.ICE, B.PISTON, B.STICKY_PISTON, B.RAIL, B.POWERED_RAIL, B.DETECTOR_RAIL]);
 const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE]);
 
 /** Experience orbs dropped when an ore block is mined. 0 = no experience. */
@@ -415,7 +424,7 @@ export function pickTier(toolId: number): number {
   return tool?.tool === 'pick' ? tool.tier ?? 1 : 0;
 }
 
-/** 0 = any tool. 1 wood, 2 stone, 3 iron, 4 diamond. */
+/** Required pick tier: 0 = no pick requirement. 1 wood, 2 stone, 3 iron, 4 diamond. */
 export function requiredPickTier(blockId: number): number {
   if (blockId === B.OBSIDIAN || blockId === B.CRYING_OBSIDIAN) return 4;
   // 2.21: wanilia – diament i szmaragd wymagają żelaza, złoto też,
@@ -423,20 +432,21 @@ export function requiredPickTier(blockId: number): number {
   if (blockId === B.DIAMOND_ORE || blockId === B.EMERALD_ORE) return 3;
   if (blockId === B.IRON_ORE) return 2;
   if (blockId === B.GOLD_ORE) return 3;
-  if (blockId === B.LAPIS_ORE) return 2;
+  if (blockId === B.LAPIS_ORE || blockId === B.LAPIS_BLOCK) return 2;
   if (blockId === B.REDSTONE_ORE) return 3;
   if (blockId === B.QUARTZ_ORE) return 1;
-  if (blockId === B.EMERALD_BLOCK) return 2;
+  if (blockId === B.EMERALD_BLOCK) return 3;
   if (blockId === B.GOLD_BLOCK || blockId === B.DIAMOND_BLOCK) return 3;
   if (blockId === B.IRON_BLOCK) return 2;
-  if (blockId === B.ANVIL) return 2;
+  if (blockId === B.ANVIL) return 1;
   if (blockId === B.NETHER_BRICKS || blockId === B.BLACKSTONE || blockId === B.BASALT) return 1;
-  if (PICK_BLOCKS.has(materialBlock(blockId))) return 1;
+  if (PICK_BLOCKS.has(materialBlock(blockId)) && !HAND_HARVESTABLE_PICK.has(materialBlock(blockId))) return 1;
   return 0;
 }
 
 /** 2.21: czy trzymane narzędzie w ogóle pozwala wydobyć blok (drop). */
 export function canHarvest(blockId: number, toolId: number): boolean {
+  if (blockId === B.SNOW) return ITEMS[toolId]?.tool === 'shovel';
   const need = requiredPickTier(blockId);
   return need === 0 || pickTier(toolId) >= need;
 }
@@ -451,55 +461,42 @@ export function pickHint(blockId: number, toolId: number): string | null {
   return null;
 }
 
-/** Seconds of holding LMB to break this block with the given tool (0 = hand).
- *  `eff` is the Efficiency level of the held item (update 1.5). */
-export function mineSeconds(blockId: number, toolId: number, eff = 0): number {
-  const def = BLOCKS[blockId];
-  if (!def || def.hardness < 0) return 1e9;
-  if (def.hardness === 0) return 0.05;
+/** Native tool-tag speed, independent of whether this tool can harvest the drop. */
+export function toolMiningSpeed(blockId: number, toolId: number): number {
   const tool = ITEMS[toolId];
-  if (tool?.tool === 'shears' && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.TALLGRASS)) return 0.12;
-  // 2.21: waniliowa formuła – 1,5 × twardość z właściwym narzędziem,
-  // 5 × twardość gołą ręką lub złym narzędziem. Brak wymaganego poziomu
-  // kilofa nie blokuje kopania (jak w grze) – tylko spowalnia i nie daje dropu.
-  const need = requiredPickTier(blockId);
-  const tier = pickTier(toolId);
-  const woodish = (id: number) =>
-    AXE_BLOCKS.has(materialBlock(id)) || isDoor(id) || isLadder(id) || isTrap(id) ||
-    id === B.FENCE || isChestBlock(id) || id === B.CAMPFIRE;
-  let correct = false;
-  let speed = 1;
-  if (PICK_BLOCKS.has(materialBlock(blockId))) {
-    correct = tier > 0 && tier >= Math.min(need, 1);
-    if (tier > 0) speed = TIER_SPEED[tier];
-  } else if (woodish(blockId)) {
-    correct = tool?.tool === 'axe';
-    if (correct) speed = TIER_SPEED[tool?.tier ?? 1];
-  } else if (SHOVEL_BLOCKS.has(blockId)) {
-    correct = tool?.tool === 'shovel';
-    if (correct) speed = TIER_SPEED[tool?.tier ?? 1];
-  } else if (tool?.tool === 'sword' && (RENDER[blockId] === 1 || blockId === B.LEAVES || blockId === B.BIRCH_LEAVES)) {
-    // miecz tnie rośliny i liście szybciej – jak w grze
-    correct = true;
-    speed = 2.5;
-  }
-  if (need > 0 && tier < need) correct = false;
-  if (eff > 0 && correct) speed *= 1 + eff * 0.35 + eff * eff * 0.12;
-  let t = (def.hardness * (correct ? 1.5 : 5)) / speed;
-  // Obsydian: 9,4 s diamentowym kilofem (twardość 50 w wanilii).
-  if ((blockId === B.OBSIDIAN || blockId === B.CRYING_OBSIDIAN) && tier >= 4) t = 9.4;
-  return t;
+  const material = materialBlock(blockId);
+  if (tool?.tool === 'shears') return LEAF_BLOCKS.has(blockId) ? 15 : WOOL_BLOCKS.has(blockId) ? 5 : 1;
+  if (tool?.tool === 'sword') return SWORD_BLOCKS.has(blockId) ? 1.5 : 1;
+  const matches = tool?.tool === 'pick' ? PICK_BLOCKS.has(material)
+    : tool?.tool === 'axe' ? AXE_BLOCKS.has(material) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || isChestBlock(blockId)
+    : tool?.tool === 'shovel' ? SHOVEL_BLOCKS.has(blockId)
+    : tool?.tool === 'hoe' ? HOE_BLOCKS.has(blockId) : false;
+  return matches ? TIER_SPEED[tool?.tier ?? 1] ?? 1 : 1;
 }
-
+export function miningDamage(blockId: number, toolId: number, eff = 0, environment: MiningEnvironment = {}): number {
+  const def = BLOCKS[blockId];
+  if (!def) return 0;
+  let speed = toolMiningSpeed(blockId, toolId);
+  if (speed > 1) speed += efficiencyBonus(eff);
+  return destroyProgress(def.hardness, speed, canHarvest(blockId, toolId), environment);
+}
+/** Tick-rounded time on the ground unless an environment is supplied. */
+export function mineSeconds(blockId: number, toolId: number, eff = 0, environment: MiningEnvironment = {}): number {
+  const damage = miningDamage(blockId, toolId, eff, environment);
+  return damage > 0 ? Math.max(1, Math.ceil(1 / damage - 1e-10)) * MINING_TICK : Infinity;
+}
 export function toolHelps(blockId: number, toolId: number): boolean {
-  const tool = ITEMS[toolId];
-  if (!tool?.tool) return false;
-  if (tool.tool === 'pick') return PICK_BLOCKS.has(materialBlock(blockId));
-  if (tool.tool === 'axe') return AXE_BLOCKS.has(materialBlock(blockId)) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || blockId === B.FENCE || isChestBlock(blockId) || blockId === B.CAMPFIRE;
-  if (tool.tool === 'shovel') return SHOVEL_BLOCKS.has(blockId);
-  if (tool.tool === 'sword') return RENDER[blockId] === 1 || blockId === B.LEAVES || blockId === B.BIRCH_LEAVES;
-  if (tool.tool === 'shears') return blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.TALLGRASS;
-  return tool.tool === 'hoe' && (blockId === B.DIRT || blockId === B.GRASS);
+  return toolMiningSpeed(blockId,toolId) > 1 || (ITEMS[toolId]?.tool === 'shears' && blockId === B.TALLGRASS);
+}
+/** Item mineBlock wear: swords cost two, mining tools one; unrelated items none. */
+export function miningDurabilityCost(blockId: number, toolId: number): number {
+  if (!BLOCKS[blockId] || BLOCKS[blockId].hardness < 0) return 0;
+  const kind = ITEMS[toolId]?.tool;
+  // Shears wear on all breakable blocks, including zero-hardness plants.
+  if (kind === 'shears') return 1;
+  if (BLOCKS[blockId].hardness === 0) return 0;
+  if (kind === 'sword') return 2;
+  return kind === 'pick' || kind === 'axe' || kind === 'shovel' || kind === 'hoe' ? 1 : 0;
 }
 
 /** `sharp` is the Sharpness level of the held weapon (update 1.5). */
@@ -561,7 +558,7 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   if (blockId === B.EMERALD_ORE) return tier >= 3 ? [{ id: I.EMERALD, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
   if (blockId === B.LAPIS_ORE) return tier >= 2 ? [{ id: I.LAPIS, count: 4 + Math.floor(Math.random() * 4) + (fortune ? Math.floor(Math.random() * (fortune + 1)) * 2 : 0) }] : [];
   if (blockId === B.REDSTONE_ORE) return tier >= 2 ? [{ id: I.REDSTONE, count: 4 + Math.floor(Math.random() * 2) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
-  if (blockId === B.QUARTZ_ORE) return tier >= 2 ? [{ id: I.QUARTZ, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
+  if (blockId === B.QUARTZ_ORE) return tier >= 1 ? [{ id: I.QUARTZ, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
   if (blockId === B.GLOWSTONE) return [{ id: I.GLOWSTONE_DUST, count: 2 + Math.floor(Math.random() * 3) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }];
   if (blockId === B.SLIME_BLOCK) return [{ id: I.SLIME_BALL, count: 1 }];
   if (blockId === B.HONEY_BLOCK) return [{ id: B.HONEY_BLOCK, count: 1 }];

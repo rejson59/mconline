@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.12.0';
-export const GAME_RELEASE_NAME = 'Miasto budowniczych';
+export const GAME_VERSION = '4.13.0';
+export const GAME_RELEASE_NAME = 'Kopanie i narzędzia';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.13: kopanie bliżej Java', text: 'Postęp 20 razy na sekundę, właściwe narzędzia i dodawana premia Wydajności. Zmiana narzędzia lub celu rozpoczyna kopanie od nowa. Zanurzenie i brak podparcia spowalniają pracę po pięć razy; Wydajność pod wodą na hełmie usuwa karę za zanurzenie.' },
+  { title: '4.13: TNT i Creative', text: 'LPM wydobywa TNT zamiast je podpalać. Miecz w Creative nie niszczy bloków; bedrock można usunąć poza fundamentem miasta. Poprawione wymagania kilofów i zużycie narzędzi bez kosztów za odmowę dostępu do działki.' },
   { title: '4.12: Miasto budowniczych', text: 'Osobny publiczny świat Creative, działki 32×32 i chronione ulice. Wpisz /dzialka zajmij na trawiastym kwadracie. Survival i jego ekwipunek pozostają osobno.' },
   { title: '4.12: więcej prawdziwych opcji', text: 'Osobny ekran czatu: widoczność powiadomień, tekst, tło, skala, szerokość i wiersze. Zasięg istot i limity FPS do 240 — także z ręcznym wyborem w trybie Auto.' },
   { title: '4.11: narożniki i odwrócone schody', text: 'Siedem materiałów schodów, oba położenia i automatyczne narożniki wewnętrzne oraz zewnętrzne. Wygląd, chodzenie, celowanie i obrys korzystają z tego samego kształtu.' },

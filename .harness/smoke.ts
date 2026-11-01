@@ -3194,8 +3194,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.12.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Miasto budowniczych', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.13.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Kopanie i narzędzia', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -5836,8 +5836,8 @@ section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
   check('kamień gołą ręką nie daje dropu', !canHarvest(B.STONE, 0) && blockDrops(B.STONE, 0).length === 0);
   check('drewniany kilof wydobywa kamień', canHarvest(B.STONE, I.WOOD_PICK) && blockDrops(B.STONE, I.WOOD_PICK)[0]?.id === B.COBBLE);
   check('złoto kamiennym kilofem nie daje dropu', blockDrops(B.GOLD_ORE, I.STONE_PICK).length === 0);
-  eq('kamień drewnianym kilofem: 1,5 × twardość / 2', Math.round(mineSeconds(B.STONE, I.WOOD_PICK) * 100) / 100, 1.13);
-  check('gołą ręką kopie się 5 × twardość', mineSeconds(B.DIRT, 0) > mineSeconds(B.DIRT, I.WOOD_SHOVEL));
+  eq('stone with wooden pick rounds 22.5 ticks up to 23', Math.round(mineSeconds(B.STONE, I.WOOD_PICK)*20), 23);
+  check('proper shovel is faster than the hand on dirt', mineSeconds(B.DIRT, 0) > mineSeconds(B.DIRT, I.WOOD_SHOVEL));
   check('obsydian diamentowym kilofem ~9,4 s', Math.abs(mineSeconds(B.OBSIDIAN, I.DIAMOND_PICK) - 9.4) < 0.1);
 
   // --- jedzenie i dropy 1:1
@@ -7662,7 +7662,7 @@ section('4.3.1: floor safety, cancelled input and atomic chunk rebuilding');
   clickedWorld.setBlock(5, fy, 7, B.PLANKS);
   clickedWorld.setBlock(5, fy + 1, 5, B.STONE);
   const destroyed: number[][] = [];
-  const click = Object.assign(Object.create(Game.prototype), { world: clickedWorld, mode: 'creative',
+  const click = Object.assign(Object.create(Game.prototype), { world: clickedWorld, mode: 'creative', selectedStack: () => null,
     eyePos: () => new THREE.Vector3(5.5, fy + 1.62, 7.5), lookDir: () => new THREE.Vector3(0, 0, -1),
     target: { x: 5, y: fy, z: 7, id: B.PLANKS, dist: 1.62 },
     findMobTarget: () => ({ mob: null }), breakBlock: (...p: number[]) => destroyed.push(p),
@@ -9202,6 +9202,125 @@ section('4.12: protected Creative city, independent worlds, negative parcel edge
   snapshotSize=300001;let oversized=false;
   try { await paged.loadBlocks(); } catch(e) {oversized=String(e).includes('300 000');}
   check('oversized city snapshot fails explicitly instead of hiding buildings',oversized);
+
+}
+
+section('4.13: Java mining ticks, effective tools, Efficiency and underwater work');
+{
+  const { toolMiningSpeed, miningDamage, miningDurabilityCost } = await import('../src/game/items');
+  const { destroyProgress, efficiencyBonus, advanceMining, miningIdentity } = await import('../src/game/mining');
+  // Independently calculated hardness/speed/harvest fixtures, in native 20 Hz ticks.
+  const fixtures:[number,number,number,number][]=[
+    [B.STONE,0,0,150],[B.STONE,I.WOOD_PICK,0,23],[B.STONE,I.STONE_PICK,0,12],[B.STONE,I.IRON_PICK,0,8],[B.STONE,I.DIAMOND_PICK,0,6],
+    [B.DIRT,0,0,15],[B.DIRT,I.WOOD_SHOVEL,0,8],[B.DIRT,I.DIAMOND_SHOVEL,0,2],
+    [B.LOG,0,0,60],[B.LOG,I.WOOD_AXE,0,30],[B.LOG,I.DIAMOND_AXE,0,8],
+    [B.OBSIDIAN,I.DIAMOND_PICK,0,188],[B.OBSIDIAN,I.DIAMOND_PICK,5,45],
+    [B.DIAMOND_ORE,I.WOOD_PICK,0,150],[B.DIAMOND_ORE,I.WOOD_PICK,5,11],
+    [B.LEAVES,0,0,6],[B.LEAVES,I.SHEARS,0,1],[B.LEAVES,I.WOOD_HOE,0,3],
+    [B.WOOL_WHITE,0,0,24],[B.WOOL_WHITE,I.SHEARS,0,5],[B.HAY,I.IRON_HOE,0,3],
+    [B.TNT,0,0,1],[B.NETHERRACK,I.DIAMOND_PICK,5,1],
+  ];
+  for(const [block,tool,eff,ticks] of fixtures)eq(`native mining duration block=${block} tool=${tool} efficiency=${eff}`,Math.round(mineSeconds(block,tool,eff)*20),ticks);
+  eq('bare hand harvestable wood uses divisor 30, not 100',destroyProgress(2,1,true),1/60);
+  check('insufficient mining tool uses divisor 100 but retains its speed',Math.abs(destroyProgress(3,2,false)-2/300)<1e-12);
+  eq('Efficiency V adds exactly 26 speed',efficiencyBonus(5),26);
+  eq('Efficiency does not accelerate the wrong tool',miningDamage(B.DIRT,I.DIAMOND_PICK,5),miningDamage(B.DIRT,I.DIAMOND_PICK));
+  check('Efficiency also speeds insufficient but effective wooden picks',miningDamage(B.DIAMOND_ORE,I.WOOD_PICK,5)>miningDamage(B.DIAMOND_ORE,I.WOOD_PICK));
+  check('Efficiency does not grant harvest rights',!canHarvest(B.DIAMOND_ORE,I.WOOD_PICK) && !blockDrops(B.DIAMOND_ORE,I.WOOD_PICK,{fortune:3,silk:true}).length);
+  eq('quartz can be recovered with a wooden pick',blockDrops(B.QUARTZ_ORE,I.WOOD_PICK)[0]?.id,I.QUARTZ);
+  eq('emerald block requires iron, matching 1.20.4 needs_iron_tool',requiredPickTier(B.EMERALD_BLOCK),3);
+  eq('lapis block requires stone, matching 1.20.4 needs_stone_tool',requiredPickTier(B.LAPIS_BLOCK),2);
+  eq('anvil requires a pick but no higher tier',requiredPickTier(B.ANVIL),1);
+  check('glowstone is hand-harvestable and not pick-efficient',canHarvest(B.GLOWSTONE,0) && toolMiningSpeed(B.GLOWSTONE,I.DIAMOND_PICK)===1 && blockDrops(B.GLOWSTONE,0)[0]?.id===I.GLOWSTONE_DUST);
+  check('redstone lamps are hand-harvestable',canHarvest(B.REDSTONE_LAMP,0) && toolMiningSpeed(B.REDSTONE_LAMP,I.DIAMOND_PICK)===1);
+  check('piston uses pick speed but can be recovered by hand',toolMiningSpeed(B.PISTON,I.WOOD_PICK)===2 && canHarvest(B.PISTON,0));
+  check('note block is axe-efficient, not pick-efficient',toolMiningSpeed(B.NOTE_BLOCK,I.IRON_AXE)===6 && toolMiningSpeed(B.NOTE_BLOCK,I.IRON_PICK)===1);
+  for(const block of [B.LEAVES,B.BIRCH_LEAVES,B.ACACIA_LEAVES,B.JUNGLE_LEAVES,B.HAY,B.TARGET,B.SHROOMLIGHT])check('native hoe tag covered: '+block,toolMiningSpeed(block,I.DIAMOND_HOE)===8);
+  for(const block of [B.WOOL_WHITE,B.WOOL_RED,B.WOOL_BLUE,B.WOOL_GREEN,B.WOOL_YELLOW,B.WOOL_BLACK,B.WOOL_ORANGE,B.WOOL_MAGENTA,B.WOOL_LIGHT_BLUE,B.WOOL_LIME,B.WOOL_PINK,B.WOOL_GRAY,B.WOOL_LIGHT_GRAY,B.WOOL_CYAN,B.WOOL_PURPLE,B.WOOL_BROWN])eq('shears work on every wool color '+block,toolMiningSpeed(block,I.SHEARS),5);
+  const dry=miningDamage(B.STONE,I.IRON_PICK);
+  check('head underwater gives exactly a fivefold speed penalty',Math.abs(miningDamage(B.STONE,I.IRON_PICK,0,{underwater:true})*5-dry)<1e-12);
+  check('airborne gives exactly a fivefold speed penalty',Math.abs(miningDamage(B.STONE,I.IRON_PICK,0,{onGround:false})*5-dry)<1e-12);
+  check('underwater plus airborne penalties stack to 25',Math.abs(miningDamage(B.STONE,I.IRON_PICK,0,{underwater:true,onGround:false})*25-dry)<1e-12);
+  eq('Aqua Affinity removes only underwater penalty',miningDamage(B.STONE,I.IRON_PICK,0,{underwater:true,aquaAffinity:true}),dry);
+  eq('Aqua Affinity does not remove airborne penalty',miningDamage(B.STONE,I.IRON_PICK,0,{underwater:true,onGround:false,aquaAffinity:true}),miningDamage(B.STONE,I.IRON_PICK,0,{onGround:false}));
+  for(const id of [I.LEATHER_HELMET,I.IRON_HELMET,I.GOLD_HELMET,I.DIAMOND_HELMET])check('Aqua Affinity accepts each helmet '+id,canEnchant(id,'aquaaffinity'));
+  for(const id of [I.IRON_BOOTS,I.IRON_CHEST,I.DIAMOND_PICK,I.SHEARS])check('Aqua Affinity refuses non-helmets '+id,!canEnchant(id,'aquaaffinity'));
+  eq('native Aqua Affinity alias resolves',resolveEnch('aqua_affinity'),'aquaaffinity');
+  const helmet:Stack={id:I.DIAMOND_HELMET,count:1};addEnch(helmet,'aquaaffinity',9);eq('Aqua Affinity caps at level I',enchLevel(helmet,'aquaaffinity'),1);
+  eq('bedrock never accumulates survival mining progress',miningDamage(B.BEDROCK,I.DIAMOND_PICK,5),0);
+  check('invalid block cannot poison progress',miningDamage(99999,0)===0 && destroyProgress(NaN,2,true)===0);
+  for(const fps of [20,30,60,144]) {
+    let progress=0,remainder=0,frames=0;while(progress<1 && frames<fps*2){const next=advanceMining(progress,remainder,1/fps,miningDamage(B.STONE,I.WOOD_PICK));progress=next.progress;remainder=next.remainder;frames++;}
+    check(`20 Hz mining independent of ${fps} FPS`,frames/fps>=1.15-1e-9 && frames/fps<1.15+1/fps+1e-9);
+  }
+  const partial=advanceMining(0,0,.025,.5);eq('half tick does not prematurely advance cracks',partial.progress,0);
+  eq('two render half ticks form exactly one mining tick',advanceMining(partial.progress,partial.remainder,.025,.5).progress,.5);
+  const tool:Stack={id:I.IRON_PICK,count:1,dur:80,ench:{efficiency:2,unbreaking:1},name:'A'};
+  const identity=miningIdentity(1,65,1,B.STONE,tool);
+  eq('enchantment insertion order does not spuriously reset mining',miningIdentity(1,65,1,B.STONE,{...tool,ench:{unbreaking:1,efficiency:2}}),identity);
+  check('changing tool, block, damage or name resets identity',[miningIdentity(1,65,1,B.STONE,{...tool,id:I.WOOD_PICK}),miningIdentity(1,65,1,B.COBBLE,tool),miningIdentity(1,65,1,B.STONE,{...tool,dur:79}),miningIdentity(1,65,1,B.STONE,{...tool,name:'B'})].every(k=>k!==identity));
+  eq('sword mining costs two durability',miningDurabilityCost(B.DIRT,I.IRON_SWORD),2);
+  eq('pick mining costs one durability',miningDurabilityCost(B.DIRT,I.IRON_PICK),1);
+  for(const id of [I.BOW,I.SHIELD,I.FISHING_ROD,I.FLINT_STEEL,I.SPYGLASS])eq('unrelated tool does not wear from mining '+id,miningDurabilityCost(B.STONE,id),0);
+  eq('shears also wear on ineffective stone, as Java ShearsItem does',miningDurabilityCost(B.STONE,I.SHEARS),1);
+  eq('shears wear on zero-hardness plants too',miningDurabilityCost(B.TALLGRASS,I.SHEARS),1);
+  check('wet farmland retains shovel speed',toolMiningSpeed(B.FARMLAND_WET,I.IRON_SHOVEL)===toolMiningSpeed(B.FARMLAND,I.IRON_SHOVEL));
+  for(const id of [B.RAIL,B.RAIL_EW,B.POWERED_RAIL,B.POWERED_RAIL_EW,B.DETECTOR_RAIL,B.DETECTOR_RAIL_EW])check('rails use pick speed without requiring a pick '+id,toolMiningSpeed(id,I.DIAMOND_PICK)===8 && canHarvest(id,0));
+  eq('native sword tag accelerates pumpkin',toolMiningSpeed(B.PUMPKIN,I.IRON_SWORD),1.5);
+  eq('sword tag does not include cactus',toolMiningSpeed(B.CACTUS,I.IRON_SWORD),1);
+  check('snow block requires a shovel for harvest',!canHarvest(B.SNOW,0) && canHarvest(B.SNOW,I.WOOD_SHOVEL));
+  eq('snow block by hand uses native non-harvest divisor',Math.round(mineSeconds(B.SNOW,0)*20),20);
+  eq('instant zero-hardness blocks do not wear picks',miningDurabilityCost(B.TNT,I.DIAMOND_PICK),0);
+}
+
+section('4.13: real interaction loop, tool swap, plot refusal and native creative safety');
+{
+  const world=new World(44331,true);const pos=[8,65,8] as const;
+  for(let y=65;y<75;y++)world.setBlock(8,y,8,B.AIR);
+  let held:Stack|null={id:I.WOOD_PICK,count:1},wear=0,exhaustion=0,broken=0;
+  const game=Object.assign(Object.create(Game.prototype),{world,mode:'survival',ui:'playing',net:null,mouseLeft:true,mouseRight:false,
+    body:{pos:new THREE.Vector3(8.5,65,8.5),onGround:true},armor:[null,null,null,null],eyeHeight:1.62,
+    eyePos:()=>new THREE.Vector3(8.5,69,8.5),lookDir:()=>new THREE.Vector3(0,-1,0),findMobTarget:()=>({mob:null,dist:Infinity}),findPlayerTarget:()=>null,
+    selection:{visible:false,scale:new THREE.Vector3(),position:new THREE.Vector3()},crackMesh:{visible:false,position:new THREE.Vector3(),material:{}},crackTex:[],
+    breakProgress:0,breakKey:'',breakTickRemainder:0,breakCooldown:0,placeCooldown:0,attackCooldown:0,pearlCd:0,eatCooldown:0,swingT:1,digSoundTimer:1,bowDraw:-1,
+    selectedStack:()=>held,blockAt:()=>B.AIR,updateBuildingTarget(){},updateHand(){},message(){},spawnParticles(){},
+    wearTool(n=1){wear+=n;},addExhaustion(n:number){exhaustion+=n;},breakBlock(x:number,y:number,z:number){world.setBlock(x,y,z,B.AIR);broken++;return true;},
+  }) as any;
+  world.setBlock(...pos,B.STONE);for(let i=0;i<10;i++)game.updateInteraction(.05);
+  check('real loop accumulates cracks at native ticks',game.breakProgress>0 && game.breakProgress<1 && broken===0);
+  held={id:I.DIAMOND_PICK,count:1};game.updateInteraction(.05);
+  check('real loop drops old tool progress when switching hotbar',game.breakProgress<.2 && broken===0);
+  for(let i=0;i<5;i++)game.updateInteraction(.05);
+  check('native diamond mining completes exactly once with one wear',broken===1 && wear===1 && exhaustion===.005 && game.breakCooldown===.25);
+  world.setBlock(...pos,B.STONE);
+  for(let i=0;i<5;i++)game.updateInteraction(.05);
+  eq('five complete mining ticks are held after a normal break',game.breakProgress,0);
+  game.updateInteraction(.05);check('mining resumes after the five-tick delay',game.breakProgress>0);
+  game.breakProgress=0;game.breakKey='';game.breakTickRemainder=0;
+  game.blockAt=()=>B.WATER;game.updateInteraction(.05);const wetProgress=game.breakProgress;
+  game.armor[0]={id:I.IRON_HELMET,count:1,ench:{aquaaffinity:1}};game.updateInteraction(.05);
+  check('real loop reads Aqua Affinity from the equipped helmet',Math.abs((game.breakProgress-wetProgress)/wetProgress-5)<1e-9);
+  game.blockAt=()=>B.AIR;game.armor[0]=null;
+  game.net={public:true,canEdit:()=>false};game.breakCooldown=0;
+  for(let i=0;i<30;i++)game.updateInteraction(.05);
+  check('protected plot consumes no wear, exhaustion, crack progress or blocks',wear===1 && exhaustion===.005 && broken===1 && game.breakProgress===0 && world.getBlock(...pos)===B.STONE);
+  game.net=null;game.mode='creative';held={id:I.DIAMOND_SWORD,count:1};game.updateInteraction(.05);game.tryAttack();
+  eq('creative sword cannot accidentally destroy a block by click or hold',broken,1);
+  held={id:I.DIAMOND_PICK,count:1};world.setBlock(...pos,B.TNT);let ignitions=0;game.igniteTNT=()=>ignitions++;game.tryAttack();
+  check('left clicking TNT mines rather than ignites',ignitions===0 && broken===2);
+  game.breakProgress=.7;game.breakTickRemainder=.04;game.cancelActions=Game.prototype['cancelActions'];game.keys=new Set();game.cancelActions();
+  check('focus loss also discards the partial mining tick',game.breakProgress===0 && game.breakTickRemainder===0);
+  const creativeWorld=new World(44332,true);creativeWorld.setBlock(3,70,3,B.BEDROCK);
+  const edit=Object.assign(Object.create(Game.prototype),{world:creativeWorld,mode:'creative',growables:new Map(),spawnParticles(){},fallGravity(){}}) as any;
+  edit.breakBlock(3,70,3,true);eq('creative can remove bedrock outside city foundation',creativeWorld.getBlock(3,70,3),B.AIR);
+  const city=new World(44332,true,false,true);edit.world=city;edit.breakBlock(20,0,20,true);eq('creative city still protects its foundation',city.getBlock(20,0,20),B.BEDROCK);
+  const inv=new Inventory();inv.slots[0]={id:I.IRON_SWORD,count:1,dur:10};
+  const durable=Object.assign(Object.create(Game.prototype),{mode:'survival',inventory:inv,selected:0,emitHud(){},message(){}}) as any;
+  durable.wearTool(2);eq('real sword durability is decremented twice',inv.slots[0]?.dur,8);
+  inv.slots[0]!.ench={unbreaking:1};const rand=Math.random;let roll=0;
+  try {Math.random=()=>[.9,.1][roll++];durable.wearTool(2);}finally{Math.random=rand;}
+  eq('Unbreaking rolls independently for both sword damage points',inv.slots[0]?.dur,7);
+  eq('the per-point wear test consumed exactly two independent rolls',roll,2);
 
 }
 

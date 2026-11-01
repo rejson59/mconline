@@ -1,3 +1,4 @@
+import { efficiencyBonus } from './mining';
 /**
  * Enchantments – the heart of update 1.5.
  *
@@ -11,6 +12,7 @@ import { ITEMS, isItem } from './items';
 import { B, BLOCKS } from './blocks';
 
 export type EnchId =
+  | 'aquaaffinity'
   | 'efficiency'
   | 'fortune'
   | 'silktouch'
@@ -36,8 +38,10 @@ export interface EnchDef {
 }
 
 export const ENCHANTS: EnchDef[] = [
+  { id: 'aquaaffinity', name: 'Wydajność pod wodą', max: 1, keys: ['aqua_affinity', 'aquaaffinity', 'wydajnosc_pod_woda'],
+    desc: () => 'Usuwa karę za kopanie z głową pod wodą; nie usuwa kary za brak podparcia.' },
   { id: 'efficiency', name: 'Wydajność', max: 5, keys: ['wydajnosc', 'efficiency'],
-    desc: (l) => `Kopanie jest ${l * 35}% szybsze.` },
+    desc: (l) => `+${efficiencyBonus(l)} do szybkości skutecznego narzędzia.` },
   { id: 'fortune', name: 'Szczęście', max: 3, keys: ['szczescie', 'fortune'],
     desc: (l) => `Rudy i plony dają do ${l + 1}× więcej surowców.` },
   { id: 'silktouch', name: 'Jedwabny dotyk', max: 1, keys: ['jedwabny_dotyk', 'silktouch', 'silk_touch'],
@@ -111,6 +115,7 @@ export function canEnchant(itemId: number, ench: EnchId | string): boolean {
   const t = targetsOf(itemId);
   if (!t.length) return false;
   switch (ench) {
+    case 'aquaaffinity': return t.includes('armor') && ITEMS[itemId]?.armor?.slot === 0;
     case 'efficiency': return t.some((x) => x === 'pick' || x === 'axe' || x === 'shovel' || x === 'hoe' || x === 'shears');
     case 'fortune': return t.some((x) => x === 'pick' || x === 'shovel' || x === 'hoe');
     case 'silktouch': return t.some((x) => x === 'pick' || x === 'axe' || x === 'shovel' || x === 'hoe');
@@ -229,10 +234,9 @@ export function rollEnchantOptions(item: Stack | null | undefined, power: number
 }
 
 // ---------------------------------------------------------------- effect maths
-/** Mining speed multiplier for Wydajność. */
-export function efficiencyFactor(lvl: number): number {
-  if (lvl <= 0) return 1;
-  return 1 + lvl * 0.35 + lvl * lvl * 0.12;
+/** Derived ratio for a specific base speed; Efficiency is additive in Java. */
+export function efficiencyFactor(lvl: number, baseSpeed = 2): number {
+  return baseSpeed > 1 ? (baseSpeed + efficiencyBonus(lvl)) / baseSpeed : 1;
 }
 
 /** Unbreaking: how likely one use is to actually cost durability. */
