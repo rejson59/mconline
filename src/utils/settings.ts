@@ -61,7 +61,7 @@ export interface Settings {
 export const SETTINGS_KEY = 'blockcraft-settings';
 
 export const DEFAULT_SETTINGS: Settings = {
-  guiScale: 0,
+  guiScale: 2,
   renderDistance: 6,
   sensitivity: 1,
   fov: 72,
@@ -158,7 +158,7 @@ export function normalizeSettings(value: unknown): Settings {
     brightness: boundedNumber(stored.brightness, DEFAULT_SETTINGS.brightness, 0, 1),
     fovEffects: boundedNumber(stored.fovEffects, 1, 0, 1),
     damageTilt: boundedNumber(stored.damageTilt, 1, 0, 1),
-    guiScale: Math.round(boundedNumber(stored.guiScale, 0, 0, 4)),
+    guiScale: Math.round(boundedNumber(stored.guiScale, DEFAULT_SETTINGS.guiScale, 0, 4)),
     renderDistance: Math.round(boundedNumber(stored.renderDistance, DEFAULT_SETTINGS.renderDistance, 2, 14)),
     sensitivity: boundedNumber(stored.sensitivity, DEFAULT_SETTINGS.sensitivity, 0.2, 3),
     fov: Math.round(boundedNumber(stored.fov, DEFAULT_SETTINGS.fov, 50, 110)),
