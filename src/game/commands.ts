@@ -41,7 +41,7 @@ export const COMMAND_CATEGORIES: { id: CommandCategory; label: string; icon: str
  * najpierw to, po co gracz sięga najczęściej.
  */
 export const COMMANDS: CommandInfo[] = [
-  { name: 'dzialka', aliases: ['działka', 'plot'], usage: 'dzialka <info|lista|zajmij|zwolnij>', description: 'Serwer publiczny: chroniony teren 16×16, do czterech działek na klucz przeglądarki.', example: '/dzialka zajmij', category: 'świat', keywords: ['ochrona', 'teren', 'claim'] },
+  { name: 'dzialka', aliases: ['działka', 'plot'], usage: 'dzialka <info|lista|zajmij|zwolnij>', description: 'Chronione działki: survival 16×16, Miasto budowniczych 32×32. Do czterech na klucz przeglądarki.', example: '/dzialka zajmij', category: 'świat', keywords: ['ochrona', 'teren', 'claim'] },
   {
     name: 'gamemode',
     aliases: ['gm'],

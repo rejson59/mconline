@@ -254,6 +254,8 @@ export interface NetLike {
   readonly transport: NetTransport;
   /** Czy to publiczny serwer (inna obsługa czasu, pogody i zapisu). */
   readonly public: boolean;
+  /** Separate protected Creative city; never inferred from a player nickname. */
+  readonly city?: boolean;
   name: string;
   /** 2.12: skórka wysyłana pozostałym graczom (pusta = domyślna). */
   skin?: string;

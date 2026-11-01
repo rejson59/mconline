@@ -1,6 +1,7 @@
 import { DEFAULT_SOUND_LEVELS, SOUND_CATEGORIES, type SoundLevels } from './soundSettings';
 import { PRESETS, recommendPreset, type DeviceProfile, type PresetName } from './performance';
 
+export const FPS_LIMITS = [0, 30, 60, 90, 120, 144, 165, 240] as const;
 export type QualityMode = 'auto' | PresetName;
 export type TouchMode = 'tap' | 'buttons';
 /** 2.5: wyraźny podział wersji PC i dotykowej (patrz utils/input.ts). */
@@ -19,6 +20,15 @@ export interface Settings {
   fovEffects: number;
   damageTilt: number;
   minimap: boolean;
+  entityDistance: number;
+  chatVisible: boolean;
+  chatOpacity: number;
+  chatBackground: number;
+  chatScale: number;
+  chatWidth: number;
+  chatLines: number;
+  /** Distinguish a deliberate FPS choice from a device preset default. */
+  fpsCapUserSet: boolean;
 
   // ——— 2.5: wersja komputerowa albo dotykowa ———
   /** auto = wg głównego wskaźnika urządzenia; można też wymusić PC lub dotyk. */
@@ -72,6 +82,14 @@ export const DEFAULT_SETTINGS: Settings = {
   fovEffects: 1,
   damageTilt: 1,
   minimap: false,
+  entityDistance: 1,
+  chatVisible: true,
+  chatOpacity: 1,
+  chatBackground: .45,
+  chatScale: 1,
+  chatWidth: 1,
+  chatLines: 10,
+  fpsCapUserSet: false,
 
   controlMode: 'auto',
 
@@ -120,7 +138,8 @@ export function applyPreset(s: Settings, name: PresetName, keepAuto = false): Se
  */
 export function effectiveSettings(s: Settings, profile: DeviceProfile): Settings {
   if (s.quality !== 'auto') return s;
-  return applyPreset(s, recommendPreset(profile), true);
+  const preset = applyPreset(s, recommendPreset(profile), true);
+  return s.fpsCapUserSet ? { ...preset, fpsCap: s.fpsCap } : preset;
 }
 
 function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
@@ -144,7 +163,7 @@ export function normalizeSettings(value: unknown): Settings {
   const quality = oneOf(stored.quality, ['auto', 'low', 'medium', 'high'] as const, DEFAULT_SETTINGS.quality);
   const controlMode = oneOf(stored.controlMode, ['auto', 'desktop', 'touch'] as const, DEFAULT_SETTINGS.controlMode);
   const touchMode = oneOf(stored.touchMode, ['tap', 'buttons'] as const, DEFAULT_SETTINGS.touchMode);
-  const fps = stored.fpsCap === 0 || stored.fpsCap === 30 || stored.fpsCap === 60 ? stored.fpsCap : DEFAULT_SETTINGS.fpsCap;
+  const fps = FPS_LIMITS.includes(stored.fpsCap as typeof FPS_LIMITS[number]) ? stored.fpsCap : DEFAULT_SETTINGS.fpsCap;
   const bool = (key: keyof Settings) => typeof stored[key] === 'boolean' ? stored[key] as boolean : DEFAULT_SETTINGS[key] as boolean;
 
   const soundVolumes = { ...DEFAULT_SOUND_LEVELS };
@@ -164,13 +183,21 @@ export function normalizeSettings(value: unknown): Settings {
     fov: Math.round(boundedNumber(stored.fov, DEFAULT_SETTINGS.fov, 50, 110)),
     volume: boundedNumber(stored.volume, DEFAULT_SETTINGS.volume, 0, 1),
     minimap: bool('minimap'),
+    entityDistance: boundedNumber(stored.entityDistance, 1, .5, 1.5),
+    chatVisible: bool('chatVisible'),
+    chatOpacity: boundedNumber(stored.chatOpacity, 1, 0, 1),
+    chatBackground: boundedNumber(stored.chatBackground, .45, 0, 1),
+    chatScale: boundedNumber(stored.chatScale, 1, .5, 1),
+    chatWidth: boundedNumber(stored.chatWidth, 1, .3, 1),
+    chatLines: Math.round(boundedNumber(stored.chatLines, 10, 1, 10)),
+    fpsCapUserSet: typeof stored.fpsCapUserSet === 'boolean' ? stored.fpsCapUserSet : fps === 30 || fps === 60,
     controlMode,
     quality,
     pixelRatio: boundedNumber(stored.pixelRatio, DEFAULT_SETTINGS.pixelRatio, 0.75, 2),
     particles: boundedNumber(stored.particles, DEFAULT_SETTINGS.particles, 0, 1),
     clouds: bool('clouds'),
     dynamicResolution: bool('dynamicResolution'),
-    fpsCap: fps,
+    fpsCap: fps as number,
     lod: bool('lod'),
     autoQuality: bool('autoQuality'),
     viewBobbing: bool('viewBobbing'),

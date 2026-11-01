@@ -118,6 +118,7 @@ export default function GameView({
     game.brightness.value = s.brightness;
     game.fovEffects = s.fovEffects;
     game.damageTilt = s.damageTilt;
+    game.entityDistance = s.entityDistance;
     game.showMinimap = s.minimap;
     game.viewBobbing = s.viewBobbing;
     game.showFps = s.showFps;
@@ -171,6 +172,7 @@ export default function GameView({
       haptics: effective.haptics,
       viewBobbing: effective.viewBobbing,
       showFps: effective.showFps,
+      entityDistance: effective.entityDistance,
     });
     g.sensitivity = effective.sensitivity;
     g.fovBase = effective.fov;
@@ -264,6 +266,8 @@ export default function GameView({
       {hud && game && ui !== 'dead' && (
         <HUD
           hud={hud}
+          chatSettings={settings}
+          chatOpen={ui === 'chat'}
           icons={icons}
           minimap={game.minimapCanvas}
           touchControls={touch}

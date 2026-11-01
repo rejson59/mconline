@@ -1,3 +1,4 @@
+import { CITY_WORLD_ID, CITY_NAME, CITY_CHANNEL, CITY_SEED, cityCell, cityPlotStart, cityBuildable } from './city';
 import { PlotAccess, plotKey } from './plots';
 import { World } from './world';
 import { cleanDrop, type SharedDrop } from './sharedDrops';
@@ -49,7 +50,7 @@ import {
 export const SUPABASE_URL = 'https://bewwejewgqzctnjrbclu.supabase.co';
 /**
  * Klucz publiczny („anon”). Nie jest tajny – dostęp ogranicza RLS:
- * anonim może czytać świat i dopisywać/aktualizować bloki publiczne.
+ * anonim czyta świat; zapis bloków wymaga chronionego RPC z kluczem działek.
  */
 export const SUPABASE_ANON =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJld3dlamV3Z3F6Y3RuanJiY2x1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1MjQyOTQsImV4cCI6MjEwODEwMDI5NH0.bZVvA-lioshG9wgTloiRX_Lrul1965QqjukcOQk0SeQ';
@@ -69,6 +70,8 @@ export const PROFILE_SAVE_MS = 6000;
 export const PUBLIC_EVENT = 'msg';
 /** Ile zmian wczytujemy maksymalnie przy wejściu. */
 export const MAX_PUBLIC_EDITS = 60_000;
+/** City has a larger snapshot budget; overflow must never silently hide builds. */
+export const MAX_CITY_EDITS = 300_000;
 /** Pozycje na serwerze publicznym: 4 Hz wystarcza, a oszczędza limit wiadomości. */
 export const PUBLIC_POS_HZ = 4;
 /** Co ile ms zapisujemy zmiany bloków do bazy. */
@@ -170,7 +173,8 @@ export class PublicServer implements NetLike {
   private lastFlush = 0;
   private lastCatchup = 0;
   private lastRevision = 0;
-  readonly plots = new PlotAccess();
+  readonly plots: PlotAccess;
+  readonly city: boolean;
   onPlotsChanged?: () => void;
   private plotSecret = '';
   private refreshingPlots = false;
@@ -205,7 +209,9 @@ export class PublicServer implements NetLike {
     this.name = (opts.name || 'Gracz').slice(0, 20);
     this.hue = hueFor(this.id);
     if (opts.worldId) this.worldId = opts.worldId;
-    if (opts.channel) this.channelName = opts.channel;
+    this.city = this.worldId === CITY_WORLD_ID;
+    this.plots = new PlotAccess(this.city);
+    this.channelName = opts.channel ?? (this.city ? CITY_CHANNEL : PUBLIC_CHANNEL);
     // Klient jest wstrzykiwany w testach (atrapa bez sieci); w grze zawsze
     // korzystamy z jednego współdzielonego połączenia.
     this.client = opts.client ?? supabaseClient();
@@ -225,10 +231,10 @@ export class PublicServer implements NetLike {
   private baseWorld(overrideName?: string): WorldHandshake {
     const now = Date.now();
     return {
-      seed: PUBLIC_SEED,
-      mode: 'survival' as never,
-      worldType: 'normal',
-      name: overrideName ?? (this.worldId === PUBLIC_WORLD_ID ? PUBLIC_NAME : this.worldId),
+      seed: this.city ? CITY_SEED : PUBLIC_SEED,
+      mode: this.city ? 'creative' : 'survival',
+      worldType: this.city ? 'flat' : 'normal',
+      name: overrideName ?? (this.city ? CITY_NAME : this.worldId === PUBLIC_WORLD_ID ? PUBLIC_NAME : this.worldId),
       time: publicTime(now),
       day: publicDay(now),
       weather: publicWeather(now),
@@ -272,8 +278,9 @@ export class PublicServer implements NetLike {
     if (head.error) throw new Error(head.error.message);
     this.lastRevision = Number(head.data?.[0]?.version ?? 0);
     const PAGE = 1000;
-    for (let from = 0; out.length < MAX_PUBLIC_EDITS; from += PAGE) {
-      const to = Math.min(from + PAGE - 1, MAX_PUBLIC_EDITS - 1);
+    const limit = this.city ? MAX_CITY_EDITS + 1 : MAX_PUBLIC_EDITS;
+    for (let from = 0; out.length < limit; from += PAGE) {
+      const to = Math.min(from + PAGE - 1, limit - 1);
       const { data, error } = await this.client
         .from(PUBLIC_TABLE)
         .select('x,y,z,block,dim')
@@ -283,6 +290,7 @@ export class PublicServer implements NetLike {
       if (error) throw new Error(error.message);
       const rows = (data ?? []) as BlockRow[];
       for (const row of rows) out.push(rowToEdit(row));
+      if (this.city && out.length > MAX_CITY_EDITS) throw new Error('Miasto przekroczyło limit 300 000 zmian. Wczytanie przerwano, żeby nie pokazać niepełnych budowli. Potrzebna jest optymalizacja serwera.');
       if (rows.length < PAGE) break;
     }
     return out;
@@ -550,7 +558,7 @@ export class PublicServer implements NetLike {
     if (this.refreshingPlots) return;
     this.refreshingPlots = true;
     try {
-      const { data, error } = await this.client.rpc('blockcraft_plot', { p_world: this.worldId, p_key: this.secret(), p_op: 'list' });
+      const { data, error } = await this.client.rpc(this.city ? 'blockcraft_city_plot' : 'blockcraft_plot', { p_world: this.worldId, p_key: this.secret(), p_op: 'list' });
       if (error) throw new Error(error.message);
       this.updatePlots(data);
     } finally { this.refreshingPlots = false; }
@@ -567,16 +575,19 @@ export class PublicServer implements NetLike {
     try {
       await this.flush();
       if (this.pending.size || this.flushing) throw new Error('Poczekaj na zapis zmian świata.');
-      const cx = Math.floor(x / 16), cz = Math.floor(z / 16);
+      const cx = this.city ? cityCell(x) : Math.floor(x / 16), cz = this.city ? cityCell(z) : Math.floor(z / 16);
+      if (this.city && ['zajmij', 'zwolnij'].includes(op) && !cityBuildable(x, z)) throw new Error('Ulice i teren poza miastem są chronione. Wejdź na trawiastą działkę 32×32.');
       const action = op === 'zajmij' ? 'claim' : op === 'zwolnij' ? 'release' : 'list';
-      const { data, error } = await this.client.rpc('blockcraft_plot', { p_world: this.worldId, p_key: this.secret(), p_op: action, p_cx: cx, p_cz: cz, p_name: this.name });
+      const { data, error } = await this.client.rpc(this.city ? 'blockcraft_city_plot' : 'blockcraft_plot', { p_world: this.worldId, p_key: this.secret(), p_op: action, p_cx: cx, p_cz: cz, p_name: this.name });
       if (error) throw new Error(error.message);
       this.updatePlots(data);
       if (action !== 'list') this.send({ t: 'edits', from: this.id, to: '*', list: [] });
       const plot = this.plots.at(x, z);
-      const text = op === 'lista' ? `Twoje działki (${this.plots.own().length}/4): ${this.plots.own().map(p => `[${p.cx * 16}, ${p.cz * 16}]`).join(', ') || 'brak'}`
-        : action === 'release' ? 'Zwolniono działkę. Budowle pozostają.'
-        : plot ? `Działka ${plot.name}: X ${cx * 16}…${cx * 16 + 15}, Z ${cz * 16}…${cz * 16 + 15}, Y 0…255. ${plot.owner === this.plots.owner ? 'Twoja.' : 'Chroniona.'}` : 'Wolny teren. /dzialka zajmij — 16×16, maks. 4; /dzialka lista; /dzialka zwolnij.';
+      const start = (n: number) => this.city ? cityPlotStart(n) : n * 16;
+      const size = this.city ? 32 : 16;
+      const text = op === 'lista' ? `Twoje działki (${this.plots.own().length}/4): ${this.plots.own().map(p => `[${start(p.cx)}, ${start(p.cz)}]`).join(', ') || 'brak'}`
+        : action === 'release' ? `Zwolniono działkę. Budowle pozostają.${this.city ? ' Następny właściciel będzie mógł je edytować.' : ''}`
+        : plot ? `Działka ${plot.name}: X ${start(cx)}…${start(cx) + size - 1}, Z ${start(cz)}…${start(cz) + size - 1}, Y ${this.city ? '1…127' : '0…255'}. ${plot.owner === this.plots.owner ? 'Twoja.' : 'Chroniona.'}` : this.city && !cityBuildable(x,z) ? 'Chroniona ulica / teren poza miastem. Działki: trawiaste kwadraty 32×32.' : `Wolna działka. /dzialka zajmij — ${size}×${size}, maks. 4; /dzialka lista; /dzialka zwolnij.${this.city ? ' Budowanie dopiero po zajęciu. Zwolnienie udostępnia budowlę następnemu właścicielowi.' : ''}`;
       this.onChat?.('Działki', text);
     } catch (e) { this.onChat?.('Działki', e instanceof Error ? e.message : 'Operacja nie powiodła się.'); }
   }
@@ -606,7 +617,7 @@ export class PublicServer implements NetLike {
   }
 
   setWorld(patch: Partial<WorldHandshake>) {
-    this.world = { ...this.world, ...patch, seed: PUBLIC_SEED, edits: this.world.edits };
+    this.world = { ...this.world, ...patch, seed: this.city ? CITY_SEED : PUBLIC_SEED, ...(this.city ? { mode: 'creative' as const, worldType: 'flat' as const } : {}), edits: this.world.edits };
   }
 
   // ------------------------------------------------------------------ zapis
@@ -639,7 +650,7 @@ export class PublicServer implements NetLike {
     for (const [key] of batch) this.pending.delete(key);
     try {
       for (const [key] of batch) this.inFlight.add(key);
-      const { data, error } = await this.client.rpc('blockcraft_write_blocks', {
+      const { data, error } = await this.client.rpc(this.city ? 'blockcraft_city_write_blocks' : 'blockcraft_write_blocks', {
         p_world: this.worldId, p_key: this.secret(), p_edits: batch.map(([, e]) => e),
       });
       if (error) throw new Error(error.message);
@@ -650,7 +661,7 @@ export class PublicServer implements NetLike {
         const list = data.rejected.map((e: NetEdit & { id: number | null }) => {
           if (e.id !== null) return e as NetEdit;
           const d = e.d ?? 'o'; let base = bases.get(d);
-          if (!base) { base = new World(PUBLIC_SEED, false, d === 'n'); bases.set(d, base); }
+          if (!base) { base = new World(this.city ? CITY_SEED : PUBLIC_SEED, this.city, d === 'n', this.city); bases.set(d, base); }
           return { ...e, id: base.getBlock(e.x, e.y, e.z) };
         });
         this.onMessage?.({ t: 'edits', from: 'server', to: this.id, list });

@@ -934,6 +934,12 @@ async function mountWithJsdom(): Promise<boolean> {
 
   await React.act(async () => { dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
   check('Escape returns from video to options', text().includes('Dostosowanie skórki...'));
+  await click('Ustawienia czatu...');
+  check('chat settings expose five real sliders',container.querySelectorAll('input[type="range"]').length===5);
+  check('chat options include a live preview',!!container.querySelector('[data-testid="chat-preview"]'));
+  await click('Powiadomienia czatu');
+  check('chat visibility preference is persisted',JSON.parse(dom.window.localStorage.getItem('blockcraft-settings')||'{}').chatVisible===false);
+  await click('Gotowe');
   await click('Sterowanie...');
   await click('Odwróć mysz');
   check('inverted mouse toggle actually persists', JSON.parse(dom.window.localStorage.getItem('blockcraft-settings') || '{}').invertMouse===true);
@@ -947,6 +953,10 @@ async function mountWithJsdom(): Promise<boolean> {
   await click('Gotowe');
   await click('Tryb wieloosobowy');
   check('multiplayer screen opens from the menu', text().includes('Dołącz do serwera') && text().includes('Serwer przeglądarkowy'));
+  const cityOption=container.querySelectorAll('[role="option"]')[1] as HTMLButtonElement;
+  check('server list has two separate public worlds',container.querySelectorAll('[role="option"]').length===2 && cityOption.textContent?.includes('Miasto budowniczych'));
+  await React.act(async()=>{cityOption.click();});
+  check('city selection is real and includes protection instructions',cityOption.getAttribute('aria-selected')==='true' && container.querySelector('[role="option"]')?.getAttribute('aria-selected')==='false' && text().includes('32×32') && text().includes('nie usuwaj danych strony'));
   await click('Połączenia przeglądarkowe...');
   check('advanced multiplayer preserves both browser transports', text().includes('Ta przeglądarka') && text().includes('Przez internet'));
   check('local mode shows the room code', text().includes('Kod pokoju'));
@@ -1020,6 +1030,17 @@ section('2.18: HUD rysuje grafiki z paczki');
   check('pasek doświadczenia ma tło i postęp', (html.match(/url\(data:image\/png/g) ?? []).length >= 2);
   check('celownik jest obrazkiem, nie divem', /translate\(-50%,\s?-50%\)/.test(html));
   check('Java health uses hearts without a numeric label', !html.includes('14/20') && html.includes('data-java-health'));
+  const messages=Array.from({length:6},(_,i)=>({text:`chat-line-${i}`,t:Date.now()}));
+  const customChat={...DEFAULT_SETTINGS,chatLines:2,chatOpacity:.4,chatBackground:.7,chatScale:.6,chatWidth:.5};
+  const custom=renderToStaticMarkup(<HUD hud={{...state,messages}} icons={{}} chatSettings={customChat} />);
+  check('HUD really limits visible chat rows',custom.includes('chat-line-5') && custom.includes('chat-line-4') && !custom.includes('chat-line-3'));
+  check('HUD applies chat text and background opacity',custom.includes('opacity:0.4') && custom.includes('rgba(0,0,0,0.7)'));
+  const hidden=renderToStaticMarkup(<HUD hud={{...state,messages}} icons={{}} chatSettings={{...customChat,chatVisible:false}} />);
+  check('HUD hides chat without hiding health or hotbar',hidden.includes('aria-hidden="true" style="display:none') && hidden.includes('data-java-health'));
+  const opened=renderToStaticMarkup(<HUD hud={{...state,messages}} icons={{}} chatOpen chatSettings={{...customChat,chatVisible:false}} />);
+  check('opening chat reveals command feedback even with notifications disabled',!opened.includes('style="display:none') && opened.includes('chat-line-5'));
+
+
 }
 
 section('2.19: teleportacja i skórki 1:1 w interfejsie');

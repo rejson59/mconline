@@ -963,6 +963,7 @@ export class Game {
   private lodEnabled = true;
   /** 2.28: Entity Culling – moby daleko aktualizują się rzadziej. */
   entityCulling = true;
+  entityDistance = 1;
   /** 2.28: automat jakości (można wyłączyć w opcjach). */
   autoQuality = true;
   /** Profil wydajności wybrany przez automat (HUD/dziennik). */
@@ -1000,14 +1001,14 @@ export class Game {
     // 2.32: React dostaje informację o automatycznej zmianie trybu sterowania
     // (tablet + klawiatura/mysz Bluetooth), żeby schować drążek i gesty.
     if (cb.onControl) this.onControlChange = (kind) => cb.onControl?.(kind);
-    this.mode = opts.save ? opts.save.mode : opts.mode;
+    this.mode = opts.net?.city ? 'creative' : opts.save ? opts.save.mode : opts.mode;
     this.renderDistance = opts.renderDistance ?? 6;
     this.worldId = opts.worldId || opts.save?.id || 'w' + Date.now().toString(36);
     this.worldName = opts.worldName || opts.save?.name || 'Świat';
     const seed = opts.save ? opts.save.seed : opts.seed;
     const worldType = opts.save?.worldType ?? opts.worldType ?? 'normal';
     this.worldType = worldType;
-    this.world = new World(seed, worldType === 'flat');
+    this.world = new World(seed, worldType === 'flat', false, !!opts.net?.city);
     this.homeWorld = this.world;
     // Nether istnieje od razu jako osobny wymiar – nigdy nie nadpisuje nadświatu.
     this.netherWorld = new World(seed, false, true);
@@ -1383,6 +1384,7 @@ export class Game {
         this.message(`Witaj ponownie, ${profile.name}! Wracasz tam, gdzie skończyłeś – ekwipunek też czeka.`);
       } else {
         const spread = spreadSpawn(this.playerId);
+        if (net.city) { spread.radius = 8; spread.angle = Math.PI / 4; }
         const spot = this.findSpawnSpot(
           Math.round(Math.cos(spread.angle) * spread.radius),
           Math.round(Math.sin(spread.angle) * spread.radius)
@@ -1392,7 +1394,7 @@ export class Game {
         this.spawnPoint.copy(this.body.pos);
         this.fallStart = this.body.pos.y;
         this.message(
-          `Witaj na serwerze publicznym! Zaczynasz w nowym miejscu (${spot.x}, ${spot.z}) – świat jest duży, więc łatwiej znaleźć własny kąt. ` +
+          net.city ? 'Witaj w Mieście budowniczych! Masz Creative i lot (2× Spacja). Trawiaste działki 32×32: wejdź na wolną i wpisz /dzialka zajmij. Maks. 4 działki. Ulice i cudze działki są chronione. /dzialka lista pokazuje twoje współrzędne.' : `Witaj na serwerze publicznym! Zaczynasz w nowym miejscu (${spot.x}, ${spot.z}) – świat jest duży, więc łatwiej znaleźć własny kąt. ` +
             'T – czat, /tpa nick – zaproś kogoś do siebie, /help – komendy.'
         );
       }
@@ -1440,7 +1442,7 @@ export class Game {
    */
   private applyProfile(p: PlayerProfile) {
     this.profileRevision = p.updated;
-    const nether = p.dim === 'n';
+    const nether = !this.net?.city && p.dim === 'n';
     if (nether !== this.isInNether) this.switchDimension(nether ? this.netherWorld : this.homeWorld);
     this.body.pos.set(p.x, p.y, p.z);
     this.body.vel.set(0, 0, 0);
@@ -1628,7 +1630,7 @@ export class Game {
         this.message('Teleportacja nie powiodła się (brak pozycji).');
         return;
       }
-      const nether = m.d === 'n';
+      const nether = !this.net?.city && m.d === 'n';
       if (nether !== this.isInNether) this.switchDimension(nether ? this.netherWorld : this.homeWorld);
       this.body.pos.set(m.x as number, m.y as number, m.z as number);
       this.body.vel.set(0, 0, 0);
@@ -1835,6 +1837,7 @@ export class Game {
         a.legR.rotation.x = -swing;
         a.armL.rotation.x = -swing * 0.8;
       }
+      a.group.visible = ((this.combatPlayers.get(id)?.d === 'n') === this.isInNether) && a.group.position.distanceToSquared(this.body.pos) <= (96 * this.entityDistance) ** 2;
       if (a.held !== a.heldId) {
         a.heldId = a.held;
         a.hand.visible = !!a.held;
@@ -2144,7 +2147,7 @@ export class Game {
 
   /** 2.28: zasięg pasma LOD w blokach (0 = wyłączone / Nether). */
   lodFar(): number {
-    if (!this.lodEnabled || this.isInNether) return 0;
+    if (!this.lodEnabled || this.isInNether || this.world.city) return 0;
     return lodRange(this.renderDistance, CS) * this.governor.profile.lodScale;
   }
 
@@ -2309,6 +2312,7 @@ export class Game {
     haptics?: boolean;
     viewBobbing?: boolean;
     showFps?: boolean;
+    entityDistance?: number;
   }) {
     if (o.renderDistance !== undefined && o.renderDistance !== this.renderDistance) this.setRenderDistance(o.renderDistance);
     if (o.pixelRatio !== undefined) {
@@ -2345,6 +2349,7 @@ export class Game {
     if (o.haptics !== undefined) this.haptics = o.haptics;
     if (o.viewBobbing !== undefined) this.viewBobbing = o.viewBobbing;
     if (o.showFps !== undefined) this.showFps = o.showFps;
+    if (o.entityDistance !== undefined) this.entityDistance = Math.max(.5, Math.min(1.5, o.entityDistance));
     this.emitHud();
   }
 
@@ -4079,6 +4084,7 @@ export class Game {
   }
 
   private enterPortal() {
+    if (this.net?.city) return;
     if (this.portalCooldown > 0 || this.ui !== 'playing') return;
     if (this.isInNether) { this.leaveNether(); return; }
     this.message('Wkraczasz do portalu Netheru...');
@@ -4545,6 +4551,7 @@ export class Game {
         this.message(BLOCKS.filter((b) => b && b.id > 0).map((b) => `${b.id}:${b.name}`).join(', '));
         break;
       case 'summon': {
+        if (this.net?.city) { this.message('Miasto jest przeznaczone do budowania, bez przyzywania mobów.'); return; }
         const raw = (args[0] || 'pig').toLowerCase();
         const map: Record<string, MobType> = {
           pig: 'pig', swinia: 'pig', świnia: 'pig', sheep: 'sheep', owca: 'sheep', zombie: 'zombie',
@@ -4678,6 +4685,7 @@ export class Game {
   }
 
   setMode(m: GameMode) {
+    if (this.net?.city && m !== 'creative') { this.message('Miasto budowniczych ma stały tryb Creative.'); return; }
     this.mode = m;
     if (m === 'survival') this.flying = false;
     this.health = 20;
@@ -6256,6 +6264,7 @@ export class Game {
    * zamiast stać spokojnie w dymie.
    */
   explode(cx: number, cy: number, cz: number, power: number, source: Mob | 'player' | null = null) {
+    if (this.net?.city) return; // City buildings and infrastructure never take explosion damage.
     Sfx.playExplosion();
     this.shake = 0.6;
     const disturbed = new Set<string>();
@@ -7079,6 +7088,7 @@ export class Game {
       // 2–6 klatek. Ruch liczymy z dt pomnożonym przez interwał, więc nic
       // nie „zwalnia” – po prostu próbkujemy rzadziej i taniej.
       const dist = m.body.pos.distanceTo(p);
+      m.group.visible = dist <= 96 * this.entityDistance;
       let mdt = dt;
       let skip = false;
       if (this.entityCulling && !m.dead && dist > 48) {
@@ -7142,7 +7152,7 @@ export class Game {
     });
 
     this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) {
+    if (this.spawnTimer <= 0 && !this.net?.city) {
       this.spawnTimer = 1.5;
       const alive = this.mobs.filter((m) => !m.dead);
       const hostile = alive.filter((m) => HOSTILE_MOBS.has(m.type)).length;

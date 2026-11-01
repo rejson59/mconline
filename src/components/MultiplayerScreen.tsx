@@ -1,3 +1,4 @@
+import { CITY_WORLD_ID, CITY_NAME } from '../game/city';
 import { JavaButton, JavaPage } from './JavaMenus';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -74,6 +75,7 @@ export default function MultiplayerScreen({
   const [name, setName] = useState(() => loadNick() || 'Gracz');
   const [skin, setSkin] = useState(loadSkinId);
   const [mode, setMode] = useState<Mode>(defaultMode);
+  const [publicWorld, setPublicWorld] = useState<'public'|'city'>('public');
   const [role, setRole] = useState<'host' | 'guest'>('host');
   const [room, setRoom] = useState('las-123');
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1_000_000));
@@ -164,14 +166,14 @@ export default function MultiplayerScreen({
 
   // ------------------------------------------------------- serwer publiczny
 
-  const joinPublic = async () => {
+  const joinPublic = async (world: 'public'|'city' = publicWorld) => {
     reset();
     setMode('public');
     const request = attempt.current;
     setBusy(true);
     setStatus('connecting');
     setMessage('Łączę z serwerem publicznym…');
-    const s = new PublicServer({ name: name.trim() || 'Gracz' });
+    const s = new PublicServer({ name: name.trim() || 'Gracz', worldId: world === 'city' ? CITY_WORLD_ID : 'public' });
     s.skin = skin;
     session.current = s;
     s.onProgress = (text) => setMessage(text);
@@ -332,13 +334,16 @@ export default function MultiplayerScreen({
   const connected = status === 'connected';
 
   if (mode === 'public') return <JavaPage title={busy ? 'Łączenie z serwerem...' : 'Tryb wieloosobowy'} footer={<>
-    <div className="java-button-row"><JavaButton width={150} disabled={busy} onClick={joinPublic}>Dołącz do serwera</JavaButton><JavaButton width={150} onClick={() => { reset(); setMode('local'); }}>Połączenia przeglądarkowe...</JavaButton></div>
+    <div className="java-button-row"><JavaButton width={150} disabled={busy} onClick={() => void joinPublic()}>Dołącz do serwera</JavaButton><JavaButton width={150} onClick={() => { reset(); setMode('local'); }}>Połączenia przeglądarkowe...</JavaButton></div>
     <JavaButton onClick={() => { reset(); onClose(); }}>Anuluj</JavaButton>
   </>}>
     <label className="java-field">Nazwa gracza<input className="java-input" value={name} maxLength={20} onChange={e => setName(e.target.value)} /></label>
-    <div className="java-world-list" role="listbox" aria-label="Serwery"><button className="java-world" role="option" aria-selected="true" disabled={busy} onDoubleClick={joinPublic}>
-      <span className="java-world-icon">▦</span><span><strong>{PUBLIC_NAME}</strong><small>Publiczny świat przetrwania</small><small>Serwer przeglądarkowy · zapis w chmurze</small></span>
-    </button></div>
+    <div className="java-world-list" role="listbox" aria-label="Serwery">
+      {(['public','city'] as const).map(world => <button key={world} className="java-world" role="option" aria-selected={publicWorld === world} disabled={busy} onClick={() => setPublicWorld(world)} onDoubleClick={() => void joinPublic(world)}>
+        <span className="java-world-icon">{world === 'city' ? '▥' : '▦'}</span><span><strong>{world === 'city' ? CITY_NAME : PUBLIC_NAME}</strong><small>{world === 'city' ? 'Creative · działki 32×32 · chronione ulice' : 'Publiczny świat przetrwania'}</small><small>Serwer przeglądarkowy · zapis w chmurze · osobny ekwipunek</small></span>
+      </button>)}
+    </div>
+    {publicWorld === 'city' && <p className="java-muted">Creative dla każdego. Wejdź na trawiastą działkę i wpisz /dzialka zajmij (maks. 4). Budujesz tylko u siebie; ulice i wolne działki są chronione. Własność jest przypisana do tej przeglądarki — nie usuwaj danych strony.</p>}
     {message && <p role="status" style={{ color: status === 'error' ? '#ff5555' : '#aaa', margin: '10px 5px' }}>{message}</p>}
     <p className="java-muted">To serwer tego projektu. Adresy oryginalnych serwerów Minecraft Java / Bedrock nie są obsługiwane.</p>
   </JavaPage>;

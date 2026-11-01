@@ -2504,7 +2504,7 @@ section('2.0: automatic graphics and settings');
 
   store.set(SETTINGS_KEY, JSON.stringify({
     renderDistance: 99, sensitivity: -3, fov: null, volume: 4, quality: 'ultra',
-    controlMode: 'flight', touchMode: 'trackball', fpsCap: 120, minimap: 'false',
+    controlMode: 'flight', touchMode: 'trackball', fpsCap: 777, minimap: 'false',
   }));
   const recovered = loadSettings();
   eq('stored render distance is clamped', recovered.renderDistance, 14);
@@ -3194,8 +3194,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.11.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Schody i płyty', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.12.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Miasto budowniczych', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -4303,7 +4303,7 @@ section('2.11: publiczny serwer – zegar, dane i integracja');
   const mp = readSource('src/components/MultiplayerScreen.tsx');
   const world = readSource('src/game/world.ts');
   check('serwer publiczny używa Supabase Realtime', /client\.channel\(PUBLIC_CHANNEL/.test(online));
-  check('zmiany bloków trafiają do chronionego RPC', online.includes("rpc('blockcraft_write_blocks'"));
+  check('zmiany bloków trafiają do chronionego RPC', online.includes("rpc(this.city ? 'blockcraft_city_write_blocks' : 'blockcraft_write_blocks'"));
   check('bezpośredni zapis nie omija ochrony działek', readSource('supabase/migrations/202610300001_plots.sql').includes('revoke insert, update, delete on public.blockcraft_blocks from anon, authenticated'));
   check('nieudany zapis wraca do kolejki', /pending\.set\(key, edit\)/.test(online));
   check('wejście pobiera zmiany z bazy', /loadBlocks/.test(online));
@@ -9121,6 +9121,88 @@ section('4.11: native stair corners, upside-down states and precise slab placeme
   game.updateBuildingTarget(B.STONE,5,y,5);game.selection.geometry.computeBoundingBox();
   check('leaving a shaped block restores cubic outline',Math.abs(game.selection.geometry.boundingBox!.max.y-game.selection.geometry.boundingBox!.min.y-1.004)<1e-6);
   for(const mesh of[game.selection,game.crackMesh]){mesh.geometry.dispose();mesh.material.dispose();}
+}
+
+section('4.12: protected Creative city, independent worlds, negative parcel edges');
+{
+  const { PlotAccess } = await import('../src/game/plots');
+  const { cityBuildable, cityCell, cityLocal, cityPlotStart, CITY_SEED, CITY_CHANNEL } = await import('../src/game/city');
+  const a = 'a'.repeat(64), b = 'b'.repeat(64), access = new PlotAccess(true);
+  check('city is fail-closed before rights load', !access.canEdit(20,20,'o'));
+  access.update(a, [{cx:0,cz:0,owner:a,name:'A'}, {cx:-1,cz:-1,owner:a,name:'A'}, {cx:1,cz:0,owner:b,name:'B'}]);
+  for (let x = -55; x <= 100; x++) for (const z of [-49,-48,-33,-32,-1,0,15,16,47,48,63,64,95]) {
+    const cx = Math.floor(x/48), cz = Math.floor(z/48);
+    const localX = x - cx*48, localZ = z - cz*48;
+    const grass = localX>=16 && localZ>=16;
+    const mine = (cx===0 && cz===0) || (cx===-1 && cz===-1);
+    eq(`city grid and floor semantics ${x},${z}`, cityBuildable(x,z), grass);
+    eq(`city rights at ${x},${z}`, access.canEdit(x,z,'o'), grass && mine);
+    check('city never enables Nether editing', !access.canEdit(x,z,'n'));
+  }
+  check('outside city is protected even if a corrupt row claims it', !cityBuildable(-769,20) && !cityBuildable(784,20));
+  eq('negative city local uses positive modulo', cityLocal(-1),47);
+  eq('negative plot index is floor not truncation', cityCell(-1),-1);
+  eq('negative plot start matches SQL', cityPlotStart(-1),-32);
+  check('roads do not display an adjacent parcel owner', !access.at(15,20));
+  check('unclaimed parcels cannot be edited', !access.canEdit(112,20,'o'));
+  check('water can flow inside an owned parcel', access.canFlow(20,20,21,20));
+  check('water cannot invade streets', !access.canFlow(16,20,15,20));
+  check('street water cannot flow even between two unowned points', !access.canFlow(0,0,1,0));
+  check('water cannot invade foreign or unclaimed parcels', !access.canFlow(47,20,64,20) && !access.canFlow(47,20,112,20));
+  const city = new World(CITY_SEED,true,false,true), copy = new World(CITY_SEED,false,false,true);
+  for (const [x,z] of [[0,0],[7,20],[2,2],[20,20],[-1,-1],[-48,-48],[-32,-32],[48,20],[64,20],[767,767]]) {
+    eq('city has solid continuous ground', city.getBlock(x,FLAT_H-1,z),B.DIRT);
+    eq('city has immutable bedrock foundation',city.getBlock(x,0,z),B.BEDROCK);
+    eq('city generator is deterministic across instances',city.getBlock(x,FLAT_H,z),copy.getBlock(x,FLAT_H,z));
+    eq('no random trees/buildings above city ground',city.getBlock(x,FLAT_H+1,z),B.AIR);
+  }
+  eq('city parcel ground is grass',city.getBlock(20,FLAT_H,20),B.GRASS);
+  eq('city avenue is concrete',city.getBlock(8,FLAT_H,20),B.CONCRETE_BLACK);
+  eq('city street lighting exists',city.getBlock(2,FLAT_H,2),B.GLOWSTONE);
+  check('city does not invent village populations',city.villageAt(0,0)===null && city.villagesIn(-1000,-1000,1000,1000).length===0 && city.nearestVillage(0,0)===null);
+  city.canEdit=(x,z)=>access.canEdit(x,z,'o');
+  city.setBlock(20,FLAT_H+1,20,B.BRICK); eq('city owner can build',city.getBlock(20,FLAT_H+1,20),B.BRICK);
+  city.setBlock(15,FLAT_H,20,B.AIR); check('street survives manual or mechanical mutation',city.getBlock(15,FLAT_H,20)!==B.AIR);
+  city.setBlock(20,0,20,B.AIR); eq('city floor cannot be removed',city.getBlock(20,0,20),B.BEDROCK);
+  city.setBlock(64,FLAT_H+1,20,B.TNT); eq('foreign parcel survives mechanical mutation',city.getBlock(64,FLAT_H+1,20),B.AIR);
+  const calls: string[] = [];
+  const client = { rpc: async(name: string, args: any)=>{ calls.push(name); return {data:name.endsWith('_plot') ? {owner:a,plots:[]} : {accepted:[],rejected:args.p_edits.map((e:any)=>({...e,id:null}))},error:null}; } };
+  const server = new PublicServer({name:'City',worldId:'city',client:client as never}) as any;
+  const survival = new PublicServer({name:'Survival',client:client as never}) as any;
+  eq('city gets a separate channel by default',server.channelName,CITY_CHANNEL);
+  check('survival channel is unchanged',server.channelName!==survival.channelName);
+  eq('city handshake forces Creative',server.world.mode,'creative');
+  eq('city seed differs from survival',server.world.seed,CITY_SEED);
+  eq('survival still uses its original seed',survival.world.seed,PUBLIC_SEED);
+  eq('survival still starts in survival',survival.world.mode,'survival');
+  server.setWorld({seed:1,mode:'survival',worldType:'normal'});
+  check('patching a handshake cannot silently convert the city',server.world.seed===CITY_SEED && server.world.mode==='creative' && server.world.worldType==='flat');
+  check('city and survival profile caches do not collide',server.dropOutboxKey()!==survival.dropOutboxKey());
+  await server.refreshPlots(); await survival.refreshPlots();
+  check('each world loads rights with its own RPC',calls.includes('blockcraft_city_plot') && calls.includes('blockcraft_plot'));
+  let restored=-1; server.onMessage=(m:any)=>{restored=m.list[0].id;};
+  server.sendEdits([{x:8,y:FLAT_H,z:20,id:B.AIR,d:'o'}]); await server.flush();
+  eq('SQL denial restores city terrain, never survival terrain',restored,B.CONCRETE_BLACK);
+  check('city edits use only the protected city writer',calls.includes('blockcraft_city_write_blocks'));
+  const game=Object.assign(Object.create(Game.prototype),{net:{city:true},mode:'creative',flying:true,message(){},emitHud(){}}) as any;
+  game.setMode('survival'); eq('city cannot switch to survival',game.mode,'creative');
+  game.enterPortal(); game.explode(0,65,0,4); game.command('/summon creeper');
+  check('city portal, explosion and summon guards run before world changes',game.mode==='creative');
+  const settings=normalizeSettings({chatScale:-10,chatWidth:8,chatLines:90,chatBackground:NaN,chatOpacity:-1,chatVisible:'yes',entityDistance:200,fpsCap:144,fpsCapUserSet:true,guiScale:0});
+  check('new options are clamped and explicit GUI Auto survives',settings.chatScale===.5 && settings.chatWidth===1 && settings.chatLines===10 && settings.chatBackground===.45 && settings.chatOpacity===0 && settings.chatVisible && settings.entityDistance===1.5 && settings.guiScale===0);
+  eq('144 Hz is a supported persistent FPS cap',settings.fpsCap,144);
+  const device:DeviceProfile={mobile:true,tier:'low',cores:4,memoryGB:2,gpu:'test',dpr:2,minScreen:360};
+  eq('explicit FPS cap takes precedence over Auto device preset',effectiveSettings({...DEFAULT_SETTINGS,quality:'auto',fpsCap:144,fpsCapUserSet:true},device).fpsCap,144);
+  eq('explicit unlimited FPS is not replaced by Auto preset',effectiveSettings({...DEFAULT_SETTINGS,quality:'auto',fpsCap:0,fpsCapUserSet:true},device).fpsCap,0);
+  let snapshotSize=1001;const ranges:number[][]=[];const worlds:string[]=[];
+  const pagedClient={from(){const q:any={select(){return q;},eq(_key:string,value:string){worlds.push(value);return q;},order(){return q;},limit(){return Promise.resolve({data:[{version:1}],error:null});},range(from:number,to:number){ranges.push([from,to]);return Promise.resolve({data:Array.from({length:Math.max(0,Math.min(to+1,snapshotSize)-from)},(_,i)=>({x:from+i,y:65,z:20,block:3,dim:'o'})),error:null});}};return q;}};
+  const paged=new PublicServer({name:'Paged',worldId:'city',client:pagedClient as never}) as any;
+  eq('city snapshot loads every page, not just the first thousand',(await paged.loadBlocks()).length,1001);
+  check('all city snapshot reads are scoped to city',worlds.every(w=>w==='city'));
+  snapshotSize=300001;let oversized=false;
+  try { await paged.loadBlocks(); } catch(e) {oversized=String(e).includes('300 000');}
+  check('oversized city snapshot fails explicitly instead of hiding buildings',oversized);
+
 }
 
 // =================================================================== report

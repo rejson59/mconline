@@ -109,7 +109,7 @@ export function ChatInput({
     }, 10);
   };
 
-  const quick = COMMANDS.filter((c) => ['help', 'gamemode', 'time', 'give', 'tp', 'weather'].includes(c.name));
+  const quick = COMMANDS.filter((c) => ['help', 'dzialka', 'gamemode', 'time', 'give', 'tp', 'weather'].includes(c.name));
 
   return (
     <div
