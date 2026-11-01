@@ -1,6 +1,9 @@
 // Original Java 1.20.4 effects, embedded offline. Audio is NOT covered by MIT.
 // See public/Minecraft-NOTICE.txt and scripts/compile-java-sounds.py.
-import { JAVA_SOUND_EVENTS, JAVA_SOUND_FILES } from './art/javaSounds.generated';
+import { JAVA_SOUND_EVENTS as BASE_EVENTS, JAVA_SOUND_FILES as BASE_FILES } from './art/javaSounds.generated';
+import { RESCUE_SOUND_EVENTS, RESCUE_SOUND_FILES } from './art/javaRescue.generated';
+const JAVA_SOUND_EVENTS = { ...BASE_EVENTS, ...RESCUE_SOUND_EVENTS };
+const JAVA_SOUND_FILES = { ...BASE_FILES, ...RESCUE_SOUND_FILES };
 import { B, BLOCKS } from './blocks';
 import { SOUND_CATEGORIES, DEFAULT_SOUND_LEVELS, type SoundCategory, type SoundLevels } from '../utils/soundSettings';
 export type { SoundCategory, SoundLevels } from '../utils/soundSettings';
@@ -146,6 +149,7 @@ export function playDrink() { sample('entity.generic.drink', 'players', .5); }
 export function playBow() { sample('entity.arrow.shoot', 'players'); }
 export function playArrowHit() { sample('entity.arrow.hit', 'players'); }
 export function playLevelUp() { sample('entity.player.levelup', 'players', .75); }
+export function playTotem() { sample('item.totem.use', 'players'); }
 export function playEnchant() { sample('block.enchantment_table.use', 'blocks'); }
 export function playShield() { sample('item.shield.block', 'players'); }
 export function playCave() { sample('ambient.cave', 'ambient', .7); }

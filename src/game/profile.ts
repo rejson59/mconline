@@ -1,3 +1,4 @@
+import { cleanStatus, type StatusSnapshot } from './statusEffects';
 import { achievementById } from './achievements';
 import { foodState } from './hunger';
 /**
@@ -36,6 +37,7 @@ export interface PlayerProfile {
   hunger: number;
   saturation?: number;
   exhaustion?: number;
+  status?: StatusSnapshot;
   xp: number;
   /** Ekwipunek: 36 slotów (9 × hotbar + 27 plecaka). */
   inv: (Stack | null)[];
@@ -172,6 +174,7 @@ export function sanitizeProfile(raw: unknown): PlayerProfile | null {
     yaw: num(r.yaw, 0),
     pitch: num(r.pitch, 0),
     health: health > 0 ? Math.min(20, health) : 1,
+    status: cleanStatus(r.status ?? (Array.isArray(inv) ? inv[51] : undefined)),
     ...foodState(num(r.hunger, 20), r.saturation ?? (Array.isArray(inv) ? inv[49]?.saturation : undefined), r.exhaustion ?? (Array.isArray(inv) ? inv[49]?.exhaustion : undefined)),
     xp: Math.max(0, Math.trunc(num(r.xp, 0))),
     inv: cleanStacks(inv, 36),
@@ -201,8 +204,8 @@ export function profileRow(p: PlayerProfile, world: string) {
     health: p.health,
     hunger: p.hunger,
     xp: p.xp,
-    // Keep the legacy first 36 slots; tail stores UI items, offhand (47), pickup receipts (48), food state (49).
-    inv: JSON.stringify([...p.inv, p.cursor ?? null, ...cleanStacks(p.grid, 9), p.enchantItem ?? null, p.offhand ?? null, p.pickupReceipts ?? [], { saturation: p.saturation ?? 5, exhaustion: p.exhaustion ?? 0 }, p.unlocked ?? []]),
+    // Keep 36 legacy slots; tail: UI items, offhand 47, receipts 48, food 49, achievements 50, status 51.
+    inv: JSON.stringify([...cleanStacks(p.inv, 36), p.cursor ?? null, ...cleanStacks(p.grid, 9), p.enchantItem ?? null, p.offhand ?? null, p.pickupReceipts ?? [], { saturation: p.saturation ?? 5, exhaustion: p.exhaustion ?? 0 }, p.unlocked ?? [], cleanStatus(p.status)]),
     armor: JSON.stringify(p.armor),
     updated_at: new Date(p.updated || Date.now()).toISOString(),
   };

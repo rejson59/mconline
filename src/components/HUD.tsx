@@ -1,3 +1,4 @@
+import { effectIconOpacity } from '../game/statusEffects';
 import { DEFAULT_SETTINGS, type Settings } from '../utils/settings';
 import { useJavaScale } from '../utils/guiScale';
 import { useEffect, useRef, useState } from 'react';
@@ -21,11 +22,11 @@ function PackIcon({ src, size, alt = '' }: { src: string | null; size: number; a
   return <img src={src} width={size} height={size} className="pixelated" alt={alt} draggable={false} />;
 }
 
-function Heart({ fill }: { fill: 0 | 1 | 2 }) {
-  const src = heartSprite(fill);
+function Heart({ fill, golden = false }: { fill: 0 | 1 | 2; golden?: boolean }) {
+  const src = golden ? guiSprite(fill === 2 ? 'heart_absorbing_full' : 'heart_absorbing_half') : heartSprite(fill);
   if (src) {
     return (
-      <span style={{ filter: outline, display: 'inline-flex' }}>
+      <span style={{ filter: outline, display: 'inline-flex', backgroundImage: `url(${heartSprite(0)})`, backgroundSize: '100% 100%' }}>
         <PackIcon src={src} size={18} />
       </span>
     );
@@ -95,11 +96,13 @@ export function Hotbar({ hud, icons, onSelect, onSwapHands }: { hud: HUDState; i
 
 function JavaVitals({ hud, icons, onSelect, onSwapHands }: { hud: HUDState; icons: Record<number, string>; onSelect?: (i: number) => void; onSwapHands?: () => void }) {
   const scale = useJavaScale();
+  const absorption = Math.max(0, Math.min(8, hud.absorption ?? 0));
   return <div className="java-vitals" style={{ position: 'absolute', bottom: 'env(safe-area-inset-bottom,0px)', left: '50%', width: 182, height: 60, transform: `translateX(-50%) scale(${scale})`, transformOrigin: 'bottom center', imageRendering: 'pixelated' }}>
     {hud.mode === 'survival' && <>
       <div data-java-health style={{ position: 'absolute', top: 21, left: 0, display: 'flex', width: 81 }}>{Array.from({ length: 10 }, (_, i) => <Heart key={i} fill={Math.ceil(hud.health) - i * 2 >= 2 ? 2 : Math.ceil(hud.health) - i * 2 >= 1 ? 1 : 0} />)}</div>
+      {absorption > 0 && <div data-java-absorption style={{ position: 'absolute', top: 11, left: 0, display: 'flex', width: 81 }}>{Array.from({ length: Math.ceil(absorption / 2) }, (_, i) => <Heart key={i} golden fill={Math.ceil(absorption) - i * 2 >= 2 ? 2 : 1} />)}</div>}
       <div data-java-food style={{ position: 'absolute', top: 21, right: 0, display: 'flex', flexDirection: 'row-reverse', width: 81 }}>{Array.from({ length: 10 }, (_, i) => <Drumstick key={i} fill={hud.hunger - i * 2 >= 2 ? 2 : hud.hunger - i * 2 >= 1 ? 1 : 0} />)}</div>
-      {hud.armorPoints > 0 && <div data-java-armor style={{ position: 'absolute', top: 11, left: 0, display: 'flex' }}>{Array.from({ length: 10 }, (_, i) => <img key={i} alt="" src={armorSprite(hud.armorPoints - i * 2 >= 2 ? 2 : hud.armorPoints - i * 2 >= 1 ? 1 : 0)!} width={9} height={9} style={{ marginRight: -1 }} />)}</div>}
+      {hud.armorPoints > 0 && <div data-java-armor style={{ position: 'absolute', top: absorption > 0 ? 1 : 11, left: 0, display: 'flex' }}>{Array.from({ length: 10 }, (_, i) => <img key={i} alt="" src={armorSprite(hud.armorPoints - i * 2 >= 2 ? 2 : hud.armorPoints - i * 2 >= 1 ? 1 : 0)!} width={9} height={9} style={{ marginRight: -1 }} />)}</div>}
       {(hud.underwater || hud.air < hud.maxAir) && <div data-java-air style={{ position: 'absolute', right: 0, top: 11, display: 'flex', flexDirection: 'row-reverse' }}>{Array.from({ length: Math.min(10, Math.ceil(hud.air / hud.maxAir * 10)) }, (_, i) => <Bubble key={i} pop={false} />)}</div>}
       <div data-java-xp style={{ position: 'absolute', top: 31, width: 182, height: 5, backgroundImage: `url(${guiSprite('exp_background')})`, backgroundSize: '182px 5px' }}><div style={{ width: `${Math.max(0, Math.min(1, hud.xpFrac)) * 100}%`, height: 5, backgroundImage: `url(${guiSprite('exp_progress')})`, backgroundSize: '182px 5px' }} /></div>
       {hud.level > 0 && <span style={{ position: 'absolute', top: 21, left: '50%', transform: 'translateX(-50%)', color: '#80ff20', fontSize: 8, lineHeight: '9px', textShadow: '1px 0 #000,-1px 0 #000,0 1px #000,0 -1px #000' }}>{hud.level}</span>}
@@ -158,17 +161,14 @@ export default function HUD({ hud, chatSettings = DEFAULT_SETTINGS, chatOpen = f
 
   return (
     <div className="pointer-events-none absolute inset-0 z-30 select-none">
+      {(hud.effects?.length ?? 0) > 0 && <div data-java-effects style={{ position: 'absolute', right: scale, top: scale, display: 'flex', flexDirection: 'row-reverse', gap: 1, transform: `scale(${scale})`, transformOrigin: 'top right', imageRendering: 'pixelated' }}>
+        {hud.effects.filter(effect => !!guiSprite(`effect_${effect.id}`)).slice().sort((a,b) => b.left - a.left).map(effect => <div key={effect.id} data-effect={effect.id} aria-label={`${effect.name}: ${Math.ceil(effect.left)} s`} style={{ width: 24, height: 24, position: 'relative', backgroundImage: `url(${guiSprite('effect_background')})`, backgroundSize: '100% 100%' }}>
+          <img alt={effect.name} src={guiSprite(`effect_${effect.id}`)!} width={18} height={18} draggable={false} style={{ position: 'absolute', left: 3, top: 3, opacity: effectIconOpacity(effect.left) }} />
+        </div>)}
+      </div>}
       {/* overlays */}
       {hud.underwater && <div className="absolute inset-0" style={{ background: 'rgba(20,60,160,0.35)' }} />}
       {hud.inLava && <div className="absolute inset-0" style={{ background: 'rgba(230,90,10,0.6)' }} />}
-      {hud.hurtCount > 0 && <div key={hud.hurtCount} className="hurt-flash absolute inset-0" style={{ background: 'radial-gradient(circle, rgba(255,0,0,0.1) 30%, rgba(200,0,0,0.7))' }} />}
-      {hud.mode === 'survival' && hud.health <= 6 && hud.health > 0 && (
-        <div
-          className="low-health absolute inset-0"
-          style={{ background: 'radial-gradient(circle, rgba(120,0,0,0) 45%, rgba(190,0,0,0.55) 100%)' }}
-        />
-      )}
-
       {/* 2.3: przy lornetcie celownik znika, a ramka zasłania kąty widzenia */}
       {hud.zoom && (
         <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 34%, rgba(0,0,0,0.85) 72%)' }} />
@@ -288,7 +288,7 @@ export default function HUD({ hud, chatSettings = DEFAULT_SETTINGS, chatOpen = f
       </div>}
 
       {hud.minimap && (
-        <div className="absolute right-3 top-3 hidden flex-col items-center gap-1 sm:flex">
+        <div className="absolute right-3 top-3 hidden flex-col items-center gap-1 sm:flex" style={{ top: (hud.effects?.length ?? 0) > 0 ? 25 * scale + 12 : 12 }}>
           <div className="relative" style={{ filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.55))' }}>
             <canvas
               ref={mapRef}

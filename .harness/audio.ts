@@ -1,3 +1,4 @@
+import { RESCUE_SOUND_FILES, RESCUE_SOUND_EVENTS } from '../src/game/art/javaRescue.generated';
 /** Functional Web Audio graph tests. Actual OGG decoding is also browser-tested. */
 import assert from 'node:assert/strict';
 import * as Audio from '../src/game/audio';
@@ -64,5 +65,11 @@ c.state='suspended';start=c.sources.length;Audio.playHurt();await flush();check(
 Audio.setVolume(NaN);check('invalid master cannot poison graph',c.gains[0].gain.value===.5);
 for(const [id,instrument] of [[B.AIR,'harp'],[B.STONE,'basedrum'],[B.PLANKS,'bass'],[B.SAND,'snare'],[B.GLASS,'hat'],[B.GOLD_BLOCK,'bell'],[B.CLAY,'flute'],[B.IRON_BLOCK,'iron_xylophone'],[B.SOUL_SAND,'cow_bell'],[B.HAY,'banjo'],[B.WOOL_WHITE,'guitar']] as const) check(`note instrument ${instrument}`,Audio.noteInstrument(id)===instrument);
 Audio.playNote(24,B.GOLD_BLOCK);await flush();check('note block includes high F-sharp (pitch 24)',c.sources.at(-1)?.playbackRate.value===2);
+Audio.setSoundLevels({...DEFAULT_SOUND_LEVELS,players:0});start=c.sources.length;Audio.playTotem();await flush();
+check('totem activation respects the players mixer',c.sources.length===start);
+Audio.setSoundLevels({...DEFAULT_SOUND_LEVELS});Audio.playTotem();await flush();
+check('totem activation starts its own original sample',c.sources.length===start+1 && c.sources.at(-1)?.started);
+check('native totem event resolves to its original recording',RESCUE_SOUND_EVENTS['item.totem.use'][0].name==='item/totem/use_totem');
+check('embedded totem recording is a real OGG',Buffer.from(RESCUE_SOUND_FILES['item/totem/use_totem'],'base64').subarray(0,4).toString()==='OggS');
 Audio.stopWorldAudio();
 console.log(`${checks} audio checks passed`);

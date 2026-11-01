@@ -30,7 +30,7 @@ export const POTIONS: Record<number, PotionDef> = {
   [I.POTION_SPEED]: { id: I.POTION_SPEED, name: 'Napój szybkości', effect: 'speed', duration: 20, color: '#b8e04a', desc: 'O 30% szybszy bieg przez 20 s.' },
   [I.POTION_NIGHT]: { id: I.POTION_NIGHT, name: 'Napój nocnego widzenia', effect: 'night', duration: 30, color: '#4ad0a8', desc: 'Jaskinie i nocy nie straszne przez 30 s.' },
   [I.POTION_STRENGTH]: { id: I.POTION_STRENGTH, name: 'Napój siły', effect: 'strength', duration: 15, color: '#e0a030', desc: '+4 obrażeń w zwarciu przez 15 s.' },
-  [I.POTION_REGEN]: { id: I.POTION_REGEN, name: 'Napój regeneracji', effect: 'regen', duration: 10, color: '#e06090', desc: 'Odnowienie: +1 serce co 2 s przez 10 s.' },
+  [I.POTION_REGEN]: { id: I.POTION_REGEN, name: 'Napój regeneracji', effect: 'regen', duration: 10, color: '#e06090', desc: 'Regeneracja I: +1 punkt zdrowia co 2,5 s przez 10 s.' },
 };
 
 /** Instant heal value of the healing potion. */
