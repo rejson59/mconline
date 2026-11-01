@@ -127,7 +127,7 @@ export interface ItemDef {
   /** Saturation modifier: nutrition × modifier × 2. */
   saturation?: number;
   /** Armor metadata: which slot it occupies and how many armor points it adds. */
-  armor?: { slot: 0 | 1 | 2 | 3; points: number };
+  armor?: { slot: 0 | 1 | 2 | 3; points: number; toughness?: number };
   /** 2.4: which buff the bottle carries (brewing.ts holds durations/values). */
   potion?: PotionEffectId;
   /** Flat color used by drop entities and the icon painter. */
@@ -248,26 +248,27 @@ const ARMOR_TIERS: {
   prefix: string; keys: [string, string]; color: string;
   points: [number, number, number, number]; // head, chest, legs, feet
   durability: [number, number, number, number];
+  toughness: number;
   names: [string, string, string, string];
 }[] = [
   {
     prefix: 'skorzany', keys: ['skorzany', 'leather'], color: '#8a5a3b',
-    points: [1, 3, 2, 1], durability: [55, 80, 75, 55],
+    points: [1, 3, 2, 1], durability: [55, 80, 75, 65], toughness: 0,
     names: ['Skórzany kaptur', 'Skórzany napierśnik', 'Skórzane nogawice', 'Skórzane buty'],
   },
   {
     prefix: 'zelazny', keys: ['zelazny', 'iron'], color: '#d8d8d8',
-    points: [2, 6, 5, 2], durability: [165, 240, 225, 195],
+    points: [2, 6, 5, 2], durability: [165, 240, 225, 195], toughness: 0,
     names: ['Żelazny kaptur', 'Żelazny napierśnik', 'Żelazne nogawice', 'Żelazne buty'],
   },
   {
     prefix: 'zloty', keys: ['zloty', 'gold'], color: '#f6d34a',
-    points: [2, 5, 3, 1], durability: [77, 112, 105, 91],
+    points: [2, 5, 3, 1], durability: [77, 112, 105, 91], toughness: 0,
     names: ['Złoty kaptur', 'Złoty napierśnik', 'Złote nogawice', 'Złote buty'],
   },
   {
     prefix: 'diamontowy', keys: ['diamontowy', 'diamond'], color: '#3ee0d0',
-    points: [3, 8, 6, 3], durability: [363, 528, 495, 429],
+    points: [3, 8, 6, 3], durability: [363, 528, 495, 429], toughness: 2,
     names: ['Diamentowy kaptur', 'Diamentowy napierśnik', 'Diamentowe nogawice', 'Diamentowe buty'],
   },
 ];
@@ -292,7 +293,7 @@ ARMOR_TIERS.forEach((tier, ti) => {
       keys: [`${tier.keys[0]}_${SLOT_KEYS[si][0]}`, `${tier.keys[1]}_${en}`],
       kind: 'armor',
       durability: tier.durability[si],
-      armor: { slot, points: tier.points[si] },
+      armor: { slot, points: tier.points[si], toughness: tier.toughness },
       color: tier.color,
     });
   });

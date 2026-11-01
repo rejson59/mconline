@@ -193,9 +193,8 @@ export function autoJumpAhead(
  * łatwo było napisać tak, że nigdy nie zachodził.
  */
 export function slimeBounce(wasGround: boolean, onGround: boolean, velY: number): number | null {
-  if (!onGround) return null;
-  if (wasGround && velY >= -2) return null;
-  return Math.max(6, -velY * 0.8);
+  if (wasGround || !onGround || velY >= 0) return null;
+  return -velY;
 }
 
 function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, d: number): boolean {

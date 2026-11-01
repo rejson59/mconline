@@ -47,7 +47,7 @@ export const ENCHANTS: EnchDef[] = [
   { id: 'silktouch', name: 'Jedwabny dotyk', max: 1, keys: ['jedwabny_dotyk', 'silktouch', 'silk_touch'],
     desc: () => 'Bloki wypadają w oryginalnej formie (kamień, szkło, ruda).' },
   { id: 'unbreaking', name: 'Niezniszczalność', max: 3, keys: ['niezniszczalnosc', 'unbreaking'],
-    desc: (l) => `${Math.round(l / (l + 1) * 100)}% szans, że użycie nie zużyje wytrzymałości.` },
+    desc: (l) => `${Math.round(l / (l + 1) * 100)}% szans oszczędzenia punktu narzędzia; na zbroi ${Math.round(.4 * l / (l + 1) * 100)}%.` },
   { id: 'sharpness', name: 'Ostrość', max: 5, keys: ['ostrzosc', 'sharpness'],
     desc: (l) => `+${(l * 0.5 + 0.5).toFixed(1)} obrażeń w zwarciu.` },
   { id: 'power', name: 'Moc', max: 5, keys: ['moc', 'power'],
@@ -59,7 +59,7 @@ export const ENCHANTS: EnchDef[] = [
   { id: 'looting', name: 'Grabież', max: 3, keys: ['grabiez', 'looting'],
     desc: (l) => `Moby zostawiają do ${l} dodatkowych przedmiotów.` },
   { id: 'protection', name: 'Ochrona', max: 4, keys: ['ochrona', 'protection'],
-    desc: (l) => `Redukuje obrażenia o ${l * 4}% (łącznie z pancerzem).` },
+    desc: (l) => `Redukuje pozostałe obrażenia o ${l * 4}% na część zbroi; łączny limit zaklęć 80%.` },
   { id: 'featherfalling', name: 'Lekki krok', max: 4, keys: ['lekki_krok', 'feather_falling', 'featherfalling'],
     desc: (l) => `Obrażenia od upadku o ${l * 12}% mniejsze.` },
 ];
@@ -267,7 +267,7 @@ export function totalProtection(equipped: (Stack | null)[]): number {
   return sum;
 }
 
-/** Multiplicative fall-damage factor from boots (0.88 per level, min 0.52). */
+/** Boots-only fall factor; the engine combines its EPF with Protection separately. */
 export function fallDamageFactor(boots: Stack | null | undefined): number {
   const lvl = enchLevel(boots, 'featherfalling');
   if (lvl <= 0) return 1;
