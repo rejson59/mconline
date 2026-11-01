@@ -1,3 +1,4 @@
+import { upperHalf } from './buildingShapes';
 import { chestLidAngle } from './chestModel';
 import { railPlacement, railBase } from './rails';
 import { smoothAlpha, movementFov, mousePitch, damageRoll } from './cameraEffects';
@@ -11,9 +12,9 @@ import { cleanDrop, DROP_LIFETIME, validVector, type SharedDrop } from './shared
 import { nearestStructure, structureKindFromName, STRUCTURE_LABELS } from './structures';
 import { explorationLootKind } from './explorationLoot';
 import * as THREE from 'three';
-import { World, CS, CH, SEA, plantTree, chestLidGeometry, closedChestGeometry, type Biome, type Chunk } from './world';
+import { World, CS, CH, SEA, plantTree, chestLidGeometry, closedChestGeometry, buildingBlockGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
-import { B, BLOCKS, IS_SOLID, RENDER, collisionBoxesAt, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsBase, isSlab, slabBase, slabFullBlock, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
+import { B, BLOCKS, IS_SOLID, RENDER, collisionBoxesAt, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsId, buildingItem, isSlab, isSlabTop, slabBase, slabDouble, isSlabDouble, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -427,6 +428,7 @@ interface Bobber {
 
 export function blockGeometry(id: number): THREE.BufferGeometry {
   if (isChestBlock(id)) return closedChestGeometry();
+  if (isStairs(id) || isSlab(id)) return buildingBlockGeometry(id);
   if (RENDER[id] === 1) {
     const g = new THREE.PlaneGeometry(1, 1);
     const uv = g.attributes.uv as THREE.BufferAttribute;
@@ -5648,6 +5650,70 @@ export class Game {
     return !this.net?.public || !this.net.canEdit || this.net.canEdit(x, z, this.isInNether ? 'n' : 'o');
   }
 
+  private canPlaceBuilding(
+    id: number,
+    x: number,
+    y: number,
+    z: number
+  ): boolean {
+    const boxes = collisionBoxesAt(
+      {
+        peekBlock: (bx, by, bz) =>
+          bx === x && by === y && bz === z
+            ? id
+            : this.world.peekBlock(bx, by, bz),
+        hasChunk: (cx, cz) => this.world.hasChunk(cx, cz),
+      },
+      x,
+      y,
+      z
+    );
+    if (!boxes) return true;
+    const bodies = [
+      this.body,
+      ...this.mobs.filter((m) => !m.dead).map((m) => m.body),
+    ];
+    return !bodies.some((b) => {
+      for (let i = 0; i < boxes.length; i += 6)
+        if (
+          b.pos.x + b.w / 2 > x + boxes[i] + 1e-6 &&
+          b.pos.x - b.w / 2 < x + boxes[i + 3] - 1e-6 &&
+          b.pos.y + b.h > y + boxes[i + 1] + 1e-6 &&
+          b.pos.y < y + boxes[i + 4] - 1e-6 &&
+          b.pos.z + b.w / 2 > z + boxes[i + 2] + 1e-6 &&
+          b.pos.z - b.w / 2 < z + boxes[i + 5] - 1e-6
+        )
+          return true;
+      return false;
+    });
+  }
+
+  /** Keep outline and breaking overlay on the same exposed shape as the mesh. */
+  private updateBuildingTarget(id: number, x: number, y: number, z: number) {
+    const shaped = isStairs(id) || isSlab(id),
+      boxes = shaped ? collisionBoxesAt(this.world, x, y, z) : null;
+    const key = boxes ? Array.from(boxes).join(',') : 'cube';
+    if ((this.selection.userData.buildingShape ?? 'cube') === key) return;
+    const geometry = shaped
+      ? buildingBlockGeometry(id, boxes!, false)
+      : new THREE.BoxGeometry(1, 1, 1);
+    const edges = new THREE.EdgesGeometry(geometry);
+    edges.scale(1.004, 1.004, 1.004);
+    geometry.scale(1.006, 1.006, 1.006);
+    this.selection.geometry.dispose();
+    this.selection.geometry = edges;
+    this.crackMesh.geometry.dispose();
+    this.crackMesh.geometry = geometry;
+    this.selection.userData.buildingShape = key;
+  }
+
+  /** Use the same eye/aim ray as targeting, including touch aim. */
+  private placementHitY(t: { y: number; dist?: number }): number {
+    const eye = this.eyePos(),
+      dir = this.aimDir ?? this.lookDir();
+    return Math.max(0, Math.min(1, eye.y + dir.y * (t.dist ?? 0) - t.y));
+  }
+
   private tryUseHeld() {
     const held = this.selectedStack();
     // Only container use targets fluids; ordinary mining/placing ignores them.
@@ -5764,11 +5830,16 @@ export class Game {
     let placeId: number | undefined;
     let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
     if (RENDER[t.id] === 1) { px = t.x; py = t.y; pz = t.z; }
+    const mergeTarget=isSlab(s.id)&&isSlab(t.id)&&!isSlabDouble(t.id)&&slabBase(s.id)===slabBase(t.id)&&
+      (isSlabTop(t.id)?t.ny<0||(t.ny===0&&this.placementHitY(t)<=.5):t.ny>0||(t.ny===0&&this.placementHitY(t)>.5));
+    if(mergeTarget){px=t.x;py=t.y;pz=t.z;}
     if (py < 0 || py >= CH) return;
     const cur = this.world.getBlock(px, py, pz);
-    if (cur !== B.AIR && RENDER[cur] !== 2 && RENDER[cur] !== 1) return;
+    const mergeSlab=isSlab(s.id)&&isSlab(cur)&&!isSlabDouble(cur)&&slabBase(s.id)===slabBase(cur)&&
+      (mergeTarget||(isSlabTop(cur)?t.ny>0||(t.ny===0&&this.placementHitY(t)<=.5):t.ny<0||(t.ny===0&&this.placementHitY(t)>.5)));
+    if (cur !== B.AIR && RENDER[cur] !== 2 && RENDER[cur] !== 1 && !mergeSlab) return;
     const id = s.id;
-    if (IS_SOLID[id]) {
+    if (IS_SOLID[id] && !isStairs(id) && !isSlab(id)) {
       const b = this.body;
       if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, px, py, pz)) return;
       for (const m of this.mobs) if (!m.dead && aabbIntersectsBlock(m.body.pos.x, m.body.pos.y, m.body.pos.z, m.body.w, m.body.h, px, py, pz)) return;
@@ -5794,19 +5865,18 @@ export class Game {
       const direction = this.lookDir();
       placeId = railPlacement(id, direction.x, direction.z);
     } else if (isStairs(id)) {
-      // schody stawiane tyłem do gracza
+      // The high half rises in the viewing direction, as in Java.
       const dir = this.lookDir();
-      const placed = stairsBase(id) + facingFromNormal(-dir.x, -dir.z);
+      const placed = stairsId(id,facingFromNormal(dir.x, dir.z),upperHalf(t.ny,this.placementHitY(t)));
       if (!BLOCKS[placed]) return;
       placeId = placed;
     } else if (isSlab(id)) {
-      // płyta górna / dolna, a dwie płyty tego samego typu łączą się w pełny blok
-      // (normal z raycastu wskazuje od klikniętego bloku w stronę gracza,
-      //  więc ny === -1 oznacza, że uderzono wierzch – stawiamy płytę górną)
+      // Clicking an underside places an upper half; side hits use ray height.
+      // Matching halves form a double slab, preserving its two-item loot.
       const base = slabBase(id);
-      const isTop = t.ny === -1;
+      const isTop = upperHalf(t.ny,this.placementHitY(t));
       const existing = this.world.getBlock(px, py, pz);
-      if (existing === base || existing === base + 1) placeId = slabFullBlock(base);
+      if (existing === base || existing === base + 1) placeId = slabDouble(base);
       else placeId = isTop ? base + 1 : base;
     } else if (isPiston(id)) {
       // piston facing toward player (place facing opposite to look)
@@ -5883,6 +5953,7 @@ export class Game {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && !isFarmland(below)) return;
     }
     const finalId = placeId ?? id;
+    if ((isStairs(id) || isSlab(id)) && !this.canPlaceBuilding(finalId,px,py,pz)) return;
     this.world.setBlock(px, py, pz, finalId);
     // 2.25: sypki blok postawiony w powietrzu od razu zaczyna spadać.
     this.fallGravity(px, py, pz);
@@ -5898,7 +5969,7 @@ export class Game {
 
   pickBlock() {
     if (!this.target) return;
-    const id = railBase(this.target.id);
+    const id = buildingItem(railBase(this.target.id));
     const hot = this.inventory.slots.findIndex((s, i) => i < 9 && s && s.id === id);
     if (hot >= 0) { this.selected = hot; this.emitHud(); return; }
     // 2.3: ŚPM działa też dla przedmiotu leżącego poza paskiem – przenosimy
@@ -6836,6 +6907,7 @@ export class Game {
     if (t) {
       this.selection.visible = true;
       const id = t.id;
+      this.updateBuildingTarget(id,t.x,t.y,t.z);
       if (id === B.GLASS_PANE) {
         const boxes = collisionBoxesAt(this.world, t.x, t.y, t.z)!;
         let x0 = 1, z0 = 1, x1 = 0, z1 = 0;

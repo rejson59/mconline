@@ -1,3 +1,4 @@
+import { stairShape, stairBoxes } from './buildingShapes';
 import { CS } from './constants';
 
 // Tile indices in the texture atlas
@@ -134,6 +135,13 @@ export const B = {
   GLASS_PANE: 452,
   // Persist an isolated rail's east/west axis; old IDs remain north/south.
   RAIL_EW: 453, POWERED_RAIL_EW: 454, DETECTOR_RAIL_EW: 455,
+  // Upside-down stairs: seven materials × four directions, append-only.
+  OAK_STAIRS_TOP_N: 456, COBBLE_STAIRS_TOP_N: 460, BRICK_STAIRS_TOP_N: 464,
+  STONE_BRICK_STAIRS_TOP_N: 468, SANDSTONE_STAIRS_TOP_N: 472,
+  NETHER_BRICK_STAIRS_TOP_N: 476, QUARTZ_STAIRS_TOP_N: 480,
+  OAK_SLAB_DOUBLE: 484, STONE_SLAB_DOUBLE: 485, COBBLE_SLAB_DOUBLE: 486,
+  BRICK_SLAB_DOUBLE: 487, SANDSTONE_SLAB_DOUBLE: 488,
+  NETHER_BRICK_SLAB_DOUBLE: 489, QUARTZ_SLAB_DOUBLE: 490,
 } as const;
 
 export type RenderType =
@@ -364,6 +372,12 @@ for (let i = 0; i < 4; i++) {
   def(B.QUARTZ_STAIRS_N + i, i === 0 ? 'Kwarcowe schody' : `Kwarcowe schody (${FACE_PL[i]})`, T.quartz_block, { hardness: 0.8, drop: B.QUARTZ_STAIRS_N, render: 'stairs' as any });
 }
 // Płyty
+for (let offset=0;offset<28;offset++) {
+  const original=defs[B.OAK_STAIRS_N+offset];
+  def(B.OAK_STAIRS_TOP_N+offset,original.name+' (górne)',[original.top,original.bottom,original.side],
+    {render:'stairs',hardness:original.hardness,sound:original.sound,drop:original.drop});
+}
+
 def(B.OAK_SLAB, 'Dębowa płyta', T.planks, { hardness: 2, sound: 'wood', render: 'slab' as any });
 def(B.OAK_SLAB_TOP, 'Dębowa płyta (górna)', T.planks, { hardness: 2, sound: 'wood', drop: B.OAK_SLAB, render: 'slab' as any, solid: true, opaque: false, layer: 1 });
 def(B.STONE_SLAB, 'Kamienna płyta', T.stone, { hardness: 2, render: 'slab' as any });
@@ -385,6 +399,12 @@ def(B.CONCRETE_BLUE, 'Niebieski beton', T.concrete_blue, { hardness: 1.8 });
 def(B.CONCRETE_GREEN, 'Zielony beton', T.concrete_green, { hardness: 1.8 });
 def(B.CONCRETE_YELLOW, 'Żółty beton', T.concrete_yellow, { hardness: 1.8 });
 def(B.CONCRETE_BLACK, 'Czarny beton', T.concrete_black, { hardness: 1.8 });
+for(let offset=0;offset<7;offset++) {
+  const original=defs[B.OAK_SLAB+offset*2];
+  def(B.OAK_SLAB_DOUBLE+offset,original.name+' (podwójna)',[original.top,original.bottom,original.side],
+    {render:'slab',hardness:original.hardness,sound:original.sound,drop:original.id});
+}
+
 def(B.TERRACOTTA, 'Terakota', T.terracotta, { hardness: 1.25 });
 def(B.RAIL, 'Tory', T.rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'metal' });
 def(B.POWERED_RAIL, 'Zasilane tory', T.powered_rail, { solid: false, opaque: false, layer: 1, render: 'rail' as any, hardness: 0.7, sound: 'metal' });
@@ -493,20 +513,12 @@ function collisionFor(d: BlockDef): Float32Array | null {
   if (!d.solid) return null;
   if (d.render === 'pane') return new Float32Array([0, 0, 7 / 16, 1, 1, 9 / 16, 7 / 16, 0, 0, 9 / 16, 1, 1]);
   if (d.render === 'slab') {
+    if(isSlabDouble(d.id))return FULL_BOX;
     return isSlabTop(d.id)
       ? new Float32Array([0, 0.5, 0, 1, 1, 1])
       : new Float32Array([0, 0, 0, 1, 0.5, 1]);
   }
-  if (d.render === 'stairs') {
-    const f = stairsFacing(d.id);
-    const q = new Float32Array(12);
-    q.set([0, 0, 0, 1, 0.5, 1]);
-    if (f === 0) q.set([0, 0.5, 0, 1, 1, 0.5], 6);
-    else if (f === 1) q.set([0.5, 0.5, 0, 1, 1, 1], 6);
-    else if (f === 2) q.set([0, 0.5, 0.5, 1, 1, 1], 6);
-    else q.set([0, 0.5, 0, 0.5, 1, 1], 6);
-    return q;
-  }
+  if (d.render === 'stairs') return stairBoxes(stairsFacing(d.id),isStairsTop(d.id));
   if (d.render === 'fence') return new Float32Array([0, 0, 0, 1, 1.5, 1]);
   if (d.render === 'cactus') return new Float32Array([1 / 16, 0, 1 / 16, 15 / 16, 1, 15 / 16]);
   if (d.render === 'bed') return new Float32Array([0, 0, 0, 1, 0.5625, 1]);
@@ -576,6 +588,7 @@ interface ShapeWorld {
 /** Same derived geometry for physics, selection and raycasts; never loads terrain. */
 export function collisionBoxesAt(world: ShapeWorld, x: number, y: number, z: number): Float32Array | null {
   const id = world.peekBlock(x, y, z);
+  if (isStairs(id)) return stairsBoxesAt((nx,ny,nz)=>world.peekBlock(nx,ny,nz),x,y,z);
   if (id !== B.GLASS_PANE) return collisionBoxes(id);
   const joins = (nx: number, nz: number) => world.hasChunk(Math.floor(nx / CS), Math.floor(nz / CS)) && paneConnects(world.peekBlock(nx, y, nz));
   return paneBoxes((joins(x, z - 1) ? 1 : 0) | (joins(x + 1, z) ? 2 : 0) | (joins(x, z + 1) ? 4 : 0) | (joins(x - 1, z) ? 8 : 0));
@@ -605,6 +618,7 @@ export function tileFor(id: number, face: number): number {
 
 // Blocks available in creative inventory
 function creativeVisible(id: number): boolean {
+  if (isStairsTop(id) || isSlabDouble(id)) return false;
   if (id === B.RAIL_EW || id === B.POWERED_RAIL_EW || id === B.DETECTOR_RAIL_EW) return false;
   if (isWater(id) && id !== B.WATER) return false;
   if (id === B.AIR || id === B.WATER || id === B.LAVA || id === B.FURNACE_ON || id === B.CROP1 || id === B.CROP2 || id === B.LOOT_CHEST) return false;
@@ -748,31 +762,68 @@ export function facingFromNormal(nx: number, nz: number): number {
 
 // ---------- 1.7 helpers ----------
 
+export function isStairsTop(id: number): boolean {
+  return id >= B.OAK_STAIRS_TOP_N && id < B.OAK_STAIRS_TOP_N + 28;
+}
 export function isStairs(id: number): boolean {
-  return (id >= B.OAK_STAIRS_N && id <= B.QUARTZ_STAIRS_W);
+  return (id >= B.OAK_STAIRS_N && id <= B.QUARTZ_STAIRS_W) || isStairsTop(id);
 }
 export function stairsFacing(id: number): number {
-  if (id >= B.OAK_STAIRS_N && id <= B.OAK_STAIRS_W) return id - B.OAK_STAIRS_N;
-  if (id >= B.COBBLE_STAIRS_N && id <= B.COBBLE_STAIRS_W) return id - B.COBBLE_STAIRS_N;
-  if (id >= B.BRICK_STAIRS_N && id <= B.BRICK_STAIRS_W) return id - B.BRICK_STAIRS_N;
-  if (id >= B.STONE_BRICK_STAIRS_N && id <= B.STONE_BRICK_STAIRS_W) return id - B.STONE_BRICK_STAIRS_N;
-  if (id >= B.SANDSTONE_STAIRS_N && id <= B.SANDSTONE_STAIRS_W) return id - B.SANDSTONE_STAIRS_N;
-  if (id >= B.NETHER_BRICK_STAIRS_N && id <= B.NETHER_BRICK_STAIRS_W) return id - B.NETHER_BRICK_STAIRS_N;
-  if (id >= B.QUARTZ_STAIRS_N && id <= B.QUARTZ_STAIRS_W) return id - B.QUARTZ_STAIRS_N;
-  return -1;
+  return isStairs(id)
+    ? (isStairsTop(id) ? id - B.OAK_STAIRS_TOP_N : id - B.OAK_STAIRS_N) % 4
+    : -1;
 }
 export function stairsBase(id: number): number {
-  if (id >= B.OAK_STAIRS_N && id <= B.OAK_STAIRS_W) return B.OAK_STAIRS_N;
-  if (id >= B.COBBLE_STAIRS_N && id <= B.COBBLE_STAIRS_W) return B.COBBLE_STAIRS_N;
-  if (id >= B.BRICK_STAIRS_N && id <= B.BRICK_STAIRS_W) return B.BRICK_STAIRS_N;
-  if (id >= B.STONE_BRICK_STAIRS_N && id <= B.STONE_BRICK_STAIRS_W) return B.STONE_BRICK_STAIRS_N;
-  if (id >= B.SANDSTONE_STAIRS_N && id <= B.SANDSTONE_STAIRS_W) return B.SANDSTONE_STAIRS_N;
-  if (id >= B.NETHER_BRICK_STAIRS_N && id <= B.NETHER_BRICK_STAIRS_W) return B.NETHER_BRICK_STAIRS_N;
-  if (id >= B.QUARTZ_STAIRS_N && id <= B.QUARTZ_STAIRS_W) return B.QUARTZ_STAIRS_N;
-  return id;
+  if (!isStairs(id)) return id;
+  return (
+    B.OAK_STAIRS_N +
+    Math.floor(
+      (isStairsTop(id) ? id - B.OAK_STAIRS_TOP_N : id - B.OAK_STAIRS_N) / 4
+    ) *
+      4
+  );
+}
+export function stairsId(id: number, facing: number, top = false): number {
+  return (
+    stairsBase(id) +
+    (facing & 3) +
+    (top ? B.OAK_STAIRS_TOP_N - B.OAK_STAIRS_N : 0)
+  );
+}
+export function stairsBoxesAt(
+  get: (x: number, y: number, z: number) => number,
+  x: number,
+  y: number,
+  z: number
+): Float32Array {
+  const id = get(x, y, z),
+    state = { facing: stairsFacing(id), top: isStairsTop(id) };
+  const shape = stairShape(
+    (nx, ny, nz) => {
+      const n = get(nx, ny, nz);
+      return isStairs(n)
+        ? { facing: stairsFacing(n), top: isStairsTop(n) }
+        : null;
+    },
+    x,
+    y,
+    z,
+    state
+  );
+  return stairBoxes(state.facing, state.top, shape);
+}
+/** Building variants are block states, never separate inventory items. */
+export function buildingItem(id: number): number {
+  return isStairs(id) ? stairsBase(id) : isSlab(id) ? slabBase(id) : id;
+}
+export function isSlabDouble(id: number): boolean {
+  return id >= B.OAK_SLAB_DOUBLE && id <= B.QUARTZ_SLAB_DOUBLE;
+}
+export function slabDouble(id: number): number {
+  return B.OAK_SLAB_DOUBLE + (slabBase(id) - B.OAK_SLAB) / 2;
 }
 export function isSlab(id: number): boolean {
-  return (id >= B.OAK_SLAB && id <= B.QUARTZ_SLAB_TOP);
+  return (id >= B.OAK_SLAB && id <= B.QUARTZ_SLAB_TOP)||isSlabDouble(id);
 }
 export function isSlabTop(id: number): boolean {
   return id === B.OAK_SLAB_TOP || id === B.STONE_SLAB_TOP || id === B.COBBLE_SLAB_TOP || id === B.BRICK_SLAB_TOP || id === B.SANDSTONE_SLAB_TOP || id === B.NETHER_BRICK_SLAB_TOP || id === B.QUARTZ_SLAB_TOP;
@@ -781,6 +832,7 @@ export function isSlabBottom(id: number): boolean {
   return id === B.OAK_SLAB || id === B.STONE_SLAB || id === B.COBBLE_SLAB || id === B.BRICK_SLAB || id === B.SANDSTONE_SLAB || id === B.NETHER_BRICK_SLAB || id === B.QUARTZ_SLAB;
 }
 export function slabBase(id: number): number {
+  if(isSlabDouble(id))return B.OAK_SLAB+(id-B.OAK_SLAB_DOUBLE)*2;
   if (id === B.OAK_SLAB || id === B.OAK_SLAB_TOP) return B.OAK_SLAB;
   if (id === B.STONE_SLAB || id === B.STONE_SLAB_TOP) return B.STONE_SLAB;
   if (id === B.COBBLE_SLAB || id === B.COBBLE_SLAB_TOP) return B.COBBLE_SLAB;

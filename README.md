@@ -1,6 +1,14 @@
-# BlockCraft 4.10.0 🌍
+# BlockCraft 4.11.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Od 2.11 ma **jeden publiczny serwer**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.11.0 „Schody i płyty”
+
+- **Schody jak w budowaniu Java:** siedem materiałów, cztery kierunki, dolne i odwrócone schody oraz automatyczne narożniki wewnętrzne i zewnętrzne. Połówki muszą pasować; dalszy ciąg schodów zapobiega fałszywemu zakrętowi. Wyższy stopień jest stawiany zgodnie z kierunkiem patrzenia.
+- **Precyzyjne płyty:** kliknięcie górnej/dolnej części boku wybiera właściwą połowę. Dwie zgodne połówki rzeczywiście się łączą, bez nadpisywania innego materiału i bez kolizji z graczem. Nowe podwójne płyty zachowują materiał i oddają dwie płyty, także przy Jedwabnym Dotyku.
+- **Spójny wygląd i fizyka:** wspólne kształty świata, kolizji i celowania. Schody i płyty mają prawdziwe modele w dłoni, jako drop i w ikonach; UV wycina właściwy fragment zamiast ściskać cały kafelek. Obrys i pęknięcia przy kopaniu odpowiadają rzeczywistemu kształtowi.
+- **Bez utraty zapisów:** nowe stany dopisano jako ID 456–490; stare bloki i stare pełne bloki utworzone z płyt pozostają niezmienione. Oś/kierunek/połowa nie zaśmiecają ekwipunku — drop i ŚPM dają bazowy przedmiot. Bez migracji SQL, skala GUI pozostaje domyślnie 2. Starsze karty gry należy odświeżyć.
+- **Zakres i weryfikacja:** [dokumentacja zmian](docs/BUILDING-4.11.md). To kolejny etap własnego silnika, nie pełna zgodność z klientem Minecrafta.
 
 ## Wersja 4.10.0 „Tory, skrzynie i światło”
 

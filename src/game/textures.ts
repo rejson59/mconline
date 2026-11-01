@@ -1,5 +1,6 @@
+import { buildingFaces, buildingUV } from './buildingShapes';
 import { CHEST_BODY, CHEST_LID, chestLockFor, chestFaceRect } from './chestModel';
-import { T, BLOCKS, RENDER, tileFor } from './blocks';
+import { T, BLOCKS, RENDER, tileFor, isStairs, isSlab, collisionBoxes } from './blocks';
 import { mulberry32 } from './noise';
 import { applyJavaRailTextures, applyEntityTextures, applyOfficialTiles, ENTITY_ATLAS, isOfficialTile, type EntityAtlasKey } from './packArt';
 
@@ -1518,7 +1519,20 @@ function makeIcon(atlas: HTMLCanvasElement, id: number): string {
     const sx = (tile % ATLAS_TILES) * TILE, sy = Math.floor(tile / ATLAS_TILES) * TILE;
     ctx.drawImage(atlas, sx, sy, 16, 16, 0, 0, 16, 16);
   };
-  if (RENDER[id] === 12) {
+  if (isStairs(id) || isSlab(id)) {
+    const project=(p:number[])=>[24+(p[0]-p[2])*20,26+(p[0]+p[2])*10-p[1]*22];
+    const faces=buildingFaces(collisionBoxes(id)!).filter(f=>[1,3,5].includes(f.face));
+    faces.sort((a,b)=>a.points.flat().reduce((n,v)=>n+v,0)-b.points.flat().reduce((n,v)=>n+v,0));
+    for(const f of faces) {
+      const uv=f.points.map(p=>buildingUV(f.face,p[0],p[1],p[2]));
+      const u0=Math.min(...uv.map(p=>p[0])),u1=Math.max(...uv.map(p=>p[0])),v0=Math.min(...uv.map(p=>p[1])),v1=Math.max(...uv.map(p=>p[1]));
+      const point=(u:number,v:number)=>project(f.points[uv.findIndex(p=>p[0]===u&&p[1]===v)]);
+      const p=point(u0,v1),q=point(u1,v1),r=point(u0,v0),w=(u1-u0)*16,h=(v1-v0)*16,tile=tileFor(id,f.face);
+      ctx.setTransform((q[0]-p[0])/w,(q[1]-p[1])/w,(r[0]-p[0])/h,(r[1]-p[1])/h,p[0],p[1]);
+      ctx.drawImage(atlas,(tile%16)*16+u0*16,Math.floor(tile/16)*16+(1-v1)*16,w,h,0,0,w,h);
+      if(f.face!==3){ctx.fillStyle=f.face===1?'rgba(0,0,0,.35)':'rgba(0,0,0,.18)';ctx.fillRect(0,0,w,h);}
+    }
+  } else if (RENDER[id] === 12) {
     // Project the actual 14×14 chest plus lid and protruding latch, not a cube.
     const project = (x:number,y:number,z:number):[number,number] => [24+(x-z)*1.3, 38+(x+z-16)*.65-y*1.5];
     const {x:ax,y:ay}=ENTITY_ATLAS.chest;
@@ -1587,8 +1601,9 @@ export function tileUVRect(tile: number, rect: readonly [number, number, number,
   const e = 0.0004;
   const a = (rect[0] + u * (rect[2] - rect[0])) / 16;
   const b = (rect[1] + v * (rect[3] - rect[1])) / 16;
-  const U = (col + a) / ATLAS_TILES + (u === 0 ? e : -e);
-  const V = 1 - (row + 1 - b) / ATLAS_TILES + (v === 0 ? e : -e);
+  // Half-block cuts lie inside the tile; pad only its outer boundaries.
+  const U = (col + a) / ATLAS_TILES + (u === 0 ? e : u === 1 ? -e : 0);
+  const V = 1 - (row + 1 - b) / ATLAS_TILES + (v === 0 ? e : v === 1 ? -e : 0);
   return [U, V];
 }
 
@@ -1614,8 +1629,8 @@ export const TILE_UV4 = (() => {
     for (let corner = 0; corner < 4; corner++) {
       const u = corner & 1;
       const v = corner >> 1;
-      const U = (col + u) / ATLAS_TILES + (u === 0 ? e : -e);
-      const V = 1 - (row + 1 - v) / ATLAS_TILES + (v === 0 ? e : -e);
+      const U = (col + u) / ATLAS_TILES + (u === 0 ? e : u === 1 ? -e : 0);
+      const V = 1 - (row + 1 - v) / ATLAS_TILES + (v === 0 ? e : v === 1 ? -e : 0);
       const i = (tile * 4 + corner) * 2;
       out[i] = U;
       out[i + 1] = V;
@@ -1645,7 +1660,8 @@ export function tileUVInset(tile: number, u: number, v: number, inset = 0): [num
   const span = 16 - inset * 2;
   const a = (inset + u * span) / 16;
   const b = (inset + v * span) / 16;
-  const U = (col + a) / ATLAS_TILES + (u === 0 ? e : -e);
-  const V = 1 - (row + 1 - b) / ATLAS_TILES + (v === 0 ? e : -e);
+  // Half-block cuts lie inside the tile; pad only its outer boundaries.
+  const U = (col + a) / ATLAS_TILES + (u === 0 ? e : u === 1 ? -e : 0);
+  const V = 1 - (row + 1 - b) / ATLAS_TILES + (v === 0 ? e : v === 1 ? -e : 0);
   return [U, V];
 }
