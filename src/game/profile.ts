@@ -159,6 +159,7 @@ export function sanitizeProfile(raw: unknown): PlayerProfile | null {
       armor = [];
     }
   }
+  const health = num(r.health, 20);
   return {
     pid,
     name: typeof r.name === 'string' ? r.name.slice(0, 20) : 'Gracz',
@@ -170,7 +171,7 @@ export function sanitizeProfile(raw: unknown): PlayerProfile | null {
     dim: r.dim === 'n' ? 'n' : 'o',
     yaw: num(r.yaw, 0),
     pitch: num(r.pitch, 0),
-    health: Math.max(1, Math.min(20, num(r.health, 20))),
+    health: health > 0 ? Math.min(20, health) : 1,
     ...foodState(num(r.hunger, 20), r.saturation ?? (Array.isArray(inv) ? inv[49]?.saturation : undefined), r.exhaustion ?? (Array.isArray(inv) ? inv[49]?.exhaustion : undefined)),
     xp: Math.max(0, Math.trunc(num(r.xp, 0))),
     inv: cleanStacks(inv, 36),

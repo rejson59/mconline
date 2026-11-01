@@ -1121,13 +1121,13 @@ section('engine: armor damage, equipping, xp');
   g.selectedStack = () => g.inventory.slots[g.selected] ?? null;
   g.unlocked = new Set<string>();
 
-  // full iron set: 15 points -> 60% reduction; 4 damage becomes 2
+  // Full iron: 15 points, zero toughness; 4 damage leaves 13 effective points.
   g.armor = [
     { id: I.IRON_HELMET, count: 1 }, { id: I.IRON_CHEST, count: 1 },
     { id: I.IRON_LEGS, count: 1 }, { id: I.IRON_BOOTS, count: 1 },
   ];
   g.damage(4);
-  eq('iron armor reduces 4 to 2', g.health, 18);
+  check('iron armor reduces a 4-point hit to 1.92 without rounding', Math.abs(g.health - 18.08) < 1e-9);
   eq('each piece wears by 1', g.armor[0].dur, 164);
   check('all pieces wore', g.armor.every((s: any) => s.dur !== undefined));
 
@@ -2829,8 +2829,8 @@ section('2.3: bug fixes');
   eq('an unknown block is left alone', slabFullBlock(B.STONE), B.STONE);
 
   // (5) blok szlamu naprawdę odbija
-  eq('landing on slime bounces up', slimeBounce(false, true, 0), 6);
-  check('a hard landing bounces higher', Math.abs((slimeBounce(false, true, -12) ?? 0) - 9.6) < 1e-9);
+  eq('slime does not invent velocity from a zero-speed contact', slimeBounce(false, true, 0), null);
+  check('a hard landing bounces higher', Math.abs((slimeBounce(false, true, -12) ?? 0) - 12) < 1e-9);
   eq('standing still on slime does not bounce', slimeBounce(true, true, 0), null);
   eq('a small hop does not bounce', slimeBounce(true, true, -1), null);
   eq('no bounce in mid-air', slimeBounce(false, false, -20), null);
@@ -3194,8 +3194,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.13.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Kopanie i narzędzia', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.14.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Obrażenia i przetrwanie', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -9322,6 +9322,128 @@ section('4.13: real interaction loop, tool swap, plot refusal and native creativ
   eq('Unbreaking rolls independently for both sword damage points',inv.slots[0]?.dur,7);
   eq('the per-point wear test consumed exactly two independent rolls',roll,2);
 
+}
+
+section('4.14: damage penetration, diamond toughness and independent enchantment stage');
+{
+  const { armorToughness, damageAfterProtection, armorWear, armorPointWears } = await import('../src/game/armor');
+  const set=(ids:number[],ench?:Record<string,number>):Stack[]=>ids.map(id=>({id,count:1,ench:ench?{...ench}:undefined}));
+  const iron=set([I.IRON_HELMET,I.IRON_CHEST,I.IRON_LEGS,I.IRON_BOOTS]);
+  const diamond=set([I.DIAMOND_HELMET,I.DIAMOND_CHEST,I.DIAMOND_LEGS,I.DIAMOND_BOOTS]);
+  const leather=set([I.LEATHER_HELMET,I.LEATHER_CHEST,I.LEATHER_LEGS,I.LEATHER_BOOTS]);
+  const gold=set([I.GOLD_HELMET,I.GOLD_CHEST,I.GOLD_LEGS,I.GOLD_BOOTS]);
+  const close=(name:string,actual:number,expected:number)=>check(name,Math.abs(actual-expected)<1e-9,`${actual} expected ${expected}`);
+  eq('diamond set has eight toughness',armorToughness(diamond),8);
+  eq('iron has no toughness',armorToughness(iron),0);
+  eq('mixed armor sums individual toughness',armorToughness([diamond[0],iron[1],null,diamond[3]]),4);
+  eq('leather boots have native 65 uses, without changing saved durability',ITEMS[I.LEATHER_BOOTS]?.durability,65);
+  for(const [name,armor,hit,expected] of [
+    ['unarmored',[],4,4],['iron small hit',iron,4,1.92],['diamond small hit',diamond,4,.96],
+    ['iron strong hit',iron,20,16],['diamond strong hit',diamond,20,8],
+    ['leather',leather,4,3.2],['gold',gold,4,2.56],['diamond tiny hit',diamond,1,.21],
+  ] as [string,Stack[],number,number][])close('native CombatRules fixture '+name,damageAfterProtection(hit,armor),expected);
+  const protection=diamond.map(s=>({...s,ench:{protection:4}}));
+  close('Protection is multiplicative after armor, never added to armor percent',damageAfterProtection(1,protection),.0756);
+  close('unenchanted diamond does not reduce falling damage',damageAfterProtection(10,diamond,'fall'),10);
+  const feather=structuredClone(diamond);feather[3].ench={featherfalling:4};
+  close('Feather Falling IV alone reduces fall damage by 48%',damageAfterProtection(10,feather,'fall'),5.2);
+  protection[3].ench={protection:4,featherfalling:4} as typeof protection[3]['ench'];
+  close('Protection plus Feather Falling share the 20 EPF cap',damageAfterProtection(10,protection,'fall'),2);
+  close('Feather Falling does not protect ordinary hits',damageAfterProtection(4,feather),.96);
+  close('plain diamond does not protect drowning',damageAfterProtection(2,diamond,'drown'),2);
+  close('Protection works on drowning, Feather Falling does not',damageAfterProtection(2,protection,'drown'),.72);
+  for(const invalid of [NaN,Infinity,-1,0])eq('invalid damage is harmless '+invalid,damageAfterProtection(invalid,diamond),0);
+  for(const [hit,wear] of [[.1,1],[4,1],[7.99,1],[8,2],[19,4],[20,5]])eq('armor wear uses raw quarter hit truncated '+hit,armorWear(hit),wear);
+  let calls=0;check('unenchanted armor always wears without random rolls',armorPointWears(0,()=>{calls++;return 1;}) && calls===0);
+  check('armor Unbreaking has mandatory 60 percent wear branch',armorPointWears(3,()=>.59));
+  let sequence=[.7,.1];check('Unbreaking III still wears when the ordinary roll is zero',armorPointWears(3,()=>sequence.shift()!));
+  sequence=[.7,.9];check('Unbreaking III can save a durability point after the mandatory branch',!armorPointWears(3,()=>sequence.shift()!));
+  // Enumerate equiprobable cells instead of a flaky Monte Carlo assertion.
+  for(let level=1;level<=3;level++){
+    let worn=0;
+    for(let a=0;a<10;a++)for(let b=0;b<=level;b++){let n=0;const random=()=>n++===0?(a+.5)/10:(b+.5)/(level+1);if(armorPointWears(level,random))worn++;}
+    close('native armor Unbreaking expected wear probability '+level,worn/(10*(level+1)),.6+.4/(level+1));
+  }
+}
+
+section('4.14: actual landing physics, environmental damage and fractional regeneration');
+{
+  const { landingDamage }=await import('../src/game/landing');
+  for(const [distance,block,sneak,expected] of [
+    [3,B.STONE,false,0],[3.01,B.STONE,false,1],[4,B.STONE,false,1],[4.01,B.STONE,false,2],
+    [13,B.HAY,false,2],[13,B.HONEY_BLOCK,false,2],[13,B.BED,false,4],[6,B.BED,false,0],[6.01,B.BED,false,1],
+    [13,B.SLIME_BLOCK,false,0],[13,B.SLIME_BLOCK,true,10],
+  ] as [number,number,boolean,number][])eq(`landing fixture ${distance}/${block}/${sneak}`,landingDamage(distance,block,sneak),expected);
+  const world=new World(4142026,true);const floor=FLAT_H+1;
+  for(let x=3;x<=5;x++)for(let z=3;z<=5;z++)for(let y=FLAT_H;y<=FLAT_H+22;y++)world.setBlock(x,y,z,y===FLAT_H?B.STONE:B.AIR);
+  const make=()=>Object.assign(Object.create(Game.prototype),{
+    world,mode:'survival',ui:'playing',health:20,hunger:10,saturation:0,exhaustion:0,
+    body:{pos:new THREE.Vector3(4.5,floor+4,4.5),vel:new THREE.Vector3(0,-1,0),onGround:false,hitWall:false,w:.6,h:1.8},
+    keys:new Set<string>(),yaw:0,eyeHeight:1.62,autoJump:false,sprinting:false,flying:false,fallStart:floor+4,
+    air:10,maxAir:10,drownAcc:0,bobAmp:0,bobPhase:0,stepDist:0,lastHurt:0,hurtCount:0,shake:0,
+    hasEffect:()=>false,emitHud(){},buzz(){},message(){},unlock(){},inventory:new Inventory(),armor:Array(4).fill(null),selected:0,
+  }) as any;
+  const armor=()=>[I.DIAMOND_HELMET,I.DIAMOND_CHEST,I.DIAMOND_LEGS,I.DIAMOND_BOOTS].map(id=>({id,count:1,dur:100}));
+  for(const fps of [20,30,60,144]){
+    const g=make();g.armor=armor();let steps=0;while(!g.body.onGround && steps++<fps*4)g.updatePlayer(1/fps);
+    check(`four-block fall hurts through plain diamond at ${fps} FPS`,g.health===19 && g.body.onGround);
+    check(`falling never wears ordinary armor at ${fps} FPS`,g.armor.every((s:Stack)=>s.dur===100));
+  }
+  const feather=make();feather.armor=armor();feather.armor[3].ench={featherfalling:4};
+  for(let n=0;!feather.body.onGround && n<200;n++)feather.updatePlayer(1/60);
+  check('actual landing retains fractional Feather Falling damage',Math.abs(feather.health-19.48)<1e-9);
+  for(const block of [B.HAY,B.HONEY_BLOCK]){
+    world.setBlock(4,FLAT_H,4,block);const g=make();g.body.pos.y=floor+13;g.fallStart=floor+13;
+    for(let n=0;!g.body.onGround && n<300;n++)g.updatePlayer(1/60);
+    eq('actual soft landing deals two instead of ten on '+block,g.health,18);
+  }
+  world.setBlock(4,FLAT_H,4,B.BED);const bed=make();bed.body.pos.y=floor+13;bed.fallStart=floor+13;
+  for(let n=0;!bed.body.onGround && n<300;n++)bed.updatePlayer(1/60);
+  eq('bed halves actual landing distance before subtracting three safe blocks',bed.health,16);
+  world.setBlock(4,FLAT_H,4,B.SLIME_BLOCK);const slime=make();slime.body.pos.y=floor+.1;slime.body.vel.y=-12;slime.fallStart=floor+13;slime.updatePlayer(1/60);
+  check('slime landing preserves incoming speed rather than collision-zero velocity',slime.health===20 && slime.body.vel.y>12 && slime.body.vel.y<13);
+  eq('slime bounce does not add a velocity to the next fall height',slime.fallStart,floor);
+  const crouch=make();crouch.body.pos.y=floor+.1;crouch.body.vel.y=-12;crouch.fallStart=floor+13;crouch.keys.add('ShiftLeft');crouch.updatePlayer(1/60);
+  check('crouching suppresses slime bounce and applies normal falling damage',crouch.health===10 && crouch.body.vel.y===0);
+  world.setBlock(4,FLAT_H,4,B.STONE);world.setBlock(4,FLAT_H+1,4,B.WATER);
+  const wet=make();wet.body.pos.y=floor+1.01;wet.body.vel.y=-40;wet.fallStart=floor+13;
+  wet.updatePlayer(.05);eq('entering a shallow water block during the landing frame cancels fall damage',wet.health,20);
+  world.setBlock(4,FLAT_H+1,4,B.AIR);
+  const drown=make();drown.armor=armor();drown.damage(2,false,false,'drown');
+  check('real drowning bypasses armor without consuming armor or exhaustion',drown.health===18 && drown.exhaustion===0 && drown.armor.every((s:Stack)=>s.dur===100));
+  world.setBlock(4,FLAT_H+1,4,B.WATER);world.setBlock(4,FLAT_H+2,4,B.WATER);
+  const submerged=make();submerged.body.pos.y=floor;submerged.fallStart=floor;submerged.armor=armor();submerged.air=-.99;submerged.updatePlayer(.05);
+  check('actual submerged-player loop uses environmental damage routing',submerged.health===18 && submerged.armor.every((s:Stack)=>s.dur===100));
+  for(const fps of [20,60]){
+    const breath=make();breath.body.pos.y=floor;breath.fallStart=floor;breath.air=breath.maxAir=15;
+    for(let tick=0;tick<15*fps;tick++)breath.updatePlayer(1/fps);
+    check('fifteen-second air reserve expires without early damage at '+fps+' FPS',breath.air<1e-8 && breath.health===20);
+    for(let tick=0;tick<fps;tick++)breath.updatePlayer(1/fps);
+    eq('first drowning damage arrives after the next complete second at '+fps+' FPS',breath.health,18);
+    breath.air=-.9;breath.body.pos.y=floor+4;breath.fallStart=floor+4;breath.updatePlayer(.05);
+    check('brief breathing replenishes signed air rather than erasing underwater debt',Math.abs(breath.air+.7)<1e-9);
+  }
+  world.setBlock(4,FLAT_H+1,4,B.AIR);world.setBlock(4,FLAT_H+2,4,B.AIR);
+  const small=make();small.armor=armor();small.damage(1);check('small physical hits never round down into false immunity',Math.abs(small.health-19.79)<1e-9);
+  const wear=make();wear.armor=armor();wear.damage(8);check('real armor wears two points based on raw eight damage, not the reduced health loss',wear.armor.every((s:Stack)=>s.dur===98));
+  const overkill=make();overkill.armor=armor();overkill.wearArmor(1e20);
+  check('oversized raw hits stop durability work once every piece has broken',overkill.armor.every((s:Stack|null)=>s===null));
+  const broken=make();broken.armor=[null,{id:I.DIAMOND_CHEST,count:1,dur:1,ench:{protection:4}},null,null];broken.damage(4);
+  check('breaking armor is removed and supplies no subsequent enchantment stage',broken.armor[1]===null && Math.abs(broken.health-17.024)<1e-9);
+  const fractional=make();fractional.health=19.9;fractional.hunger=20;fractional.saturation=6;fractional.updateFood(.5);
+  check('final fractional saturated heal still pays full requested food cost',fractional.health===20 && fractional.saturation===5 && fractional.exhaustion===2);
+  const slow=make();slow.health=19.9;slow.hunger=18;slow.updateFood(4);
+  check('final fractional ordinary heal still pays six exhaustion',slow.health===20 && slow.hunger===17 && slow.exhaustion===2);
+  const starve=make();starve.health=1.5;starve.hunger=starve.saturation=0;starve.updateFood(4);
+  eq('normal starvation applies a whole health point when health is fractional above one',starve.health,.5);
+  starve.updateFood(4);eq('normal starvation cannot kill a player already below one health',starve.health,.5);
+  const pid='p1234567890abcdef123';
+  for(const health of [.01,.5,1.5,19.79]){
+    const profile=sanitizeProfile({pid,x:0,y:65,z:0,health,inv:[],armor:[]})!;
+    eq('public profile roundtrip does not silently heal fractional health '+health,sanitizeProfile(profileRow(profile,'fractional-test'))!.health,health);
+  }
+  for(const amount of [NaN,Infinity,-1])small.damage(amount);check('nonfinite hits cannot corrupt player health',Number.isFinite(small.health));
+  small.mode='creative';const before=small.health;small.damage(10,false,false,'fall');eq('creative remains immune to ordinary environmental damage',small.health,before);
 }
 
 // =================================================================== report

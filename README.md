@@ -1,6 +1,15 @@
-# BlockCraft 4.13.0 🌍
+# BlockCraft 4.14.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.14.0 „Obrażenia i przetrwanie”
+
+- **Zbroja bliżej Java:** siła trafienia wpływa na przebicie, a diamentowe części mają po 2 punkty twardości. Ochrona działa jako osobna redukcja po zbroi; małe obrażenia nie są już zaokrąglane do zera.
+- **Poprawione upadki:** zwykły pancerz nie chroni przed upadkiem. Lekki krok i Ochrona współdzielą limit 80% redukcji. Siano, miód i łóżka amortyzują lądowanie, woda zapobiega obrażeniom również przy wejściu do niej w klatce lądowania.
+- **Szlam bez sztucznego odbicia:** zachowana prędkość sprzed kolizji wyznacza siłę odbicia. Kucanie wyłącza odbicie i ochronę przed upadkiem. Kolejny upadek nie dostaje fikcyjnej dodatkowej wysokości.
+- **Oddech i trwałość:** 15 sekund powietrza, potem 2 HP co sekundę. Topienie omija zwykły pancerz bez jego zużycia, ale Ochrona nadal działa. Zbroja zużywa się od surowego trafienia, a Niezniszczalność ma osobne losowania i właściwą regułę dla zbroi. Skórzane buty mają 65 użyć.
+- **Ułamkowe zdrowie bez błędów:** serca pokazują połówkę nawet przy 0,25 HP, profil nie leczy już samoczynnie do 1 HP przy ponownym wejściu, a końcowy mały krok regeneracji płaci prawidłowy koszt jedzenia. Zachowane światy, budowle, ID, ustawienia i uprawnienia miasta; bez nowej migracji SQL.
+- **Zakres, wzory i testy:** [dokumentacja wydania](docs/SURVIVAL-4.14.md). To kolejny etap własnego silnika, nie deklaracja pełnej zgodności 1:1 z Minecraftem.
 
 ## Wersja 4.13.0 „Kopanie i narzędzia”
 

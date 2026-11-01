@@ -1030,6 +1030,13 @@ section('2.18: HUD rysuje grafiki z paczki');
   check('pasek doświadczenia ma tło i postęp', (html.match(/url\(data:image\/png/g) ?? []).length >= 2);
   check('celownik jest obrazkiem, nie divem', /translate\(-50%,\s?-50%\)/.test(html));
   check('Java health uses hearts without a numeric label', !html.includes('14/20') && html.includes('data-java-health'));
+  for(const [health,full,half] of [[19.01,10,0],[18.01,9,1],[1.01,1,0],[.01,0,1],[0,0,0]]){
+    const fraction=renderToStaticMarkup(<HUD hud={{...state,health}} icons={{}} />);
+    const vitals=fraction.split('data-java-health')[1].split('data-java-food')[0];
+    const fullSrc=guiSprite('heart_full')!;const halfSrc=guiSprite('heart_half')!;
+    check(`fractional health ${health} uses Java ceiling in real HUD`,vitals.split(`src="${fullSrc}"`).length-1===full && vitals.split(`src="${halfSrc}"`).length-1===half);
+  }
+
   const messages=Array.from({length:6},(_,i)=>({text:`chat-line-${i}`,t:Date.now()}));
   const customChat={...DEFAULT_SETTINGS,chatLines:2,chatOpacity:.4,chatBackground:.7,chatScale:.6,chatWidth:.5};
   const custom=renderToStaticMarkup(<HUD hud={{...state,messages}} icons={{}} chatSettings={customChat} />);

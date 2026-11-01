@@ -1,3 +1,4 @@
+import { landingDamage } from './landing';
 import { advanceMining, miningIdentity } from './mining';
 import { upperHalf } from './buildingShapes';
 import { chestLidAngle } from './chestModel';
@@ -70,7 +71,7 @@ import { hasPackSkin, isSlimSkin, playerSkinTexture, skinnedBox, skinnedHat } fr
 import {
   rollEnchantOptions, countShelves, canAddEnch, addEnch, enchLevel, enchName,
   canEnchant, resolveEnch, ENCHANTS, enchList, wearChance,
-  sharpnessDamage, knockbackFactor, powerFactor, totalProtection, fallDamageFactor,
+  sharpnessDamage, knockbackFactor, powerFactor,
   type EnchOption,
 } from './enchant';
 import * as Sfx from './audio';
@@ -88,7 +89,7 @@ import { type ChestState, chestKey, emptyChest, lootChest } from './chest';
 import { achievementById } from './achievements';
 import { upsertSave } from './saves';
 import { Xp } from './xp';
-import { armorPoints, damageReduction, armorSlotOf, ARMOR_SLOT_COUNT } from './armor';
+import { armorPoints, damageAfterArmor, damageAfterEnchantments, armorWear, armorPointWears, usesArmor, type DamageKind, armorSlotOf, ARMOR_SLOT_COUNT } from './armor';
 import {
   applyTrade,
   canTrade,
@@ -694,8 +695,8 @@ export class Game {
   saturation = 5;
   exhaustion = 0;
   private foodRegenAcc = 0;
-  air = 12;
-  maxAir = 12;
+  air = 15;
+  maxAir = 15;
   flying = false;
   sprinting = false;
   eyeHeight = 1.62;
@@ -703,7 +704,6 @@ export class Game {
   hurtCount = 0;
   lastHurt = 0;
   regenAcc = 0;
-  drownAcc = 0;
   starveAcc = 0;
   lavaAcc = 0;
   stepDist = 0;
@@ -3775,19 +3775,18 @@ export class Game {
     this.emitHud();
   }
 
-  /** Every equipped piece takes a quarter of the hit; broken pieces fall off. */
-  private wearArmor(dealt: number) {
+  /** Every equipped piece wears from the raw hit, before damage reduction. */
+  private wearArmor(incoming: number) {
     if (this.mode !== 'survival') return;
-    const wear = Math.max(1, Math.ceil(dealt / 4));
+    const wear = armorWear(incoming);
     for (let i = 0; i < ARMOR_SLOT_COUNT; i++) {
       const s = this.armor[i];
-      if (!s) continue;
+      if (!s || ITEMS[s.id]?.kind !== 'armor') continue;
       const lvl = enchLevel(s, 'unbreaking');
-      if (lvl > 0 && Math.random() > wearChance(lvl)) continue;
       const max = ITEMS[s.id]?.durability;
       if (!max) continue;
       if (s.dur === undefined) s.dur = max;
-      s.dur -= wear;
+      for (let point = 0; point < wear && s.dur > 0; point++) if (armorPointWears(lvl)) s.dur--;
       if (s.dur <= 0) {
         this.armor[i] = null;
         Sfx.playBreak('cloth');
@@ -3841,8 +3840,8 @@ export class Game {
       const interval = saturated ? 0.5 : 4;
       if (this.foodRegenAcc >= interval) {
         this.foodRegenAcc -= interval;
-        const heal = Math.min(20 - this.health, saturated ? Math.min(this.saturation, 6) / 6 : 1);
-        this.health += heal;
+        const heal = saturated ? Math.min(this.saturation, 6) / 6 : 1;
+        this.health = Math.min(20, this.health + heal);
         this.addExhaustion(heal * 6);
       }
     } else this.foodRegenAcc = 0;
@@ -3850,7 +3849,7 @@ export class Game {
       this.starveAcc = (this.starveAcc ?? 0) + dt;
       if (this.starveAcc >= 4) {
         this.starveAcc -= 4;
-        if (this.health > 1) this.damage(Math.min(1, this.health - 1), false, true);
+        if (this.health > 1) this.damage(1, false, true);
       }
     } else this.starveAcc = 0;
   }
@@ -6308,17 +6307,17 @@ export class Game {
     });
   }
 
-  damage(amount: number, force = false, bypassArmor = false) {
-    if (amount <= 0) return;
+  damage(amount: number, force = false, bypassArmor = false, kind: DamageKind = 'normal') {
+    if (!Number.isFinite(amount) || amount <= 0) return;
     if (this.mode === 'creative' && !force) return;
     if (this.ui === 'dead') return;
-    // Armor soaks damage; force kills (void, /kill) ignore it and don't break the gear.
-    // Zaklęcie Ochrona dodaje 3% redukcji za każdy poziom (do 90% łącznie).
-    const reduction = Math.min(0.9, damageReduction(armorPoints(this.armor)) + totalProtection(this.armor) * 0.03);
-    const dealt = force || bypassArmor ? amount : Math.max(0, Math.round(amount * (1 - reduction)));
+    // Keep health fractional. Environmental bypass is not the same as /kill/starvation.
+    // Snapshot armor attributes before wear; only surviving gear supplies enchantments.
+    const armored = force || bypassArmor ? amount : damageAfterArmor(amount, this.armor, kind);
+    if (!force && !bypassArmor && usesArmor(kind)) this.wearArmor(amount);
+    const dealt = force || bypassArmor ? armored : damageAfterEnchantments(armored, this.armor, kind);
     if (dealt > 0) {
-      if (!force && !bypassArmor) this.wearArmor(dealt);
-      if (!force && !bypassArmor) this.addExhaustion(0.1);
+      if (!force && !bypassArmor && usesArmor(kind)) this.addExhaustion(0.1);
       this.health -= dealt;
       this.hurtCount++;
       this.lastHurt = performance.now();
@@ -6654,6 +6653,7 @@ export class Game {
     }
     const wasGround = b.onGround;
     const previousPosition = b.pos.clone();
+    const impactVelocity = b.vel.y;
     stepBody(this.world, b, dt, sneaking);
     if (playing && !this.flying) {
       const dx = b.pos.x - previousPosition.x, dz = b.pos.z - previousPosition.z;
@@ -6679,20 +6679,17 @@ export class Game {
       }
     }
 
-    // fall damage
-    if (this.flying || inWater || b.vel.y > 0) this.fallStart = b.pos.y;
+    // Fall damage bypasses armor points, but not Protection and Feather Falling.
+    const landingBlock = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - .05), Math.floor(b.pos.z)) ?? B.AIR;
+    const landedInWater = isWater(this.blockAt(b.pos, .1));
+    if (this.flying || inWater || landedInWater || b.vel.y > 0) this.fallStart = b.pos.y;
     else if (!b.onGround) this.fallStart = Math.max(this.fallStart, b.pos.y);
     if (b.onGround && !wasGround) {
       const fall = this.fallStart - b.pos.y;
-      if (fall > 3.4 && this.mode === 'survival' && !inWater) {
-        // Lekki krok na butach tłumi upadek
-        const raw = Math.floor(fall - 3);
-        this.damage(Math.max(raw > 0 ? 1 : 0, Math.round(raw * fallDamageFactor(this.armor[3]))));
+      if (this.mode === 'survival' && !inWater && !landedInWater) {
+        this.damage(landingDamage(fall, landingBlock, sneaking), false, false, 'fall');
       }
-      if (fall > 1) {
-        const below = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.1), Math.floor(b.pos.z));
-        if (below) Sfx.playStep(BLOCKS[below].sound);
-      }
+      if (fall > 1 && BLOCKS[landingBlock]) Sfx.playStep(BLOCKS[landingBlock].sound);
       this.fallStart = b.pos.y;
     }
     if (b.onGround) this.fallStart = b.pos.y;
@@ -6703,25 +6700,23 @@ export class Game {
       else this.damage(1000, true);
     }
 
-    // drowning
+    // Keep Java's signed air reserve: 300 ticks = 15 s; -20 ticks deals two HP.
+    // A brief breath replenishes four air ticks per tick, even while air is negative.
     if (eyeInWater && this.mode === 'survival') {
       this.air -= dt;
-      if (this.air <= 0) {
-        this.air = 0;
-        this.drownAcc += dt;
-        if (this.drownAcc > 1) { this.drownAcc = 0; this.damage(2); }
+      if (this.air <= -1 + 1e-9) {
+        this.air += 1;
+        this.damage(2, false, false, 'drown');
       }
-    } else {
-      this.air = Math.min(this.maxAir, this.air + dt * 4);
-    }
+    } else this.air = Math.min(this.maxAir, this.air + dt * 4);
     const under = this.world.peekBlock(Math.floor(b.pos.x), Math.floor(b.pos.y - 0.05), Math.floor(b.pos.z));
     // 1.7 special blocks effects
     // 2.3: 2.0 pisało `wasGround === false`, co nigdy nie zachodzi – blok szlamu
     // nie odbijał przy lądowaniu. Reguła żyje teraz w physics.slimeBounce().
-    const bounce = slimeBounce(wasGround, b.onGround, b.vel.y);
+    const bounce = sneaking ? null : slimeBounce(wasGround, b.onGround, impactVelocity);
     if (under === B.SLIME_BLOCK && bounce !== null && this.mode !== 'creative') {
       b.vel.y = bounce;
-      this.fallStart = b.pos.y + bounce;
+      this.fallStart = b.pos.y;
       Sfx.playSlime();
     }
     if (under === B.HONEY_BLOCK) {
