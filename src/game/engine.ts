@@ -1,3 +1,4 @@
+import { smoothAlpha, movementFov, mousePitch, damageRoll } from './cameraEffects';
 import { isWater, waterHeight } from './blocks';
 import { submerged, waterCurrent } from './water';
 import { FirstPersonView } from './firstPersonView';
@@ -624,6 +625,10 @@ export class Game {
   renderDistance = 6;
   sensitivity = 1;
   fovBase = 72;
+  invertMouse = false;
+  brightness = { value: .5 };
+  fovEffects = 1;
+  damageTilt = 1;
 
   // ——— 2.0: automat graficzny ———
   /** Sprzętowy pixel ratio ograniczony do 2 – punkt wyjścia dla skalowania. */
@@ -1054,7 +1059,7 @@ export class Game {
     ];
     // 2.8: warstwa przezroczysta (woda, szkło, portal) dostaje delikatną falę.
     this.materials.forEach((m, i) =>
-      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime, held: this.heldLight, sun: this.sunState })
+      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime, held: this.heldLight, sun: this.sunState, brightness: this.brightness })
     );
     this.dropMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.4, side: THREE.DoubleSide });
     // 2.18: pęknięcia bloku wprost z paczki (10 faz, jak w grze). Gdyby
@@ -2505,8 +2510,7 @@ export class Game {
       // 2.3: przy lornetcie celownik musi dać się ustawić precyzyjnie.
       const s = 0.0022 * this.sensitivity * (this.zooming ? 0.4 : 1);
       this.yaw -= e.movementX * s;
-      this.pitch -= e.movementY * s;
-      this.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, this.pitch));
+      this.pitch = mousePitch(this.pitch, e.movementY, s, this.invertMouse);
     }) as EventListener);
     this.on(window, 'wheel', ((e: WheelEvent) => {
       if (!this.locked) return;
@@ -2531,7 +2535,7 @@ export class Game {
         const s = 0.0022 * this.sensitivity * (this.zooming ? 0.4 : 1) * 1.6;
         if (dx || dy) {
           this.yaw -= dx * s;
-          this.pitch = Math.max(-Math.PI / 2 + 0.001, Math.min(Math.PI / 2 - 0.001, this.pitch - dy * s));
+          this.pitch = mousePitch(this.pitch, dy, s, this.invertMouse);
         }
       }
     }) as EventListener);
@@ -6537,7 +6541,7 @@ export class Game {
     const jump = playing && k.has('Space');
     if (this.flying) {
       const ty = jump ? 9 : playing && sneakHeld ? -9 : 0;
-      b.vel.y += (ty - b.vel.y) * Math.min(1, dt * 10);
+      b.vel.y += (ty - b.vel.y) * smoothAlpha(dt, 10);
     } else if (onLadder && !this.flying) {
       const climb = jump || (playing && k.has('KeyW'));
       const descend = sneaking || (playing && k.has('KeyS'));
@@ -6686,7 +6690,7 @@ export class Game {
     // steps
     const hs = Math.hypot(b.vel.x, b.vel.z);
     const walkingBob = b.onGround && hs > 0.5;
-    this.bobAmp += ((walkingBob ? Math.min(1, hs / 4.3) : 0) - this.bobAmp) * Math.min(1, dt * 10);
+    this.bobAmp += ((walkingBob ? Math.min(1, hs / 4.3) : 0) - this.bobAmp) * smoothAlpha(dt, 10);
     if (walkingBob) {
       this.stepDist += hs * dt;
       this.bobPhase += hs * dt * 1.9;
@@ -6696,10 +6700,11 @@ export class Game {
         if (below && !sneaking) Sfx.playStep(BLOCKS[below].sound);
       }
     } else {
-      this.bobPhase *= 0.9;
+      // Keep the walked phase: rewinding it here made the view wobble
+      // backwards on stopping, at a different speed for each frame rate.
     }
     const targetEye = sneaking ? 1.42 : 1.62;
-    this.eyeHeight += (targetEye - this.eyeHeight) * Math.min(1, dt * 15);
+    this.eyeHeight += (targetEye - this.eyeHeight) * smoothAlpha(dt, 15);
   }
 
   /** Animate only the container currently in use; closing the UI closes its lid. */
@@ -7006,7 +7011,8 @@ export class Game {
         m.stepDist += moved;
         if (m.stepDist > (m.type === 'chicken' ? 0.85 : 1.45) && m.body.pos.distanceTo(p) < 16) {
           m.stepDist = 0;
-          Sfx.playMobStep(m.type, m.body.pos.x, m.body.pos.y, m.body.pos.z);
+          const ground = this.world.peekBlock(Math.floor(m.body.pos.x), Math.floor(m.body.pos.y - .05), Math.floor(m.body.pos.z));
+          Sfx.playMobStep(m.type, m.body.pos.x, m.body.pos.y, m.body.pos.z, BLOCKS[ground]?.sound ?? 'stone');
         }
       }
       if (m.soundTimer <= 0) {
@@ -7152,7 +7158,6 @@ export class Game {
     const cam = this.camera;
     // 2.31: uszy gracza = kamera. Od tej pozycji liczone jest tłumienie
     // i panorama każdego dźwięku w świecie (moby, bloki, skrzynie).
-    Sfx.setListener(cam.position.x || b.pos.x, cam.position.y || b.pos.y + this.eyeHeight, cam.position.z || b.pos.z, this.yaw);
     // 2.30: kołysanie kamery 1:1 z grą – pionowe podbicie i boczny ruch na
     // zmianę, prostopadle do kierunku patrzenia. Amplituda rośnie z prędkością
     // i wygasa po zatrzymaniu, a przełącznik „Kołysanie kamery” jest
@@ -7168,16 +7173,13 @@ export class Game {
     cam.rotation.set(this.pitch, this.yaw, 0);
     if (this.shake > 0) {
       this.shake = Math.max(0, this.shake - dt);
-      cam.position.x += (Math.random() - 0.5) * this.shake * 0.3;
-      cam.position.y += (Math.random() - 0.5) * this.shake * 0.3;
-      cam.rotation.z = (Math.random() - 0.5) * this.shake * 0.1;
+      cam.rotation.z = damageRoll(this.shake, this.damageTilt);
     }
-    let targetFov = this.fovBase;
-    if (this.sprinting) targetFov += 10;
-    if (this.flying && this.sprinting) targetFov += 5;
+    Sfx.setListener(cam.position.x, cam.position.y, cam.position.z, this.yaw);
+    let targetFov = movementFov(this.fovBase, this.sprinting, this.flying, this.fovEffects);
     // 2.3: lorneta zwęża pole widzenia do szpilkowatego „dalekiego oka”.
     if (this.zooming && this.ui === 'playing') targetFov = Math.min(targetFov, 24);
-    cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 8);
+    cam.fov += (targetFov - cam.fov) * smoothAlpha(dt, 8);
     cam.updateProjectionMatrix();
 
     // hand
@@ -8177,7 +8179,7 @@ export class Game {
     this.viewRO = null;
     for (const t of this.viewTimers) clearTimeout(t);
     this.viewTimers = [];
-    Sfx.setRain(false);
+    Sfx.stopWorldAudio();
     for (const [t, type, fn, opts] of this.listeners) t.removeEventListener(type, fn, opts);
     if (document.pointerLockElement) document.exitPointerLock();
     // Oba wymiary – chunki netheru też trzymają geometrię.

@@ -1,3 +1,4 @@
+import { playClick, setVolume, setSoundLevels } from '../game/audio';
 import { useEffect, useState, type ComponentProps, type ReactNode } from 'react';
 import type { MainMenu as LegacyMainMenu, PauseMenu as LegacyPauseMenu } from './Menus';
 import { Controls, filterAndSortWorlds } from './Menus';
@@ -10,7 +11,7 @@ import JavaSettings from './JavaSettings';
 import JavaPanorama from './JavaPanorama';
 
 export function JavaButton({ children, onClick, disabled, width = 200 }: { children: ReactNode; onClick?: () => void; disabled?: boolean; width?: number }) {
-  return <button className="java-btn" style={{ width }} onClick={onClick} disabled={disabled}>{children}</button>;
+  return <button className="java-btn" style={{ width }} onClick={() => { const s = loadSettings(); setVolume(s.volume); setSoundLevels(s.soundVolumes); playClick(); onClick?.(); }} disabled={disabled}>{children}</button>;
 }
 export function JavaPage({ title, children, footer, overlay = false }: { title: string; children: ReactNode; footer?: ReactNode; overlay?: boolean }) {
   const scale = useJavaScale();

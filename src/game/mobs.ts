@@ -1,3 +1,4 @@
+import { smoothAlpha } from './cameraEffects';
 import { isWater } from './blocks';
 import { submerged } from './water';
 import { findShore, type Shore } from './mobSwimming';
@@ -1525,7 +1526,7 @@ export class Mob {
     let diff = this.yaw - this.group.rotation.y;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    this.group.rotation.y += diff * Math.min(1, dt * 8);
+    this.group.rotation.y += diff * smoothAlpha(dt, 8);
 
     // 2.18: głowa odwraca się w stronę gracza, gdy ten jest blisko – tak jak
     // w grze. Kąt jest ograniczony, żeby mob nie skręcał karku na plecy.
@@ -1568,11 +1569,11 @@ export class Mob {
         wantPitch = this.lookPitch;
       }
       // Szybsze, ale ciągle płynne obracanie (wanilia robi to co tick).
-      const k = Math.min(1, dt * 9);
+      const k = smoothAlpha(dt, 9);
       this.headYaw += (wantYaw - this.headYaw) * k;
-      this.headPitch += (wantPitch - this.headPitch) * Math.min(1, dt * 7);
+      this.headPitch += (wantPitch - this.headPitch) * smoothAlpha(dt, 7);
     } else {
-      const k = Math.min(1, dt * 6);
+      const k = smoothAlpha(dt, 6);
       this.headYaw += (0 - this.headYaw) * k;
       this.headPitch += (0 - this.headPitch) * k;
     }

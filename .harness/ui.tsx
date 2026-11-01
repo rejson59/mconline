@@ -930,8 +930,20 @@ async function mountWithJsdom(): Promise<boolean> {
   check('native options open from title', text().includes('Pole widzenia') && !!byText('Ustawienia grafiki'));
   await click('Ustawienia grafiki');
   check('video settings expose actual GUI scaling', text().includes('Skala interfejsu:'));
+  check('video options expose engine-backed brightness, FOV effects and hurt tilt', ['Jasność','Efekty pola widzenia','Przechylenie przy obrażeniach'].every(label=>container.querySelector(`input[aria-label="${label}"]`)));
+
   await React.act(async () => { dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
   check('Escape returns from video to options', text().includes('Dostosowanie skórki...'));
+  await click('Sterowanie...');
+  await click('Odwróć mysz');
+  check('inverted mouse toggle actually persists', JSON.parse(dom.window.localStorage.getItem('blockcraft-settings') || '{}').invertMouse===true);
+  await click('Gotowe');
+  await click('Muzyka i dźwięki...');
+  check('sound page exposes master and eight real channel sliders', container.querySelectorAll('input[type="range"]').length===9);
+  check('sound page distinguishes original effects from custom music',text().includes('Oryginalne efekty Java 1.20.4') && text().includes('nie ścieżką Minecrafta'));
+  check('sound page does not pretend unsupported jukeboxes work',text().includes('szaf grających jeszcze nie ma'));
+  await click('Gotowe');
+
   await click('Gotowe');
   await click('Tryb wieloosobowy');
   check('multiplayer screen opens from the menu', text().includes('Dołącz do serwera') && text().includes('Serwer przeglądarkowy'));

@@ -1,3 +1,8 @@
+import { JAVA_SOUND_EVENTS, JAVA_SOUND_FILES } from '../src/game/art/javaSounds.generated';
+import { setListener, placeAt } from '../src/game/audio';
+import { smoothAlpha, movementFov, mousePitch, damageRoll } from '../src/game/cameraEffects';
+import { brightnessFactor } from '../src/game/lighting';
+import { treeRootReserved } from '../src/game/decorationMask';
 import type { NetMessage } from '../src/game/net';
 import { isDoor } from '../src/game/blocks';
 import { structuresOverlapping, ADVENTURE_RADIUS, nearestStructure, structureKindFromName } from '../src/game/structures';
@@ -3179,8 +3184,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.8.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Interfejs Java 1.20.4', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.9.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Oryginalne dźwięki i płynny widok', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -3949,7 +3954,7 @@ section('2.8.2: kierunkowe słońce');
   check('the fragment shader has a face normal helper', shader.fragmentShader.includes('faceNormal'));
   check('sunlight uses a dot product', shader.fragmentShader.includes('dot(faceNormal(vFace), uSunDir)'));
   check('sunlight is gated by sky exposure', shader.fragmentShader.includes('clamp(sky * 4.0, 0.0, 1.0)'));
-  check('light materials use a fresh cache key', mat.customProgramCacheKey() === 'blockcraft-light-4');
+  check('light materials use a fresh cache key', mat.customProgramCacheKey() === 'blockcraft-light-5');
 
   // Światło trzymane w dłoni jest mocniejsze i sięga dalej niż w 2.8.1.
   check('the held torch reaches further than before', HELD_RANGE >= 12);
@@ -6391,13 +6396,18 @@ section('2.29: drzwi i łóżko jak w Minecraftcie');
   // --- dźwięki: drzwi i łóżko mają własne, oryginalne barwy (synteza)
   const audioSrc = readSource('src/game/audio.ts');
   check('drzwi mają osobny dźwięk otwierania i zamykania', /export function playDoor\(open: boolean\)/.test(audioSrc) && /playDoor\(open\)/.test(readSource('src/game/engine.ts')));
-  check('łóżko ma własny dźwięk', /export function playBed\(\)/.test(audioSrc));
-  check('materiały mają własne barwy (korpus + rezonans)', /const MAT: Record<Kind/.test(audioSrc) && /bodyThump/.test(audioSrc));
-  check('dźwięki nadal są w pełni syntezowane', !/new Audio\(|\.mp3|\.ogg/.test(audioSrc));
-  check('każdy efekt idzie przez wspólne wyjście', /function out\(node: AudioNode\)/.test(audioSrc) && (audioSrc.match(/out\(/g)?.length ?? 0) > 25);
-  check('efekty mają proceduralny pogłos (mały pokój)', /function buildRoom\(c: AudioContext, dest: GainNode, out: AudioNode\)/.test(audioSrc) && /createConvolver/.test(audioSrc) && /dest\.connect\(conv\)/.test(audioSrc));
-  check('splash, ból i wybuch mają nową, cieplejszą barwę', /bąbelków o rosnącej wysokości/.test(audioSrc) && /dwa tony: krótkie/.test(audioSrc) && /niski „bum” pod szumem/.test(audioSrc));
-  check('jedzenie chrupie trzy razy', /chrupnięcie: trzy krótkie/.test(audioSrc));
+  check('bed audio entry remains compatible (Java is silent)', /export function playBed\(\)/.test(audioSrc));
+  // 4.9 replaces the obsolete procedural-timbre/reverb assertions with
+  // checks on the actual embedded Java recordings (also exercised by audio.ts).
+  for (const material of ['stone','wood','grass','sand','glass','wool','slime_block','metal']) {
+    for (const action of ['break','place','hit','step']) {
+      const event = JAVA_SOUND_EVENTS[`block.${material}.${action}`];
+      check(`original ${material}.${action} recording exists`, !!event?.length && event.every(v => !!JAVA_SOUND_FILES[v.name]));
+    }
+  }
+  check('original eating recording exists', !!JAVA_SOUND_EVENTS['entity.generic.eat']?.length);
+  check('original effects are not sent through an invented convolution room', !audioSrc.includes('createConvolver'));
+
 }
 
 
@@ -6728,25 +6738,20 @@ section('2.31: dźwięki mobów i przestrzeń jak w Minecrafcie');
 {
   const audioSrc = readSource('src/game/audio.ts');
 
-  // --- każdy mob ma własny głos (barwa, nie jeden wspólny ton)
-  const mobs = ['pig', 'sheep', 'cow', 'chicken', 'creeper', 'spider', 'skeleton',
-    'zombie', 'wolf', 'villager', 'golem', 'enderman', 'slime', 'ghast'] as const;
-  for (const m of mobs) {
-    check(`głos moba: ${m}`, new RegExp(`\\b${m}: \\{`).test(audioSrc));
+  for (const mob of ['pig','sheep','cow','chicken','creeper','spider','skeleton','zombie','wolf','villager','iron_golem','enderman','slime','ghast']) {
+    for (const kind of ['hurt','death']) check(`original ${mob}.${kind}`, !!JAVA_SOUND_EVENTS[`entity.${mob}.${kind}`]?.length);
+    if (!['creeper','iron_golem','slime'].includes(mob)) check(`original ${mob} ambient`, !!JAVA_SOUND_EVENTS[`entity.${mob}.ambient`]?.length);
   }
-  check('każdy głos ma trzy warianty (bezczynność, trafienie, śmierć)',
-    (audioSrc.match(/hurt: \{ wave:/g)?.length ?? 0) >= 14 && (audioSrc.match(/death: \{ wave:/g)?.length ?? 0) >= 14);
-  check('głosy mają formanty (barwę gardła, nie czysty ton)', /formants: \[\[\d+, \d+, [\d.]+\]/.test(audioSrc));
-  check('beczenie owcy ma wibrato', /sheep: \{[\s\S]{0,400}vibrato/.test(audioSrc));
-  check('krowa ma długie „muu” (≥ 0,9 s)', /cow: \{[\s\S]{0,300}dur: 0\.95/.test(audioSrc));
-  check('szkielet klika kośćmi (ziarna)', /skeleton: \{[\s\S]{0,400}grains/.test(audioSrc));
-  check('creeper syczy szumem, bez tonu', /creeper: \{[\s\S]{0,220}formants: \[\]/.test(audioSrc));
-  check('każdy mob ma własny rodzaj kroku', (audioSrc.match(/step: '(soft|hard|bone|metal|slime)'/g)?.length ?? 0) >= 14);
-
-  // --- przestrzeń: tłumienie, panorama, filtr
-  check('dźwięk ma pozycję i tłumienie odległością', /export function placeAt\(/.test(audioSrc) && /const gain = Math\.max\(0, 1 - d \/ distance\)/.test(audioSrc));
-  check('panorama stereo zależy od obrotu kamery', /createStereoPanner/.test(audioSrc) && /rightX = Math\.cos\(listener\.yaw\)/.test(audioSrc));
-  check('oddalone dźwięki są ciemniejsze (filtr dolnoprzepustowy)', /lp\.frequency\.value = 16000 - where\.dull \* 11000/.test(audioSrc));
+  check('creepers have no invented idle hiss', !JAVA_SOUND_EVENTS['entity.creeper.ambient']);
+  setListener(0,0,0,0);
+  eq('audio at listener has full gain', placeAt(0,0,0)?.gain, 1);
+  eq('linear attenuation at half range', placeAt(8,0,0)?.gain, .5);
+  eq('out of range is silent', placeAt(16,0,0), null);
+  eq('right-side sound pans right', placeAt(8,0,0)?.pan, 1);
+  setListener(0,0,0,Math.PI);
+  check('turning camera reverses panorama', (placeAt(8,0,0)?.pan ?? 0) < -.99);
+  eq('invalid position is silent', placeAt(NaN,0,0), null);
+  setListener(0,0,0,0);
   check('uszy gracza ustawia silnik', /Sfx\.setListener\(/.test(readSource('src/game/engine.ts')));
 
   // --- nowe dźwięki: kroki mobów, śmierć, skrzynia
@@ -6759,17 +6764,17 @@ section('2.31: dźwięki mobów i przestrzeń jak w Minecrafcie');
   check('rozbicie bloku ma pozycję', /Sfx\.playBreak\(def\.sound, x \+ 0\.5/.test(readSource('src/game/engine.ts')));
   check('stawianie bloku ma pozycję', /Sfx\.playPlace\(BLOCKS\[finalId\]\.sound, px \+ 0\.5/.test(readSource('src/game/engine.ts')));
   check('kopanie bloku ma pozycję', /Sfx\.playDig\(def\.sound, t\.x \+ 0\.5/.test(readSource('src/game/engine.ts')));
-  check('rozbicie to kilka ziaren, nie jeden klik', /const grains = kind === 'grass' \|\| kind === 'sand' \? 4 : 3/.test(audioSrc));
-  check('dźwięki nadal syntezowane (zero plików z gry)', !/new Audio\(|\.mp3['"]|\.ogg['"]|\.wav['"]|data:audio/.test(audioSrc));
+  check('stone break has original random variants', JAVA_SOUND_EVENTS['block.stone.break'].length === 4);
+  check('original effects use Web Audio decode', audioSrc.includes('c.decodeAudioData(bytes.buffer)'));
 
   // ---metal brzmi inaczej niż kamień/ szkło
-  check('metal to własny materiał dźwięku', /metal: \{ freq: 1750/.test(audioSrc));
+  check('metal has its own source event', !!JAVA_SOUND_EVENTS['block.metal.step']);
   check('bloki metalowe używają dźwięku metalu', (readSource('src/game/blocks.ts').match(/sound: 'metal'/g)?.length ?? 0) >= 8);
   check('kowadło i dzwon dzwonią metalicznie', /T\.anvil, \{ hardness: 5, sound: 'metal' \}/.test(readSource('src/game/blocks.ts')));
 
   // --- limiter: tłum mobów nie przesterowuje miksu
-  check('miks ma limiter jak w wanilii', /createDynamicsCompressor\(\)/.test(audioSrc) && /limiter jak w wanilii/.test(audioSrc));
-  check('pogłos też przechodzi przez limiter', /conv\.connect\(g\)\.connect\(out\)/.test(audioSrc));
+  check('miks ma limiter jak w wanilii', /createDynamicsCompressor\(\)/.test(audioSrc));
+  check('master still feeds output limiter', audioSrc.includes('m.connect(limiter).connect(c.destination)'));
 
   // --- skrzynia nie trzaśnie przy każdym innym oknie
   const engine2 = readSource('src/game/engine.ts');
@@ -7426,6 +7431,7 @@ section('4.3: mineshafts, craters, denser portals and chunk seams');
       const mask = new Uint8Array(CS * CS), occupied = new Uint8Array(CS * CS);
       applyStructures(new Uint16Array(CS * CS * CH), cx, cz, ctx, mask, occupied);
       eq('underground mine does not clear vegetation on the surface', mask[(z - cz * CS) * CS + x - cx * CS], 0);
+      check('global root mask also preserves forest above mine galleries', !treeRootReserved(x,z,ctx));
       eq('underground mine remains protected from cave-chest decoration', occupied[(z - cz * CS) * CS + x - cx * CS], 1);
     } else {
       check('crater excavates a real depression', blocks.some(b => b.id === B.AIR && b.y <= s.y - 4));
@@ -8669,6 +8675,70 @@ section('4.8: Java logical pixels, exact assets, atomic recipe-book placement an
   check('outside cursor drop preserves durability, enchantments and name',drops[0][5]===13 && (drops[0][9] as Record<string,number>).efficiency===2 && drops[0][10]==='Mój kilof');
   eq('outside drop removes held item once',g.inventory.cursor,null);
   g.inventory.cursor={id:B.PLANKS,count:5};g.dropInventoryCursor(true);eq('outside RMB drops only one',g.inventory.cursor?.count,4);g.dropInventoryCursor(false);eq('outside LMB drops remaining stack',g.inventory.cursor,null);
+}
+
+
+section('4.9: real settings, camera damping, brightness, safe tree generation');
+{
+  const old = normalizeSettings({ volume:.3, fov:80 });
+  eq('old preferences retain master volume', old.volume,.3);
+  eq('old preferences acquire all eight audio categories', Object.keys(old.soundVolumes).length,8);
+  check('old preferences default categories to full gain', Object.values(old.soundVolumes).every(v=>v===1));
+  const bad = normalizeSettings({ invertMouse:'yes', brightness:8, fovEffects:NaN, damageTilt:-4, soundVolumes:{music:0,blocks:NaN,weather:8,players:-1,neutral:'0'} });
+  eq('invert mouse must be boolean',bad.invertMouse,false);
+  eq('brightness upper bound',bad.brightness,1);eq('invalid FOV effect strength defaults safely',bad.fovEffects,1);eq('damage tilt lower bound',bad.damageTilt,0);
+  eq('muted music persists',bad.soundVolumes.music,0);eq('invalid category volume defaults safely',bad.soundVolumes.blocks,1);eq('weather gain is bounded',bad.soundVolumes.weather,1);eq('player gain is bounded',bad.soundVolumes.players,0);eq('strings cannot poison category gains',bad.soundVolumes.neutral,1);
+  const user = normalizeSettings({ invertMouse:true, brightness:.7, fovEffects:.2, damageTilt:.4, soundVolumes:{music:.1,hostile:0} });
+  const preset = applyPreset(user,'low');
+  check('quality changes preserve accessibility preferences and mixer',preset.invertMouse && preset.brightness===.7 && preset.fovEffects===.2 && preset.damageTilt===.4 && preset.soundVolumes.music===.1 && preset.soundVolumes.hostile===0);
+  for (const fps of [30,60,144]) {
+    let fov=70, head=0;
+    for (let i=0;i<fps;i++) { fov+=(85-fov)*smoothAlpha(1/fps,8); head+=(1-head)*smoothAlpha(1/fps,9); }
+    check(`FOV damping independent of FPS ${fps}`,Math.abs(fov-(85-15*Math.exp(-8)))<1e-9);
+    check(`head rotation damping independent of FPS ${fps}`,Math.abs(head-(1-Math.exp(-9)))<1e-9);
+  }
+  eq('zero time never moves camera',smoothAlpha(0,8),0);eq('negative time never reverses animation',smoothAlpha(-1,8),0);
+  eq('zero FOV effects disables sprint zoom',movementFov(72,true,true,0),72);
+  eq('half FOV effects scales sprint and flying',movementFov(72,true,true,.5),79.5);
+  check('normal mouse looks down',mousePitch(0,30,.002,false)<0);check('inverted mouse looks up',mousePitch(0,30,.002,true)>0);
+  check('pitch stays bounded',mousePitch(0,1e9,1,true)<Math.PI/2);
+  eq('damage tilt can be disabled',damageRoll(.4,0),0);eq('hurt roll returns to neutral',damageRoll(0,1),0);
+  check('hurt roll is deterministic',damageRoll(.4,1)===damageRoll(.4,1));
+  for (const light of [.13,.3,.7,1,1.8]) {
+    eq(`moody brightness preserves light ${light}`,brightnessFactor(light,0),light);
+    check(`bright never darkens light ${light}`,brightnessFactor(light,1)>=light);
+  }
+  eq('brightness leaves full daylight intact',brightnessFactor(1,1),1);eq('brightness preserves emissive highlights',brightnessFactor(1.8,1),1.8);
+  const uniform={value:0};const mat=new THREE.MeshBasicMaterial();patchChunkMaterial(mat,{value:1},{brightness:uniform});
+  const shader={uniforms:{},vertexShader:'#include <common>\n#include <begin_vertex>',fragmentShader:'#include <common>\n#include <color_fragment>'};
+  mat.onBeforeCompile(shader as unknown as Parameters<typeof mat.onBeforeCompile>[0], {} as THREE.WebGLRenderer);
+  check('brightness uniform actually reaches GLSL', (shader.uniforms as Record<string,unknown>).uBrightness===uniform && shader.fragmentShader.includes('gammaLight'));
+  const w=new World(901,true), ctx=w.villageContext(); const v=w.nearestVillage(0,0,5);
+  check('tree seam regression has village fixture',!!v);
+  if (v) {
+    const cx=Math.floor(v.village.x/CS),cz=Math.floor(v.village.z/CS);let reserved=0;
+    for (let dz=-2;dz<=2;dz++) for (let dx=-2;dx<=2;dx++) {
+      const x=(cx+dx)*CS,z=(cz+dz)*CS;const scratch=new Uint16Array(CH*CS*CS);const expected=applyVillages(scratch,cx+dx,cz+dz,ctx).mask;
+      let equal=true;for(let lz=0;lz<CS;lz++) for(let lx=0;lx<CS;lx++) { const yes=!!expected[lz*CS+lx];if(yes)reserved++; if(treeRootReserved(x+lx,z+lz,ctx)!==yes)equal=false; }
+      check(`unloaded neighbouring root mask matches exact village writes ${dx}/${dz}`,equal);
+    }
+    check('seam fixture exercises actual reserved roots',reserved>0);eq('root checks never load neighbour chunks',w.chunks.size,0);
+  }
+  // Confirmed against pre-4.9 generator: seed 1 placed an orphan leaf (ID 6)
+  // at (110,68,-147) although root (112,-148) was cancelled by village writes.
+  const seam=new World(1,true), first=seam.getChunk(6,-10);
+  eq('cancelled neighbour root leaves no floating canopy (seed 1)',first.data[(68*CS+13)*CS+14],B.AIR);
+  check('the cancelled root is actually reserved by the village',treeRootReserved(112,-148,seam.villageContext()));
+  const reverse=new World(1,true);reverse.getChunk(7,-10);const second=reverse.getChunk(6,-10);
+  check('canopy fix is independent of neighbour generation order',first.data.every((id,i)=>id===second.data[i]));
+  const terrain=new World(1,true), c=terrain.getChunk(0,0), base=FLAT_H+1;
+  const at=(x:number,y:number,z:number)=>(y*CS+z)*CS+x;
+  for(let y=base;y<base+20;y++)for(let z=0;z<CS;z++)for(let x=0;x<CS;x++)c.data[at(x,y,z)]=B.AIR;
+  c.data[at(8,base+2,8)]=B.STONE;
+  const grow=(terrain as unknown as {growTree:(chunk:typeof c,x:number,z:number,y:number,birch:boolean)=>number}).growTree;
+  grow.call(terrain,c,8,8,base,false);
+  eq('generated trunk cannot overwrite solid hillside',c.data[at(8,base+2,8)],B.STONE);
+  eq('unobstructed trunk still generates',c.data[at(8,base,8)],B.LOG);
 }
 
 // =================================================================== report

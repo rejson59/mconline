@@ -1106,3 +1106,7 @@ body, button, input, select, textarea, .mc-btn, .mc-input { font-family: 'Java B
   .java-chat-suggestions button > span { display: none; }
   .java-chat-suggestions code { font-family: inherit; font-weight: 400; }
 }
+
+/* Java sound screen: full-width master above paired category controls. */
+.java-master-volume { grid-column: 1 / -1; }
+.java-master-volume .java-slider { width: 100%; }

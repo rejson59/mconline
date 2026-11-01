@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'audio', entry: path.join(here, 'audio.ts'), label: 'Oryginalne efekty i mikser' },
   { name: 'smoke', entry: path.join(here, 'smoke.ts'), label: 'Silnik (headless)' },
   { name: 'ui', entry: path.join(here, 'ui.tsx'), label: 'Interfejs (React)' },
   { name: 'account', entry: path.join(here, 'account.tsx'), label: 'Konto społeczności' },
