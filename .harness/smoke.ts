@@ -9859,6 +9859,9 @@ section('4.17: native base alchemy, 20 Hz stand, save compatibility and bottle c
 section('4.23: late pointer capture must never steal container clicks');
 {
   const globals = globalThis as any, oldDoc = globals.document, oldWindow = globals.window;
+  const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  // Node 20 has no navigator; Node 22 exposes a read-only getter. Neither is a browser.
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { maxTouchPoints: 0 } });
   const callbacks: Record<string, () => void> = {};
   let exits = 0, requests = 0, rejected: (() => void) | undefined;
   const canvas = { requestPointerLock() { requests++; return { catch(fn: () => void) { rejected = fn; } }; } };
@@ -9882,7 +9885,11 @@ section('4.23: late pointer capture must never steal container clicks');
     check('ordinary successful capture still works', g.locked && exits === 1);
     fakeDoc.pointerLockElement = null; callbacks.pointerlockchange(); eq('ordinary Esc still pauses', g.ui, 'paused');
     g.ui = 'playing'; g.touchInput = true; callbacks.pointerlockchange(); eq('touch does not spuriously pause', g.ui, 'playing');
-  } finally { globals.document = oldDoc; globals.window = oldWindow; }
+  } finally {
+    globals.document = oldDoc; globals.window = oldWindow;
+    if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator);
+    else delete globals.navigator;
+  }
 }
 
 // =================================================================== report
