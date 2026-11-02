@@ -35,10 +35,15 @@ if (!fs.existsSync(libs)) {
   execFileSync("tar", ["xf", tar, "-C", libs]);
   fs.unlinkSync(tar);
 }
-const furnaceAudit = process.env.BROWSER_FURNACE === "1";
+const facingAudit = process.env.BROWSER_FACING === "1";
+const furnaceAudit = facingAudit || process.env.BROWSER_FURNACE === "1";
 const outputDir = path.join(
   root,
-  furnaceAudit ? ".cache/verification423" : ".cache/verification422",
+  facingAudit
+    ? ".cache/verification424"
+    : furnaceAudit
+      ? ".cache/verification423"
+      : ".cache/verification422",
 );
 const baseUrl = process.env.BROWSER_URL ?? "http://127.0.0.1:4173/";
 const version = JSON.parse(
@@ -69,7 +74,7 @@ const enumFile = path.join(outputDir, "enums.mjs");
 await build({
   stdin: {
     contents:
-      "export { B } from './src/game/blocks'; export { I } from './src/game/items';",
+      "export { B,T } from './src/game/blocks'; export { I } from './src/game/items'; export {JAVA_FACING_TEXTURES} from './src/game/art/javaFacing.generated';",
     resolveDir: root,
     loader: "ts",
   },
@@ -78,7 +83,9 @@ await build({
   format: "esm",
   outfile: enumFile,
 });
-const { B, I } = await import(pathToFileURL(enumFile).href);
+const { B, I, T, JAVA_FACING_TEXTURES } = await import(
+  pathToFileURL(enumFile).href
+);
 const reports = [];
 try {
   for (const device of (
@@ -404,6 +411,148 @@ try {
       );
       furnaceResult.entityDrops = entityDrops;
     }
+    let facingResult;
+    if (facingAudit) {
+      facingResult = await p.evaluate(
+        async ({ B, I, T, art }) => {
+          const g = window.minecraft.game;
+          g.closeInventory();
+          const image = g.atlasTex.image,
+            ctx = image.getContext("2d");
+          let channels = 0;
+          for (const [name, tile] of Object.entries({
+            furnace_front: T.furnace_front,
+            furnace_front_on: T.furnace_lit,
+            furnace_side: T.furnace_side,
+            furnace_top: T.furnace_top,
+          })) {
+            const pic = new Image();
+            pic.src = "data:image/png;base64," + art[name];
+            await pic.decode();
+            const canvas = document.createElement("canvas");
+            canvas.width = canvas.height = 16;
+            const c = canvas.getContext("2d");
+            c.drawImage(pic, 0, 0);
+            const expected = c.getImageData(0, 0, 16, 16).data,
+              actual = ctx.getImageData(
+                (tile % 16) * 16,
+                Math.floor(tile / 16) * 16,
+                16,
+                16,
+              ).data;
+            for (let i = 0; i < actual.length; i++) {
+              if (actual[i] !== expected[i])
+                throw Error(
+                  "Production native atlas mismatch " + name + "/" + i,
+                );
+              channels++;
+            }
+          }
+          const ray = g.raycastTarget,
+            selected = g.selected,
+            previous = g.inventory.slots[35],
+            oldFurnaces = g.furnaces;
+          const rows = [];
+          g.furnaces = new Map();
+          g.selected = 35;
+          try {
+            for (let i = 0; i < 8; i++) {
+              const x = 16 + i * 2,
+                yaw = [0, Math.PI / 2, Math.PI, -Math.PI / 2][i % 4],
+                cold = [B.FURNACE, B.FURNACE_E, B.FURNACE_N, B.FURNACE_W][
+                  i % 4
+                ];
+              g.world.setBlock(x, 64, 10, B.STONE);
+              for (let y = 65; y <= 68; y++) g.world.setBlock(x, y, 10, B.AIR);
+              g.inventory.slots[35] = { id: B.FURNACE, count: 1 };
+              g.yaw = yaw;
+              g.pitch = i % 2 === 0 ? Math.PI / 2 : -Math.PI / 2;
+              g.raycastTarget = () => ({
+                x,
+                y: 64,
+                z: 10,
+                nx: 0,
+                ny: 1,
+                nz: 0,
+                id: B.STONE,
+              });
+              g.tryUse();
+              if (
+                g.world.peekBlock(x, 65, 10) !== cold ||
+                g.inventory.slots[35]
+              )
+                throw Error("Actual furnace placement mismatch " + i);
+              g.openFurnace(x, 65, 10);
+              const f = g.currentFurnace();
+              if (!f) throw Error("Oriented container did not open");
+              if (i >= 4) {
+                f.input = { id: I.RAW_IRON, count: 2 };
+                f.fuel = { id: I.CHARCOAL, count: 1 };
+              }
+              rows.push({
+                x,
+                cold,
+                id:
+                  i < 4
+                    ? cold
+                    : [
+                        B.FURNACE_ON,
+                        B.FURNACE_ON_E,
+                        B.FURNACE_ON_N,
+                        B.FURNACE_ON_W,
+                      ][i % 4],
+              });
+            }
+            g.updateFurnaces(5);
+            for (const row of rows)
+              if (g.world.peekBlock(row.x, 65, 10) !== row.id)
+                throw Error("Ignition rotated or erased a furnace");
+          } finally {
+            g.raycastTarget = ray;
+            g.selected = selected;
+            g.inventory.slots[35] = previous;
+            g.furnaces = new Map([...oldFurnaces, ...g.furnaces]);
+          }
+          g.closeInventory();
+          g.body.pos.set(24, 65, 16);
+          g.yaw = 0;
+          g.pitch = -0.17;
+          g.updateCamera(0.016);
+          g.save();
+          g.requestChunk(1, 0);
+          return { rows, atlasChannels: channels };
+        },
+        { B, I, T, art: JAVA_FACING_TEXTURES },
+      );
+      await p.waitForFunction(() => !window.minecraft.game.meshWorker?.busy, {
+        timeout: 15000,
+      });
+      const mesh = await p.evaluate(() => {
+        const g = window.minecraft.game,
+          c = g.world.getChunk(1, 0),
+          expected = g.world.buildMesh(c);
+        let values = 0;
+        for (const m of c.meshes)
+          for (const [name, a] of Object.entries(m.geometry.attributes)) {
+            const b = expected[m.renderOrder].getAttribute(name);
+            if (a.array.length !== b.array.length)
+              throw Error("Facing Worker layout mismatch");
+            for (let i = 0; i < a.array.length; i++) {
+              if (a.array[i] !== b.array[i])
+                throw Error("Facing Worker attribute mismatch " + name);
+              values++;
+            }
+          }
+        if (!values) throw Error("No native-facing geometry rendered");
+        for (const e of expected) e.dispose();
+        g.firstPerson.render(g.renderer, g.scene, g.camera);
+        return { values, worker: g.meshWorker.report().state };
+      });
+      facingResult.mesh = mesh;
+      await p.screenshot({
+        path: path.join(outputDir, device + "-facings.png"),
+      });
+    }
     await p.screenshot({ path: path.join(outputDir, device + ".png") });
     await p.reload({ waitUntil: "domcontentloaded" });
     await p.waitForFunction(() =>
@@ -429,6 +578,10 @@ try {
           rawIron: g.inventory.countOf(I.RAW_IRON),
           rawGold: g.inventory.countOf(I.RAW_GOLD),
           furnace: g.furnaces.get("12,65,12"),
+          facingRows: Array.from({ length: 8 }, (_, i) => ({
+            id: g.world.peekBlock(16 + i * 2, 65, 10),
+            state: g.furnaces.get(`${16 + i * 2},65,10`),
+          })),
           gui: JSON.parse(localStorage.getItem("blockcraft-settings")).guiScale,
         };
       },
@@ -456,12 +609,26 @@ try {
         restored.furnace.burn > 70)
     )
       throw Error("Furnace/material save mismatch " + JSON.stringify(restored));
+    if (facingAudit)
+      for (let i = 0; i < 8; i++) {
+        const row = restored.facingRows[i];
+        if (
+          row.id !== facingResult.rows[i].id ||
+          !row.state ||
+          row.state.input?.count !== (i < 4 ? undefined : 2) ||
+          row.state.output ||
+          row.state.burn < (i < 4 ? 0 : 73) ||
+          row.state.burn > (i < 4 ? 0 : 75)
+        )
+          throw Error("Facing save mismatch " + JSON.stringify(row));
+      }
     if (errors.length) throw Error("Browser errors " + errors.join("\n"));
     reports.push({
       device,
       placed,
       ...result,
       furnaceResult,
+      facingResult,
       restored,
       errors,
     });

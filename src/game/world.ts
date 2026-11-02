@@ -10,7 +10,7 @@ import { isWater, isFire, waterHeight } from './blocks';
 import { applyStructures } from './structures';
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, T, EMIT, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, paneBoxes, paneConnects, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, stairsBoxesAt, isStairs, isSlab, collisionBoxes, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
+import { B, T, EMIT, isFurnace, furnaceCapCorner, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, paneBoxes, paneConnects, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, stairsBoxesAt, isStairs, isSlab, collisionBoxes, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
 import { TILE_UV4, entityUV, tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
@@ -2127,6 +2127,7 @@ export class World {
             const wave = isLiquid && F.dir[1] === 1 ? 1 : 0;
             const base = buf.count;
             const ao = [1, 1, 1, 1];
+            const furnaceCap = (f === 2 || f === 3) && isFurnace(id);
             for (let k = 0; k < 4; k++) {
               const cr = F.c[k];
               let px = cr[0], py = cr[1], pz = cr[2];
@@ -2159,7 +2160,8 @@ export class World {
               if (water) vy = y + (py === 1 ? fluidHeight : neighborHeight);
               else if (liquidTopLow && py === 1) vy -= 0.12;
               // 2.32: narożniki (u,v) to zawsze 0/1, więc UV czytamy z tabeli.
-              const uvi = (t * 4 + ((cr[3] ? 1 : 0) | (cr[4] ? 2 : 0))) * 2;
+              const corner = furnaceCap ? furnaceCapCorner(id,f,px,pz) : ((cr[3] ? 1 : 0) | (cr[4] ? 2 : 0));
+              const uvi = (t * 4 + corner) * 2;
               const uv0 = TILE_UV4[uvi];
               const uv1 = TILE_UV4[uvi + 1];
               const shadeAo = F.shade * aoF;

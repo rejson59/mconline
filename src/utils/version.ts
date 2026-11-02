@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.23.0';
-export const GAME_RELEASE_NAME = 'Od rudy do sztabki';
+export const GAME_VERSION = '4.24.0';
+export const GAME_RELEASE_NAME = 'Piec we właściwą stronę';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.24: kierunek pieca jak w Java', text: 'Piec stawia się frontem przeciwnie do poziomego kierunku patrzenia gracza, niezależnie od patrzenia w górę lub w dół. Rozpalanie i gaśnięcie zachowują kierunek, zapis i zawartość. Wydobywanie, wybieranie bloku i ochrona działek obsługują wszystkie osiem stanów.' },
+  { title: '4.24: oryginalne tekstury i obrót modelu', text: 'Cztery tekstury pieca pochodzą dokładnie z Java 1.20.4, bez proceduralnego wygładzania. Położenie frontu i obrót tekstury góry/spodu porównujemy z oryginalnymi blockstates i modelami. Stare piece zachowują swój dotychczasowy kierunek.' },
   { title: '4.23: piec, surowe metale i węgiel drzewny', text: 'Piec przetapia w 10 sekund, a węgiel wystarcza na osiem przedmiotów. Żelazo i złoto wypadają jako surowce, działają Fortune i Silk Touch. Drewno daje węgiel drzewny; można nim palić, robić pochodnie i ogniska. Ognisko bez Silk Touch zostawia dwa węgle drzewne. Wiadro lawy zostaje po zużyciu paliwa.' },
   { title: '4.23: oryginalne ikony Java 1.20.4', text: 'Węgiel, węgiel drzewny, surowe żelazo i złoto oraz sztabki mają oryginalne tekstury 16×16. Piec nie spala już obsydianu, kamiennych bloków, kwiatów ani samego pieca wskutek błędnego zakresu ID wełny. Postęp i paliwo są poprawnie rozliczane także przy dłuższych klatkach.' },
   { title: '4.22: receptury sprawdzane z oryginalnymi JSON', text: 'TNT wymaga prochu, kompas i zegar redstone, a ognisko trzech pni. Poprawione kształty papieru, chleba, wiadra, strzał i nożyc; receptury przyjmują odbicie lustrzane. Usunięto biblioteczkę z wełny. To audyt wybranego zestawu, nie wszystkich receptur Java.' },

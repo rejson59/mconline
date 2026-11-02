@@ -144,6 +144,9 @@ export const B = {
   BRICK_SLAB_DOUBLE: 487, SANDSTONE_SLAB_DOUBLE: 488,
   NETHER_BRICK_SLAB_DOUBLE: 489, QUARTZ_SLAB_DOUBLE: 490,
   FIRE: 491, SOUL_FIRE: 492, CAMPFIRE_OFF: 493,
+  // 494–496 are charcoal/raw-metal items. Keep legacy south-facing IDs.
+  FURNACE_N: 497, FURNACE_E: 498, FURNACE_W: 499,
+  FURNACE_ON_N: 500, FURNACE_ON_E: 501, FURNACE_ON_W: 502,
 } as const;
 
 export type RenderType =
@@ -286,6 +289,11 @@ for (const [id, name] of BED_FACES) {
   });
 }
 def(B.FURNACE_ON, 'Rozpalony piec', [T.furnace_top, T.furnace_top, T.furnace_side, T.furnace_lit], { hardness: 3.5, drop: B.FURNACE });
+for (const [id, lit] of [[B.FURNACE_N,false],[B.FURNACE_E,false],[B.FURNACE_W,false],
+  [B.FURNACE_ON_N,true],[B.FURNACE_ON_E,true],[B.FURNACE_ON_W,true]] as const) {
+  const direction = ['północ','wschód','południe','zachód'][furnaceFacing(id)];
+  def(id, `${lit ? 'Rozpalony piec' : 'Piec'} (${direction})`, [T.furnace_top,T.furnace_top,T.furnace_side,lit ? T.furnace_lit : T.furnace_front], {hardness:3.5,drop:B.FURNACE});
+}
 const FACE_PL = ['północ', 'wschód', 'południe', 'zachód'];
 def(B.CHEST, 'Skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', render: 'chest' });
 def(B.LOOT_CHEST, 'Stara skrzynia', [T.chest_top, T.chest_front, T.chest_side, T.chest_front], { hardness: 2.5, sound: 'wood', drop: B.CHEST, render: 'chest' });
@@ -493,6 +501,7 @@ EMIT[B.LAVA] = 15;
 EMIT[B.GLOWSTONE] = 15;
 EMIT[B.TORCH] = 14;
 EMIT[B.FURNACE_ON] = 13;
+EMIT[B.FURNACE_ON_N] = EMIT[B.FURNACE_ON_E] = EMIT[B.FURNACE_ON_W] = 13;
 EMIT[B.CAMPFIRE] = 15;
 EMIT[B.FIRE] = 15;
 EMIT[B.SOUL_FIRE] = 10;
@@ -620,6 +629,7 @@ export function tileFor(id: number, face: number): number {
   if (!d) return 0;
   if (face === 3) return d.top;
   if (face === 2) return d.bottom;
+  if (isFurnace(id)) return face === (furnaceFacing(id) === 0 ? 4 : furnaceFacing(id) === 1 ? 1 : furnaceFacing(id) === 2 ? 5 : 0) ? d.front! : d.side;
   if (face === 5 && d.front !== undefined) return d.front;
   return d.side;
 }
@@ -628,6 +638,7 @@ export function tileFor(id: number, face: number): number {
 export function isFire(id: number): boolean { return id === B.FIRE || id === B.SOUL_FIRE; }
 
 function creativeVisible(id: number): boolean {
+  if (isFurnace(id) && id !== B.FURNACE) return false;
   if (isFire(id) || id === B.CAMPFIRE_OFF) return false;
   if (isStairsTop(id) || isSlabDouble(id)) return false;
   if (id === B.RAIL_EW || id === B.POWERED_RAIL_EW || id === B.DETECTOR_RAIL_EW) return false;
@@ -825,6 +836,7 @@ export function stairsBoxesAt(
 }
 /** Building variants are block states, never separate inventory items. */
 export function buildingItem(id: number): number {
+  if (isFurnace(id)) return B.FURNACE;
   if (id === B.CAMPFIRE_OFF) return B.CAMPFIRE;
   return isStairs(id) ? stairsBase(id) : isSlab(id) ? slabBase(id) : id;
 }
@@ -979,4 +991,36 @@ export function waterLevel(id: number): number {
 }
 export function waterHeight(id: number): number {
   return id === B.WATER_FALL ? 1 : isWater(id) ? (8 - waterLevel(id)) / 9 : 0;
+}
+
+/** Furnace state: N/E/S/W, with original IDs 28/53 preserving south-facing saves. */
+export function isFurnace(id: number): boolean {
+  return id === B.FURNACE || id === B.FURNACE_ON || (id >= B.FURNACE_N && id <= B.FURNACE_ON_W);
+}
+export function furnaceFacing(id: number): number {
+  if (id === B.FURNACE_N || id === B.FURNACE_ON_N) return 0;
+  if (id === B.FURNACE_E || id === B.FURNACE_ON_E) return 1;
+  if (id === B.FURNACE_W || id === B.FURNACE_ON_W) return 3;
+  return 2;
+}
+export function furnaceIdFor(facing: number, lit = false): number {
+  const f = ((Math.round(facing) % 4) + 4) % 4;
+  if (f === 0) return lit ? B.FURNACE_ON_N : B.FURNACE_N;
+  if (f === 1) return lit ? B.FURNACE_ON_E : B.FURNACE_E;
+  if (f === 3) return lit ? B.FURNACE_ON_W : B.FURNACE_W;
+  return lit ? B.FURNACE_ON : B.FURNACE;
+}
+/** Engine yaw looks along -Z at zero; Java yaw is PI minus this angle.
+ * Java's horizontal quadrant selection is independent of pitch and hit position. */
+export function furnaceFacingForYaw(yaw: number): number {
+  if (!Number.isFinite(yaw)) return 2;
+  return ((Math.floor(2.5 - yaw / (Math.PI / 2)) % 4) + 4) % 4;
+}
+/** Reverse the model's Y rotation, then use Java cube's implicit up/down UVs.
+ * Input x/z are cube corner coordinates, output is TILE_UV4 corner index. */
+export function furnaceCapCorner(id: number, face: number, x: number, z: number): number {
+  const f = furnaceFacing(id);
+  const u = f === 0 ? x : f === 1 ? z : f === 2 ? 1-x : 1-z;
+  const v = f === 0 ? z : f === 1 ? 1-x : f === 2 ? 1-z : x;
+  return u | ((face === 3 ? 1-v : v) << 1);
 }

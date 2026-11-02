@@ -1,6 +1,6 @@
 import { destroyProgress, efficiencyBonus, MINING_TICK, type MiningEnvironment } from './mining';
 import { railBase } from './rails';
-import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase, buildingItem, isSlabDouble } from './blocks';
+import { B, BLOCKS, RENDER, isFurnace, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase, buildingItem, isSlabDouble } from './blocks';
 import type { Stack } from './inventory';
 
 /** Item ids sit above block ids so a stack can hold either. */
@@ -393,7 +393,7 @@ const PICK_BLOCKS = new Set<number>([
   B.COBBLE_STAIRS_N, B.BRICK_STAIRS_N, B.STONE_BRICK_STAIRS_N, B.SANDSTONE_STAIRS_N, B.NETHER_BRICK_STAIRS_N, B.QUARTZ_STAIRS_N,
   B.STONE_SLAB, B.COBBLE_SLAB, B.BRICK_SLAB, B.SANDSTONE_SLAB, B.NETHER_BRICK_SLAB, B.QUARTZ_SLAB,
 ]);
-const materialBlock = (id: number) => slabBase(stairsBase(railBase(id)));
+const materialBlock = (id: number) => isFurnace(id) ? B.FURNACE : slabBase(stairsBase(railBase(id)));
 const AXE_BLOCKS = new Set<number>([
   B.OAK_STAIRS_N, B.OAK_SLAB,
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.CHEST, B.LOOT_CHEST,
