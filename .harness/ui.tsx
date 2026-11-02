@@ -271,6 +271,18 @@ section('2.11: ekran „Gra razem” – serwer publiczny');
   check('bez obsługi multiplayera przycisk się nie pojawia', !noMp.includes('Gra razem · multiplayer'));
 }
 
+section('4.18: native attack indicator widgets');
+{
+  const {AttackIndicator}=await import('../src/components/HUD');
+  for(const location of ['crosshair','hotbar'] as const){
+    const meter=renderToStaticMarkup(<AttackIndicator location={location} progress={.5}/>);
+    check('native attack sprite '+location,meter.includes(guiSprite(location+'_attack_indicator_background')!));
+    check('native integer crop '+location,meter.includes(`data-java-attack-fill="${location==='hotbar'?9:8}"`));
+    check('attack meter accessible '+location,meter.includes('role="img"')&&meter.includes('Siła ataku: 50%'));
+    check('full attack meter hidden '+location,renderToStaticMarkup(<AttackIndicator location={location} progress={1}/>)==='');
+  }
+}
+
 section('4.8: active Java screens, not legacy menu exports');
 {
   const title = renderToStaticMarkup(<JavaMainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} onMultiplayer={noop} />);
@@ -908,7 +920,30 @@ async function mountWithJsdom(): Promise<boolean> {
   check('UI: lost mouseup is reconciled by the next real mouse event', !eventGame.mouseLeft);
   eventGame.mouseLeft = true; dom.window.dispatchEvent(new dom.window.Event('pointercancel'));
   check('UI: a cancelled pointer cannot leave mining pressed', !eventGame.mouseLeft);
+
+  Object.assign(eventGame,{locked:true,selected:0,wheelRemainder:0,scrollSensitivity:1,discreteScroll:false,emitHud(){}});
+  const wheel=(deltaY:number)=>dom.window.dispatchEvent(new dom.window.WheelEvent('wheel',{deltaY}));
+  wheel(90);check('UI: actual registered wheel keeps trackpad fractions',eventGame.selected===0);
+  wheel(10);check('UI: actual registered wheel accumulates a full notch',eventGame.selected===1);
+  wheel(0);check('UI: zero wheel delta cannot jump backwards',eventGame.selected===1);
+  eventGame.locked=false;eventGame.mouseFallback=true;wheel(100);check('UI: fallback mouse without Pointer Lock can scroll',eventGame.selected===2);
+  eventGame.ui='paused';wheel(100);check('UI: menu scrolling never changes hotbar selection',eventGame.selected===2);
+  eventGame.ui='playing';eventGame.mouseFallback=false;wheel(100);check('UI: unlocked inactive mouse cannot scroll hotbar',eventGame.selected===2);
   for (const [target, type, fn, options] of eventGame.listeners) target.removeEventListener(type, fn, options);
+  const {detectDeviceProfile}=await import('../src/utils/performance');
+  const canvasProto=(w.HTMLCanvasElement as typeof HTMLCanvasElement).prototype as any,previousGetContext=canvasProto.getContext,previousGL=w.WebGLRenderingContext;
+  let releases=0;
+  w.WebGLRenderingContext=function(){};
+  try{
+    canvasProto.getContext=()=>({getParameter:()=> 'Test GPU',getExtension:(name:string)=>name==='WEBGL_lose_context'?{loseContext(){releases++;}}:null});
+    check('UI: hardware profile still reads the GPU name',detectDeviceProfile().gpu==='Test GPU');
+    check('UI: every GPU profile probe releases its graphics context',releases===1);
+    canvasProto.getContext=()=>({getParameter:()=> 'Test GPU',getExtension:(name:string)=>name==='WEBGL_lose_context'?{loseContext(){throw Error('already lost');}}:null});
+    check('UI: a failed context release cannot crash options',detectDeviceProfile().gpu==='Test GPU');
+    canvasProto.getContext=()=>({getExtension(){throw Error('driver unavailable');}});
+    check('UI: GPU lookup failure returns a usable fallback profile',detectDeviceProfile().gpu==='');
+  }finally{canvasProto.getContext=previousGetContext;w.WebGLRenderingContext=previousGL;}
+
   inv.cursor = null; inv.slots.fill(null); chest.slots[0] = { id: B.LOG, count: 15 }; game.ui = 'chest';
   await React.act(async () => { root.render(<ChestScreen game={game} icons={{}} onChange={() => {}} />); });
   const guiSlot = container.querySelector('[role="button"]')!;
@@ -942,11 +977,24 @@ async function mountWithJsdom(): Promise<boolean> {
   await click('Opcje...');
   check('native options open from title', text().includes('Pole widzenia') && !!byText('Ustawienia grafiki'));
   await click('Ustawienia grafiki');
+  await click('Wskaźnik ataku');
+  check('attack indicator changes crosshair to hotbar',JSON.parse(dom.window.localStorage.getItem('blockcraft-settings')||'{}').attackIndicator==='hotbar');
+  await click('Wskaźnik ataku');
+  check('attack indicator can be disabled',JSON.parse(dom.window.localStorage.getItem('blockcraft-settings')||'{}').attackIndicator==='off');
+  await click('Wskaźnik ataku');
+  check('attack indicator cycles back to native default',JSON.parse(dom.window.localStorage.getItem('blockcraft-settings')||'{}').attackIndicator==='crosshair');
+
   check('video settings expose actual GUI scaling', text().includes('Skala interfejsu:'));
-  check('video options expose engine-backed brightness, FOV effects and hurt tilt', ['Jasność','Efekty pola widzenia','Przechylenie przy obrażeniach'].every(label=>container.querySelector(`input[aria-label="${label}"]`)));
+  check('video options expose engine-backed brightness, FOV effects and hurt tilt', ['Jasność','Efekty pola widzenia','Zadrżenie od obrażeń'].every(label=>container.querySelector(`input[aria-label="${label}"]`)));
 
   await React.act(async () => { dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
   check('Escape returns from video to options', text().includes('Dostosowanie skórki...'));
+
+  await click('Ułatwienia dostępu...');
+  check('accessibility exposes five working ranges',container.querySelectorAll('input[type="range"]').length===5);
+  check('glint speed and strength have native defaults',container.querySelector('input[aria-label="Prędkość poświaty"]')?.getAttribute('value')==='0.5' && container.querySelector('input[aria-label="Siła poświaty"]')?.getAttribute('value')==='0.75');
+  check('notification multiplier is adjustable',!!container.querySelector('input[aria-label="Czas wyświetl. powiad."]'));
+  await click('Gotowe');
   await click('Ustawienia czatu...');
   check('chat settings expose five real sliders',container.querySelectorAll('input[type="range"]').length===5);
   check('chat options include a live preview',!!container.querySelector('[data-testid="chat-preview"]'));
@@ -954,8 +1002,14 @@ async function mountWithJsdom(): Promise<boolean> {
   check('chat visibility preference is persisted',JSON.parse(dom.window.localStorage.getItem('blockcraft-settings')||'{}').chatVisible===false);
   await click('Gotowe');
   await click('Sterowanie...');
+  await click('Ustawienia myszy...');
   await click('Odwróć mysz');
+  check('mouse subpage includes scroll sensitivity and discrete scrolling',!!container.querySelector('input[aria-label="Czułość przewijania"]') && !!byText('Przewij. zrównoważone'));
+  await click('Przewij. zrównoważone');
+  check('discrete scroll is actually stored',JSON.parse(dom.window.localStorage.getItem('blockcraft-settings')||'{}').discreteScroll===true);
+
   check('inverted mouse toggle actually persists', JSON.parse(dom.window.localStorage.getItem('blockcraft-settings') || '{}').invertMouse===true);
+  await click('Gotowe');
   await click('Gotowe');
   await click('Muzyka i dźwięki...');
   check('sound page exposes master and eight real channel sliders', container.querySelectorAll('input[type="range"]').length===9);

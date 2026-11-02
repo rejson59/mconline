@@ -11,6 +11,10 @@
 import { guiSprite } from '../game/art/uiSprites';
 
 const VARS: Record<string, string> = {
+  '--mc-slider-img': 'slider',
+  '--mc-slider-hover-img': 'slider_highlighted',
+  '--mc-slider-handle': 'slider_handle',
+  '--mc-slider-handle-hover': 'slider_handle_highlighted',
   '--mc-slot-img': 'slot',
   '--mc-creative-scroller': 'creative_scroller',
   '--mc-btn-img': 'button',

@@ -420,10 +420,12 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(115deg, transparent 30%, rgba(190, 120, 255, 0.75) 45%, rgba(120, 90, 255, 0.75) 55%, transparent 70%);
+  background: linear-gradient(115deg, transparent 30%, rgba(190, 120, 255, 1) 45%, rgba(120, 90, 255, 1) 55%, transparent 70%);
   background-size: 260% 100%;
   mix-blend-mode: screen;
-  animation: ench-glint 1.6s linear infinite;
+  opacity: var(--mc-glint-opacity, .75);
+  animation: ench-glint var(--mc-glint-duration, 1.6s) linear infinite;
+  animation-play-state: var(--mc-glint-play-state, running);
 }
 @keyframes ench-glint {
   0% { background-position: 180% 0; }
@@ -970,7 +972,7 @@ body, button, input, select, textarea, .mc-btn, .mc-input { font-family: 'Java B
 .mc-btn:hover:not(:disabled), .mc-btn-primary:hover:not(:disabled) { background-image: var(--mc-btn-hover-img); }
 .mc-btn:disabled { background-image: var(--mc-btn-disabled-img); color: #a0a0a0; }
 .java-screen { position: absolute; inset: 0; z-index: 45; font-size: 8px; line-height: 10px; color: white; text-shadow: 1px 1px #3f3f3f; }
-.java-dirt { background-color: #30251e; background-size: 64px 64px; image-rendering: pixelated; background-blend-mode: multiply; }
+.java-dirt { background-color: #404040; background-size: 64px 64px; image-rendering: pixelated; background-blend-mode: multiply; }
 .java-screen-overlay { background: linear-gradient(#101010a0, #202030b0); }
 .java-page { position: absolute; top: 0; left: 50%; transform-origin: top center; }
 .java-page > h1 { position: absolute; margin: 0; top: 18px; left: 0; width: 100%; text-align: center; font-size: 8px; font-weight: 400; line-height: 10px; }
@@ -1092,3 +1094,22 @@ body, button, input, select, textarea, .mc-btn, .mc-input { font-family: 'Java B
 /* Java sound screen: full-width master above paired category controls. */
 .java-master-volume { grid-column: 1 / -1; }
 .java-master-volume .java-slider { width: 100%; }
+
+/* Java 1.20.4 slider widgets: native nine-sliced track and eight-pixel handle. */
+.java-slider { border: 1px solid transparent; border-image: var(--mc-slider-img) 1 fill / 1px / 0 stretch; background: transparent; }
+.java-slider:has(input:focus-visible) { border-image-source: var(--mc-slider-hover-img); }
+.java-slider input { outline: none; border: 0; border-radius: 0; }
+.java-slider input::-webkit-slider-runnable-track { height: 20px; background: transparent; }
+.java-slider input::-webkit-slider-thumb { width: 8px; height: 20px; border: 0; box-shadow: none; background: var(--mc-slider-handle) center/100% 100%; image-rendering: pixelated; border-radius: 0; }
+.java-slider input:is(:hover,:focus-visible)::-webkit-slider-thumb { background-image: var(--mc-slider-handle-hover); }
+.java-slider input::-moz-range-track { background: transparent; border: 0; height: 20px; }
+.java-slider input::-moz-range-thumb { width: 8px; height: 20px; border: 0; box-shadow: none; background: var(--mc-slider-handle) center/100% 100%; image-rendering: pixelated; border-radius: 0; }
+.java-slider input:is(:hover,:focus-visible)::-moz-range-thumb { background-image: var(--mc-slider-handle-hover); }
+.java-page-content { scrollbar-color: #aaa #111; }
+
+.java-options-page .java-page-content { top: calc(100% / 6 - 12px); height: 172px; bottom: auto; }
+.java-options-page .java-page-footer { top: calc(100% / 6 + 168px); bottom: auto; }
+
+.java-slider input { inset: -1px; width: calc(100% + 2px); height: 20px; }
+/* Native labels remain one line; full names/values are exposed to assistive tech. */
+.java-slider > span { max-width: calc(100% - 6px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

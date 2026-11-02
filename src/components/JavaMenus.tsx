@@ -13,10 +13,10 @@ import JavaPanorama from './JavaPanorama';
 export function JavaButton({ children, onClick, disabled, width = 200 }: { children: ReactNode; onClick?: () => void; disabled?: boolean; width?: number }) {
   return <button className="java-btn" style={{ width }} onClick={() => { const s = loadSettings(); setVolume(s.volume); setSoundLevels(s.soundVolumes); playClick(); onClick?.(); }} disabled={disabled}>{children}</button>;
 }
-export function JavaPage({ title, children, footer, overlay = false }: { title: string; children: ReactNode; footer?: ReactNode; overlay?: boolean }) {
+export function JavaPage({ title, children, footer, overlay = false, optionsLayout = false }: { title: string; children: ReactNode; footer?: ReactNode; overlay?: boolean; optionsLayout?: boolean }) {
   const scale = useJavaScale();
-  return <div className={`java-screen ${overlay ? 'java-screen-overlay' : 'java-dirt'}`} style={overlay ? undefined : { backgroundImage: `url(${guiSprite('dirt')})` }}>
-    <div className="java-page" style={{ width: 320, height: `calc(100% / ${scale})`, transform: `translateX(-50%) scale(${scale})` }}>
+  return <div className={`java-screen ${overlay ? 'java-screen-overlay' : 'java-dirt'}`} style={overlay ? undefined : { backgroundImage: `url(${guiSprite('dirt')})`, backgroundSize: `${32*scale}px ${32*scale}px` }}>
+    <div className={`java-page${optionsLayout ? ' java-options-page' : ''}`} style={{ width: 320, height: `calc(100% / ${scale})`, transform: `translateX(-50%) scale(${scale})` }}>
       <h1>{title}</h1><div className="java-page-content">{children}</div>{footer && <div className="java-page-footer">{footer}</div>}
     </div>
   </div>;

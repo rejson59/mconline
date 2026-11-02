@@ -1,3 +1,4 @@
+import { hotbarScroll, attackRecharge, notificationDuration } from './optionRules';
 import { cleanStatus, isTimedEffect, maxAmplifier, effectClock, mergeEffect, advanceEffect, type SavedEffect, type StatusSnapshot } from './statusEffects';
 import { landingDamage } from './landing';
 import { advanceMining, miningIdentity } from './mining';
@@ -186,6 +187,8 @@ export interface HUDState {
   inLava: boolean;
   flying: boolean;
   debug: boolean;
+  attackProgress?: number;
+  attackIndicator?: 'crosshair' | 'hotbar' | 'off';
   hurtCount: number;
   mobs: number;
   seed: number;
@@ -749,6 +752,11 @@ export class Game {
   breakCooldown = 0;
   placeCooldown = 0;
   attackCooldown = 0;
+  scrollSensitivity = 1;
+  discreteScroll = false;
+  wheelRemainder = 0;
+  notificationDisplayTime = 1;
+  attackIndicator: 'crosshair' | 'hotbar' | 'off' = 'crosshair';
   digSoundTimer = 0;
   swingT = 1;
 
@@ -2532,8 +2540,11 @@ export class Game {
       this.pitch = mousePitch(this.pitch, e.movementY, s, this.invertMouse);
     }) as EventListener);
     this.on(window, 'wheel', ((e: WheelEvent) => {
-      if (!this.locked) return;
-      this.selected = (this.selected + (e.deltaY > 0 ? 1 : -1) + 9) % 9;
+      if ((!this.locked && !this.mouseFallback) || this.ui !== 'playing') return;
+      const scroll = hotbarScroll(this.wheelRemainder, e.deltaY, e.deltaMode, this.scrollSensitivity, this.discreteScroll);
+      this.wheelRemainder = scroll.remainder;
+      if (!scroll.steps) return;
+      this.selected = (this.selected + scroll.steps % 9 + 9) % 9;
       this.emitHud();
     }) as EventListener, { passive: true });
     // 2.32: nasłuch sprzętu – klawiatura i mysz Bluetooth podłączone do
@@ -2813,6 +2824,7 @@ export class Game {
   }
 
   setUI(s: UIState) {
+    this.wheelRemainder = 0;
     const prev = this.ui;
     this.ui = s;
     this.breakProgress = 0; this.breakKey = ''; this.breakTickRemainder = 0;
@@ -7502,6 +7514,8 @@ export class Game {
       inLava: this.blockAt(p, this.eyeHeight) === B.LAVA,
       flying: this.flying,
       debug: this.debug,
+      attackProgress: attackRecharge(this.attackCooldown, attackCooldown(this.selectedStack()?.id ?? 0)),
+      attackIndicator: this.attackIndicator,
       hurtCount: this.hurtCount,
       mobs: this.mobs.length,
       seed: this.world.seed,
@@ -7513,7 +7527,7 @@ export class Game {
       locked: this.locked || this.mouseFallback,
       hunger: this.hunger,
       weather: this.weather,
-      toast: this.toast && now - this.toast.at < 4600 ? { title: this.toast.title, text: this.toast.text } : null,
+      toast: this.toast && now - this.toast.at < notificationDuration(this.notificationDisplayTime) ? { title: this.toast.title, text: this.toast.text } : null,
       sprinting: this.sprinting,
       worldName: this.worldName,
       worldType: this.worldType,

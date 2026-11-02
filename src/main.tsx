@@ -1,3 +1,4 @@
+import { installVisualPreferences, loadSettings } from './utils/settings';
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
@@ -8,6 +9,7 @@ const rootEl = document.getElementById("root");
 
 // 2.18: sloty i przyciski w stylu paczki tekstur (grafiki jako zmienne CSS).
 installPackTheme();
+installVisualPreferences(loadSettings());
 
 /** Last-resort screen so a crash never leaves the player with a black page. */
 function showFatal(message: string) {

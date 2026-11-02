@@ -1,6 +1,15 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.17.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.18.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.18.0 „Opcje i interfejs Java”
+
+- **Bliżej oryginalnego GUI:** osiem oryginalnych PNG Java 1.20.4 — tła i uchwyty suwaków oraz wskaźniki ataku. Pikselowe uchwyty, prawidłowe przycinanie, fokus klawiatury, skalowane kafelki tła i układ głównych opcji względem wysokości ekranu. Długie etykiety nie zawijają się na uchwyty.
+- **Ustawienia myszy:** czułość przewijania i przewijanie zrównoważone/dyskretne, obok czułości kamery i odwrócenia myszy. Touchpad sumuje małe ruchy; zdarzenie o zerowej delcie nie przełącza slotu. Działa również mysz bez Pointer Lock; przewijanie w menu nie zmienia hotbara.
+- **Ułatwienia dostępu:** działające sterowanie prędkością/siłą poświaty zaklętych przedmiotów w GUI oraz czasem powiadomień postępów (0,5–10×), razem z efektami FOV, zadrżeniem od obrażeń, kołysaniem i automatycznym skokiem.
+- **Wskaźnik ataku:** rzeczywisty stan odnowienia silnika pod celownikiem, przy pasku narzędzi lub całkowicie wyłączony. To wskaźnik istniejącego cooldownu, nie deklaracja pełnej implementacji walki Java.
+- **Ustawienia nie są pozorne:** ręczna zmiana zasięgu/chmur/cząsteczek wychodzi z automatycznego profilu, zachowując pozostałe efektywne wartości, jawny limit FPS i zapisane Auto skali GUI. Profil „Ziemniak” nie znika po odświeżeniu. Profil wydajności jest w rozszerzeniach, bez mylącego udawania natywnych trybów Fast/Fancy.
+- **Sprawdzone:** 17 182 kontrole, build/typecheck i rzeczywista produkcyjna gra w Chromium/WebGL desktop + mobilny viewport. Szczegóły i ograniczenia: [OPTIONS-4.18](docs/OPTIONS-4.18.md). Bez zmian danych światów, praw miasta czy protokołu multiplayer.
 
 ## Wersja 4.17.0 „Alchemia Java”
 

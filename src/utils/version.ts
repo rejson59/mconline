@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.17.0';
-export const GAME_RELEASE_NAME = 'Alchemia Java';
+export const GAME_VERSION = '4.18.0';
+export const GAME_RELEASE_NAME = 'Opcje i interfejs Java';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.18: opcje i GUI bliżej Java', text: 'Oryginalne suwaki i uchwyty 1.20.4, układ opcji w pikselach GUI oraz osobne ustawienia myszy i ułatwienia dostępu. Czułość kółka, przewijanie dyskretne, prędkość i siła połysku oraz czas powiadomień naprawdę działają.' },
+  { title: '4.18: wskaźnik ataku i trwałe wybory', text: 'Wskaźnik odnowienia ataku pod celownikiem, przy hotbarze albo wyłączony. Ręczne ustawienie zasięgu/chmur/cząsteczek nie jest już nadpisywane przez profil Auto. Zachowane zapisane ustawienia i światy.' },
   { title: '4.17: warzenie bliżej Java', text: 'Statyw odlicza 400 ticków, używa płomiennego proszku na 20 partii i zużywa jeden składnik na maksymalnie trzy butelki. Poprawione receptury podstawowych mikstur i anulowanie warzenia. Bez restartu po dotknięciu paliwa.' },
   { title: '4.17: prawdziwe parametry i grafika mikstur', text: 'Leczenie I daje 4 HP, Szybkość +20%, Siła +3; standardowe efekty trwają 3 minuty, Regeneracja I 45 sekund. Oryginalne kolory, butelki, składniki i dźwięk statywu Java 1.20.4. Picie oddaje pustą butelkę.' },
   { title: '4.16: Minecraft — wersja przeglądarkowa', text: 'Minecraft w przeglądarce: nowa nazwa w menu, launcherze, HUD i karcie. Nadal nieoficjalny własny silnik, nie klient Mojang. Dotychczasowe światy, profile, ustawienia i serwery pozostają dostępne.' },

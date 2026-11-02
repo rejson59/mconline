@@ -9,6 +9,7 @@
  */
 
 import { RESCUE_SPRITES } from './javaRescue.generated';
+import { JAVA_OPTIONS } from './javaOptions.generated';
 import { JAVA_GUI } from './javaGui.generated';
 import { GUI_SPRITES } from './vanillaArt.generated';
 
@@ -21,7 +22,7 @@ const cache = new Map<string, string | null>();
  */
 export function guiSprite(name: string): string | null {
   if (cache.has(name)) return cache.get(name) ?? null;
-  const png = JAVA_GUI[name] ?? RESCUE_SPRITES[name] ?? GUI_SPRITES[name];
+  const png = JAVA_OPTIONS[name] ?? JAVA_GUI[name] ?? RESCUE_SPRITES[name] ?? GUI_SPRITES[name];
   const url = png ? (png.startsWith('data:') ? png : `data:image/png;base64,${png}`) : null;
   cache.set(name, url);
   return url;
@@ -29,12 +30,12 @@ export function guiSprite(name: string): string | null {
 
 /** Czy paczka zawiera daną grafikę interfejsu. */
 export function hasGuiSprite(name: string): boolean {
-  return JAVA_GUI[name] != null || RESCUE_SPRITES[name] != null || GUI_SPRITES[name] != null;
+  return JAVA_OPTIONS[name] != null || JAVA_GUI[name] != null || RESCUE_SPRITES[name] != null || GUI_SPRITES[name] != null;
 }
 
 /** Ile grafik interfejsu pochodzi z paczki (diagnostyka i testy). */
 export function guiSpriteCount(): number {
-  return new Set([...Object.keys(GUI_SPRITES), ...Object.keys(JAVA_GUI), ...Object.keys(RESCUE_SPRITES)]).size;
+  return new Set([...Object.keys(GUI_SPRITES), ...Object.keys(JAVA_OPTIONS), ...Object.keys(JAVA_GUI), ...Object.keys(RESCUE_SPRITES)]).size;
 }
 
 /**
@@ -61,4 +62,4 @@ export function airSprite(empty: boolean): string | null {
 }
 
 /** Nazwy grafik, które trafiły do builda – do podpowiedzi w testach. */
-export const GUI_SPRITE_NAMES: readonly string[] = [...new Set([...Object.keys(GUI_SPRITES), ...Object.keys(JAVA_GUI), ...Object.keys(RESCUE_SPRITES)])];
+export const GUI_SPRITE_NAMES: readonly string[] = [...new Set([...Object.keys(GUI_SPRITES), ...Object.keys(JAVA_OPTIONS), ...Object.keys(JAVA_GUI), ...Object.keys(RESCUE_SPRITES)])];

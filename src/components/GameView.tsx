@@ -115,6 +115,10 @@ export default function GameView({
     game.sensitivity = s.sensitivity;
     game.fovBase = s.fov;
     game.invertMouse = s.invertMouse;
+    game.scrollSensitivity = s.scrollSensitivity;
+    game.discreteScroll = s.discreteScroll;
+    game.attackIndicator = s.attackIndicator;
+    game.notificationDisplayTime = s.notificationDisplayTime;
     game.brightness.value = s.brightness;
     game.fovEffects = s.fovEffects;
     game.damageTilt = s.damageTilt;
@@ -180,6 +184,10 @@ export default function GameView({
     g.sensitivity = effective.sensitivity;
     g.fovBase = effective.fov;
     g.invertMouse = effective.invertMouse;
+    g.scrollSensitivity = effective.scrollSensitivity;
+    g.discreteScroll = effective.discreteScroll;
+    g.attackIndicator = effective.attackIndicator;
+    g.notificationDisplayTime = effective.notificationDisplayTime;
     g.brightness.value = effective.brightness;
     g.fovEffects = effective.fovEffects;
     g.damageTilt = effective.damageTilt;
