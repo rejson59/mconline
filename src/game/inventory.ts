@@ -298,6 +298,12 @@ addTools(B.COBBLE, I.STONE_PICK, I.STONE_AXE, I.STONE_SHOVEL, I.STONE_SWORD, I.S
 addTools(I.IRON, I.IRON_PICK, I.IRON_AXE, I.IRON_SHOVEL, I.IRON_SWORD, I.IRON_HOE);
 addTools(I.DIAMOND, I.DIAMOND_PICK, I.DIAMOND_AXE, I.DIAMOND_SHOVEL, I.DIAMOND_SWORD, I.DIAMOND_HOE);
 
+// Explicit native coal alternatives: do not substitute charcoal in invented dye/ore shortcuts.
+for (const r of RECIPES.filter(r => r.out.id === B.TORCH || r.out.id === B.CAMPFIRE)) {
+  RECIPES.push({ ...r, inputs: r.inputs.map(s => ({...s, id: s.id === I.COAL ? I.CHARCOAL : s.id})),
+    key: Object.fromEntries(Object.entries(r.key ?? {}).map(([k,id]) => [k,id === I.COAL ? I.CHARCOAL : id])) });
+}
+
 export class Inventory {
   offhand: Stack | null = null;
   slots: (Stack | null)[] = new Array(36).fill(null);

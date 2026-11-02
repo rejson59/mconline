@@ -1,0 +1,92 @@
+{
+  "version": "1.20.4",
+  "repository": "InventivetalentDev/minecraft-assets",
+  "commit": "90d256dfee7b6fd8014e1bc3b107e64a530c5f9b",
+  "files": [
+    {
+      "path": "data/minecraft/recipes/charcoal.json",
+      "bytes": 195,
+      "sha256": "6da0fd209e159fc8fc39a2d06150556276cd860349dcd826b452d4aaacab1354"
+    },
+    {
+      "path": "data/minecraft/recipes/iron_ingot_from_smelting_raw_iron.json",
+      "bytes": 216,
+      "sha256": "2affd44df5c06e1fa432b6f0da3a17a4c9d4194d996428953cccf29415c569cd"
+    },
+    {
+      "path": "data/minecraft/recipes/gold_ingot_from_smelting_raw_gold.json",
+      "bytes": 216,
+      "sha256": "e7d373b348d7289215e5a1f80dc4d9254c97fe390e2758f96d99f6701e607dee"
+    },
+    {
+      "path": "data/minecraft/recipes/glass.json",
+      "bytes": 194,
+      "sha256": "063c00845f435899d1f8ec672b1f9c3db82bcb490bae397a96b213f4a377390e"
+    },
+    {
+      "path": "data/minecraft/recipes/stone.json",
+      "bytes": 191,
+      "sha256": "c0c7a61baaa7575c57da55a90d2220e22674eb0de4a244c9ea7db020d1f8a2e2"
+    },
+    {
+      "path": "data/minecraft/recipes/cooked_porkchop.json",
+      "bytes": 197,
+      "sha256": "57f76de0c39af9aeee854d5054550fcbc36138a813584647d5e11d1c65d0ee95"
+    },
+    {
+      "path": "data/minecraft/recipes/iron_ingot_from_smelting_iron_ore.json",
+      "bytes": 216,
+      "sha256": "9a582ce6851d41d5097a975baff859aa812f9204dc5302de4803c9a79cbfbe41"
+    },
+    {
+      "path": "data/minecraft/recipes/gold_ingot_from_smelting_gold_ore.json",
+      "bytes": 216,
+      "sha256": "76aaa25c55b2e752266b3eccc2a4fe60ff23e5a1fb87a9f9682121d2f1533d29"
+    },
+    {
+      "path": "data/minecraft/loot_tables/blocks/iron_ore.json",
+      "bytes": 1303,
+      "sha256": "74dbb94e0db426f95d81b9306855ea3cb9b5305414a321fac06e679f854fcd3f"
+    },
+    {
+      "path": "data/minecraft/loot_tables/blocks/gold_ore.json",
+      "bytes": 1303,
+      "sha256": "8f61b14a5574929b1babd8f914a91c60e6da73c2af7fbfd2994a0a693f0cb2a6"
+    },
+    {
+      "path": "data/minecraft/loot_tables/blocks/campfire.json",
+      "bytes": 1309,
+      "sha256": "67a14ec8911efa2421d890b3e59c50b68e357a7624a8495f7c4db00b053e6819"
+    },
+    {
+      "path": "assets/minecraft/textures/item/charcoal.png",
+      "bytes": 215,
+      "sha256": "8694dbb742b7aeea35fda24643f078a3624e083109a3968431f944ff3c178473"
+    },
+    {
+      "path": "assets/minecraft/textures/item/raw_iron.png",
+      "bytes": 224,
+      "sha256": "5ac9321000afa9b49215970326fde0eb88bb7de518a8974d4e8ec38373c49ae6"
+    },
+    {
+      "path": "assets/minecraft/textures/item/raw_gold.png",
+      "bytes": 218,
+      "sha256": "1cd44c35178953ca5791e2a059e9c12e97519d554064f171b1d55f79fb2a407d"
+    },
+    {
+      "path": "assets/minecraft/textures/item/coal.png",
+      "bytes": 207,
+      "sha256": "31a5bf332d28c65e0e83368d4008b31c471023ae391e4533f80cd80ad13f54e0"
+    },
+    {
+      "path": "assets/minecraft/textures/item/iron_ingot.png",
+      "bytes": 189,
+      "sha256": "4625aa2c32c74bd6796c7ba8e7ee6300db8d2f24fb38c9d9324a63b262a44391"
+    },
+    {
+      "path": "assets/minecraft/textures/item/gold_ingot.png",
+      "bytes": 199,
+      "sha256": "b4e38d8476c35fafd18dba27ab2ec0304cedc7296ca170fd723afae5a08b2a2d"
+    }
+  ]
+}

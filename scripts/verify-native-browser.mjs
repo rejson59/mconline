@@ -35,7 +35,11 @@ if (!fs.existsSync(libs)) {
   execFileSync("tar", ["xf", tar, "-C", libs]);
   fs.unlinkSync(tar);
 }
-const outputDir = path.join(root, ".cache/verification422");
+const furnaceAudit = process.env.BROWSER_FURNACE === "1";
+const outputDir = path.join(
+  root,
+  furnaceAudit ? ".cache/verification423" : ".cache/verification422",
+);
 const baseUrl = process.env.BROWSER_URL ?? "http://127.0.0.1:4173/";
 const version = JSON.parse(
   fs.readFileSync(path.join(root, "package.json"), "utf8"),
@@ -278,6 +282,128 @@ try {
       },
       { B, I },
     );
+    let furnaceResult;
+    if (furnaceAudit) {
+      const entityDrops = await p.evaluate(
+        ({ B, I }) => {
+          const g = window.minecraft.game;
+          g.closeInventory();
+          const selected = g.selected,
+            previous = g.inventory.slots[35];
+          g.inventory.slots[35] = { id: I.DIAMOND_PICK, count: 1, dur: 1561 };
+          g.selected = 35;
+          const result = [];
+          for (const [block, item, count] of [
+            [B.IRON_ORE, I.RAW_IRON, 1],
+            [B.GOLD_ORE, I.RAW_GOLD, 1],
+            [B.CAMPFIRE, I.CHARCOAL, 2],
+          ]) {
+            g.world.setBlock(10, 65, 10, block);
+            const n = g.drops.length;
+            if (!g.breakBlock(10, 65, 10))
+              throw Error("Could not break furnace audit block");
+            const fresh = g.drops
+              .slice(n)
+              .map((d) => ({ id: d.id, count: d.count }));
+            if (JSON.stringify(fresh) !== JSON.stringify([{ id: item, count }]))
+              throw Error("Incorrect native entity " + JSON.stringify(fresh));
+            result.push(...fresh);
+          }
+          g.inventory.slots[35] = previous;
+          g.selected = selected;
+          g.inventory.add(I.CHARCOAL, 3);
+          g.inventory.add(I.RAW_IRON, 4);
+          g.inventory.add(I.RAW_GOLD, 2);
+          g.world.setBlock(12, 65, 12, B.FURNACE);
+          g.furnaces.set("12,65,12", {
+            x: 12,
+            y: 65,
+            z: 12,
+            input: { id: I.RAW_IRON, count: 2 },
+            fuel: { id: I.CHARCOAL, count: 2 },
+            output: null,
+            burn: 0,
+            burnMax: 0,
+            cook: 0,
+          });
+          g.openFurnace(12, 65, 12);
+          g.updateFurnaces(5);
+          const f = g.currentFurnace();
+          if (
+            f.output ||
+            Math.abs(f.cook - 0.5) > 1e-6 ||
+            Math.abs(f.burn - 75) > 1e-6 ||
+            g.world.getBlock(12, 65, 12) !== B.FURNACE_ON
+          )
+            throw Error("Incorrect halfway furnace state");
+          return result;
+        },
+        { B, I },
+      );
+      await p.waitForFunction(
+        ({ I }) => {
+          const g = window.minecraft.game;
+          return (
+            document.querySelector(
+              '[data-slot-area="furnace"][data-slot-index="0"] img',
+            )?.src === g.icons[I.RAW_IRON] &&
+            document.querySelector(
+              '[data-slot-area="furnace"][data-slot-index="1"] img',
+            )?.src === g.icons[I.CHARCOAL]
+          );
+        },
+        {},
+        { I },
+      );
+      await p.screenshot({
+        path: path.join(outputDir, device + "-furnace-half.png"),
+      });
+      await p.waitForFunction(() => !document.pointerLockElement);
+      await p.evaluate(() => window.minecraft.game.updateFurnaces(5));
+      await p.waitForSelector(
+        '[data-slot-area="furnace"][data-slot-index="2"] img',
+      );
+      const slot = await p.$('[data-slot-area="furnace"][data-slot-index="2"]');
+      if (device === "mobile") {
+        const box = await slot.boundingBox();
+        await p.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      } else await slot.click();
+      await p.screenshot({
+        path: path.join(outputDir, device + "-furnace-click.png"),
+      });
+      furnaceResult = await p.evaluate(
+        ({ I }) => {
+          const g = window.minecraft.game,
+            f = g.currentFurnace();
+          if (
+            g.inventory.cursor?.id !== I.IRON ||
+            g.inventory.cursor.count !== 1 ||
+            f.output
+          )
+            throw Error(
+              "Actual furnace result-slot input failed " +
+                JSON.stringify({
+                  cursor: g.inventory.cursor,
+                  f,
+                  ui: g.ui,
+                  body: document.body.innerText.slice(-400),
+                }),
+            );
+          g.closeInventory();
+          g.save();
+          return {
+            input: f.input,
+            fuel: f.fuel,
+            burn: f.burn,
+            cook: f.cook,
+            ingots: g.inventory.countOf(I.IRON),
+            charcoal: g.inventory.countOf(I.CHARCOAL),
+          };
+        },
+        { I },
+      );
+      furnaceResult.entityDrops = entityDrops;
+    }
     await p.screenshot({ path: path.join(outputDir, device + ".png") });
     await p.reload({ waitUntil: "domcontentloaded" });
     await p.waitForFunction(() =>
@@ -299,6 +425,10 @@ try {
           coal: g.inventory.countOf(I.COAL),
           redstone: g.inventory.countOf(I.REDSTONE),
           iron: g.inventory.countOf(I.IRON),
+          charcoal: g.inventory.countOf(I.CHARCOAL),
+          rawIron: g.inventory.countOf(I.RAW_IRON),
+          rawGold: g.inventory.countOf(I.RAW_GOLD),
+          furnace: g.furnaces.get("12,65,12"),
           gui: JSON.parse(localStorage.getItem("blockcraft-settings")).guiScale,
         };
       },
@@ -308,12 +438,33 @@ try {
       restored.compass !== 1 ||
       restored.coal !== 16 ||
       restored.redstone !== 0 ||
-      restored.iron !== 0 ||
+      restored.iron !== (furnaceAudit ? 1 : 0) ||
       restored.gui !== (device === "mobile" ? 0 : 2)
     )
       throw Error("Save/GUI mismatch " + JSON.stringify(restored));
+    if (
+      furnaceAudit &&
+      (restored.charcoal !== 3 ||
+        restored.rawIron !== 4 ||
+        restored.rawGold !== 2 ||
+        restored.furnace?.input?.id !== I.RAW_IRON ||
+        restored.furnace.input.count !== 1 ||
+        restored.furnace.fuel?.id !== I.CHARCOAL ||
+        restored.furnace.fuel.count !== 1 ||
+        restored.furnace.output ||
+        restored.furnace.burn < 69 ||
+        restored.furnace.burn > 70)
+    )
+      throw Error("Furnace/material save mismatch " + JSON.stringify(restored));
     if (errors.length) throw Error("Browser errors " + errors.join("\n"));
-    reports.push({ device, placed, ...result, restored, errors });
+    reports.push({
+      device,
+      placed,
+      ...result,
+      furnaceResult,
+      restored,
+      errors,
+    });
     console.log("PASS", device, JSON.stringify(reports.at(-1)));
     await p.close();
   }

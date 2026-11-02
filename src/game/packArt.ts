@@ -1,3 +1,4 @@
+import { javaFurnaceItemPixels, JAVA_FURNACE_IDS } from './furnaceArt';
 import { JAVA_FIRE_ANIMATIONS, JAVA_FIRE_TEXTURES } from './art/javaFire.generated';
 import { javaBrewingItemPixels, JAVA_BREWING_IDS } from './brewingArt';
 import { JAVA_CHEST_TEXTURES, JAVA_RAIL_TEXTURES } from './art/javaBlocks.generated';
@@ -154,6 +155,7 @@ export function officialTileCount(): number {
  * odpowiednika w paczce 1.16 (tarcza, lorneta…).
  */
 export function officialItemPixels(id: number): Uint8Array | null {
+  const furnace = javaFurnaceItemPixels(id); if (furnace) return furnace;
   const native = javaBrewingItemPixels(id); if (native) return native;
   const src = officialItemAtlas();
   const tile = ITEM_TILE[id];
@@ -176,12 +178,12 @@ export function officialItemPixels(id: number): Uint8Array | null {
 
 /** Czy przedmiot ma ikonę z paczki. */
 export function hasOfficialItemIcon(id: number): boolean {
-  return JAVA_BREWING_IDS.has(id) || ITEM_TILE[id] !== undefined;
+  return JAVA_FURNACE_IDS.has(id) || JAVA_BREWING_IDS.has(id) || ITEM_TILE[id] !== undefined;
 }
 
 /** Ile przedmiotów ma oficjalną ikonę. */
 export function officialItemCount(): number {
-  return new Set([...Object.keys(ITEM_TILE).map(Number), ...JAVA_BREWING_IDS]).size;
+  return new Set([...Object.keys(ITEM_TILE).map(Number), ...JAVA_BREWING_IDS, ...JAVA_FURNACE_IDS]).size;
 }
 
 /** Original Java rail sprites; reserved corner tile stays outside chest regions. */

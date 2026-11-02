@@ -752,7 +752,7 @@ section('chests and furnaces');
   check('furnace smelts iron into ingots', f.output?.id === I.IRON && (f.output?.count ?? 0) >= 1, `out=${f.output?.count}`);
   check('furnace consumed the input', (f.input?.count ?? 0) < 2);
   check('furnace burned fuel', f.fuel === null || (f.fuel.count ?? 0) < 1);
-  check('cook time is short', COOK_TIME > 0 && COOK_TIME < 10);
+  eq('ordinary furnace takes 200 Java ticks', COOK_TIME, 10);
 
   const f2 = emptyFurnace(0, 0, 0);
   f2.input = { id: B.IRON_ORE, count: 1 };
@@ -1752,7 +1752,7 @@ section('update 1.6: paths, lanterns, emeralds');
   eq('path is a shovel block', toolHelps(B.PATH, I.DIAMOND_SHOVEL), true);
 
   // siano pali się w piecu
-  eq('hay is fuel', fuelSeconds(B.HAY), 6);
+  eq('hay is not furnace fuel in Java', fuelSeconds(B.HAY), 0);
 
   // ruda szmaragdu: żelazny kilof, kamienny nic nie da
   eq('emerald ore needs iron pick', requiredPickTier(B.EMERALD_ORE), 3);
@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.22.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Receptury pod lupą', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.23.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Od rudy do sztabki', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -4699,7 +4699,7 @@ section('2.16: nowe przepisy rzemieślnicze');
 
   // Naprawiony błąd: blackstone nie „wypala się” w siebie.
   eq('blackstone nie jest paliwem ani wynikiem wypalania', smeltResult(B.BLACKSTONE), null);
-  eq('soul sand nadal daje soul soil', smeltResult(B.SOUL_SAND), B.SOUL_SOIL);
+  eq('soul sand nie ma wymyślonego przepisu przetapiania', smeltResult(B.SOUL_SAND), null);
 }
 
 // ============================================ 2.17: grafika z paczki tekstur
@@ -8116,7 +8116,7 @@ section('4.4.1: ore placement/mining cycle has no item or XP gain');
     if (ore === B.IRON_ORE || ore === B.GOLD_ORE) {
       delete g.inventory.slots[1].ench;
       for (let repeat = 0; repeat < 8; repeat++) { g.selected = 0; g.tryUse(); g.selected = 1; g.breakBlock(4, FLAT_H + 1, 4); }
-      check(`ordinary repeat mining of ore ${ore} cannot farm XP or items`, xp === 0 && g.inventory.countOf(ore) === 1);
+      check(`ordinary repeat mining of ore ${ore} cannot farm XP or items`, xp === 0 && g.inventory.countOf(ore) === 0 && g.inventory.countOf(ore === B.IRON_ORE ? I.RAW_IRON : I.RAW_GOLD) === 1);
     }
     g.inventory.slots[1].ench = undefined; world.setBlock(4, FLAT_H + 1, 4, ore); g.breakBlock(4, FLAT_H + 1, 4);
     if (ore !== B.IRON_ORE && ore !== B.GOLD_ORE) check(`ordinary resource mining still grants XP for ore ${ore}`, xp > 0);
@@ -9854,6 +9854,35 @@ section('4.17: native base alchemy, 20 Hz stand, save compatibility and bottle c
   check('native potion colors differ between effects',JSON.stringify(javaBrewingItemPixels(I.POTION_FIRE))!==JSON.stringify(javaBrewingItemPixels(I.POTION_SPEED)));
   for(let ticks=1;ticks<=400;ticks++){const frame=brewingFrame({...make(),remainingTicks:ticks});check('native progress and bubble cropping at countdown '+ticks,frame.progress===Math.floor(28*(1-ticks/400))&&frame.bubbles===[29,24,20,16,11,6,0][Math.floor(ticks/2)%7]);}
   for(let fuel=0;fuel<=20;fuel++)eq('native fuel pixel ceil '+fuel,brewingFrame({...make(),fuelLeft:fuel}).fuel,Math.ceil(18*fuel/20));
+}
+
+section('4.23: late pointer capture must never steal container clicks');
+{
+  const globals = globalThis as any, oldDoc = globals.document, oldWindow = globals.window;
+  const callbacks: Record<string, () => void> = {};
+  let exits = 0, requests = 0, rejected: (() => void) | undefined;
+  const canvas = { requestPointerLock() { requests++; return { catch(fn: () => void) { rejected = fn; } }; } };
+  const fakeDoc = { pointerLockElement: canvas as unknown, exitPointerLock() { exits++; this.pointerLockElement = null; } };
+  globals.document = fakeDoc; globals.window = oldWindow ?? {};
+  try {
+    const g = Object.assign(Object.create(Game.prototype), {
+      renderer: { domElement: canvas }, ui: 'furnace', locked: false, touchInput: false,
+      keys: new Set(['KeyW']), mouseLeft: true, mouseRight: true,
+      bindViewport() {}, on(_target: unknown, name: string, fn: () => void) { callbacks[name] = fn; },
+      setUI(s: string) { this.ui = s; },
+    }) as any;
+    g.bindEvents(); callbacks.pointerlockchange();
+    eq('late successful lock is released while furnace visible', exits, 1);
+    callbacks.pointerlockchange();
+    check('release leaves furnace open and clears held controls', g.ui === 'furnace' && !g.locked && !g.mouseLeft && !g.mouseRight && g.keys.size === 0);
+    g.lockPointer(); eq('container cannot request capture', requests, 0);
+    g.ui = 'playing'; g.lockPointer(); eq('playing requests capture', requests, 1);
+    g.ui = 'furnace'; rejected?.(); eq('late failure cannot retry capture behind a GUI', requests, 1);
+    fakeDoc.pointerLockElement = canvas; g.ui = 'playing'; callbacks.pointerlockchange();
+    check('ordinary successful capture still works', g.locked && exits === 1);
+    fakeDoc.pointerLockElement = null; callbacks.pointerlockchange(); eq('ordinary Esc still pauses', g.ui, 'paused');
+    g.ui = 'playing'; g.touchInput = true; callbacks.pointerlockchange(); eq('touch does not spuriously pause', g.ui, 'playing');
+  } finally { globals.document = oldDoc; globals.window = oldWindow; }
 }
 
 // =================================================================== report

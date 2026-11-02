@@ -95,3 +95,14 @@ Sync: scripts/sync-java-audit.py. The JSON corpus is test-only, never downloaded
 by the game or treated as MIT-licensed original project code. Ownership remains
 with Mojang/Microsoft and the respective authors; no redistribution rights are
 granted by this notice. The small comparison interpreter is project-written.
+
+4.23 native furnace/material audit:
+17 pinned files (8 smelting recipes, 3 block loot tables, 6 original 16x16 item PNGs)
+from Minecraft Java Edition 1.20.4, mirrored at:
+https://github.com/InventivetalentDev/minecraft-assets/tree/90d256dfee7b6fd8014e1bc3b107e64a530c5f9b
+SHA-256/byte manifest: .harness/fixtures/java-furnace-1.20.4/manifest.json
+Embedded artwork: src/game/art/javaFurnace.generated.ts
+Reproduction: scripts/sync-java-furnace.py; no runtime downloads.
+Original Minecraft data and artwork remain copyright Mojang/Microsoft and are
+NOT covered by this project's MIT license. This is an unofficial project,
+not an official Minecraft product or approved/associated with Mojang/Microsoft.

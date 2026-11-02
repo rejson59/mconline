@@ -1,3 +1,5 @@
+import FurnaceScreen from '../src/components/FurnaceScreen';
+import { emptyFurnace } from '../src/game/furnace';
 /**
  * UI suite: renders the real React screens without a browser.
  *
@@ -562,6 +564,21 @@ section('2.28.1: skrzynia 1:1 z GenericContainerScreen');
     <ChestScreen game={{ ...game, currentChest: () => null } as never} icons={{}} onChange={noop} />
   );
   check('a closed chest renders nothing', none === '', none);
+}
+
+section('4.23: native furnace inventory label and slots');
+{
+  const f = emptyFurnace(0, 65, 0);
+  f.input = { id: I.RAW_IRON, count: 2 }; f.fuel = { id: I.CHARCOAL, count: 1 };
+  const game = { inventory: new Inventory(), currentFurnace: () => f };
+  for (const burn of [0, 75]) {
+    f.burn = burn; f.burnMax = 80; f.cook = 0.5;
+    const html = renderToStaticMarkup(<FurnaceScreen game={game as never} icons={{}} onChange={() => {}} />);
+    check('furnace retains native inventory label '+burn, html.includes('Ekwipunek'));
+    check('status message cannot overwrite inventory label '+burn, !html.includes('Piec pracuje') && !html.includes('Piec wygasł'));
+    check('furnace exposes raw metal and charcoal names '+burn, html.includes('Surowe żelazo') && html.includes('Węgiel drzewny'));
+  }
+  check('closed furnace renders nothing', renderToStaticMarkup(<FurnaceScreen game={{...game, currentFurnace:()=>null} as never} icons={{}} onChange={() => {}} />) === '');
 }
 
 section('2.4: brewing screen');

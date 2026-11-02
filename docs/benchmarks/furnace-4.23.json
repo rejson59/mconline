@@ -1,0 +1,430 @@
+{
+  "version": "4.23.0",
+  "baselineCommit": "b94ae1060142f420554aff6400edf75fe8df4fc0",
+  "unit": {
+    "checks": 678,
+    "failed": 0,
+    "reference": "90d256dfee7b6fd8014e1bc3b107e64a530c5f9b",
+    "referenceFiles": 17,
+    "referenceBytes": 6808
+  },
+  "checks": {
+    "total": 24231,
+    "furnace": 678,
+    "native": 5746,
+    "engine": 16467,
+    "fire": 436,
+    "worker": 81,
+    "audio": 403,
+    "ui": 413,
+    "account": 5,
+    "bootstrap": 2
+  },
+  "browser": {
+    "version": "4.23.0",
+    "environment": "Chromium / SwiftShader sandbox, mobile is viewport emulation",
+    "reports": [
+      {
+        "device": "desktop",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "furnaceResult": {
+          "input": {
+            "id": 495,
+            "count": 1
+          },
+          "fuel": {
+            "id": 494,
+            "count": 1
+          },
+          "burn": 70,
+          "cook": 0,
+          "ingots": 1,
+          "charcoal": 3,
+          "entityDrops": [
+            {
+              "id": 495,
+              "count": 1
+            },
+            {
+              "id": 496,
+              "count": 1
+            },
+            {
+              "id": 494,
+              "count": 2
+            }
+          ]
+        },
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 1,
+          "charcoal": 3,
+          "rawIron": 4,
+          "rawGold": 2,
+          "furnace": {
+            "x": 12,
+            "y": 65,
+            "z": 12,
+            "input": {
+              "id": 495,
+              "count": 1
+            },
+            "fuel": {
+              "id": 494,
+              "count": 1
+            },
+            "output": null,
+            "burn": 70,
+            "burnMax": 80,
+            "cook": 0
+          },
+          "gui": 2
+        },
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "furnaceResult": {
+          "input": {
+            "id": 495,
+            "count": 1
+          },
+          "fuel": {
+            "id": 494,
+            "count": 1
+          },
+          "burn": 70,
+          "cook": 0,
+          "ingots": 1,
+          "charcoal": 3,
+          "entityDrops": [
+            {
+              "id": 495,
+              "count": 1
+            },
+            {
+              "id": 496,
+              "count": 1
+            },
+            {
+              "id": 494,
+              "count": 2
+            }
+          ]
+        },
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 1,
+          "charcoal": 3,
+          "rawIron": 4,
+          "rawGold": 2,
+          "furnace": {
+            "x": 12,
+            "y": 65,
+            "z": 12,
+            "input": {
+              "id": 495,
+              "count": 1
+            },
+            "fuel": {
+              "id": 494,
+              "count": 1
+            },
+            "output": null,
+            "burn": 70,
+            "burnMax": 80,
+            "cook": 0
+          },
+          "gui": 0
+        },
+        "errors": []
+      },
+      {
+        "device": "file",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "furnaceResult": {
+          "input": {
+            "id": 495,
+            "count": 1
+          },
+          "fuel": {
+            "id": 494,
+            "count": 1
+          },
+          "burn": 70,
+          "cook": 0,
+          "ingots": 1,
+          "charcoal": 3,
+          "entityDrops": [
+            {
+              "id": 495,
+              "count": 1
+            },
+            {
+              "id": 496,
+              "count": 1
+            },
+            {
+              "id": 494,
+              "count": 2
+            }
+          ]
+        },
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 1,
+          "charcoal": 3,
+          "rawIron": 4,
+          "rawGold": 2,
+          "furnace": {
+            "x": 12,
+            "y": 65,
+            "z": 12,
+            "input": {
+              "id": 495,
+              "count": 1
+            },
+            "fuel": {
+              "id": 494,
+              "count": 1
+            },
+            "output": null,
+            "burn": 70,
+            "burnMax": 80,
+            "cook": 0
+          },
+          "gui": 2
+        },
+        "errors": []
+      }
+    ]
+  },
+  "fireRegression": {
+    "version": "4.23.0",
+    "browser": "Chromium / SwiftShader sandbox, not physical hardware",
+    "reports": [
+      {
+        "device": "desktop",
+        "changedChannels": 125983,
+        "fire": 491,
+        "offhandDur": 63,
+        "shaderPrograms": 9,
+        "worker": "worker",
+        "flags": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "decodedAudio": [
+          {
+            "name": "fire/ignite",
+            "duration": 0.4252154195011338,
+            "sampleRate": 44100
+          },
+          {
+            "name": "random/fizz",
+            "duration": 1.248299319727891,
+            "sampleRate": 44100
+          }
+        ],
+        "restored": [
+          491,
+          492,
+          493,
+          63
+        ],
+        "errors": []
+      }
+    ]
+  },
+  "workerRegression": [
+    {
+      "device": "desktop",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 5.800000000046566,
+        "snapshotMs": 1,
+        "latencyMs": 7.300000000046566
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 25,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 22.199999999953434,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 25.600000000093132
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 12.899999999906868,
+          "submitMs": 8.100000000093132,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 14.599999999860302,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 16.300000000046566
+        },
+        {
+          "syncMs": 9.399999999906868,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 12.400000000139698,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 13.199999999953434
+        },
+        {
+          "syncMs": 12.600000000093132,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 12.099999999860302,
+          "snapshotMs": 0.2999999998137355,
+          "latencyMs": 12.900000000139698
+        },
+        {
+          "syncMs": 8.800000000046566,
+          "submitMs": 0.6999999999534339,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 7.099999999860302,
+          "snapshotMs": 0.5,
+          "latencyMs": 7.800000000046566
+        },
+        {
+          "syncMs": 16,
+          "submitMs": 0.6000000000931323,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 5.600000000093132,
+          "snapshotMs": 0.2999999998137355,
+          "latencyMs": 6.300000000046566
+        },
+        {
+          "syncMs": 14.399999999906868,
+          "submitMs": 0.5999999998603016,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 14.600000000093132,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 15.100000000093132
+        },
+        {
+          "syncMs": 11.100000000093132,
+          "submitMs": 17.5,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 16.699999999953434,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 17.5
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    }
+  ],
+  "artifact": {
+    "path": "dist/index.html",
+    "bytes": 10558427,
+    "sha256": "0c2d399a88d702caa7fa8d7256d02f2f9a7c2e19bd7660bab4d611cb7a6d119d"
+  },
+  "limits": [
+    "Selected reference corpus, not whole-game 1:1 equivalence.",
+    "Controlled random draws and elapsed-time steps; no original JVM execution.",
+    "Mobile viewport emulation, not a physical phone.",
+    "Public multiplayer/database not exercised.",
+    "Furnace XP, facing and full ingredient tags remain outside this batch."
+  ]
+}
