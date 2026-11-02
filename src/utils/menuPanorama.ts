@@ -4,16 +4,16 @@ export const PANORAMA_SCENES = [
   { id: 'nether', label: 'Nether · Java 1.16' },
 ] as const;
 export type PanoramaScene = typeof PANORAMA_SCENES[number]['id'];
-export type PanoramaChoice = PanoramaScene | 'random';
+export type PanoramaChoice = PanoramaScene | 'random' | 'automatic';
 export interface PanoramaPreferences { scene: PanoramaChoice; motion: boolean }
 export const PANORAMA_STORAGE_KEY = 'minecraft-menu-panorama-v1';
-export const DEFAULT_PANORAMA: PanoramaPreferences = { scene: 'trails', motion: true };
+export const DEFAULT_PANORAMA: PanoramaPreferences = { scene: 'automatic', motion: true };
 export function parsePanoramaPreferences(raw: string | null): PanoramaPreferences {
   try {
     const value: unknown = JSON.parse(raw ?? 'null');
     if (!value || typeof value !== 'object') return { ...DEFAULT_PANORAMA };
     const v = value as Record<string, unknown>;
-    const scene = v.scene === 'random' || PANORAMA_SCENES.some(s => s.id === v.scene) ? v.scene as PanoramaChoice : 'trails';
+    const scene = v.scene === 'automatic' || v.scene === 'random' || PANORAMA_SCENES.some(s => s.id === v.scene) ? v.scene as PanoramaChoice : 'automatic';
     return { scene, motion: typeof v.motion === 'boolean' ? v.motion : true };
   } catch { return { ...DEFAULT_PANORAMA }; }
 }
@@ -24,10 +24,52 @@ export function loadPanoramaPreferences(): PanoramaPreferences {
 export function savePanoramaPreferences(value: PanoramaPreferences): void {
   try { localStorage.setItem(PANORAMA_STORAGE_KEY, JSON.stringify(value)); } catch { /* private mode/quota: session choice still works */ }
 }
-export function resolvePanoramaScene(choice: PanoramaChoice, random = Math.random()): PanoramaScene {
-  if (choice !== 'random') return choice;
-  const index = Math.min(2, Math.max(0, Math.floor((Number.isFinite(random) ? random : 0) * 3)));
-  return PANORAMA_SCENES[index].id;
+export function resolvePanoramaScene(choice: PanoramaChoice, random = Math.random(), previous?: PanoramaScene): PanoramaScene {
+  if (choice !== 'random' && choice !== 'automatic') return choice;
+  const pool = PANORAMA_SCENES.filter(scene => scene.id !== previous);
+  const index = Math.min(pool.length - 1, Math.max(0, Math.floor((Number.isFinite(random) ? random : 0) * pool.length)));
+  return pool[index].id;
+}
+export function nextPanoramaScene(current: PanoramaScene): PanoramaScene {
+  return PANORAMA_SCENES[(PANORAMA_SCENES.findIndex(scene => scene.id === current) + 1) % PANORAMA_SCENES.length].id;
+}
+export const PANORAMA_LAST_SCENE_KEY = 'minecraft-menu-panorama-last-v1';
+let sessionLastScene: PanoramaScene | undefined;
+export function lastPanoramaScene(): PanoramaScene | undefined {
+  try {
+    const value = localStorage.getItem(PANORAMA_LAST_SCENE_KEY);
+    return PANORAMA_SCENES.find(scene => scene.id === value)?.id ?? sessionLastScene;
+  } catch { return sessionLastScene; }
+}
+export function rememberPanoramaScene(scene: PanoramaScene): void {
+  sessionLastScene = scene;
+  try { localStorage.setItem(PANORAMA_LAST_SCENE_KEY, scene); } catch { /* memory fallback */ }
+}
+export const PANORAMA_CYCLE_MS = 45_000;
+export interface PanoramaCycleEnvironment {
+  visible: () => boolean;
+  reduced: () => boolean;
+  setTimer: (callback: () => void, ms: number) => number;
+  clearTimer: (timer: number) => void;
+  subscribe: (callback: () => void) => () => void;
+}
+/** No catching up after a hidden tab or reduced-motion period; wait a full interval. */
+export function startPanoramaCycle(next: () => void, env: PanoramaCycleEnvironment): () => void {
+  let disposed = false, timer: number | undefined;
+  const clear = () => { if (timer !== undefined) env.clearTimer(timer); timer = undefined; };
+  const arm = () => {
+    clear();
+    if (disposed || !env.visible() || env.reduced()) return;
+    timer = env.setTimer(() => {
+      timer = undefined;
+      if (disposed) return;
+      if (env.visible() && !env.reduced()) next();
+      arm();
+    }, PANORAMA_CYCLE_MS);
+  };
+  const unsubscribe = env.subscribe(arm);
+  arm();
+  return () => { disposed = true; clear(); unsubscribe(); };
 }
 /** Degrees, local elapsed time rather than the page's absolute performance clock.
  * Two degrees/second is an explicit browser implementation, not a JVM timing claim. */

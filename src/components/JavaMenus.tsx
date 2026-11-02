@@ -9,7 +9,7 @@ import { loadSettings, saveSettings } from '../utils/settings';
 import { useJavaScale } from '../utils/guiScale';
 import JavaSettings from './JavaSettings';
 import JavaPanorama from './JavaPanorama';
-import { PANORAMA_SCENES, loadPanoramaPreferences, savePanoramaPreferences, resolvePanoramaScene, type PanoramaChoice } from '../utils/menuPanorama';
+import { PANORAMA_SCENES, loadPanoramaPreferences, savePanoramaPreferences, resolvePanoramaScene, nextPanoramaScene, lastPanoramaScene, rememberPanoramaScene, startPanoramaCycle, type PanoramaChoice } from '../utils/menuPanorama';
 
 export function JavaButton({ children, onClick, disabled, width = 200 }: { children: ReactNode; onClick?: () => void; disabled?: boolean; width?: number }) {
   return <button className="java-btn" style={{ width }} onClick={() => { const s = loadSettings(); setVolume(s.volume); setSoundLevels(s.soundVolumes); playClick(); onClick?.(); }} disabled={disabled}>{children}</button>;
@@ -25,12 +25,34 @@ export function JavaPage({ title, children, footer, overlay = false, optionsLayo
 export function JavaMainMenu(props: ComponentProps<typeof LegacyMainMenu>) {
   const { saves, onPlay, onNew, onDelete, onRename, onDuplicate, onImported, onMultiplayer, onAccount, sharedSeed, sharedMode } = props;
   const [panorama, setPanorama] = useState(loadPanoramaPreferences);
-  const [panoramaScene, setPanoramaScene] = useState(() => resolvePanoramaScene(panorama.scene));
+  const [panoramaScene, setPanoramaScene] = useState(() => resolvePanoramaScene(panorama.scene, Math.random(), lastPanoramaScene() ?? 'trails'));
   const changePanorama = (choice: PanoramaChoice) => {
     const next = { ...panorama, scene: choice };
-    setPanorama(next); setPanoramaScene(resolvePanoramaScene(choice)); savePanoramaPreferences(next);
+    setPanorama(next); setPanoramaScene(resolvePanoramaScene(choice, Math.random(), panoramaScene)); savePanoramaPreferences(next);
   };
   const [view, setView] = useState<'main'|'worlds'|'new'|'options'|'controls'|'edit'|'delete'|'about'>(sharedSeed != null ? 'new' : 'main');
+  const nextBackground = () => {
+    const scene = nextPanoramaScene(panoramaScene);
+    setPanoramaScene(scene);
+    if (panorama.scene !== 'automatic' && panorama.scene !== 'random') {
+      const next = { ...panorama, scene }; setPanorama(next); savePanoramaPreferences(next);
+    }
+  };
+  useEffect(() => { rememberPanoramaScene(panoramaScene); }, [panoramaScene]);
+  useEffect(() => {
+    if (view !== 'main' || panorama.scene !== 'automatic' || !panorama.motion) return;
+    const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    return startPanoramaCycle(() => setPanoramaScene(scene => nextPanoramaScene(scene)), {
+      visible: () => !document.hidden,
+      reduced: () => media?.matches ?? false,
+      setTimer: (callback, ms) => window.setTimeout(callback, ms),
+      clearTimer: timer => window.clearTimeout(timer),
+      subscribe: callback => {
+        document.addEventListener('visibilitychange', callback); media?.addEventListener('change', callback);
+        return () => { document.removeEventListener('visibilitychange', callback); media?.removeEventListener('change', callback); };
+      },
+    });
+  }, [view, panorama.scene, panorama.motion, panoramaScene]);
   const [settings, setSettings] = useState(loadSettings), [selected, setSelected] = useState<string | null>(saves[0]?.id ?? null);
   const [query, setQuery] = useState(''), [name, setName] = useState('Nowy świat'), [seed, setSeed] = useState(sharedSeed?.toString() ?? '');
   const [mode, setMode] = useState<'survival'|'creative'>(sharedMode ?? 'survival'), [flat, setFlat] = useState(false), [notice, setNotice] = useState('');
@@ -77,6 +99,10 @@ export function JavaMainMenu(props: ComponentProps<typeof LegacyMainMenu>) {
   if (view === 'about') return <JavaPage title="O tej wersji" footer={<JavaButton onClick={back}>Gotowe</JavaButton>}><p>Minecraft — nieoficjalna wersja przeglądarkowa, wydanie {GAME_VERSION}. Interfejs odtwarza Minecraft Java 1.20.4. To nie jest oficjalny Minecraft ani klient Mojang.</p><p>Grafiki i bitmapy czcionki Minecraft: © Mojang / Microsoft. Światy i serwer publiczny tego projektu nie są zgodne z serwerami Java/Bedrock.</p><div className="java-centered"><JavaButton onClick={() => setView('controls')}>Sterowanie i rozszerzenia</JavaButton>{onAccount && <JavaButton onClick={onAccount}>Konto społeczności</JavaButton>}</div></JavaPage>;
   return <div className="java-title-screen">
     <JavaPanorama scene={panoramaScene} motion={panorama.motion} /><div className="java-panorama-shade" />
+    <div className="java-background-shortcut">
+      <button className="java-background-next" onClick={nextBackground}>Następne tło →</button>
+      <output aria-live="polite" aria-atomic="true">{PANORAMA_SCENES.find(scene => scene.id === panoramaScene)?.label}{panorama.scene === 'automatic' ? ' · Auto' : ''}</output>
+    </div>
     <details className="java-background-controls" onKeyDown={e => {
       if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.open = false; e.currentTarget.querySelector('summary')?.focus(); }
     }}>
@@ -84,6 +110,7 @@ export function JavaMainMenu(props: ComponentProps<typeof LegacyMainMenu>) {
       <div>
         <label htmlFor="menu-panorama-scene">Sceneria</label>
         <select id="menu-panorama-scene" value={panorama.scene} onChange={e => changePanorama(e.target.value as PanoramaChoice)}>
+          <option value="automatic">Automatycznie · co 45 sekund</option>
           {PANORAMA_SCENES.map(scene => <option key={scene.id} value={scene.id}>{scene.label}</option>)}
           <option value="random">Losowa przy otwarciu menu</option>
         </select>
