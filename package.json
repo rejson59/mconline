@@ -1,8 +1,8 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.25.0",
-  "description": "Minecraft \u2014 nieoficjalna wersja przegl\u0105darkowa, survival i wsp\u00f3lne miasto Creative",
+  "version": "4.26.0",
+  "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
   "type": "module",
   "license": "MIT",
   "keywords": [

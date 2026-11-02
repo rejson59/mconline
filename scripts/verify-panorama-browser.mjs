@@ -37,8 +37,8 @@ if (!fs.existsSync(libs)) {
 }
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-const out = path.join(root,'.cache/verification425'); fs.mkdirSync(out,{recursive:true});
-const browser = await puppeteer.launch({ executablePath: await chromium.executablePath(), args: chromium.args.filter(arg => arg !== '--single-process'), headless:true, protocolTimeout:20000, env:{...process.env,LD_LIBRARY_PATH:[path.join(libs,'lib'),process.env.LD_LIBRARY_PATH].filter(Boolean).join(':')} });
+const out = path.join(root,'.cache/verification426'); fs.mkdirSync(out,{recursive:true});
+const browser = await puppeteer.launch({ executablePath: await chromium.executablePath(), args: chromium.args.filter(arg => arg !== '--single-process'), headless:true, protocolTimeout:90000, env:{...process.env,LD_LIBRARY_PATH:[path.join(libs,'lib'),process.env.LD_LIBRARY_PATH].filter(Boolean).join(':')} });
 const reports = [];
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const check = (ok, message) => assert.ok(ok, message);
@@ -53,6 +53,26 @@ try {
     await p.setViewport(device==='mobile'?{width:390,height:844,isMobile:true,hasTouch:true}:{width:960,height:600});
     await p.evaluateOnNewDocument(fallback => {
       window.__panoramaDraws=0;
+      // Isolate only menu preferences, preserving worlds/settings. Initial seed
+      // reproduces the reported prior view: the player last saw the cherry grove.
+      if (!sessionStorage.getItem('panorama426-initialized')) {
+        localStorage.removeItem('minecraft-menu-panorama-v1');
+        localStorage.setItem('minecraft-menu-panorama-last-v1','trails');
+        sessionStorage.setItem('panorama426-initialized','1');
+      }
+      const schedule=window.setTimeout.bind(window), cancel=window.clearTimeout.bind(window);
+      window.__sceneTimers=new Map();
+      window.setTimeout=function(callback,ms,...args) {
+        if(ms!==45000 || typeof callback!=='function') return schedule(callback,ms,...args);
+        const id=schedule(()=>{window.__sceneTimers.delete(id);callback(...args);},ms);
+        window.__sceneTimers.set(id,callback);
+        return id;
+      };
+      window.clearTimeout=function(id){window.__sceneTimers.delete(id);return cancel(id);};
+      window.__fireSceneTimer=()=>{
+        const entry=[...window.__sceneTimers][0]; if(!entry) throw Error('No automatic scene timer');
+        window.clearTimeout(entry[0]);entry[1]();
+      };
       if (fallback) {
         const get=HTMLCanvasElement.prototype.getContext;
         HTMLCanvasElement.prototype.getContext=function(type,...args){ return type.startsWith('webgl') || type==='experimental-webgl' ? null : get.call(this,type,...args); };
@@ -68,8 +88,44 @@ try {
     await p.waitForSelector('.java-background-controls summary');
     const renderer=device==='fallback'?'fallback':'webgl';
     await p.waitForFunction(renderer=>document.querySelector('.java-panorama')?.dataset.renderer===renderer,{},renderer);
+    check(await p.$eval('#menu-panorama-scene',e=>e.value)==='automatic','fresh default is automatic, not fixed cherry');
+    const first=await p.$eval('.java-panorama',e=>e.dataset.scene);
+    check(first!=='trails','first visit is different from the reported cherry background');
+    await p.reload({waitUntil:'networkidle0'});
+    await p.waitForFunction(renderer=>document.querySelector('.java-panorama')?.dataset.renderer===renderer,{},renderer);
+    const reopened=await p.$eval('.java-panorama',e=>e.dataset.scene);
+    check(reopened!==first,'refresh does not repeat last scenery');
+    check(await p.$eval('.java-background-next',e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0;}),'next background button is visible without expanding options');
+    await p.click('.java-background-next');
+    await p.waitForFunction(({renderer,previous})=>{const e=document.querySelector('.java-panorama');return e?.dataset.scene!==previous&&e?.dataset.renderer===renderer;},{},{renderer,previous:reopened});
+    const clicked=await p.$eval('.java-panorama',e=>e.dataset.scene);
+    check(clicked!==reopened,'one click immediately changes the scenery');
+    const autoBefore=clicked, realStart=Date.now();
+    if(device==='desktop') {
+      // Keep the actual 45-second production timer on desktop; no accelerated clock.
+      await p.waitForFunction(scene=>document.querySelector('.java-panorama')?.dataset.scene!==scene,{timeout:52000},autoBefore);
+      check(Date.now()-realStart>=44000,'automatic scene really advances after about 45 seconds');
+    } else {
+      // Remaining environments fire the recorded production callback explicitly.
+      await p.evaluate(()=>window.__fireSceneTimer());
+      await p.waitForFunction(scene=>document.querySelector('.java-panorama')?.dataset.scene!==scene,{},autoBefore);
+    }
+    await p.waitForFunction(renderer=>document.querySelector('.java-panorama')?.dataset.renderer===renderer,{},renderer);
+    const autoAfter=await p.$eval('.java-panorama',e=>e.dataset.scene);
+    check(autoAfter!==autoBefore,'automatic rotation picks a different scene');
+    await p.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
+    await p.waitForFunction(()=>document.querySelector('.java-panorama')?.dataset.motion==='paused');
+    check(await p.evaluate(()=>window.__sceneTimers.size)===0,'reduced motion also stops scene switching');
+    await p.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'no-preference'}]);
+    await p.waitForFunction(()=>window.__sceneTimers.size===1);
+    await p.evaluate(()=>{window.__staleSceneTimer=[...window.__sceneTimers.values()][0];Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});
+    check(await p.evaluate(()=>window.__sceneTimers.size)===0,'hidden document cancels scene timer');
+    await p.evaluate(()=>window.__staleSceneTimer());
+    check(await p.$eval('.java-panorama',e=>e.dataset.scene)===autoAfter,'stale hidden callback does not change scene');
+    await p.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
+    await p.waitForFunction(()=>window.__sceneTimers.size===1);
     // Hide foreground only while comparing actual background pixels. Restore for deliverable screenshots.
-    const clean=await p.addStyleTag({content:'.java-title-canvas,.java-title-footer,.java-background-controls,.java-panorama-shade{visibility:hidden!important}'});
+    const clean=await p.addStyleTag({content:'.java-title-canvas,.java-title-footer,.java-background-controls,.java-background-shortcut,.java-panorama-shade{visibility:hidden!important}'});
     const a=await shot(); const drawsBefore=await p.evaluate(()=>window.__panoramaDraws);
     await wait(device==='fallback'?2300:1100);
     const b=await shot(); const drawsAfter=await p.evaluate(()=>window.__panoramaDraws);
@@ -90,6 +146,7 @@ try {
     await p.click('.java-background-controls summary');
     await p.select('#menu-panorama-scene','nether');
     await p.waitForFunction(renderer=>document.querySelector('.java-panorama')?.dataset.scene==='nether' && document.querySelector('.java-panorama')?.dataset.renderer===renderer,{},renderer);
+    check(await p.evaluate(()=>window.__sceneTimers.size)===0,'fixed scene stops automatic switching');
     await shot({path:path.join(out,`${device}-nether.png`)});
     await p.select('#menu-panorama-scene','caves');
     await p.waitForFunction(renderer=>document.querySelector('.java-panorama')?.dataset.scene==='caves' && document.querySelector('.java-panorama')?.dataset.renderer===renderer,{},renderer);
@@ -100,7 +157,7 @@ try {
     await wait(100); const pausedBefore=await p.evaluate(()=>window.__panoramaDraws); await wait(500);
     check(await p.evaluate(()=>window.__panoramaDraws)===pausedBefore,'pause stops draw work');
     check(await p.evaluate(()=>window.__previousCanvas===document.querySelector('.java-panorama canvas')),'pause preserves renderer');
-    const plain=await p.addStyleTag({content:'.java-title-canvas,.java-title-footer,.java-background-controls,.java-panorama-shade{visibility:hidden!important}'});
+    const plain=await p.addStyleTag({content:'.java-title-canvas,.java-title-footer,.java-background-controls,.java-background-shortcut,.java-panorama-shade{visibility:hidden!important}'});
     const stillA=await shot(); await wait(400); const stillB=await shot();
     check(hash(stillA)===hash(stillB),'paused pixels remain identical');
     await p.evaluate(()=>[...document.querySelectorAll('style')].find(s=>s.textContent.includes('visibility:hidden!important'))?.remove()); await plain.dispose();
@@ -130,12 +187,23 @@ try {
     }
     await p.select('#menu-panorama-scene','random');
     const random=await p.$eval('.java-panorama',e=>e.dataset.scene); check(['trails','caves','nether'].includes(random),'random resolves to a valid scene');
+    await p.reload({waitUntil:'networkidle0'});
+    await p.waitForFunction(renderer=>document.querySelector('.java-panorama')?.dataset.renderer===renderer,{},renderer);
+    check(await p.$eval('.java-panorama',e=>e.dataset.scene)!==random,'random choice does not repeat on reload');
+    await p.click('.java-background-controls summary');
     await p.select('#menu-panorama-scene','trails');
     await p.waitForFunction(renderer=>document.querySelector('.java-panorama')?.dataset.scene==='trails' && document.querySelector('.java-panorama')?.dataset.renderer===renderer,{},renderer);
     await p.click('.java-background-controls summary');
     await shot({path:path.join(out,`${device}-menu.png`)});
+    // Explicit legacy choices are intentionally not migrated to automatic.
+    await p.reload({waitUntil:'networkidle0'});
+    await p.waitForFunction(renderer=>document.querySelector('.java-panorama')?.dataset.renderer===renderer,{},renderer);
+    check(await p.$eval('.java-panorama',e=>e.dataset.scene)==='trails','explicit fixed cherry choice survives reload');
+    await p.click('.java-background-controls summary'); await p.select('#menu-panorama-scene','automatic');
+    await p.waitForFunction(()=>window.__sceneTimers.size===1);
     await clickText(p,'Tryb jednoosobowy'); await p.waitForSelector('.java-world-list');
     check(await p.$$eval('.java-panorama canvas',a=>a.length)===0,'leaving title disposes panorama canvas');
+    check(await p.evaluate(()=>window.__sceneTimers.size)===0,'leaving title clears scene timer');
     const off=await p.evaluate(()=>window.__panoramaDraws); await wait(300);
     check(await p.evaluate(()=>window.__panoramaDraws)===off,'no draws after unmount');
     await clickText(p,'Anuluj'); await p.waitForFunction(renderer=>document.querySelector('.java-panorama')?.dataset.renderer===renderer,{},renderer);
@@ -143,7 +211,7 @@ try {
     check(external.length===0,'no third-party runtime downloads');
     check(errors.length===0,JSON.stringify(errors));
     const size=await p.evaluate(()=>{const c=document.querySelector('.java-panorama canvas');return c?{width:c.width,height:c.height}:null;});
-    const report={device,renderer,movingPixels:true,pausedPixelsIdentical:true,drawsDuringMotion:drawsAfter-drawsBefore,size,preferencesReload:true,liveReducedMotion:true,simulatedVisibilityPause:true,contextRestored:device!=='fallback',cleanup:true,externalRequests:external,errors};
+    const report={device,renderer,defaultAutomatic:true,initialScene:first,reloadedScene:reopened,clickedScene:clicked,autoBefore,autoAfter,actual45SecondWait:device==='desktop',noImmediateRepeat:true,fixedChoicePreserved:true,sceneTimerCleanup:true,movingPixels:true,pausedPixelsIdentical:true,drawsDuringMotion:drawsAfter-drawsBefore,size,preferencesReload:true,liveReducedMotion:true,simulatedVisibilityPause:true,contextRestored:device!=='fallback',cleanup:true,externalRequests:external,errors};
     reports.push(report); console.log('PASS panorama',JSON.stringify(report)); await p.close();
   }
   fs.writeFileSync(path.join(out,'report.json'),JSON.stringify({version:JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).version,environment:'Chromium / SwiftShader, mobile viewport emulation',reports},null,2)+'\n');

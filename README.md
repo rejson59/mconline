@@ -1,6 +1,13 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.25.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.26.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.26.0 „Nie tylko wiśniowy gaj”
+
+- **Poprawione „ciągle to samo tło”:** domyślnie automatyczna zmiana scenerii co 45 sekund, a przy otwarciu inne tło niż ostatnio oglądane. Automatyczny i losowy wybór bez natychmiastowej powtórki po odświeżeniu.
+- **Widoczny przycisk „Następne tło →”** i nazwa bieżącej scenerii. Nie trzeba szukać wyboru w rozwijanym panelu. Ręcznie przypięte tło z wcześniejszej wersji pozostaje zachowane.
+- **Bez zbędnej pracy i nagłych zmian:** zatrzymanie automatu po ukryciu karty, wyłączeniu ruchu i systemowym ograniczeniu animacji; sprzątanie po wyjściu z menu.
+- **25 350 kontroli**, cztery produkcyjne scenariusze przeglądarkowe, w tym rzeczywiste odczekanie 45 sekund na desktopie. [Przyczyna, weryfikacja i ograniczenia](docs/PANORAMA-4.26.md). Automat jest dodatkiem przeglądarkowym, nie funkcją vanilla Java.
 
 ## Wersja 4.25.0 „Menu w ruchu”
 
