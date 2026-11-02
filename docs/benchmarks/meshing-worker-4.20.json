@@ -1,0 +1,487 @@
+{
+  "date": "2026-11-02",
+  "candidate": "4.20.0",
+  "environment": {
+    "node": "22.22.3",
+    "chromiumPackage": "153.0.0",
+    "puppeteerCore": "25.16.0",
+    "renderer": "headless Chromium / SwiftShader, Linux x64 virtual host",
+    "viewportDesktop": [
+      960,
+      600
+    ],
+    "viewportMobile": [
+      390,
+      844
+    ]
+  },
+  "method": "Correctness suite plus small blocking-call observations, NOT rendered FPS or physical-phone results. Same warmed flat scene and 9 neighbours; RAF game loop frozen; sequential sync then async, seven pairs, no randomization, all samples retained. syncMs includes build + publish; submitMs only caller blocking time for clone/post, not completion; latencyMs is ready-snapshot to accepted mesh, includes worker and delivery/publish. Ranges vary and overlap. file/terrain each one observation, not benchmark samples.",
+  "summary": [
+    {
+      "run": "full",
+      "device": "desktop",
+      "n": 7,
+      "medianMs": {
+        "syncMs": 5.199999999953434,
+        "submitMs": 0.7000000001862645,
+        "latencyMs": 9
+      },
+      "rangeMs": {
+        "syncMs": [
+          4.800000000046566,
+          15.5
+        ],
+        "submitMs": [
+          0.5,
+          9.899999999906868
+        ],
+        "latencyMs": [
+          6.5,
+          29.300000000046566
+        ]
+      }
+    },
+    {
+      "run": "full",
+      "device": "mobile",
+      "n": 7,
+      "medianMs": {
+        "syncMs": 6.300000000046566,
+        "submitMs": 0.8000000000465661,
+        "latencyMs": 18
+      },
+      "rangeMs": {
+        "syncMs": [
+          3.6000000000931323,
+          9
+        ],
+        "submitMs": [
+          0.39999999990686774,
+          5.900000000139698
+        ],
+        "latencyMs": [
+          12.900000000139698,
+          29.799999999813735
+        ]
+      }
+    },
+    {
+      "run": "repeat-desktop",
+      "device": "desktop",
+      "n": 7,
+      "medianMs": {
+        "syncMs": 10.300000000046566,
+        "submitMs": 0.8000000000465661,
+        "latencyMs": 14.800000000046566
+      },
+      "rangeMs": {
+        "syncMs": [
+          6.7000000001862645,
+          14.899999999906868
+        ],
+        "submitMs": [
+          0.39999999990686774,
+          6.5
+        ],
+        "latencyMs": [
+          7,
+          16.4000000001397
+        ]
+      }
+    }
+  ],
+  "fullSuite": [
+    {
+      "device": "desktop",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 13.099999999860302,
+        "snapshotMs": 1.1999999999534339,
+        "latencyMs": 15.300000000046566
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 25,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 32,
+          "snapshotMs": 0.5,
+          "latencyMs": 34.60000000009313
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 15.5,
+          "submitMs": 9.899999999906868,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 24.5,
+          "snapshotMs": 9.199999999953434,
+          "latencyMs": 29.300000000046566
+        },
+        {
+          "syncMs": 12.600000000093132,
+          "submitMs": 0.9000000001396984,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 7.800000000046566,
+          "snapshotMs": 0.5,
+          "latencyMs": 9.400000000139698
+        },
+        {
+          "syncMs": 5,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 7.2000000001862645,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 8.099999999860302
+        },
+        {
+          "syncMs": 5.5,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 7.599999999860302,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 8.199999999953434
+        },
+        {
+          "syncMs": 5.199999999953434,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 6,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 6.5
+        },
+        {
+          "syncMs": 4.800000000046566,
+          "submitMs": 5.900000000139698,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 7.7000000001862645,
+          "snapshotMs": 5.300000000046566,
+          "latencyMs": 9
+        },
+        {
+          "syncMs": 5,
+          "submitMs": 0.7000000001862645,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 8.699999999953434,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 9.200000000186265
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    },
+    {
+      "device": "mobile",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 24.199999999953434,
+        "snapshotMs": 1.1000000000931323,
+        "latencyMs": 25.5
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 599114,
+        "differences": 0,
+        "drawCalls": 19,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 25.100000000093132,
+          "snapshotMs": 0.7999999998137355,
+          "latencyMs": 29.700000000186265
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 9,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 17.399999999906868,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 18
+        },
+        {
+          "syncMs": 6.300000000046566,
+          "submitMs": 0.39999999990686774,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 10.599999999860302,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 17.199999999953434
+        },
+        {
+          "syncMs": 8.099999999860302,
+          "submitMs": 5.900000000139698,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 11.300000000046566,
+          "snapshotMs": 4,
+          "latencyMs": 13.699999999953434
+        },
+        {
+          "syncMs": 7.099999999860302,
+          "submitMs": 0.39999999990686774,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 25.300000000046566,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 29.799999999813735
+        },
+        {
+          "syncMs": 5,
+          "submitMs": 3,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 14.399999999906868,
+          "snapshotMs": 0.4000000001396984,
+          "latencyMs": 21
+        },
+        {
+          "syncMs": 5,
+          "submitMs": 0.8000000000465661,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 21.399999999906868,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 23
+        },
+        {
+          "syncMs": 3.6000000000931323,
+          "submitMs": 2.6000000000931323,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 11.800000000046566,
+          "snapshotMs": 2.0999999998603016,
+          "latencyMs": 12.900000000139698
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    },
+    {
+      "device": "file",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 23,
+        "snapshotMs": 0.8999999999068677,
+        "latencyMs": 24.4000000001397
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 25,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 10.300000000046566,
+          "snapshotMs": 0.4000000001396984,
+          "latencyMs": 18.5999999998603
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 6.600000000093132,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 9.5,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 10.700000000186265
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    },
+    {
+      "device": "terrain",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 60.39999999990687,
+        "snapshotMs": 5,
+        "latencyMs": 61.799999999813735
+      },
+      "parity": {
+        "values": 122892,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 36,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 29,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 30.600000000093132
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 28.899999999906868,
+          "submitMs": 0.7000000001862645,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 74.80000000004657,
+          "snapshotMs": 0.4000000001396984,
+          "latencyMs": 75.80000000004657
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    }
+  ],
+  "repeatDesktop": [
+    {
+      "device": "desktop",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 21.5999999998603,
+        "snapshotMs": 7.699999999953434,
+        "latencyMs": 23.300000000046566
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 25,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 26.100000000093132,
+          "snapshotMs": 0.4000000001396984,
+          "latencyMs": 28.899999999906868
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 6.7000000001862645,
+          "submitMs": 0.6999999999534339,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 15,
+          "snapshotMs": 0.5,
+          "latencyMs": 15.600000000093132
+        },
+        {
+          "syncMs": 7.800000000046566,
+          "submitMs": 5.099999999860302,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 13.099999999860302,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 14.800000000046566
+        },
+        {
+          "syncMs": 14.899999999906868,
+          "submitMs": 6.5,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 8.399999999906868,
+          "snapshotMs": 1.8000000000465661,
+          "latencyMs": 9
+        },
+        {
+          "syncMs": 14.5,
+          "submitMs": 0.39999999990686774,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 5.300000000046566,
+          "snapshotMs": 0.2999999998137355,
+          "latencyMs": 7
+        },
+        {
+          "syncMs": 10.300000000046566,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 8.5,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 9.5
+        },
+        {
+          "syncMs": 9.5,
+          "submitMs": 0.8000000000465661,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 14.5,
+          "snapshotMs": 0.5999999998603016,
+          "latencyMs": 15.800000000046566
+        },
+        {
+          "syncMs": 13.200000000186265,
+          "submitMs": 1.6000000000931323,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 15.5,
+          "snapshotMs": 1,
+          "latencyMs": 16.4000000001397
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    }
+  ]
+}

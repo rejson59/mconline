@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.19.0';
-export const GAME_RELEASE_NAME = 'Płynniejsze chunki';
+export const GAME_VERSION = '4.20.0';
+export const GAME_RELEASE_NAME = 'Chunki w tle';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.20: siatki chunków liczone w tle', text: 'Jeden Web Worker oblicza geometrię poza głównym wątkiem. Gra przyjmuje tylko aktualne wyniki; zmieniony teren, sąsiednie światło i otwarte wieka unieważniają stare obliczenia. Zapis i kolizje nigdy nie są odłączane.' },
+  { title: '4.20: bezpieczny powrót i diagnostyka', text: 'Awaria, blokada lub przekroczenie czasu Workera uruchamia tryb zapasowy. Stara podłoga pozostaje do gotowego wyniku. F3 rozdziela czas kopiowania, pracy Workera i oczekiwania. Początkowy teren i generowanie nadal mogą blokować — to nie obietnica stałych FPS.' },
   { title: '4.19: mniejsze bufory i mniej alokacji', text: 'Bufory robocze terenu są ponownie używane z limitem pamięci. Flagi ścian i fal zajmują po jednym bajcie bez zmiany geometrii, UV ani oświetlenia. Mniej danych do przesłania na GPU, bez obniżania jakości.' },
   { title: '4.19: płynność zamiast pustego licznika FPS', text: 'Edytowanie i doczytywanie terenu korzystają ze wspólnego budżetu, pobliskie poprawki mają pierwszeństwo. F3 pokazuje czasy klatek i 1% low, a licznik kreśleń obejmuje świat i ręce. Benchmark CPU nie jest obietnicą 500 FPS.' },
   { title: '4.18: opcje i GUI bliżej Java', text: 'Oryginalne suwaki i uchwyty 1.20.4, układ opcji w pikselach GUI oraz osobne ustawienia myszy i ułatwienia dostępu. Czułość kółka, przewijanie dyskretne, prędkość i siła połysku oraz czas powiadomień naprawdę działają.' },

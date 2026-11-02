@@ -47,8 +47,8 @@ function hash(x: number, y: number, z: number, s: number): number {
 export class Chunk {
   cx: number;
   cz: number;
-  data = new Uint16Array(CS * CS * CH);
-  heightMap = new Uint16Array(CS * CS);
+  data: Uint16Array;
+  heightMap: Uint16Array;
   meshes: THREE.Mesh[] = [];
   built = false;
   maxY = 0;
@@ -62,7 +62,9 @@ export class Chunk {
   emitters: number[] = [];
   /** Zmienia się przy każdej modyfikacji terenu (cache minimapy). */
   revision = 0;
-  constructor(cx: number, cz: number) {
+  constructor(cx: number, cz: number, data: Uint16Array = new Uint16Array(CS * CS * CH), heightMap: Uint16Array = new Uint16Array(CS * CS)) {
+    this.data = data;
+    this.heightMap = heightMap;
     this.cx = cx;
     this.cz = cz;
   }
@@ -1655,6 +1657,18 @@ export class World {
   /** Światło kratki ze skrzynią (1, 1, gdy siatka jeszcze jej nie widziała). */
   chestLightAt(x: number, y: number, z: number): { sky: number; blk: number } {
     return this.chestLight.get(`${x},${y},${z}`) ?? { sky: 1, blk: 0 };
+  }
+
+  /** Worker transport: keep animated chest lids lit like their accepted static mesh. */
+  chunkChestLights(cx: number, cz: number): [string, { sky: number; blk: number }][] {
+    return [...this.chestLight].filter(([key]) => {
+      const [x, , z] = key.split(',').map(Number);
+      return Math.floor(x / CS) === cx && Math.floor(z / CS) === cz;
+    });
+  }
+  replaceChestLights(cx: number, cz: number, lights: [string, { sky: number; blk: number }][]) {
+    for (const [key] of this.chunkChestLights(cx, cz)) this.chestLight.delete(key);
+    for (const [key, value] of lights) this.chestLight.set(key, value);
   }
 
   /**

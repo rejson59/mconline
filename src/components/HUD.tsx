@@ -264,7 +264,8 @@ export default function HUD({ hud, chatSettings = DEFAULT_SETTINGS, chatOpen = f
             // 2.28: profil automatu jakości – widać, czy gra właśnie oszczędza.
             `Jakość: ${hud.perf} · LOD: ${hud.lodRange > 0 ? `${hud.lodRange} bloków` : 'wyłączony'}`,
             ...(hud.frameTimes?.samples ? [`Klatki: p50 ${hud.frameTimes.medianMs.toFixed(1)} ms · p95 ${hud.frameTimes.p95Ms.toFixed(1)} · p99 ${hud.frameTimes.p99Ms.toFixed(1)} · max ${hud.frameTimes.maxMs.toFixed(1)} · 1% low ${Math.round(hud.frameTimes.low1Fps)} FPS`] : []),
-            ...(hud.chunkWork ? [`Chunki: ${hud.chunkWork.attempts} prac · ${hud.chunkWork.ms.toFixed(1)} ms / budżet ${hud.chunkWork.budgetMs.toFixed(1)} ms (pojedynczy chunk jest niepodzielny)`] : []),
+            ...(hud.chunkWork ? [`Chunki (wątek gry): ${hud.chunkWork.attempts} prac · ${hud.chunkWork.ms.toFixed(1)} ms / budżet ${hud.chunkWork.budgetMs.toFixed(1)} ms (pojedynczy chunk jest niepodzielny)`] : []),
+            ...(hud.mesher ? [`Mesher: ${hud.mesher.state === 'sync' ? 'zapasowy synchroniczny' : hud.mesher.state === 'busy' ? 'worker pracuje' : 'worker gotowy'} · gotowe ${hud.mesher.completed} · nieaktualne ${hud.mesher.discarded}`, `Ostatni mesh: worker ${hud.mesher.workerMs.toFixed(1)} ms · snapshot ${hud.mesher.snapshotMs.toFixed(1)} ms · razem ${hud.mesher.latencyMs.toFixed(1)} ms`] : []),
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
