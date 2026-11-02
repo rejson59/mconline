@@ -1,0 +1,32 @@
+{
+  "terrain": {
+    "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+    "bytes": 454208,
+    "vertices": 9664,
+    "indices": 14496
+  },
+  "nether": {
+    "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+    "bytes": 407020,
+    "vertices": 8660,
+    "indices": 12990
+  },
+  "flat": {
+    "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+    "bytes": 127464,
+    "vertices": 2712,
+    "indices": 4068
+  },
+  "models": {
+    "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+    "bytes": 94564,
+    "vertices": 2012,
+    "indices": 3018
+  },
+  "city": {
+    "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+    "bytes": 48128,
+    "vertices": 1024,
+    "indices": 1536
+  }
+}

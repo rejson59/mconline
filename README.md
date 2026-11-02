@@ -1,6 +1,15 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.18.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.19.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.19.0 „Płynniejsze chunki”
+
+- **Wnioski z Horizon, bez obietnicy 500 FPS:** sprawdzone źródła natywnego projektu Rust/wgpu, pakowanie danych, bufory robocze, workery i ograniczanie niewidocznej geometrii. Wyjaśnienie różnic względem naszej gry WWW i warunków opublikowanych benchmarków: [analiza i wyniki](docs/PERFORMANCE-4.19.md).
+- **Mniejsze dane terenu, ten sam obraz:** flagi ścian i fal w jednym bajcie zamiast float32. W pięciu stałych scenariuszach **12,77% mniej bajtów geometrii z indeksami**, identyczne hashe wartości geometrii; w kontrolnej scenie WebGL także identyczne piksele. Bez obniżania jakości czy zasięgu.
+- **Mniej powtarzanych alokacji:** ponowne wykorzystanie trzech buforów roboczych z limitem pozostającej pamięci 12 MiB. Duże jednorazowe bufory są zwalniane; gotowe siatki nie współdzielą nadpisywanych danych. Nie oznacza to zerowych alokacji ani spadku całego RAM gry o 12,77%.
+- **Wspólny budżet chunków:** edycje i doczytywanie dzielą jeden przydział, pobliskie poprawki mają pierwszeństwo. Awaria zachowuje poprzednią podłogę i ponawia próbę z odstępem. Pojedynczy chunk nadal jest niepodzielny — nie deklarujemy całkowitego usunięcia przycięć.
+- **F3 pokazuje przycięcia:** p50/p95/p99/max i 1% low, czas pracy chunków oraz poprawne kreślenia świata + rąk. FPS przestał ukrywać długie klatki przez ogranicznik czasu fizyki. Przerwy w nieaktywnej karcie są pomijane.
+- **Sprawdzone:** 17 264 kontrole, typecheck/build, produkcyjny Chromium/WebGL desktop + mobilny viewport, zapis/odświeżenie. Powtarzalny `npm run bench:meshing`; CPU zmienia się nieznacznie i z szumem, **brak wykazanego globalnego wzrostu FPS**. Bez zmiany światów, GUI 2/Auto 0, multiplayera, praw miasta ani SQL.
 
 ## Wersja 4.18.0 „Opcje i interfejs Java”
 

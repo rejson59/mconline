@@ -1,0 +1,745 @@
+{
+  "date": "2026-11-02",
+  "baseline": "ce87f55f2a90ca324eaebaf168e44a86217aa7f2 (4.18.0), same benchmark driver",
+  "candidate": "4.19.0, this change",
+  "method": "CPU meshing only, no rendered FPS. 3 warmups + 60 builds per scenario per run. Five sequential alternating AB/BA pairs. Geometry hashes canonicalize numeric attribute/index types. Shared virtual host; ranges overlap; no statistical significance or overall FPS claim.",
+  "summary": [
+    {
+      "scenario": "terrain",
+      "semanticHash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+      "vertices": 9664,
+      "indices": 14496,
+      "bytesBefore": 454208,
+      "bytesAfter": 396224,
+      "medianOfRunMediansMsBefore": 6.171425999999997,
+      "medianOfRunMediansMsAfter": 5.961982999999975,
+      "runMedianRangeMsBefore": [
+        5.76558,
+        6.242460999999992
+      ],
+      "runMedianRangeMsAfter": [
+        5.627291000000014,
+        6.175614999999993
+      ]
+    },
+    {
+      "scenario": "nether",
+      "semanticHash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+      "vertices": 8660,
+      "indices": 12990,
+      "bytesBefore": 407020,
+      "bytesAfter": 355060,
+      "medianOfRunMediansMsBefore": 18.11198400000012,
+      "medianOfRunMediansMsAfter": 18.19592200000011,
+      "runMedianRangeMsBefore": [
+        17.56931899999995,
+        19.553671000000122
+      ],
+      "runMedianRangeMsAfter": [
+        17.91547300000002,
+        18.598109000000022
+      ]
+    },
+    {
+      "scenario": "flat",
+      "semanticHash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+      "vertices": 2712,
+      "indices": 4068,
+      "bytesBefore": 127464,
+      "bytesAfter": 111192,
+      "medianOfRunMediansMsBefore": 2.820560999999998,
+      "medianOfRunMediansMsAfter": 2.6897690000000694,
+      "runMedianRangeMsBefore": [
+        2.718589999999949,
+        3.870983000000251
+      ],
+      "runMedianRangeMsAfter": [
+        2.649355000000014,
+        2.9095509999997375
+      ]
+    },
+    {
+      "scenario": "models",
+      "semanticHash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+      "vertices": 2012,
+      "indices": 3018,
+      "bytesBefore": 94564,
+      "bytesAfter": 82492,
+      "medianOfRunMediansMsBefore": 3.5772750000000997,
+      "medianOfRunMediansMsAfter": 3.411906000000272,
+      "runMedianRangeMsBefore": [
+        3.3557340000002114,
+        4.0869119999997565
+      ],
+      "runMedianRangeMsAfter": [
+        3.177647999999863,
+        4.071819999999661
+      ]
+    },
+    {
+      "scenario": "city",
+      "semanticHash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+      "vertices": 1024,
+      "indices": 1536,
+      "bytesBefore": 48128,
+      "bytesAfter": 41984,
+      "medianOfRunMediansMsBefore": 2.6856629999997494,
+      "medianOfRunMediansMsAfter": 2.518492000000151,
+      "runMedianRangeMsBefore": [
+        2.637314999999944,
+        2.6962109999999484
+      ],
+      "runMedianRangeMsAfter": [
+        2.4025369999999384,
+        2.832126000000244
+      ]
+    }
+  ],
+  "pairs": [
+    {
+      "order": "AB",
+      "before": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 454208,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 6.238112000000001,
+            "p95Ms": 9.427376999999979,
+            "meanMs": 7.358330833333336
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 407020,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 17.56931899999995,
+            "p95Ms": 19.290019999999913,
+            "meanMs": 17.702510683333333
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 127464,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 2.718589999999949,
+            "p95Ms": 4.222269999999753,
+            "meanMs": 3.144386366666686
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 94564,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 3.862312000000202,
+            "p95Ms": 16.606642000000193,
+            "meanMs": 5.804101550000033
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 48128,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.6859660000000076,
+            "p95Ms": 2.980920999999853,
+            "meanMs": 2.7210088333333715
+          }
+        ]
+      },
+      "after": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 396224,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 6.15272200000004,
+            "p95Ms": 18.625004999999987,
+            "meanMs": 7.421068733333332
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 355060,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 18.071890999999823,
+            "p95Ms": 22.592482999999902,
+            "meanMs": 18.577373749999996
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 111192,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 2.649355000000014,
+            "p95Ms": 3.746646000000055,
+            "meanMs": 3.1096942666666183
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 82492,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 3.411906000000272,
+            "p95Ms": 12.606557000000066,
+            "meanMs": 4.627856949999985
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 41984,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.518492000000151,
+            "p95Ms": 3.0120210000000043,
+            "meanMs": 2.5268657833333616
+          }
+        ]
+      }
+    },
+    {
+      "order": "BA",
+      "before": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 454208,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 6.242460999999992,
+            "p95Ms": 8.964370999999971,
+            "meanMs": 7.15985263333334
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 407020,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 18.27750100000003,
+            "p95Ms": 20.619271000000026,
+            "meanMs": 18.611182266666667
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 127464,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 3.049391999999898,
+            "p95Ms": 4.50381200000038,
+            "meanMs": 4.112342683333342
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 94564,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 3.4170090000002347,
+            "p95Ms": 16.683572000000368,
+            "meanMs": 5.539562599999962
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 48128,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.645009999999729,
+            "p95Ms": 2.9735459999997147,
+            "meanMs": 2.7039113833333657
+          }
+        ]
+      },
+      "after": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 396224,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 5.961982999999975,
+            "p95Ms": 28.091144999999983,
+            "meanMs": 7.98744009999999
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 355060,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 17.91547300000002,
+            "p95Ms": 20.339289000000008,
+            "meanMs": 18.149541466666683
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 111192,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 2.6664420000001883,
+            "p95Ms": 3.5979059999999663,
+            "meanMs": 3.3939977166666266
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 82492,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 3.5211269999999786,
+            "p95Ms": 14.12166900000011,
+            "meanMs": 5.187914616666687
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 41984,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.4025369999999384,
+            "p95Ms": 2.7715610000000197,
+            "meanMs": 2.3998142166666563
+          }
+        ]
+      }
+    },
+    {
+      "order": "AB",
+      "before": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 454208,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 5.867159000000015,
+            "p95Ms": 7.7479790000000435,
+            "meanMs": 6.721983083333337
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 407020,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 18.11198400000012,
+            "p95Ms": 20.493900000000053,
+            "meanMs": 18.462875733333338
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 127464,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 2.820560999999998,
+            "p95Ms": 20.415491000000202,
+            "meanMs": 4.6603151333333095
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 94564,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 3.5772750000000997,
+            "p95Ms": 16.043600999999853,
+            "meanMs": 5.001361616666675
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 48128,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.637314999999944,
+            "p95Ms": 2.97265600000037,
+            "meanMs": 2.6906937166666163
+          }
+        ]
+      },
+      "after": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 396224,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 5.627291000000014,
+            "p95Ms": 16.332244000000003,
+            "meanMs": 6.868014683333341
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 355060,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 18.598109000000022,
+            "p95Ms": 22.247575000000097,
+            "meanMs": 19.085733916666666
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 111192,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 2.9095509999997375,
+            "p95Ms": 4.624616999999944,
+            "meanMs": 3.6089395833333735
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 82492,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 4.071819999999661,
+            "p95Ms": 5.6836709999997765,
+            "meanMs": 4.222911133333355
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 41984,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.832126000000244,
+            "p95Ms": 4.131517999999687,
+            "meanMs": 3.0048286000000037
+          }
+        ]
+      }
+    },
+    {
+      "order": "BA",
+      "before": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 454208,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 6.171425999999997,
+            "p95Ms": 10.987219000000039,
+            "meanMs": 7.068605600000002
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 407020,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 19.553671000000122,
+            "p95Ms": 27.91544500000009,
+            "meanMs": 20.644884783333353
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 127464,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 3.870983000000251,
+            "p95Ms": 15.387050000000272,
+            "meanMs": 4.897585549999977
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 94564,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 4.0869119999997565,
+            "p95Ms": 17.387125999999625,
+            "meanMs": 6.4737282833332905
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 48128,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.6856629999997494,
+            "p95Ms": 3.1791910000001735,
+            "meanMs": 2.763639699999976
+          }
+        ]
+      },
+      "after": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 396224,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 6.175614999999993,
+            "p95Ms": 18.602630999999974,
+            "meanMs": 7.876107149999993
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 355060,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 18.241312000000107,
+            "p95Ms": 20.515896999999995,
+            "meanMs": 18.542979750000015
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 111192,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 2.6897690000000694,
+            "p95Ms": 3.268909999999778,
+            "meanMs": 3.236831799999982
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 82492,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 3.177647999999863,
+            "p95Ms": 14.776321999999709,
+            "meanMs": 5.059079249999976
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 41984,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.579997000000276,
+            "p95Ms": 4.544231999999738,
+            "meanMs": 2.782381749999998
+          }
+        ]
+      }
+    },
+    {
+      "order": "AB",
+      "before": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 454208,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 5.76558,
+            "p95Ms": 8.080919999999992,
+            "meanMs": 6.1816224666666635
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 407020,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 17.919091999999864,
+            "p95Ms": 23.65409599999998,
+            "meanMs": 18.746143699999987
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 127464,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 2.7235859999996137,
+            "p95Ms": 3.7315990000001875,
+            "meanMs": 3.7104860333333365
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 94564,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 3.3557340000002114,
+            "p95Ms": 16.59020099999998,
+            "meanMs": 5.47128746666668
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 48128,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.6962109999999484,
+            "p95Ms": 3.439440000000104,
+            "meanMs": 2.95665475000006
+          }
+        ]
+      },
+      "after": {
+        "node": "v22.22.3",
+        "os": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "results": [
+          {
+            "name": "terrain",
+            "hash": "1429e34cb85fae7abf1c667239cfe09bb10415cf7c320373762ad90e0fab8814",
+            "bytes": 396224,
+            "vertices": 9664,
+            "indices": 14496,
+            "iterations": 60,
+            "medianMs": 5.881019999999978,
+            "p95Ms": 20.36056500000001,
+            "meanMs": 7.783365266666668
+          },
+          {
+            "name": "nether",
+            "hash": "1891302a1de2ad8b80f48a764570aaf1b4b7a522b1ca548277185f4fb012d483",
+            "bytes": 355060,
+            "vertices": 8660,
+            "indices": 12990,
+            "iterations": 60,
+            "medianMs": 18.19592200000011,
+            "p95Ms": 20.517174999999952,
+            "meanMs": 18.556262366666683
+          },
+          {
+            "name": "flat",
+            "hash": "3719b897c8d54e06676a9f048e8e1b4305ccd61340c2e8eb3d00779b78be15c6",
+            "bytes": 111192,
+            "vertices": 2712,
+            "indices": 4068,
+            "iterations": 60,
+            "medianMs": 2.7097230000003947,
+            "p95Ms": 4.185755999999856,
+            "meanMs": 3.207841799999998
+          },
+          {
+            "name": "models",
+            "hash": "c8adb5738aa1f28d8b0be86f9f5f7b5378b3c4e7c81eb90aa2eb87c5d1def76a",
+            "bytes": 82492,
+            "vertices": 2012,
+            "indices": 3018,
+            "iterations": 60,
+            "medianMs": 3.2967109999999593,
+            "p95Ms": 14.92853200000036,
+            "meanMs": 5.218401283333318
+          },
+          {
+            "name": "city",
+            "hash": "abdc09c5dc8bce2d80f753a926635db711d344d1ae1aa47e09fa3836b2bf858e",
+            "bytes": 41984,
+            "vertices": 1024,
+            "indices": 1536,
+            "iterations": 60,
+            "medianMs": 2.4995850000000246,
+            "p95Ms": 3.260870000000068,
+            "meanMs": 2.6429724166666273
+          }
+        ]
+      }
+    }
+  ]
+}

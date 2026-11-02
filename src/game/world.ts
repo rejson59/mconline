@@ -133,9 +133,9 @@ class MeshBuffer {
   uv: Float32Array;
   col: Float32Array;
   block: Float32Array;
-  wave: Float32Array;
+  wave: Uint8Array;
   /** 2.8.2: numer ściany (0–5) – shader liczy z niego kierunek słońca. */
-  face: Float32Array;
+  face: Uint8Array;
   ind: Uint32Array;
   count = 0;
   icount = 0;
@@ -145,9 +145,14 @@ class MeshBuffer {
     this.uv = new Float32Array(capacity * 2);
     this.col = new Float32Array(capacity * 3);
     this.block = new Float32Array(capacity);
-    this.wave = new Float32Array(capacity);
-    this.face = new Float32Array(capacity);
+    this.wave = new Uint8Array(capacity);
+    this.face = new Uint8Array(capacity);
     this.ind = new Uint32Array(capacity * 1.5);
+  }
+
+  reset() { this.count = 0; this.icount = 0; }
+  get scratchBytes() {
+    return this.pos.byteLength + this.uv.byteLength + this.col.byteLength + this.block.byteLength + this.wave.byteLength + this.face.byteLength + this.ind.byteLength;
   }
 
   private growVertices(need: number) {
@@ -163,8 +168,9 @@ class MeshBuffer {
     this.uv = copy(this.uv, 2);
     this.col = copy(this.col, 3);
     this.block = copy(this.block, 1);
-    this.wave = copy(this.wave, 1);
-    this.face = copy(this.face, 1);
+    const wave = new Uint8Array(cap), face = new Uint8Array(cap);
+    wave.set(this.wave); face.set(this.face);
+    this.wave = wave; this.face = face;
   }
 
   private growIndices(need: number) {
@@ -223,6 +229,13 @@ class MeshBuffer {
     return g;
   }
 }
+
+// Meshing is synchronous, as are the existing lighting scratch buffers.
+// Bound retained memory independently per layer; oversized one-off builds are released.
+const MAX_MESH_SCRATCH = 4 * 1024 * 1024;
+const meshScratch: (MeshBuffer | null)[] = [null, null, null];
+export function meshScratchBytes(): number { return meshScratch.reduce((n,b) => n + (b?.scratchBytes ?? 0), 0); }
+const occlusionStrength = (id: number) => OCCLUDES[id] ? 1 : IS_LEAFY[id] ? .55 : 0;
 
 /* ------------------------------------------------------------------ 2.32
  * Skrzynia 1:1 z waniliowym `ChestModel` (26.1.2).
@@ -1717,7 +1730,10 @@ export class World {
   }
 
   buildMesh(c: Chunk): THREE.BufferGeometry[] {
-    const bufs = [new MeshBuffer(), new MeshBuffer(), new MeshBuffer()];
+    const bufs = meshScratch.map((buffer,i) => {
+      const b = buffer ?? new MeshBuffer(); b.reset(); meshScratch[i] = b; return b;
+    });
+    try {
     const ox = c.cx * CS, oz = c.cz * CS;
     // Ensure neighbors exist
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) this.getChunk(c.cx + dx, c.cz + dz);
@@ -2061,10 +2077,9 @@ export class World {
                 // 2.8.2: miękkie AO. Liście liczą się jako PÓŁ okludera (0.55),
                 // więc pień pod koroną ma delikatny cień zamiast czarnej plamy,
                 // a gęsty las nadal wygląda na głęboki.
-                const occ = (bid: number) => (OCCLUDES[bid] ? 1 : IS_LEAFY[bid] ? 0.55 : 0);
-                const a = occ(get(nx + s1x, ny + s1y, nz + s1z));
-                const b = occ(get(nx + s2x, ny + s2y, nz + s2z));
-                const cc = occ(get(nx + s1x + s2x, ny + s1y + s2y, nz + s1z + s2z));
+                const a = occlusionStrength(get(nx + s1x, ny + s1y, nz + s1z));
+                const b = occlusionStrength(get(nx + s2x, ny + s2y, nz + s2z));
+                const cc = occlusionStrength(get(nx + s1x + s2x, ny + s1y + s2y, nz + s1z + s2z));
                 const occl = a > 0 && b > 0 ? 1 : Math.min(1, a + b + cc);
                 aoF = 1 - 0.42 * occl;
                 const sx=nx+s1x,sy=ny+s1y,sz=nz+s1z,tx=nx+s2x,ty=ny+s2y,tz=nz+s2z;
@@ -2094,6 +2109,9 @@ export class World {
         }
 
     return bufs.map((b) => b.geometry());
+    } finally {
+      for (let i=0;i<bufs.length;i++) if (bufs[i].scratchBytes > MAX_MESH_SCRATCH) meshScratch[i] = null;
+    }
   }
 
   isSolid(x: number, y: number, z: number) {

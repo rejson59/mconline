@@ -263,6 +263,8 @@ export default function HUD({ hud, chatSettings = DEFAULT_SETTINGS, chatOpen = f
             `Minecraft Java 1.20.4 — przeglądarka ${GAME_VERSION} „${GAME_RELEASE_NAME}” (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
             // 2.28: profil automatu jakości – widać, czy gra właśnie oszczędza.
             `Jakość: ${hud.perf} · LOD: ${hud.lodRange > 0 ? `${hud.lodRange} bloków` : 'wyłączony'}`,
+            ...(hud.frameTimes?.samples ? [`Klatki: p50 ${hud.frameTimes.medianMs.toFixed(1)} ms · p95 ${hud.frameTimes.p95Ms.toFixed(1)} · p99 ${hud.frameTimes.p99Ms.toFixed(1)} · max ${hud.frameTimes.maxMs.toFixed(1)} · 1% low ${Math.round(hud.frameTimes.low1Fps)} FPS`] : []),
+            ...(hud.chunkWork ? [`Chunki: ${hud.chunkWork.attempts} prac · ${hud.chunkWork.ms.toFixed(1)} ms / budżet ${hud.chunkWork.budgetMs.toFixed(1)} ms (pojedynczy chunk jest niepodzielny)`] : []),
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,
             `Blok: ${Math.floor(hud.pos[0])} ${Math.floor(hud.pos[1])} ${Math.floor(hud.pos[2])}`,
             `Chunk: ${Math.floor(hud.pos[0] / 16)} ${Math.floor(hud.pos[2] / 16)}  (załadowane: ${hud.chunks})`,
