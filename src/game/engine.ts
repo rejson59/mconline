@@ -1,4 +1,4 @@
-import { cleanStatus, isTimedEffect, maxAmplifier, effectClock, regenerationPulses, type StatusSnapshot } from './statusEffects';
+import { cleanStatus, isTimedEffect, maxAmplifier, effectClock, mergeEffect, advanceEffect, type SavedEffect, type StatusSnapshot } from './statusEffects';
 import { landingDamage } from './landing';
 import { advanceMining, miningIdentity } from './mining';
 import { upperHalf } from './buildingShapes';
@@ -80,7 +80,6 @@ import { patchChunkMaterial, HELD_POWER, type HeldLightState, type SunState } fr
 import { cloudLook, rainFogMix } from './sky';
 import { spriteTexture } from './art/spriteTex';
 import { buildItemIcons } from './itemIcons';
-import { GAME_RELEASE_NAME, GAME_VERSION } from '../utils/version';
 import {
   ITEMS, I, displayName, isItem, isFood, isPotion, isHoe, canHarvest, miningDamage, miningDurabilityCost, attackDamage, attackCooldown,
   blockDrops, isOre, smeltResult, fuelSeconds, resolveId, stackLimit, pickHint, oreXp,
@@ -849,6 +848,7 @@ export class Game {
   private effects = new Map<PotionEffectId, number>();
   private effectLevels = new Map<PotionEffectId, number>();
   private effectsTickRemainder = 0;
+  private effectHidden = new Map<PotionEffectId, SavedEffect>();
   absorption = 0;
   /** 2.4: jakie butelki gracz kiedykolwiek wypił (osiągnięcie „Mistrz eliksirów”). */
   potionsDrunk = new Set<number>();
@@ -1304,9 +1304,7 @@ export class Game {
     if (opts.net) this.bindNet(opts.net);
     this.loop = this.loop.bind(this);
     this.raf = requestAnimationFrame(this.loop);
-    this.message(this.mode === 'creative'
-      ? 'Tryb kreatywny. J – dziennik przygód, T – czat, /help – komendy, M – minimapa.'
-      : `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}”: szukaj receptur po nazwie lub składniku; pełny ekwipunek nie gubi łupu. K – punkty podróży, J – dziennik. Na telefonie tapnij, aby użyć, przytrzymaj, aby kopać.`);
+
   }
 
   // ------------------------------------------------------- 2.10: multiplayer
@@ -3439,34 +3437,45 @@ export class Game {
     }
   }
 
-  /** Timed effects keep their amplifier and do not extend a stronger effect via a weaker one. */
+  /** Strong effects may mask a weaker one; hidden time still elapses. */
   applyEffect(id: PotionEffectId, seconds: number, amplifier = 0) {
     if (!isTimedEffect(id) || !Number.isFinite(seconds) || seconds <= 0) return;
     const ticks = Math.min(72000, Math.floor(seconds * 20));
     if (ticks <= 0) return;
     const level = Number.isFinite(amplifier) ? Math.max(0, Math.min(maxAmplifier(id), Math.floor(amplifier))) : 0;
-    const current = this.effects.get(id) ?? 0;
-    const oldLevel = this.effectLevels.get(id) ?? 0;
-    if (current > 0 && level < oldLevel) return;
-    if (current > 0 && level === oldLevel && current >= ticks * 50) return;
-    this.effects.set(id, level > oldLevel ? ticks * 50 : Math.max(current, ticks * 50));
-    this.effectLevels.set(id, level);
-    if (id === 'absorption') this.absorption = 4 * (level + 1);
+    const next = mergeEffect(this.savedEffect(id), { id, ticks, amplifier: level });
+    this.storeEffect(next);
+    // onEffectStarted runs even when the offered duration/level is ignored.
+    // Weak absorption must never reduce a stronger existing buffer.
+    if (id === 'absorption') this.absorption = Math.min(4 * (next.amplifier + 1), Math.max(this.absorption ?? 0, 4 * (level + 1)));
+  }
+
+  private savedEffect(id: PotionEffectId): SavedEffect | undefined {
+    const ms = this.effects.get(id);
+    if (!ms || !isTimedEffect(id)) return;
+    return { id, ticks: Math.ceil(ms / 50), amplifier: this.effectLevels.get(id) ?? 0, ...(this.effectHidden?.has(id) ? { hidden: this.effectHidden.get(id) } : {}) };
+  }
+
+  private storeEffect(effect: SavedEffect) {
+    this.effects.set(effect.id, effect.ticks * 50); this.effectLevels.set(effect.id, effect.amplifier);
+    this.effectHidden ??= new Map();
+    if (effect.hidden) this.effectHidden.set(effect.id, effect.hidden);
+    else this.effectHidden.delete(effect.id);
   }
 
   private clearEffects() {
-    this.effects = new Map(); this.effectLevels = new Map();
+    this.effects = new Map(); this.effectLevels = new Map(); this.effectHidden = new Map();
     this.effectsTickRemainder = 0; this.absorption = 0;
   }
 
   private statusSnapshot(): StatusSnapshot {
-    return cleanStatus({ effects: [...(this.effects ?? [])].map(([id, ms]) => ({ id, ticks: Math.ceil(ms / 50), amplifier: this.effectLevels?.get(id) ?? 0 })), absorption: this.absorption ?? 0 });
+    return cleanStatus({ effects: [...(this.effects ?? [])].map(([id]) => this.savedEffect(id)), absorption: this.absorption ?? 0 });
   }
 
   private restoreStatus(raw: unknown) {
     const snapshot = cleanStatus(raw); this.clearEffects();
     for (const effect of snapshot.effects) {
-      this.effects.set(effect.id, effect.ticks * 50); this.effectLevels.set(effect.id, effect.amplifier);
+      this.storeEffect(effect);
     }
     this.absorption = snapshot.absorption; // Never refill depleted golden hearts on reload.
   }
@@ -3482,17 +3491,19 @@ export class Game {
     const clock = effectClock(this.effectsTickRemainder ?? 0, dt);
     this.effectsTickRemainder = clock.remainder;
     if (!clock.ticks) return;
-    for (const [id, ms] of this.effects) {
-      const before = Math.ceil(ms / 50);
-      if (id === 'regen' && this.mode === 'survival' && this.health > 0) {
-        const pulses = regenerationPulses(before, clock.ticks, this.effectLevels.get(id) ?? 0);
-        this.health = Math.min(20, this.health + pulses);
-      }
-      const next = Math.max(0, before - clock.ticks);
-      if (next === 0) {
-        this.effects.delete(id); this.effectLevels.delete(id);
+    for (const [id] of this.effects) {
+      const current = this.savedEffect(id)!;
+      // Java removes exhausted absorption on its next effect tick, including
+      // its hidden chain. A spent effect cannot later restore golden hearts.
+      const next = id === 'absorption' && this.absorption <= 0 ? { effect: undefined, pulses: 0 } : advanceEffect(current, clock.ticks);
+      if (id === 'regen' && this.mode === 'survival' && this.health > 0) this.health = Math.min(20, this.health + next.pulses);
+      if (next.effect) {
+        this.storeEffect(next.effect);
+        if (id === 'absorption') this.absorption = Math.min(this.absorption, 4 * (next.effect.amplifier + 1));
+      } else {
+        this.effects.delete(id); this.effectLevels.delete(id); this.effectHidden?.delete(id);
         if (id === 'absorption') this.absorption = 0;
-      } else this.effects.set(id, next * 50);
+      }
     }
   }
 

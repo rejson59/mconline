@@ -4,7 +4,6 @@ import { type WorldCard, type WorldType } from './components/Menus';
 import { JavaMainMenu as MainMenu } from './components/JavaMenus';
 import { type GameMode, type SaveData } from './game/engine';
 import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
-import OrientationGuard from './components/OrientationGuard';
 import CommunityAccount from './components/CommunityAccount';
 import type { NetLike } from './game/net';
 import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
@@ -149,7 +148,6 @@ export default function App() {
   if (multiplayer) {
     return (
       <div className="flex h-full w-full flex-col">
-        <OrientationGuard variant="menu" />
         <div className="relative min-h-0 w-full flex-1">
           <MultiplayerScreen onStart={startMultiplayer} onClose={() => setMultiplayer(false)} />
         </div>
@@ -160,7 +158,6 @@ export default function App() {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <OrientationGuard variant="menu" />
       <div className="relative min-h-0 w-full flex-1">
         <MainMenu
           onAccount={() => setAccountOpen(true)}

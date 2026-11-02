@@ -3195,8 +3195,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.15.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Totem i złote serca', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.16.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Minecraft — efekty i zgodność', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -9540,6 +9540,12 @@ section('4.15: rescue persistence, profile application and no health/absorption 
   const short=sanitizeProfile(profileRow({...p,inv:[]},'short'))!;eq('short legacy inventory input cannot shift metadata into real slots',short.status?.absorption,2.5);
   g.restoreStatus(p.status);g.net=null;g.pvpProtectedUntil=0;g.keys=new Set();g.lockPointer=()=>{};g.onUI=()=>{};g.respawn();
   check('respawn clears both active statuses and absorption',g.absorption===0 && g.effects.size===0 && g.health===20);
+  g.applyEffect('regen',100);g.applyEffect('regen',5,1);g.save();
+  const chained=loadSaves().find(s=>s.id==='rescue-save') as any;
+  check('real Game.save persists the hidden chain in the local world',chained.status.effects[0].hidden.ticks===2000);
+  g.clearEffects();g.restoreStatus(chained.status);g.updateEffects(5);
+  check('real local save restoration preserves the fallback countdown',g.effectLevels.get('regen')===0 && g.effectLeft('regen')===95);
+
 }
 
 section('4.15: original rescue assets and effect icon timing');
@@ -9556,6 +9562,98 @@ section('4.15: original rescue assets and effect icon timing');
   eq('effect icons remain opaque above ten seconds',effectIconOpacity(40),1);
   check('native last-five-second opacity pulse',Math.abs(effectIconOpacity(5)-.625)<1e-9);
   check('effect opacity always remains bounded',[0,.05,.1,1,3,9.95,10].every(s=>effectIconOpacity(s)>=0 && effectIconOpacity(s)<=1));
+}
+
+section('4.16: hidden native effect chains, promotion boundaries and persistence');
+{
+  const {mergeEffect,advanceEffect,cleanStatus,compareEffectIcons}=await import('../src/game/statusEffects');
+  type E=import('../src/game/statusEffects').SavedEffect;
+  const e=(ticks:number,amplifier=0):E=>({id:'regen',ticks,amplifier});
+  const weak=e(200), strong=e(50,1);
+  const masked=mergeEffect(weak,strong);
+  check('short stronger effect masks the previous weaker effect',masked.ticks===50 && masked.amplifier===1 && masked.hidden?.ticks===200);
+  const boundary=advanceEffect(masked,50);
+  check('hidden duration elapses in parallel and resumes at the expiration boundary',boundary.effect?.ticks===150 && boundary.effect?.amplifier===0 && boundary.pulses===2);
+  const next=advanceEffect(boundary.effect!,1);
+  check('fallback first acts on the NEXT tick, using its own remaining duration',next.pulses===1 && next.effect?.ticks===149);
+  const batch=advanceEffect(masked,101);
+  check('batched time splits across amplifiers without extra healing',batch.pulses===4 && batch.effect?.ticks===99 && batch.effect?.amplifier===0);
+  eq('pure updates never mutate previous snapshots',JSON.stringify(weak),JSON.stringify(e(200)));
+  eq('longer stronger effect need not preserve an already shorter effect',mergeEffect(e(30),e(50,1)).hidden,undefined);
+  eq('shorter weaker offer is not needlessly queued',mergeEffect(e(50,1),e(30)).hidden,undefined);
+  eq('equal duration weaker offer is not queued',mergeEffect(e(50,1),e(50)).hidden,undefined);
+  eq('same level extends the current effect instead of adding levels',mergeEffect(e(50,1),e(100,1)).ticks,100);
+  eq('shorter same level does not shorten the duration',mergeEffect(e(100,1),e(50,1)).ticks,100);
+  eq('long weak offer while strong is active is retained',mergeEffect(e(50,1),e(200)).hidden?.ticks,200);
+  eq('weak hidden offers refresh by max duration',mergeEffect(masked,e(300)).hidden?.ticks,300);
+  eq('weak hidden offers cannot shorten an existing fallback',mergeEffect(masked,e(100)).hidden?.ticks,200);
+  const prolonged=mergeEffect(masked,e(300,1));
+  eq('hidden expires while a prolonged strong effect remains',advanceEffect(prolonged,250).effect?.hidden,undefined);
+  eq('expired hidden does not resurrect on eventual promotion',advanceEffect(prolonged,300).effect,undefined);
+  const valid=cleanStatus({effects:[masked],absorption:0});
+  eq('sanitizer retains native hidden effect data',valid.effects[0].hidden?.ticks,200);
+  const cyclic:any={id:'regen',ticks:50,amplifier:1};cyclic.hidden=cyclic;
+  eq('cyclic effect data cannot cause recursive parsing',cleanStatus({effects:[cyclic]}).effects[0].hidden,undefined);
+  for(const hidden of [e(200,1),{id:'fire',ticks:200,amplifier:0},e(0),{...e(200),ticks:Infinity}])eq('invalid hidden node is dropped safely '+JSON.stringify(hidden),cleanStatus({effects:[{...strong,hidden}]}).effects[0].hidden,undefined);
+  // Independent one-tick mutable reference, mirroring the documented Java
+  // branches. Compare offers, expiry and regeneration against batched code.
+  const clone=(x:E):E=>JSON.parse(JSON.stringify(x));
+  const offer=(cur:E|undefined,n:E):E=>{
+    if(!cur)return clone(n);
+    if(n.amplifier>cur.amplifier){if(n.ticks<cur.ticks)cur.hidden={...clone(cur)};cur.amplifier=n.amplifier;cur.ticks=n.ticks;}
+    else if(n.ticks>cur.ticks){if(n.amplifier===cur.amplifier)cur.ticks=n.ticks;else cur.hidden=offer(cur.hidden,n);}
+    return cur;
+  };
+  const normalize=(x:E|undefined):string=>JSON.stringify(x?cleanStatus({effects:[x]}).effects[0]:null);
+  let seed=416;const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed;};
+  for(let trial=0;trial<120;trial++){
+    let actual:E|undefined,reference:E|undefined,totalActual=0,totalReference=0;
+    for(let event=0;event<30;event++){
+      const n=e(1+rand()%400,rand()%2);actual=mergeEffect(actual,n);reference=offer(reference,n);
+      const elapsed=1+rand()%170;
+      const advanced=advanceEffect(actual,elapsed);actual=advanced.effect;totalActual+=advanced.pulses;
+      for(let tick=0;tick<elapsed && reference;tick++){
+        if(reference.ticks%(reference.amplifier?25:50)===0)totalReference++;
+        if(reference.hidden)reference.hidden.ticks--;
+        reference.ticks--;
+        if(!reference.ticks)reference=reference.hidden?.ticks && reference.hidden.ticks>0?reference.hidden:undefined;
+      }
+      check('effect chain agrees with native one-tick reference '+trial+'/'+event,normalize(actual)===normalize(reference) && totalActual===totalReference);
+    }
+  }
+  const g=Object.assign(Object.create(Game.prototype),{mode:'survival',health:1}) as any;g.clearEffects();
+  for(const fps of [20,30,60,144]){
+    g.clearEffects();g.health=1;g.applyEffect('regen',10);g.applyEffect('regen',2.5,1);g.applyEffect('absorption',10);g.applyEffect('absorption',2.5,1);
+    for(let frame=0;frame<fps*5;frame++)g.updateEffects(1/fps);
+    check('hidden promotion matches 20 Hz across render FPS '+fps,g.health===4 && g.absorption===4 && g.effectLeft('regen')===5 && g.effectLevels.get('regen')===0);
+  }
+  g.clearEffects();g.health=1;
+  g.applyEffect('regen',10);g.applyEffect('regen',2.5,1);g.updateEffects(2.5);
+  check('actual Game promotes the weak effect with no extra boundary heal',g.effectLevels.get('regen')===0 && g.effectLeft('regen')===7.5 && g.health===3);
+  g.updateEffects(.05);eq('actual fallback regeneration starts on following tick',g.health,4);
+  g.clearEffects();g.applyEffect('regen',10);g.applyEffect('regen',2.5,1);g.updateEffects(.5);
+  const snapshot=g.statusSnapshot();g.restoreStatus(snapshot);
+  check('actual restore retains both effect levels without restarting hidden time',g.effectHidden.get('regen').ticks===190 && g.effectLeft('regen')===2);
+  const cloud=sanitizeProfile(profileRow({pid:'p1234567890abcdef123',name:'Test',skin:'steve',dim:'o',x:0,y:65,z:0,yaw:0,pitch:0,health:1,hunger:20,xp:0,inv:[],armor:[],status:snapshot,updated:0},'hidden'))!;
+  check('cloud profile slot 51 preserves the complete hidden effect chain',cloud.status?.effects[0].hidden?.ticks===190 && JSON.parse(profileRow(cloud,'hidden').inv)[51].effects[0].hidden.ticks===190);
+  g.restoreStatus(cloud.status);g.updateEffects(2);
+  eq('restored chain promotes with correctly reduced weaker duration',g.effectLeft('regen'),7.5);
+  g.clearEffects();eq('clear/death/respawn has no hidden effect residue',g.effectHidden.size,0);
+  g.applyEffect('absorption',10);g.applyEffect('absorption',2.5,1);g.absorption=7;g.updateEffects(2.5);
+  check('weaker absorption returns with capped capacity, not a free refill',g.absorption===4 && g.effectLevels.get('absorption')===0 && g.effectLeft('absorption')===7.5);
+  g.clearEffects();g.applyEffect('absorption',10);g.applyEffect('absorption',2.5,1);g.absorption=2;g.updateEffects(2.5);
+  eq('absorption promotion preserves a depleted buffer below the new cap',g.absorption,2);
+  g.absorption=0;g.updateEffects(.05);
+  check('spent absorption and its hidden chain disappear on the next effect tick',!g.hasEffect('absorption') && !g.effectHidden.has('absorption'));
+  g.applyEffect('absorption',10,1);g.absorption=2;g.applyEffect('absorption',1,1);
+  check('new absorption source refills even if its shorter duration is ignored',g.absorption===8 && g.effectLeft('absorption')===10);
+  g.absorption=5;g.applyEffect('absorption',20);eq('weaker absorption offer cannot reduce stronger golden hearts',g.absorption,5);
+  g.absorption=2;g.applyEffect('absorption',20);eq('weaker absorption source grants only four HP, not eight',g.absorption,4);
+  eq('refreshing weaker absorption cannot downgrade the active amplifier',g.effectLevels.get('absorption'),1);
+  const order=['absorption','speed','regen','fire','strength','night'].map(id=>({id,left:20})).sort(compareEffectIcons).map(x=>x.id).join(',');
+  eq('equal-duration HUD order uses native effect colors','strength,fire,regen,night,speed,absorption',order);
+  check('long finite effects use color order above the 32147 tick threshold',compareEffectIcons({id:'regen',left:3000},{id:'fire',left:2000})>0);
+  check('duration ordering still applies at the exact native threshold',compareEffectIcons({id:'regen',left:32147/20},{id:'fire',left:32148/20})>0);
 }
 
 // =================================================================== report

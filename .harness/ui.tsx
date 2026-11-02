@@ -60,6 +60,7 @@ section('2.24: launcher – ekran startowy');
     />
   );
   check('launcher pokazuje przycisk GRAJ', /GRAJ/.test(html));
+  check('legacy launcher also uses Minecraft branding without the old product name',html.includes('MINECRAFT') && !/blockcraft/i.test(html));
   check(
     'launcher ma wszystkie sekcje',
     ['Start', 'Światy', 'Serwery', 'Paczki i mody', 'Skórki', 'Ustawienia', 'Konsola'].every((t) => html.includes(t))
@@ -275,6 +276,7 @@ section('4.8: active Java screens, not legacy menu exports');
   const title = renderToStaticMarkup(<JavaMainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} onMultiplayer={noop} />);
   check('Java title uses the actual logo and bitmap layout', title.includes('alt="Minecraft"') && title.includes('java-title-canvas'));
   check('Java title separates singleplayer and multiplayer', title.includes('Tryb jednoosobowy') && title.includes('Tryb wieloosobowy'));
+  check('Minecraft title separates the native target from the browser build',title.includes('Minecraft 1.20.4') && title.includes('przeglądarka '+GAME_VERSION) && !/blockcraft/i.test(title));
   check('Java title has no old shortcut crafting or launcher cards', !title.includes('Co nowego') && !title.includes('Witaj w BlockCraft'));
   const pause = renderToStaticMarkup(<JavaPauseMenu settings={DEFAULT_SETTINGS} shareUrl="" onSettings={noop} onResume={noop} onQuit={noop} onJournal={noop} onSave={noop} />);
   check('Java pause has native resume/save-and-quit actions', pause.includes('Powrót do gry') && pause.includes('Zapisz i wyjdź do menu'));
@@ -289,7 +291,8 @@ section('menus: static render');
   const menu = renderToStaticMarkup(
     <MainMenu saves={[]} onPlay={noop} onNew={noop} onDelete={noop} />
   );
-  check('title is rendered', menu.includes('BLOCKCRAFT'));
+  check('title is rendered', menu.includes('MINECRAFT'));
+  check('legacy menu no longer exposes the old product name', !/blockcraft/i.test(menu));
   check('main menu shows the current release', menu.includes(`WERSJA ${GAME_VERSION}`) && menu.includes(GAME_RELEASE_NAME));
   check('new world button', menu.includes('Nowy świat'));
   check('controls button', menu.includes('Sterowanie'));
@@ -298,7 +301,7 @@ section('menus: static render');
   check('export/import buttons', menu.includes('Eksport zapisów') && menu.includes('Import zapisów'));
   check('menu background is a relative url', !menu.includes('url("/menu-bg.jpg'));
   check('2.8 menu keeps the primary action', menu.includes('mc-btn-primary') && menu.includes('Nowy świat'));
-  check('2.8 menu shows the release highlight card', menu.includes('Witaj w BlockCraft') && menu.includes(GAME_RELEASE_NAME));
+  check('2.8 menu shows the release highlight card', menu.includes('Witaj w Minecraft') && menu.includes(GAME_RELEASE_NAME));
   check('the welcome card mentions the new look', menu.includes('Tekstury jak w nowym Minecrafcie') && menu.includes('Lista komend'));
 
   const withSaves = renderToStaticMarkup(
@@ -915,7 +918,8 @@ async function mountWithJsdom(): Promise<boolean> {
   const byText = (label: string) => buttons().find((b) => (b.textContent ?? '').includes(label));
 
   check('app renders the Java title screen', !!container.querySelector('img[alt="Minecraft"]') && text().includes('Tryb jednoosobowy'));
-  check('title retains honest project and release attribution', text().includes('BlockCraft ' + GAME_VERSION) && text().includes('Nieoficjalny projekt'));
+  check('title retains honest project and release attribution', text().includes('Minecraft 1.20.4') && text().includes('przeglądarka ' + GAME_VERSION) && text().includes('Nieoficjalny projekt'));
+  check('title no longer exposes the old product name', !/blockcraft/i.test(text()));
   check('title does not render the old launcher panels', !text().includes('Co nowego'));
   dom.window.location.hash = '#launcher';
   await React.act(async () => { root.unmount(); }); root = createRoot(container);
@@ -926,6 +930,9 @@ async function mountWithJsdom(): Promise<boolean> {
     const button = byText(label); check('navigation action exists: ' + label, !!button);
     await React.act(async () => { button?.click(); });
   };
+  await click('Informacje');
+  check('about page explicitly identifies the renamed game as unofficial',text().includes('Minecraft — nieoficjalna wersja przeglądarkowa') && text().includes('To nie jest oficjalny Minecraft ani klient Mojang.') && !/blockcraft/i.test(text()));
+  await click('Gotowe');
   await click('Opcje...');
   check('native options open from title', text().includes('Pole widzenia') && !!byText('Ustawienia grafiki'));
   await click('Ustawienia grafiki');
@@ -1048,6 +1055,8 @@ section('2.18: HUD rysuje grafiki z paczki');
   check('rescued player gets native positive effect icons',rescue.includes('data-java-effects') && rescue.includes(guiSprite('effect_regen')!) && rescue.includes(guiSprite('effect_fire')!) && rescue.includes(guiSprite('effect_absorption')!));
   check('effect icons use native frame and 18 px art',rescue.includes(guiSprite('effect_background')!) && rescue.includes('width="18" height="18"'));
   check('positive effects appear in descending-duration order',rescue.indexOf('data-effect="regen"')<rescue.indexOf('data-effect="fire"') && rescue.indexOf('data-effect="fire"')<rescue.indexOf('data-effect="absorption"'));
+  const ties=renderToStaticMarkup(<HUD hud={{...state,effects:[{id:'absorption',name:'Absorpcja',left:20,icon:'x'},{id:'regen',name:'Regeneracja',left:20,icon:'x'},{id:'fire',name:'Ognioodporność',left:20,icon:'x'}]}} icons={{}} />);
+  check('actual HUD uses native color order when effect durations tie',ties.indexOf('data-effect="fire"')<ties.indexOf('data-effect="regen"') && ties.indexOf('data-effect="regen"')<ties.indexOf('data-effect="absorption"'));
   check('rescue never covers the screen with invented low-health red vignettes',!rescue.includes('hurt-flash') && !rescue.includes('low-health'));
   const messages=Array.from({length:6},(_,i)=>({text:`chat-line-${i}`,t:Date.now()}));
   const customChat={...DEFAULT_SETTINGS,chatLines:2,chatOpacity:.4,chatBackground:.7,chatScale:.6,chatWidth:.5};

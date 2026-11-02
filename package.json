@@ -1,8 +1,8 @@
 {
-  "name": "blockcraft",
+  "name": "minecraft-browser",
   "private": true,
-  "version": "4.15.0",
-  "description": "BlockCraft – osobne miasto Creative, chronione działki i rozbudowane opcje",
+  "version": "4.16.0",
+  "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
   "type": "module",
   "license": "MIT",
   "keywords": [

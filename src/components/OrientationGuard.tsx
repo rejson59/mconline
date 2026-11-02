@@ -10,7 +10,7 @@ import {
 import { onViewportChange } from '../utils/viewport';
 
 /**
- * 2.13: „Obróć telefon” – BlockCraft gra się w poziomie.
+ * 2.13: „Obróć telefon” – Minecraft gra się w poziomie.
  *
  * Na telefonie w pionie pokazujemy dużą, czytelną nakładkę z jednym
  * przyciskiem, który wchodzi w pełny ekran i blokuje orientację poziomą.
@@ -111,7 +111,7 @@ export default function OrientationGuard({ variant = 'game' }: { variant?: 'game
         Obróć telefon poziomo
       </h2>
       <p className="max-w-[340px] text-sm leading-snug text-white/75">
-        BlockCraft gra się w poziomie – tak jak Minecraft na telefonie. Wtedy widać cały hotbar,
+        Najwygodniej gra się w poziomie. Wtedy widać cały hotbar,
         drążek i przyciski akcji. Przycisk poniżej włączy pełny ekran i zablokuje obrót.
       </p>
       {button}

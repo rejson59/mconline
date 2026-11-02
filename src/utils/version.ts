@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.15.0';
-export const GAME_RELEASE_NAME = 'Totem i złote serca';
+export const GAME_VERSION = '4.16.0';
+export const GAME_RELEASE_NAME = 'Minecraft — efekty i zgodność';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.16: Minecraft — wersja przeglądarkowa', text: 'Minecraft w przeglądarce: nowa nazwa w menu, launcherze, HUD i karcie. Nadal nieoficjalny własny silnik, nie klient Mojang. Dotychczasowe światy, profile, ustawienia i serwery pozostają dostępne.' },
+  { title: '4.16: nakładające się efekty bliżej Java', text: 'Krótsza Regeneracja II nie kasuje dłuższej Regeneracji I. Słabszy efekt odlicza czas w tle i wraca po mocniejszym; cały stan zachowuje się w zapisie. Poprawione odświeżanie i wyczerpanie absorpcji oraz kolejność ikon przy takim samym czasie.' },
   { title: '4.15: totem jak w survivalu Java', text: 'Totem musi być w jednej z rąk. Po uratowaniu: 1 HP, Regeneracja II przez 45 s, Absorpcja II przez 5 s i Ognioodporność przez 40 s. Bez sztucznego cooldownu i leczenia z plecaka.' },
   { title: '4.15: oryginalne złote serca i efekty', text: 'Cztery złote serca pochłaniają obrażenia; oryginalne ikony efektów, tło i dźwięk aktywacji Java 1.20.4. Efekty i zużyta osłona zapisują się. Usunięto sztuczne czerwone obwódki niskiego zdrowia.' },
   { title: '4.14: zbroja i survival bliżej Java', text: 'Silne ciosy przebijają zbroję, a diament ma twardość. Ochrona działa po pancerzu, bez zaokrąglania małych obrażeń do zera. Poprawione zużycie zbroi i Niezniszczalność; także małe ułamki zdrowia zachowują się po ponownym wejściu.' },
@@ -292,7 +294,7 @@ export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
   },
   {
     title: 'Klasyczne menu wraca',
-    text: 'Po 2.24 pierwszym ekranem znów jest stare, dobre menu gry: tło z paczki, wielkie BLOCKCRAFT, podpis wersji i te same przyciski co wcześniej. Nic nie zostało przeprojektowane – wrócił dokładnie poprzedni wygląd.',
+    text: 'Po 2.24 pierwszym ekranem znów jest stare, dobre menu gry: tło z paczki, poprzednie logo gry, podpis wersji i te same przyciski co wcześniej. Nic nie zostało przeprojektowane – wrócił dokładnie poprzedni wygląd.',
   },
   {
     title: 'Launcher bez przeszkadzania',
@@ -312,7 +314,7 @@ export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
   },
   {
     title: 'Uczciwie o oryginale',
-    text: 'Oryginalny klient Minecrafta (Java) nie działa w przeglądarce i nie da się go legalnie uruchomić bez plików Mojanga, dlatego launcher obsługuje BlockCraft: własną grę z paczką tekstur 26.2. Nie łączy się z kontem ani serwerami Minecrafta i niczego nie pobiera z sieci.',
+    text: 'Launcher uruchamia własny silnik przeglądarkowy, nie oryginalny klient Java. Nie loguje do konta Microsoft/Mojang i nie łączy się z serwerami Minecraft Java/Bedrock. Materiały są wbudowane w grę.',
   },
   {
     title: 'Moby z modeli Minecrafta 26.2',
