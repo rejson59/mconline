@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'panorama', entry: path.join(here, 'panorama.tsx'), label: 'Ruchome panoramy i wybór tła menu' },
   { name: 'facing', entry: path.join(here, 'facing.ts'), label: 'Oryginalne stany pieca, tekstury i UV' },
   { name: 'furnace', entry: path.join(here, 'furnace.ts'), label: 'Piec, surowe metale i oryginalne ikony Java' },
   { name: 'native', entry: path.join(here, 'nativeAudit.ts'), label: 'Porównanie z oryginalnymi JSON Java 1.20.4' },

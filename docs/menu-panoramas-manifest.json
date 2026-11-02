@@ -1,0 +1,126 @@
+{
+  "repository": "InventivetalentDev/minecraft-assets",
+  "transform": "Pillow 11.3.0, RGB, 512x512 Lanczos, WebP quality=90 method=6",
+  "files": [
+    {
+      "scene": "caves",
+      "version": "1.18",
+      "commit": "65c67a1ffd41640355d0aadb691567a821879b72",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_0.png",
+      "sourceBytes": 879297,
+      "sourceSha256": "8cff557cadc3be7708863fc559be69d31fe1ff3cddfe101704f1329d9f343c20",
+      "outputBytes": 44042,
+      "outputSha256": "85d6f03cadad1fa0a06c9ae32940d781ae6227332d863b7adf5ecd5c28aca033"
+    },
+    {
+      "scene": "caves",
+      "version": "1.18",
+      "commit": "65c67a1ffd41640355d0aadb691567a821879b72",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_1.png",
+      "sourceBytes": 975006,
+      "sourceSha256": "66e5b18fda1921f6bf82dd0bd1622245175adfab6104b596526d7268f5a7f7a2",
+      "outputBytes": 46870,
+      "outputSha256": "481faf0bef1ce481c0e4c26ef038abf00dc78a4d2185790a9ac96cc97920bf45"
+    },
+    {
+      "scene": "caves",
+      "version": "1.18",
+      "commit": "65c67a1ffd41640355d0aadb691567a821879b72",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_2.png",
+      "sourceBytes": 720686,
+      "sourceSha256": "a3988b0c1a0f7d5b7b59df237b8d9512a2685110238c8589858a20debe24eb2f",
+      "outputBytes": 37828,
+      "outputSha256": "777b65b952457838df73fdebf7ccd091f28f05745ee5e0594db95cb36aa8cd7e"
+    },
+    {
+      "scene": "caves",
+      "version": "1.18",
+      "commit": "65c67a1ffd41640355d0aadb691567a821879b72",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_3.png",
+      "sourceBytes": 700054,
+      "sourceSha256": "57ebac5285d053aee915d270079f5d3bd19e9b8362782100e0e8da6836a312b3",
+      "outputBytes": 30262,
+      "outputSha256": "586c9adbde329b4ccccfc0c75373fb6088bac3fee34105175c2cdc00a069cd04"
+    },
+    {
+      "scene": "caves",
+      "version": "1.18",
+      "commit": "65c67a1ffd41640355d0aadb691567a821879b72",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_4.png",
+      "sourceBytes": 6756,
+      "sourceSha256": "49dcf9fa1db650ad010c9fe95a50674168210f406c33ebdbedfb39c2486dbd7d",
+      "outputBytes": 2000,
+      "outputSha256": "bc71ee17acbe6ee511d2e6dc3e185640dfc2a144527526bfd903c49173193fe5"
+    },
+    {
+      "scene": "caves",
+      "version": "1.18",
+      "commit": "65c67a1ffd41640355d0aadb691567a821879b72",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_5.png",
+      "sourceBytes": 1122177,
+      "sourceSha256": "7888ab245c81f35c2e6c16d10872512e4c6fa7ab47a8f76063ef688213802007",
+      "outputBytes": 49204,
+      "outputSha256": "d172519386af427b6a0fbc5f5e3e56d8cea9da596dedf9548d611b85f48ed812"
+    },
+    {
+      "scene": "nether",
+      "version": "1.16",
+      "commit": "1bca5976bce1c7c553762aecb04c29f41c7ba96e",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_0.png",
+      "sourceBytes": 926254,
+      "sourceSha256": "8cd9b43d106fdb2cafa43ed112b74ce971c181088f366e7270f5858b181821bb",
+      "outputBytes": 53848,
+      "outputSha256": "ad3e6243aa9f782e0cdd23e2db393523454f3f417cd7c8bc1e6ae4d3836407f5"
+    },
+    {
+      "scene": "nether",
+      "version": "1.16",
+      "commit": "1bca5976bce1c7c553762aecb04c29f41c7ba96e",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_1.png",
+      "sourceBytes": 935499,
+      "sourceSha256": "a277f58505f9bbb9619f348e62bb55da66d6e6cdd325c6da3f91caae60525dc9",
+      "outputBytes": 54044,
+      "outputSha256": "692f004a88e66867ecfc1b5aa08f4cd3487725eeabf5343ac4dc97a7d3014119"
+    },
+    {
+      "scene": "nether",
+      "version": "1.16",
+      "commit": "1bca5976bce1c7c553762aecb04c29f41c7ba96e",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_2.png",
+      "sourceBytes": 954364,
+      "sourceSha256": "5c044e625bb79819fec2ac0eef69705f388dd4ba2f89aa6bf584eead3c6e04af",
+      "outputBytes": 33194,
+      "outputSha256": "336df5f65d3a0841141d705ff6868d05cb4ed842111c7d28876414c1fb6bf255"
+    },
+    {
+      "scene": "nether",
+      "version": "1.16",
+      "commit": "1bca5976bce1c7c553762aecb04c29f41c7ba96e",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_3.png",
+      "sourceBytes": 928744,
+      "sourceSha256": "1f33c9694d36c914996308861235ca3f29814302f87fe2698c6476d3e4e85311",
+      "outputBytes": 50220,
+      "outputSha256": "ebd1de13799dc384121eef788f64414cf4a1b3b9f8ac1308ceaa1a1afa117d33"
+    },
+    {
+      "scene": "nether",
+      "version": "1.16",
+      "commit": "1bca5976bce1c7c553762aecb04c29f41c7ba96e",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_4.png",
+      "sourceBytes": 581259,
+      "sourceSha256": "853b96972332d687eb378d090859c2114cee9531f429353eb7fdbd4d9abd749c",
+      "outputBytes": 43346,
+      "outputSha256": "522d1113d8b716efaaa91de7357df2b2358e5645109615c234279e23d9f1dfd7"
+    },
+    {
+      "scene": "nether",
+      "version": "1.16",
+      "commit": "1bca5976bce1c7c553762aecb04c29f41c7ba96e",
+      "path": "assets/minecraft/textures/gui/title/background/panorama_5.png",
+      "sourceBytes": 848164,
+      "sourceSha256": "0336243404eacdc4022edc457a76650095b03d6779fff01a86d8e476a890bc4e",
+      "outputBytes": 59948,
+      "outputSha256": "9c6b9e5e8c02260df3de316d976cde1581f455c87834ddd401955fc22495411f"
+    }
+  ]
+}

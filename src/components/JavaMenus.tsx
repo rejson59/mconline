@@ -9,6 +9,7 @@ import { loadSettings, saveSettings } from '../utils/settings';
 import { useJavaScale } from '../utils/guiScale';
 import JavaSettings from './JavaSettings';
 import JavaPanorama from './JavaPanorama';
+import { PANORAMA_SCENES, loadPanoramaPreferences, savePanoramaPreferences, resolvePanoramaScene, type PanoramaChoice } from '../utils/menuPanorama';
 
 export function JavaButton({ children, onClick, disabled, width = 200 }: { children: ReactNode; onClick?: () => void; disabled?: boolean; width?: number }) {
   return <button className="java-btn" style={{ width }} onClick={() => { const s = loadSettings(); setVolume(s.volume); setSoundLevels(s.soundVolumes); playClick(); onClick?.(); }} disabled={disabled}>{children}</button>;
@@ -23,6 +24,12 @@ export function JavaPage({ title, children, footer, overlay = false, optionsLayo
 }
 export function JavaMainMenu(props: ComponentProps<typeof LegacyMainMenu>) {
   const { saves, onPlay, onNew, onDelete, onRename, onDuplicate, onImported, onMultiplayer, onAccount, sharedSeed, sharedMode } = props;
+  const [panorama, setPanorama] = useState(loadPanoramaPreferences);
+  const [panoramaScene, setPanoramaScene] = useState(() => resolvePanoramaScene(panorama.scene));
+  const changePanorama = (choice: PanoramaChoice) => {
+    const next = { ...panorama, scene: choice };
+    setPanorama(next); setPanoramaScene(resolvePanoramaScene(choice)); savePanoramaPreferences(next);
+  };
   const [view, setView] = useState<'main'|'worlds'|'new'|'options'|'controls'|'edit'|'delete'|'about'>(sharedSeed != null ? 'new' : 'main');
   const [settings, setSettings] = useState(loadSettings), [selected, setSelected] = useState<string | null>(saves[0]?.id ?? null);
   const [query, setQuery] = useState(''), [name, setName] = useState('Nowy świat'), [seed, setSeed] = useState(sharedSeed?.toString() ?? '');
@@ -68,8 +75,24 @@ export function JavaMainMenu(props: ComponentProps<typeof LegacyMainMenu>) {
   if (view === 'delete') return <JavaPage title="Usunąć ten świat?" footer={<div className="java-button-row"><JavaButton width={150} onClick={() => { if (selected) onDelete(selected); setSelected(null); setView('worlds'); }}>Usuń</JavaButton><JavaButton width={150} onClick={() => setView('worlds')}>Anuluj</JavaButton></div>}><p className="java-confirm">„{world?.name || 'Świat'}” zostanie utracony na zawsze!<br />Tej operacji nie można cofnąć.</p></JavaPage>;
   if (view === 'edit') return <JavaPage title="Edytuj świat" footer={<JavaButton onClick={() => { if (selected) onRename?.(selected, name.trim() || 'Świat'); setView('worlds'); }}>Zapisz</JavaButton>}><label className="java-field">Nazwa świata<input className="java-input" value={name} onChange={e => setName(e.target.value)} maxLength={64} /></label><div className="java-centered"><JavaButton onClick={download}>Eksportuj kopię świata</JavaButton><JavaButton onClick={() => { if (selected) onDuplicate?.(selected); setView('worlds'); }}>Utwórz kopię</JavaButton><JavaButton onClick={() => setView('worlds')}>Anuluj</JavaButton></div></JavaPage>;
   if (view === 'about') return <JavaPage title="O tej wersji" footer={<JavaButton onClick={back}>Gotowe</JavaButton>}><p>Minecraft — nieoficjalna wersja przeglądarkowa, wydanie {GAME_VERSION}. Interfejs odtwarza Minecraft Java 1.20.4. To nie jest oficjalny Minecraft ani klient Mojang.</p><p>Grafiki i bitmapy czcionki Minecraft: © Mojang / Microsoft. Światy i serwer publiczny tego projektu nie są zgodne z serwerami Java/Bedrock.</p><div className="java-centered"><JavaButton onClick={() => setView('controls')}>Sterowanie i rozszerzenia</JavaButton>{onAccount && <JavaButton onClick={onAccount}>Konto społeczności</JavaButton>}</div></JavaPage>;
-  return <div className="java-title-screen" style={{ backgroundImage: `url(${guiSprite('panorama')})` }}>
-    <JavaPanorama /><div className="java-panorama-shade" />
+  return <div className="java-title-screen">
+    <JavaPanorama scene={panoramaScene} motion={panorama.motion} /><div className="java-panorama-shade" />
+    <details className="java-background-controls" onKeyDown={e => {
+      if (e.key === 'Escape') { e.stopPropagation(); e.currentTarget.open = false; e.currentTarget.querySelector('summary')?.focus(); }
+    }}>
+      <summary>Tło menu</summary>
+      <div>
+        <label htmlFor="menu-panorama-scene">Sceneria</label>
+        <select id="menu-panorama-scene" value={panorama.scene} onChange={e => changePanorama(e.target.value as PanoramaChoice)}>
+          {PANORAMA_SCENES.map(scene => <option key={scene.id} value={scene.id}>{scene.label}</option>)}
+          <option value="random">Losowa przy otwarciu menu</option>
+        </select>
+        <label className="java-background-motion"><input type="checkbox" checked={panorama.motion} onChange={e => {
+          const next = { ...panorama, motion: e.target.checked }; setPanorama(next); savePanoramaPreferences(next);
+        }} /> Obracaj panoramę</label>
+        <small>Wybór teł to dodatek przeglądarkowy. Ograniczenie ruchu w systemie zatrzymuje animację.</small>
+      </div>
+    </details>
     <div className="java-title-canvas" style={{ transform: `translate(-50%,-50%) scale(${scale})` }}>
       <div className="java-title-logo"><img src={guiSprite('logo')!} alt="Minecraft" width={274} height={68} /><img src={guiSprite('edition')!} alt="Java Edition" className="java-edition" /><span className="java-splash">Also try the browser!</span></div>
       <div className="java-title-buttons"><JavaButton onClick={() => setView('worlds')}>Tryb jednoosobowy</JavaButton><JavaButton disabled={!onMultiplayer} onClick={onMultiplayer}>Tryb wieloosobowy</JavaButton><JavaButton onClick={() => setView('about')}>O wersji przeglądarkowej...</JavaButton><div className="java-button-row"><JavaButton width={98} onClick={() => setView('options')}>Opcje...</JavaButton><JavaButton width={98} onClick={() => setView('about')}>Informacje</JavaButton></div></div>

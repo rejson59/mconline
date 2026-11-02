@@ -118,3 +118,14 @@ Reproduction: scripts/sync-java-facing.py; no runtime downloads.
 Original data and artwork remain Mojang/Microsoft property and are NOT MIT.
 The project-written comparison, renderer and interaction code are separate.
 Existing unofficial-product and trademark disclaimers continue to apply.
+
+4.25 optional title panoramas (third-party artwork, NOT MIT):
+Minecraft Java 1.18: 65c67a1ffd41640355d0aadb691567a821879b72
+Minecraft Java 1.16: 1bca5976bce1c7c553762aecb04c29f41c7ba96e
+Mirror: InventivetalentDev/minecraft-assets, textures/gui/title/background/panorama_0..5.png.
+Original source and derived WebP SHA-256: docs/menu-panoramas-manifest.json.
+Compiler: scripts/compile-menu-panoramas.py (512x512 resampling, WebP quality 90).
+Embedded data: src/game/art/menuPanoramas.generated.ts; no runtime downloads.
+The default Java 1.20.4 scene remains in javaGui.generated.ts. These assets remain
+Mojang/Microsoft property and are NOT covered by this project's MIT license.
+Multiple background choices are a browser extension, not a vanilla 1.20.4 feature.

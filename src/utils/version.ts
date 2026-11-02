@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.24.0';
-export const GAME_RELEASE_NAME = 'Piec we właściwą stronę';
+export const GAME_VERSION = '4.25.0';
+export const GAME_RELEASE_NAME = 'Menu w ruchu';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.25: menu w ruchu', text: 'Prawdziwa obracana panorama, trzy scenerie Minecrafta i zapis wyboru. Pauza ruchu, systemowe ograniczenie animacji, usypianie ukrytej karty i uproszczone tło bez WebGL.' },
   { title: '4.24: kierunek pieca jak w Java', text: 'Piec stawia się frontem przeciwnie do poziomego kierunku patrzenia gracza, niezależnie od patrzenia w górę lub w dół. Rozpalanie i gaśnięcie zachowują kierunek, zapis i zawartość. Wydobywanie, wybieranie bloku i ochrona działek obsługują wszystkie osiem stanów.' },
   { title: '4.24: oryginalne tekstury i obrót modelu', text: 'Cztery tekstury pieca pochodzą dokładnie z Java 1.20.4, bez proceduralnego wygładzania. Położenie frontu i obrót tekstury góry/spodu porównujemy z oryginalnymi blockstates i modelami. Stare piece zachowują swój dotychczasowy kierunek.' },
   { title: '4.23: piec, surowe metale i węgiel drzewny', text: 'Piec przetapia w 10 sekund, a węgiel wystarcza na osiem przedmiotów. Żelazo i złoto wypadają jako surowce, działają Fortune i Silk Touch. Drewno daje węgiel drzewny; można nim palić, robić pochodnie i ogniska. Ognisko bez Silk Touch zostawia dwa węgle drzewne. Wiadro lawy zostaje po zużyciu paliwa.' },

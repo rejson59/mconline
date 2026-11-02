@@ -1113,3 +1113,24 @@ body, button, input, select, textarea, .mc-btn, .mc-input { font-family: 'Java B
 .java-slider input { inset: -1px; width: calc(100% + 2px); height: 20px; }
 /* Native labels remain one line; full names/values are exposed to assistive tech. */
 .java-slider > span { max-width: calc(100% - 6px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 4.25: six-face menu panorama; no 3D claim for the lightweight fallback. */
+.java-panorama { pointer-events: none; filter: blur(1px); }
+.java-panorama-fallback { position: absolute; inset: 0; background-size: max(120vw, 120vh) max(120vw, 120vh); background-position: center; animation: java-panorama-pan 40s ease-in-out infinite alternate; }
+@keyframes java-panorama-pan { from { background-position: 30% 30%; } to { background-position: 70% 70%; } }
+.java-panorama[data-motion=paused] .java-panorama-fallback { animation-play-state: paused; }
+.java-panorama canvas { position: absolute; inset: 0; opacity: 0; }
+.java-panorama[data-renderer=webgl] canvas { opacity: 1; }
+.java-panorama[data-renderer=webgl] .java-panorama-fallback { visibility: hidden; animation-play-state: paused; }
+.java-panorama-shade { pointer-events: none; backdrop-filter: none; }
+.java-background-controls { position: absolute; z-index: 2; right: 8px; top: 8px; color: white; font-size: 12px; max-width: calc(100% - 16px); text-shadow: 1px 1px #222; }
+.java-background-controls summary { cursor: pointer; background: #0009; border: 1px solid #888; padding: 6px 10px; width: fit-content; margin-left: auto; }
+.java-background-controls > div { display: grid; gap: 8px; width: 250px; max-width: 100%; padding: 12px; background: #181818ed; border: 1px solid #888; }
+.java-background-controls select { color: white; background: #333; border: 1px solid #aaa; font: inherit; padding: 6px; width: 100%; }
+.java-background-motion { display: flex; align-items: center; gap: 6px; }
+.java-background-controls input { accent-color: #ddd; }
+.java-background-controls small { color: #bbb; line-height: 1.4; }
+.java-background-controls :focus-visible { outline: 2px solid white; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .java-panorama-fallback { animation: none; } }
+/* No GPU filter/transform layer is required by the no-WebGL fallback. */
+.java-panorama[data-renderer=fallback] { filter: none; }

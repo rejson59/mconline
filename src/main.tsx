@@ -24,25 +24,13 @@ function showFatal(message: string) {
     </div>`;
 }
 
-const webglOk = (() => {
-  try {
-    const c = document.createElement("canvas");
-    return !!(c.getContext("webgl2") || c.getContext("webgl") || c.getContext("experimental-webgl"));
-  } catch {
-    return false;
-  }
-})();
-
 window.addEventListener("error", (e) => {
   console.error(e.error ?? e.message);
 });
 
-if (!webglOk) {
-  showFatal(
-    "Twoja przeglądarka nie udostępnia WebGL, więc grafika 3D nie może zostać uruchomiona. " +
-      "Włącz akcelerację sprzętową (chrome://settings/system lub about:preferences#general) i odśwież stronę."
-  );
-} else if (rootEl) {
+// The menu has a lightweight fallback. Only entering a world requires WebGL;
+// GameView reports that failure with a return-to-menu action.
+if (rootEl) {
   try {
     createRoot(rootEl).render(
       <StrictMode>
