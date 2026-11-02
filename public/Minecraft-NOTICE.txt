@@ -52,3 +52,13 @@ Textures: hud/heart/absorbing_{full,half}.png, hud/effect_background.png,
           mob_effect/{absorption,regeneration,fire_resistance,speed,night_vision,strength}.png
 Audio event: item.totem.use -> sounds/item/totem/use_totem.ogg (35,952 bytes).
 No ownership or redistribution rights are granted by the project's MIT license.
+
+4.17 brewing items and sound (same third-party ownership, NOT MIT):
+Pinned source mirror commit: 90d256dfee7b6fd8014e1bc3b107e64a530c5f9b
+Compiler: scripts/compile-java-brewing.py
+Embedded data: src/game/art/javaBrewing.generated.ts
+Six original textures/item/*.png: blaze_powder, golden_carrot,
+  glistering_melon_slice, glass_bottle, potion, potion_overlay.
+Potion overlay colors follow the effect colors; the glass layer is not tinted.
+Audio event block.brewing_stand.brew: sounds/block/brewing_stand/brew{1,2}.ogg.
+No rights to these third-party materials are granted by the project's MIT license.

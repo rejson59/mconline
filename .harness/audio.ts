@@ -1,3 +1,4 @@
+import { BREWING_SOUND_EVENTS, BREWING_SOUND_FILES } from '../src/game/art/javaBrewing.generated';
 import { RESCUE_SOUND_FILES, RESCUE_SOUND_EVENTS } from '../src/game/art/javaRescue.generated';
 /** Functional Web Audio graph tests. Actual OGG decoding is also browser-tested. */
 import assert from 'node:assert/strict';
@@ -71,5 +72,10 @@ Audio.setSoundLevels({...DEFAULT_SOUND_LEVELS});Audio.playTotem();await flush();
 check('totem activation starts its own original sample',c.sources.length===start+1 && c.sources.at(-1)?.started);
 check('native totem event resolves to its original recording',RESCUE_SOUND_EVENTS['item.totem.use'][0].name==='item/totem/use_totem');
 check('embedded totem recording is a real OGG',Buffer.from(RESCUE_SOUND_FILES['item/totem/use_totem'],'base64').subarray(0,4).toString()==='OggS');
+Audio.setListener(0,0,0,0);Audio.setVolume(1);Audio.setSoundLevels({...DEFAULT_SOUND_LEVELS,blocks:0});start=c.sources.length;Audio.playBrew(1,0,0);await flush();
+check('brewing respects block mixer mute',c.sources.length===start);
+Audio.setSoundLevels({...DEFAULT_SOUND_LEVELS});Audio.playBrew(1,0,0);await flush();check('brewing starts its own spatial native sample',c.sources.length===start+1&&c.sources.at(-1)?.started);
+check('brewing has exactly the two native sound variants',BREWING_SOUND_EVENTS['block.brewing_stand.brew'].length===2);
+for(const [name,data] of Object.entries(BREWING_SOUND_FILES))check('native brewing OGG header '+name,Buffer.from(data,'base64').subarray(0,4).toString()==='OggS');
 Audio.stopWorldAudio();
 console.log(`${checks} audio checks passed`);

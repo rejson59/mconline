@@ -2,8 +2,9 @@
 // See public/Minecraft-NOTICE.txt and scripts/compile-java-sounds.py.
 import { JAVA_SOUND_EVENTS as BASE_EVENTS, JAVA_SOUND_FILES as BASE_FILES } from './art/javaSounds.generated';
 import { RESCUE_SOUND_EVENTS, RESCUE_SOUND_FILES } from './art/javaRescue.generated';
-const JAVA_SOUND_EVENTS = { ...BASE_EVENTS, ...RESCUE_SOUND_EVENTS };
-const JAVA_SOUND_FILES = { ...BASE_FILES, ...RESCUE_SOUND_FILES };
+import { BREWING_SOUND_FILES, BREWING_SOUND_EVENTS } from './art/javaBrewing.generated';
+const JAVA_SOUND_EVENTS = { ...BASE_EVENTS, ...RESCUE_SOUND_EVENTS, ...BREWING_SOUND_EVENTS };
+const JAVA_SOUND_FILES = { ...BASE_FILES, ...RESCUE_SOUND_FILES, ...BREWING_SOUND_FILES };
 import { B, BLOCKS } from './blocks';
 import { SOUND_CATEGORIES, DEFAULT_SOUND_LEVELS, type SoundCategory, type SoundLevels } from '../utils/soundSettings';
 export type { SoundCategory, SoundLevels } from '../utils/soundSettings';
@@ -207,3 +208,5 @@ export function unlockAudio() {
     const name = JAVA_SOUND_EVENTS[event]?.[0]?.name; if (name) void decode(name);
   }
 }
+
+export function playBrew(x:number,y:number,z:number) { sample('block.brewing_stand.brew', 'blocks', 1, 1, position(x,y,z)); }
