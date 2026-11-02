@@ -2850,7 +2850,7 @@ section('2.4: brewing inside the engine');
   g.inventory = new Inventory();
   g.inventory.slots[0] = { id: I.WATER_BOTTLE, count: 3 };
   g.inventory.slots[1] = { id: I.NETHER_WART, count: 4 };
-  g.inventory.slots[2] = { id: I.BLAZE_ROD, count: 2 };
+  g.inventory.slots[2] = { id: I.BLAZE_POWDER, count: 2 };
   g.brewings = new Map();
   g.brewingPos = { x: 1, y: 2, z: 3 };
   g.body = { pos: new THREE.Vector3(1, 2, 3) };
@@ -2871,22 +2871,22 @@ section('2.4: brewing inside the engine');
   g.clickBrewing('b0', false);
   g.inventory.cursor = { id: I.NETHER_WART, count: 1 };
   g.clickBrewing('ingredient', false);
-  g.inventory.cursor = { id: I.BLAZE_ROD, count: 1 };
+  g.inventory.cursor = { id: I.BLAZE_POWDER, count: 1 };
   g.clickBrewing('fuel', false);
   const stand = g.brewings.get(brewingKey(1, 2, 3));
   eq('the bottle lands in slot one', stand.bottles[0]?.id, I.WATER_BOTTLE);
   eq('the ingredient sits in the cup', stand.ingredient?.id, I.NETHER_WART);
-  eq('the fuel rests on the tray', stand.fuel?.id, I.BLAZE_ROD);
+  eq('the fuel rests on the tray', stand.fuel?.id, I.BLAZE_POWDER);
   // a random item is not a brewing ingredient
   g.inventory.cursor = { id: I.STICK, count: 1 };
   g.clickBrewing('ingredient', false);
   eq('the cup keeps the wart', stand.ingredient?.id, I.NETHER_WART);
   eq('the stick stayed in the cursor', g.inventory.cursor?.id, I.STICK);
-  // the full 8 s batch
-  for (let t = 0; t < 8.2; t += 0.5) g.updateBrewings(0.5);
+  // the full 400 countdown ticks plus the start tick
+  for (let t = 0; t < 20.1; t += 0.5) g.updateBrewings(0.5);
   eq('water + wart = awkward potion', stand.bottles[0]?.id, I.POTION_AWKWARD);
-  eq('one brew was consumed from the rod', stand.fuelLeft, 2);
-  eq('the ingredient survived the brew', stand.ingredient?.id, I.NETHER_WART);
+  eq('one of twenty powder charges was spent', stand.fuelLeft, 19);
+  eq('one ingredient was consumed', stand.ingredient, null);
   check('the alchemist achievement fired', (g.unlocked as Set<string>).has('alchemist'));
 
   // breaking the stand spills everything
@@ -2896,10 +2896,10 @@ section('2.4: brewing inside the engine');
   g.spawnDrop = ((id: number, n: number) => { g.dropped = (g.dropped ?? 0) + n; droppedIds.push(id); });
   g.updateBrewings(0.1);
   check('the stand state is gone after the block vanished', !g.brewings.get(brewingKey(1, 2, 3)));
-  // the rod was already spent by the brew, so potion + wart are all that spill
-  check('the contents spilled to the ground', (g.dropped ?? 0) === 2, String(g.dropped));
+  // Both powder and wart were consumed; breaking must not duplicate them.
+  check('the contents spilled to the ground', (g.dropped ?? 0) === 1, String(g.dropped));
   check('the brewed potion survived the spill', droppedIds.includes(I.POTION_AWKWARD));
-  check('the ingredient spilled too', droppedIds.includes(I.NETHER_WART));
+  check('consumed ingredient cannot spill again', !droppedIds.includes(I.NETHER_WART));
 }
 
 section('2.4: potion effects inside the engine');
@@ -2923,8 +2923,8 @@ section('2.4: potion effects inside the engine');
   // healing potion: instant, consumed
   g.inventory.slots[0] = { id: I.POTION_HEAL, count: 1 };
   g.drinkPotion({ id: I.POTION_HEAL, count: 1 });
-  eq('healing restores seven points', g.health, 12);
-  eq('the bottle was consumed', g.inventory.slots[0], null);
+  eq('healing I restores four points', g.health, 9);
+  eq('drinking returns a glass bottle', g.inventory.slots[0]?.id, I.BOTTLE);
   check('the tonic achievement fired', (g.unlocked as Set<string>).has('tonic'));
 
   // timed buff: speed
@@ -2951,7 +2951,7 @@ section('2.4: potion effects inside the engine');
   // the awkward brew is harmless but still drunk
   g.inventory.slots[0] = { id: I.POTION_AWKWARD, count: 1 };
   g.drinkPotion({ id: I.POTION_AWKWARD, count: 1 });
-  eq('awkward tastes like dirt', g.inventory.slots[0], null);
+  eq('awkward still returns a glass bottle', g.inventory.slots[0]?.id, I.BOTTLE);
   check('and no effect sticks', g.effects.size === 0);
   check('it does not count toward mastery', (g.potionsDrunk as Set<number>).size === 1);
 }
@@ -3195,8 +3195,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.16.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Minecraft — efekty i zgodność', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.17.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Alchemia Java', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -9654,6 +9654,78 @@ section('4.16: hidden native effect chains, promotion boundaries and persistence
   eq('equal-duration HUD order uses native effect colors','strength,fire,regen,night,speed,absorption',order);
   check('long finite effects use color order above the 32147 tick threshold',compareEffectIcons({id:'regen',left:3000},{id:'fire',left:2000})>0);
   check('duration ordering still applies at the exact native threshold',compareEffectIcons({id:'regen',left:32147/20},{id:'fire',left:32148/20})>0);
+}
+
+section('4.17: native base alchemy, 20 Hz stand, save compatibility and bottle conservation');
+{
+  const {worldSimulationActive}=await import('../src/game/engine');
+  for(const mode of ['playing','inventory','chat','dead','furnace','chest','enchant','trade','anvil','brewing'] as const)check('native non-pausing UI still simulates the world '+mode,worldSimulationActive(mode));
+  for(const mode of ['paused','journal','waypoints'] as const){check('singleplayer pause UI stops simulation '+mode,!worldSimulationActive(mode));check('multiplayer UI cannot pause other players '+mode,worldSimulationActive(mode,true));}
+  const {brewResult,tickBrewing,applyBrew,cleanBrewing,canStartBrew,brewingFrame,POTIONS,HEAL_AMOUNT,SPEED_FACTOR,STRENGTH_DAMAGE}=await import('../src/game/brewing');
+  const {JAVA_BREWING_ITEMS}=await import('../src/game/art/javaBrewing.generated');
+  const {createHash}=await import('node:crypto');
+  for(const [name,sha]of [['blaze_powder','be1d8c93bbff955c94c194bb944b200d884d30fcc7e221fff739881d6ed5eca2'],['golden_carrot','45a268364038d628e05d74be2f09a7e85e21236e2f7474f1d32d7d5021476f8f'],['glistering_melon_slice','563a1feab9a23c8c5e16b97d817fbb1d8b1d3347bac590d3bc4d30b0c3f06074']])eq('native ingredient byte hash '+name,createHash('sha256').update(Buffer.from(JAVA_BREWING_ITEMS[name],'base64')).digest('hex'),sha);
+
+  const {javaBrewingItemPixels,JAVA_BREWING_IDS}=await import('../src/game/brewingArt');
+  const {decodePng}=await import('../src/game/art/miniPng');
+  const recipes=[[I.GLISTERING_MELON,I.POTION_HEAL],[I.MAGMA_CREAM,I.POTION_FIRE],[I.SUGAR,I.POTION_SPEED],[I.GOLDEN_CARROT,I.POTION_NIGHT],[I.BLAZE_POWDER,I.POTION_STRENGTH],[I.GHAST_TEAR,I.POTION_REGEN]];
+  for(const [ingredient,result] of recipes)eq('awkward base native recipe '+ingredient,brewResult(I.POTION_AWKWARD,ingredient),result);
+  for(const [ingredient] of recipes)eq('water cannot skip the awkward base '+ingredient,brewResult(I.WATER_BOTTLE,ingredient),ingredient===I.GOLDEN_CARROT?null:I.POTION_MUNDANE);
+  eq('water plus glowstone makes thick, not night vision',brewResult(I.WATER_BOTTLE,I.GLOWSTONE_DUST),I.POTION_THICK);
+  eq('awkward plus glowstone cannot manufacture regeneration',brewResult(I.POTION_AWKWARD,I.GLOWSTONE_DUST),null);
+  eq('blaze rod is not strength ingredient',brewResult(I.POTION_AWKWARD,I.BLAZE_ROD),null);
+  eq('water plus redstone makes mundane',brewResult(I.WATER_BOTTLE,I.REDSTONE),I.POTION_MUNDANE);
+  check('base effects match supported Java I values',HEAL_AMOUNT===4&&SPEED_FACTOR===1.2&&STRENGTH_DAMAGE===3&&POTIONS[I.POTION_REGEN].duration===45&&[I.POTION_FIRE,I.POTION_SPEED,I.POTION_NIGHT,I.POTION_STRENGTH].every(id=>POTIONS[id].duration===180));
+  const make=()=>{const s=emptyBrewing(4,65,4);s.bottles=[0,1,2].map(()=>({id:I.WATER_BOTTLE,count:1}));s.ingredient={id:I.NETHER_WART,count:4};s.fuel={id:I.BLAZE_POWDER,count:1};return s;};
+  check('a valid native stand can start',canStartBrew(make()));
+  const s=make();tickBrewing(s,.025);eq('no fuel/business mutations before a full game tick',s.fuel?.count,1);
+  tickBrewing(s,.025);check('first tick loads powder, spends a charge and sets native 400 ticks',s.fuel===null&&s.fuelLeft===19&&s.remainingTicks===400&&s.progress===0);
+  tickBrewing(s,19.95);eq('399 countdown ticks do not finish a brew',s.bottles[0]?.id,I.WATER_BOTTLE);
+  check('exact completion consumes one ingredient for all three bottles',tickBrewing(s,.05).done&&s.bottles.every(b=>b?.id===I.POTION_AWKWARD)&&s.ingredient?.count===3&&s.fuelLeft===19);
+  const idle=emptyBrewing(0,0,0);idle.fuel={id:I.BLAZE_POWDER,count:1};tickBrewing(idle,.05);
+  check('idle stand loads fuel even without bottles, but does not spend charges',idle.fuel===null&&idle.fuelLeft===20&&idle.remainingTicks===0);
+  const rod=make();rod.fuel={id:I.BLAZE_ROD,count:1};tickBrewing(rod,30);check('rod is neither auto-converted nor accepted as native fuel',rod.fuel.count===1&&rod.fuelLeft===0&&rod.bottles[0]?.id===I.WATER_BOTTLE);
+  const change=make();tickBrewing(change,.05);change.ingredient={id:I.SUGAR,count:4};tickBrewing(change,.05);
+  check('ingredient type change cancels mid-brew and does not refund the charge',change.remainingTicks===0&&change.fuelLeft===19&&change.bottles[0]?.id===I.WATER_BOTTLE);
+  const bottle=make();tickBrewing(bottle,.05);bottle.bottles[0]=null;tickBrewing(bottle,.05);eq('removing one bottle does not restart remaining valid bottles',bottle.remainingTicks,399);
+  bottle.bottles=[null,null,null];tickBrewing(bottle,.05);eq('removing all bottles cancels on next tick',bottle.remainingTicks,0);
+  const last=make();tickBrewing(last,20);last.ingredient={id:I.SUGAR,count:1};tickBrewing(last,.05);
+  check('native final-tick order brews a valid current ingredient before mismatch cancellation',last.bottles.every(b=>b?.id===I.POTION_MUNDANE)&&last.ingredient===null);
+  const noProgress=make();for(const dt of [NaN,Infinity,-1,0])tickBrewing(noProgress,dt);check('invalid or zero time cannot spend items or fuel',noProgress.fuel?.count===1&&noProgress.remainingTicks===0);
+  for(const fps of [20,30,60,144]){
+    const stand=make();for(let f=0;f<fps*20;f++)tickBrewing(stand,1/fps);
+    check('stand duration independent of render FPS '+fps,stand.remainingTicks===1&&stand.bottles[0]?.id===I.WATER_BOTTLE);
+    tickBrewing(stand,.05);check('last countdown tick finishes at all FPS '+fps,stand.bottles.every(b=>b?.id===I.POTION_AWKWARD)&&stand.ingredient?.count===3);
+  }
+  const resource=make();resource.ingredient!.count=20;
+  for(let n=0;n<20;n++){resource.bottles=[{id:I.WATER_BOTTLE,count:1},null,null];tickBrewing(resource,20.05);eq('one powder covers exactly twenty start/completion pairs '+n,resource.fuelLeft,19-n);}
+  check('twenty batches consumed exactly twenty ingredients and one powder',resource.ingredient===null&&resource.fuel===null&&resource.fuelLeft===0);
+  resource.bottles[0]={id:I.WATER_BOTTLE,count:1};resource.ingredient={id:I.NETHER_WART,count:1};tickBrewing(resource,30);eq('twenty-first brew needs new powder',resource.bottles[0]?.id,I.WATER_BOTTLE);
+  const legacy=cleanBrewing({...make(),rules:undefined,progress:7,fuelLeft:2,fuel:{id:I.BLAZE_ROD,count:2}});
+  check('legacy eight-second state keeps paid credits and rods, restarting progress safely',legacy.progress===0&&legacy.remainingTicks===0&&legacy.fuelLeft===2&&legacy.fuel?.id===I.BLAZE_ROD&&legacy.fuel.count===2&&legacy.ingredient?.count===4);
+  const saving=make();tickBrewing(saving,6.475);const saved=cleanBrewing(JSON.parse(JSON.stringify(saving)));
+  check('native save preserves exact countdown and sub-tick remainder',saved.remainingTicks===saving.remainingTicks&&Math.abs(saved.tickRemainder!-saving.tickRemainder!)<1e-9&&saved.brewingIngredient===I.NETHER_WART&&saved.fuelLeft===19);
+  tickBrewing(saving,13.575);tickBrewing(saved,13.575);eq('restored native stand completes without double fuel/ingredient cost',JSON.stringify(saved),JSON.stringify(saving));
+  const corrupt=cleanBrewing({...make(),fuelLeft:NaN,remainingTicks:Infinity,tickRemainder:Infinity});check('corrupt clocks cannot create free charged fuel',corrupt.fuelLeft===0&&corrupt.remainingTicks===0&&corrupt.tickRemainder===0);
+  const mixed=applyBrew([{id:I.POTION_AWKWARD,count:1,name:'Old',ench:{sharpness:5}},{id:I.POTION_HEAL,count:1,name:'Keep'},null],I.SUGAR);
+  check('supported conversion resets bottle custom data like native mix, without touching unmatched bottles',mixed.bottles[0]?.id===I.POTION_SPEED&&!mixed.bottles[0].name&&!mixed.bottles[0].ench&&mixed.bottles[1]?.name==='Keep');
+  const craft=new Inventory();craft.grid[4]={id:I.BLAZE_ROD,count:1};check('one rod crafts exactly two powders in a backpack grid',craft.gridMatch(false)?.out.id===I.BLAZE_POWDER&&craft.gridMatch(false)?.out.count===2);
+  const stand=make(),g=Object.assign(Object.create(Game.prototype),{inventory:new Inventory(),ui:'brewing',brewings:new Map([[brewingKey(4,65,4),stand]]),brewingPos:{x:4,y:65,z:4},emitHud(){},message(){},notePickup(){},saveProfileNow(){}}) as any;
+  stand.bottles=[null,null,null];g.inventory.cursor={id:I.WATER_BOTTLE,count:5};g.clickBrewing('b0',false);g.clickBrewing('b0',false);
+  check('regular click inserts one bottle, never merges a legacy stack into the slot',stand.bottles[0]?.count===1&&g.inventory.cursor.count===4);
+  g.inventory.cursor=null;g.inventory.slots[0]={id:I.BLAZE_POWDER,count:8};g.inventoryAction('inventory',0,{type:'quick'});
+  check('shift-click powder prioritizes native fuel slot, not strength ingredient',stand.fuel?.count===9&&stand.ingredient?.id===I.NETHER_WART&&g.inventory.slots[0]===null);
+  tickBrewing(stand,.05);const left=stand.remainingTicks;g.inventory.cursor={id:I.BLAZE_POWDER,count:1};g.clickBrewing('fuel',false);eq('changing fuel does not reset in-flight progress',stand.remainingTicks,left);
+  const drink=Object.assign(Object.create(Game.prototype),{mode:'survival',inventory:new Inventory(),selected:0,potionsDrunk:new Set(),health:10,body:{pos:new THREE.Vector3()},emitHud(){},updateHand(){},message(){},spawnParticles(){},unlock(){},dropped:0,spawnDrop(_id:number,n:number){this.dropped+=n;}}) as any;drink.clearEffects();
+  drink.inventory.slots[0]={id:I.POTION_FIRE,count:1};drink.drinkPotion(drink.inventory.slots[0]);check('actual fire potion lasts 180 seconds and replaces last potion with empty bottle',drink.effectLeft('fire')===180&&drink.inventory.slots[0]?.id===I.BOTTLE);
+  drink.inventory.slots=Array(36).fill(null).map(()=>({id:B.STONE,count:64}));drink.inventory.slots[0]={id:I.POTION_HEAL,count:2};drink.drinkPotion(drink.inventory.slots[0]);check('legacy stacked potion with full backpack drops exactly one empty bottle, not the remaining potion',drink.health===14&&drink.inventory.slots[0].count===1&&drink.dropped===1);
+  drink.mode='creative';drink.inventory.slots[0]={id:I.POTION_HEAL,count:1};drink.drinkPotion(drink.inventory.slots[0]);check('creative drinking does not create free empty bottles',drink.health===18&&drink.inventory.slots[0]?.id===I.POTION_HEAL&&drink.dropped===1);
+  for(const [name,png] of Object.entries(JAVA_BREWING_ITEMS)){const decoded=decodePng(png);check('native brewing PNG dimensions '+name,decoded.width===16&&decoded.height===16);}
+  for(const id of JAVA_BREWING_IDS){const pixels=javaBrewingItemPixels(id);check('native brewing item has opaque and transparent artwork '+id,!!pixels&&pixels.length===1024&&pixels.some((v,i)=>i%4===3&&v>0)&&pixels.some((v,i)=>i%4===3&&v===0));}
+  const colored=javaBrewingItemPixels(I.POTION_FIRE)!,again=colored.slice();colored.fill(0);eq('cached native item data cannot be mutated by consumers',JSON.stringify(javaBrewingItemPixels(I.POTION_FIRE)),JSON.stringify(again));
+  check('native potion colors differ between effects',JSON.stringify(javaBrewingItemPixels(I.POTION_FIRE))!==JSON.stringify(javaBrewingItemPixels(I.POTION_SPEED)));
+  for(let ticks=1;ticks<=400;ticks++){const frame=brewingFrame({...make(),remainingTicks:ticks});check('native progress and bubble cropping at countdown '+ticks,frame.progress===Math.floor(28*(1-ticks/400))&&frame.bubbles===[29,24,20,16,11,6,0][Math.floor(ticks/2)%7]);}
+  for(let fuel=0;fuel<=20;fuel++)eq('native fuel pixel ceil '+fuel,brewingFrame({...make(),fuelLeft:fuel}).fuel,Math.ceil(18*fuel/20));
 }
 
 // =================================================================== report

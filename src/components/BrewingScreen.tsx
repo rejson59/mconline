@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
 import { I } from '../game/items';
-import { BREW_TIME, POTIONS, brewResult, type BrewingState } from '../game/brewing';
+import { POTIONS, brewResult, brewingFrame, type BrewingState } from '../game/brewing';
 import { BREWING, CONTAINER, containerInvSlot } from '../game/containerLayout';
 import { guiSprite } from '../game/art/uiSprites';
 import { GuiInventory, GuiOverlay, GuiSlot, GuiWindow, useCursorPos, useGuiScale } from './GuiContainer';
@@ -10,7 +10,7 @@ import { GuiInventory, GuiOverlay, GuiSlot, GuiWindow, useCursorPos, useGuiScale
  * 2.28: statyw alchemiczny 1:1 jak `BrewingStandScreen` z Minecrafta.
  *
  * Panel `gui/container/brewing_stand.png` (176 × 166): trzy fiolki w literę V,
- * składnik u góry, różdżka w lewym górnym slocie, pęcherzyki `bubbles.png`
+ * składnik u góry, płomienny proszek w lewym górnym slocie, pęcherzyki `bubbles.png`
  * (12 × 29) rosnące od dołu, pionowy pasek warzenia `brew_progress.png`
  * (9 × 28) i poziomy pasek paliwa `fuel_length.png` (18 × 4) – wszystkie
  * na waniliowych współrzędnych.
@@ -25,18 +25,12 @@ function brewPreview(s: BrewingState): string | null {
 }
 
 /** Warstwy sprite'a, które rosną od dołu (przycinamy górną część obrazka). */
-function rising(sprite: string | null, x: number, y: number, w: number, h: number, frac: number, bottomToTop = true) {
-  const f = Math.max(0, Math.min(1, frac));
-  const visible = Math.round(h * f);
+function rising(sprite: string | null, x: number, y: number, w: number, h: number, visible: number, axis: 'bottom'|'top'|'left' = 'bottom') {
   if (!sprite || visible <= 0) return null;
-  // Obrazek przycinamy tak, żeby widoczna była dolna (albo lewa) część –
-  // dokładnie jak `blit` z wanilii, który rysuje tylko fragment tekstury.
-  const clip = bottomToTop
-    ? `inset(${h - visible}px 0 0 0)`
-    : `inset(0 ${w - Math.round(w * f)}px 0 0)`;
+  const clip = axis === 'bottom' ? `inset(${h-visible}px 0 0 0)` : axis === 'top' ? `inset(0 0 ${h-visible}px 0)` : `inset(0 ${w-visible}px 0 0)`;
   return (
     <div
-      key={`${x},${y}`}
+      key={`${x},${y}`} data-java-brew-crop={`${axis}:${visible}`}
       style={{
         position: 'absolute', left: x, top: y, width: w, height: h,
         backgroundImage: `url(${sprite})`, backgroundSize: `${w}px ${h}px`,
@@ -64,22 +58,20 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
   };
   if (!stand) return null;
 
-  const frac = Math.max(0, Math.min(1, stand.progress / BREW_TIME));
-  const lit = stand.progress > 0;
-  const fuelLeft = Math.max(0, Math.min(1, stand.fuelLeft > 0 ? stand.fuelLeft / 3 : stand.fuel ? 1 : 0));
+  const frame = brewingFrame(stand), lit = frame.lit;
   const preview = brewPreview(stand);
   const noFuel = stand.fuel === null;
-  const hasFuelLeft = stand.fuelLeft > 0 || (stand.fuel !== null && stand.fuel.id === I.BLAZE_ROD);
+  const hasFuelLeft = stand.fuelLeft > 0 || stand.fuel?.id === I.BLAZE_POWDER;
   const slots = Array.from({ length: 36 }, (_, i) => containerInvSlot(i));
   const hint = noFuel && !hasFuelLeft
-    ? 'Potrzebna płomienna różdżka, żeby rozpalić kocioł.'
+    ? 'Potrzebny płomienny proszek.'
     : lit
       ? `Warzenie… ${preview ?? ''}`
       : hasFuelLeft
         ? preview
           ? `Gotowe do warzenia: ${preview}.`
-          : 'Dołóż fiolkę z wodą albo zaczarowany napój.'
-        : 'Paliwo się skończyło – dołóż różdżkę.';
+          : 'Dołóż butelkę wody albo klarowną miksturę.'
+        : 'Paliwo się skończyło – dołóż płomienny proszek.';
 
   return (
     <>
@@ -96,7 +88,6 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
               onHover={setHover}
               onAction={(a) => { game.inventoryAction('brewing', i, a); refresh(); }}
               onClick={(r) => { game.clickBrewing((['b0', 'b1', 'b2'] as const)[i], r); refresh(); }}
-              highlight={lit}
             />
           );
         })}
@@ -121,29 +112,20 @@ export default function BrewingScreen({ game, icons, onChange }: { game: Game; i
         />
 
         {/* Pęcherzyki i postęp warzenia – jak `blit` w waniliowym ekranie. */}
-        {lit && rising(guiSprite('brewing_bubbles'), BREWING.bubbles.x, BREWING.bubbles.y, BREWING.bubbles.w, BREWING.bubbles.h, Math.min(1, frac * 1.15 + 0.1))}
-        {rising(guiSprite('brewing_progress'), BREWING.progress.x, BREWING.progress.y, BREWING.progress.w, BREWING.progress.h, frac)}
+        {lit && rising(guiSprite('brewing_bubbles'), BREWING.bubbles.x, BREWING.bubbles.y, BREWING.bubbles.w, BREWING.bubbles.h, frame.bubbles)}
+        {rising(guiSprite('brewing_progress'), BREWING.progress.x, BREWING.progress.y, BREWING.progress.w, BREWING.progress.h, frame.progress, 'top')}
         {rising(
           guiSprite('brewing_fuel'),
           BREWING.fuelBar.x,
           BREWING.fuelBar.y,
           BREWING.fuelBar.w,
           BREWING.fuelBar.h,
-          hasFuelLeft ? fuelLeft : 0,
-          false
+          frame.fuel,
+          'left'
         )}
 
-        {/* Podpis stanu – wanilia nie ma tekstu, ale gracz musi wiedzieć, co dalej. */}
-        <span
-          title={hint}
-          style={{
-            position: 'absolute', left: 8, top: 74, maxWidth: 160,
-            fontSize: 7, lineHeight: '8px', color: '#5a5a5a', whiteSpace: 'nowrap',
-            overflow: 'hidden', textOverflow: 'ellipsis',
-          }}
-        >
-          {hint}
-        </span>
+        {/* Keep guidance accessible without adding non-native text to the panel. */}
+        <span className="sr-only" role="status">{hint}</span>
 
         <GuiInventory game={game} icons={icons} slots={slots} onHover={setHover} onChange={refresh} />
       </GuiWindow>

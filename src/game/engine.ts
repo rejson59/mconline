@@ -22,8 +22,8 @@ import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButto
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
 import {
-  BREW_FUELS, BREWING_INGREDIENTS, HEAL_AMOUNT, SPEED_FACTOR, STRENGTH_DAMAGE, POTIONS,
-  brewingKey, emptyBrewing, tickBrewing,
+  BREWING_INGREDIENTS, HEAL_AMOUNT, SPEED_FACTOR, STRENGTH_DAMAGE, POTIONS,
+  brewingKey, emptyBrewing, cleanBrewing, tickBrewing,
   type BrewingState, type PotionEffectId,
 } from './brewing';
 import { getAtlas, tileUV, tileUVInset, tileUVRect, AVG_COLOR } from './textures';
@@ -112,6 +112,16 @@ import { isVillageMob } from './mobs';
 
 export type GameMode = 'survival' | 'creative';
 export type UIState = 'playing' | 'paused' | 'inventory' | 'chat' | 'dead' | 'furnace' | 'chest' | 'enchant' | 'trade' | 'journal' | 'waypoints' | 'anvil' | 'brewing';
+/** Exhaustive so a new container cannot accidentally freeze the whole world. */
+const SIMULATING_UI: Record<UIState, boolean> = {
+  playing: true, paused: false, inventory: true, chat: true, dead: true,
+  furnace: true, chest: true, enchant: true, trade: true, journal: false,
+  waypoints: false, anvil: true, brewing: true,
+};
+export function worldSimulationActive(ui: UIState, multiplayer = false): boolean {
+  return multiplayer || SIMULATING_UI[ui];
+}
+
 
 export interface Waypoint {
   id: string;
@@ -1243,15 +1253,8 @@ export class Game {
       }
       // 2.4: statywy alchemiczne – fiolki, składnik i paliwo wracają do kotła.
       for (const b of opts.save.brewings ?? []) {
-        if (!b || typeof b.x !== 'number' || typeof b.y !== 'number' || typeof b.z !== 'number') continue;
-        const clean = emptyBrewing(b.x, b.y, b.z);
-        clean.dim = b.dim;
-        clean.bottles = (Array.isArray(b.bottles) ? b.bottles : []).slice(0, 3).map((s) => (s && typeof s.id === 'number' ? { ...s } : null));
-        while (clean.bottles.length < 3) clean.bottles.push(null);
-        clean.ingredient = b.ingredient && typeof b.ingredient.id === 'number' ? { ...b.ingredient } : null;
-        clean.fuel = b.fuel && typeof b.fuel.id === 'number' ? { ...b.fuel } : null;
-        clean.fuelLeft = Math.max(0, Math.min(BREW_FUELS, Math.floor(b.fuelLeft ?? 0)));
-        clean.progress = Math.max(0, Math.min(8, b.progress ?? 0));
+        if (!b || ![b.x,b.y,b.z].every(Number.isFinite)) continue;
+        const clean = cleanBrewing(b);
         this.brewings.set((b.dim ? 'n:' : '') + brewingKey(b.x, b.y, b.z), clean);
       }
       this.fishCaught = Math.max(0, Math.floor(opts.save.fishCaught ?? 0));
@@ -3122,9 +3125,9 @@ export class Game {
     const brewing = area === 'brewing' ? this.currentBrewing() : null;
     if (brewing) return [0, 1, 2, 3, 4].map((i) => ({
       get: () => i < 3 ? brewing.bottles[i] : i === 3 ? brewing.ingredient : brewing.fuel,
-      set: (s: Stack | null) => { if (i < 3) brewing.bottles[i] = s; else if (i === 3) brewing.ingredient = s; else brewing.fuel = s; brewing.progress = 0; },
+      set: (s: Stack | null) => { if (i < 3) brewing.bottles[i] = s; else if (i === 3) brewing.ingredient = s; else brewing.fuel = s; },
       limit: i < 3 ? 1 : 64,
-      accepts: (s: Stack) => i < 3 ? !!POTIONS[s.id] : i === 3 ? BREWING_INGREDIENTS.has(s.id) : s.id === I.BLAZE_ROD,
+      accepts: (s: Stack) => i < 3 ? !!POTIONS[s.id] : i === 3 ? BREWING_INGREDIENTS.has(s.id) : s.id === I.BLAZE_POWDER,
     }));
     return [];
   }
@@ -3168,6 +3171,7 @@ export class Game {
     const container = containerArea ? this.navigationSlots(containerArea) : [];
     if (action.type === 'quick') {
       if (area !== 'inventory') quickMove(source, [...inventory.slice(9), ...inventory.slice(0, 9)]);
+      else if (containerArea === 'brewing' && source.get()?.id === I.BLAZE_POWDER) quickMove(source, [container[4]]);
       else if (container.length && source.get() && container.some((slot) => slot.accepts?.(source.get()!) !== false)) quickMove(source, container);
       else {
         const stack = source.get();
@@ -3371,14 +3375,24 @@ export class Game {
   /**
    * Move stacks between the cursor and a stand slot. `slot` is one of the
    * three bottles, the ingredient cup or the fuel tray. The fuel tray only
-   * accepts blaze rods; the cup only accepts real brewing ingredients.
+   * accepts blaze powder; the cup only accepts real brewing ingredients.
    */
   clickBrewing(slot: 'b0' | 'b1' | 'b2' | 'ingredient' | 'fuel', right: boolean) {
     const s = this.currentBrewing();
     if (!s) return;
     const cur = this.inventory.cursor;
-    if (slot === 'fuel' && cur && cur.id !== I.BLAZE_ROD) {
-      this.message('Statyw pali się tylko płomienną różdżką.');
+    if (slot.startsWith('b') && cur) {
+      if (!POTIONS[cur.id]) return;
+      const index = Number(slot[1]), previous = s.bottles[index];
+      if (!previous) {
+        s.bottles[index] = { ...cur, count: 1 };
+        if (--cur.count <= 0) this.inventory.cursor = null;
+      } else if (cur.count === 1) { s.bottles[index] = cur; this.inventory.cursor = previous; }
+      if (this.inventory.cursor) this.notePickup(this.inventory.cursor.id);
+      this.emitHud(); return;
+    }
+    if (slot === 'fuel' && cur && cur.id !== I.BLAZE_POWDER) {
+      this.message('Paliwem statywu jest płomienny proszek.');
       return;
     }
     if (slot === 'ingredient' && cur && !BREWING_INGREDIENTS.has(cur.id)) {
@@ -3395,8 +3409,6 @@ export class Game {
     };
     this.transfer(get, set, right);
     if (this.inventory.cursor) this.notePickup(this.inventory.cursor.id);
-    // a touched slot restarts the batch, so a new mix re-brews from zero
-    s.progress = 0;
     this.emitHud();
   }
 
@@ -3428,9 +3440,7 @@ export class Game {
         const after = s.bottles.map((b) => (b ? b.id : 0));
         const first = after.findIndex((id, i) => id !== before[i] && id !== 0);
         if (first >= 0) {
-          Sfx.playEnchant();
-          this.spawnParticles(s.x + 0.5, s.y + 0.8, s.z + 0.5, POTIONS[after[first]] ? B.GLOWSTONE : B.WOOL_WHITE, 14, 0.7);
-          this.message(`Zawarzone: ${displayName(after[first])}.`);
+          Sfx.playBrew(s.x + .5, s.y + .5, s.z + .5);
           this.unlock('alchemist');
         }
       }
@@ -3511,7 +3521,11 @@ export class Game {
   private drinkPotion(s: Stack) {
     const def = POTIONS[s.id];
     if (!def) return;
-    if (this.mode === 'survival') this.consumeSelected();
+    if (this.mode === 'survival') {
+      this.consumeSelected();
+      if (!this.selectedStack()) this.setSelectedStack({ id: I.BOTTLE, count: 1 });
+      else if (!this.inventory.add(I.BOTTLE, 1)) this.spawnDrop(I.BOTTLE, 1, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z);
+    }
     Sfx.playDrink();
     this.swingT = 0;
     // Mistrz eliksirów: only real (non-awkward) potions count, once per type.
@@ -3520,17 +3534,13 @@ export class Game {
       if (this.potionsDrunk.size >= 6) this.unlock('potioneer');
     }
     if (def.effect === 'none') {
-      this.message('Mętny smak. Potrzebny składnik do pełnej mocy.');
       return;
     }
     if (def.effect === 'heal') {
       this.health = Math.min(20, this.health + HEAL_AMOUNT);
-      this.spawnParticles(this.body.pos.x, this.body.pos.y + 1.2, this.body.pos.z, B.WOOL_RED, 16, 1);
-      this.message(`Wypito: ${def.name}. +${HEAL_AMOUNT} zdrowia.`);
       this.unlock('tonic');
     } else {
       this.applyEffect(def.effect, def.duration);
-      this.message(`Wypito: ${def.name} (${def.duration} s).`);
     }
     this.emitHud();
   }
@@ -5851,7 +5861,7 @@ export class Game {
     }
     if (isFood(s.id)) { this.tryEat(s); return; }
     // 2.4: fiolki pije się dokładnie tak jak jedzenie – PPM w powietrzu.
-    if (isPotion(s.id)) { this.drinkPotion(s); return; }
+    if (isPotion(s.id) || s.id === I.WATER_BOTTLE) { this.drinkPotion(s); return; }
     if (!t) return;
     if (isHoe(s.id) && this.tryTill(t)) return;
     if (this.tryMakePath(t)) return;
@@ -6510,7 +6520,7 @@ export class Game {
     }
     if (this.governor.tier !== this.appliedTier) this.applyPerfProfile(this.governor.profile);
 
-    const active = !!this.net || this.ui === 'playing' || this.ui === 'inventory' || this.ui === 'furnace' || this.ui === 'chest' || this.ui === 'enchant' || this.ui === 'trade' || this.ui === 'chat' || this.ui === 'dead';
+    const active = worldSimulationActive(this.ui, !!this.net);
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);

@@ -569,18 +569,24 @@ section('2.4: brewing screen');
   check('the brewing panel has a title', brew.includes('Statyw alchemiczny'));
   check('the panel is the vanilla brewing texture', brew.includes(guiSprite('brewing_gui') ?? 'NO-PANEL'));
   check('it draws five slots (3 bottles + ingredient + fuel)', (brew.match(/role="button"/g) ?? []).length >= 41);
-  check('a fresh stand asks for fuel', brew.includes('Potrzebna płomienna różdżka'));
+  check('a fresh stand asks for fuel', brew.includes('Potrzebny płomienny proszek'));
 
   const lit = emptyBrewing(0, 1, 0);
   lit.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
   lit.ingredient = { id: I.NETHER_WART, count: 1 };
-  lit.fuel = { id: I.BLAZE_ROD, count: 2 };
-  lit.progress = 4;
+  lit.fuel = { id: I.BLAZE_POWDER, count: 2 };
+  lit.progress = 4.1; lit.remainingTicks = 318; lit.brewingIngredient = I.NETHER_WART; lit.fuelLeft = 19;
   const brewing = renderToStaticMarkup(<BrewingScreen game={makeBrewing(lit) as never} icons={{}} onChange={() => {}} />);
   check('a lit stand announces brewing', brewing.includes('Warzenie…'));
   check('the bubbles sprite is drawn while brewing', brewing.includes(guiSprite('brewing_bubbles') ?? 'NO-BUBBLES'));
   check('the progress sprite is drawn', brewing.includes(guiSprite('brewing_progress') ?? 'NO-PROGRESS'));
   check('the fuel bar is drawn', brewing.includes(guiSprite('brewing_fuel') ?? 'NO-FUEL'));
+  check('brewing does not invent an active border around all three bottle slots',!brewing.includes('inset 0 0 0 1px rgba(255,255,255,0.75)'));
+  check('native progress grows from the top with exact pixel cropping',brewing.includes('data-java-brew-crop="top:5"'));
+  check('native bubbles use the remaining-tick seven-frame cycle',brewing.includes('data-java-brew-crop="bottom:6"'));
+  check('native fuel uses twenty charges and the ceiling pixel formula',brewing.includes('data-java-brew-crop="left:18"'));
+  check('guidance is screen-reader-only rather than a non-native panel label',brewing.includes('class="sr-only" role="status"'));
+
 
   const gone = { ...makeBrewing(fresh), currentBrewing: () => null };
   const nothing = renderToStaticMarkup(<BrewingScreen game={gone as never} icons={{}} onChange={() => {}} />);
@@ -630,18 +636,18 @@ section('2.4: brewing rules');
   const base: (Stack | null)[] = [{ id: I.WATER_BOTTLE, count: 1 }, null, null];
   let res = applyBrew(base, I.NETHER_WART);
   check('water + wart = awkward', res.brewed === true && res.bottles[0]?.id === I.POTION_AWKWARD);
-  // awkward + glowstone = regeneration
+  // awkward + tear = regeneration
   const awk: (Stack | null)[] = [{ id: I.POTION_AWKWARD, count: 1 }, null, null];
-  res = applyBrew(awk, I.GLOWSTONE_DUST);
-  check('awkward + dust = regeneration', res.brewed === true && res.bottles[0]?.id === I.POTION_REGEN);
-  // water + dust = night vision (not regeneration)
+  res = applyBrew(awk, I.GHAST_TEAR);
+  check('awkward + tear = regeneration', res.brewed === true && res.bottles[0]?.id === I.POTION_REGEN);
+  // water + dust = thick (not regeneration)
   res = applyBrew(base, I.GLOWSTONE_DUST);
-  check('water + dust = night vision', res.brewed === true && res.bottles[0]?.id === I.POTION_NIGHT);
+  check('water + dust = thick', res.brewed === true && res.bottles[0]?.id === I.POTION_THICK);
   // healing, fire, speed, strength
-  check('water + tear = healing', applyBrew(base, I.GHAST_TEAR).bottles[0]?.id === I.POTION_HEAL);
-  check('water + magma = fire', applyBrew(base, I.MAGMA_CREAM).bottles[0]?.id === I.POTION_FIRE);
-  check('water + sugar = speed', applyBrew(base, I.SUGAR).bottles[0]?.id === I.POTION_SPEED);
-  check('water + rod = strength', applyBrew(base, I.BLAZE_ROD).bottles[0]?.id === I.POTION_STRENGTH);
+  check('awkward + melon = healing', applyBrew(awk, I.GLISTERING_MELON).bottles[0]?.id === I.POTION_HEAL);
+  check('awkward + magma = fire', applyBrew(awk, I.MAGMA_CREAM).bottles[0]?.id === I.POTION_FIRE);
+  check('awkward + sugar = speed', applyBrew(awk, I.SUGAR).bottles[0]?.id === I.POTION_SPEED);
+  check('awkward + powder = strength', applyBrew(awk, I.BLAZE_POWDER).bottles[0]?.id === I.POTION_STRENGTH);
   // a finished potion cannot be re-brewed
   const healed: (Stack | null)[] = [{ id: I.POTION_HEAL, count: 1 }, null, null];
   check('healing + wart does nothing', applyBrew(healed, I.NETHER_WART).brewed === false);
@@ -649,17 +655,17 @@ section('2.4: brewing rules');
   const emptySlots: (Stack | null)[] = [null, null, null];
   check('empty slots never brew', applyBrew(emptySlots, I.NETHER_WART).brewed === false);
 
-  // the stand ticks a full 8 s batch and spends fuel
+  // The stand counts 400 ticks after starting and spends one charge.
   const stand = emptyBrewing(0, 1, 0);
   stand.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
   stand.ingredient = { id: I.NETHER_WART, count: 1 };
-  stand.fuel = { id: I.BLAZE_ROD, count: 1 };
+  stand.fuel = { id: I.BLAZE_POWDER, count: 1 };
   let doneCount = 0;
-  for (let t = 0; t < 8.01; t += 0.5) { if (tickBrewing(stand, 0.5).done) doneCount++; }
-  check('one batch finishes in 8 s', doneCount === 1 && stand.bottles[0]?.id === I.POTION_AWKWARD);
-  check('a single rod is spent and two brews are banked', stand.fuel === null && stand.fuelLeft === 2);
-  // the ingredient survives the brew
-  check('the ingredient is not consumed', stand.ingredient?.id === I.NETHER_WART);
+  for (let t = 0; t < 20.1; t += 0.5) { if (tickBrewing(stand, 0.5).done) doneCount++; }
+  check('one batch finishes after 400 countdown ticks', doneCount === 1 && stand.bottles[0]?.id === I.POTION_AWKWARD);
+  check('one powder was loaded and nineteen charges remain', stand.fuel === null && stand.fuelLeft === 19);
+  // The batch consumes exactly one ingredient.
+  check('one ingredient is consumed for the batch', stand.ingredient === null);
   // a stand with no fuel never starts
   const noFuel = emptyBrewing(0, 1, 0);
   noFuel.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
@@ -669,7 +675,7 @@ section('2.4: brewing rules');
   // an invalid ingredient never starts a batch
   const badIng = emptyBrewing(0, 1, 0);
   badIng.bottles[0] = { id: I.WATER_BOTTLE, count: 1 };
-  badIng.fuel = { id: I.BLAZE_ROD, count: 1 };
+  badIng.fuel = { id: I.BLAZE_POWDER, count: 1 };
   badIng.ingredient = { id: B.STONE, count: 1 };
   for (let t = 0; t < 20; t += 1) tickBrewing(badIng, 1);
   check('stone is not a brewing ingredient', badIng.bottles[0]?.id === I.WATER_BOTTLE && badIng.progress === 0);
@@ -680,12 +686,12 @@ section('2.4: potion item metadata');
   const potionIds = [I.POTION_AWKWARD, I.POTION_HEAL, I.POTION_FIRE, I.POTION_SPEED, I.POTION_NIGHT, I.POTION_STRENGTH, I.POTION_REGEN];
   check('all potions are drinkable', potionIds.every((id) => isPotion(id)));
   check('potion effect metadata is complete', potionIds.every((id) => !!POTIONS[id]?.name));
-  check('healing is the instant effect', POTIONS[I.POTION_HEAL]?.effect === 'heal' && HEAL_AMOUNT === 7);
-  check('fire resistance is 45 s', POTIONS[I.POTION_FIRE]?.effect === 'fire' && POTIONS[I.POTION_FIRE]?.duration === 45);
-  check('night vision is 30 s', POTIONS[I.POTION_NIGHT]?.effect === 'night' && POTIONS[I.POTION_NIGHT]?.duration === 30);
-  check('speed is 20 s', POTIONS[I.POTION_SPEED]?.effect === 'speed' && POTIONS[I.POTION_SPEED]?.duration === 20);
-  check('strength is 15 s', POTIONS[I.POTION_STRENGTH]?.effect === 'strength' && POTIONS[I.POTION_STRENGTH]?.duration === 15);
-  check('regeneration is 10 s', POTIONS[I.POTION_REGEN]?.effect === 'regen' && POTIONS[I.POTION_REGEN]?.duration === 10);
+  check('healing is the instant effect', POTIONS[I.POTION_HEAL]?.effect === 'heal' && HEAL_AMOUNT === 4);
+  check('fire resistance is 180 s', POTIONS[I.POTION_FIRE]?.effect === 'fire' && POTIONS[I.POTION_FIRE]?.duration === 180);
+  check('night vision is 180 s', POTIONS[I.POTION_NIGHT]?.effect === 'night' && POTIONS[I.POTION_NIGHT]?.duration === 180);
+  check('speed is 180 s', POTIONS[I.POTION_SPEED]?.effect === 'speed' && POTIONS[I.POTION_SPEED]?.duration === 180);
+  check('strength is 180 s', POTIONS[I.POTION_STRENGTH]?.effect === 'strength' && POTIONS[I.POTION_STRENGTH]?.duration === 180);
+  check('regeneration is 45 s', POTIONS[I.POTION_REGEN]?.effect === 'regen' && POTIONS[I.POTION_REGEN]?.duration === 45);
   check('new items do not collide with blocks', potionIds.every((id) => !BLOCKS[id]) && !BLOCKS[I.SUGAR] && !BLOCKS[I.BOTTLE] && !BLOCKS[I.WATER_BOTTLE] && !BLOCKS[I.HONEY_BOTTLE]);
   check('bottles never stack (vanilla)', potionIds.every((id) => stackLimit(id) === 1));
   check('honey bottle is food', isFood(I.HONEY_BOTTLE) === true);

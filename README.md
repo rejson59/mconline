@@ -1,6 +1,16 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.16.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.17.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.17.0 „Alchemia Java”
+
+- **Statyw działa, gdy jest otwarty:** znaleziony i naprawiony błąd zatrzymujący całą symulację singleplayer w ekranie warzenia i kowadła. Kontenery nie pauzują świata; właściwa pauza nadal zatrzymuje symulację, a multiplayer nie pauzuje innych graczy.
+- **Rzeczywiste warzenie:** płomienny proszek zamiast różdżki, 20 ładunków z jednego proszku, 400 ticków odliczania, jeden zużyty składnik na maksymalnie trzy butelki. Zmiana paliwa nie zeruje partii; zmiana składnika lub usunięcie wszystkich butelek anuluje ją zgodnie z kolejnością ticków.
+- **Podstawowe receptury Java:** najpierw butelka wody + brodawka → klarowna mikstura; dopiero potem właściwy składnik. Dodane płomienny proszek, złota marchewka, kawałek lśniącego arbuza oraz mdła i gęsta mikstura. Różdżka daje dwa proszki, proszek + kula szlamu — krem magmowy. Złote składniki można znaleźć w łupach portali; pełna uprawa/crafting tych składników nie jest częścią wydania.
+- **Właściwe wartości mikstur I:** leczenie 4 HP, szybkość +20%, siła +3 obrażenia; ognioodporność/szybkość/noktowizja/siła 3 minuty, regeneracja 45 sekund. Picie oddaje pustą butelkę, także przy pełnym plecaku. Zachowane stare aliasy komend i ID istniejących mikstur.
+- **Oryginalne materiały 1.20.4:** nowe ikony składników, warstwowo kolorowane butelki i dwa nagrania statywu, bez pobierania podczas gry. Dokładne przycinanie paska, paliwa i siedmiu klatek bąbelków. Bez wymyślonego tekstu/obramowania w panelu, dźwięku zaklinania ani spamu o każdej miksturze.
+- **Zgodność zapisów:** nowy licznik partii i paliwo odtwarzają się bez ponownego opłacania. Stare przedmioty i pozostałe opłacone ładunki są zachowane; dawna ośmiosekundowa partia rozpoczyna się od nowa według nowych zasad. Stara różdżka pozostaje do wyjęcia, nie znika i nie zamienia się sama w proszek. Brak migracji bazy i zmian praw miasta.
+- **Zakres i testy:** [szczegóły wydania](docs/ALCHEMY-4.17.md). Nadal poza zakresem są m.in. rozszerzone/wzmocnione/rzucane mikstury oraz pełna animacja i czas picia.
 
 ## Wersja 4.16.0 „Minecraft — efekty i zgodność”
 

@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.16.0';
-export const GAME_RELEASE_NAME = 'Minecraft — efekty i zgodność';
+export const GAME_VERSION = '4.17.0';
+export const GAME_RELEASE_NAME = 'Alchemia Java';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.17: warzenie bliżej Java', text: 'Statyw odlicza 400 ticków, używa płomiennego proszku na 20 partii i zużywa jeden składnik na maksymalnie trzy butelki. Poprawione receptury podstawowych mikstur i anulowanie warzenia. Bez restartu po dotknięciu paliwa.' },
+  { title: '4.17: prawdziwe parametry i grafika mikstur', text: 'Leczenie I daje 4 HP, Szybkość +20%, Siła +3; standardowe efekty trwają 3 minuty, Regeneracja I 45 sekund. Oryginalne kolory, butelki, składniki i dźwięk statywu Java 1.20.4. Picie oddaje pustą butelkę.' },
   { title: '4.16: Minecraft — wersja przeglądarkowa', text: 'Minecraft w przeglądarce: nowa nazwa w menu, launcherze, HUD i karcie. Nadal nieoficjalny własny silnik, nie klient Mojang. Dotychczasowe światy, profile, ustawienia i serwery pozostają dostępne.' },
   { title: '4.16: nakładające się efekty bliżej Java', text: 'Krótsza Regeneracja II nie kasuje dłuższej Regeneracji I. Słabszy efekt odlicza czas w tle i wraca po mocniejszym; cały stan zachowuje się w zapisie. Poprawione odświeżanie i wyczerpanie absorpcji oraz kolejność ikon przy takim samym czasie.' },
   { title: '4.15: totem jak w survivalu Java', text: 'Totem musi być w jednej z rąk. Po uratowaniu: 1 HP, Regeneracja II przez 45 s, Absorpcja II przez 5 s i Ognioodporność przez 40 s. Bez sztucznego cooldownu i leczenia z plecaka.' },

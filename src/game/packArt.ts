@@ -1,3 +1,4 @@
+import { javaBrewingItemPixels, JAVA_BREWING_IDS } from './brewingArt';
 import { JAVA_CHEST_TEXTURES, JAVA_RAIL_TEXTURES } from './art/javaBlocks.generated';
 /**
  * 2.17: grafika z paczki „Pixel Perfection CE” wkomponowana w atlas gry.
@@ -152,6 +153,7 @@ export function officialTileCount(): number {
  * odpowiednika w paczce 1.16 (tarcza, lorneta…).
  */
 export function officialItemPixels(id: number): Uint8Array | null {
+  const native = javaBrewingItemPixels(id); if (native) return native;
   const src = officialItemAtlas();
   const tile = ITEM_TILE[id];
   if (!src || tile === undefined) return null;
@@ -173,12 +175,12 @@ export function officialItemPixels(id: number): Uint8Array | null {
 
 /** Czy przedmiot ma ikonę z paczki. */
 export function hasOfficialItemIcon(id: number): boolean {
-  return ITEM_TILE[id] !== undefined;
+  return JAVA_BREWING_IDS.has(id) || ITEM_TILE[id] !== undefined;
 }
 
 /** Ile przedmiotów ma oficjalną ikonę. */
 export function officialItemCount(): number {
-  return Object.keys(ITEM_TILE).length;
+  return new Set([...Object.keys(ITEM_TILE).map(Number), ...JAVA_BREWING_IDS]).size;
 }
 
 /** Original Java rail sprites; reserved corner tile stays outside chest regions. */

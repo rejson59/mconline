@@ -107,6 +107,12 @@ export const I = {
   POTION_NIGHT: 349,
   POTION_STRENGTH: 350,
   POTION_REGEN: 351,
+  // Append-only: 352 belongs to hydrated farmland, never reuse it.
+  BLAZE_POWDER: 353,
+  GOLDEN_CARROT: 354,
+  GLISTERING_MELON: 355,
+  POTION_MUNDANE: 356,
+  POTION_THICK: 357,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
@@ -232,16 +238,21 @@ export const ITEM_LIST: ItemDef[] = [
   { id: I.TOTEM, name: 'Totem nieśmiertelności', keys: ['totem', 'totem_ratowania', 'totem_ratownictwa', 'totem_of_undying', 'totem_niesmiertelnosci'], kind: 'material', stack: 1, color: '#e8c85a' },
   // 2.4 „Godzina alchemika” – cukier, fiolki i napoje
   { id: I.SUGAR, name: 'Cukier', keys: ['cukier', 'sugar'], kind: 'material', color: '#f6f4ee' },
-  { id: I.BOTTLE, name: 'Szklana fiolka', keys: ['fiolka', 'szklana_fiolka', 'bottle', 'glass_bottle'], kind: 'material', color: '#bfe4f2' },
-  { id: I.WATER_BOTTLE, name: 'Fiolka z wodą', keys: ['fiolka_z_woda', 'water_bottle', 'woda_fiolka'], kind: 'material', color: '#4a8ae0' },
+  { id: I.BOTTLE, name: 'Szklana butelka', keys: ['fiolka', 'szklana_fiolka', 'bottle', 'glass_bottle'], kind: 'material', color: '#bfe4f2' },
+  { id: I.WATER_BOTTLE, name: 'Butelka wody', keys: ['fiolka_z_woda', 'water_bottle', 'woda_fiolka'], kind: 'material', color: '#4a8ae0' },
   { id: I.HONEY_BOTTLE, name: 'Butelka miodu', keys: ['butelka_miodu', 'honey_bottle', 'miodek'], kind: 'food', hunger: 6, saturation: 0.1, color: '#e8a020' },
-  { id: I.POTION_AWKWARD, name: 'Zaczarowany napój', keys: ['zaczarowany_napoj', 'potion_awkward', 'awkward'], kind: 'potion', potion: 'none', color: '#c8b8a8' },
-  { id: I.POTION_HEAL, name: 'Napój leczący', keys: ['napoj_leczacy', 'potion_heal', 'healing'], kind: 'potion', potion: 'heal', color: '#d44a5a' },
-  { id: I.POTION_FIRE, name: 'Napój ognioodporności', keys: ['napoj_ognioodpornosci', 'potion_fire', 'fire_resistance'], kind: 'potion', potion: 'fire', color: '#e07820' },
-  { id: I.POTION_SPEED, name: 'Napój szybkości', keys: ['napoj_szybkosci', 'potion_speed', 'swiftness'], kind: 'potion', potion: 'speed', color: '#b8e04a' },
-  { id: I.POTION_NIGHT, name: 'Napój nocnego widzenia', keys: ['napoj_nocnego_widzenia', 'potion_night', 'night_vision'], kind: 'potion', potion: 'night', color: '#4ad0a8' },
-  { id: I.POTION_STRENGTH, name: 'Napój siły', keys: ['napoj_sily', 'potion_strength', 'sila'], kind: 'potion', potion: 'strength', color: '#e0a030' },
-  { id: I.POTION_REGEN, name: 'Napój regeneracji', keys: ['napoj_regeneracji', 'potion_regen', 'regeneration'], kind: 'potion', potion: 'regen', color: '#e06090' },
+  { id: I.POTION_AWKWARD, name: 'Klarowna mikstura', keys: ['zaczarowany_napoj', 'potion_awkward', 'awkward'], kind: 'potion', potion: 'none', color: '#c8b8a8' },
+  { id: I.POTION_HEAL, name: 'Mikstura leczenia', keys: ['napoj_leczacy', 'potion_heal', 'healing'], kind: 'potion', potion: 'heal', color: '#d44a5a' },
+  { id: I.POTION_FIRE, name: 'Mikstura ognioodporności', keys: ['napoj_ognioodpornosci', 'potion_fire', 'fire_resistance'], kind: 'potion', potion: 'fire', color: '#e07820' },
+  { id: I.POTION_SPEED, name: 'Mikstura szybkości', keys: ['napoj_szybkosci', 'potion_speed', 'swiftness'], kind: 'potion', potion: 'speed', color: '#b8e04a' },
+  { id: I.POTION_NIGHT, name: 'Mikstura noktowizji', keys: ['napoj_nocnego_widzenia', 'potion_night', 'night_vision'], kind: 'potion', potion: 'night', color: '#4ad0a8' },
+  { id: I.POTION_STRENGTH, name: 'Mikstura siły', keys: ['napoj_sily', 'potion_strength', 'sila'], kind: 'potion', potion: 'strength', color: '#e0a030' },
+  { id: I.POTION_REGEN, name: 'Mikstura regeneracji', keys: ['napoj_regeneracji', 'potion_regen', 'regeneration'], kind: 'potion', potion: 'regen', color: '#e06090' },
+  { id: I.BLAZE_POWDER, name: 'Płomienny proszek', keys: ['blaze_powder','plomienny_proszek'], kind: 'material', color: '#efaf20' },
+  { id: I.GOLDEN_CARROT, name: 'Złota marchewka', keys: ['golden_carrot','zlota_marchewka'], kind: 'food', hunger: 6, saturation: 1.2, color: '#ffc83d' },
+  { id: I.GLISTERING_MELON, name: 'Kawałek lśniącego arbuza', keys: ['glistering_melon_slice','glistering_melon','lsniacy_arbuz'], kind: 'material', color: '#f5bc3a' },
+  { id: I.POTION_MUNDANE, name: 'Mdła mikstura', keys: ['potion_mundane','mundane','mdla_mikstura'], kind: 'potion', potion: 'none', color: '#385dc6' },
+  { id: I.POTION_THICK, name: 'Gęsta mikstura', keys: ['potion_thick','thick','gesta_mikstura'], kind: 'potion', potion: 'none', color: '#385dc6' },
 ];
 
 const ARMOR_TIERS: {

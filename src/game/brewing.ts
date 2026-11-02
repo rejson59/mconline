@@ -1,177 +1,293 @@
-/**
- * Brewing (2.4 „Godzina alchemika”) – the stand existed since 1.9 as a
- * decorative cross, these pure rules make it brew. Like anvil.ts and
- * fishing.ts the module is free of THREE and of the world, so the engine,
- * the screen and the headless tests all share one implementation.
- */
+/** Supported Java brewing recipes and tick-based stand simulation. No renderer. */
 import type { Stack } from './inventory';
 import { I, ITEMS, type PotionEffectId } from './items';
-
+import { effectClock } from './statusEffects';
 export type { PotionEffectId };
-
 export interface PotionDef {
   id: number;
-  /** Polish name. */
   name: string;
-  /** Effect applied when drunk (instant `heal` or timed buff). */
   effect: PotionEffectId;
-  /** Seconds the buff lasts (0 for instant/none). */
   duration: number;
-  /** Swatch colour of the liquid in the icon painter and tooltips. */
   color: string;
-  /** One-line description shown in the brewing screen. */
   desc: string;
 }
-
+const potion = (
+  id: number,
+  effect: PotionEffectId,
+  duration: number,
+  color: number,
+  desc: string,
+): PotionDef => ({
+  id,
+  name: ITEMS[id]?.name ?? '',
+  effect,
+  duration,
+  color: '#' + color.toString(16).padStart(6, '0'),
+  desc,
+});
 export const POTIONS: Record<number, PotionDef> = {
-  [I.POTION_AWKWARD]: { id: I.POTION_AWKWARD, name: 'Zaczarowany napój', effect: 'none', duration: 0, color: '#c8b8a8', desc: 'Bazowa, mętna esencja. W połączeniu z dodatkami daje prawdziwe napoje.' },
-  [I.POTION_HEAL]: { id: I.POTION_HEAL, name: 'Napój leczący', effect: 'heal', duration: 0, color: '#d44a5a', desc: 'Przywraca od razu 7 punktów zdrowia.' },
-  [I.POTION_FIRE]: { id: I.POTION_FIRE, name: 'Napój ognioodporności', effect: 'fire', duration: 45, color: '#e07820', desc: 'Lawa, ogniska i bloki magmy nie ranią przez 45 s.' },
-  [I.POTION_SPEED]: { id: I.POTION_SPEED, name: 'Napój szybkości', effect: 'speed', duration: 20, color: '#b8e04a', desc: 'O 30% szybszy bieg przez 20 s.' },
-  [I.POTION_NIGHT]: { id: I.POTION_NIGHT, name: 'Napój nocnego widzenia', effect: 'night', duration: 30, color: '#4ad0a8', desc: 'Jaskinie i nocy nie straszne przez 30 s.' },
-  [I.POTION_STRENGTH]: { id: I.POTION_STRENGTH, name: 'Napój siły', effect: 'strength', duration: 15, color: '#e0a030', desc: '+4 obrażeń w zwarciu przez 15 s.' },
-  [I.POTION_REGEN]: { id: I.POTION_REGEN, name: 'Napój regeneracji', effect: 'regen', duration: 10, color: '#e06090', desc: 'Regeneracja I: +1 punkt zdrowia co 2,5 s przez 10 s.' },
+  [I.WATER_BOTTLE]: potion(
+    I.WATER_BOTTLE,
+    'none',
+    0,
+    3694022,
+    'Woda — do klarownej mikstury dodaj brodawkę netherową.',
+  ),
+  [I.POTION_AWKWARD]: potion(
+    I.POTION_AWKWARD,
+    'none',
+    0,
+    3694022,
+    'Baza mikstur; dodaj właściwy składnik efektu.',
+  ),
+  [I.POTION_MUNDANE]: potion(
+    I.POTION_MUNDANE,
+    'none',
+    0,
+    3694022,
+    'Bez efektów. Nie jest bazą mikstur wzmacniających.',
+  ),
+  [I.POTION_THICK]: potion(
+    I.POTION_THICK,
+    'none',
+    0,
+    3694022,
+    'Bez efektów. Pył jasnogłazu dodany do wody.',
+  ),
+  [I.POTION_HEAL]: potion(
+    I.POTION_HEAL,
+    'heal',
+    0,
+    16262179,
+    'Natychmiastowe leczenie I: +4 HP.',
+  ),
+  [I.POTION_FIRE]: potion(
+    I.POTION_FIRE,
+    'fire',
+    180,
+    16750848,
+    'Ognioodporność (3:00).',
+  ),
+  [I.POTION_SPEED]: potion(
+    I.POTION_SPEED,
+    'speed',
+    180,
+    3402751,
+    'Szybkość (3:00): +20% prędkości.',
+  ),
+  [I.POTION_NIGHT]: potion(
+    I.POTION_NIGHT,
+    'night',
+    180,
+    12779366,
+    'Noktowizja (3:00).',
+  ),
+  [I.POTION_STRENGTH]: potion(
+    I.POTION_STRENGTH,
+    'strength',
+    180,
+    16762624,
+    'Siła (3:00): +3 obrażenia w zwarciu.',
+  ),
+  [I.POTION_REGEN]: potion(
+    I.POTION_REGEN,
+    'regen',
+    45,
+    13458603,
+    'Regeneracja I (0:45): +1 HP co 2,5 s.',
+  ),
 };
-
-/** Instant heal value of the healing potion. */
-export const HEAL_AMOUNT = 7;
-/** Extra melee damage while the strength potion is active. */
-export const STRENGTH_DAMAGE = 4;
-/** Move-speed multiplier while the speed potion is active. */
-export const SPEED_FACTOR = 1.3;
-
-/** A batch takes this many seconds on the stand. */
-export const BREW_TIME = 8;
-/** One blaze rod keeps the fire going this many batches. */
-export const BREW_FUELS = 3;
-
-/** Item ids the stand accepts in its ingredient cup. */
-export const BREWING_INGREDIENTS = new Set<number>([
-  I.NETHER_WART, I.GHAST_TEAR, I.MAGMA_CREAM, I.SUGAR, I.GLOWSTONE_DUST, I.BLAZE_ROD,
+export const HEAL_AMOUNT = 4;
+export const STRENGTH_DAMAGE = 3;
+export const SPEED_FACTOR = 1.2;
+export const BREW_TIME = 20;
+export const BREW_TICKS = 400;
+export const BREW_FUELS = 20;
+const MIXES = new Map<number, number>([
+  [I.GLISTERING_MELON, I.POTION_HEAL],
+  [I.MAGMA_CREAM, I.POTION_FIRE],
+  [I.SUGAR, I.POTION_SPEED],
+  [I.GOLDEN_CARROT, I.POTION_NIGHT],
+  [I.BLAZE_POWDER, I.POTION_STRENGTH],
+  [I.GHAST_TEAR, I.POTION_REGEN],
 ]);
-
-/**
- * What an ingredient does to a bottle, given the bottle's current potion id.
- * Water (WATER_BOTTLE) + wart is the base recipe; awkward (POTION_AWKWARD)
- * is the mid-point for the advanced mixes.
- */
-export function brewResult(bottleId: number, ingredientId: number): number | null {
-  const isWater = bottleId === I.WATER_BOTTLE;
-  const isAwkward = bottleId === I.POTION_AWKWARD;
-  if (!isWater && !isAwkward) return null;
-  switch (ingredientId) {
-    case I.NETHER_WART:
-      return isWater ? I.POTION_AWKWARD : null;
-    case I.GHAST_TEAR:
-      return isWater ? I.POTION_HEAL : null;
-    case I.MAGMA_CREAM:
-      return isWater ? I.POTION_FIRE : null;
-    case I.SUGAR:
-      return isWater ? I.POTION_SPEED : null;
-    case I.GLOWSTONE_DUST:
-      // two paths: water + dust = night sight, awkward + dust = regeneration
-      return isWater ? I.POTION_NIGHT : I.POTION_REGEN;
-    case I.BLAZE_ROD:
-      return isWater ? I.POTION_STRENGTH : null;
-    default:
-      return null;
+export const BREWING_INGREDIENTS = new Set<number>([
+  I.NETHER_WART,
+  I.GLOWSTONE_DUST,
+  I.REDSTONE,
+  ...MIXES.keys(),
+]);
+export function brewResult(
+  bottleId: number,
+  ingredientId: number,
+): number | null {
+  if (bottleId === I.WATER_BOTTLE) {
+    if (ingredientId === I.NETHER_WART) return I.POTION_AWKWARD;
+    if (ingredientId === I.GLOWSTONE_DUST) return I.POTION_THICK;
+    if (
+      ingredientId === I.REDSTONE ||
+      (MIXES.has(ingredientId) && ingredientId !== I.GOLDEN_CARROT)
+    )
+      return I.POTION_MUNDANE;
   }
+  return bottleId === I.POTION_AWKWARD
+    ? (MIXES.get(ingredientId) ?? null)
+    : null;
 }
-
-/**
- * One brewing pass over all three bottles. Returns the new bottle stacks and
- * whether anything changed (a batch was completed).
- */
-export function applyBrew(bottles: (Stack | null)[], ingredientId: number): { bottles: (Stack | null)[]; brewed: boolean } {
-  const out: (Stack | null)[] = bottles.map((b) => (b ? { ...b } : null));
+export function applyBrew(
+  bottles: (Stack | null)[],
+  ingredientId: number,
+): { bottles: (Stack | null)[]; brewed: boolean } {
   let brewed = false;
-  for (let i = 0; i < 3; i++) {
-    const b = out[i];
-    if (!b) continue;
-    const next = brewResult(b.id, ingredientId);
-    if (next !== null && next !== b.id) {
-      out[i] = { ...b, id: next };
-      brewed = true;
-    }
-  }
+  const out = bottles.map((b, i) => {
+    if (!b) return null;
+    const next = i < 3 && b.count > 0 ? brewResult(b.id, ingredientId) : null;
+    if (next === null) return { ...b };
+    brewed = true;
+    return { id: next, count: b.count };
+  });
   return { bottles: out, brewed };
 }
-
-/** Full state of one stand block. */
 export interface BrewingState {
   x: number;
   y: number;
   z: number;
-  /** 1 when the block stands in the Nether – keys never clash across dimensions. */
   dim?: number;
-  /** Three bottle slots. */
   bottles: (Stack | null)[];
-  /** The ingredient that is (or will be) thrown into the cauldron. */
   ingredient: Stack | null;
-  /** Blaze rod fuel. */
   fuel: Stack | null;
-  /** How many batches the current fuel piece still covers. */
   fuelLeft: number;
-  /** Seconds of the current batch (0 = idle, BREW_TIME = done). */
+  /** Elapsed seconds, mirrored for existing save readers. Zero can mean just started. */
   progress: number;
+  /** New fields optional for legacy saves. */
+  rules?: 1;
+  remainingTicks?: number;
+  brewingIngredient?: number;
+  tickRemainder?: number;
 }
-
 export function brewingKey(x: number, y: number, z: number): string {
   return `${x},${y},${z}`;
 }
-
 export function emptyBrewing(x: number, y: number, z: number): BrewingState {
-  return { x, y, z, bottles: [null, null, null], ingredient: null, fuel: null, fuelLeft: 0, progress: 0 };
+  return {
+    x,
+    y,
+    z,
+    bottles: [null, null, null],
+    ingredient: null,
+    fuel: null,
+    fuelLeft: 0,
+    progress: 0,
+    rules: 1,
+    remainingTicks: 0,
+    tickRemainder: 0,
+  };
 }
-
-/** True when the stand can start (or is starting) a batch. */
+const positive = (s: Stack | null | undefined): s is Stack =>
+  !!s && Number.isFinite(s.count) && s.count >= 1;
+const integer = (n: unknown, max: number) =>
+  typeof n === 'number' && Number.isFinite(n)
+    ? Math.max(0, Math.min(max, Math.floor(n)))
+    : 0;
+/** Keep old items/paid fuel, but restart old eight-second in-flight recipes.
+ * A rod stays a rod; players can remove it and craft powder without data loss. */
+export function cleanBrewing(raw: BrewingState): BrewingState {
+  const out = emptyBrewing(raw.x, raw.y, raw.z);
+  out.dim = raw.dim;
+  const copy = (s: Stack | null | undefined) =>
+    positive(s) ? { ...s, ench: s.ench ? { ...s.ench } : undefined } : null;
+  out.bottles = Array.from({ length: 3 }, (_, i) => copy(raw.bottles?.[i]));
+  out.ingredient = copy(raw.ingredient);
+  out.fuel = copy(raw.fuel);
+  out.fuelLeft = integer(raw.fuelLeft, raw.rules === 1 ? BREW_FUELS : 3);
+  if (raw.rules === 1) {
+    out.remainingTicks = integer(raw.remainingTicks, BREW_TICKS);
+    out.brewingIngredient =
+      typeof raw.brewingIngredient === 'number' &&
+      Number.isFinite(raw.brewingIngredient)
+        ? raw.brewingIngredient
+        : undefined;
+    if (!out.brewingIngredient) out.remainingTicks = 0;
+    out.progress =
+      out.remainingTicks > 0 ? (BREW_TICKS - out.remainingTicks) / 20 : 0;
+    out.tickRemainder =
+      typeof raw.tickRemainder === 'number' &&
+      Number.isFinite(raw.tickRemainder)
+        ? Math.max(0, Math.min(0.049999999, raw.tickRemainder))
+        : 0;
+  }
+  return out;
+}
+function brewable(s: BrewingState): boolean {
+  return (
+    positive(s.ingredient) &&
+    s.bottles.some(
+      (b) => positive(b) && brewResult(b.id, s.ingredient!.id) !== null,
+    )
+  );
+}
 export function canStartBrew(s: BrewingState): boolean {
-  const hasBottle = s.bottles.some((b) => b && brewResult(b.id, s.ingredient?.id ?? -1) !== null);
-  const hasFuel = s.fuelLeft > 0 || s.fuel?.id === I.BLAZE_ROD;
-  return hasBottle && s.ingredient !== null && hasFuel;
+  return (
+    brewable(s) &&
+    (s.fuelLeft > 0 || (positive(s.fuel) && s.fuel.id === I.BLAZE_POWDER))
+  );
 }
-
-/**
- * Advances one stand. When the batch is ready the bottles transform, the
- * ingredient survives (it is not consumed – like in the classic game) and
- * one unit of fuel is spent.
- */
+/** Native order per tick: load powder even if idle, decrement/cancel active
+ * batch, otherwise spend a fuel charge to start 400 countdown ticks. */
 export function tickBrewing(s: BrewingState, dt: number): { done: boolean } {
-  if (s.progress <= 0) {
-    // a batch needs a bottle it can transform, an ingredient and live fuel
-    if (!canStartBrew(s) || !s.ingredient) return { done: false };
-    s.progress = 0.0001;
-  } else if (!s.ingredient) {
-    // the ingredient was pulled out mid-brew – the batch quietly cancels
-    s.progress = 0;
-    return { done: false };
-  }
-  s.progress += dt;
-  if (s.progress < BREW_TIME) return { done: false };
-  s.progress = 0;
-  const res = applyBrew(s.bottles, s.ingredient!.id);
-  s.bottles = res.bottles;
-  if (res.brewed) {
-    if (s.fuelLeft > 0) {
-      s.fuelLeft--;
-    } else if (s.fuel?.id === I.BLAZE_ROD) {
-      // one blaze rod feeds three batches: spend the rod, bank the rest
-      s.fuelLeft = BREW_FUELS - 1;
-      s.fuel.count--;
-      if (s.fuel.count <= 0) s.fuel = null;
+  if (!Number.isFinite(dt) || dt <= 0) return { done: false };
+  if (s.rules !== 1) Object.assign(s, cleanBrewing(s));
+  const clock = effectClock(s.tickRemainder ?? 0, dt);
+  s.tickRemainder = clock.remainder;
+  let done = false;
+  for (let tick = 0; tick < clock.ticks; tick++) {
+    if (s.fuelLeft <= 0 && positive(s.fuel) && s.fuel.id === I.BLAZE_POWDER) {
+      s.fuelLeft = BREW_FUELS;
+      if (--s.fuel.count <= 0) s.fuel = null;
     }
-    return { done: true };
+    const valid = brewable(s);
+    if ((s.remainingTicks ?? 0) > 0) {
+      s.remainingTicks = (s.remainingTicks ?? 0) - 1;
+      if (s.remainingTicks === 0 && valid) {
+        const result = applyBrew(s.bottles, s.ingredient!.id);
+        s.bottles = result.bottles;
+        if (--s.ingredient!.count <= 0) s.ingredient = null;
+        done = done || result.brewed;
+      } else if (!valid || s.ingredient?.id !== s.brewingIngredient)
+        s.remainingTicks = 0;
+    } else if (valid && s.fuelLeft > 0) {
+      s.fuelLeft--;
+      s.remainingTicks = BREW_TICKS;
+      s.brewingIngredient = s.ingredient!.id;
+    }
+    s.progress =
+      (s.remainingTicks ?? 0) > 0 ? (BREW_TICKS - s.remainingTicks!) / 20 : 0;
   }
-  // no bottle could change – do not burn the fuel
-  return { done: false };
+  return { done };
 }
-
-/** Polish label for a potion id (falls back to the item name). */
+/** Native GUI cropping: progress from top, seven-frame bubbles from bottom. */
+export function brewingFrame(s: BrewingState): {
+  progress: number;
+  bubbles: number;
+  fuel: number;
+  lit: boolean;
+} {
+  const ticks =
+    s.remainingTicks ??
+    (s.progress > 0
+      ? Math.max(0, BREW_TICKS - Math.floor(s.progress * 20))
+      : 0);
+  return {
+    progress: ticks > 0 ? Math.floor(28 * (1 - ticks / BREW_TICKS)) : 0,
+    bubbles:
+      ticks > 0 ? [29, 24, 20, 16, 11, 6, 0][Math.floor(ticks / 2) % 7] : 0,
+    fuel: Math.max(0, Math.min(18, Math.ceil((18 * s.fuelLeft) / BREW_FUELS))),
+    lit: ticks > 0,
+  };
+}
 export function potionName(id: number): string {
   return POTIONS[id]?.name ?? ITEMS[id]?.name ?? '';
 }
-
-/** Effect id carried by a potion, null for non-potions. */
 export function potionEffect(id: number): PotionEffectId | null {
   return POTIONS[id]?.effect ?? null;
 }
