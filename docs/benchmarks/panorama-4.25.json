@@ -1,0 +1,387 @@
+{
+  "version": "4.25.0",
+  "baselineCommit": "136a141f067a8a6ddc415911d720261c162f6607",
+  "checks": {
+    "total": 25271,
+    "panorama": 161,
+    "facing": 599,
+    "furnace": 678,
+    "native": 5746,
+    "engine": 16747,
+    "fire": 436,
+    "worker": 81,
+    "audio": 403,
+    "ui": 413,
+    "account": 5,
+    "bootstrap": 2
+  },
+  "testedNodeVersion": "22.22.3",
+  "browser": {
+    "version": "4.25.0",
+    "environment": "Chromium / SwiftShader, mobile viewport emulation",
+    "reports": [
+      {
+        "device": "desktop",
+        "renderer": "webgl",
+        "movingPixels": true,
+        "pausedPixelsIdentical": true,
+        "drawsDuringMotion": 47,
+        "size": {
+          "width": 720,
+          "height": 450
+        },
+        "preferencesReload": true,
+        "liveReducedMotion": true,
+        "simulatedVisibilityPause": true,
+        "contextRestored": true,
+        "cleanup": true,
+        "externalRequests": [],
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "renderer": "webgl",
+        "movingPixels": true,
+        "pausedPixelsIdentical": true,
+        "drawsDuringMotion": 30,
+        "size": {
+          "width": 293,
+          "height": 633
+        },
+        "preferencesReload": true,
+        "liveReducedMotion": true,
+        "simulatedVisibilityPause": true,
+        "contextRestored": true,
+        "cleanup": true,
+        "externalRequests": [],
+        "errors": []
+      },
+      {
+        "device": "file",
+        "renderer": "webgl",
+        "movingPixels": true,
+        "pausedPixelsIdentical": true,
+        "drawsDuringMotion": 54,
+        "size": {
+          "width": 720,
+          "height": 450
+        },
+        "preferencesReload": true,
+        "liveReducedMotion": true,
+        "simulatedVisibilityPause": true,
+        "contextRestored": true,
+        "cleanup": true,
+        "externalRequests": [],
+        "errors": []
+      },
+      {
+        "device": "fallback",
+        "renderer": "fallback",
+        "movingPixels": true,
+        "pausedPixelsIdentical": true,
+        "drawsDuringMotion": 0,
+        "size": null,
+        "preferencesReload": true,
+        "liveReducedMotion": true,
+        "simulatedVisibilityPause": true,
+        "contextRestored": false,
+        "cleanup": true,
+        "externalRequests": [],
+        "errors": []
+      }
+    ]
+  },
+  "furnaceRegression": {
+    "version": "4.25.0",
+    "environment": "Chromium / SwiftShader sandbox, mobile is viewport emulation",
+    "reports": [
+      {
+        "device": "desktop",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "furnaceResult": {
+          "input": {
+            "id": 495,
+            "count": 1
+          },
+          "fuel": {
+            "id": 494,
+            "count": 1
+          },
+          "burn": 70,
+          "cook": 0,
+          "ingots": 1,
+          "charcoal": 3,
+          "entityDrops": [
+            {
+              "id": 495,
+              "count": 1
+            },
+            {
+              "id": 496,
+              "count": 1
+            },
+            {
+              "id": 494,
+              "count": 2
+            }
+          ]
+        },
+        "facingResult": {
+          "rows": [
+            {
+              "x": 16,
+              "cold": 28,
+              "id": 28
+            },
+            {
+              "x": 18,
+              "cold": 498,
+              "id": 498
+            },
+            {
+              "x": 20,
+              "cold": 497,
+              "id": 497
+            },
+            {
+              "x": 22,
+              "cold": 499,
+              "id": 499
+            },
+            {
+              "x": 24,
+              "cold": 28,
+              "id": 53
+            },
+            {
+              "x": 26,
+              "cold": 498,
+              "id": 501
+            },
+            {
+              "x": 28,
+              "cold": 497,
+              "id": 500
+            },
+            {
+              "x": 30,
+              "cold": 499,
+              "id": 502
+            }
+          ],
+          "atlasChannels": 4096,
+          "mesh": {
+            "values": 32736,
+            "worker": "worker"
+          }
+        },
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 1,
+          "charcoal": 3,
+          "rawIron": 4,
+          "rawGold": 2,
+          "furnace": {
+            "x": 12,
+            "y": 65,
+            "z": 12,
+            "input": {
+              "id": 495,
+              "count": 1
+            },
+            "fuel": {
+              "id": 494,
+              "count": 1
+            },
+            "output": null,
+            "burn": 70,
+            "burnMax": 80,
+            "cook": 0
+          },
+          "facingRows": [
+            {
+              "id": 28,
+              "state": {
+                "x": 16,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 498,
+              "state": {
+                "x": 18,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 497,
+              "state": {
+                "x": 20,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 499,
+              "state": {
+                "x": 22,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 53,
+              "state": {
+                "x": 24,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 501,
+              "state": {
+                "x": 26,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 500,
+              "state": {
+                "x": 28,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 502,
+              "state": {
+                "x": 30,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            }
+          ],
+          "gui": 2
+        },
+        "errors": []
+      }
+    ]
+  },
+  "assets": {
+    "manifest": "docs/menu-panoramas-manifest.json",
+    "originalFiles": 12,
+    "originalBytes": 9578260,
+    "embeddedWebPBytes": 504806,
+    "size": 512,
+    "quality": 90,
+    "exactOriginalPixels": false
+  },
+  "artifact": {
+    "path": "dist/index.html",
+    "bytes": 11242582,
+    "sha256": "0df3c588717033e21802f7867fca66a66c07256587f56a9718e9df26533900c5"
+  },
+  "limits": [
+    "Multiple scene choices are an explicit browser extension, not vanilla Java 1.20.4.",
+    "Six-face 3D is tested separately from the one-image CSS fallback.",
+    "Optional scenes are resampled/compressed original artwork, not exact original PNG pixels.",
+    "Visibility pause is exercised with a synthetic document visibility event.",
+    "Chromium/SwiftShader and mobile viewport emulation are not hardware FPS or physical phone tests.",
+    "No public multiplayer/database exercise; no whole-game 1:1 claim."
+  ]
+}

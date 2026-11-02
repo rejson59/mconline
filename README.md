@@ -1,6 +1,13 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.24.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.25.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.25.0 „Menu w ruchu”
+
+- **Ruchoma panorama 3D:** sześć ścian, widoczny płynny obrót i stały kąt kamery zamiast przesuwania jednego zdjęcia. Maksymalnie 30 klatek tła/s i ograniczona rozdzielczość.
+- **Trzy scenerie:** wiśniowy gaj z Java 1.20, góry z 1.18 i Nether z 1.16. W „Tło menu” można wybrać scenerię, losowanie przy otwarciu menu lub zatrzymać ruch; wybór jest zapamiętywany. To jawny dodatek przeglądarkowy.
+- **Bez zbędnej pracy:** zatrzymanie po ukryciu karty, systemowe ograniczenie ruchu, sprzątanie renderera po wyjściu do gry i odzyskiwanie po utracie kontekstu. Bez WebGL menu nadal działa z lekkim przesuwanym tłem; sama gra 3D nadal wymaga WebGL.
+- **25 271 kontroli**, produkcyjne porównanie ruchomych/zatrzymanych pikseli na desktopie, mobilnym viewporcie, z lokalnego HTML i bez WebGL. [Zakres, źródła i ograniczenia](docs/PANORAMA-4.25.md).
 
 ## Wersja 4.24.0 „Piec we właściwą stronę”
 
