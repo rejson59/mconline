@@ -1,5 +1,5 @@
 /**
- * 2.24: Launcher BlockCraft – powłoka w stylu Lunar Client / Prism Launcher.
+ * 2.24: Launcher Minecraft – powłoka w stylu Lunar Client / Prism Launcher.
  *
  * Zamiast od razu wrzucać gracza do menu gry, pokazujemy klienta: profil,
  * instancje światów, serwery, paczki, skórki, ustawienia i konsolę. Kliknięcie
@@ -136,9 +136,9 @@ export default function Launcher({
   // start: komunikat jak w prawdziwym kliencie + wykryty sprzęt
   useEffect(() => {
     const stats = `${officialTileCount()} kafelków bloków, ${officialItemCount()} ikon przedmiotów, ${Object.keys(MOB_SKINS).length} skórek mobów`;
-    pushLog(`Launcher BlockCraft ${GAME_VERSION} gotowy`, 'ok');
+    pushLog(`Launcher Minecraft ${GAME_VERSION} gotowy`, 'ok');
     pushLog(`Paczka 26.2.x Template wczytana: ${stats}`);
-    pushLog(`Cel zgodności: Minecraft ${TARGET_LABEL}`);
+    pushLog(`Cel zgodności: ${TARGET_LABEL}`);
     try {
       const p = autoPreset();
       pushLog(`Sprzęt: ${describeProfile(p.profile)} → preset „${PRESETS[p.preset].label}”`);
@@ -256,7 +256,7 @@ export default function Launcher({
         <button type="button" onClick={() => go('home')} className="mb-6 flex items-center gap-3 px-1.5 text-left">
           <BlockCube size={34} spin />
           <span className="min-w-0">
-            <span className="block truncate text-[15px] font-black tracking-wide">BLOCKCRAFT</span>
+            <span className="block truncate text-[15px] font-black tracking-wide">MINECRAFT</span>
             <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300/80">Launcher</span>
           </span>
         </button>
@@ -305,7 +305,7 @@ export default function Launcher({
           </button>
           <div className="flex flex-wrap gap-1.5 px-0.5">
             <span className={CHIP}>v{GAME_VERSION}</span>
-            <span className={CHIP}>MC {TARGET_LABEL.split(' ')[0]}</span>
+            <span className={CHIP}>MC {TARGET_LABEL.replace('Minecraft: Java Edition ', '')}</span>
           </div>
         </div>
       </aside>
@@ -316,7 +316,7 @@ export default function Launcher({
         <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/[0.07] bg-black/20 px-4 py-3 backdrop-blur sm:px-6">
           <button type="button" onClick={() => go('home')} className="flex items-center gap-2.5 lg:hidden">
             <BlockCube size={26} spin={false} />
-            <span className="text-[13px] font-black tracking-wide">BLOCKCRAFT</span>
+            <span className="text-[13px] font-black tracking-wide">MINECRAFT</span>
           </button>
           <div className="hidden min-w-0 items-center gap-2 lg:flex">
             <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">Launcher</span>
@@ -508,7 +508,7 @@ function HomeTab({
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300 ring-1 ring-inset ring-emerald-400/30">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> gotowe do gry
               </span>
-              <span className={CHIP}>Minecraft {TARGET_LABEL}</span>
+              <span className={CHIP}>{TARGET_LABEL}</span>
               <span className={CHIP}>v{GAME_VERSION}</span>
             </div>
             <h1 className="mt-3 text-[clamp(1.5rem,4.4vw,2.3rem)] font-black leading-tight tracking-tight">
@@ -993,7 +993,7 @@ function ServersTab({ onMultiplayer, onSolo }: { onMultiplayer: () => void; onSo
               </span>
               <span className={CHIP}>publiczny</span>
             </div>
-            <h2 className="mt-2 text-[17px] font-extrabold">BlockCraft — survival i miasto Creative</h2>
+            <h2 className="mt-2 text-[17px] font-extrabold">Minecraft — survival i miasto Creative</h2>
             <p className="mt-1 max-w-lg text-[12px] leading-relaxed text-white/50">
               Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po odświeżeniu i po
               wyjściu. Wchodzisz jednym kliknięciem z dowolnego urządzenia.
@@ -1040,7 +1040,7 @@ function ServersTab({ onMultiplayer, onSolo }: { onMultiplayer: () => void; onSo
       </section>
 
       <p className="rounded-xl border border-amber-300/20 bg-amber-400/[0.06] p-3 text-[11.5px] leading-relaxed text-amber-100/70">
-        <b className="font-bold text-amber-200/90">Uczciwie:</b> launcher uruchamia BlockCraft – własną grę
+        <b className="font-bold text-amber-200/90">Uczciwie:</b> launcher uruchamia nieoficjalną wersję przeglądarkową Minecraft – własny silnik
         w przeglądarce z paczką tekstur 26.2. Nie łączy się z serwerami ani kontem Minecrafta i nie
         pobiera plików Mojanga, bo oryginalny klient (Java) nie działa w przeglądarce.
       </p>
@@ -1307,7 +1307,7 @@ function ConsoleTab({ log, onClear }: { log: LogEntry[]; onClear: () => void }) 
           <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
           <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
           <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
-          <span className="ml-2 font-mono text-[10.5px] text-white/35">blockcraft-launcher — log</span>
+          <span className="ml-2 font-mono text-[10.5px] text-white/35">minecraft-browser — log</span>
         </div>
         <div className="max-h-[58vh] overflow-y-auto p-3 font-mono text-[11.5px] leading-relaxed">
           {log.length === 0 && <p className="text-white/30">Brak wpisów.</p>}
@@ -1332,7 +1332,7 @@ function LaunchOverlay({ step, progress, worldName }: { step: number; progress: 
         <div className="flex items-center gap-3">
           <BlockCube size={44} />
           <div className="min-w-0">
-            <div className="text-[13px] font-extrabold">Uruchamianie BlockCraft</div>
+            <div className="text-[13px] font-extrabold">Uruchamianie Minecraft</div>
             <div className="truncate text-[11px] text-white/45">{worldName}</div>
           </div>
           <div className="ml-auto text-[13px] font-black tabular-nums text-emerald-300">{progress}%</div>

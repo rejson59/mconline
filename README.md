@@ -1,6 +1,17 @@
-# BlockCraft 4.15.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.16.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.16.0 „Minecraft — efekty i zgodność”
+
+- **Nazwa Minecraft:** menu Java, starsze menu/launcher, ekran telefonu, HUD/debug, karta przeglądarki, metadane społecznościowe i nazwy eksportowanych plików. Natywny cel **1.20.4** oddzielono od numeru wydania przeglądarkowego **4.16.0**. To nadal **nieoficjalny własny silnik**, nie komercyjny klient Mojang/Microsoft ani klient oryginalnych serwerów Java/Bedrock.
+- **Bez utraty danych:** dotychczasowe klucze `blockcraft-*`, format eksportu JSON i techniczne identyfikatory sieci/bazy pozostają kompatybilne. Zmiana nazwy nie wymaga migracji świata, konta ani SQL. Publiczna konsola ma `minecraft.game` z zachowanym aliasem diagnostycznym.
+- **Efekty w tle:** krótsza Regeneracja II może przesłonić dłuższą I. Słabszy efekt nadal odlicza czas i wraca po mocniejszym, jeśli jeszcze nie wygasł. Zapis lokalny i profil przechowują obie warstwy. Bez dodatkowego leczenia na granicy zamiany.
+- **Absorpcja bliżej Java:** rzeczywiste nowe źródło może uzupełnić złote HP nawet przy krótszym czasie; słabsze nie obniża mocniejszej osłony. Powrót słabszego poziomu tylko ogranicza pojemność, nigdy nie odnawia zużytych serc. Wyczerpany efekt znika przy następnym ticku.
+- **Czystszy widok gry:** bez nienatywnego reklamowego powitania zasłaniającego świat w czacie; instrukcje są nadal w sterowaniu i `/help`. **Czytelne menu telefonu:** usunięty wielki automatyczny baner obrotu z menu głównego i listy serwerów. Pomoc obrotu pozostaje w rozgrywce, z opcją gry w pionie. Ikony efektów przy jednakowym czasie używają natywnego porządku kolorów.
+- **Testy i ograniczenia:** [szczegóły wydania](docs/FIDELITY-4.16.md). Nadal nie jest to pełna zgodność 1:1 całego Minecrafta; m.in. natywna animacja totemu, pełna alchemia i protokół oryginalnego serwera pozostają poza tym etapem.
+
+Starsze wpisy poniżej mogą zachowywać historyczną nazwę BlockCraft. Nie jest to już nazwa widoczna w aktualnym interfejsie.
 
 ## Wersja 4.15.0 „Totem i złote serca”
 

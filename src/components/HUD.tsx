@@ -1,4 +1,4 @@
-import { effectIconOpacity } from '../game/statusEffects';
+import { effectIconOpacity, compareEffectIcons } from '../game/statusEffects';
 import { DEFAULT_SETTINGS, type Settings } from '../utils/settings';
 import { useJavaScale } from '../utils/guiScale';
 import { useEffect, useRef, useState } from 'react';
@@ -162,7 +162,7 @@ export default function HUD({ hud, chatSettings = DEFAULT_SETTINGS, chatOpen = f
   return (
     <div className="pointer-events-none absolute inset-0 z-30 select-none">
       {(hud.effects?.length ?? 0) > 0 && <div data-java-effects style={{ position: 'absolute', right: scale, top: scale, display: 'flex', flexDirection: 'row-reverse', gap: 1, transform: `scale(${scale})`, transformOrigin: 'top right', imageRendering: 'pixelated' }}>
-        {hud.effects.filter(effect => !!guiSprite(`effect_${effect.id}`)).slice().sort((a,b) => b.left - a.left).map(effect => <div key={effect.id} data-effect={effect.id} aria-label={`${effect.name}: ${Math.ceil(effect.left)} s`} style={{ width: 24, height: 24, position: 'relative', backgroundImage: `url(${guiSprite('effect_background')})`, backgroundSize: '100% 100%' }}>
+        {hud.effects.filter(effect => !!guiSprite(`effect_${effect.id}`)).slice().sort(compareEffectIcons).map(effect => <div key={effect.id} data-effect={effect.id} aria-label={`${effect.name}: ${Math.ceil(effect.left)} s`} style={{ width: 24, height: 24, position: 'relative', backgroundImage: `url(${guiSprite('effect_background')})`, backgroundSize: '100% 100%' }}>
           <img alt={effect.name} src={guiSprite(`effect_${effect.id}`)!} width={18} height={18} draggable={false} style={{ position: 'absolute', left: 3, top: 3, opacity: effectIconOpacity(effect.left) }} />
         </div>)}
       </div>}
@@ -246,7 +246,7 @@ export default function HUD({ hud, chatSettings = DEFAULT_SETTINGS, chatOpen = f
       {hud.debug ? (
         <div className="absolute left-2 top-2 space-y-0.5 text-[15px] leading-tight">
           {[
-            `BlockCraft ${GAME_VERSION} „${GAME_RELEASE_NAME}” (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
+            `Minecraft Java 1.20.4 — przeglądarka ${GAME_VERSION} „${GAME_RELEASE_NAME}” (${hud.fps} fps, skala ${Math.round(hud.resScale * 100)}%, ${hud.drawCalls} kresleń)`,
             // 2.28: profil automatu jakości – widać, czy gra właśnie oszczędza.
             `Jakość: ${hud.perf} · LOD: ${hud.lodRange > 0 ? `${hud.lodRange} bloków` : 'wyłączony'}`,
             `XYZ: ${hud.pos[0].toFixed(2)} / ${hud.pos[1].toFixed(2)} / ${hud.pos[2].toFixed(2)}`,

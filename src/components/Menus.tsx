@@ -67,7 +67,7 @@ const SPLASHES = [
   '2.9: tekstury jak w nowym Minecrafcie!',
   'Ekwipunek zamyka się na dotyku!',
   'Wpisz „/”, aby zobaczyć komendy!',
-  'BlockCraft 2.8: płynniej, szybciej, piękniej!',
+  'Minecraft 2.8: płynniej, szybciej, piękniej!',
   '2.8: woda faluje, niebo ma gradient!',
   'Mniej zacięć – więcej budowania!',
   'Nowe menu, ten sam świat!',
@@ -119,7 +119,7 @@ export function Title() {
           WebkitTextStroke: '2px #14161a',
         }}
       >
-        BLOCKCRAFT
+        MINECRAFT
       </h1>
       <div className="mt-2.5 flex w-full flex-wrap items-center justify-center gap-2 px-1">
         <span className="mc-badge">WERSJA {GAME_VERSION}</span>
@@ -350,7 +350,7 @@ export function MainMenu({
       const blob = new Blob([exportSaves()], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'blockcraft-swiety.json';
+      a.download = 'minecraft-swiaty.json';
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     } catch {
@@ -366,7 +366,7 @@ export function MainMenu({
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       const safeName = (world.name || 'swiat').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
-      a.download = `blockcraft-${safeName || 'swiat'}.json`;
+      a.download = `minecraft-${safeName || 'swiat'}.json`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     } catch {
@@ -384,7 +384,7 @@ export function MainMenu({
     const reader = new FileReader();
     reader.onload = () => {
       const n = importSaves(String(reader.result ?? ''));
-      window.alert(n > 0 ? `Zaimportowano światów: ${n}` : 'To nie jest plik z zapisami BlockCraft.');
+      window.alert(n > 0 ? `Zaimportowano światów: ${n}` : 'To nie jest plik z zapisami Minecraft.');
       onImported?.();
     };
     reader.readAsText(file);
@@ -577,7 +577,7 @@ export function MainMenu({
 
             {view === 'main' && saves.length === 0 && (
               <section aria-label="Witamy" className="mc-card p-4 sm:p-6">
-                <div className="mc-card-title">Witaj w BlockCraft</div>
+                <div className="mc-card-title">Witaj w Minecraft</div>
                 <p className="text-sm leading-relaxed text-white/85">
                   Zagraj sam albo wejdź na <b className="text-yellow-200">serwer publiczny</b>: jeden świat dla wszystkich,
                   bez kodów i bez gospodarza. Wersja <b className="text-yellow-200">{GAME_VERSION} „{GAME_RELEASE_NAME}”</b>
@@ -664,7 +664,7 @@ export function MainMenu({
         </div>
 
         <footer className="mt-3 flex w-full max-w-[1040px] flex-col items-center justify-between gap-1 border-t border-white/10 pt-2 text-center text-[11px] leading-tight text-white/55 sm:flex-row sm:text-left sm:text-xs">
-          <span>BlockCraft {GAME_VERSION} „{GAME_RELEASE_NAME}”</span>
+          <span>Minecraft — przeglądarka {GAME_VERSION} „{GAME_RELEASE_NAME}”</span>
           <span>Gra w przeglądarce · Three.js · GitHub Pages</span>
         </footer>
       </div>

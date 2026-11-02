@@ -1,4 +1,4 @@
-name: Deploy BlockCraft to GitHub Pages
+name: Deploy Minecraft browser to GitHub Pages
 
 on:
   push:

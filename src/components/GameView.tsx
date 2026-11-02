@@ -125,11 +125,14 @@ export default function GameView({
     setVolume(s.volume);
     setSoundLevels(s.soundVolumes);
     gameRef.current = game;
-    // handy for debugging from the browser console: blockcraft.game.…
-    (window as unknown as { blockcraft?: { game: Game } }).blockcraft = { game };
+    // New console name; retain the legacy alias for existing diagnostic tools.
+    const debug = window as unknown as { minecraft?: { game: Game }; blockcraft?: { game: Game } };
+    debug.minecraft = debug.blockcraft = { game };
     return () => {
       game?.save();
       game?.dispose();
+      if (debug.minecraft?.game === game) delete debug.minecraft;
+      if (debug.blockcraft?.game === game) delete debug.blockcraft;
       gameRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
