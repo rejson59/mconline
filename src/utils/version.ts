@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.21.0';
-export const GAME_RELEASE_NAME = 'Krzesiwo i płomienie';
+export const GAME_VERSION = '4.22.0';
+export const GAME_RELEASE_NAME = 'Receptury pod lupą';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.22: receptury sprawdzane z oryginalnymi JSON', text: 'TNT wymaga prochu, kompas i zegar redstone, a ognisko trzech pni. Poprawione kształty papieru, chleba, wiadra, strzał i nożyc; receptury przyjmują odbicie lustrzane. Usunięto biblioteczkę z wełny. To audyt wybranego zestawu, nie wszystkich receptur Java.' },
+  { title: '4.22: dropy i Szczęście bliżej Java', text: 'Bloki szlamu i plastra miodu wypadają w całości. Poprawiono Szczęście dla rud, krzemienia i pyłu jasnogłazu: właściwe zakresy, mnożniki oraz limit czterech pyłów. Testy porównują zachowanie z przypiętymi oryginalnymi tabelami łupu, nie tylko z własnymi oczekiwaniami.' },
   { title: '4.21: działające krzesiwo i ogniska', text: 'PPM zapala zwykły ogień, a na piasku/glebie dusz — niebieskie płomienie. Oryginalne tekstury i odgłosy, światło, gaszenie oraz trwałość tylko za udaną akcję. Łopata gasi ognisko, krzesiwo je rozpala. Ogień nie rozprzestrzenia się i nie spala budowli.' },
   { title: '4.21: portale i bezpieczne podpalanie', text: 'Obsydianowe ramy bez narożników i większe portale do 23×23 bloków. Całe wnętrze jest sprawdzane przed aktywacją — bez zapalania cudzych działek ani ulic. TNT ma 4-sekundowy lont; w Mieście pozostaje wyłączone. Zmiany źródeł światła nie skanują już całego chunka.' },
   { title: '4.20: siatki chunków liczone w tle', text: 'Jeden Web Worker oblicza geometrię poza głównym wątkiem. Gra przyjmuje tylko aktualne wyniki; zmieniony teren, sąsiednie światło i otwarte wieka unieważniają stare obliczenia. Zapis i kolizje nigdy nie są odłączane.' },

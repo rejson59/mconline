@@ -573,7 +573,7 @@ section('inventory: slots, cursor, recipes');
   check('bow costs 3 sticks + 3 string', bow?.inputs.some((s) => s.id === I.STICK && s.count === 3) && bow?.inputs.some((s) => s.id === I.STRING && s.count === 3));
   const arrow = recipe(I.ARROW);
   check('arrow recipe exists', !!arrow && arrow.inputs.some((s) => s.id === I.FLINT) && arrow.inputs.some((s) => s.id === I.STICK) && arrow.inputs.some((s) => s.id === I.FEATHER));
-  check('arrows need no table', arrow?.table === false);
+  check('arrows require a three-high pattern at a crafting table', arrow?.table === true);
   check('iron block recipe needs 9 ingots', recipe(B.IRON_BLOCK)?.inputs.length === 1 && recipe(B.IRON_BLOCK)?.inputs[0].count === 9 && recipe(B.IRON_BLOCK)?.inputs[0].id === I.IRON);
   check('gold block recipe', !!recipe(B.GOLD_BLOCK));
   check('diamond block recipe', !!recipe(B.DIAMOND_BLOCK));
@@ -1364,8 +1364,10 @@ section('update 1.5: lapis, sugar cane, table, drops');
   inv.grid[0] = { id: B.SUGARCANE, count: 1 };
   inv.grid[1] = { id: B.SUGARCANE, count: 1 };
   inv.grid[3] = { id: B.SUGARCANE, count: 1 };
-  const paper = inv.gridMatch(false);
-  eq('3 cane craft paper (shapeless, fits 2×2)', paper?.out.id, I.PAPER);
+  eq('paper cannot be crafted in personal 2×2', inv.gridMatch(false), null);
+  inv.grid[3] = null; inv.grid[2] = { id: B.SUGARCANE, count: 1 };
+  const paper = inv.gridMatch(true);
+  eq('3 cane in a row craft paper at a table', paper?.out.id, I.PAPER);
   eq('paper yields three', paper?.out.count, 3);
 
   const inv2 = new Inventory();
@@ -3195,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.21.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Krzesiwo i płomienie', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.22.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Receptury pod lupą', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));

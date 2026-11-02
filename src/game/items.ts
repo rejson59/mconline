@@ -535,6 +535,13 @@ export function attackCooldown(toolId: number): number {
  *  `opts.fortune` (Szczęście) multiplies ore/crop yields, `opts.silk`
  *  (Jedwabny dotyk) makes the block drop in its original form. */
 export interface DropOpts { fortune?: number; silk?: boolean }
+/** Native ore_drops bonus: at Fortune I the multipliers are 1, 1, 2 (not 1, 2). */
+function oreDropMultiplier(fortune: number): number {
+  return fortune > 0 ? Math.max(0, Math.floor(Math.random() * (fortune + 2)) - 1) + 1 : 1;
+}
+function uniformDropBonus(fortune: number): number {
+  return fortune > 0 ? Math.floor(Math.random() * (fortune + 1)) : 0;
+}
 export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {}): Stack[] {
   if(isSlabDouble(blockId)) {
     const base=slabBase(blockId);
@@ -543,7 +550,7 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   blockId = buildingItem(railBase(blockId));
   const tier = pickTier(toolId);
   const shears = ITEMS[toolId]?.tool === 'shears';
-  const fortune = Math.max(0, Math.floor(opts.fortune ?? 0));
+  const fortune = Number.isFinite(opts.fortune) ? Math.max(0, Math.min(255, Math.floor(opts.fortune!))) : 0;
   // 2.21: wanilia – bez wymaganego poziomu kilofa blok znika bez dropu
   // (kamień gołą ręką, złoto kamiennym kilofem, obsydian bez diamentu).
   if (!canHarvest(blockId, toolId)) return [];
@@ -566,17 +573,17 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   }
   if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
   if (blockId === B.CAMPFIRE_OFF) return [{ id: B.CAMPFIRE, count: 1 }];
-  if (blockId === B.GRAVEL) return Math.random() < 0.1 ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
-  if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
-  if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
-  if (blockId === B.EMERALD_ORE) return tier >= 3 ? [{ id: I.EMERALD, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
-  if (blockId === B.LAPIS_ORE) return tier >= 2 ? [{ id: I.LAPIS, count: 4 + Math.floor(Math.random() * 4) + (fortune ? Math.floor(Math.random() * (fortune + 1)) * 2 : 0) }] : [];
-  if (blockId === B.REDSTONE_ORE) return tier >= 2 ? [{ id: I.REDSTONE, count: 4 + Math.floor(Math.random() * 2) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
-  if (blockId === B.QUARTZ_ORE) return tier >= 1 ? [{ id: I.QUARTZ, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
-  if (blockId === B.GLOWSTONE) return [{ id: I.GLOWSTONE_DUST, count: 2 + Math.floor(Math.random() * 3) + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }];
-  if (blockId === B.SLIME_BLOCK) return [{ id: I.SLIME_BALL, count: 1 }];
+  if (blockId === B.GRAVEL) return Math.random() < [0.1, 0.14285715, 0.25, 1][Math.min(3, fortune)] ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
+  if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: oreDropMultiplier(fortune) }] : [];
+  if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: oreDropMultiplier(fortune) }] : [];
+  if (blockId === B.EMERALD_ORE) return tier >= 3 ? [{ id: I.EMERALD, count: oreDropMultiplier(fortune) }] : [];
+  if (blockId === B.LAPIS_ORE) return tier >= 2 ? [{ id: I.LAPIS, count: (4 + Math.floor(Math.random() * 6)) * oreDropMultiplier(fortune) }] : [];
+  if (blockId === B.REDSTONE_ORE) return tier >= 2 ? [{ id: I.REDSTONE, count: 4 + Math.floor(Math.random() * 2) + uniformDropBonus(fortune) }] : [];
+  if (blockId === B.QUARTZ_ORE) return tier >= 1 ? [{ id: I.QUARTZ, count: oreDropMultiplier(fortune) }] : [];
+  if (blockId === B.GLOWSTONE) return [{ id: I.GLOWSTONE_DUST, count: Math.min(4, 2 + Math.floor(Math.random() * 3) + uniformDropBonus(fortune)) }];
+  if (blockId === B.SLIME_BLOCK) return [{ id: B.SLIME_BLOCK, count: 1 }];
   if (blockId === B.HONEY_BLOCK) return [{ id: B.HONEY_BLOCK, count: 1 }];
-  if (blockId === B.HONEYCOMB_BLOCK) return [{ id: I.HONEYCOMB, count: 4 }];
+  if (blockId === B.HONEYCOMB_BLOCK) return [{ id: B.HONEYCOMB_BLOCK, count: 1 }];
   if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return tier >= 2 ? [{ id: blockId, count: 1 }] : [];
   // płyty: górna dropuje dolną
   if (blockId === B.OAK_SLAB_TOP || blockId === B.STONE_SLAB_TOP || blockId === B.COBBLE_SLAB_TOP || blockId === B.BRICK_SLAB_TOP || blockId === B.SANDSTONE_SLAB_TOP || blockId === B.NETHER_BRICK_SLAB_TOP || blockId === B.QUARTZ_SLAB_TOP) {

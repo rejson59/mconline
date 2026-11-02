@@ -72,8 +72,7 @@ export interface Recipe {
   table: boolean;
   /**
    * Optional crafting-grid pattern (rows of characters, ' ' or '.' = empty).
-   * When present the recipe can also be made by placing the items in that
-   * shape – exactly like in Minecraft. `key` maps characters to item ids.
+   * When present the grid requires this shape (or its horizontal reflection). `key` maps characters to item ids.
    */
   pattern?: string[];
   key?: Record<string, number>;
@@ -119,17 +118,15 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.STONE_BRICKS, count: 4 }, inputs: [{ id: B.STONE, count: 4 }], table: true },
   { out: { id: B.BRICK, count: 2 }, inputs: [{ id: B.CLAY, count: 4 }, { id: I.COAL, count: 1 }], table: true },
   { out: { id: B.SANDSTONE, count: 1 }, inputs: [{ id: B.SAND, count: 4 }], table: false },
-  { out: { id: B.BOOKSHELF, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: B.WOOL_WHITE, count: 1 }], table: true },
   // 1.5 „Zaklęcia": papier → książka → biblioteczka (modyfikuje ten sam blok)
   { out: { id: B.BOOKSHELF, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.BOOK, count: 3 }], table: true, pattern: ['PPP', 'BBB', 'PPP'], key: { P: B.PLANKS, B: I.BOOK } },
-  // Papier i książka są bezpostaciowe – mieści się je także w siatce 2×2.
-  { out: { id: I.PAPER, count: 3 }, inputs: [{ id: B.SUGARCANE, count: 3 }], table: false },
+  // Paper is three-wide; only the book itself is shapeless.
+  { out: { id: I.PAPER, count: 3 }, inputs: [{ id: B.SUGARCANE, count: 3 }], table: true, pattern: ['SSS'], key: { S: B.SUGARCANE } },
   { out: { id: I.BOOK, count: 1 }, inputs: [{ id: I.PAPER, count: 3 }, { id: I.LEATHER, count: 1 }], table: false },
   { out: { id: B.ENCHANT, count: 1 }, inputs: [{ id: B.OBSIDIAN, count: 4 }, { id: I.DIAMOND, count: 2 }, { id: I.BOOK, count: 1 }], table: true, pattern: [' B ', 'DOD', 'OOO'], key: { D: I.DIAMOND, B: I.BOOK, O: B.OBSIDIAN } },
   { out: { id: B.LAPIS_BLOCK, count: 1 }, inputs: [{ id: I.LAPIS, count: 9 }], table: true, pattern: ['LLL', 'LLL', 'LLL'], key: { L: I.LAPIS } },
   { out: { id: I.LAPIS, count: 9 }, inputs: [{ id: B.LAPIS_BLOCK, count: 1 }], table: false },
-  { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.COAL, count: 5 }], table: true },
-  { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.GUNPOWDER, count: 5 }], table: true },
+  { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.GUNPOWDER, count: 5 }], table: true, pattern: ['GSG', 'SGS', 'GSG'], key: { G: I.GUNPOWDER, S: B.SAND } },
   // 1.9: jasnogłaz składa się z pyłu jasnogłazu (jak w Minecraftcie)
   { out: { id: B.GLOWSTONE, count: 1 }, inputs: [{ id: I.GLOWSTONE_DUST, count: 4 }], table: false, pattern: ['DD', 'DD'], key: { D: I.GLOWSTONE_DUST } },
   { out: { id: B.MOSSY, count: 1 }, inputs: [{ id: B.COBBLE, count: 1 }, { id: B.LEAVES, count: 1 }], table: false },
@@ -145,19 +142,19 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.LAPIS, count: 4 }, inputs: [{ id: B.LAPIS_ORE, count: 1 }], table: false },
   { out: { id: I.STICK, count: 4 }, inputs: [{ id: B.PLANKS, count: 2 }], table: false, pattern: ['P', 'P'], key: { P: B.PLANKS } },
   { out: { id: B.TORCH, count: 4 }, inputs: [{ id: I.COAL, count: 1 }, { id: I.STICK, count: 1 }], table: false, pattern: ['C', 'S'], key: { C: I.COAL, S: I.STICK } },
-  { out: { id: I.BREAD, count: 1 }, inputs: [{ id: I.WHEAT, count: 3 }], table: false },
-  { out: { id: I.BUCKET, count: 1 }, inputs: [{ id: I.IRON, count: 3 }], table: true },
+  { out: { id: I.BREAD, count: 1 }, inputs: [{ id: I.WHEAT, count: 3 }], table: true, pattern: ['WWW'], key: { W: I.WHEAT } },
+  { out: { id: I.BUCKET, count: 1 }, inputs: [{ id: I.IRON, count: 3 }], table: true, pattern: ['I I', ' I '], key: { I: I.IRON } },
   { out: { id: B.BED, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 3 }, { id: B.PLANKS, count: 3 }], table: true, pattern: ['WWW', 'PPP'], key: { W: B.WOOL_WHITE, P: B.PLANKS } },
   { out: { id: B.CHEST, count: 1 }, inputs: [{ id: B.PLANKS, count: 8 }], table: true, pattern: ['PPP', 'P P', 'PPP'], key: { P: B.PLANKS } },
   { out: { id: B.DOOR_N, count: 3 }, inputs: [{ id: B.PLANKS, count: 6 }], table: true, pattern: ['PP', 'PP', 'PP'], key: { P: B.PLANKS } },
   { out: { id: B.LADDER_N, count: 3 }, inputs: [{ id: I.STICK, count: 7 }], table: false, pattern: ['S S', 'SSS', 'S S'], key: { S: I.STICK } },
   { out: { id: B.FENCE, count: 3 }, inputs: [{ id: B.PLANKS, count: 4 }, { id: I.STICK, count: 2 }], table: false, pattern: ['PSP', 'PSP'], key: { P: B.PLANKS, S: I.STICK } },
   { out: { id: B.TRAP, count: 2 }, inputs: [{ id: B.PLANKS, count: 6 }], table: true, pattern: ['PPP', 'PPP'], key: { P: B.PLANKS } },
-  { out: { id: B.CAMPFIRE, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.COAL, count: 1 }], table: false },
-  { out: { id: I.SHEARS, count: 1 }, inputs: [{ id: I.IRON, count: 2 }], table: true },
+  { out: { id: B.CAMPFIRE, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.COAL, count: 1 }, { id: B.LOG, count: 3 }], table: true, pattern: [' S ', 'SCS', 'LLL'], key: { S: I.STICK, C: I.COAL, L: B.LOG } },
+  { out: { id: I.SHEARS, count: 1 }, inputs: [{ id: I.IRON, count: 2 }], table: false, pattern: [' I', 'I '], key: { I: I.IRON } },
   { out: { id: I.FLINT_STEEL, count: 1 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.IRON, count: 1 }], table: false },
-  { out: { id: I.COMPASS, count: 1 }, inputs: [{ id: I.IRON, count: 4 }, { id: I.COAL, count: 1 }], table: true },
-  { out: { id: I.CLOCK, count: 1 }, inputs: [{ id: I.GOLD, count: 4 }, { id: I.COAL, count: 1 }], table: true },
+  { out: { id: I.COMPASS, count: 1 }, inputs: [{ id: I.IRON, count: 4 }, { id: I.REDSTONE, count: 1 }], table: true, pattern: [' I ', 'IRI', ' I '], key: { I: I.IRON, R: I.REDSTONE } },
+  { out: { id: I.CLOCK, count: 1 }, inputs: [{ id: I.GOLD, count: 4 }, { id: I.REDSTONE, count: 1 }], table: true, pattern: [' G ', 'GRG', ' G '], key: { G: I.GOLD, R: I.REDSTONE } },
   { out: { id: B.IRON_BLOCK, count: 1 }, inputs: [{ id: I.IRON, count: 9 }], table: true, pattern: ['III', 'III', 'III'], key: { I: I.IRON } },
   { out: { id: B.GOLD_BLOCK, count: 1 }, inputs: [{ id: I.GOLD, count: 9 }], table: true, pattern: ['GGG', 'GGG', 'GGG'], key: { G: I.GOLD } },
   { out: { id: B.DIAMOND_BLOCK, count: 1 }, inputs: [{ id: I.DIAMOND, count: 9 }], table: true, pattern: ['DDD', 'DDD', 'DDD'], key: { D: I.DIAMOND } },
@@ -165,7 +162,7 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.GOLD, count: 9 }, inputs: [{ id: B.GOLD_BLOCK, count: 1 }], table: false },
   { out: { id: I.DIAMOND, count: 9 }, inputs: [{ id: B.DIAMOND_BLOCK, count: 1 }], table: false },
   { out: { id: I.BOW, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 3 }], table: true, pattern: [' #S', '# S', ' #S'], key: { '#': I.STICK, S: I.STRING } },
-  { out: { id: I.ARROW, count: 4 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.STICK, count: 1 }, { id: I.FEATHER, count: 1 }], table: false },
+  { out: { id: I.ARROW, count: 4 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.STICK, count: 1 }, { id: I.FEATHER, count: 1 }], table: true, pattern: ['F', 'S', 'P'], key: { F: I.FLINT, S: I.STICK, P: I.FEATHER } },
   { out: { id: I.SHIELD, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.IRON, count: 1 }], table: true, pattern: ['PIP', 'PPP', ' P '], key: { P: B.PLANKS, I: I.IRON } },
   // 1.7 „Nether & Redstone”
   { out: { id: B.REDSTONE_BLOCK, count: 1 }, inputs: [{ id: I.REDSTONE, count: 9 }], table: true, pattern: ['RRR', 'RRR', 'RRR'], key: { R: I.REDSTONE } },
@@ -193,7 +190,7 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.DETECTOR_RAIL, count: 6 }, inputs: [{ id: I.IRON, count: 6 }, { id: B.STONE, count: 1 }, { id: I.REDSTONE, count: 1 }], table: true, pattern: ['I I', 'ISI', 'IRI'], key: { I: I.IRON, S: B.STONE, R: I.REDSTONE } },
   { out: { id: B.ANVIL, count: 1 }, inputs: [{ id: B.IRON_BLOCK, count: 3 }, { id: I.IRON, count: 4 }], table: true, pattern: ['BBB', ' I ', 'III'], key: { B: B.IRON_BLOCK, I: I.IRON } },
   { out: { id: B.TARGET, count: 1 }, inputs: [{ id: I.REDSTONE, count: 4 }, { id: B.HAY, count: 1 }], table: true, pattern: [' R ', 'RHR', ' R '], key: { R: I.REDSTONE, H: B.HAY } },
-  { out: { id: B.HONEYCOMB_BLOCK, count: 1 }, inputs: [{ id: I.HONEYCOMB, count: 4 }], table: true, pattern: ['HH', 'HH'], key: { H: I.HONEYCOMB } },
+  { out: { id: B.HONEYCOMB_BLOCK, count: 1 }, inputs: [{ id: I.HONEYCOMB, count: 4 }], table: false, pattern: ['HH', 'HH'], key: { H: I.HONEYCOMB } },
   // 1.9: netherowe surowce mają swoje receptury i źródła
   { out: { id: B.MAGMA, count: 1 }, inputs: [{ id: I.MAGMA_CREAM, count: 4 }], table: false, pattern: ['MM', 'MM'], key: { M: I.MAGMA_CREAM } },
   { out: { id: B.BREWING, count: 1 }, inputs: [{ id: I.BLAZE_ROD, count: 1 }, { id: B.COBBLE, count: 3 }], table: false, pattern: [' R ', 'CCC'], key: { R: I.BLAZE_ROD, C: B.COBBLE } },
@@ -426,17 +423,20 @@ export class Inventory {
       if (r.pattern) {
         const p = trimPattern(r.pattern);
         if (p.w !== w || p.h !== h || p.w > cols) continue;
-        let ok = true;
-        for (let y = 0; y < h && ok; y++) {
-          for (let x = 0; x < w && ok; x++) {
-            const ch = p.rows[y][x] ?? ' ';
-            const want = ch === ' ' || ch === '.' ? 0 : (r.key?.[ch] ?? -1);
-            const cell = at(minX + x, minY + y);
-            if (want === 0) { if (cell) ok = false; }
-            else if (!cell || cell.id !== want) ok = false;
+        // Java shaped recipes accept horizontal reflection, not 90° rotation.
+        for (let mirrored = 0; mirrored < 2; mirrored++) {
+          let ok = true;
+          for (let y = 0; y < h && ok; y++) {
+            for (let x = 0; x < w && ok; x++) {
+              const ch = p.rows[y][mirrored ? w - 1 - x : x] ?? ' ';
+              const want = ch === ' ' || ch === '.' ? 0 : (r.key?.[ch] ?? -1);
+              const cell = at(minX + x, minY + y);
+              if (want === 0) { if (cell) ok = false; }
+              else if (!cell || cell.id !== want) ok = false;
+            }
           }
+          if (ok) return r;
         }
-        if (ok) return r;
       } else {
         // shapeless: the placed items must be exactly the recipe inputs
         if (have.size !== new Set(r.inputs.map((i) => i.id)).size) continue;
