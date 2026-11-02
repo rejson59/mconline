@@ -1,6 +1,14 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.19.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.20.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.20.0 „Chunki w tle”
+
+- **Rzeczywisty Web Worker:** późniejsze budowanie siatek terenu poza głównym wątkiem, z jednym zadaniem w locie. Kopiowane snapshoty 3×3 chunków i transferowane bufory wyników; żywe tablice kolizji, zapisów i multiplayera nigdy nie są odłączane. Bez nowych zależności gry i wymogu serwera obliczeniowego.
+- **Nie cofamy edycji:** przed publikacją sprawdzane są rewizje i tożsamość dziewięciu chunków oraz otwarte wieka skrzyń. Stary wynik nie zastępuje nowszego terenu. Zachowane oświetlenie skrzyń, modele, UV i bajtowe atrybuty z 4.19; sfery frustum również liczone w tle.
+- **Podłoga ma pierwszeństwo:** przy teleporcie/szybkim locie brakujący chunk pod graczem przerywa odległe zadanie i jest budowany synchronicznie. Nieudana publikacja zachowuje poprzednią geometrię. Błędy, blokada i timeout Workera uruchamiają tryb zapasowy; ciągłe edycje nie mogą bez końca zagłodzić siatki.
+- **Uczciwe F3:** osobny czas snapshotu, pracy Workera i oczekiwania na wynik; liczba gotowych i odrzuconych odpowiedzi. Początkowe 3×3, generowanie, publikacja GPU i awaryjne naprawy nadal mogą blokować — brak obietnicy stałych FPS czy niższego całkowitego RAM.
+- **Sprawdzone:** 17 347 kontroli, typecheck/build, prawdziwy Worker/WebGL desktop i mobilny viewport, zwykły teren, lokalny HTML, tryb zapasowy, teleport, zapis/odświeżenie i GUI 2/Auto 0. Identyczna geometria oraz kontrolne piksele. `npm run test:meshing`; opcjonalnie powtarzalny test Chromium. [Architektura, koszty, pomiary i instrukcja](docs/WORKERS-4.20.md). Bez migracji SQL, zmian ID, protokołu i ochrony miasta.
 
 ## Wersja 4.19.0 „Płynniejsze chunki”
 

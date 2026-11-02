@@ -1093,9 +1093,13 @@ section('2.18: HUD rysuje grafiki z paczki');
     time: 0.4, hurtCount: 0, zoom: false, minimap: false, bow: -1,
   } as unknown as Parameters<typeof HUD>[0]['hud'];
   const html = renderToStaticMarkup(<HUD hud={state} icons={{}} />);
-  const view=renderToStaticMarkup(<HUD hud={{...state,pos:[0,65,0],xpFrac:0,resScale:1,debug:true,frameTimes:{samples:100,medianMs:2,p95Ms:3,p99Ms:30,maxMs:50,low1Fps:20},chunkWork:{attempts:1,ms:7,budgetMs:4}}} icons={{}}/>);
+  const view=renderToStaticMarkup(<HUD hud={{...state,pos:[0,65,0],xpFrac:0,resScale:1,debug:true,mesher:{state:'busy',completed:3,discarded:2,workerMs:8,snapshotMs:1,latencyMs:10},frameTimes:{samples:100,medianMs:2,p95Ms:3,p99Ms:30,maxMs:50,low1Fps:20},chunkWork:{attempts:1,ms:7,budgetMs:4}}} icons={{}}/>);
   check('F3 shows the tail, not just average FPS',view.includes('p99 30.0')&&view.includes('max 50.0')&&view.includes('1% low 20 FPS'));
   check('F3 reports a slow atomic mesh honestly',view.includes('7.0 ms / budżet 4.0 ms')&&view.includes('niepodzielny'));
+  check('F3 separates worker work from main snapshot and latency',view.includes('worker pracuje')&&view.includes('gotowe 3')&&view.includes('nieaktualne 2')&&view.includes('worker 8.0 ms')&&view.includes('snapshot 1.0 ms')&&view.includes('razem 10.0 ms'));
+  const fallback=renderToStaticMarkup(<HUD hud={{...state,pos:[0,65,0],xpFrac:0,resScale:1,debug:true,mesher:{state:'sync',completed:0,discarded:0,workerMs:0,snapshotMs:0,latencyMs:0}}} icons={{}}/>);
+  check('F3 makes fallback explicit instead of pretending a worker is running',fallback.includes('zapasowy synchroniczny'));
+
 
   const images = (html.match(/<img/g) ?? []).length;
   check('HUD składa się z grafik, nie z rysowanych kształtów', images >= 30, `${images} obrazków`);

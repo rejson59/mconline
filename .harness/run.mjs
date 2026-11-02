@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'meshing', entry: path.join(here, 'meshing.ts'), label: 'Asynchroniczne chunki i bezpieczny fallback' },
   { name: 'audio', entry: path.join(here, 'audio.ts'), label: 'Oryginalne efekty i mikser' },
   { name: 'smoke', entry: path.join(here, 'smoke.ts'), label: 'Silnik (headless)' },
   { name: 'ui', entry: path.join(here, 'ui.tsx'), label: 'Interfejs (React)' },
@@ -61,6 +62,12 @@ for (const s of suites) {
       entryPoints: [s.entry],
       outfile: out,
       bundle: true,
+      // Vite owns the production inline worker. Headless engine tests use the
+      // synchronous path; AsyncMesher is separately exercised with a fake port.
+      plugins: [{ name: 'headless-worker', setup(build) {
+        build.onResolve({ filter: /\?worker&inline$/ }, () => ({ path: 'worker', namespace: 'headless-worker' }));
+        build.onLoad({ filter: /.*/, namespace: 'headless-worker' }, () => ({ contents: 'export default class { constructor() { throw new Error("Worker unavailable in headless harness"); } }', loader: 'js' }));
+      } }],
       format: 'esm',
       platform: 'node',
       target: 'node20',

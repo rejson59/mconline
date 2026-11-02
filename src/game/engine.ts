@@ -1,3 +1,5 @@
+import ChunkMeshWorker from './chunkMesh.worker?worker&inline';
+import { AsyncMesher } from './asyncMesher';
 import { ChunkWorkBudget, chunkWorkLimits } from './chunkWork';
 import { FrameTimes, type FrameReport } from './frameTimes';
 import { hotbarScroll, attackRecharge, notificationDuration } from './optionRules';
@@ -238,6 +240,7 @@ export interface HUDState {
   /** 2.0: wywołania rysowania w ostatniej klatce (debug). */
   drawCalls: number;
   frameTimes?: FrameReport;
+  mesher?: ReturnType<AsyncMesher['report']>;
   chunkWork?: { attempts: number; ms: number; budgetMs: number };
   /** 2.2: aktywny cel nawigacji w tym wymiarze. */
   waypoint: { name: string; distance: number; direction: string; bearing: number } | null;
@@ -982,6 +985,7 @@ export class Game {
   /** 2.28: licznik klatek – decyduje, które moby tickują w danej klatce. */
   private frameNo = 0;
   readonly frameTimes = new FrameTimes();
+  private meshWorker?: AsyncMesher;
   private meshRetry = new Map<string, number>();
   private chunkWork = { attempts: 0, ms: 0, budgetMs: 0 };
   /** 2.28: pasmo terenu w oddali (Distant Horizons). */
@@ -1312,6 +1316,8 @@ export class Game {
     // Build nearby chunks right away
     const pcx = Math.floor(this.body.pos.x / CS), pcz = Math.floor(this.body.pos.z / CS);
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) this.buildChunk(pcx + dx, pcz + dz);
+
+    this.meshWorker = new AsyncMesher(() => new ChunkMeshWorker());
 
     this.bindEvents();
     this.updateHand();
@@ -4205,6 +4211,7 @@ export class Game {
    * przełączane razem ze światem, więc nigdy nie „wchodzą" na siebie.
    */
   private switchDimension(next: World) {
+    this.meshWorker?.cancel();
     this.meshRetry?.clear();
     const prev = this.world;
     if (prev === next) return;
@@ -4816,16 +4823,25 @@ export class Game {
 
   // ---------- Chunks ----------
   buildChunk(cx: number, cz: number) {
-    const c = this.world.getChunk(cx, cz);
-    let geos: THREE.BufferGeometry[];
-    try { geos = this.world.buildMesh(c); }
+    let geos: THREE.BufferGeometry[] = [];
+    try {
+      const c = this.world.getChunk(cx, cz);
+      geos = this.world.buildMesh(c);
+      return this.publishChunk(c, geos);
+    }
     catch (error) {
+      for (const g of geos) g.dispose();
       // Preserve the last valid floor instead of leaving an invisible chunk.
       this.world.dirty.add(World.key(cx, cz));
       (this.meshRetry ??= new Map()).set(World.key(cx,cz),performance.now()+250);
       console.warn(`Chunk ${cx},${cz} mesh rebuild failed; keeping previous geometry`, error);
       return false;
     }
+  }
+
+  /** Both paths publish only a complete mesh; live data and the old floor stay intact. */
+  private publishChunk(c: Chunk, geos: THREE.BufferGeometry[]) {
+    const { cx, cz } = c;
     const previous = c.meshes;
     const next: THREE.Mesh[] = [];
     // 2.32: nowy chunk od razu dostaje widoczność zgodną z zasięgiem
@@ -4833,20 +4849,35 @@ export class Game {
     // spoza horyzontu, dopóki gracz nie zmieni chunka.
     const pcx = Math.floor(this.body.pos.x / CS), pcz = Math.floor(this.body.pos.z / CS);
     const vis = Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz)) <= Math.min(this.drawDistance, this.renderDistance);
-    geos.forEach((g, i) => {
-      if (!g.getAttribute('position')) { g.dispose(); return; }
-      const m = new THREE.Mesh(g, this.materials[i]);
-      m.matrixAutoUpdate = false;
-      m.renderOrder = i;
-      m.visible = vis;
-      this.scene.add(m);
-      next.push(m);
-    });
+    try {
+      geos.forEach((g, i) => {
+        if (!g.getAttribute('position')) { g.dispose(); return; }
+        const m = new THREE.Mesh(g, this.materials[i]);
+        m.matrixAutoUpdate = false;
+        m.renderOrder = i;
+        m.visible = vis;
+        next.push(m);
+      });
+      this.scene.add(...next);
+    } catch (error) {
+      for (const m of next) this.scene.remove(m);
+      throw error;
+    }
     c.meshes = next;
     for (const m of previous) { this.scene.remove(m); m.geometry.dispose(); }
     c.built = true;
     this.meshRetry?.delete(World.key(cx,cz));
     return true;
+  }
+
+  private requestChunk(cx: number, cz: number): boolean {
+    if (!this.meshWorker?.available) return this.buildChunk(cx, cz);
+    const queued = this.meshWorker.submit(this.world, cx, cz, (chunk, geometries) => {
+      this.publishChunk(chunk, geometries);
+    });
+    // Unsupported/CSP/errors and repeated stale edits get a synchronous repair.
+    if (!queued && !this.meshWorker.busy) return this.buildChunk(cx, cz);
+    return false; // Scheduled is not built. Progress advances after a valid reply.
   }
 
   private updateChunks(dt = 1 / 60) {
@@ -4861,6 +4892,16 @@ export class Game {
     const dirty: Chunk[] = [];
     const buildLimit = this.drawDistance + 1;
     const retryReady = (key: string) => (this.meshRetry?.get(key) ?? 0) <= work.start;
+    // Teleport/fast flight must not wait behind a remote worker for the floor.
+    // Initial 3x3 spawn meshes still use buildChunk before this worker exists.
+    const floorKey = World.key(pcx, pcz);
+    if (this.meshWorker && !this.world.chunks.get(floorKey)?.built && retryReady(floorKey)) {
+      this.meshWorker.cancel();
+      if (work.take()) {
+        this.world.dirty.delete(floorKey);
+        this.buildChunk(pcx, pcz);
+      }
+    }
     for (const key of this.world.dirty) {
       const c = this.world.chunks.get(key);
       if (!c || !c.built) { this.world.dirty.delete(key); continue; }
@@ -4868,9 +4909,9 @@ export class Game {
     }
     dirty.sort((a,b) => (a.cx-pcx)**2+(a.cz-pcz)**2 - ((b.cx-pcx)**2+(b.cz-pcz)**2));
     for (const c of dirty) {
-      if (!work.take()) break;
+      if (this.meshWorker?.busy || !work.take()) break;
       this.world.dirty.delete(World.key(c.cx,c.cz));
-      this.buildChunk(c.cx,c.cz);
+      this.requestChunk(c.cx,c.cz);
     }
     let total = 0, done = 0;
     const order = this.chunkOrder.length ? this.chunkOrder : this.offsets;
@@ -4884,7 +4925,7 @@ export class Game {
       if (c && c.built) { done++; continue; }
       if (Math.max(Math.abs(dx), Math.abs(dz)) > buildLimit) { done++; continue; }
       // 2.0: budżet zależny od jakości (na słabych telefonach mniejszy).
-      if (retryReady(World.key(pcx+dx,pcz+dz)) && work.take() && this.buildChunk(pcx + dx, pcz + dz)) done++;
+      if (!this.meshWorker?.busy && retryReady(World.key(pcx+dx,pcz+dz)) && work.take() && this.requestChunk(pcx + dx, pcz + dz)) done++;
     }
     this.loadingProgress = done / Math.max(1, total);
     this.chunkWork = { attempts: work.attempts, ms: work.elapsedMs, budgetMs: limits.maxMs };
@@ -7560,6 +7601,7 @@ export class Game {
       resScale: this.resScale,
       showFps: this.showFps,
       drawCalls: this.renderer.info.render.calls,
+      mesher: this.debug ? this.meshWorker?.report() : undefined,
       frameTimes: this.debug ? this.frameTimes?.report() : undefined,
       chunkWork: this.debug ? this.chunkWork : undefined,
       zoom: this.isZooming() && this.ui === 'playing',
@@ -8326,6 +8368,7 @@ export class Game {
   }
 
   dispose() {
+    this.meshWorker?.dispose();
     this.clearChestLids();
     cancelAnimationFrame(this.raf);
     this.viewRO?.disconnect();
