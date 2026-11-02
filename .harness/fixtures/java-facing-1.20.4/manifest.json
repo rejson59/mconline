@@ -1,0 +1,62 @@
+{
+  "version": "1.20.4",
+  "repository": "InventivetalentDev/minecraft-assets",
+  "commit": "90d256dfee7b6fd8014e1bc3b107e64a530c5f9b",
+  "files": [
+    {
+      "path": "assets/minecraft/blockstates/furnace.json",
+      "bytes": 760,
+      "sha256": "aedb43571027a5dea15ba9cbfc05f0327af3048de70b72c3cd67c851839bb284"
+    },
+    {
+      "path": "assets/minecraft/models/block/furnace.json",
+      "bytes": 196,
+      "sha256": "f1005df7892e96ab8bc3bc513bba9e0aa1930ff901423ea726e3bad1f49614c9"
+    },
+    {
+      "path": "assets/minecraft/models/block/furnace_on.json",
+      "bytes": 199,
+      "sha256": "c6cc3c51295082082a41c17fef84742207d2d8a5913b72260bb1dcda27063f72"
+    },
+    {
+      "path": "assets/minecraft/models/block/orientable.json",
+      "bytes": 99,
+      "sha256": "f3da11f14343fd2cb38fe196dc775d1f4c21284b0dfcf09314659da8f4b6fc79"
+    },
+    {
+      "path": "assets/minecraft/models/block/orientable_with_bottom.json",
+      "bytes": 427,
+      "sha256": "8da2928f84a31c6986dc31a916b8be736e5b0afdce7b3fbe651ec42771dd7255"
+    },
+    {
+      "path": "assets/minecraft/models/block/cube.json",
+      "bytes": 584,
+      "sha256": "3e4aacd02e816aeba38f83076596e18ded4cf49c01e17c62d1fce79850ffb84e"
+    },
+    {
+      "path": "data/minecraft/loot_tables/blocks/furnace.json",
+      "bytes": 536,
+      "sha256": "a7fd03a1d02939539aa9730e92e3117727683cafa96835a42f6a7a8d091887b3"
+    },
+    {
+      "path": "assets/minecraft/textures/block/furnace_front.png",
+      "bytes": 254,
+      "sha256": "809df7f59ef95a65da1dc2c7c86b5c6288a93dea2fde8ee506ee1e2b753397cb"
+    },
+    {
+      "path": "assets/minecraft/textures/block/furnace_front_on.png",
+      "bytes": 269,
+      "sha256": "a4ff7cbdc6502673e9a2d61472a15673f608e70cbfc7b325a9473819906c73b9"
+    },
+    {
+      "path": "assets/minecraft/textures/block/furnace_side.png",
+      "bytes": 243,
+      "sha256": "3e3673a0c87a636b51e6ceb33081dda1fd3c89fe0c013d69c0244487e3b65d52"
+    },
+    {
+      "path": "assets/minecraft/textures/block/furnace_top.png",
+      "bytes": 215,
+      "sha256": "d92e36ac9025e4cb46e450ac3bd21692f50c54ebc9373c512530247fc1c2b65c"
+    }
+  ]
+}

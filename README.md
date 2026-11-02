@@ -1,6 +1,14 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.23.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.24.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.24.0 „Piec we właściwą stronę”
+
+- **Cztery kierunki pieca:** front zależy od poziomego kierunku patrzenia, nie od nachylenia kamery. Rozpalenie i zgaszenie nie obracają bloku; zawartość i kierunek przetrwają zapis.
+- **Oryginalne tekstury Java 1.20.4:** cztery PNG 16×16 bez przerysowania, właściwa strona frontu oraz obrót UV góry i spodu w świecie i modelu trzymanym w ręce.
+- **Spójne zachowanie wszystkich ośmiu stanów:** otwieranie, kilof, drop zwykłego pieca, Silk Touch, środkowy przycisk, zawartość, eksplozje i ochrona miasta. Creative pokazuje jeden przedmiot, a stare ID i zapisy pozostają zgodne.
+- **25 110 kontroli**, w tym 599 niezależnego audytu kierunków/tekstur/geometrii. Produkcyjna przeglądarka: desktop, mobilny viewport i lokalny HTML; dokładne bajty atlasu, geometria Workera i zapis wszystkich ośmiu stanów.
+- [Źródła, reprodukcja i ograniczenia](docs/FACING-4.24.md). To kolejny sprawdzony fragment zgodności, nie deklaracja całej gry 1:1.
 
 ## Wersja 4.23.0 „Od rudy do sztabki”
 

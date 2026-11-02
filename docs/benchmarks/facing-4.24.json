@@ -1,0 +1,985 @@
+{
+  "version": "4.24.0",
+  "baselineCommit": "903215f15510fd5ba85d54773d6a0820ab1f184f",
+  "unit": {
+    "checks": 599,
+    "failed": 0,
+    "reference": "90d256dfee7b6fd8014e1bc3b107e64a530c5f9b",
+    "files": 11,
+    "bytes": 3782
+  },
+  "checks": {
+    "total": 25110,
+    "facing": 599,
+    "furnace": 678,
+    "native": 5746,
+    "engine": 16747,
+    "fire": 436,
+    "worker": 81,
+    "audio": 403,
+    "ui": 413,
+    "account": 5,
+    "bootstrap": 2
+  },
+  "testedNodeVersions": [
+    "22.22.3",
+    "20.20.2"
+  ],
+  "browser": {
+    "version": "4.24.0",
+    "environment": "Chromium / SwiftShader sandbox, mobile is viewport emulation",
+    "reports": [
+      {
+        "device": "desktop",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "furnaceResult": {
+          "input": {
+            "id": 495,
+            "count": 1
+          },
+          "fuel": {
+            "id": 494,
+            "count": 1
+          },
+          "burn": 70,
+          "cook": 0,
+          "ingots": 1,
+          "charcoal": 3,
+          "entityDrops": [
+            {
+              "id": 495,
+              "count": 1
+            },
+            {
+              "id": 496,
+              "count": 1
+            },
+            {
+              "id": 494,
+              "count": 2
+            }
+          ]
+        },
+        "facingResult": {
+          "rows": [
+            {
+              "x": 16,
+              "cold": 28,
+              "id": 28
+            },
+            {
+              "x": 18,
+              "cold": 498,
+              "id": 498
+            },
+            {
+              "x": 20,
+              "cold": 497,
+              "id": 497
+            },
+            {
+              "x": 22,
+              "cold": 499,
+              "id": 499
+            },
+            {
+              "x": 24,
+              "cold": 28,
+              "id": 53
+            },
+            {
+              "x": 26,
+              "cold": 498,
+              "id": 501
+            },
+            {
+              "x": 28,
+              "cold": 497,
+              "id": 500
+            },
+            {
+              "x": 30,
+              "cold": 499,
+              "id": 502
+            }
+          ],
+          "atlasChannels": 4096,
+          "mesh": {
+            "values": 32736,
+            "worker": "worker"
+          }
+        },
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 1,
+          "charcoal": 3,
+          "rawIron": 4,
+          "rawGold": 2,
+          "furnace": {
+            "x": 12,
+            "y": 65,
+            "z": 12,
+            "input": {
+              "id": 495,
+              "count": 1
+            },
+            "fuel": {
+              "id": 494,
+              "count": 1
+            },
+            "output": null,
+            "burn": 70,
+            "burnMax": 80,
+            "cook": 0
+          },
+          "facingRows": [
+            {
+              "id": 28,
+              "state": {
+                "x": 16,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 498,
+              "state": {
+                "x": 18,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 497,
+              "state": {
+                "x": 20,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 499,
+              "state": {
+                "x": 22,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 53,
+              "state": {
+                "x": 24,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 501,
+              "state": {
+                "x": 26,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 500,
+              "state": {
+                "x": 28,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 502,
+              "state": {
+                "x": 30,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            }
+          ],
+          "gui": 2
+        },
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "furnaceResult": {
+          "input": {
+            "id": 495,
+            "count": 1
+          },
+          "fuel": {
+            "id": 494,
+            "count": 1
+          },
+          "burn": 70,
+          "cook": 0,
+          "ingots": 1,
+          "charcoal": 3,
+          "entityDrops": [
+            {
+              "id": 495,
+              "count": 1
+            },
+            {
+              "id": 496,
+              "count": 1
+            },
+            {
+              "id": 494,
+              "count": 2
+            }
+          ]
+        },
+        "facingResult": {
+          "rows": [
+            {
+              "x": 16,
+              "cold": 28,
+              "id": 28
+            },
+            {
+              "x": 18,
+              "cold": 498,
+              "id": 498
+            },
+            {
+              "x": 20,
+              "cold": 497,
+              "id": 497
+            },
+            {
+              "x": 22,
+              "cold": 499,
+              "id": 499
+            },
+            {
+              "x": 24,
+              "cold": 28,
+              "id": 53
+            },
+            {
+              "x": 26,
+              "cold": 498,
+              "id": 501
+            },
+            {
+              "x": 28,
+              "cold": 497,
+              "id": 500
+            },
+            {
+              "x": 30,
+              "cold": 499,
+              "id": 502
+            }
+          ],
+          "atlasChannels": 4096,
+          "mesh": {
+            "values": 32736,
+            "worker": "worker"
+          }
+        },
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 1,
+          "charcoal": 3,
+          "rawIron": 4,
+          "rawGold": 2,
+          "furnace": {
+            "x": 12,
+            "y": 65,
+            "z": 12,
+            "input": {
+              "id": 495,
+              "count": 1
+            },
+            "fuel": {
+              "id": 494,
+              "count": 1
+            },
+            "output": null,
+            "burn": 70,
+            "burnMax": 80,
+            "cook": 0
+          },
+          "facingRows": [
+            {
+              "id": 28,
+              "state": {
+                "x": 16,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 498,
+              "state": {
+                "x": 18,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 497,
+              "state": {
+                "x": 20,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 499,
+              "state": {
+                "x": 22,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 53,
+              "state": {
+                "x": 24,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 501,
+              "state": {
+                "x": 26,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 500,
+              "state": {
+                "x": 28,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 502,
+              "state": {
+                "x": 30,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            }
+          ],
+          "gui": 0
+        },
+        "errors": []
+      },
+      {
+        "device": "file",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "furnaceResult": {
+          "input": {
+            "id": 495,
+            "count": 1
+          },
+          "fuel": {
+            "id": 494,
+            "count": 1
+          },
+          "burn": 70,
+          "cook": 0,
+          "ingots": 1,
+          "charcoal": 3,
+          "entityDrops": [
+            {
+              "id": 495,
+              "count": 1
+            },
+            {
+              "id": 496,
+              "count": 1
+            },
+            {
+              "id": 494,
+              "count": 2
+            }
+          ]
+        },
+        "facingResult": {
+          "rows": [
+            {
+              "x": 16,
+              "cold": 28,
+              "id": 28
+            },
+            {
+              "x": 18,
+              "cold": 498,
+              "id": 498
+            },
+            {
+              "x": 20,
+              "cold": 497,
+              "id": 497
+            },
+            {
+              "x": 22,
+              "cold": 499,
+              "id": 499
+            },
+            {
+              "x": 24,
+              "cold": 28,
+              "id": 53
+            },
+            {
+              "x": 26,
+              "cold": 498,
+              "id": 501
+            },
+            {
+              "x": 28,
+              "cold": 497,
+              "id": 500
+            },
+            {
+              "x": 30,
+              "cold": 499,
+              "id": 502
+            }
+          ],
+          "atlasChannels": 4096,
+          "mesh": {
+            "values": 32736,
+            "worker": "worker"
+          }
+        },
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 1,
+          "charcoal": 3,
+          "rawIron": 4,
+          "rawGold": 2,
+          "furnace": {
+            "x": 12,
+            "y": 65,
+            "z": 12,
+            "input": {
+              "id": 495,
+              "count": 1
+            },
+            "fuel": {
+              "id": 494,
+              "count": 1
+            },
+            "output": null,
+            "burn": 70,
+            "burnMax": 80,
+            "cook": 0
+          },
+          "facingRows": [
+            {
+              "id": 28,
+              "state": {
+                "x": 16,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 498,
+              "state": {
+                "x": 18,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 497,
+              "state": {
+                "x": 20,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 499,
+              "state": {
+                "x": 22,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 53,
+              "state": {
+                "x": 24,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 501,
+              "state": {
+                "x": 26,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 500,
+              "state": {
+                "x": 28,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 502,
+              "state": {
+                "x": 30,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            }
+          ],
+          "gui": 2
+        },
+        "errors": []
+      }
+    ]
+  },
+  "fireRegression": {
+    "version": "4.24.0",
+    "browser": "Chromium / SwiftShader sandbox, not physical hardware",
+    "reports": [
+      {
+        "device": "desktop",
+        "changedChannels": 125983,
+        "fire": 491,
+        "offhandDur": 63,
+        "shaderPrograms": 9,
+        "worker": "worker",
+        "flags": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "decodedAudio": [
+          {
+            "name": "fire/ignite",
+            "duration": 0.4252154195011338,
+            "sampleRate": 44100
+          },
+          {
+            "name": "random/fizz",
+            "duration": 1.248299319727891,
+            "sampleRate": 44100
+          }
+        ],
+        "restored": [
+          491,
+          492,
+          493,
+          63
+        ],
+        "errors": []
+      }
+    ]
+  },
+  "meshingRegression": [
+    {
+      "device": "desktop",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 25.5,
+        "snapshotMs": 0.8000000000465661,
+        "latencyMs": 27.400000000023283
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 25,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 10.599999999976717,
+          "snapshotMs": 0.2999999999301508,
+          "latencyMs": 15.70000000006985
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 30,
+          "submitMs": 3.5,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 18,
+          "snapshotMs": 3.099999999976717,
+          "latencyMs": 26.29999999993015
+        },
+        {
+          "syncMs": 4.099999999976717,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 10.400000000023283,
+          "snapshotMs": 0.40000000002328306,
+          "latencyMs": 10.699999999953434
+        },
+        {
+          "syncMs": 6.299999999930151,
+          "submitMs": 4,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 8.599999999976717,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 9.199999999953434
+        },
+        {
+          "syncMs": 2.8999999999068677,
+          "submitMs": 3.800000000046566,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 5.400000000023283,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 5.900000000023283
+        },
+        {
+          "syncMs": 6.300000000046566,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 7.599999999976717,
+          "snapshotMs": 0.40000000002328306,
+          "latencyMs": 7.899999999906868
+        },
+        {
+          "syncMs": 11,
+          "submitMs": 3.400000000023283,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 3.099999999976717,
+          "snapshotMs": 0.19999999995343387,
+          "latencyMs": 3.199999999953434
+        },
+        {
+          "syncMs": 12.599999999976717,
+          "submitMs": 0.2999999999301508,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 3.5,
+          "snapshotMs": 0.19999999995343387,
+          "latencyMs": 3.900000000023283
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    }
+  ],
+  "artifact": {
+    "path": "dist/index.html",
+    "bytes": 10562395,
+    "sha256": "1992e088c4eff25c0e72f22441a3f3c73542cb958e2163c57bcdb839b309231d"
+  },
+  "limits": [
+    "Selected furnace states/textures/geometry, not whole-game 1:1 equivalence.",
+    "Model JSON verifies model data, not original server placement code execution.",
+    "Controlled simulation steps; no original JVM, Java PRNG or fixed server tick-rate equivalence.",
+    "Chromium/SwiftShader and mobile viewport emulation, not physical phone or hardware FPS benchmark.",
+    "Public multiplayer/database not exercised.",
+    "Full furnace XP, material tags, crafting shortcuts and generated structures remain outside this batch."
+  ]
+}

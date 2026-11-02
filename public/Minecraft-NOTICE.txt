@@ -106,3 +106,15 @@ Reproduction: scripts/sync-java-furnace.py; no runtime downloads.
 Original Minecraft data and artwork remain copyright Mojang/Microsoft and are
 NOT covered by this project's MIT license. This is an unofficial project,
 not an official Minecraft product or approved/associated with Mojang/Microsoft.
+
+4.24 native furnace directions and block textures:
+11 pinned Java Edition 1.20.4 files: furnace blockstates, five block models,
+furnace loot table, furnace_front/front_on/side/top 16x16 PNGs.
+Mirror: InventivetalentDev/minecraft-assets, commit
+90d256dfee7b6fd8014e1bc3b107e64a530c5f9b.
+SHA-256/byte manifest: .harness/fixtures/java-facing-1.20.4/manifest.json
+Embedded original artwork: src/game/art/javaFacing.generated.ts
+Reproduction: scripts/sync-java-facing.py; no runtime downloads.
+Original data and artwork remain Mojang/Microsoft property and are NOT MIT.
+The project-written comparison, renderer and interaction code are separate.
+Existing unofficial-product and trademark disclaimers continue to apply.

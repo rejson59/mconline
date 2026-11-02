@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.23.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Od rudy do sztabki', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.24.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Piec we właściwą stronę', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -9889,6 +9889,63 @@ section('4.23: late pointer capture must never steal container clicks');
     globals.document = oldDoc; globals.window = oldWindow;
     if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator);
     else delete globals.navigator;
+  }
+}
+
+section('4.24: oriented furnaces retain state, tools, GUI and contents');
+{
+  const { furnaceFacing, furnaceIdFor, furnaceFacingForYaw, furnaceCapCorner } = await import('../src/game/blocks');
+  for (const yaw of [0, Math.PI/2, Math.PI, -Math.PI/2]) for (const pitch of [-Math.PI/2,0,Math.PI/2]) {
+    const world = new World(4242,true); world.getChunk(0,0); world.setBlock(4,FLAT_H,4,B.STONE);
+    const g = Object.assign(Object.create(Game.prototype), { world, yaw, pitch, mode:'survival',ui:'playing',selected:0,inventory:new Inventory(),
+      body:{pos:new THREE.Vector3(10,FLAT_H+1,10),w:.6,h:1.8},keys:new Set(),mobs:[],growables:new Map(),furnaces:new Map(),
+      raycastTarget:()=>({x:4,y:FLAT_H,z:4,nx:0,ny:1,nz:0,id:B.STONE}),findMobTarget:()=>({mob:null}),
+      spawnParticles(){},emitHud(){},message(){},unlock(){},fallGravity(){},onBlockChanged(){},gainXp(){},setUI(s:string){this.ui=s;}
+    }) as any;
+    g.spawnDrop=(id:number,count:number)=>g.inventory.add(id,count);
+    g.inventory.slots[0]={id:B.FURNACE,count:1};g.tryUse();
+    const expected=furnaceFacingForYaw(yaw),id=world.getBlock(4,FLAT_H+1,4);
+    eq('real placement uses yaw independently of pitch '+yaw+'/'+pitch,id,furnaceIdFor(expected));
+    eq('placement consumes one furnace '+yaw+'/'+pitch,g.inventory.countOf(B.FURNACE),0);
+    g.openFurnace(4,FLAT_H+1,4);const f=g.currentFurnace();
+    check('oriented furnace opens real container '+yaw+'/'+pitch,g.ui==='furnace'&&!!f);
+    f.input={id:I.RAW_IRON,count:2};f.fuel={id:I.CHARCOAL,count:2};
+    g.updateFurnaces(1);
+    eq('ignition preserves direction '+yaw+'/'+pitch,world.getBlock(4,FLAT_H+1,4),furnaceIdFor(expected,true));
+    eq('ignition keeps same container '+yaw+'/'+pitch,g.currentFurnace(),f);
+    f.input=null;g.updateFurnaces(80);
+    eq('extinguishing preserves direction '+yaw+'/'+pitch,world.getBlock(4,FLAT_H+1,4),furnaceIdFor(expected));
+    f.input={id:I.RAW_IRON,count:2};f.fuel={id:I.CHARCOAL,count:1};f.output={id:I.GOLD,count:1};
+    g.net={public:true,canEdit:()=>false};
+    eq('protected oriented furnace cannot be broken',g.breakBlock(4,FLAT_H+1,4),false);
+    eq('protected contents remain',g.furnaces.size,1);g.net=undefined;
+    g.inventory.slots[1]={id:I.DIAMOND_PICK,count:1};g.selected=1;
+    g.breakBlock(4,FLAT_H+1,4);
+    eq('breaking clears only that container',g.furnaces.size,0);
+    eq('canonical furnace recovered',g.inventory.countOf(B.FURNACE),1);
+    eq('input spills once',g.inventory.countOf(I.RAW_IRON),2);
+    eq('fuel spills once',g.inventory.countOf(I.CHARCOAL),1);
+    eq('output spills once',g.inventory.countOf(I.GOLD),1);
+    eq('furnace direction helper survives state '+yaw,furnaceFacing(furnaceIdFor(expected,true)),expected);
+    g.target={id:furnaceIdFor(expected,true),x:4,y:FLAT_H+1,z:4};g.pickBlock();
+    eq('pick block selects canonical furnace',g.selectedStack()?.id,B.FURNACE);
+    world.setBlock(4,FLAT_H+1,4,furnaceIdFor(expected,true));
+    g.furnaces.set(`4,${FLAT_H+1},4`,{...f,input:{id:I.RAW_GOLD,count:3},fuel:null,output:null});
+    g.spawnSmoke=()=>{};g.damage=()=>{};g.body.vel=new THREE.Vector3();
+    g.net={city:true};g.explode(4.5,FLAT_H+1.5,4.5,.1);
+    eq('city explosion preserves oriented container',g.furnaces.size,1);
+    g.net=undefined;g.explode(4.5,FLAT_H+1.5,4.5,.1);
+    eq('ordinary explosion clears oriented container',g.furnaces.size,0);
+    eq('ordinary explosion spills contents once',g.inventory.countOf(I.RAW_GOLD),3);
+  }
+  for (let facing=0;facing<4;facing++) for(const lit of [false,true]) {
+    const id=furnaceIdFor(facing,lit),geo=blockGeometry(id),pos=geo.getAttribute('position'),uv=geo.getAttribute('uv');
+    for(const [group,face] of [[2,3],[3,2]]) for(let v=0;v<4;v++) {
+      const i=group*4+v,corner=furnaceCapCorner(id,face,pos.getX(i)+.5,pos.getZ(i)+.5);
+      const [u0,v0]=tileUV(T.furnace_top,corner&1,corner>>1);
+      check('hand geometry has native cap UV '+id+'/'+i,Math.abs(uv.getX(i)-u0)<1e-6&&Math.abs(uv.getY(i)-v0)<1e-6);
+    }
+    geo.dispose();
   }
 }
 

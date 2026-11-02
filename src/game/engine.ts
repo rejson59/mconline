@@ -23,7 +23,7 @@ import { explorationLootKind } from './explorationLoot';
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, chestLidGeometry, closedChestGeometry, buildingBlockGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
-import { B, BLOCKS, IS_SOLID, RENDER, collisionBoxesAt, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsId, buildingItem, isSlab, isSlabTop, slabBase, slabDouble, isSlabDouble, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
+import { B, BLOCKS, isFurnace, furnaceFacing, furnaceIdFor, furnaceFacingForYaw, furnaceCapCorner, IS_SOLID, RENDER, collisionBoxesAt, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsId, buildingItem, isSlab, isSlabTop, slabBase, slabDouble, isSlabDouble, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryLightPortalAt } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -527,9 +527,15 @@ export function blockGeometry(id: number): THREE.BufferGeometry {
     const tile = tileFor(id, rt === 16 && f < 2 ? 2 : faceMap[f]);
     for (let v = 0; v < 4; v++) {
       const i = f * 4 + v;
+      let cu = Math.round(uv.getX(i)), cv = Math.round(uv.getY(i));
+      if (isFurnace(id) && (faceMap[f] === 2 || faceMap[f] === 3)) {
+        const pos = g.attributes.position as THREE.BufferAttribute;
+        const corner = furnaceCapCorner(id,faceMap[f],pos.getX(i)+.5,pos.getZ(i)+.5);
+        cu = corner & 1; cv = corner >> 1;
+      }
       const [U, V] = handCrop
-        ? tileUVRect(tile, handCrop, Math.round(uv.getX(i)), Math.round(uv.getY(i)))
-        : tileUVInset(tile, Math.round(uv.getX(i)), Math.round(uv.getY(i)), inset);
+        ? tileUVRect(tile, handCrop, cu, cv)
+        : tileUVInset(tile, cu, cv, inset);
       uv.setXY(i, U, V);
       const s = shades[f] * shades[f];
       cols[i * 3] = cols[i * 3 + 1] = cols[i * 3 + 2] = s;
@@ -5857,7 +5863,7 @@ export class Game {
       if (isTrap(t.id)) { this.toggleTrap(t.x, t.y, t.z, t.nx, t.nz); return; }
       if (isChestBlock(t.id)) { this.openChest(t.x, t.y, t.z); return; }
       if (t.id === B.CRAFTING) { this.openInventory(true); return; }
-      if (t.id === B.FURNACE || t.id === B.FURNACE_ON) { this.openFurnace(t.x, t.y, t.z); return; }
+      if (isFurnace(t.id)) { this.openFurnace(t.x, t.y, t.z); return; }
       if (t.id === B.ENCHANT) { this.openEnchant(t.x, t.y, t.z); return; }
       if (isBed(t.id)) { this.trySleep(t.x, t.y, t.z); return; }
       if (t.id === B.LEVER || t.id === B.LEVER_ON) { this.toggleLever(t.x, t.y, t.z); return; }
@@ -6063,6 +6069,8 @@ export class Game {
       this.swingT = 0;
       this.consumeSelected();
       return;
+    } else if (isFurnace(id)) {
+      placeId = furnaceIdFor(furnaceFacingForYaw(this.yaw));
     } else if (id === B.CHEST) {
       // 2.32: przód skrzyni patrzy w stronę gracza (jak `getStateForPlacement`).
       this.unlock('stash');
@@ -6305,7 +6313,7 @@ export class Game {
     for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]]) {
       if (this.world.getBlock(x + dx, y + dy, z + dz) === B.LAVA) fill = B.LAVA;
     }
-    if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
+    if (isFurnace(id)) this.spillFurnace(x, y, z);
     if (isChestBlock(id)) this.spillChest(x, y, z);
     if (id === B.ANVIL) this.spillAnvil(x, y, z);
     if (id === B.BREWING) this.spillBrewing(x, y, z);
@@ -6405,7 +6413,7 @@ export class Game {
           const id = this.world.getBlock(x, y, z);
           if (id === B.AIR || id === B.BEDROCK || id === B.OBSIDIAN || isWater(id) || id === B.LAVA) continue;
           if (id === B.TNT) { this.igniteTNT(x, y, z, 0.3 + Math.random() * 0.6, source); continue; }
-          if (id === B.FURNACE || id === B.FURNACE_ON) this.spillFurnace(x, y, z);
+          if (isFurnace(id)) this.spillFurnace(x, y, z);
           if (isChestBlock(id)) this.spillChest(x, y, z);
           if (id === B.ANVIL) this.spillAnvil(x, y, z);
           if (id === B.BREWING) this.spillBrewing(x, y, z);
@@ -8181,7 +8189,7 @@ export class Game {
       // wraz z zawartością, gdy gracz oddalił się o kilkanaście bloków.
       if (!this.world.hasChunk(Math.floor(f.x / CS), Math.floor(f.z / CS))) continue;
       const id = this.world.peekBlock(f.x, f.y, f.z);
-      if (id !== B.FURNACE && id !== B.FURNACE_ON) {
+      if (!isFurnace(id)) {
         this.furnaces.delete(key);
         continue;
       }
@@ -8190,7 +8198,7 @@ export class Game {
       if ((f.output?.count ?? 0) > before && f.output?.id === I.IRON) this.unlock('iron');
       if ((f.output?.count ?? 0) > before && (f.output?.id === I.COOKED_FISH || f.output?.id === I.COOKED_SALMON)) this.unlock('chef');
       if (before === 0 && f.output) this.gainXp(1); // a finished smelt pays 1 XP
-      const want = lit ? B.FURNACE_ON : B.FURNACE;
+      const want = furnaceIdFor(furnaceFacing(id), lit);
       if (id !== want) this.world.setBlock(f.x, f.y, f.z, want);
     }
   }

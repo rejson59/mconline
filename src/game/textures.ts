@@ -1,3 +1,4 @@
+import { applyJavaFurnaceTextures } from './facingArt';
 import { buildingFaces, buildingUV } from './buildingShapes';
 import { CHEST_BODY, CHEST_LID, chestLockFor, chestFaceRect } from './chestModel';
 import { T, BLOCKS, RENDER, tileFor, isStairs, isSlab, collisionBoxes } from './blocks';
@@ -1343,6 +1344,7 @@ export function buildAtlas(): AtlasResult {
   applyJavaRailTextures(img, { rail:T.rail, rail_corner:T.rail_corner, powered_rail:T.powered_rail, detector_rail:T.detector_rail });
 
   applyJavaFireTextures(img, T);
+  applyJavaFurnaceTextures(img, { furnace_front:T.furnace_front, furnace_front_on:T.furnace_lit, furnace_side:T.furnace_side, furnace_top:T.furnace_top });
 
   // 2.8.2: dopiero teraz cały obraz trafia do atlasu – wszystkie kafelki są
   // narysowane, dziury w liściach wypełnione, a krawędzie wygładzone.

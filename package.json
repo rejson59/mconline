@@ -1,7 +1,7 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.23.0",
+  "version": "4.24.0",
   "description": "Minecraft \u2014 nieoficjalna wersja przegl\u0105darkowa, survival i wsp\u00f3lne miasto Creative",
   "type": "module",
   "license": "MIT",
@@ -31,7 +31,9 @@
     "deploy:branch": "npm run build && npx --yes gh-pages -d dist",
     "bench:meshing": "node scripts/bench-meshing.mjs",
     "test:furnace": "node .harness/run.mjs furnace",
-    "test:browser:furnace": "BROWSER_FURNACE=1 node scripts/verify-native-browser.mjs"
+    "test:browser:furnace": "BROWSER_FURNACE=1 node scripts/verify-native-browser.mjs",
+    "test:facing": "node .harness/run.mjs facing",
+    "test:browser:facing": "BROWSER_FACING=1 node scripts/verify-native-browser.mjs"
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",
