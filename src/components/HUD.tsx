@@ -85,12 +85,24 @@ function Drumstick({ fill }: { fill: 0 | 1 | 2 }) {
 export function Hotbar({ hud, icons, onSelect, onSwapHands }: { hud: HUDState; icons: Record<number, string>; onSelect?: (i: number) => void; onSwapHands?: () => void }) {
   return <div className="java-hotbar" style={{ position: 'relative', width: 182, height: 22, backgroundImage: `url(${guiSprite('hotbar')})`, backgroundSize: '100% 100%', imageRendering: 'pixelated' }}>
     <img alt="" src={guiSprite('hotbar_selection')!} style={{ position: 'absolute', left: hud.selected * 20 - 1, top: -1, width: 24, height: 23, imageRendering: 'pixelated' }} />
+    {hud.attackIndicator === 'hotbar' && <AttackIndicator location="hotbar" progress={hud.attackProgress} />}
     {hud.offhand && <button type="button" aria-label="Druga ręka — zamień ręce (F)" onClick={onSwapHands} onPointerDown={e => e.stopPropagation()} style={{ position: 'absolute', left: -29, top: -1, width: 29, height: 24, border: 0, background: `url(${guiSprite('hotbar_offhand')}) center/100% 100%`, pointerEvents: 'auto' }}><img src={icons[hud.offhand.id]} alt="" width={16} height={16} className="pixelated" />{hud.offhand.count > 1 && <span className="java-count">{hud.offhand.count}</span>}</button>}
     {hud.hotbar.map((s, i) => <div key={i} aria-current={i === hud.selected ? 'true' : undefined} className="java-hotbar-slot" onPointerDown={onSelect ? e => { e.stopPropagation(); onSelect(i); } : undefined} style={{ position: 'absolute', left: 3 + i * 20, top: 3, width: 16, height: 16, pointerEvents: onSelect ? 'auto' : undefined }}>
       {s && <img src={icons[s.id]} alt="" width={16} height={16} className="pixelated" />}{s && s.count > 1 && <span className="java-count">{s.count}</span>}
       {s?.ench && <span className="ench-glint" />}
       {s?.dur !== undefined && s.dur < durabilityMax(s.id) && <span className="dur-bar" style={{ height: 2, left: 1, right: 2, bottom: 1 }}><i style={{ width: `${s.dur / durabilityMax(s.id) * 100}%`, background: '#3dba3d' }} /></span>}
     </div>)}
+  </div>;
+}
+
+/** Original Java HUD sprites, cropped rather than stretched to show charge. */
+export function AttackIndicator({ progress = 1, location }: { progress?: number; location: 'crosshair'|'hotbar' }) {
+  const value = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 1;
+  if (value >= 1) return null;
+  const hotbar = location === 'hotbar', w = hotbar ? 18 : 16, h = hotbar ? 18 : 4;
+  const fill = Math.floor(value * (hotbar ? 19 : 17));
+  return <div data-java-attack={location} role="img" aria-label={`Siła ataku: ${Math.round(value*100)}%`} style={{position:'absolute',width:w,height:h,left:hotbar ? 188 : -8,top:hotbar ? 2 : 9,backgroundImage:`url(${guiSprite(`${location}_attack_indicator_background`)})`,backgroundSize:`${w}px ${h}px`,imageRendering:'pixelated'}}>
+    <div data-java-attack-fill={fill} style={{position:'absolute',left:0,bottom:0,width:hotbar?w:fill,height:hotbar?fill:h,backgroundImage:`url(${guiSprite(`${location}_attack_indicator_progress`)})`,backgroundSize:`${w}px ${h}px`,backgroundPosition:hotbar?'left bottom':'left top'}} />
   </div>;
 }
 
@@ -218,6 +230,8 @@ export default function HUD({ hud, chatSettings = DEFAULT_SETTINGS, chatOpen = f
           <div style={{ position: 'absolute', left: -1, top: -1, width: 2, height: 2, background: 'rgba(255,255,255,0.85)' }} />
         </div>
       )}
+
+      {!hud.zoom && !hud.debug && (hud.attackIndicator ?? 'crosshair') === 'crosshair' && <div style={{position:'absolute',left:'50%',top:'50%',transform:`scale(${scale})`,transformOrigin:'top left'}}><AttackIndicator location="crosshair" progress={hud.attackProgress} /></div>}
 
       {/* 2.3: stan wędkarstwa nad celownikiem (2.5: treść wg wersji sterowania) */}
       {touchControls && hud.fishing && hud.fishing !== 'idle' && (

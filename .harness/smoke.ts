@@ -3195,8 +3195,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.17.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Alchemia Java', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.18.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Opcje i interfejs Java', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -9654,6 +9654,70 @@ section('4.16: hidden native effect chains, promotion boundaries and persistence
   eq('equal-duration HUD order uses native effect colors','strength,fire,regen,night,speed,absorption',order);
   check('long finite effects use color order above the 32147 tick threshold',compareEffectIcons({id:'regen',left:3000},{id:'fire',left:2000})>0);
   check('duration ordering still applies at the exact native threshold',compareEffectIcons({id:'regen',left:32147/20},{id:'fire',left:32148/20})>0);
+}
+
+section('4.18: real options, scroll, recharging and migration');
+{
+  const {hotbarScroll,attackRecharge,notificationDuration}=await import('../src/game/optionRules');
+  const {manualVideoSettings}=await import('../src/utils/settings');
+  eq('old settings get safe scroll default',normalizeSettings({}).scrollSensitivity,1);
+  eq('potato profile survives load',normalizeSettings({quality:'potato'}).quality,'potato');
+  eq('attack indicator fallback',normalizeSettings({attackIndicator:'fake'}).attackIndicator,'crosshair');
+  for(const indicator of ['crosshair','hotbar','off'] as const)eq('indicator migration '+indicator,normalizeSettings({attackIndicator:indicator}).attackIndicator,indicator);
+  for(const key of ['glintSpeed','glintStrength','scrollSensitivity','notificationDisplayTime'] as const){
+    for(const invalid of [NaN,Infinity,-Infinity,'1',null])eq('invalid option '+key+' '+invalid,normalizeSettings({[key]:invalid})[key],DEFAULT_SETTINGS[key]);
+  }
+  eq('glint can be fully disabled',normalizeSettings({glintStrength:0}).glintStrength,0);
+  eq('glint speed can freeze',normalizeSettings({glintSpeed:0}).glintSpeed,0);
+  eq('scroll sensitivity lower bound',normalizeSettings({scrollSensitivity:-1}).scrollSensitivity,.01);
+  eq('scroll sensitivity upper bound',normalizeSettings({scrollSensitivity:999}).scrollSensitivity,10);
+  eq('notification lower bound',normalizeSettings({notificationDisplayTime:-1}).notificationDisplayTime,.5);
+  eq('notification upper bound',normalizeSettings({notificationDisplayTime:99}).notificationDisplayTime,10);
+  eq('native toast default five seconds',notificationDuration(),5000);
+  eq('toast multiplier affects real time',notificationDuration(2),10000);
+  eq('invalid toast duration safe',notificationDuration(NaN),5000);
+  for(const direction of [-1,1]){
+    eq('one pixel-wheel notch '+direction,hotbarScroll(0,direction*100,0).steps,direction);
+    eq('one line-wheel notch '+direction,hotbarScroll(0,direction*3,1).steps,direction);
+    eq('one page-wheel notch '+direction,hotbarScroll(0,direction,2).steps,direction);
+    eq('discrete trackpad notch '+direction,hotbarScroll(0,direction*.1,0,1,true).steps,direction);
+    eq('sensitivity multiplies discrete scroll '+direction,hotbarScroll(0,direction,0,2,true).steps,2*direction);
+  }
+  for(const delta of [0,NaN,Infinity,-Infinity])eq('invalid or zero scroll never selects a slot '+delta,hotbarScroll(0,delta,0).steps,0);
+  let remainder=0,steps=0;
+  for(let n=0;n<25;n++){const next=hotbarScroll(remainder,4,0);remainder=next.remainder;steps+=next.steps;}
+  eq('trackpad fractions eventually select exactly one slot',steps,1);
+  for(const count of [10,20,30,60,120,144,1000]){
+    let left=0,sum=0;
+    for(let n=0;n<count;n++){const part=hotbarScroll(left,100/count,0);left=part.remainder;sum+=part.steps;}
+    eq('fractional event partition does not lose a notch '+count,sum,1);
+    eq('fractional event partition clears debt '+count,left,0);
+  }
+  check('huge finite scroll cannot poison selected slot',Number.isFinite(hotbarScroll(0,Number.MAX_VALUE,2,10).steps));
+
+  eq('reversing a gesture clears old fractional debt',hotbarScroll(.9,-10,0).remainder,-.1);
+  eq('idle attack recharge',attackRecharge(-1,.6),1);
+  eq('half attack recharge',attackRecharge(.3,.6),.5);
+  eq('excess attack delay clamps',attackRecharge(3,.6),0);
+  eq('invalid attack duration safe',attackRecharge(1,0),1);
+  const profile={mobile:true,tier:'low' as const,cores:2,memoryGB:1,gpu:'',dpr:1,minScreen:390};
+  const manual=manualVideoSettings({...DEFAULT_SETTINGS,quality:'auto',guiScale:0,fpsCap:144,fpsCapUserSet:true},{renderDistance:7,clouds:true,particles:.9},profile);
+  eq('manual change exits Auto profile',manual.quality,'potato');
+  eq('manual render distance not silently overridden',effectiveSettings(manual,profile).renderDistance,7);
+  eq('manual particles not silently overridden',effectiveSettings(manual,profile).particles,.9);
+  eq('manual clouds not silently overridden',effectiveSettings(manual,profile).clouds,true);
+  eq('explicit FPS retained when leaving Auto',manual.fpsCap,144);
+  eq('saved Auto GUI retained when leaving Auto',manual.guiScale,0);
+  eq('manual edit retains unrelated controls',manual.sensitivity,DEFAULT_SETTINGS.sensitivity);
+  const {JAVA_OPTIONS}=await import('../src/game/art/javaOptions.generated');
+  const {createHash}=await import('node:crypto');
+  for(const [name,sha]of Object.entries({"slider": "4895acd147454771fd6a61ad294dfc12e13ff15d6018da26c9fa0e884fd9c14e", "slider_highlighted": "406e28df8f21c63364a44d2215f0914bd240854683b06fbf6c53167736bd7c98", "slider_handle": "9e9f72ccb8eb7886db92ac8e8dab1bf21ef09451bfcbafaf822fe0dafa54719d", "slider_handle_highlighted": "2cd50ead04a0bda16b782723ffc1a2469817d556b462107baf19c657e52bd1ca", "crosshair_attack_indicator_background": "9b7568a9f326cb5b6081e843c6c80e2cd932a100422db6995f6d84778466c258", "crosshair_attack_indicator_progress": "a9685123440676828801734e5551beff77fb8020a20270c4eb284bdd95d6e5a1", "hotbar_attack_indicator_background": "88a103a6da7e6459fa7fc84d8e4501d089669c4d62ed56c43449765b58f6cbee", "hotbar_attack_indicator_progress": "7ed1075bceb9b98403def6025b96f074cb0e8dd8c21cc45068ea70acee8416df"}))eq('pinned original option asset byte hash '+name,createHash('sha256').update(Buffer.from(JAVA_OPTIONS[name],'base64')).digest('hex'),sha);
+
+  const {decodePng}=await import('../src/game/art/miniPng');
+  for(const [name,b64]of Object.entries(JAVA_OPTIONS)){
+    const png=decodePng(b64);eq('native widget dimensions '+name,png.width,name.startsWith('slider_handle')?8:name.startsWith('slider')?200:name.startsWith('crosshair')?16:18);
+    eq('native widget height '+name,png.height,name.startsWith('slider')?20:name.startsWith('crosshair')?4:18);
+  }
 }
 
 section('4.17: native base alchemy, 20 Hz stand, save compatibility and bottle conservation');

@@ -16,6 +16,12 @@ export interface Settings {
   volume: number;
   soundVolumes: SoundLevels;
   invertMouse: boolean;
+  scrollSensitivity: number;
+  discreteScroll: boolean;
+  attackIndicator: 'crosshair' | 'hotbar' | 'off';
+  glintSpeed: number;
+  glintStrength: number;
+  notificationDisplayTime: number;
   brightness: number;
   fovEffects: number;
   damageTilt: number;
@@ -78,6 +84,12 @@ export const DEFAULT_SETTINGS: Settings = {
   volume: 0.5,
   soundVolumes: { ...DEFAULT_SOUND_LEVELS },
   invertMouse: false,
+  scrollSensitivity: 1,
+  discreteScroll: false,
+  attackIndicator: 'crosshair',
+  glintSpeed: .5,
+  glintStrength: .75,
+  notificationDisplayTime: 1,
   brightness: 0.5,
   fovEffects: 1,
   damageTilt: 1,
@@ -142,6 +154,11 @@ export function effectiveSettings(s: Settings, profile: DeviceProfile): Settings
   return s.fpsCapUserSet ? { ...preset, fpsCap: s.fpsCap } : preset;
 }
 
+export function manualVideoSettings(s: Settings, patch: Partial<Settings>, profile: DeviceProfile): Settings {
+  return { ...effectiveSettings(s, profile), ...patch,
+    quality: s.quality === 'auto' ? recommendPreset(profile) : s.quality };
+}
+
 function boundedNumber(value: unknown, fallback: number, min: number, max: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.max(min, Math.min(max, value));
@@ -160,7 +177,7 @@ export function normalizeSettings(value: unknown): Settings {
   const stored = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Partial<Record<keyof Settings, unknown>>
     : {};
-  const quality = oneOf(stored.quality, ['auto', 'low', 'medium', 'high'] as const, DEFAULT_SETTINGS.quality);
+  const quality = oneOf(stored.quality, ['auto', 'potato', 'low', 'medium', 'high'] as const, DEFAULT_SETTINGS.quality);
   const controlMode = oneOf(stored.controlMode, ['auto', 'desktop', 'touch'] as const, DEFAULT_SETTINGS.controlMode);
   const touchMode = oneOf(stored.touchMode, ['tap', 'buttons'] as const, DEFAULT_SETTINGS.touchMode);
   const fps = FPS_LIMITS.includes(stored.fpsCap as typeof FPS_LIMITS[number]) ? stored.fpsCap : DEFAULT_SETTINGS.fpsCap;
@@ -174,6 +191,12 @@ export function normalizeSettings(value: unknown): Settings {
     ...DEFAULT_SETTINGS,
     soundVolumes,
     invertMouse: bool('invertMouse'),
+    scrollSensitivity: boundedNumber(stored.scrollSensitivity, 1, .01, 10),
+    discreteScroll: bool('discreteScroll'),
+    attackIndicator: oneOf(stored.attackIndicator, ['crosshair', 'hotbar', 'off'] as const, 'crosshair'),
+    glintSpeed: boundedNumber(stored.glintSpeed, .5, 0, 1),
+    glintStrength: boundedNumber(stored.glintStrength, .75, 0, 1),
+    notificationDisplayTime: boundedNumber(stored.notificationDisplayTime, 1, .5, 10),
     brightness: boundedNumber(stored.brightness, DEFAULT_SETTINGS.brightness, 0, 1),
     fovEffects: boundedNumber(stored.fovEffects, 1, 0, 1),
     damageTilt: boundedNumber(stored.damageTilt, 1, 0, 1),
@@ -220,7 +243,16 @@ export function loadSettings(): Settings {
   }
 }
 
+/** Rendering-only preferences, also applied before the first screen is painted. */
+export function installVisualPreferences(s: Settings) {
+  if (typeof document === 'undefined') return;
+  const style = document.documentElement.style;
+  style.setProperty('--mc-glint-opacity', String(s.glintStrength));
+  style.setProperty('--mc-glint-duration', `${s.glintSpeed > 0 ? .8 / s.glintSpeed : 1}s`);
+  style.setProperty('--mc-glint-play-state', s.glintSpeed > 0 ? 'running' : 'paused');
+}
 export function saveSettings(s: Settings) {
+  installVisualPreferences(s);
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('gui-scale'));

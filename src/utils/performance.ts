@@ -111,15 +111,20 @@ const STRONG_GPU = /(rtx|gtx\s*1|radeon rx|arc\s*[aA]\d|apple\s*(m[1-9]|gpu)|app
 
 /** Wyciąga nazwę GPU z kontekstu WebGL (bez szkoda gdy brak WebGL). */
 function detectGPU(): string {
+  // A profile probe must not retain a graphics context after closing Options.
+  if (typeof window.WebGLRenderingContext === 'undefined' && typeof window.WebGL2RenderingContext === 'undefined') return '';
+  let gl: WebGLRenderingContext | null = null;
   try {
     const canvas = document.createElement('canvas');
-    const gl = (canvas.getContext('webgl2') || canvas.getContext('webgl')) as WebGLRenderingContext | null;
+    gl = (canvas.getContext('webgl2') || canvas.getContext('webgl')) as WebGLRenderingContext | null;
     if (!gl) return '';
     const dbg = gl.getExtension('WEBGL_debug_renderer_info');
     const raw = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : String(gl.getParameter(gl.RENDERER) || '');
     return raw.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
   } catch {
     return '';
+  } finally {
+    try { gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch { /* Already-lost/unsupported driver: the profile remains usable. */ }
   }
 }
 

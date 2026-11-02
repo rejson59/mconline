@@ -62,3 +62,14 @@ Six original textures/item/*.png: blaze_powder, golden_carrot,
 Potion overlay colors follow the effect colors; the glass layer is not tinted.
 Audio event block.brewing_stand.brew: sounds/block/brewing_stand/brew{1,2}.ogg.
 No rights to these third-party materials are granted by the project's MIT license.
+
+4.18 option widgets and attack indicators (original third-party artwork, NOT MIT):
+Pinned Java 1.20.4 mirror commit: 90d256dfee7b6fd8014e1bc3b107e64a530c5f9b
+Compiler: scripts/compile-java-options.py
+Embedded original bytes: src/game/art/javaOptions.generated.ts
+Eight textures/gui/sprites/*.png:
+  widget/{slider,slider_highlighted,slider_handle,slider_handle_highlighted}
+  hud/{crosshair_attack_indicator_background,crosshair_attack_indicator_progress,
+       hotbar_attack_indicator_background,hotbar_attack_indicator_progress}
+Original Polish option labels read from lang/pl_pl.json at the same pinned commit.
+Existing project copyright and trademark disclaimers continue to apply.
