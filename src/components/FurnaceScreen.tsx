@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Game } from '../game/engine';
 import { CONTAINER, FURNACE, containerInvSlot } from '../game/containerLayout';
 import { guiSprite } from '../game/art/uiSprites';
-import { GuiInventory, GuiOverlay, GuiSlot, GuiWindow, useCursorPos, useGuiScale } from './GuiContainer';
+import { GuiInventory, GuiOverlay, GuiSlot, GuiWindow, guiText, useCursorPos, useGuiScale } from './GuiContainer';
 
 /**
  * 2.28: piec 1:1 jak `FurnaceScreen` z Minecrafta.
@@ -97,8 +97,8 @@ export default function FurnaceScreen({ game, icons, onChange }: { game: Game; i
           />
         )}
 
-        <span style={{ position: 'absolute', left: 8, top: 74, fontSize: 7, lineHeight: '8px', color: '#5a5a5a' }}>
-          {burn > 0 ? 'Piec pracuje…' : 'Piec wygasł – dołóż paliwo.'}
+        <span style={{ ...guiText(), position: 'absolute', left: 8, top: 72 }}>
+          Ekwipunek
         </span>
 
         <GuiInventory game={game} icons={icons} slots={slots} onHover={setHover} onChange={refresh} />

@@ -397,7 +397,7 @@ const summary = {
       "full item/tag coverage (canonical oak/coal subset only)",
       "explosion decay",
       "Java PRNG bit sequence",
-      "campfire charcoal (item not implemented)",
+      "campfire loot checked separately by test:furnace",
       "other recipes and loot not in this corpus",
     ],
   },

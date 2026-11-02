@@ -1,8 +1,8 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.22.0",
-  "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
+  "version": "4.23.0",
+  "description": "Minecraft \u2014 nieoficjalna wersja przegl\u0105darkowa, survival i wsp\u00f3lne miasto Creative",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -29,7 +29,9 @@
     "test:meshing": "node .harness/run.mjs meshing",
     "test:ui": "node .harness/run.mjs ui",
     "deploy:branch": "npm run build && npx --yes gh-pages -d dist",
-    "bench:meshing": "node scripts/bench-meshing.mjs"
+    "bench:meshing": "node scripts/bench-meshing.mjs",
+    "test:furnace": "node .harness/run.mjs furnace",
+    "test:browser:furnace": "BROWSER_FURNACE=1 node scripts/verify-native-browser.mjs"
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",

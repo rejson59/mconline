@@ -113,6 +113,8 @@ export const I = {
   GLISTERING_MELON: 355,
   POTION_MUNDANE: 356,
   POTION_THICK: 357,
+  // Append-only, above every existing block and item ID.
+  CHARCOAL: 494, RAW_IRON: 495, RAW_GOLD: 496,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
@@ -163,6 +165,9 @@ const GEM = '#3ee0d0';
 
 export const ITEM_LIST: ItemDef[] = [
   { id: I.STICK, name: 'Patyk', keys: ['patyk', 'stick'], kind: 'material', color: '#b5834a' },
+  { id: I.CHARCOAL, name: 'Węgiel drzewny', keys: ['wegiel_drzewny', 'węgiel drzewny', 'charcoal'], kind: 'material', color: '#40362d' },
+  { id: I.RAW_IRON, name: 'Surowe żelazo', keys: ['surowe_zelazo', 'surowe żelazo', 'raw_iron'], kind: 'material', color: '#b99882' },
+  { id: I.RAW_GOLD, name: 'Surowe złoto', keys: ['surowe_zloto', 'surowe złoto', 'raw_gold'], kind: 'material', color: '#e5b443' },
   { id: I.COAL, name: 'Węgiel', keys: ['wegiel', 'węgiel', 'coal'], kind: 'material', color: '#2a2a2a' },
   { id: I.IRON, name: 'Sztabka żelaza', keys: ['zelazo', 'żelazo', 'iron'], kind: 'material', color: IRON },
   { id: I.GOLD, name: 'Sztabka złota', keys: ['zloto', 'złoto', 'gold'], kind: 'material', color: '#f6d34a' },
@@ -572,7 +577,7 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
     return [];
   }
   if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
-  if (blockId === B.CAMPFIRE_OFF) return [{ id: B.CAMPFIRE, count: 1 }];
+  if (blockId === B.CAMPFIRE || blockId === B.CAMPFIRE_OFF) return [{ id: I.CHARCOAL, count: 2 }];
   if (blockId === B.GRAVEL) return Math.random() < [0.1, 0.14285715, 0.25, 1][Math.min(3, fortune)] ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
   if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: oreDropMultiplier(fortune) }] : [];
   if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: oreDropMultiplier(fortune) }] : [];
@@ -584,7 +589,7 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   if (blockId === B.SLIME_BLOCK) return [{ id: B.SLIME_BLOCK, count: 1 }];
   if (blockId === B.HONEY_BLOCK) return [{ id: B.HONEY_BLOCK, count: 1 }];
   if (blockId === B.HONEYCOMB_BLOCK) return [{ id: B.HONEYCOMB_BLOCK, count: 1 }];
-  if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return tier >= 2 ? [{ id: blockId, count: 1 }] : [];
+  if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return [{ id: blockId === B.IRON_ORE ? I.RAW_IRON : I.RAW_GOLD, count: oreDropMultiplier(fortune) }];
   // płyty: górna dropuje dolną
   if (blockId === B.OAK_SLAB_TOP || blockId === B.STONE_SLAB_TOP || blockId === B.COBBLE_SLAB_TOP || blockId === B.BRICK_SLAB_TOP || blockId === B.SANDSTONE_SLAB_TOP || blockId === B.NETHER_BRICK_SLAB_TOP || blockId === B.QUARTZ_SLAB_TOP) {
     const base = BLOCKS[blockId]?.drop;
@@ -626,8 +631,10 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
 export function smeltResult(id: number): number | null {
   switch (id) {
     case B.IRON_ORE:
+    case I.RAW_IRON:
       return I.IRON;
     case B.GOLD_ORE:
+    case I.RAW_GOLD:
       return I.GOLD;
     case B.SAND:
       return B.GLASS;
@@ -641,11 +648,10 @@ export function smeltResult(id: number): number | null {
       return I.NETHER_BRICK_ITEM;
     case B.QUARTZ_ORE:
       return I.QUARTZ;
-    case B.COBBLE_STAIRS_N:
-      return B.STONE;
     case B.LOG:
     case B.BIRCH_LOG:
-      return I.COAL;
+    case B.ACACIA_LOG:
+      return I.CHARCOAL;
     case I.RAW_PORK:
       return I.COOKED_PORK;
     case I.RAW_BEEF:
@@ -656,8 +662,6 @@ export function smeltResult(id: number): number | null {
       return I.COOKED_FISH;
     case I.RAW_SALMON:
       return I.COOKED_SALMON;
-    case B.SOUL_SAND:
-      return B.SOUL_SOIL;
     default:
       return null;
   }
@@ -665,15 +669,19 @@ export function smeltResult(id: number): number | null {
 
 /** Seconds of burn time one item of fuel provides. 0 = not fuel. */
 export function fuelSeconds(id: number): number {
-  if (id === I.COAL || id === B.COAL_ORE) return 32;
-  if (id === I.BLAZE_ROD) return 60;
-  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || isChestBlock(id) || id === B.FENCE || id === B.TRAP || (id === B.CAMPFIRE || id === B.CAMPFIRE_OFF) || isDoor(id)) return 6;
-  if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || isLadder(id)) return 2;
-  if (id === B.HAY) return 6;
-  if (id >= B.WOOL_WHITE && id <= B.WOOL_BLACK) return 3;
-  if (id >= B.WOOL_ORANGE && id <= B.WOOL_BROWN) return 3;
+  if (id === I.COAL || id === I.CHARCOAL) return 80;
+  if (id === I.LAVA_BUCKET) return 1000;
+  if (id === I.BOW || id === I.FISHING_ROD || id === I.SHIELD) return 15;
+  if (id === I.BLAZE_ROD) return 120;
+  if (id === B.OAK_SLAB || id === B.OAK_SLAB_TOP) return 7.5;
+  if (id === B.OAK_SLAB_DOUBLE) return 15;
+  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.ACACIA_LOG || id === B.CRAFTING || id === B.BOOKSHELF || isChestBlock(id) || id === B.FENCE || isTrap(id) || isLadder(id) || stairsBase(id) === B.OAK_STAIRS_N) return 15;
+  if (isDoor(id)) return 10;
+  if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING) return 5;
+  if (id === B.WOOL_WHITE || id === B.WOOL_RED || id === B.WOOL_BLUE || id === B.WOOL_GREEN || id === B.WOOL_YELLOW || id === B.WOOL_BLACK) return 5;
+  if (id >= B.WOOL_ORANGE && id <= B.WOOL_BROWN) return 5;
   const it = ITEMS[id];
-  if (it?.tool && it.tier === 1) return 4;
+  if (it?.tool && it.tier === 1) return 10;
   return 0;
 }
 

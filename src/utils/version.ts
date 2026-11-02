@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.22.0';
-export const GAME_RELEASE_NAME = 'Receptury pod lupą';
+export const GAME_VERSION = '4.23.0';
+export const GAME_RELEASE_NAME = 'Od rudy do sztabki';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,8 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.23: piec, surowe metale i węgiel drzewny', text: 'Piec przetapia w 10 sekund, a węgiel wystarcza na osiem przedmiotów. Żelazo i złoto wypadają jako surowce, działają Fortune i Silk Touch. Drewno daje węgiel drzewny; można nim palić, robić pochodnie i ogniska. Ognisko bez Silk Touch zostawia dwa węgle drzewne. Wiadro lawy zostaje po zużyciu paliwa.' },
+  { title: '4.23: oryginalne ikony Java 1.20.4', text: 'Węgiel, węgiel drzewny, surowe żelazo i złoto oraz sztabki mają oryginalne tekstury 16×16. Piec nie spala już obsydianu, kamiennych bloków, kwiatów ani samego pieca wskutek błędnego zakresu ID wełny. Postęp i paliwo są poprawnie rozliczane także przy dłuższych klatkach.' },
   { title: '4.22: receptury sprawdzane z oryginalnymi JSON', text: 'TNT wymaga prochu, kompas i zegar redstone, a ognisko trzech pni. Poprawione kształty papieru, chleba, wiadra, strzał i nożyc; receptury przyjmują odbicie lustrzane. Usunięto biblioteczkę z wełny. To audyt wybranego zestawu, nie wszystkich receptur Java.' },
   { title: '4.22: dropy i Szczęście bliżej Java', text: 'Bloki szlamu i plastra miodu wypadają w całości. Poprawiono Szczęście dla rud, krzemienia i pyłu jasnogłazu: właściwe zakresy, mnożniki oraz limit czterech pyłów. Testy porównują zachowanie z przypiętymi oryginalnymi tabelami łupu, nie tylko z własnymi oczekiwaniami.' },
   { title: '4.21: działające krzesiwo i ogniska', text: 'PPM zapala zwykły ogień, a na piasku/glebie dusz — niebieskie płomienie. Oryginalne tekstury i odgłosy, światło, gaszenie oraz trwałość tylko za udaną akcję. Łopata gasi ognisko, krzesiwo je rozpala. Ogień nie rozprzestrzenia się i nie spala budowli.' },

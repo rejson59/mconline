@@ -2517,6 +2517,12 @@ export class Game {
     this.on(document, 'pointerlockchange', () => {
       const was = this.locked;
       this.locked = document.pointerLockElement === canvas;
+      // A successful asynchronous request may arrive after a container opened.
+      // Never leave a visible GUI routing mouse input to the world canvas.
+      if (this.locked && this.ui !== 'playing') {
+        document.exitPointerLock();
+        return;
+      }
       // 2.32: udało się przechwycić kursor – wracamy do zwykłego sterowania.
       if (this.locked) this.mouseFallback = false;
       // Sterowanie dotykowe nie korzysta z Pointer Lock. Na części telefonów
@@ -2806,7 +2812,7 @@ export class Game {
   }
 
   lockPointer() {
-    if (this.touchInput) return;
+    if (this.touchInput || this.ui !== 'playing') return;
     const c = this.renderer.domElement as HTMLCanvasElement & {
       requestPointerLock: (opts?: { unadjustedMovement?: boolean }) => unknown;
     };
@@ -2832,6 +2838,7 @@ export class Game {
       const p = c.requestPointerLock({ unadjustedMovement: true });
       if (p && typeof (p as Promise<void>).catch === 'function') {
         (p as Promise<void>).catch(() => {
+          if (this.ui !== 'playing') return;
           try {
             const fallback = c.requestPointerLock();
             if (fallback && typeof (fallback as Promise<void>).catch === 'function') (fallback as Promise<void>).catch(enableFallback);

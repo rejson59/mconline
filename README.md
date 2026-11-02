@@ -1,6 +1,15 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.22.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.23.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.23.0 „Od rudy do sztabki”
+
+- **Piec bliżej Java 1.20.4:** 10 s na przedmiot, węgiel/węgiel drzewny na osiem przetopień. Bez gubienia czasu na granicach klatek i paliwa. Wiadro lawy jest paliwem i zostawia puste wiadro.
+- **Surowe metale i węgiel drzewny:** rudy żelaza/złota dają surowce z właściwym Fortune; Silk Touch zachowuje blok. Dąb, brzoza i akacja dają węgiel drzewny, używany też do pochodni i dębowego ogniska. Ognisko bez Silk Touch daje dwa węgle drzewne.
+- **Wygląd przedmiotów i pieca:** sześć oryginalnych ikon 16×16 z 1.20.4; poprawiona etykieta „Ekwipunek” i światło rozpalonego pieca (13).
+- **Dwa dodatkowe błędy:** piec nie spala już przypadkowych kamiennych bloków/obsydianu wskutek błędnego zakresu ID wełny; spóźnione przechwycenie kursora nie blokuje kliknięć w otwartym kontenerze.
+- **24 231 kontroli**, 17 kolejnych przypiętych plików referencyjnych, testy produkcyjnego okna pieca, rzeczywistych encji dropu i zapisu na desktopie, mobilnym viewporcie i z lokalnego HTML. Nowe ID są append-only; bez zmian SQL i usuwania zapisów.
+- [Źródła, szczegóły, reprodukcja i pozostałe ograniczenia](docs/FURNACE-4.23.md). To kolejny ograniczony etap, nie pełna zgodność gry 1:1.
 
 ## Wersja 4.22.0 „Receptury pod lupą”
 

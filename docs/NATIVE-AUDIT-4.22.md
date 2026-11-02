@@ -1,5 +1,7 @@
 # 4.22 — pierwszy audyt porównawczy danych Java
 
+> Dokument opisuje stan wydania 4.22. Wydanie [4.23](FURNACE-4.23.md) dodaje węgiel drzewny, surowe metale i dalszy audyt pieca; część wymienionego tu backlogu została już zrealizowana.
+
 ## Metoda zamiast zgadywania
 
 Punktem odniesienia jest **Minecraft Java 1.20.4**, nie Bedrock ani inna wersja Java. Oryginalny klient JVM i nasza gra TypeScript/Three.js nie mają porównywalnej struktury plików. Wspólnym, sensownym punktem odniesienia są natomiast oryginalne JSON-y receptur i tabel łupu.
