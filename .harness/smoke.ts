@@ -3195,8 +3195,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.20.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Chunki w tle', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.21.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Krzesiwo i płomienie', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));

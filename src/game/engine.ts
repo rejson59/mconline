@@ -10,7 +10,8 @@ import { upperHalf } from './buildingShapes';
 import { chestLidAngle } from './chestModel';
 import { railPlacement, railBase } from './rails';
 import { smoothAlpha, movementFov, mousePitch, damageRoll } from './cameraEffects';
-import { isWater, waterHeight } from './blocks';
+import { lightFire } from './fire';
+import { isFire, isWater, waterHeight } from './blocks';
 import { submerged, waterCurrent } from './water';
 import { FirstPersonView } from './firstPersonView';
 import { ArmorVisual } from './armorVisual';
@@ -23,7 +24,7 @@ import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, chestLidGeometry, closedChestGeometry, buildingBlockGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
 import { B, BLOCKS, IS_SOLID, RENDER, collisionBoxesAt, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsId, buildingItem, isSlab, isSlabTop, slabBase, slabDouble, isSlabDouble, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
-import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryCreatePortal } from './redstone';
+import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryLightPortalAt } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
 import {
@@ -1099,7 +1100,7 @@ export class Game {
     ];
     // 2.8: warstwa przezroczysta (woda, szkło, portal) dostaje delikatną falę.
     this.materials.forEach((m, i) =>
-      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, time: this.uTime, held: this.heldLight, sun: this.sunState, brightness: this.brightness })
+      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, fire: i === 1, time: this.uTime, held: this.heldLight, sun: this.sunState, brightness: this.brightness })
     );
     this.dropMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.4, side: THREE.DoubleSide });
     // 2.18: pęknięcia bloku wprost z paczki (10 faz, jak w grze). Gdyby
@@ -4003,9 +4004,9 @@ export class Game {
     }
     const fluid = s.id === I.WATER_BUCKET ? B.WATER : B.LAVA;
     let px = t.x + t.nx, py = t.y + t.ny, pz = t.z + t.nz;
-    if (RENDER[t.id] === 1) { px = t.x; py = t.y; pz = t.z; }
+    if (RENDER[t.id] === 1 || isFire(t.id)) { px = t.x; py = t.y; pz = t.z; }
     const cur = this.world.getBlock(px, py, pz);
-    if (cur !== B.AIR && RENDER[cur] !== 1 && !isWater(cur) && cur !== B.LAVA) return;
+    if (cur !== B.AIR && RENDER[cur] !== 1 && !isFire(cur) && !isWater(cur) && cur !== B.LAVA) return;
     if (py < 0 || py >= CH) return;
     if (this.mode === 'survival' && !this.exchangeContainer(I.BUCKET)) {
       this.message('Brak miejsca na puste wiadro.');
@@ -5828,7 +5829,8 @@ export class Game {
     // Only container use targets fluids; ordinary mining/placing ignores them.
     const t = this.raycastTarget(held?.id === I.BUCKET ? 'sources' : held?.id === I.BOTTLE);
     this.placeCooldown = 0.22;
-    if (t && (!this.canModify(t.x, t.z) || !this.canModify(t.x + t.nx, t.z + t.nz))) { this.message('Ten teren jest chroniony działką.'); return; }
+    const inPlace = t && ((isFire(t.id) && (held?.id === I.WATER_BUCKET || held?.id === I.LAVA_BUCKET)) || (held?.id === I.FLINT_STEEL && (t.id === B.TNT || t.id === B.CAMPFIRE || t.id === B.CAMPFIRE_OFF)) || (ITEMS[held?.id ?? 0]?.tool === 'shovel' && t.id === B.CAMPFIRE));
+    if (t && (!this.canModify(t.x, t.z) || (!inPlace && !this.canModify(t.x + t.nx, t.z + t.nz)))) { this.message('Ten teren jest chroniony działką.'); return; }
     const sneaking = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     // Mieszkaniec ma pierwszeństwo – PPM otwiera okno handlu.
     const vt = this.findMobTarget(4.5);
@@ -5876,23 +5878,30 @@ export class Game {
       return;
     }
     if (t && s.id === I.FLINT_STEEL) {
+      let used = false;
       if (t.id === B.TNT) {
-        this.igniteTNT(t.x, t.y, t.z, 3.2, 'player');
-        this.unlock('boom');
-        this.wearTool();
-        this.swingT = 0;
-        return;
+        if (this.net?.city || this.world.city) { this.message('TNT jest wyłączone w Mieście, aby chronić budowle.'); return; }
+        used = this.igniteTNT(t.x, t.y, t.z, 4, 'player');
+        if (used) this.unlock('boom');
+      } else if (t.id === B.CAMPFIRE_OFF) {
+        this.world.setBlock(t.x,t.y,t.z,B.CAMPFIRE);
+        used = this.world.peekBlock(t.x,t.y,t.z) === B.CAMPFIRE;
+      } else if (t.id !== B.CAMPFIRE && !isFire(t.id)) {
+        const x=t.x+t.nx,y=t.y+t.ny,z=t.z+t.nz;
+        if (tryLightPortalAt(this.world,x,y,z,(px,pz)=>this.canModify(px,pz))) {
+          used = true;
+          this.message('Portal do Netheru został aktywowany!'); this.unlock('portal');
+        } else used = lightFire(this.world,x,y,z);
       }
-      if (t.id === B.OBSIDIAN || t.id === B.CRYING_OBSIDIAN) {
-        if (tryCreatePortal(this.world, t.x, t.y, t.z)) {
-          this.message('Portal do Netheru został aktywowany!');
-          Sfx.playPlace('glass');
-          this.wearTool();
-          this.swingT = 0;
-          this.unlock('portal');
-          return;
-        }
+      if (used) { Sfx.playIgnite(t.x+.5,t.y+.5,t.z+.5); this.wearTool(); this.swingT=0; }
+      return;
+    }
+    if (t?.id === B.CAMPFIRE && ITEMS[s.id]?.tool === 'shovel') {
+      this.world.setBlock(t.x,t.y,t.z,B.CAMPFIRE_OFF);
+      if (this.world.peekBlock(t.x,t.y,t.z) === B.CAMPFIRE_OFF) {
+        Sfx.playExtinguish(t.x+.5,t.y+.5,t.z+.5); this.wearTool(); this.swingT=0;
       }
+      return;
     }
     if (t && t.id === B.CAMPFIRE && this.cookOnCampfire(s)) return;
     // Taming uses bones, not food. Target selection also enforces reach/occlusion.
@@ -6077,7 +6086,7 @@ export class Game {
   }
 
   pickBlock() {
-    if (!this.target) return;
+    if (!this.target || isFire(this.target.id)) return;
     const id = buildingItem(railBase(this.target.id));
     const hot = this.inventory.slots.findIndex((s, i) => i < 9 && s && s.id === id);
     if (hot >= 0) { this.selected = hot; this.emitHud(); return; }
@@ -6276,6 +6285,12 @@ export class Game {
     if (y < 0 || y >= CH || !this.canModify(x, z)) return false;
     const id = this.world.getBlock(x, y, z);
     if (id === B.AIR || !BLOCKS[id] || (BLOCKS[id].hardness < 0 && this.mode !== 'creative') || (this.world.city && y === 0)) return false;
+    if (isFire(id)) {
+      this.world.setBlock(x,y,z,B.AIR);
+      if (this.world.peekBlock(x,y,z) !== B.AIR) return false;
+      if (!silent) Sfx.playExtinguish(x+.5,y+.5,z+.5);
+      return true;
+    }
     const def = BLOCKS[id];
     // Derived flow, not a newly-created source, fills an opened cavity.
     let fill = B.AIR as number;
@@ -6346,8 +6361,9 @@ export class Game {
   }
 
   igniteTNT(x: number, y: number, z: number, fuse: number, owner: Mob | 'player' | null = null) {
-    if (!this.canModify(x, z)) return;
+    if (this.net?.city || this.world.city || !this.canModify(x, z) || this.world.peekBlock(x,y,z) !== B.TNT) return false;
     this.world.setBlock(x, y, z, B.AIR);
+    if (this.world.peekBlock(x,y,z) !== B.AIR) return false;
     const mesh = new THREE.Mesh(this.tntGeo, new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true }));
     mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
     this.scene.add(mesh);
@@ -6358,6 +6374,7 @@ export class Game {
       owner,
     });
     Sfx.playFuse();
+    return true;
   }
 
   /**
@@ -6366,7 +6383,7 @@ export class Game {
    * zamiast stać spokojnie w dymie.
    */
   explode(cx: number, cy: number, cz: number, power: number, source: Mob | 'player' | null = null) {
-    if (this.net?.city) return; // City buildings and infrastructure never take explosion damage.
+    if (this.net?.city || this.world.city) return; // City buildings and infrastructure never take explosion damage.
     Sfx.playExplosion();
     this.shake = 0.6;
     const disturbed = new Set<string>();
@@ -6414,6 +6431,21 @@ export class Game {
       m.damage(dmg, cx, cz, source === m ? null : source);
       m.body.vel.add(kb);
     });
+  }
+
+  private fireContactAcc = 0;
+  private updateFireContact(dt: number, immune: boolean) {
+    if (immune || this.mode !== 'survival') { this.fireContactAcc=0; return; }
+    const b=this.body, hw=b.w/2-.001;let amount=0;
+    for(let y=Math.floor(b.pos.y+.001);y<=Math.floor(b.pos.y+b.h-.001);y++)
+      for(let x=Math.floor(b.pos.x-hw);x<=Math.floor(b.pos.x+hw);x++)
+        for(let z=Math.floor(b.pos.z-hw);z<=Math.floor(b.pos.z+hw);z++){
+          const id=this.world.peekBlock(x,y,z);
+          if(isFire(id))amount=Math.max(amount,id===B.SOUL_FIRE?2:1);
+        }
+    if(!amount){this.fireContactAcc=0;return;}
+    this.fireContactAcc=(this.fireContactAcc??0)+dt;
+    if(this.fireContactAcc>=.5){this.fireContactAcc%=.5;this.damage(amount);}
   }
 
   damage(amount: number, force = false, bypassArmor = false, kind: DamageKind = 'normal') {
@@ -6598,6 +6630,7 @@ export class Game {
       this.updateEntities(dt);
       this.updateFalling(dt);
       this.world.water.tick(dt);
+      this.world.fire.tick(dt);
       this.updateLeafDecay(dt);
       this.updateArrows(dt);
       this.updateDrops(dt);
@@ -6830,6 +6863,7 @@ export class Game {
     }
     // 2.4: ognioodporność – żar, lawa i ogniska nie ruszają odpornego gracza
     const fireImmune = this.hasEffect('fire');
+    this.updateFireContact(dt, fireImmune);
     if (!fireImmune && under === B.MAGMA && b.onGround && this.mode === 'survival' && !this.flying) {
       this.campfireHurt += dt;
       if (this.campfireHurt > 0.6) { this.campfireHurt = 0; this.damage(1); this.message('Blok magmy parzy!'); }
@@ -7640,6 +7674,7 @@ export class Game {
     const id = sel?.id;
     const ench = sel?.ench ? enchList(sel) : null;
     // 2.4: fiolki i napoje mają krótką podpowiedź pod celownikiem
+    if (id === I.FLINT_STEEL) return this.target?.id === B.CAMPFIRE ? 'Ognisko już płonie — łopata je gasi' : 'Krzesiwo: PPM na wierzchu bloku lub wewnątrz ramy z obsydianu';
     if (id === I.BOTTLE) return 'Fiolka: PPM nad wodą, aby napełnić';
     if (id !== undefined && isPotion(id)) return 'Napój: PPM, aby wypić';
     if (id === I.COMPASS) {

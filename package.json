@@ -1,7 +1,7 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.20.0",
+  "version": "4.21.0",
   "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
   "type": "module",
   "license": "MIT",
@@ -20,7 +20,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs",
+    "test:fire": "node .harness/run.mjs fire",
     "test:engine": "node .harness/run.mjs smoke",
+    "test:browser:fire": "node scripts/verify-fire-browser.mjs",
     "test:browser:meshing": "node scripts/verify-meshing-browser.mjs",
     "test:meshing": "node .harness/run.mjs meshing",
     "test:ui": "node .harness/run.mjs ui",

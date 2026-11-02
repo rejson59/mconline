@@ -4,6 +4,7 @@ import { CS } from './constants';
 // Tile indices in the texture atlas
 export const T = {
   glass_pane_edge: 252, rail_corner: 253,
+  fire: 240, soul_fire: 248, campfire_off: 204, campfire_flame: 188, // 8 + 4 + 4 animation tiles and an unlit log, outside entity/pane/rail slots.
   grass_top: 0, grass_side: 1, dirt: 2, stone: 3, cobble: 4, log_side: 5, log_top: 6,
   leaves: 7, planks: 8, sand: 9, water: 10, glass: 11, bedrock: 12, gravel: 13,
   coal_ore: 14, iron_ore: 15, gold_ore: 16, diamond_ore: 17, brick: 18, snow: 19,
@@ -142,12 +143,13 @@ export const B = {
   OAK_SLAB_DOUBLE: 484, STONE_SLAB_DOUBLE: 485, COBBLE_SLAB_DOUBLE: 486,
   BRICK_SLAB_DOUBLE: 487, SANDSTONE_SLAB_DOUBLE: 488,
   NETHER_BRICK_SLAB_DOUBLE: 489, QUARTZ_SLAB_DOUBLE: 490,
+  FIRE: 491, SOUL_FIRE: 492, CAMPFIRE_OFF: 493,
 } as const;
 
 export type RenderType =
   | 'cube' | 'cross' | 'liquid' | 'slab' | 'stairs' | 'portal' | 'rail'
   | 'cactus' | 'bed' | 'fence' | 'torch' | 'lily' | 'chest'
-  | 'lantern' | 'bell' | 'brewing' | 'pane';
+  | 'lantern' | 'bell' | 'brewing' | 'pane' | 'fire';
 
 export interface BlockDef {
   id: number;
@@ -314,6 +316,9 @@ for (let i = 0; i < 4; i++) {
 def(B.TRAP, 'Właz', T.trapdoor, { hardness: 3, sound: 'wood', opaque: false });
 def(B.FENCE, 'Płot', T.fence, { opaque: false, layer: 1, hardness: 2, sound: 'wood', render: 'fence' });
 def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { hardness: 2, sound: 'wood', opaque: false, layer: 1 });
+def(B.CAMPFIRE_OFF, 'Zgaszone ognisko', T.campfire_off, { hardness: 2, sound: 'wood', opaque: false, layer: 1, drop: B.CAMPFIRE });
+def(B.FIRE, 'Ogień', T.fire, { solid: false, opaque: false, layer: 1, render: 'fire', hardness: 0, drop: -1 });
+def(B.SOUL_FIRE, 'Ogień dusz', T.soul_fire, { solid: false, opaque: false, layer: 1, render: 'fire', hardness: 0, drop: -1 });
 def(B.IRON_BLOCK, 'Blok żelaza', T.iron_block, { hardness: 5, sound: 'metal' });
 def(B.GOLD_BLOCK, 'Blok złota', T.gold_block, { hardness: 3, sound: 'metal' });
 def(B.DIAMOND_BLOCK, 'Blok diamentu', T.diamond_block, { hardness: 5, sound: 'stone' });
@@ -463,6 +468,7 @@ for (const d of defs) {
   LAYER[d.id] = d.layer;
   if (d.render === 'cube') RENDER[d.id] = 0;
   else if (d.render === 'cross') RENDER[d.id] = 1;
+  else if (d.render === 'fire') RENDER[d.id] = 17;
   else if (d.render === 'liquid') RENDER[d.id] = 2;
   else if ((d.render as any) === 'slab') RENDER[d.id] = 3;
   else if ((d.render as any) === 'stairs') RENDER[d.id] = 4;
@@ -488,6 +494,8 @@ EMIT[B.GLOWSTONE] = 15;
 EMIT[B.TORCH] = 14;
 EMIT[B.FURNACE_ON] = 12;
 EMIT[B.CAMPFIRE] = 15;
+EMIT[B.FIRE] = 15;
+EMIT[B.SOUL_FIRE] = 10;
 EMIT[B.LANTERN] = 15;
 EMIT[B.REDSTONE_TORCH] = 7;
 EMIT[B.REDSTONE_BLOCK] = 0;
@@ -536,7 +544,7 @@ function collisionFor(d: BlockDef): Float32Array | null {
     return new Float32Array([0, 0, 0, lt, 1, 1]);
   }
   if (d.id === B.FARMLAND || d.id === B.FARMLAND_WET) return new Float32Array([0, 0, 0, 1, 0.9375, 1]);
-  if (d.id === B.CAMPFIRE) return new Float32Array([0, 0, 0, 1, 0.4375, 1]);
+  if (d.id === B.CAMPFIRE || d.id === B.CAMPFIRE_OFF) return new Float32Array([0, 0, 0, 1, 0.4375, 1]);
   if (isDoor(d.id)) {
     // 2.29: drzwi to płyta 3/16 przy krawędzi – zamknięta po stronie
     // przeciwnej do `facing`, otwarta obrócona o 90° wokół zawiasu.
@@ -617,7 +625,10 @@ export function tileFor(id: number, face: number): number {
 }
 
 // Blocks available in creative inventory
+export function isFire(id: number): boolean { return id === B.FIRE || id === B.SOUL_FIRE; }
+
 function creativeVisible(id: number): boolean {
+  if (isFire(id) || id === B.CAMPFIRE_OFF) return false;
   if (isStairsTop(id) || isSlabDouble(id)) return false;
   if (id === B.RAIL_EW || id === B.POWERED_RAIL_EW || id === B.DETECTOR_RAIL_EW) return false;
   if (isWater(id) && id !== B.WATER) return false;
@@ -814,6 +825,7 @@ export function stairsBoxesAt(
 }
 /** Building variants are block states, never separate inventory items. */
 export function buildingItem(id: number): number {
+  if (id === B.CAMPFIRE_OFF) return B.CAMPFIRE;
   return isStairs(id) ? stairsBase(id) : isSlab(id) ? slabBase(id) : id;
 }
 export function isSlabDouble(id: number): boolean {

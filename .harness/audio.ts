@@ -1,3 +1,4 @@
+import { FIRE_SOUND_FILES, FIRE_SOUND_EVENTS } from '../src/game/art/javaFire.generated';
 import { BREWING_SOUND_EVENTS, BREWING_SOUND_FILES } from '../src/game/art/javaBrewing.generated';
 import { RESCUE_SOUND_FILES, RESCUE_SOUND_EVENTS } from '../src/game/art/javaRescue.generated';
 /** Functional Web Audio graph tests. Actual OGG decoding is also browser-tested. */
@@ -77,5 +78,11 @@ check('brewing respects block mixer mute',c.sources.length===start);
 Audio.setSoundLevels({...DEFAULT_SOUND_LEVELS});Audio.playBrew(1,0,0);await flush();check('brewing starts its own spatial native sample',c.sources.length===start+1&&c.sources.at(-1)?.started);
 check('brewing has exactly the two native sound variants',BREWING_SOUND_EVENTS['block.brewing_stand.brew'].length===2);
 for(const [name,data] of Object.entries(BREWING_SOUND_FILES))check('native brewing OGG header '+name,Buffer.from(data,'base64').subarray(0,4).toString()==='OggS');
+for(const [event,name,play] of [['item.flintandsteel.use','fire/ignite',Audio.playIgnite],['block.fire.extinguish','random/fizz',Audio.playExtinguish]] as const){
+  check('native fire event '+event,FIRE_SOUND_EVENTS[event][0].name===name);
+  check('native fire OGG '+name,Buffer.from(FIRE_SOUND_FILES[name],'base64').subarray(0,4).toString()==='OggS');
+  Audio.setSoundLevels({...DEFAULT_SOUND_LEVELS,blocks:0});start=c.sources.length;play(1,0,0);await flush();check('fire effect respects block mute '+event,c.sources.length===start);
+  Audio.setSoundLevels({...DEFAULT_SOUND_LEVELS});play(1,0,0);await flush();check('native fire event actually starts '+event,c.sources.length===start+1&&c.sources.at(-1)?.started);
+}
 Audio.stopWorldAudio();
 console.log(`${checks} audio checks passed`);
