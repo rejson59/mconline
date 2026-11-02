@@ -1,4 +1,4 @@
-import { B, isWater, waterHeight, waterLevel } from './blocks';
+import { B, isFire, isWater, waterHeight, waterLevel } from './blocks';
 import { CH, CS } from './constants';
 
 interface WaterWorld {
@@ -8,7 +8,7 @@ interface WaterWorld {
   setBlock(x: number, y: number, z: number, id: number, notify?: boolean): void;
 }
 const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
-const fallsInto = (id: number) => id === B.AIR || (isWater(id) && id !== B.WATER);
+const fallsInto = (id: number) => id === B.AIR || isFire(id) || (isWater(id) && id !== B.WATER);
 
 /** A derived fluid simulation: only sources/player edits go over the network.
  * Every client reconstructs flow from those inputs. Flow IDs persist in offline
@@ -54,7 +54,7 @@ export class WaterSimulation {
     for (const [x, y, z] of batch) {
       if (!this.world.hasChunk(Math.floor(x / CS), Math.floor(z / CS))) continue;
       const old = this.world.peekBlock(x, y, z);
-      if (old !== B.AIR && !isWater(old)) continue;
+      if (old !== B.AIR && !isFire(old) && !isWater(old)) continue;
       if (old === B.WATER) continue; // Explicit/generated sources never decay.
       let next = B.AIR as number;
       if (isWater(this.world.peekBlock(x, y + 1, z))) next = B.WATER_FALL;
@@ -68,6 +68,7 @@ export class WaterSimulation {
         }
         if (best <= 7) next = B.WATER_FLOW_1 + best - 1;
       }
+      if (isFire(old) && next === B.AIR) continue; // No incoming fluid: a queued dry flame must not disappear.
       if (old !== next) changes.push([x, y, z, next]);
     }
     for (const [x, y, z, id] of changes) this.world.setBlock(x, y, z, id, false);

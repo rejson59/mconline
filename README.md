@@ -1,6 +1,15 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.20.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.21.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.21.0 „Krzesiwo i płomienie”
+
+- **Naprawione krzesiwo:** PPM naprawdę zapala ogień; piasek i gleba dusz dają niebieski płomień. Światło, kontaktowe obrażenia gracza, gaszenie LPM/wodą, oryginalne odgłosy i animowane tekstury. Trwałość spada tylko po udanej akcji, także w drugiej ręce; Creative jej nie zużywa.
+- **Ogniska i TNT:** łopata gasi ognisko, krzesiwo je rozpala. TNT ma 4-sekundowy lont i nie da się go zduplikować ponownym zapłonem pustej kratki. W chronionym Mieście pozostaje wyłączone, z czytelnym komunikatem.
+- **Portale bez narożników:** obie osie i ramy do 23×23; uprawnienia do całego wnętrza sprawdzane przed aktywacją. Podpalanie i gaszenie nie obchodzą ochrony działek ani ulic.
+- **Mniej zbędnej pracy:** źródła światła aktualizują posortowany indeks bez pełnego skanu 32 768 bloków przy każdej edycji. Animacja płomieni działa w shaderze bez przebudowy siatki.
+- **17 791 kontroli** oraz produkcyjny WebGL/Worker na desktopie, dotykowym viewporcie i z lokalnego HTML; zapis/odświeżenie, prawdziwe dekodowanie OGG i ponowna regresja podłogi/GUI z 4.20.
+- **Uczciwy zakres:** ogień nie rozprzestrzenia się i nie spala budowli. Nie ma jeszcze pełnej symulacji pożaru Java; animacje próbkują część oryginalnych klatek. [Mechanika, ochrona, ograniczenia i powtarzalne testy](docs/FIRE-4.21.md).
 
 ## Wersja 4.20.0 „Chunki w tle”
 

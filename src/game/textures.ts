@@ -2,7 +2,7 @@ import { buildingFaces, buildingUV } from './buildingShapes';
 import { CHEST_BODY, CHEST_LID, chestLockFor, chestFaceRect } from './chestModel';
 import { T, BLOCKS, RENDER, tileFor, isStairs, isSlab, collisionBoxes } from './blocks';
 import { mulberry32 } from './noise';
-import { applyJavaRailTextures, applyEntityTextures, applyOfficialTiles, ENTITY_ATLAS, isOfficialTile, type EntityAtlasKey } from './packArt';
+import { applyJavaFireTextures, applyJavaRailTextures, applyEntityTextures, applyOfficialTiles, ENTITY_ATLAS, isOfficialTile, type EntityAtlasKey } from './packArt';
 
 export const TILE = 16;
 export const ATLAS_TILES = 16; // tiles per row
@@ -1341,6 +1341,8 @@ export function buildAtlas(): AtlasResult {
   }
 
   applyJavaRailTextures(img, { rail:T.rail, rail_corner:T.rail_corner, powered_rail:T.powered_rail, detector_rail:T.detector_rail });
+
+  applyJavaFireTextures(img, T);
 
   // 2.8.2: dopiero teraz cały obraz trafia do atlasu – wszystkie kafelki są
   // narysowane, dziury w liściach wypełnione, a krawędzie wygładzone.

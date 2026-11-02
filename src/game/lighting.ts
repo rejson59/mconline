@@ -102,9 +102,9 @@ export interface SunState {
 export function patchChunkMaterial(
   mat: THREE.MeshBasicMaterial,
   uDay: { value: number },
-  opts: { water?: boolean; time?: { value: number }; held?: HeldLightState; sun?: SunState; brightness?: { value: number } } = {}
+  opts: { water?: boolean; fire?: boolean; time?: { value: number }; held?: HeldLightState; sun?: SunState; brightness?: { value: number } } = {}
 ) {
-  const water = !!opts.water;
+  const water = !!opts.water, fire = !!opts.fire;
   const uTime = opts.time ?? { value: 0 };
   const heldPos = opts.held?.pos ?? new THREE.Vector3(0, -1000, 0);
   const uHeldStrength = { value: 0 };
@@ -119,7 +119,7 @@ export function patchChunkMaterial(
   mat.userData.uHeldStrength = uHeldStrength;
   mat.userData.uSun = uSun;
   mat.color.setRGB(1, 1, 1);
-  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-6-water' : 'blockcraft-light-6');
+  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-6-water' : fire ? 'blockcraft-light-7-fire' : 'blockcraft-light-6');
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uBrightness = uBrightness;
     shader.uniforms.uDay = uDay;
@@ -132,7 +132,7 @@ export function patchChunkMaterial(
       .replace(
         '#include <common>',
         '#include <common>\nattribute float aBlock;\nattribute float aFace;\n' +
-          (water ? 'attribute float aWave;\nuniform float uTime;\n' : '') +
+          (water || fire ? 'attribute float aWave;\nuniform float uTime;\n' : '') +
           'varying float vBlock;\nvarying float vFace;\nvarying vec3 vWorldPos;'
       )
       .replace(
@@ -143,6 +143,9 @@ export function patchChunkMaterial(
             : '') +
           '\n\tvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;'
       );
+    if (water || fire) shader.uniforms.uTime = uTime;
+    if (fire) shader.vertexShader = shader.vertexShader.replace('#include <uv_vertex>',
+      '#include <uv_vertex>\n#ifdef USE_MAP\nif (aWave > 1.5) {\nfloat frames = aWave > 2.5 ? 4.0 : 8.0;\nfloat rate = aWave > 3.5 ? 5.0 : (aWave > 2.5 ? 2.5 : 5.0);\nvMapUv.x += floor(mod(uTime * rate, frames)) / 16.0;\n}\n#endif');
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',

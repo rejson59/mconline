@@ -392,7 +392,7 @@ const materialBlock = (id: number) => slabBase(stairsBase(railBase(id)));
 const AXE_BLOCKS = new Set<number>([
   B.OAK_STAIRS_N, B.OAK_SLAB,
   B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.CHEST, B.LOOT_CHEST,
-  B.NOTE_BLOCK, B.CAMPFIRE, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG,
+  B.NOTE_BLOCK, B.CAMPFIRE, B.CAMPFIRE_OFF, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG,
 ]);
 const SHOVEL_BLOCKS = new Set<number>([
   B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.FARMLAND_WET, B.PATH, B.SOUL_SAND, B.SOUL_SOIL, B.MUD,
@@ -560,10 +560,12 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
         blockId === B.FARMLAND || (blockId >= B.CROP0 && blockId <= B.CROP3)) {
       return [{ id: blockId, count: 1 }];
     }
+    if (blockId === B.CAMPFIRE_OFF) return [{ id: B.CAMPFIRE, count: 1 }];
     if (BLOCKS[blockId]?.drop >= 0) return [{ id: blockId, count: 1 }];
     return [];
   }
   if (shears && (blockId === B.LEAVES || blockId === B.BIRCH_LEAVES || blockId === B.ACACIA_LEAVES || blockId === B.JUNGLE_LEAVES || blockId === B.TALLGRASS)) return [{ id: blockId, count: 1 }];
+  if (blockId === B.CAMPFIRE_OFF) return [{ id: B.CAMPFIRE, count: 1 }];
   if (blockId === B.GRAVEL) return Math.random() < 0.1 ? [{ id: I.FLINT, count: 1 }] : [{ id: B.GRAVEL, count: 1 }];
   if (blockId === B.COAL_ORE) return tier >= 1 ? [{ id: I.COAL, count: 1 + (fortune ? Math.floor(Math.random() * (fortune + 1)) : 0) }] : [];
   if (blockId === B.DIAMOND_ORE) return tier >= 3 ? [{ id: I.DIAMOND, count: 1 + (fortune ? Math.floor(Math.random() * fortune) : 0) }] : [];
@@ -658,7 +660,7 @@ export function smeltResult(id: number): number | null {
 export function fuelSeconds(id: number): number {
   if (id === I.COAL || id === B.COAL_ORE) return 32;
   if (id === I.BLAZE_ROD) return 60;
-  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || isChestBlock(id) || id === B.FENCE || id === B.TRAP || id === B.CAMPFIRE || isDoor(id)) return 6;
+  if (id === B.PLANKS || id === B.LOG || id === B.BIRCH_LOG || id === B.CRAFTING || id === B.BOOKSHELF || isChestBlock(id) || id === B.FENCE || id === B.TRAP || (id === B.CAMPFIRE || id === B.CAMPFIRE_OFF) || isDoor(id)) return 6;
   if (id === I.STICK || id === B.SAPLING || id === B.BIRCH_SAPLING || isLadder(id)) return 2;
   if (id === B.HAY) return 6;
   if (id >= B.WOOL_WHITE && id <= B.WOOL_BLACK) return 3;

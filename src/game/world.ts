@@ -1,3 +1,4 @@
+import { FireSimulation, FIRE_QUADS } from './fire';
 import { cityLocal, CITY_ROAD } from './city';
 import { buildingFaces, buildingUV } from './buildingShapes';
 import { LIGHT_RADIUS, buildSkyLight, skyLevel, lightLevel, type SkyField } from './lightMap';
@@ -5,7 +6,7 @@ import { CHEST_BODY, CHEST_LID, chestBoxFor, chestLockFor, chestSeamSkip, chestF
 import { railShape, railCorner } from './rails';
 import { rememberDecorationMask, treeRootReserved } from './decorationMask';
 import { WaterSimulation } from './water';
-import { isWater, waterHeight } from './blocks';
+import { isWater, isFire, waterHeight } from './blocks';
 import { applyStructures } from './structures';
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
@@ -68,12 +69,19 @@ export class Chunk {
     this.cx = cx;
     this.cz = cz;
   }
-  /** Przebudowuje indeks świateł po wygenerowaniu albo zmianie bloku. */
+  /** Przebudowuje indeks świateł po wygenerowaniu lub wczytaniu danych. */
   refreshEmitters() {
     const out: number[] = [];
     const d = this.data;
     for (let i = 0; i < d.length; i++) if (EMIT[d[i]]) out.push(i);
     this.emitters = out;
+  }
+  updateEmitter(index: number, previous: number, next: number) {
+    if (!!EMIT[previous] === !!EMIT[next]) return;
+    let lo = 0, hi = this.emitters.length;
+    while (lo < hi) { const mid = (lo + hi) >>> 1; if (this.emitters[mid] < index) lo = mid + 1; else hi = mid; }
+    if (EMIT[next]) { if (this.emitters[lo] !== index) this.emitters.splice(lo, 0, index); }
+    else if (this.emitters[lo] === index) this.emitters.splice(lo, 1);
   }
   recomputeHeight(x: number, z: number) {
     if (this.nether) {
@@ -405,6 +413,38 @@ export function buildingBlockGeometry(
   return geo;
 }
 /** Axis-aligned box in local 0–1 space, translated to world. Used for doors, ladders and hatches. */
+function addFlames(
+  buf: MeshBuffer,
+  x: number,
+  y: number,
+  z: number,
+  tile: number,
+  sky: number,
+  blk: number,
+  wave: number,
+  scale = 1,
+) {
+  for (const q of FIRE_QUADS) {
+    const n = buf.count;
+    for (let k = 0; k < 4; k++) {
+      const uv = tileUV(tile, k % 2, k < 2 ? 0 : 1);
+      buf.vertex(
+        x + 0.5 + (q[k][0] - 0.5) * scale,
+        y + q[k][1] * scale,
+        z + 0.5 + (q[k][2] - 0.5) * scale,
+        uv[0],
+        uv[1],
+        sky * sky,
+        sky * sky,
+        sky * sky,
+        blk * blk,
+        wave,
+        3,
+      );
+    }
+    buf.quad(n);
+  }
+}
 function addBox(
   buf: MeshBuffer,
   ox: number,
@@ -717,7 +757,7 @@ function specialBoxes(id: number): SpecialBox[] | null {
       },
     ];
   }
-  if (id === B.CAMPFIRE) {
+  if (id === B.CAMPFIRE || id === B.CAMPFIRE_OFF) {
     // 2.21: waniliowe ognisko – cztery bale w dwóch warstwach, zamiast
     // jednego niskiego sześcianu z płomieniem na górze.
     const log = tileFor(id, 4);
@@ -854,6 +894,7 @@ export class World {
   mods = new Map<string, Map<number, number>>();
   dirty = new Set<string>();
   readonly water = new WaterSimulation(this);
+  readonly fire = new FireSimulation(this);
   canEdit?: (x: number, z: number) => boolean;
   allowFluid?: (x: number, z: number, nx: number, nz: number) => boolean;
   /**
@@ -991,6 +1032,7 @@ export class World {
     const c = this.chunks.get(World.key(cx, cz)) ?? null;
     if (!c) return null;
     this.chunks.delete(World.key(cx, cz));
+    this.fire.release(cx, cz);
     if (this.lastChunk === c) {
       this.lastChunk = null;
       this.lastCx = 0x7fffffff;
@@ -1011,6 +1053,7 @@ export class World {
       // every submerged cell. Newly loaded seams also wake their loaded side.
       for (let y = 0; y <= c.maxY; y++) for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++) {
         const id = c.data[idx(x, y, z)];
+        if (isFire(id)) this.fire.changed(cx * CS + x, y, cz * CS + z);
         if (!isWater(id)) continue;
         const wx = cx * CS + x, wz = cz * CS + z;
         this.water.wake(wx, y, wz);
@@ -1544,11 +1587,12 @@ export class World {
     c.recomputeHeight(lx, lz);
     // 2.8: utrzymuje indeks świateł w zgodzie z terenem (bez pełnego skanu
     // przy stawianiu zwykłego bloku).
-    if (EMIT[previous] || EMIT[id]) c.refreshEmitters();
+    c.updateEmitter(i, previous, id);
     if (this.lightChanged(previous,id)) this.markLightDirty(x,z);
     c.revision++;
     if (notify) this.onEdit?.(x, y, z, id);
     this.water.changed(x, y, z, previous);
+    if (isFire(previous) || isFire(id)) this.fire.changed(x, y, z);
     const k = World.key(cx, cz);
     let m = this.mods.get(k);
     if (!m) { m = new Map(); this.mods.set(k, m); }
@@ -1616,9 +1660,10 @@ export class World {
       c.data[i] = e.id;
       c.maxY = Math.min(CH - 1, Math.max(c.maxY, e.y + 2));
       this.water.changed(e.x, e.y, e.z, previous);
+      if (isFire(previous) || isFire(e.id)) this.fire.changed(e.x, e.y, e.z);
       c.recomputeHeight(lx, lz);
       c.revision++;
-      if (EMIT[previous] || EMIT[e.id]) c.refreshEmitters();
+      c.updateEmitter(i, previous, e.id);
       if (this.lightChanged(previous,e.id)) this.markLightDirty(e.x,e.z);
       this.markBlockDirty(e.x,e.y,e.z);
       this.dirty.add(k);
@@ -1881,6 +1926,11 @@ export class World {
                 sb.tiles ?? sb.side ?? tileFor(id, 0), sky, blk, sb.top, sb.bottom, sb.inset ?? 0, sb.crops
               );
             }
+            if (id === B.CAMPFIRE) addFlames(buf,ox+x,y+.25,oz+z,T.campfire_flame,sky,blk,4,.75);
+            continue;
+          }
+          if (rt === 17) {
+            addFlames(buf,ox+x,y,oz+z,id===B.SOUL_FIRE?T.soul_fire:T.fire,modelSkyLight(x,y,z),Math.max(modelBlockLight(x,y,z),lightLevel(EMIT[id])),id===B.SOUL_FIRE?3:2);
             continue;
           }
           if (rt === 16) {

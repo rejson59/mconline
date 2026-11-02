@@ -1,6 +1,8 @@
-import { B, isRedstoneSource } from './blocks';
+import { B, isFire, isRedstoneSource } from './blocks';
+import { CH } from './constants';
 
 export type WorldLike = {
+  canEdit?: (x: number, z: number) => boolean;
   getBlock(x: number, y: number, z: number): number;
   setBlock(x: number, y: number, z: number, id: number): void;
   peekBlock(x: number, y: number, z: number): number;
@@ -91,52 +93,131 @@ export function pressButton(world: WorldLike, x: number, y: number, z: number): 
   return false;
 }
 
-/**
- * Lights an obsidian frame the player clicked with flint & steel.
- *
- * Searches every plausible 4×5 frame that covers the clicked block, in both
- * planes. The old code walked down from the click and often missed frames
- * when the player lit the top or a side column – now any frame block works.
- */
-export function tryCreatePortal(world: WorldLike, x: number, y: number, z: number): boolean {
-  for (const axis of ['x', 'z'] as const) {
-    // The clicked block lies on the frame, so the bottom-left corner can be at
-    // most 3 blocks sideways and 4 blocks below it.
-    for (let lo = -3; lo <= 0; lo++) {
+/** Compatibility helper for existing 4×5 clicked-frame callers. The item uses the exact adjacent ignition cell below. */
+export function tryCreatePortal(
+  world: WorldLike,
+  x: number,
+  y: number,
+  z: number,
+): boolean {
+  for (const axis of ["x", "z"])
+    for (let lo = -3; lo <= 0; lo++)
       for (let ly = y - 4; ly <= y; ly++) {
-        const lx = axis === 'x' ? x + lo : x;
-        const lz = axis === 'z' ? z + lo : z;
-        if (ly < 0) continue;
-        // outer ring must be obsidian...
-        let ok = true;
-        for (let f = 0; f < 4 && ok; f++) {
-          if (world.getBlock(lx + (axis === 'x' ? f : 0), ly, lz + (axis === 'z' ? f : 0)) !== B.OBSIDIAN) ok = false;
-          if (world.getBlock(lx + (axis === 'x' ? f : 0), ly + 4, lz + (axis === 'z' ? f : 0)) !== B.OBSIDIAN) ok = false;
-        }
-        for (let fy = 1; fy < 4 && ok; fy++) {
-          if (world.getBlock(lx, ly + fy, lz) !== B.OBSIDIAN) ok = false;
-          if (world.getBlock(lx + (axis === 'x' ? 3 : 0), ly + fy, lz + (axis === 'z' ? 3 : 0)) !== B.OBSIDIAN) ok = false;
-        }
-        if (!ok) continue;
-        // ...and the 2×3 interior must be free (air or an already-lit portal).
-        for (let i = 1; i <= 2 && ok; i++) {
-          for (let j = 1; j <= 3 && ok; j++) {
-            const ix = lx + (axis === 'x' ? i : 0);
-            const iz = lz + (axis === 'z' ? i : 0);
-            const bid = world.getBlock(ix, ly + j, iz);
-            if (bid !== B.AIR && bid !== B.NETHER_PORTAL) ok = false;
-          }
-        }
-        if (!ok) continue;
-        // fill the interior with portal blocks
-        for (let i = 1; i <= 2; i++) {
-          for (let j = 1; j <= 3; j++) {
-            world.setBlock(lx + (axis === 'x' ? i : 0), ly + j, lz + (axis === 'z' ? i : 0), B.NETHER_PORTAL);
-          }
-        }
-        return true;
+        if (
+          tryLightPortalAt(
+            world,
+            x + (axis === "x" ? lo + 1 : 0),
+            ly + 1,
+            z + (axis === "z" ? lo + 1 : 0),
+          )
+        )
+          return true;
       }
+  return false;
+}
+/** Java-sized obsidian frames: 2..21 × 3..21 interior, optional corners, either axis.
+ * No terrain generation; preflight EVERY interior write before activating any part.
+ */
+export function tryLightPortalAt(
+  world: WorldLike,
+  x: number,
+  y: number,
+  z: number,
+  permit: (x: number, z: number) => boolean = () => true,
+): boolean {
+  const empty = (id: number) =>
+    id === B.AIR || id === B.NETHER_PORTAL || isFire(id);
+  if (
+    !Number.isInteger(x) ||
+    !Number.isInteger(y) ||
+    !Number.isInteger(z) ||
+    y < 1 ||
+    y >= CH - 1 ||
+    !empty(world.peekBlock(x, y, z))
+  )
+    return false;
+  for (const axis of ["x", "z"]) {
+    const dx = axis === "x" ? 1 : 0,
+      dz = axis === "z" ? 1 : 0;
+    let bottom = y,
+      steps = 0;
+    while (
+      bottom > 0 &&
+      world.peekBlock(x, bottom - 1, z) !== B.OBSIDIAN &&
+      steps < 21
+    ) {
+      if (!empty(world.peekBlock(x, bottom - 1, z))) break;
+      bottom--;
+      steps++;
     }
+    if (bottom < 1 || world.peekBlock(x, bottom - 1, z) !== B.OBSIDIAN)
+      continue;
+    let left = 0;
+    while (
+      left < 21 &&
+      empty(
+        world.peekBlock(x - (left + 1) * dx, bottom, z - (left + 1) * dz),
+      ) &&
+      world.peekBlock(x - (left + 1) * dx, bottom - 1, z - (left + 1) * dz) ===
+        B.OBSIDIAN
+    )
+      left++;
+    const ox = x - left * dx,
+      oz = z - left * dz;
+    const at = (i: number, j: number) =>
+      world.peekBlock(ox + i * dx, bottom + j, oz + i * dz);
+    if (at(-1, 0) !== B.OBSIDIAN) continue;
+    let width = 0;
+    while (width <= 21 && empty(at(width, 0)) && at(width, -1) === B.OBSIDIAN)
+      width++;
+    if (width < 2 || width > 21 || at(width, 0) !== B.OBSIDIAN) continue;
+    const cells: [number, number, number][] = [];
+    let height = 0,
+      missing = false,
+      valid = true;
+    for (let h = 0; h <= 21; h++) {
+      if (bottom + h >= CH) {
+        valid = false;
+        break;
+      }
+      let roof = true;
+      for (let i = 0; i < width; i++)
+        if (at(i, h) !== B.OBSIDIAN) {
+          roof = false;
+          break;
+        }
+      if (roof) {
+        height = h;
+        break;
+      }
+      if (h === 21 || at(-1, h) !== B.OBSIDIAN || at(width, h) !== B.OBSIDIAN) {
+        valid = false;
+        break;
+      }
+      for (let i = 0; i < width; i++) {
+        const id = at(i, h);
+        if (!empty(id)) {
+          valid = false;
+          break;
+        }
+        missing ||= id !== B.NETHER_PORTAL;
+        cells.push([ox + i * dx, bottom + h, oz + i * dz]);
+      }
+      if (!valid) break;
+    }
+    if (!valid || height < 3 || !missing) continue;
+    if (
+      cells.some(
+        ([px, , pz]) =>
+          !permit(px, pz) || (world.canEdit && !world.canEdit(px, pz)),
+      )
+    )
+      continue;
+    for (const [px, py, pz] of cells)
+      world.setBlock(px, py, pz, B.NETHER_PORTAL);
+    return cells.every(
+      ([px, py, pz]) => world.peekBlock(px, py, pz) === B.NETHER_PORTAL,
+    );
   }
   return false;
 }

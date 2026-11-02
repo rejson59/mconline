@@ -3,8 +3,9 @@
 import { JAVA_SOUND_EVENTS as BASE_EVENTS, JAVA_SOUND_FILES as BASE_FILES } from './art/javaSounds.generated';
 import { RESCUE_SOUND_EVENTS, RESCUE_SOUND_FILES } from './art/javaRescue.generated';
 import { BREWING_SOUND_FILES, BREWING_SOUND_EVENTS } from './art/javaBrewing.generated';
-const JAVA_SOUND_EVENTS = { ...BASE_EVENTS, ...RESCUE_SOUND_EVENTS, ...BREWING_SOUND_EVENTS };
-const JAVA_SOUND_FILES = { ...BASE_FILES, ...RESCUE_SOUND_FILES, ...BREWING_SOUND_FILES };
+import { FIRE_SOUND_FILES, FIRE_SOUND_EVENTS } from './art/javaFire.generated';
+const JAVA_SOUND_EVENTS = { ...BASE_EVENTS, ...RESCUE_SOUND_EVENTS, ...BREWING_SOUND_EVENTS, ...FIRE_SOUND_EVENTS };
+const JAVA_SOUND_FILES = { ...BASE_FILES, ...RESCUE_SOUND_FILES, ...BREWING_SOUND_FILES, ...FIRE_SOUND_FILES };
 import { B, BLOCKS } from './blocks';
 import { SOUND_CATEGORIES, DEFAULT_SOUND_LEVELS, type SoundCategory, type SoundLevels } from '../utils/soundSettings';
 export type { SoundCategory, SoundLevels } from '../utils/soundSettings';
@@ -143,6 +144,8 @@ export function playMobStep(type: MobVoiceKey, x?: number, y?: number, z?: numbe
 }
 export function playBell() { sample('block.bell.use', 'blocks'); }
 export function playExplosion() { sample('entity.generic.explode', 'blocks'); }
+export function playIgnite(x: number, y: number, z: number) { sample('item.flintandsteel.use', 'blocks', 1, .8 + Math.random() * .4, { x, y, z }); }
+export function playExtinguish(x: number, y: number, z: number) { sample('block.fire.extinguish', 'blocks', 1, 1, { x, y, z }); }
 export function playFuse() { sample('entity.tnt.primed', 'blocks'); }
 export function playPop() { sample('entity.item.pickup', 'players', .2); }
 export function playEat() { sample('entity.generic.eat', 'players', .5); }

@@ -73,3 +73,15 @@ Eight textures/gui/sprites/*.png:
        hotbar_attack_indicator_background,hotbar_attack_indicator_progress}
 Original Polish option labels read from lang/pl_pl.json at the same pinned commit.
 Existing project copyright and trademark disclaimers continue to apply.
+
+4.21 fire assets (original third-party artwork and recordings, NOT MIT):
+Pinned Java 1.20.4 mirror commit: 90d256dfee7b6fd8014e1bc3b107e64a530c5f9b
+Compiler: scripts/compile-java-fire.py
+Embedded data: src/game/art/javaFire.generated.ts
+Textures/block: fire_0.png, soul_fire_0.png, campfire_fire.png, campfire_log.png.
+Original animation order/timing comes from the corresponding .png.mcmeta files;
+the browser atlas uses sampled frames (8 normal, 4 soul, 4 campfire).
+Audio events: item.flintandsteel.use -> sounds/fire/ignite.ogg;
+              block.fire.extinguish -> sounds/random/fizz.ogg.
+These assets remain Mojang/Microsoft property. No rights to these materials
+are granted by this project's MIT license or by the source mirror.

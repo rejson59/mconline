@@ -1,0 +1,468 @@
+{
+  "version": "4.21.0",
+  "environment": "Chromium 153 / SwiftShader, sandbox VM; mobile is an emulated viewport, not a physical phone. Synthetic PPM event and real Game.touchTap entry point. No live public multiplayer.",
+  "html": {
+    "bytes": 10554287,
+    "sha256": "31ef9a320886fcdd825a54e9a2691543231c255d5ff90138608d236c09ece992",
+    "previous_4_20_bytes": 10483752,
+    "increase_percent": 0.6728030193770218
+  },
+  "checks": {
+    "total": 17791,
+    "fire": 436,
+    "meshing": 81,
+    "engine": 16458,
+    "audio": 403,
+    "ui": 406,
+    "account": 5,
+    "bootstrap": 2
+  },
+  "fireBrowser": {
+    "version": "4.21.0",
+    "browser": "Chromium / SwiftShader sandbox, not physical hardware",
+    "reports": [
+      {
+        "device": "desktop",
+        "changedChannels": 125983,
+        "fire": 491,
+        "offhandDur": 63,
+        "shaderPrograms": 9,
+        "worker": "worker",
+        "flags": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "decodedAudio": [
+          {
+            "name": "fire/ignite",
+            "duration": 0.4252154195011338,
+            "sampleRate": 44100
+          },
+          {
+            "name": "random/fizz",
+            "duration": 1.248299319727891,
+            "sampleRate": 44100
+          }
+        ],
+        "restored": [
+          491,
+          492,
+          493,
+          63
+        ],
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "changedChannels": 94233,
+        "fire": 491,
+        "offhandDur": 63,
+        "shaderPrograms": 9,
+        "worker": "worker",
+        "flags": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "decodedAudio": [
+          {
+            "name": "fire/ignite",
+            "duration": 0.4252154195011338,
+            "sampleRate": 44100
+          },
+          {
+            "name": "random/fizz",
+            "duration": 1.248299319727891,
+            "sampleRate": 44100
+          }
+        ],
+        "restored": [
+          491,
+          492,
+          493,
+          63
+        ],
+        "errors": []
+      },
+      {
+        "device": "file",
+        "changedChannels": 125983,
+        "fire": 491,
+        "offhandDur": 63,
+        "shaderPrograms": 9,
+        "worker": "worker",
+        "flags": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "decodedAudio": [
+          {
+            "name": "fire/ignite",
+            "duration": 0.4252154195011338,
+            "sampleRate": 44100
+          },
+          {
+            "name": "random/fizz",
+            "duration": 1.248299319727891,
+            "sampleRate": 44100
+          }
+        ],
+        "restored": [
+          491,
+          492,
+          493,
+          63
+        ],
+        "errors": []
+      }
+    ]
+  },
+  "workerRegression": [
+    {
+      "device": "desktop",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 23.600000000093132,
+        "snapshotMs": 2.800000000046566,
+        "latencyMs": 29.300000000046566
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 25,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 13,
+          "snapshotMs": 3.6000000000931323,
+          "latencyMs": 15.300000000046566
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 11.100000000093132,
+          "submitMs": 14.100000000093132,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 12.5,
+          "snapshotMs": 2.8999999999068677,
+          "latencyMs": 13.5
+        },
+        {
+          "syncMs": 5.2000000001862645,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 8.600000000093132,
+          "snapshotMs": 0.2999999998137355,
+          "latencyMs": 12.600000000093132
+        },
+        {
+          "syncMs": 11.199999999953434,
+          "submitMs": 7.099999999860302,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 15.100000000093132,
+          "snapshotMs": 0.5999999998603016,
+          "latencyMs": 16.600000000093132
+        },
+        {
+          "syncMs": 3.3999999999068677,
+          "submitMs": 0.6000000000931323,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 4,
+          "snapshotMs": 0.6000000000931323,
+          "latencyMs": 4.5
+        },
+        {
+          "syncMs": 7.599999999860302,
+          "submitMs": 0.8000000000465661,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 3.800000000046566,
+          "snapshotMs": 0.7000000001862645,
+          "latencyMs": 4.099999999860302
+        },
+        {
+          "syncMs": 9.099999999860302,
+          "submitMs": 4.699999999953434,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 14.100000000093132,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 14.399999999906868
+        },
+        {
+          "syncMs": 4.199999999953434,
+          "submitMs": 5,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 4.399999999906868,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 4.899999999906868
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    },
+    {
+      "device": "mobile",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 24.800000000046566,
+        "snapshotMs": 1,
+        "latencyMs": 28.4000000001397
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 599114,
+        "differences": 0,
+        "drawCalls": 19,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 32.300000000046566,
+          "snapshotMs": 0.2999999998137355,
+          "latencyMs": 32.700000000186265
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 11.699999999953434,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 6.100000000093132,
+          "snapshotMs": 0.4000000001396984,
+          "latencyMs": 7
+        },
+        {
+          "syncMs": 6.399999999906868,
+          "submitMs": 4.899999999906868,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 11,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 11.5
+        },
+        {
+          "syncMs": 7.300000000046566,
+          "submitMs": 0.39999999990686774,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 6.100000000093132,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 9.099999999860302
+        },
+        {
+          "syncMs": 4.099999999860302,
+          "submitMs": 0.39999999990686774,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 10.5,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 10.899999999906868
+        },
+        {
+          "syncMs": 5.099999999860302,
+          "submitMs": 0.30000000004656613,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 11.5,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 11.800000000046566
+        },
+        {
+          "syncMs": 4.399999999906868,
+          "submitMs": 9.400000000139698,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 9.100000000093132,
+          "snapshotMs": 3.9000000001396984,
+          "latencyMs": 9.399999999906868
+        },
+        {
+          "syncMs": 6.099999999860302,
+          "submitMs": 6,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 10.199999999953434,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 10.699999999953434
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    },
+    {
+      "device": "file",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 4.099999999860302,
+        "snapshotMs": 1,
+        "latencyMs": 6.300000000046566
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 25,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 5.599999999860302,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 12.899999999906868
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 6.399999999906868,
+          "submitMs": 1.3000000000465661,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 18.299999999813735,
+          "snapshotMs": 0.5,
+          "latencyMs": 19.600000000093132
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    },
+    {
+      "device": "terrain",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 26,
+        "snapshotMs": 3.5999999998603016,
+        "latencyMs": 26.600000000093132
+      },
+      "parity": {
+        "values": 122892,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 36,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 19.800000000046566,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 27
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 13.699999999953434,
+          "submitMs": 1.1000000000931323,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 28.600000000093132,
+          "snapshotMs": 0.9000000001396984,
+          "latencyMs": 29.199999999953434
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    }
+  ],
+  "assetSource": "90d256dfee7b6fd8014e1bc3b107e64a530c5f9b",
+  "assets": [
+    {
+      "path": "textures/block/fire_0.png",
+      "bytes": 11703,
+      "sha256": "9d6d68cbf19f2f9aaed72086069faaedb78b9d8384b55b663fbebb2d02afeb48"
+    },
+    {
+      "path": "textures/block/fire_0.png.mcmeta",
+      "bytes": 356,
+      "sha256": "658d67c1b3206e23a401d04ec196512b72702b7b8c6fa0200c6c66250529bbbb"
+    },
+    {
+      "path": "textures/block/soul_fire_0.png",
+      "bytes": 8056,
+      "sha256": "5239a385a4eca64b7832a8945f99385240e1d54ccbbe7d27dc0fa443effed790"
+    },
+    {
+      "path": "textures/block/soul_fire_0.png.mcmeta",
+      "bytes": 356,
+      "sha256": "658d67c1b3206e23a401d04ec196512b72702b7b8c6fa0200c6c66250529bbbb"
+    },
+    {
+      "path": "textures/block/campfire_fire.png",
+      "bytes": 635,
+      "sha256": "35d5e013ec297d0ff2e09cac67a35d5228d6c36a8e9b70209f89e86db0a06542"
+    },
+    {
+      "path": "textures/block/campfire_fire.png.mcmeta",
+      "bytes": 44,
+      "sha256": "e9b8025fde1b09b0a4d2a38427b04f98f28a593045be6d177eb2b29164c872b0"
+    },
+    {
+      "path": "textures/block/campfire_log.png",
+      "bytes": 249,
+      "sha256": "f17e54bca739ad5e7b4bdf2f44f4e2f454658aae2a385acfaa0c5949e1693f42"
+    },
+    {
+      "path": "sounds.json",
+      "bytes": 494101,
+      "sha256": "4bf50ededd60b0069af21f027d319d09585a78d9276eedc414dc4eefaf564b13"
+    },
+    {
+      "path": "sounds/fire/ignite.ogg",
+      "bytes": 6418,
+      "sha256": "6d3cc135c6beefcc097e63785e691063db8598b2ccad8d20374b53b474165171"
+    },
+    {
+      "path": "sounds/random/fizz.ogg",
+      "bytes": 17002,
+      "sha256": "32c42c9c46b99b40191ab10dca9096ff7d7fc05f69276b418a4ae244f08e319e"
+    }
+  ]
+}

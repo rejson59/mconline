@@ -1,3 +1,4 @@
+import { JAVA_FIRE_ANIMATIONS, JAVA_FIRE_TEXTURES } from './art/javaFire.generated';
 import { javaBrewingItemPixels, JAVA_BREWING_IDS } from './brewingArt';
 import { JAVA_CHEST_TEXTURES, JAVA_RAIL_TEXTURES } from './art/javaBlocks.generated';
 /**
@@ -193,4 +194,53 @@ export function applyJavaRailTextures(img: ImageData, tiles: Record<string,numbe
       for(let channel=0;channel<4;channel++)img.data[di+channel]=source.data[si+channel];
     }
   }
+}
+
+/** Row 15 cols 0..11, row 11 cols 12..15 and row 12 col 12: no chest/pane/rail overlap. */
+export function applyJavaFireTextures(
+  img: ImageData,
+  tiles: {
+    fire: number;
+    soul_fire: number;
+    campfire_off: number;
+    campfire_flame: number;
+  },
+): void {
+  for (const [name, base, count] of [
+    ["fire_0", tiles.fire, 8],
+    ["soul_fire_0", tiles.soul_fire, 4],
+    ["campfire_fire", tiles.campfire_flame, 4],
+  ] as const) {
+    const sheet = decodePng(JAVA_FIRE_TEXTURES[name]);
+    if (sheet.width !== 16 || sheet.height % 16 !== 0)
+      throw new Error("Unexpected pinned fire sheet");
+    for (let frame = 0; frame < count; frame++)
+      for (let y = 0; y < 16; y++)
+        for (let x = 0; x < 16; x++) {
+          const frames = JAVA_FIRE_ANIMATIONS[name].frames;
+          const src =
+            ((frames[Math.floor((frame * frames.length) / count)] * 16 + y) *
+              16 +
+              x) *
+            4;
+          const dst =
+            ((Math.floor((base + frame) / 16) * 16 + y) * img.width +
+              ((base + frame) % 16) * 16 +
+              x) *
+            4;
+          img.data.set(sheet.data.subarray(src, src + 4), dst);
+        }
+  }
+  const log = decodePng(JAVA_FIRE_TEXTURES.campfire_log),
+    base = tiles.campfire_off;
+  for (let y = 0; y < 16; y++)
+    for (let x = 0; x < 16; x++) {
+      const src = (y * 16 + x) * 4,
+        dst =
+          ((Math.floor(base / 16) * 16 + y) * img.width +
+            (base % 16) * 16 +
+            x) *
+          4;
+      img.data.set(log.data.subarray(src, src + 4), dst);
+    }
 }
