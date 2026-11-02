@@ -1,3 +1,5 @@
+import { ChunkWorkBudget, chunkWorkLimits } from './chunkWork';
+import { FrameTimes, type FrameReport } from './frameTimes';
 import { hotbarScroll, attackRecharge, notificationDuration } from './optionRules';
 import { cleanStatus, isTimedEffect, maxAmplifier, effectClock, mergeEffect, advanceEffect, type SavedEffect, type StatusSnapshot } from './statusEffects';
 import { landingDamage } from './landing';
@@ -235,6 +237,8 @@ export interface HUDState {
   showFps: boolean;
   /** 2.0: wywołania rysowania w ostatniej klatce (debug). */
   drawCalls: number;
+  frameTimes?: FrameReport;
+  chunkWork?: { attempts: number; ms: number; budgetMs: number };
   /** 2.2: aktywny cel nawigacji w tym wymiarze. */
   waypoint: { name: string; distance: number; direction: string; bearing: number } | null;
   /** 2.3: lorneta w dłoni – pole widzenia jest zwężone. */
@@ -977,6 +981,9 @@ export class Game {
   drawDistance = 6;
   /** 2.28: licznik klatek – decyduje, które moby tickują w danej klatce. */
   private frameNo = 0;
+  readonly frameTimes = new FrameTimes();
+  private meshRetry = new Map<string, number>();
+  private chunkWork = { attempts: 0, ms: 0, budgetMs: 0 };
   /** 2.28: pasmo terenu w oddali (Distant Horizons). */
   private lodGroup = new THREE.Group();
   private lodMat!: THREE.MeshBasicMaterial;
@@ -2538,6 +2545,11 @@ export class Game {
       const s = 0.0022 * this.sensitivity * (this.zooming ? 0.4 : 1);
       this.yaw -= e.movementX * s;
       this.pitch = mousePitch(this.pitch, e.movementY, s, this.invertMouse);
+    }) as EventListener);
+    this.on(document, 'visibilitychange', (() => {
+      this.frameTimes?.reset(true);
+      this.lastTime = performance.now();
+      this.fpsFrames = this.fpsTime = 0;
     }) as EventListener);
     this.on(window, 'wheel', ((e: WheelEvent) => {
       if ((!this.locked && !this.mouseFallback) || this.ui !== 'playing') return;
@@ -4193,6 +4205,7 @@ export class Game {
    * przełączane razem ze światem, więc nigdy nie „wchodzą" na siebie.
    */
   private switchDimension(next: World) {
+    this.meshRetry?.clear();
     const prev = this.world;
     if (prev === next) return;
     this.playerHistory = [];
@@ -4809,8 +4822,9 @@ export class Game {
     catch (error) {
       // Preserve the last valid floor instead of leaving an invisible chunk.
       this.world.dirty.add(World.key(cx, cz));
+      (this.meshRetry ??= new Map()).set(World.key(cx,cz),performance.now()+250);
       console.warn(`Chunk ${cx},${cz} mesh rebuild failed; keeping previous geometry`, error);
-      return;
+      return false;
     }
     const previous = c.meshes;
     const next: THREE.Mesh[] = [];
@@ -4831,54 +4845,50 @@ export class Game {
     c.meshes = next;
     for (const m of previous) { this.scene.remove(m); m.geometry.dispose(); }
     c.built = true;
+    this.meshRetry?.delete(World.key(cx,cz));
+    return true;
   }
 
-  private updateChunks() {
+  private updateChunks(dt = 1 / 60) {
     const pcx = Math.floor(this.body.pos.x / CS), pcz = Math.floor(this.body.pos.z / CS);
-    // 2.8: przebudowy po zmianie bloku też mają budżet – wcześniej dziesięć
-    // dużych chunków naraz potrafiło zamrozić klatkę na kilkadziesiąt ms.
-    const t0 = performance.now();
-    // 2.8: na słabszym sprzęcie budujemy mniej na klatkę, żeby nie „szarpało”.
-    // 2.28: automat jakości dokłada swoje, gdy klatki są wyraźnie za długie.
     const adaptive = (this.fps > 0 && this.fps < 28 ? 0.65 : 1) * this.governor.profile.chunkScale;
-    this.refreshChunkOrder(1 / Math.max(1, this.fps || 60));
-    let rebuilt = 0;
-    for (const k of this.world.dirty) {
-      const c = this.world.chunks.get(k);
-      this.world.dirty.delete(k);
-      if (c && c.built) {
-        this.buildChunk(c.cx, c.cz);
-        rebuilt++;
-      }
-      if (rebuilt >= 6 || performance.now() - t0 > this.gfx.chunkBudgetMs * 1.5 * adaptive) break;
+    this.refreshChunkOrder(dt);
+    const loading = this.loadingProgress < .999;
+    const limits = chunkWorkLimits(this.gfx.chunkBudgetMs, this.gfx.chunksPerFrame, this.fpsCap, adaptive, loading);
+    const work = new ChunkWorkBudget(limits.maxMs, limits.limit);
+    // Snapshot avoids retrying a failed/reinserted Set entry repeatedly in one frame.
+    // Nearby edits (especially the player's floor) win over remote dirty meshes.
+    const dirty: Chunk[] = [];
+    const buildLimit = this.drawDistance + 1;
+    const retryReady = (key: string) => (this.meshRetry?.get(key) ?? 0) <= work.start;
+    for (const key of this.world.dirty) {
+      const c = this.world.chunks.get(key);
+      if (!c || !c.built) { this.world.dirty.delete(key); continue; }
+      if (Math.max(Math.abs(c.cx-pcx),Math.abs(c.cz-pcz)) <= buildLimit && retryReady(key)) dirty.push(c);
     }
-    let built = 0;
+    dirty.sort((a,b) => (a.cx-pcx)**2+(a.cz-pcz)**2 - ((b.cx-pcx)**2+(b.cz-pcz)**2));
+    for (const c of dirty) {
+      if (!work.take()) break;
+      this.world.dirty.delete(World.key(c.cx,c.cz));
+      this.buildChunk(c.cx,c.cz);
+    }
     let total = 0, done = 0;
-    const loading = this.loadingProgress < 0.999;
-    // Podczas pierwszego wejścia do świata budżet jest hojniejszy, żeby horyzont
-    // pojawił się szybko; w trakcie gry liczy się przede wszystkim płynność.
-    const budget = this.gfx.chunkBudgetMs * adaptive * (loading ? 1.8 : 1);
-    const perFrame = this.gfx.chunksPerFrame * (loading ? 2 : 1);
     const order = this.chunkOrder.length ? this.chunkOrder : this.offsets;
     // 2.32: nie budujemy siatek chunków, których automat jakości i tak nie
     // rysuje. Na „ziemniaku” to 169 → 81 chunków, czyli o połowę mniej
     // generowania i meshingu przy każdym kroku gracza. Po powrocie do
     // wyższej jakości brakujące siatki powstaną same.
-    const buildLimit = this.drawDistance + 1;
     for (const [dx, dz] of order) {
       total++;
       const c = this.world.chunks.get(World.key(pcx + dx, pcz + dz));
       if (c && c.built) { done++; continue; }
       if (Math.max(Math.abs(dx), Math.abs(dz)) > buildLimit) { done++; continue; }
       // 2.0: budżet zależny od jakości (na słabych telefonach mniejszy).
-      if (built < perFrame && performance.now() - t0 < budget) {
-        this.buildChunk(pcx + dx, pcz + dz);
-        built++;
-        done++;
-      }
+      if (retryReady(World.key(pcx+dx,pcz+dz)) && work.take() && this.buildChunk(pcx + dx, pcz + dz)) done++;
     }
     this.loadingProgress = done / Math.max(1, total);
-    this.unloadTimer -= 1 / 60;
+    this.chunkWork = { attempts: work.attempts, ms: work.elapsedMs, budgetMs: limits.maxMs };
+    this.unloadTimer -= dt;
     if (this.unloadTimer <= 0) {
       this.unloadTimer = 2;
       const lim = this.renderDistance + this.gfx.unloadMargin;
@@ -4887,7 +4897,8 @@ export class Game {
           for (const m of c.meshes) { this.scene.remove(m); m.geometry.dispose(); }
           // 2.8: releaseChunk czyści też jednowpisowy cache świata.
           this.world.releaseChunk(c.cx, c.cz);
-          void k;
+          this.meshRetry?.delete(k);
+          this.world.dirty.delete(k);
         }
       }
     }
@@ -6488,7 +6499,9 @@ export class Game {
     // 2.0: limit klatek – klatka jest po prostu pomijana, liczniki czasu
     // ruszają dopiero przy realnym renderze (ruch zostaje prawidłowy).
     if (this.fpsCap > 0 && now - this.lastTime < 1000 / this.fpsCap - 0.6) return;
-    let dt = (now - this.lastTime) / 1000;
+    const frameMs = now - this.lastTime;
+    this.frameTimes.record(frameMs);
+    let dt = frameMs / 1000;
     this.lastTime = now;
     if (dt > 0.1) dt = 0.1;
     // 2.15: awaryjna kontrola rozmiaru (2 odczyty layoutu na ~0,5 s) – gdyby
@@ -6496,7 +6509,7 @@ export class Game {
     this.viewCheck = (this.viewCheck + 1) % 30;
     if (this.viewCheck === 0) this.syncViewport();
     this.fpsFrames++;
-    this.fpsTime += dt;
+    this.fpsTime += frameMs / 1000;
     if (this.fpsTime >= 0.5) {
       this.fps = Math.round(this.fpsFrames / this.fpsTime);
       this.fpsFrames = 0;
@@ -6571,7 +6584,7 @@ export class Game {
       if (this.saveTimer > 30) { this.saveTimer = 0; this.save(); }
     }
     this.checkHardwareIdle();
-    this.updateChunks();
+    this.updateChunks(dt);
     this.updateChunkVisibility();
     this.updateLod(dt);
     this.uTime.value += dt;
@@ -7547,6 +7560,8 @@ export class Game {
       resScale: this.resScale,
       showFps: this.showFps,
       drawCalls: this.renderer.info.render.calls,
+      frameTimes: this.debug ? this.frameTimes?.report() : undefined,
+      chunkWork: this.debug ? this.chunkWork : undefined,
       zoom: this.isZooming() && this.ui === 'playing',
       // 2.5: HUD zna tryb sterowania (inna treść podpowiedzi na dotyku).
       touch: this.touchInput,

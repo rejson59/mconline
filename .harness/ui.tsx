@@ -913,6 +913,10 @@ async function mountWithJsdom(): Promise<boolean> {
     ui: 'playing', touchInput: false, save() {},
   }) as any;
   eventGame.bindEvents();
+  let skippedInactive=false;eventGame.frameTimes={reset(skip:boolean){skippedInactive=skip;}};eventGame.fpsFrames=7;eventGame.fpsTime=2;
+  dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
+  check('UI: inactive tab gap is excluded from frame statistics and FPS window',skippedInactive&&eventGame.fpsFrames===0&&eventGame.fpsTime===0&&Number.isFinite(eventGame.lastTime));
+
   dom.window.dispatchEvent(new dom.window.Event('blur'));
   check('UI: browser blur immediately stops mining the floor', !eventGame.mouseLeft && !eventGame.mouseRight && eventGame.breakProgress === 0 && eventGame.keys.size === 0);
   eventGame.mouseLeft = true;
@@ -1089,6 +1093,10 @@ section('2.18: HUD rysuje grafiki z paczki');
     time: 0.4, hurtCount: 0, zoom: false, minimap: false, bow: -1,
   } as unknown as Parameters<typeof HUD>[0]['hud'];
   const html = renderToStaticMarkup(<HUD hud={state} icons={{}} />);
+  const view=renderToStaticMarkup(<HUD hud={{...state,pos:[0,65,0],xpFrac:0,resScale:1,debug:true,frameTimes:{samples:100,medianMs:2,p95Ms:3,p99Ms:30,maxMs:50,low1Fps:20},chunkWork:{attempts:1,ms:7,budgetMs:4}}} icons={{}}/>);
+  check('F3 shows the tail, not just average FPS',view.includes('p99 30.0')&&view.includes('max 50.0')&&view.includes('1% low 20 FPS'));
+  check('F3 reports a slow atomic mesh honestly',view.includes('7.0 ms / budżet 4.0 ms')&&view.includes('niepodzielny'));
+
   const images = (html.match(/<img/g) ?? []).length;
   check('HUD składa się z grafik, nie z rysowanych kształtów', images >= 30, `${images} obrazków`);
   check('każdy adres ma jeden prefiks data:', !html.includes('base64,data:'));

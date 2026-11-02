@@ -3195,8 +3195,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.18.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Opcje i interfejs Java', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.19.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Płynniejsze chunki', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -8294,8 +8294,11 @@ section('4.5.0: both first-person hands render after transparent water/clouds');
   const view = new FirstPersonView(main, off), trace: string[] = [];
   const renderer = {
     autoClear: true,
+    info: {autoReset:true,render:{calls:0},reset(){this.render.calls=0;}},
     clearDepth() { trace.push('depth'); },
     render(scene: THREE.Scene, cam: THREE.PerspectiveCamera) {
+      if(this.info.autoReset)this.info.reset();
+      this.info.render.calls+=scene===world?5:2;
       if (scene === world) {
         trace.push('world'); check('world pass contains water and clouds but no held meshes', scene.children.includes(water) && scene.children.includes(clouds) && !camera.children.includes(main) && !camera.children.includes(off));
       } else {
@@ -8308,11 +8311,14 @@ section('4.5.0: both first-person hands render after transparent water/clouds');
   view.render(renderer as unknown as THREE.WebGLRenderer, world, camera);
   eq('render order is world, clear world depth, then held objects', trace.join(','), 'world,depth,hands');
   check('renderer and world background/fog survive the extra pass', renderer.autoClear && world.background instanceof THREE.Color && !!world.fog);
+  eq('draw calls include world and hands, not just the last pass',renderer.info.render.calls,7);
+  check('renderer statistics reset policy is restored',renderer.info.autoReset);
   off.visible = false; view.render(renderer as unknown as THREE.WebGLRenderer, world, camera);
+  eq('draw statistics reset once for the next frame',renderer.info.render.calls,7);
   eq('empty offhand visibility is not changed by rendering', off.visible, false);
-  const failing = { autoClear: true, clearDepth() {}, render(scene: THREE.Scene) { if (scene === view.scene) throw new Error('test viewmodel failure'); } };
+  const failing = { autoClear: true, info:{autoReset:true,reset(){}}, clearDepth() {}, render(scene: THREE.Scene) { if (scene === view.scene) throw new Error('test viewmodel failure'); } };
   try { view.render(failing as unknown as THREE.WebGLRenderer, world, camera); } catch { /* expected */ }
-  check('a failed viewmodel pass still restores renderer state', failing.autoClear);
+  check('a failed viewmodel pass still restores renderer state', failing.autoClear && failing.info.autoReset);
   const code = readSource('src/game/engine.ts');
   check('engine actually calls the final viewmodel renderer', code.includes('this.firstPerson.render(this.renderer, this.scene, this.camera)') && !code.includes('this.camera.add(this.hand, this.offHand)'));
   main.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); o.material.dispose(); } });
@@ -9654,6 +9660,62 @@ section('4.16: hidden native effect chains, promotion boundaries and persistence
   eq('equal-duration HUD order uses native effect colors','strength,fire,regen,night,speed,absorption',order);
   check('long finite effects use color order above the 32147 tick threshold',compareEffectIcons({id:'regen',left:3000},{id:'fire',left:2000})>0);
   check('duration ordering still applies at the exact native threshold',compareEffectIcons({id:'regen',left:32147/20},{id:'fire',left:32148/20})>0);
+}
+
+section('4.19: lossless terrain buffers, shared work budget and real frame times');
+{
+  const {meshFingerprint}=await import('./meshFingerprint');
+  const baseline=(await import('./fixtures/meshing-4.18.json')).default;
+  const {meshScratchBytes}=await import('../src/game/world');
+  const cases=[['terrain',new World(12345)],['nether',new World(12345,false,true)],['flat',new World(12345,true)],['models',new World(9876,true)],['city',new World(20261101,false,false,true)]] as const;
+  for(const [name,w]of cases){
+    for(let z=-1;z<=1;z++)for(let x=-1;x<=1;x++)w.getChunk(x,z);
+    if(name==='models')for(const [n,id]of [B.TORCH,B.WATER,B.LAVA,B.CHEST,B.GLASS_PANE,B.RAIL,B.OAK_SLAB,B.OAK_STAIRS_N,B.LEAVES].entries())w.setBlock(n+2,65,6,id);
+    const c=w.getChunk(0,0),gs=w.buildMesh(c),result=meshFingerprint(gs),expected=baseline[name];
+    eq('all semantic vertex and triangle bits unchanged '+name,result.hash,expected.hash);
+    eq('topology vertex count unchanged '+name,result.vertices,expected.vertices);
+    eq('topology index count unchanged '+name,result.indices,expected.indices);
+    eq('exactly six bytes saved per vertex '+name,expected.bytes-result.bytes,6*result.vertices);
+    for(const g of gs){
+      const face=g.getAttribute('aFace'),wave=g.getAttribute('aWave');if(!face)continue;
+      check('face and wave are losslessly packed bytes '+name,face.array instanceof Uint8Array&&wave.array instanceof Uint8Array&&!face.normalized&&!wave.normalized);
+      check('face identifiers remain valid '+name,Array.from(face.array).every(v=>Number.isInteger(v)&&v>=0&&v<=5));
+      check('wave flags remain boolean '+name,Array.from(wave.array).every(v=>v===0||v===1));
+    }
+    w.setBlock(4,68,4,B.TORCH);const changed=w.buildMesh(c);for(const g of changed)g.dispose();
+    eq('reusing scratch cannot mutate an already published mesh '+name,meshFingerprint(gs).hash,result.hash);
+    w.setBlock(4,68,4,B.AIR);for(const g of gs)g.dispose();
+  }
+  check('scratch retention is bounded across all layers',meshScratchBytes()<=12*1024*1024);
+  const {ChunkWorkBudget,chunkWorkLimits}=await import('../src/game/chunkWork');
+  let clock=0;const work=new ChunkWorkBudget(4,3,()=>clock);
+  check('first atomic mesh can start',work.take());clock=7;
+  check('slow first mesh stops both phases',!work.take());eq('one slow mesh is counted once',work.attempts,1);
+  clock=0;const count=new ChunkWorkBudget(100,2,()=>clock);check('dirty phase uses shared slot',count.take());check('stream phase can use second slot',count.take());check('no separate stream allowance after shared cap',!count.take());
+  eq('60 Hz chunk budget is a quarter frame',chunkWorkLimits(12,3,0,1,false).maxMs,1000/60*.25);
+  eq('loading doubles the shared job count',chunkWorkLimits(12,3,60,1,true).limit,6);
+  check('explicit low FPS allows a bigger work window',chunkWorkLimits(12,3,30,1,false).maxMs>chunkWorkLimits(12,3,144,1,false).maxMs);
+  const {FrameTimes}=await import('../src/game/frameTimes');const frames=new FrameTimes(100);
+  eq('empty frame report has no fabricated FPS',frames.report().low1Fps,0);
+  for(let i=0;i<99;i++)frames.record(2);frames.record(30);
+  eq('fast median does not hide a freeze',frames.report().medianMs,2);eq('actual maximum exposes freeze',frames.report().maxMs,30);
+  check('one-percent low reveals a stall despite 500 FPS median',frames.report().low1Fps<34);
+  for(const value of [NaN,Infinity,-Infinity,0,-2])frames.record(value);eq('invalid timings never poison ring',frames.report().samples,100);
+  frames.record(5);eq('frame ring stays bounded',frames.report().samples,100);eq('ring replaces its oldest frame',frames.report().maxMs,30);
+  frames.reset(true);frames.record(60000);frames.record(16);eq('return from hidden tab excludes inactive gap',frames.report().maxMs,16);
+  // Exercise the actual engine scheduler with fake jobs, not only the budget helper.
+  const w=new World(419,true),near=w.getChunk(0,0),far=w.getChunk(2,0);near.built=far.built=true;
+  w.dirty.clear();w.dirty.add(World.key(2,0));w.dirty.add(World.key(0,0));
+  const built:string[]=[];
+  const g=Object.assign(Object.create(Game.prototype),{world:w,body:{pos:new THREE.Vector3(1,70,1)},fps:60,fpsCap:60,loadingProgress:1,
+    governor:{profile:{chunkScale:1}},gfx:{chunkBudgetMs:12,chunksPerFrame:1,unloadMargin:2},drawDistance:3,renderDistance:3,unloadTimer:2,
+    offsets:[[0,0],[2,0],[1,0]],chunkOrder:[],refreshChunkOrder(){},buildChunk(x:number,z:number){built.push(World.key(x,z));return true;}}) as any;
+  g.updateChunks(.1);eq('nearby floor edit wins over earlier far dirty edit',built[0],'0,0');eq('actual engine shares dirty/stream job cap',built.length,1);
+  check('budgeted far edit remains scheduled',w.dirty.has('2,0'));check('unload timer uses elapsed time, not frame count',Math.abs(g.unloadTimer-1.9)<1e-10);
+  const failureWorld=new World(420,true),failureChunk=failureWorld.getChunk(0,0);failureChunk.built=true;failureWorld.dirty.clear();failureWorld.dirty.add('0,0');
+  let attempts=0;g.world=failureWorld;g.gfx.chunksPerFrame=3;g.offsets=[[0,0],[1,0]];
+  g.buildChunk=(x:number,z:number)=>{attempts++;failureWorld.dirty.add(World.key(x,z));return false;};g.updateChunks(.01);
+  eq('failed dirty mesh is not retried from the live Set in one frame',attempts,2);check('failed work remains queued',failureWorld.dirty.has('0,0'));
 }
 
 section('4.18: real options, scroll, recharging and migration');
