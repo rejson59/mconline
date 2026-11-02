@@ -51,7 +51,7 @@ Nie zmieniono SQL, protokołu, zasad chronionego miasta ani publicznych zapisów
 ## Weryfikacja
 
 - **24 231 kontroli**: 678 pieca/materiałów/ikon, 5746 wcześniejszego audytu, 16 467 silnika (w tym regresja kursora), 436 ognia, 81 Workera, 403 audio, 413 UI, 5 konta, 2 bootstrapu.
-- `typecheck`, pełne `npm test`, produkcyjny build i `git diff --check`.
+- `typecheck`, pełne `npm test`, produkcyjny build i `git diff --check`. Testy sprawdzono lokalnie również na Node 20.20.2 i 22.22.3; CI i wdrożenie używają teraz wspólnie Node 22. Test kursora sam izoluje `navigator`, zamiast polegać na globalu dostępnym dopiero w nowszym Node.
 - Testy bilansu: jeden węgiel → osiem sztabek przy 144/60/30 FPS jako krokach symulacji, 20 TPS, nieregularnych i dużych krokach. To **nie benchmark FPS**.
 - Brak przedwczesnego produktu, przejście na następne paliwo, blokada pełnego/obcego wyniku, chłodzenie, puste wejście, wiadro lawy, błędne `dt`, stare pozostałe ciepło i zapis nowego materiału.
 - Produkcyjny Chromium/SwiftShader: desktop, dotykowy viewport 390×844 i lokalny HTML. Prawdziwe `Game.breakBlock()` tworzy surowe żelazo/złoto oraz dwa węgle drzewne z ogniska. Prawdziwe okno pieca pokazuje właściwe ikony i połowę postępu po 5 s; po 10 s rzeczywiste kliknięcie/tapnięcie odbiera jedną sztabkę. Zapis/odświeżenie zachowuje zawartość i 70 s ciepła, nowe materiały oraz GUI 2/Auto 0. Czas w tym teście jest podawany kontrolowanymi krokami do produkcyjnego `Game.updateFurnaces()`, a nie oczekiwaniem 10 s zegara.
