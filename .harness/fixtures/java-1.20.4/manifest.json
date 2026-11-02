@@ -1,0 +1,163 @@
+{
+  "version": "1.20.4",
+  "repository": "InventivetalentDev/minecraft-assets",
+  "commit": "90d256dfee7b6fd8014e1bc3b107e64a530c5f9b",
+  "notice": "Original Mojang/Microsoft data; not project MIT. See public/Minecraft-NOTICE.txt.",
+  "files": [
+    {
+      "path": "recipes/tnt.json",
+      "sha256": "536d6e999dc1122b6478e46958d27ab76b5b195defdaa8112203613fadad7218",
+      "bytes": 356
+    },
+    {
+      "path": "recipes/compass.json",
+      "sha256": "eb8a7222586985d1152a843de29c06d1f96a26962629426432461aec40117c66",
+      "bytes": 294
+    },
+    {
+      "path": "recipes/clock.json",
+      "sha256": "863ae27288bf4b6332d49c047659625999c83e94d42bb3c8ef4db9b387a1255a",
+      "bytes": 292
+    },
+    {
+      "path": "recipes/campfire.json",
+      "sha256": "1f7a2d04cb0c63bb2ac83b11d30db69fc1ae12230f2f22d3b5a4f4c6086fbc66",
+      "bytes": 329
+    },
+    {
+      "path": "recipes/bread.json",
+      "sha256": "0d100be75731a7ac432071dec386ed7e5c8770222d05953a717d6349a85f30b9",
+      "bytes": 207
+    },
+    {
+      "path": "recipes/paper.json",
+      "sha256": "f53de0cdc2285d41902a58537a9e2277ab317cc4cd7a75d65bb97cc8cab43b8a",
+      "bytes": 228
+    },
+    {
+      "path": "recipes/bucket.json",
+      "sha256": "448621b27636ecf01a73d7d28728594520655c3f5257ba65bfce7e5e65aeecf7",
+      "bytes": 224
+    },
+    {
+      "path": "recipes/shears.json",
+      "sha256": "aef6b69179b36cda2e0da8657c9e9f193ef9b0844b6c47e81fbfc5d3d8687e1e",
+      "bytes": 227
+    },
+    {
+      "path": "recipes/arrow.json",
+      "sha256": "b87cf48c356b5c5ce5ee812ef1693c7ce589c5c200bf1528dfdeb3261cd72194",
+      "bytes": 346
+    },
+    {
+      "path": "recipes/bookshelf.json",
+      "sha256": "458f21f55c11e1dabd9086b9b06358e27869fba54d71d163ff15643fee6bfde5",
+      "bytes": 286
+    },
+    {
+      "path": "recipes/stick.json",
+      "sha256": "c39a2d0a59da39229f2ecab24fa1145bbfeb814ca2705ab7b3792d352fbf3c59",
+      "bytes": 251
+    },
+    {
+      "path": "recipes/furnace.json",
+      "sha256": "3addf7ac9fd6fa0415717df62a1fc7f2680cdc0c52b64dc5408fc2382b03e38f",
+      "bytes": 249
+    },
+    {
+      "path": "recipes/glowstone.json",
+      "sha256": "c6293cd88747e550296f9749870db48a5f361485e6be8630550e864d2825ad1a",
+      "bytes": 233
+    },
+    {
+      "path": "recipes/torch.json",
+      "sha256": "75aa8052c8375b8c9cef309d30e64352a8d0ed189d38320364fac69e9ddcbafc",
+      "bytes": 351
+    },
+    {
+      "path": "recipes/crafting_table.json",
+      "sha256": "419dd111c3baa4ef3af609c1a6924b6db85edf73341131f41ca946cd842c152a",
+      "bytes": 255
+    },
+    {
+      "path": "recipes/wooden_axe.json",
+      "sha256": "5726d4f9a704cc5235b5c12d0d44e30460b521355bce6f2fb89411f6ec155a76",
+      "bytes": 286
+    },
+    {
+      "path": "recipes/bow.json",
+      "sha256": "79df12ec9bbd549dd8c4058d41656796ca74f7c646ad9e102c723001b96c79e8",
+      "bytes": 283
+    },
+    {
+      "path": "recipes/oak_stairs.json",
+      "sha256": "3ad4c887a9e58368aad4911d2bec29f3e63bda37f1a66e8bce71e0eada70bd82",
+      "bytes": 287
+    },
+    {
+      "path": "recipes/honeycomb_block.json",
+      "sha256": "e3d8cdad1d0b61e26427da01473776ab261518d87926752bb5ba1a243a3bed24",
+      "bytes": 230
+    },
+    {
+      "path": "recipes/slime_block.json",
+      "sha256": "20b753fd71625b4e1e09c36c76c3f744b5e4a2b72d4dffd3aff86ccb563ef723",
+      "bytes": 244
+    },
+    {
+      "path": "loot_tables/blocks/slime_block.json",
+      "sha256": "67f414606e0368a684f16af2107b115888a9616e13dcdb6ffbc53967d5c43c0f",
+      "bytes": 390
+    },
+    {
+      "path": "loot_tables/blocks/honeycomb_block.json",
+      "sha256": "e8fb1312b6b41b54af49bddffff6010d3c9c7ea0654d6c0c6c1ae454fb4ddffb",
+      "bytes": 398
+    },
+    {
+      "path": "loot_tables/blocks/gravel.json",
+      "sha256": "c8a2fd7c18b97ccc40f3c7108433979f25b222946524b9ac5988d4de6c6744b3",
+      "bytes": 1765
+    },
+    {
+      "path": "loot_tables/blocks/glowstone.json",
+      "sha256": "ddb68652ce630c5cc0c7143c35af42ab023e39544b5188f37a853531ac7650e5",
+      "bytes": 1904
+    },
+    {
+      "path": "loot_tables/blocks/coal_ore.json",
+      "sha256": "d5ce731aa88ba4a091ed70a07313f35aaa37967c5d458f7146378de4d0e07dc4",
+      "bytes": 1299
+    },
+    {
+      "path": "loot_tables/blocks/diamond_ore.json",
+      "sha256": "9f33f825e40a7ec8371cd6e699de60ea2d18b12ae22bfd5ffc9152b8e08c2542",
+      "bytes": 1308
+    },
+    {
+      "path": "loot_tables/blocks/emerald_ore.json",
+      "sha256": "c5cf75f1a0ece422b9f82267af267fd4314aaba5247fa300d6ccdceea7556ab8",
+      "bytes": 1308
+    },
+    {
+      "path": "loot_tables/blocks/lapis_ore.json",
+      "sha256": "681ef200d97cb9de8a5d807f6f4990ec3fb4e52c6a569972ab1f2bfd64ff0d96",
+      "bytes": 1592
+    },
+    {
+      "path": "loot_tables/blocks/redstone_ore.json",
+      "sha256": "73554e17a8b15b83f8a6656fe1c907318c58e1d1bcece57f64ad9ad121e717ff",
+      "bytes": 1700
+    },
+    {
+      "path": "loot_tables/blocks/nether_quartz_ore.json",
+      "sha256": "0e2ac9001aa9a1b6f3939d2b93699d3f95bc4cb47d569e4090e9d995a6f3eddc",
+      "bytes": 1319
+    },
+    {
+      "path": "loot_tables/blocks/campfire.json",
+      "sha256": "67a14ec8911efa2421d890b3e59c50b68e357a7624a8495f7c4db00b053e6819",
+      "bytes": 1309
+    }
+  ]
+}

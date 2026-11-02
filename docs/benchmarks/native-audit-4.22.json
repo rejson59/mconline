@@ -1,0 +1,696 @@
+{
+  "gameVersion": "4.22.0",
+  "baselineGameCommit": "ef50fb4bc8ef8b991fd4cb9a10514795f10f4f9a",
+  "before": {
+    "version": "1.20.4",
+    "reference": "90d256dfee7b6fd8014e1bc3b107e64a530c5f9b",
+    "checks": 5746,
+    "failed": 1041,
+    "examples": [
+      {
+        "name": "native shape compass 3x3 mirror=false offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 143,
+          "count": 1
+        }
+      },
+      {
+        "name": "actual craft output compass 3x3 mirror=false offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 143,
+          "count": 1
+        }
+      },
+      {
+        "name": "one unit per used cell compass 3x3 mirror=false offset=0,0",
+        "actual": [
+          0,
+          2,
+          0,
+          2,
+          2,
+          2,
+          0,
+          2,
+          0
+        ],
+        "expected": [
+          0,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          0
+        ]
+      },
+      {
+        "name": "native shape compass 3x3 mirror=true offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 143,
+          "count": 1
+        }
+      },
+      {
+        "name": "actual craft output compass 3x3 mirror=true offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 143,
+          "count": 1
+        }
+      },
+      {
+        "name": "one unit per used cell compass 3x3 mirror=true offset=0,0",
+        "actual": [
+          0,
+          2,
+          0,
+          2,
+          2,
+          2,
+          0,
+          2,
+          0
+        ],
+        "expected": [
+          0,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          0
+        ]
+      },
+      {
+        "name": "canonical recipe exists compass",
+        "actual": false,
+        "expected": true
+      },
+      {
+        "name": "recipe book placement compass",
+        "actual": false,
+        "expected": true
+      },
+      {
+        "name": "recipe book output compass",
+        "actual": null,
+        "expected": {
+          "id": 143,
+          "count": 1
+        }
+      },
+      {
+        "name": "recipe book actual craft compass",
+        "actual": null,
+        "expected": {
+          "id": 143,
+          "count": 1
+        }
+      },
+      {
+        "name": "recipe book sources consumed once compass",
+        "actual": false,
+        "expected": true
+      },
+      {
+        "name": "native shape clock 3x3 mirror=false offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 144,
+          "count": 1
+        }
+      },
+      {
+        "name": "actual craft output clock 3x3 mirror=false offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 144,
+          "count": 1
+        }
+      },
+      {
+        "name": "one unit per used cell clock 3x3 mirror=false offset=0,0",
+        "actual": [
+          0,
+          2,
+          0,
+          2,
+          2,
+          2,
+          0,
+          2,
+          0
+        ],
+        "expected": [
+          0,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          0
+        ]
+      },
+      {
+        "name": "native shape clock 3x3 mirror=true offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 144,
+          "count": 1
+        }
+      },
+      {
+        "name": "actual craft output clock 3x3 mirror=true offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 144,
+          "count": 1
+        }
+      },
+      {
+        "name": "one unit per used cell clock 3x3 mirror=true offset=0,0",
+        "actual": [
+          0,
+          2,
+          0,
+          2,
+          2,
+          2,
+          0,
+          2,
+          0
+        ],
+        "expected": [
+          0,
+          1,
+          0,
+          1,
+          1,
+          1,
+          0,
+          1,
+          0
+        ]
+      },
+      {
+        "name": "canonical recipe exists clock",
+        "actual": false,
+        "expected": true
+      },
+      {
+        "name": "recipe book placement clock",
+        "actual": false,
+        "expected": true
+      },
+      {
+        "name": "recipe book output clock",
+        "actual": null,
+        "expected": {
+          "id": 144,
+          "count": 1
+        }
+      },
+      {
+        "name": "recipe book actual craft clock",
+        "actual": null,
+        "expected": {
+          "id": 144,
+          "count": 1
+        }
+      },
+      {
+        "name": "recipe book sources consumed once clock",
+        "actual": false,
+        "expected": true
+      },
+      {
+        "name": "native shape campfire 3x3 mirror=false offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 73,
+          "count": 1
+        }
+      },
+      {
+        "name": "actual craft output campfire 3x3 mirror=false offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 73,
+          "count": 1
+        }
+      },
+      {
+        "name": "one unit per used cell campfire 3x3 mirror=false offset=0,0",
+        "actual": [
+          0,
+          2,
+          0,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "expected": [
+          0,
+          1,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "name": "native shape campfire 3x3 mirror=true offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 73,
+          "count": 1
+        }
+      },
+      {
+        "name": "actual craft output campfire 3x3 mirror=true offset=0,0",
+        "actual": null,
+        "expected": {
+          "id": 73,
+          "count": 1
+        }
+      },
+      {
+        "name": "one unit per used cell campfire 3x3 mirror=true offset=0,0",
+        "actual": [
+          0,
+          2,
+          0,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "expected": [
+          0,
+          1,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "name": "canonical recipe exists campfire",
+        "actual": false,
+        "expected": true
+      },
+      {
+        "name": "recipe book placement campfire",
+        "actual": false,
+        "expected": true
+      }
+    ],
+    "scope": {
+      "recipes": [
+        "tnt",
+        "compass",
+        "clock",
+        "campfire",
+        "bread",
+        "paper",
+        "bucket",
+        "shears",
+        "arrow",
+        "bookshelf",
+        "stick",
+        "furnace",
+        "glowstone",
+        "torch",
+        "crafting_table",
+        "wooden_axe",
+        "bow",
+        "oak_stairs",
+        "honeycomb_block",
+        "slime_block"
+      ],
+      "loot": [
+        "slime_block",
+        "honeycomb_block",
+        "gravel",
+        "glowstone",
+        "coal_ore",
+        "diamond_ore",
+        "emerald_ore",
+        "lapis_ore",
+        "redstone_ore",
+        "nether_quartz_ore"
+      ],
+      "excluded": [
+        "full item/tag coverage (canonical oak/coal subset only)",
+        "explosion decay",
+        "Java PRNG bit sequence",
+        "campfire charcoal (item not implemented)",
+        "other recipes and loot not in this corpus"
+      ]
+    }
+  },
+  "after": {
+    "version": "1.20.4",
+    "reference": "90d256dfee7b6fd8014e1bc3b107e64a530c5f9b",
+    "checks": 5746,
+    "failed": 0,
+    "examples": [],
+    "scope": {
+      "recipes": [
+        "tnt",
+        "compass",
+        "clock",
+        "campfire",
+        "bread",
+        "paper",
+        "bucket",
+        "shears",
+        "arrow",
+        "bookshelf",
+        "stick",
+        "furnace",
+        "glowstone",
+        "torch",
+        "crafting_table",
+        "wooden_axe",
+        "bow",
+        "oak_stairs",
+        "honeycomb_block",
+        "slime_block"
+      ],
+      "loot": [
+        "slime_block",
+        "honeycomb_block",
+        "gravel",
+        "glowstone",
+        "coal_ore",
+        "diamond_ore",
+        "emerald_ore",
+        "lapis_ore",
+        "redstone_ore",
+        "nether_quartz_ore"
+      ],
+      "excluded": [
+        "full item/tag coverage (canonical oak/coal subset only)",
+        "explosion decay",
+        "Java PRNG bit sequence",
+        "campfire charcoal (item not implemented)",
+        "other recipes and loot not in this corpus"
+      ]
+    }
+  },
+  "browser": {
+    "version": "4.22.0",
+    "environment": "Chromium / SwiftShader sandbox, mobile is viewport emulation",
+    "reports": [
+      {
+        "device": "desktop",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 0,
+          "gui": 2
+        },
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 0,
+          "gui": 0
+        },
+        "errors": []
+      },
+      {
+        "device": "file",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 0,
+          "gui": 2
+        },
+        "errors": []
+      }
+    ]
+  },
+  "fireRegression": {
+    "version": "4.22.0",
+    "browser": "Chromium / SwiftShader sandbox, not physical hardware",
+    "reports": [
+      {
+        "device": "desktop",
+        "changedChannels": 125983,
+        "fire": 491,
+        "offhandDur": 63,
+        "shaderPrograms": 9,
+        "worker": "worker",
+        "flags": [
+          0,
+          2,
+          3,
+          4
+        ],
+        "decodedAudio": [
+          {
+            "name": "fire/ignite",
+            "duration": 0.4252154195011338,
+            "sampleRate": 44100
+          },
+          {
+            "name": "random/fizz",
+            "duration": 1.248299319727891,
+            "sampleRate": 44100
+          }
+        ],
+        "restored": [
+          491,
+          492,
+          493,
+          63
+        ],
+        "errors": []
+      }
+    ]
+  },
+  "workerRegression": [
+    {
+      "device": "desktop",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 11.900000000139698,
+        "snapshotMs": 1.8999999999068677,
+        "latencyMs": 15.699999999953434
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 25,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 42.199999999953434,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 43.199999999953434
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 13.400000000139698,
+          "submitMs": 4.100000000093132,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 22.800000000046566,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 23.399999999906868
+        },
+        {
+          "syncMs": 6.899999999906868,
+          "submitMs": 0.6000000000931323,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 9,
+          "snapshotMs": 0.4000000001396984,
+          "latencyMs": 10.599999999860302
+        },
+        {
+          "syncMs": 8.099999999860302,
+          "submitMs": 3.699999999953434,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 26.299999999813735,
+          "snapshotMs": 3.300000000046566,
+          "latencyMs": 27
+        },
+        {
+          "syncMs": 4.400000000139698,
+          "submitMs": 12.600000000093132,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 40.10000000009313,
+          "snapshotMs": 8.800000000046566,
+          "latencyMs": 40.699999999953434
+        },
+        {
+          "syncMs": 10.400000000139698,
+          "submitMs": 9.199999999953434,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 23,
+          "snapshotMs": 8.899999999906868,
+          "latencyMs": 23.5
+        },
+        {
+          "syncMs": 9.099999999860302,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 6.199999999953434,
+          "snapshotMs": 0.4000000001396984,
+          "latencyMs": 14.599999999860302
+        },
+        {
+          "syncMs": 13.599999999860302,
+          "submitMs": 0.8000000000465661,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 7.600000000093132,
+          "snapshotMs": 0.4000000001396984,
+          "latencyMs": 9.100000000093132
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    }
+  ],
+  "limits": [
+    "Reference corpus is a selected subset, not whole Java parity.",
+    "Synthetic controlled uniform draws, not Java PRNG seed parity.",
+    "No physical phone, no public multiplayer or original Java binary execution.",
+    "Browser crafting checked desktop, mobile viewport and file; fire/Worker regression desktop only in this release."
+  ],
+  "checks": {
+    "total": 23532,
+    "native": 5746,
+    "engine": 16453,
+    "fire": 436,
+    "worker": 81,
+    "audio": 403,
+    "ui": 406,
+    "account": 5,
+    "bootstrap": 2
+  },
+  "artifact": {
+    "path": "dist/index.html",
+    "bytes": 10554600,
+    "sha256": "7978128c33ea6c9f14d8de0113fd33be363aa028516acc3299e3f655f13c7a4d"
+  }
+}

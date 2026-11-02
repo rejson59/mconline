@@ -85,3 +85,13 @@ Audio events: item.flintandsteel.use -> sounds/fire/ignite.ogg;
               block.fire.extinguish -> sounds/random/fizz.ogg.
 These assets remain Mojang/Microsoft property. No rights to these materials
 are granted by this project's MIT license or by the source mirror.
+
+4.22 native-data audit fixtures (original third-party data, NOT MIT code):
+Minecraft Java Edition 1.20.4, pinned mirror commit
+90d256dfee7b6fd8014e1bc3b107e64a530c5f9b.
+Source: InventivetalentDev/minecraft-assets/data/minecraft/{recipes,loot_tables}.
+Copies: .harness/fixtures/java-1.20.4/ (manifest contains original SHA-256 hashes).
+Sync: scripts/sync-java-audit.py. The JSON corpus is test-only, never downloaded
+by the game or treated as MIT-licensed original project code. Ownership remains
+with Mojang/Microsoft and the respective authors; no redistribution rights are
+granted by this notice. The small comparison interpreter is project-written.

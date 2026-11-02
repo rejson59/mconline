@@ -1,6 +1,14 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.21.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.22.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.22.0 „Receptury pod lupą”
+
+- **Porównanie z oryginalnymi plikami Java 1.20.4:** 31 przypiętych JSON-ów receptur i łupu, manifest SHA-256 i niezależny interpreter testowy. W identycznej macierzy 5 746 kontroli: historyczne 4.21 ma 1 041 niezgodnych scenariuszy, nowa wersja 0. To scenariusze testowe, nie liczba odrębnych błędów.
+- **Poprawione receptury:** TNT z prochu, kompas/zegar z redstone, ognisko z trzema pniami; właściwe układy papieru, chleba, wiadra, strzał i nożyc. Usunięta biblioteczka z wełny. Poziome odbicia receptur działają; blok plastra miodu można zrobić w 2×2.
+- **Dropy i Szczęście:** bloki szlamu/plastra miodu wypadają w całości. Poprawione mnożniki rud, lapis 4–9, bonus krzemienia i limit 4 pyłów jasnogłazu. Nieprawidłowy poziom Fortune nie tworzy nieskończonych stosów.
+- **23 532 kontrole**, produkcyjna książka receptur i kliknięcie/tapnięcie wyniku, rzeczywiste encje dropów, zapis/odświeżenie i GUI 2/Auto 0. Bez zmian ID, zapisu, SQL i zależności gry.
+- **To pierwszy, ograniczony audyt, nie certyfikat 1:1.** Pełne tagi materiałów, węgiel drzewny, inne receptury i przetapianie mają jawny backlog. [Zakres, źródła, konkretne rozbieżności i powtarzalne porównanie](docs/NATIVE-AUDIT-4.22.md).
 
 ## Wersja 4.21.0 „Krzesiwo i płomienie”
 

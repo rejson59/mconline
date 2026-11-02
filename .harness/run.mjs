@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'native', entry: path.join(here, 'nativeAudit.ts'), label: 'Porównanie z oryginalnymi JSON Java 1.20.4' },
   { name: 'fire', entry: path.join(here, 'fire.ts'), label: 'Krzesiwo, ogień, portale i ochrona działek' },
   { name: 'meshing', entry: path.join(here, 'meshing.ts'), label: 'Asynchroniczne chunki i bezpieczny fallback' },
   { name: 'audio', entry: path.join(here, 'audio.ts'), label: 'Oryginalne efekty i mikser' },
