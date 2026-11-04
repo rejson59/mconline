@@ -36,7 +36,7 @@ if (!fs.existsSync(libs)) {
   fs.unlinkSync(tar);
 }
 import assert from 'node:assert/strict';
-const out=path.join(root,'.cache/verification427');fs.mkdirSync(out,{recursive:true});
+const out=path.join(root,'.cache/verification428');fs.mkdirSync(out,{recursive:true});
 const browser=await puppeteer.launch({executablePath:await chromium.executablePath(),args:chromium.args.filter(arg=>arg!=='--single-process'),headless:true,protocolTimeout:45000,env:{...process.env,LD_LIBRARY_PATH:[path.join(libs,'lib'),process.env.LD_LIBRARY_PATH].filter(Boolean).join(':')}});
 const html=fs.readFileSync(path.join(root,'dist/index.html'),'utf8');
 const provider=fs.readFileSync(path.join(root,'.harness/fixtures/rejson-account/rejson-account.js'),'utf8');
@@ -79,6 +79,11 @@ try{
         if(url.origin==='https://rejson59.github.io'&&url.pathname==='/mconline/'){
           await req.respond({status:200,contentType:'text/html',body:html});return;
         }
+        if(url.pathname==='/rest/v1/rpc/mconline_identity'||url.pathname==='/rest/v1/rpc/mconline_worlds_op'){
+          const params=JSON.parse(req.postData()||'{}'), id=params.p_token===tokenB?'22222222-2222-4222-8222-222222222222':'11111111-1111-4111-8111-111111111111';
+          const identity={id,username:params.p_token===tokenB?'TestoweKontoB':'TestoweKontoA'};
+          await req.respond({status:offline?503:200,contentType:'application/json',body:JSON.stringify(offline?{message:'Test offline'}:url.pathname.endsWith('mconline_identity')?identity:{identity,worlds:[]})});return;
+        }
         if(url.pathname==='/rest/v1/rpc/community_whoami'){
           whoami++;const params=JSON.parse(req.postData()||'{}');
           if(hold&&params.p_token===tokenA){hold=false;heldStarted();await new Promise(resolve=>{release=resolve;});}
@@ -95,7 +100,7 @@ try{
         sessionStorage.setItem('account427-world-fixture','1');
       }
     });
-    await p.goto('https://rejson59.github.io/mconline/?v=4.27.0',{waitUntil:'networkidle0'});
+    await p.goto('https://rejson59.github.io/mconline/?v=4.28.0',{waitUntil:'networkidle0'});
     assert.equal(await p.evaluate(()=>navigator.serviceWorker.controller),null,'direct first visit has no SW');
     await click(p,'Konto rejson59.github.io...');await dialog(p);
     await p.waitForFunction(()=>document.querySelector('[role="dialog"]')?.textContent.includes('Brak potwierdzonej sesji'));
@@ -139,8 +144,8 @@ try{
     await dialog(p);await p.waitForFunction(()=>document.querySelector('[role="dialog"] strong')?.textContent==='TestoweKontoA');
     const data=await p.evaluate(()=>({world:localStorage.getItem('blockcraft-saves-v2'),profile:localStorage.getItem('blockcraft-profile-v1'),keys:Array.from({length:sessionStorage.length},(_,i)=>sessionStorage.key(i))}));
     assert.equal(data.world,'[{"id":"untouched-local-world","seed":42}]');assert.equal(data.profile,'p1234567890123456789');
-    const onlyPermitted=attempted.every(url=>url==='https://rejson59.github.io/mconline/'||url==='https://rejson59.github.io/js/rejson-account.js'||url==='https://rejson59.github.io/logowanie'||url.endsWith('/rest/v1/rpc/community_whoami')||url==='https://rejson59.github.io/favicon.ico'||url.startsWith('data:')||url.startsWith('blob:'));
-    assert.equal(onlyPermitted,true,'unexpected HTTP route: '+attempted.filter(url=>url.startsWith('http')&&!url.includes('/mconline/')&&!url.includes('/js/rejson-account.js')&&!url.includes('/logowanie')&&!url.endsWith('/rest/v1/rpc/community_whoami')&&!url.endsWith('/favicon.ico')).join(', '));
+    const onlyPermitted=attempted.every(url=>url==='https://rejson59.github.io/mconline/'||url==='https://rejson59.github.io/js/rejson-account.js'||url==='https://rejson59.github.io/logowanie'||/\/rest\/v1\/rpc\/(community_whoami|mconline_identity|mconline_worlds_op)$/.test(url)||url==='https://rejson59.github.io/favicon.ico'||url.startsWith('data:')||url.startsWith('blob:'));
+    assert.equal(onlyPermitted,true,'unexpected HTTP route: '+attempted.filter(url=>url.startsWith('http')&&!url.includes('/mconline/')&&!url.includes('/js/rejson-account.js')&&!url.includes('/logowanie')&&!/\/rest\/v1\/rpc\/(community_whoami|mconline_identity|mconline_worlds_op)$/.test(url)&&!url.endsWith('/favicon.ico')).join(', '));
     assert.equal(errors.length,0,JSON.stringify(errors));
     reports.push({device,environment:'production HTML and pinned real provider, mocked login page/whoami, synthetic accounts only',helperLoads,whoamiRequests:whoami,loginVisits,roundTrip:true,noServiceWorker:true,noCredentialForms:true,verifiedName:true,projectDisconnectPreservesSharedSession:true,sharedLogout:true,accountSwitch:true,lateResponseIgnored:true,offlineRetry:true,worldsAndProfileUntouched:true,secretsInUrls:false,errors});
     console.log('PASS account',JSON.stringify(reports[reports.length-1]));await context.close();

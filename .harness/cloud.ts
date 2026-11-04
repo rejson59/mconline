@@ -1,0 +1,90 @@
+/** Synthetic devices/identities only; the SQL integration suite separately
+ * exercises the deployed owner predicate/CAS/privileges with rolled-back fixtures. */
+import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
+import { AccountWorlds, cloudState } from '../src/game/accountWorlds';
+import { upsertSave, loadSaves, deleteSave, setSaveNamespace, newSaveId, registerSaveTarget, readSaveJournal, readScopedSaves, SAVES_KEY, saveKey, importSaves, duplicateSave } from '../src/game/saves';
+import { gateway } from '../supabase/functions/mconline-gateway/index';
+const dom = new JSDOM('', { url: 'https://rejson59.github.io/mconline/' });
+Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage, Event: dom.window.Event, CustomEvent: dom.window.CustomEvent });
+let checks = 0;
+const check = (name: string, fn: () => void) => { fn(); checks++; console.log('✓ ' + name); };
+const A = '11111111-1111-4111-8111-111111111111', B = '22222222-2222-4222-8222-222222222222';
+let version = 0, offline = false;
+const db = new Map<string, { revision: number; data: any }>();
+const api = (owner: string): typeof fetch => (async (_url: unknown, options: RequestInit) => {
+  if (offline) throw new Error('offline');
+  const b = JSON.parse(String(options.body)), key = `${owner}:${b.p_id}`;
+  if (b.p_op === 'list') return Response.json({ identity: { id: owner }, worlds: [...db].filter(([k]) => k.startsWith(owner + ':')).map(([, row]) => ({ id: row.data.id, ...row })) });
+  const row = db.get(key);
+  if ((row?.revision ?? 0) !== b.p_expected) return Response.json({ code: '40001' }, { status: 409 });
+  if (b.p_op === 'delete') { db.delete(key); return Response.json({ revision: 0 }); }
+  db.set(key, { revision: ++version, data: b.p_data }); return Response.json({ revision: version });
+}) as typeof fetch;
+try {
+  localStorage.setItem(SAVES_KEY, JSON.stringify([{ id: 'legacy-local', seed: 7, name: 'Old local' }]));
+  setSaveNamespace(A);
+  const first = new AccountWorlds(A, 'Alice', 'synthetic-session-a-only', api(A));
+  await first.refresh();
+  check('fresh account does not import or erase device worlds', () => { assert.equal(loadSaves().length, 0); assert.match(localStorage.getItem(SAVES_KEY)!, /Old local/); });
+  const id = newSaveId(); registerSaveTarget(id);
+  upsertSave({ id, seed: 37, name: 'Cross-device', mods: { '1,2,3': 4 }, netherMods: { '1,2,3': 5 }, inv: [{ id: 1, count: 12 }], health: 13, pos: [1, 80, 3] });
+  await first.sync();
+  check('automatic queue uploads the entire snapshot and acknowledges its revision', () => { assert.equal(db.get(`${A}:${id}`)?.data.health, 13); assert.deepEqual(readSaveJournal(A).dirty, []); assert.equal(cloudState().phase, 'ready'); });
+  const cache = localStorage.getItem(saveKey(A))!, journal = localStorage.getItem(`${saveKey(A)}:sync`)!;
+  localStorage.removeItem(saveKey(A)); localStorage.removeItem(`${saveKey(A)}:sync`);
+  const second = new AccountWorlds(A, 'Alice', 'synthetic-session-a-only', api(A));
+  await second.refresh();
+  check('a second device actually downloads blocks, Nether and inventory from server', () => { const world = loadSaves()[0]; assert.deepEqual(world.netherMods, { '1,2,3': 5 }); assert.deepEqual(world.inv, [{ id: 1, count: 12 }]); });
+  upsertSave({ ...loadSaves()[0], health: 8 }); await second.sync();
+  localStorage.setItem(saveKey(A), cache); localStorage.setItem(`${saveKey(A)}:sync`, journal);
+  upsertSave({ ...loadSaves()[0], health: 19 }); await first.sync();
+  check('two devices cannot silently overwrite each other', () => { assert.equal(cloudState().phase, 'conflict'); assert.equal(db.get(`${A}:${id}`)?.data.health, 8); assert.equal(loadSaves()[0].health, 19); assert.ok(readSaveJournal(A).conflicts.includes(id)); });
+  setSaveNamespace(B);
+  const other = new AccountWorlds(B, 'Bob', 'synthetic-session-b-only', api(B)); await other.refresh();
+  check('another account sees an empty library', () => assert.equal(loadSaves().length, 0));
+  upsertSave({ id, seed: 37, health: 17 }); // late cleanup of Alice's running Game
+  check('late engine save remains bound to original owner', () => { assert.equal(readScopedSaves(B).length, 0); assert.equal(readScopedSaves(A)[0].health, 17); });
+  const bid = newSaveId(); upsertSave({ id: bid, seed: 99, name: 'Offline progress' });
+  offline = true; await other.sync();
+  check('network outage keeps the dirty recovery snapshot and does not claim cloud success', () => { assert.equal(cloudState().phase, 'error'); assert.ok(readSaveJournal(B).dirty.includes(bid)); assert.equal(loadSaves()[0].seed, 99); });
+  offline = false; await other.refresh();
+  check('reopening/retrying uploads an unchanged-base offline recovery', () => { assert.equal(db.get(`${B}:${bid}`)?.data.seed, 99); assert.equal(readSaveJournal(B).dirty.length, 0); });
+  const copy = duplicateSave(bid)!; await other.sync();
+  check('duplicate world has account-bound independent identity', () => { assert.ok(copy.startsWith(`a${B}_`)); assert.ok(db.has(`${B}:${copy}`)); });
+  deleteSave(copy); await other.sync();
+  check('deletion is revision checked and synced', () => assert.ok(!db.has(`${B}:${copy}`)));
+  importSaves(JSON.stringify({ saves: [{ id: 'legacy-local', seed: 7 }] }));
+  check('explicit old-world import is a new cloud copy, not a write into guest library', () => { assert.ok(loadSaves().some(w => w.id.startsWith(`a${B}_`) && w.seed === 7)); assert.match(localStorage.getItem(SAVES_KEY)!, /Old local/); });
+  const before = localStorage.getItem(saveKey(B)); other.stop(); await other.refresh();
+  check('stopped account cannot apply a late cloud response', () => assert.equal(localStorage.getItem(saveKey(B)), before));
+  const calls: { path: string; body: any }[] = [];
+  let valid = true;
+  const upstream = (async (url: string, init: RequestInit) => {
+    const body = init.body ? JSON.parse(String(init.body)) : null; calls.push({ path: url, body });
+    if (url.includes('mconline_identity')) return valid ? Response.json({ id: A, username: 'Alice' }) : Response.json({ error: 'invalid' }, { status: 401 });
+    if (url.includes('mconline_member')) return Response.json({ pid: 'p' + 'a'.repeat(19), capability: 'server-only-capability', username: 'Alice', cursor: 42 });
+    return Response.json([]);
+  }) as typeof fetch;
+  const handle = gateway('https://world.invalid', 'server-role-test-value', upstream);
+  const send = (body: unknown, origin = 'https://rejson59.github.io') => handle(new Request('https://world.invalid/functions/v1/mconline-gateway', { method: 'POST', headers: { origin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
+  const base = { token: 'synthetic-session-only', world: 'public', session: crypto.randomUUID() };
+  let r = await send({ ...base, token: '', op: 'read' });
+  check('anonymous caller never reaches service-role database', () => { assert.equal(r.status, 401); assert.equal(calls.length, 0); });
+  valid = false; r = await send({ ...base, op: 'join' });
+  check('revoked or forged general session is rejected server-side', () => { assert.equal(r.status, 401); assert.equal(calls.length, 1); });
+  valid = true; r = await send({ ...base, op: 'join' }); const joined = await r.json();
+  check('join exposes neither service key nor plot capability', () => { assert.equal(joined.data.cursor, 42); assert.ok(!JSON.stringify(joined).includes('capability')); assert.ok(!JSON.stringify(joined).includes('server-role')); });
+  await send({ ...base, op: 'profile', args: { world: 'city', pid: 'victim', name: 'Forged', x: 5, y: 80, z: 7, inv: '[]', updated_at: '2099-01-01T00:00:00.000Z', capability: 'attack' } });
+  check('profile ownership/world/name cannot be selected by client', () => { const row = calls.at(-1)!.body; assert.equal(row.pid, 'p'+'a'.repeat(19)); assert.equal(row.world, 'public'); assert.equal(row.name, 'Alice'); assert.ok(!('capability' in row)); assert.ok(Date.parse(row.updated_at) < Date.now()+30000, 'client clock ignored'); });
+  await send({ ...base, op: 'rpc', args: { name: 'blockcraft_plot', params: { p_world: 'city', p_key: 'forged', p_op: 'claim', p_name: 'Forged' } } });
+  check('plot capability is chosen server-side and stable for the account', () => { const args = calls.at(-1)!.body; assert.equal(args.p_key, 'server-only-capability'); assert.equal(args.p_world, 'public'); assert.equal(args.p_name, 'Alice'); });
+  await send({ ...base, op: 'read', args: { table: 'blockcraft_players', select: '*', pid: 'victim' } });
+  check('profile read also binds the verified player', () => assert.match(calls.at(-1)!.path, /pid=eq.paaaaaaaaaaaaaaaaaaa/));
+  r = await send({ ...base, op: 'rpc', args: { name: 'community_whoami', params: {} } });
+  check('arbitrary RPC forwarding is forbidden', () => assert.equal(r.status, 409));
+  const count = calls.length; r = await send({ ...base, op: 'join' }, 'https://rejson59.github.io.evil.invalid');
+  check('lookalike origin is rejected before receiving account authority', () => { assert.equal(r.status, 403); assert.equal(calls.length, count); });
+  first.stop(); second.stop();
+  console.log(`${checks} cloud/gateway checks passed`);
+} finally { setSaveNamespace(null); dom.window.close(); }

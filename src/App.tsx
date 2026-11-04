@@ -5,9 +5,11 @@ import { JavaMainMenu as MainMenu } from './components/JavaMenus';
 import { type GameMode, type SaveData } from './game/engine';
 import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
 import CommunityAccount from './components/CommunityAccount';
+import CloudStatus from './components/CloudStatus';
+import { startAccountWorlds, cloudPlayable, cloudState, refreshCloud } from './game/accountWorlds';
 import { shouldOpenAccountOnReturn } from './game/communityAccount';
 import type { NetLike } from './game/net';
-import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
+import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave, newSaveId, registerSaveTarget } from './game/saves';
 import { onViewportChange } from './utils/viewport';
 import { watchLandscape } from './utils/screen';
 
@@ -76,6 +78,14 @@ export default function App() {
   const [multiplayer, setMultiplayer] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const closeAccount = useCallback(() => setAccountOpen(false), []);
+  useEffect(() => startAccountWorlds(() => { setSession(null); setMultiplayer(false); }, () => setSaves(cards())), []);
+  useEffect(() => {
+    const disconnected = () => { setSession(null); setMultiplayer(false); window.alert('Utracono potwierdzenie sesji multiplayer. Połącz się ponownie. Kopia profilu pozostaje na urządzeniu.'); };
+    window.addEventListener('mconline-server-disconnected', disconnected);
+    return () => window.removeEventListener('mconline-server-disconnected', disconnected);
+  }, []);
+  const status = (playing = false) => <CloudStatus playing={playing} onAccount={() => setAccountOpen(true)} />;
+
   useEffect(() => {
     const resumeAccount = () => { if (shouldOpenAccountOnReturn(window)) setAccountOpen(true); };
     resumeAccount(); window.addEventListener('pageshow', resumeAccount);
@@ -102,7 +112,11 @@ export default function App() {
   const refresh = () => setSaves(cards());
 
   /** 2.24: wspólne wejście do świata dla launchera i klasycznego menu. */
-  const playWorld = (id: string) => {
+  const playWorld = async (id: string) => {
+    const owner = cloudState().owner;
+    if (owner) await refreshCloud();
+    if (!cloudPlayable() || owner !== cloudState().owner) { window.alert('Poczekaj na potwierdzenie synchronizacji lub rozwiąż konflikt w menu.'); return; }
+    registerSaveTarget(id);
     const s = loadSaves().find((w) => w.id === id);
     if (!s) return;
     const save = asSave(s);
@@ -118,8 +132,11 @@ export default function App() {
   };
 
   /** 2.24: nowy świat z launchera albo z klasycznego menu. */
-  const newWorld = (seed: number, mode: GameMode, name: string, worldType: WorldType) => {
-    if (saves.length >= MAX_SAVES) {
+  const newWorld = async (seed: number, mode: GameMode, name: string, worldType: WorldType) => {
+    const owner = cloudState().owner;
+    if (owner) await refreshCloud();
+    if (!cloudPlayable() || owner !== cloudState().owner) { window.alert('Poczekaj na potwierdzenie konta i synchronizacji lub kontynuuj jako gość po rozłączeniu projektu.'); return; }
+    if (loadSaves().length >= MAX_SAVES) {
       window.alert(`Możesz mieć najwyżej ${MAX_SAVES} światów. Usuń jeden, żeby utworzyć nowy.`);
       return;
     }
@@ -129,11 +146,14 @@ export default function App() {
       /* ignore */
     }
     setShared({ seed: null, mode: null });
-    setSession({ seed, mode, id: Date.now(), worldId: 'w' + Date.now().toString(36), worldName: name, worldType });
+    const worldId = newSaveId(); registerSaveTarget(worldId);
+    setSession({ seed, mode, id: Date.now(), worldId, worldName: name, worldType });
   };
 
   if (session) {
     return (
+      <>
+      {status(true)}
       <GameView
         key={session.id}
         seed={session.seed}
@@ -145,9 +165,10 @@ export default function App() {
         net={session.net}
         onQuit={() => {
           setSession(null);
-          setTimeout(refresh, 50);
+          setTimeout(() => { void refreshCloud().then(refresh); }, 50);
         }}
       />
+      </>
     );
   }
 
@@ -155,7 +176,9 @@ export default function App() {
     return (
       <div className="flex h-full w-full flex-col">
         <div className="relative min-h-0 w-full flex-1">
-          <MultiplayerScreen onStart={startMultiplayer} onClose={() => setMultiplayer(false)} />
+          <MultiplayerScreen onStart={startMultiplayer} onClose={() => setMultiplayer(false)} onAccount={() => setAccountOpen(true)} />
+          {status()}
+          {accountOpen && <CommunityAccount onClose={closeAccount} />}
         </div>
       </div>
     );
@@ -165,6 +188,7 @@ export default function App() {
   return (
     <div className="flex h-full w-full flex-col">
       <div className="relative min-h-0 w-full flex-1">
+        {status()}
         <MainMenu
           onAccount={() => setAccountOpen(true)}
           onMultiplayer={() => setMultiplayer(true)}

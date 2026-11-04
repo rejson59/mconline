@@ -28,7 +28,7 @@ export default function CommunityAccount({ onClose }: { onClose: () => void }) {
     <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="community-title" className="my-auto w-full max-w-md border-2 border-black bg-[#272119] p-5 text-white shadow-2xl">
       <div className="flex items-center justify-between gap-3"><h2 id="community-title" className="mc-text text-xl">Konto rejson59.github.io</h2><button type="button" className="mc-btn !w-auto !px-3" onClick={onClose} aria-label="Zamknij konto">✕</button></div>
       <p className="my-3 text-sm text-white/80">Ogólne konto strony i podłączonych projektów. Logowanie i rejestracja odbywają się na stronie konta, w tej samej karcie.</p>
-      <p className="mb-3 text-sm text-amber-100">Gra działa też bez konta. Światy lokalne, profil multiplayer i prawa działek pozostają niezależne. Połączenie konta nie synchronizuje ani nie przenosi tych danych.</p>
+      <p className="mb-3 text-sm text-amber-100">Bez konta możesz grać jednoosobowo na tym urządzeniu. Po zalogowaniu nowe światy zapisują się na koncie i są dostępne na innych urządzeniach. Multiplayer, ekwipunek i działki wymagają konta. Stare lokalne światy nie zostały usunięte: znajdziesz je po rozłączeniu projektu; plik kopii możesz świadomie zaimportować do chmury.</p>
       {state.view === 'checking' && <p role="status">Sprawdzam konto…</p>}
       {state.view === 'connected' && state.identity && <div>
         <p>Potwierdzone konto: <strong>{state.identity.username}</strong>.</p>

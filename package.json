@@ -1,8 +1,8 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.27.0",
-  "description": "Minecraft \u2014 nieoficjalna wersja przegl\u0105darkowa, survival i wsp\u00f3lne miasto Creative",
+  "version": "4.28.0",
+  "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -37,7 +37,10 @@
     "test:panorama": "node .harness/run.mjs panorama",
     "test:browser:panorama": "node scripts/verify-panorama-browser.mjs",
     "test:account": "node .harness/run.mjs account",
-    "test:browser:account": "node scripts/verify-account-browser.mjs"
+    "test:browser:account": "node scripts/verify-account-browser.mjs",
+    "test:cloud": "node .harness/run.mjs cloud",
+    "test:browser:cloud": "node scripts/verify-cloud-browser.mjs",
+    "test:cloud:live": "node scripts/verify-cloud-live.mjs"
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",

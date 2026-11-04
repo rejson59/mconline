@@ -1,6 +1,17 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.27.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.28.0 🌍
 
-Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.28.0 „Światy na koncie, nowy start”
+
+- **Jednoosobowo z kontem:** rzeczywista biblioteka w chmurze, automatyczny zapis pełnego świata i odtworzenie na innym urządzeniu. Własność po zweryfikowanym UUID, nie po wpisanym nicku. Przed zmianą urządzenia poczekaj na potwierdzenie zapisu.
+- **Bez konta:** nadal można grać jednoosobowo, lokalnie/offline. Stare światy urządzenia pozostają nienaruszone. Po zalogowaniu używana jest osobna, nowa biblioteka; lokalne światy można świadomie skopiować przez eksport/import.
+- **Multiplayer tylko z kontem:** każda operacja wymaga serwerowego sprawdzenia sesji. Brak anonimowego dostępu do światów, ekwipunku i dawnych RPC; profil i działki są związane z kontem. Niezabezpieczone pokoje lokalne/P2P wyłączone.
+- **Zatwierdzony nowy start 5.11.2026:** aktywne zapisy survivalu, miasta, profili, działek i dropów wyzerowane; nowa biblioteka kontowa zaczyna pusta. Konta strony i dane innych projektów bez zmian.
+- **Konflikty zamiast cichego nadpisania:** wersjonowanie/CAS, kolejka, izolowane kopie lokalne i jawne odzyskiwanie. 8 światów, 8 MiB/świat, 32 MiB/konto; pamięć przeglądarki może ograniczać lokalną kopię wcześniej.
+- **Weryfikacja:** pełny zestaw offline, produkcyjna przeglądarka z dwoma izolowanymi profilami i symulowanym RPC, rzeczywiste SQL z wycofanymi fixture’ami oraz publiczne HTTP testy uprawnień w CI. [Architektura, reset i ograniczenia](docs/CLOUD-4.28.md).
+
+### Historia wydań (opisy dotyczą stanu danej wersji)
 
 ## Wersja 4.27.0 „Jedno konto, wspólne logowanie”
 
@@ -1002,6 +1013,6 @@ Integracja działa wyłącznie na dokładnym originie **https://rejson59.github.
 
 **Rozłącz ten projekt** nie usuwa wspólnej sesji strony ani nie wylogowuje innych projektów. Globalnym kontem zarządza się przez **Zarządzaj kontem na stronie**. Błąd sieci nie jest traktowany jako zalogowanie; dostępne jest ponowienie sprawdzenia.
 
-**Konto nie synchronizuje światów i nie wiąże obecnych działek z kontem strony.** Światy jednoosobowe pozostają w lokalnej przeglądarce, a publiczny profil multiplayer i klucze działek są niezależne. Nie importujemy, nie usuwamy i nie łączymy zapisów przy logowaniu. Lokalne światy na tym urządzeniu nie są osobnym prywatnym magazynem każdego ogólnego konta. Transfer na inne urządzenie wymaga obecnie ręcznej kopii plikowej. Import może zastąpić zapis o tym samym identyfikatorze i ograniczyć listę do 8 światów, dlatego przed importem zachowaj osobną kopię. Gra nadal działa bez konta, również offline; samo sprawdzenie konta wymaga sieci.
+**Od 4.28 konto zapisuje światy jednoosobowe w chmurze**, a profil i działki multiplayer są przypisane do zweryfikowanego konta. Gość korzysta wyłącznie z biblioteki urządzenia. Logowanie nie usuwa ani automatycznie nie importuje starych lokalnych światów: rozłącz projekt, by je zobaczyć, i świadomie przenieś plik kopii, jeśli chcesz. Światy konta mają osobne UUID i kontrolę wersji; przed zmianą urządzenia poczekaj na potwierdzenie synchronizacji. Multiplayer wymaga sieci i konta. Na kontowej bibliotece błąd sieci nie przełącza świata na cudzą bibliotekę ani na bibliotekę gościa.
 
-Migracja danych i autoryzacja prywatnych zasobów po koncie wymagają osobnego projektu, wdrożenia serwerowego i uzgodnienia właściciela. Szczegóły: [ACCOUNT-4.27](docs/ACCOUNT-4.27.md).
+Backend i ograniczenia: [CLOUD-4.28](docs/CLOUD-4.28.md). Opis samego logowania z poprzedniego wydania: [ACCOUNT-4.27](docs/ACCOUNT-4.27.md).
