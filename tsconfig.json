@@ -27,5 +27,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", ".harness/panorama.tsx", "vite.config.ts", ".harness/perf.ts", ".harness/meshing.ts", ".harness/fire.ts", ".harness/nativeAudit.ts", ".harness/furnace.ts", ".harness/facing.ts", ".harness/smoke.ts", ".harness/ui.tsx", ".harness/account.tsx", ".harness/bench.ts", ".harness/jsdom.d.ts"]
+  "include": ["src", ".harness/cloud.ts", ".harness/panorama.tsx", "vite.config.ts", ".harness/perf.ts", ".harness/meshing.ts", ".harness/fire.ts", ".harness/nativeAudit.ts", ".harness/furnace.ts", ".harness/facing.ts", ".harness/smoke.ts", ".harness/ui.tsx", ".harness/account.tsx", ".harness/bench.ts", ".harness/jsdom.d.ts"]
 }

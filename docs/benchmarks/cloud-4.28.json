@@ -1,0 +1,100 @@
+{
+  "version": "4.28.0",
+  "date": "2026-11-05",
+  "offlineChecks": 25386,
+  "cloudGatewayChecks": 20,
+  "sql": {
+    "accountChecks": 12,
+    "multiplayerChecks": 15,
+    "fixturesRolledBack": true
+  },
+  "browserCloud": [
+    {
+      "productionHTML": true,
+      "realPinnedProvider": true,
+      "mockedRPC": true,
+      "isolatedDevices": 2,
+      "fullGameSnapshotUploaded": true,
+      "blocksAndInventoryRestored": true,
+      "offlineConflictProtected": true,
+      "storageFailureVisible": true,
+      "accountSwitchStopsGame": true,
+      "localDeviceWorldPreserved": true,
+      "errors": []
+    }
+  ],
+  "browserAccount": [
+    {
+      "device": "desktop",
+      "environment": "production HTML and pinned real provider, mocked login page/whoami, synthetic accounts only",
+      "helperLoads": 3,
+      "whoamiRequests": 20,
+      "loginVisits": 2,
+      "roundTrip": true,
+      "noServiceWorker": true,
+      "noCredentialForms": true,
+      "verifiedName": true,
+      "projectDisconnectPreservesSharedSession": true,
+      "sharedLogout": true,
+      "accountSwitch": true,
+      "lateResponseIgnored": true,
+      "offlineRetry": true,
+      "worldsAndProfileUntouched": true,
+      "secretsInUrls": false,
+      "errors": []
+    },
+    {
+      "device": "mobile",
+      "environment": "production HTML and pinned real provider, mocked login page/whoami, synthetic accounts only",
+      "helperLoads": 3,
+      "whoamiRequests": 20,
+      "loginVisits": 2,
+      "roundTrip": true,
+      "noServiceWorker": true,
+      "noCredentialForms": true,
+      "verifiedName": true,
+      "projectDisconnectPreservesSharedSession": true,
+      "sharedLogout": true,
+      "accountSwitch": true,
+      "lateResponseIgnored": true,
+      "offlineRetry": true,
+      "worldsAndProfileUntouched": true,
+      "secretsInUrls": false,
+      "errors": []
+    },
+    {
+      "device": "preview",
+      "sameOriginRestriction": true,
+      "helperRequests": 0,
+      "noCredentialForms": true,
+      "errors": []
+    },
+    {
+      "device": "file",
+      "sameOriginRestriction": true,
+      "helperRequests": 0,
+      "noCredentialForms": true,
+      "errors": []
+    },
+    {
+      "device": "other-origin",
+      "sameOriginRestriction": true,
+      "helperRequests": 0,
+      "noCredentialForms": true,
+      "errors": []
+    }
+  ],
+  "cutover": {
+    "blocks": 0,
+    "profiles": 0,
+    "plots": 0,
+    "drops": 0,
+    "accountWorlds": 0,
+    "localDeviceWorldsDeleted": false,
+    "sharedAccountDataDeleted": false
+  },
+  "artifact": {
+    "bytes": 11233765,
+    "sha256": "9d1a2409ddaff1bb9cf5e5e626312eaf1017d4cdef58d4b380ab41b02c16e1a2"
+  }
+}

@@ -36,5 +36,8 @@ jobs:
       - name: Tests
         run: npm test
 
+      - name: Deployed cloud authorization (no real sessions)
+        run: node scripts/verify-cloud-live.mjs
+
       - name: Production build
         run: npm run build

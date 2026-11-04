@@ -50,7 +50,7 @@ import {
 export const SUPABASE_URL = 'https://bewwejewgqzctnjrbclu.supabase.co';
 /**
  * Klucz publiczny („anon”). Nie jest tajny – dostęp ogranicza RLS:
- * anonim czyta świat; zapis bloków wymaga chronionego RPC z kluczem działek.
+ * anonim nie ma dostępu do danych gry; wszystkie operacje przechodzą przez bramkę konta.
  */
 export const SUPABASE_ANON =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJld3dlamV3Z3F6Y3RuanJiY2x1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1MjQyOTQsImV4cCI6MjEwODEwMDI5NH0.bZVvA-lioshG9wgTloiRX_Lrul1965QqjukcOQk0SeQ';
@@ -184,6 +184,9 @@ export class PublicServer implements NetLike {
   private lastProfileSave = 0;
   private pendingProfile: PlayerProfile | null = null;
   private writingProfile = false;
+  private profileTask: Promise<void> | null = null;
+  private release?: () => void;
+  private accountBound = false;
   private warnedProfile = false;
   private warnedCache = false;
   private flushing = false;
@@ -201,9 +204,10 @@ export class PublicServer implements NetLike {
   private worldId: string = PUBLIC_WORLD_ID;
   private channelName: string = PUBLIC_CHANNEL;
 
-  constructor(opts: { name: string; id?: string; pid?: string; client?: SupabaseClient; worldId?: string; channel?: string; worldName?: string }) {
+  constructor(opts: { name: string; id?: string; pid?: string; client?: SupabaseClient; worldId?: string; channel?: string; worldName?: string; onClose?: () => void; accountBound?: boolean }) {
     // „Niewidzialna sesja”: id w sieci to trwały pid, więc pozostali gracze
     // widzą tę samą postać nawet po zmianie nicku czy skórki.
+    this.release = opts.onClose; this.accountBound = !!opts.accountBound;
     this.pid = opts.pid ?? loadPlayerId();
     this.id = opts.id ?? this.pid ?? randomId();
     this.name = (opts.name || 'Gracz').slice(0, 20);
@@ -306,14 +310,16 @@ export class PublicServer implements NetLike {
       if (error) throw new Error(error.message);
       const remote = data?.length ? sanitizeProfile(data[0]) : null;
       if (data?.length && (!remote || remote.pid !== this.pid)) throw new Error('Nieprawidłowy zapis gracza');
-      const newest = cached && (!remote || cached.updated >= remote.updated) ? cached : remote;
+      // Account servers are authoritative across devices; a browser with a
+      // future clock/stale cache must never replace a newer remote inventory.
+      const newest = this.accountBound ? remote ?? cached : cached && (!remote || cached.updated >= remote.updated) ? cached : remote;
       if (newest) {
         newest.unlocked = [...new Set([...(cached?.unlocked ?? []), ...(remote?.unlocked ?? [])])];
         cacheProfile(this.worldId, newest);
       }
       return newest;
     } catch (error) {
-      if (cached) return cached;
+      if (cached && !this.accountBound) return cached;
       // Never mistake a failed read for a new player and overwrite their inventory.
       throw new Error(`Nie można wczytać postępu gracza. Spróbuj ponownie. (${String(error)})`);
     }
@@ -336,7 +342,12 @@ export class PublicServer implements NetLike {
   }
 
   /** Serialize writes: an older slow request must not replace the exit snapshot. */
-  private async writeProfiles() {
+  private writeProfiles(): Promise<void> {
+    if (this.profileTask) return this.profileTask;
+    this.profileTask = this.processProfiles().finally(() => { this.profileTask = null; });
+    return this.profileTask;
+  }
+  private async processProfiles() {
     if (this.writingProfile) return;
     this.writingProfile = true;
     try {
@@ -393,6 +404,12 @@ export class PublicServer implements NetLike {
             settled = true;
             resolve();
           }
+          return;
+        }
+        if (status === 'CLOSED' && this.accountBound) {
+          this.close('Utracono potwierdzenie sesji serwera.');
+          window.dispatchEvent(new Event('mconline-server-disconnected'));
+          if (!settled) { settled = true; reject(new Error('Utracono połączenie z serwerem.')); }
           return;
         }
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -757,8 +774,8 @@ export class PublicServer implements NetLike {
 
   close(reason?: string) {
     if (this.closed) return;
+    const finalEdits = this.flush();
     this.closed = true;
-    void this.flush();
     // 2.19: ostatni zapis postępu – gracz wraca tu, gdzie wyszedł.
     if (this.lastProfile) {
       this.pendingProfile = this.lastProfile;
@@ -774,6 +791,7 @@ export class PublicServer implements NetLike {
         /* kanał mógł już być zamknięty */
       }
     }
+    void Promise.all([finalEdits, this.writeProfiles()]).finally(() => this.release?.());
     this.setStatus('closed', reason ?? null);
   }
 

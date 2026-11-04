@@ -1,5 +1,5 @@
 /** General rejson59.github.io account bridge. Historical filename is intentional.
- * No credentials, RPC transport, token persistence or game-data authorization here.
+ * No credentials, RPC transport or token persistence here. Account-bound data lives in accountWorlds.ts.
  */
 export const ACCOUNT_ORIGIN = 'https://rejson59.github.io';
 export const ACCOUNT_PENDING_KEY = 'mconline-account-pending-v1';
@@ -7,6 +7,7 @@ export const ACCOUNT_CONNECTED_KEY = 'mconline-account-connected-v1';
 export const ACCOUNT_DISCONNECTED_KEY = 'mconline-account-disconnected-v1';
 const RETURN_MAX_AGE = 30 * 60 * 1000;
 const disconnectedDocuments = new WeakSet<Window>();
+function policyChanged(win: Window) { const event = win.document.createEvent('Event'); event.initEvent('mconline-account-policy', false, false); win.dispatchEvent(event); }
 export type AccountIdentity = { username: string };
 export interface RejsonAccountBridge {
   getSession(): Promise<{ username: string; token?: string } | null>;
@@ -61,7 +62,7 @@ function checkedSession(win: Window, api: RejsonAccountBridge, signal: AbortSign
     Promise.resolve().then(() => api.getSession()).then(session => {
       if (session === null) { done(null); return; }
       if (!session || typeof session.username !== 'string' || !session.username.trim()) { done(new Error('Invalid identity')); return; }
-      // Deliberately strip the provider token: this project has no account-bound RPC.
+      // This display controller strips the token; only accountWorlds owns the private RPC transport.
       done(null, { username: session.username });
     }, () => done(new Error('Account unavailable')));
   });
@@ -96,7 +97,7 @@ export class ProjectAccount {
   }
   async refresh(fromClick = false): Promise<void> {
     if (this.disposed || !accountOriginSupported(this.win.location.origin)) return;
-    if (fromClick) { this.wanted = true; disconnectedDocuments.delete(this.win); this.remove(ACCOUNT_DISCONNECTED_KEY); }
+    if (fromClick) { this.wanted = true; disconnectedDocuments.delete(this.win); this.remove(ACCOUNT_DISCONNECTED_KEY); policyChanged(this.win); }
     if (!this.wanted) return;
     const sequence = ++this.serial;
     this.request?.abort(); const request = new AbortController(); this.request = request;
@@ -142,6 +143,7 @@ export class ProjectAccount {
   disconnect(): void {
     ++this.serial; this.request?.abort(); this.wanted = false; disconnectedDocuments.add(this.win);
     this.remove(ACCOUNT_PENDING_KEY); this.remove(ACCOUNT_CONNECTED_KEY); this.write(ACCOUNT_DISCONNECTED_KEY, '1');
+    policyChanged(this.win);
     this.emit('guest', null, 'Projekt rozłączony. Nadal możesz być zalogowany na rejson59.github.io. Nie wylogowano innych projektów.');
   }
   dispose(): void {

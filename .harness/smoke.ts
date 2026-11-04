@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.27.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Jedno konto, wspólne logowanie', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.28.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Światy na koncie, nowy start', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -4318,7 +4318,7 @@ section('2.11: publiczny serwer – zegar, dane i integracja');
   check('silnik synchronizuje zegar publiczny', /syncPublicClock/.test(engine));
   check('pozycje na serwerze publicznym są rzadsze', /PUBLIC_POS_HZ/.test(engine));
   check('ekran gry ma przycisk serwera publicznego', /Dołącz do serwera/.test(mp));
-  check('ekran nie wymaga już kodów do gry online', /joinPublic/.test(mp));
+  check('ekran nie wymaga już kodów do gry online', /openAccountServer/.test(mp));
   check('stary błąd P2P ma czytelny komunikat', /wrong state/.test(readSource('src/game/net.ts')));
   check('P2P sprawdza stan połączenia przed odpowiedzią', /signalingState !== 'have-local-offer'/.test(readSource('src/game/net.ts')));
   check('HUD trzyma listę graczy pod Tab zamiast stałej plakietki serwera', /tabList/.test(readSource('src/components/HUD.tsx')));
@@ -4472,9 +4472,9 @@ section('2.10: multiplayer wpięty w grę');
   check('silnik ma etykiety z nazwami graczy', /fillText\(name\.slice\(0, 16\)/.test(engine));
   check('HUD pokazuje obsadę sesji', /hud\.players/.test(hud));
   check('HUD pokazuje ping graczy', /p\.ping/.test(hud));
-  check('poczekalnia ma tryb tej samej przeglądarki', /createLocalLink/.test(mp));
-  check('poczekalnia ma tryb przez internet', /createRtcHost/.test(mp) && /createRtcGuest/.test(mp));
-  check('poczekalnia kopiuje kody jednym przyciskiem', /navigator\.clipboard/.test(mp));
+  check('poczekalnia nie uruchamia niezabezpieczonych pokoi', !/createLocalLink/.test(mp));
+  check('poczekalnia wymaga bramki konta', /openAccountServer/.test(mp) && /accountBound: true/.test(mp));
+  check('poczekalnia nie pozwala podszyć się nickiem', !/setName/.test(mp) && /access.name/.test(mp));
   check('menu główne ma wejście do multiplayera', /Gra razem/.test(readSource('src/components/Menus.tsx')));
   check('aplikacja przekazuje sesję do gry', /net=\{session\.net\}/.test(app));
   check('aplikacja sprząta sesję po powrocie do menu', /setMultiplayer\(false\)/.test(app));
