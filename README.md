@@ -1,6 +1,14 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.26.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.27.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów, bez gospodarza i bez zakładania konta. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.27.0 „Jedno konto, wspólne logowanie”
+
+- **Jeden sposób logowania:** przycisk „Zaloguj się przez rejson59.github.io” zamiast formularzy hasła/PIN-u i rejestracji w grze. Strona konta otwiera się w tej samej karcie, a po powrocie gra ponownie potwierdza sesję.
+- **Ogólne konto strony, nie konto społecznościowe:** jawnie dołączony skrypt `RejsonAccount`, obsługa zmiany konta, wylogowania na stronie, błędu sieci i rozłączenia tylko tego projektu.
+- **Dokładnie ten sam origin:** podgląd, lokalny HTML, Vercel i inne domeny nie udają wspólnej sesji; nie przekazujemy tokenów w adresach ani między domenami.
+- **25 370 kontroli**, w tym 23 scenariusze konta i testy bootstrapa. Przeglądarka: rzeczywisty skrypt integracyjny, symulowane konto/serwer na desktopie i mobilnym viewporcie; dodatkowo trzy nieobsługiwane originy. [Zakres, źródło i ograniczenia](docs/ACCOUNT-4.27.md).
+- **Bez automatycznej migracji danych:** światy lokalne, publiczny profil gracza i działki nadal mają dotychczasowe identyfikatory/autoryzację. Integracja sesji nie jest synchronizacją danych.
 
 ## Wersja 4.26.0 „Nie tylko wiśniowy gaj”
 
@@ -166,7 +174,7 @@ siatce — wynik odbierasz osobno. Przeciąganie rozdziela stosy; klik poza pane
 wyrzuca przedmiot z kursora. Skala GUI jest wspólna dla menu, slotów i HUD.
 
 Minimapa i auto-atak są domyślnie wyłączone, ale zachowujemy zapisane wybory.
-Konto jest dostępne przez **Informacje → Konto społeczności**, a dodatkowe
+Konto jest dostępne bezpośrednio przez **Konto rejson59.github.io...** lub **Informacje → Konto rejson59.github.io**, a dodatkowe
 transporty przez **Tryb wieloosobowy → Połączenia przeglądarkowe**.
 Istniejące światy i profile pozostają bez zmian.
 
@@ -986,8 +994,14 @@ Projekt jest nieoficjalny i nie jest zatwierdzony ani powiązany z Mojang / Micr
 
 Na `https://rejson59.github.io` dokument rozpoznaje jednorazowy znacznik przejścia i wczytuje animację wyjścia przed startem aplikacji — również wtedy, gdy projekt ma własny service worker. Bez znacznika, w ramce, na innych domenach i przy niedostępnej pamięci sesji kod nie pobiera zasobów portalu. Skrypt nie przenosi kont ani danych między domenami; na innych originach wyjście z portalu nie jest gwarantowane.
 
-## Wspólne konto Rejson
+## Ogólne konto rejson59.github.io
 
-W menu można zalogować się lub założyć konto bez opuszczania gry. To opcjonalne konto używa istniejącego Supabase Rejsona, hasła albo dotychczasowego PIN-u. Na tym samym originie sesja jest wspólna ze stroną główną i innymi zgodnymi projektami; na innej domenie trzeba się zalogować osobno. Zmiana PIN-u/hasła jest dostępna na stronie konta Rejsona. Bez e-maila nie ma automatycznego odzyskania zapomnianego hasła.
+W menu wybierz **Konto rejson59.github.io... → Zaloguj się przez rejson59.github.io**. Gra najpierw sprawdza potwierdzoną sesję przez `RejsonAccount.getSession()`. Jeśli jej nie ma, otwiera stronę konta w tej samej karcie i po powrocie ponownie weryfikuje tożsamość. Rejestracja i zarządzanie hasłem odbywają się na stronie konta, nie w formularzach gry.
 
-**Konto nie synchronizuje jeszcze światów.** Światy jednoosobowe pozostają w lokalnej przeglądarce, a profil multiplayer jest niezależny. Nie importujemy, nie usuwamy i nie łączymy żadnych zapisów przy logowaniu; transfer na inne urządzenie wymaga obecnie ręcznej kopii plikowej. Import może zastąpić zapis o tym samym identyfikatorze i ograniczyć listę do 8 światów, dlatego przed importem zachowaj osobną kopię istniejących światów. Gra nadal działa bez konta, również bez połączenia. Dostęp do serwera kont, gdy sieć nie działa, nie jest możliwy. Wylogowanie usuwa lokalną sesję, ale nie unieważnia jej po stronie serwera.
+Integracja działa wyłącznie na dokładnym originie **https://rejson59.github.io**, w tym pod `/mconline/`. Na innych domenach, w podglądzie i z lokalnego HTML wspólne logowanie jest niedostępne; można otworzyć produkcyjną grę. To nie OAuth/OIDC ani logowanie między domenami. Token nie jest przekazywany w URL, historii lub `postMessage`; projekt nie zapisuje go ponownie. Nazwa z pamięci przeglądarki nie jest dowodem tożsamości.
+
+**Rozłącz ten projekt** nie usuwa wspólnej sesji strony ani nie wylogowuje innych projektów. Globalnym kontem zarządza się przez **Zarządzaj kontem na stronie**. Błąd sieci nie jest traktowany jako zalogowanie; dostępne jest ponowienie sprawdzenia.
+
+**Konto nie synchronizuje światów i nie wiąże obecnych działek z kontem strony.** Światy jednoosobowe pozostają w lokalnej przeglądarce, a publiczny profil multiplayer i klucze działek są niezależne. Nie importujemy, nie usuwamy i nie łączymy zapisów przy logowaniu. Lokalne światy na tym urządzeniu nie są osobnym prywatnym magazynem każdego ogólnego konta. Transfer na inne urządzenie wymaga obecnie ręcznej kopii plikowej. Import może zastąpić zapis o tym samym identyfikatorze i ograniczyć listę do 8 światów, dlatego przed importem zachowaj osobną kopię. Gra nadal działa bez konta, również offline; samo sprawdzenie konta wymaga sieci.
+
+Migracja danych i autoryzacja prywatnych zasobów po koncie wymagają osobnego projektu, wdrożenia serwerowego i uzgodnienia właściciela. Szczegóły: [ACCOUNT-4.27](docs/ACCOUNT-4.27.md).

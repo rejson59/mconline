@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.26.0';
-export const GAME_RELEASE_NAME = 'Nie tylko wiśniowy gaj';
+export const GAME_VERSION = '4.27.0';
+export const GAME_RELEASE_NAME = 'Jedno konto, wspólne logowanie';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.27: ogólne konto strony', text: 'Logowanie przez rejson59.github.io zamiast osobnych formularzy hasła/PIN-u w grze. Potwierdzenie sesji po powrocie, zmiana konta i rozłączenie tylko projektu. Bez automatycznego przenoszenia światów i działek.' },
   { title: '4.26: tła naprawdę się zmieniają', text: 'Domyślnie inna sceneria przy otwarciu oraz automatyczna zmiana co 45 sekund. Widoczny przycisk Następne tło, nazwa scenerii i brak natychmiastowych powtórek. Ręcznie wybrane stałe tło zostaje zachowane.' },
   { title: '4.25: menu w ruchu', text: 'Prawdziwa obracana panorama, trzy scenerie Minecrafta i zapis wyboru. Pauza ruchu, systemowe ograniczenie animacji, usypianie ukrytej karty i uproszczone tło bez WebGL.' },
   { title: '4.24: kierunek pieca jak w Java', text: 'Piec stawia się frontem przeciwnie do poziomego kierunku patrzenia gracza, niezależnie od patrzenia w górę lub w dół. Rozpalanie i gaśnięcie zachowują kierunek, zapis i zawartość. Wydobywanie, wybieranie bloku i ochrona działek obsługują wszystkie osiem stanów.' },

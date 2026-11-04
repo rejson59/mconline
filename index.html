@@ -17,6 +17,18 @@
     <!-- rj-portal-bootstrap:end -->
 
     <meta charset="UTF-8" />
+
+    <!-- rj-account-bootstrap:start: explicit same-origin integration, not SW injection -->
+    <script>
+      (function () {
+        if (location.origin !== "https://rejson59.github.io" || window.RejsonAccount ||
+            document.querySelector('script[data-rejson-account]')) return;
+        document.write('<scr' + 'ipt defer src="/js/rejson-account.js?v=1" data-rejson-account onerror="window.dispatchEvent(new Event(&quot;rj:account-error&quot;))"></scr' + 'ipt>');
+      })();
+    </script>
+    <!-- rj-account-bootstrap:end -->
+
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#3b2a1e" />
