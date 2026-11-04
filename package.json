@@ -1,8 +1,8 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.26.0",
-  "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
+  "version": "4.27.0",
+  "description": "Minecraft \u2014 nieoficjalna wersja przegl\u0105darkowa, survival i wsp\u00f3lne miasto Creative",
   "type": "module",
   "license": "MIT",
   "keywords": [
@@ -16,10 +16,10 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node --test scripts/portal-bootstrap.test.mjs",
+    "build": "vite build && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs",
+    "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs",
     "test:native": "node .harness/run.mjs native",
     "test:fire": "node .harness/run.mjs fire",
     "test:engine": "node .harness/run.mjs smoke",
@@ -35,7 +35,9 @@
     "test:facing": "node .harness/run.mjs facing",
     "test:browser:facing": "BROWSER_FACING=1 node scripts/verify-native-browser.mjs",
     "test:panorama": "node .harness/run.mjs panorama",
-    "test:browser:panorama": "node scripts/verify-panorama-browser.mjs"
+    "test:browser:panorama": "node scripts/verify-panorama-browser.mjs",
+    "test:account": "node .harness/run.mjs account",
+    "test:browser:account": "node scripts/verify-account-browser.mjs"
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",

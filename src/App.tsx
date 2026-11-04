@@ -5,6 +5,7 @@ import { JavaMainMenu as MainMenu } from './components/JavaMenus';
 import { type GameMode, type SaveData } from './game/engine';
 import MultiplayerScreen, { type NetStart } from './components/MultiplayerScreen';
 import CommunityAccount from './components/CommunityAccount';
+import { shouldOpenAccountOnReturn } from './game/communityAccount';
 import type { NetLike } from './game/net';
 import { deleteSave, duplicateSave, loadSaves, MAX_SAVES, renameSave, toggleFavoriteSave } from './game/saves';
 import { onViewportChange } from './utils/viewport';
@@ -75,6 +76,11 @@ export default function App() {
   const [multiplayer, setMultiplayer] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const closeAccount = useCallback(() => setAccountOpen(false), []);
+  useEffect(() => {
+    const resumeAccount = () => { if (shouldOpenAccountOnReturn(window)) setAccountOpen(true); };
+    resumeAccount(); window.addEventListener('pageshow', resumeAccount);
+    return () => window.removeEventListener('pageshow', resumeAccount);
+  }, []);
   const startMultiplayer = (s: NetStart) => {
     setMultiplayer(false);
     try {

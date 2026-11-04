@@ -32,7 +32,7 @@ const SUITES = [
   { name: 'audio', entry: path.join(here, 'audio.ts'), label: 'Oryginalne efekty i mikser' },
   { name: 'smoke', entry: path.join(here, 'smoke.ts'), label: 'Silnik (headless)' },
   { name: 'ui', entry: path.join(here, 'ui.tsx'), label: 'Interfejs (React)' },
-  { name: 'account', entry: path.join(here, 'account.tsx'), label: 'Konto społeczności' },
+  { name: 'account', entry: path.join(here, 'account.tsx'), label: 'Ogólne konto rejson59.github.io' },
 ];
 
 const wanted = process.argv.slice(2).filter((a) => !a.startsWith('-'));

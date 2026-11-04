@@ -1,0 +1,385 @@
+{
+  "version": "4.27.0",
+  "baselineCommit": "b0c8c1824fd1e3e02523afc439b00e2331204276",
+  "reference": {
+    "repository": "rejson59/rejson59.github.io",
+    "commit": "0a6fd96d02dfe4b9f62e2fb62859d2134f438a20",
+    "files": [
+      {
+        "path": "js/rejson-account.js",
+        "fixture": "rejson-account.js",
+        "bytes": 3154,
+        "sha256": "2d50be5e6ef5cb4a621d804da7685d1c4bcc6a2c1a80edf644314f10bfd4ced2"
+      },
+      {
+        "path": "docs/wspolne-konto-projekty.md",
+        "fixture": "wspolne-konto-projekty.md",
+        "bytes": 9263,
+        "sha256": "c8ce4709909f706f95428e2d5843d9e90ad9a42f3e1e51b33168db0e1a7ff520"
+      }
+    ]
+  },
+  "checks": {
+    "total": 25370,
+    "panorama": 240,
+    "facing": 599,
+    "furnace": 678,
+    "native": 5746,
+    "engine": 16747,
+    "fire": 436,
+    "worker": 81,
+    "audio": 403,
+    "ui": 413,
+    "account": 23,
+    "bootstrap": 4
+  },
+  "testedNodeVersion": "22.22.3",
+  "browser": {
+    "version": "4.27.0",
+    "reports": [
+      {
+        "device": "desktop",
+        "environment": "production HTML and pinned real provider, mocked login page/whoami, synthetic accounts only",
+        "helperLoads": 3,
+        "whoamiRequests": 8,
+        "loginVisits": 2,
+        "roundTrip": true,
+        "noServiceWorker": true,
+        "noCredentialForms": true,
+        "verifiedName": true,
+        "projectDisconnectPreservesSharedSession": true,
+        "sharedLogout": true,
+        "accountSwitch": true,
+        "lateResponseIgnored": true,
+        "offlineRetry": true,
+        "worldsAndProfileUntouched": true,
+        "secretsInUrls": false,
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "environment": "production HTML and pinned real provider, mocked login page/whoami, synthetic accounts only",
+        "helperLoads": 3,
+        "whoamiRequests": 8,
+        "loginVisits": 2,
+        "roundTrip": true,
+        "noServiceWorker": true,
+        "noCredentialForms": true,
+        "verifiedName": true,
+        "projectDisconnectPreservesSharedSession": true,
+        "sharedLogout": true,
+        "accountSwitch": true,
+        "lateResponseIgnored": true,
+        "offlineRetry": true,
+        "worldsAndProfileUntouched": true,
+        "secretsInUrls": false,
+        "errors": []
+      },
+      {
+        "device": "preview",
+        "sameOriginRestriction": true,
+        "helperRequests": 0,
+        "noCredentialForms": true,
+        "errors": []
+      },
+      {
+        "device": "file",
+        "sameOriginRestriction": true,
+        "helperRequests": 0,
+        "noCredentialForms": true,
+        "errors": []
+      },
+      {
+        "device": "other-origin",
+        "sameOriginRestriction": true,
+        "helperRequests": 0,
+        "noCredentialForms": true,
+        "errors": []
+      }
+    ]
+  },
+  "furnaceRegression": {
+    "version": "4.27.0",
+    "environment": "Chromium / SwiftShader sandbox, mobile is viewport emulation",
+    "reports": [
+      {
+        "device": "desktop",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "furnaceResult": {
+          "input": {
+            "id": 495,
+            "count": 1
+          },
+          "fuel": {
+            "id": 494,
+            "count": 1
+          },
+          "burn": 70,
+          "cook": 0,
+          "ingots": 1,
+          "charcoal": 3,
+          "entityDrops": [
+            {
+              "id": 495,
+              "count": 1
+            },
+            {
+              "id": 496,
+              "count": 1
+            },
+            {
+              "id": 494,
+              "count": 2
+            }
+          ]
+        },
+        "facingResult": {
+          "rows": [
+            {
+              "x": 16,
+              "cold": 28,
+              "id": 28
+            },
+            {
+              "x": 18,
+              "cold": 498,
+              "id": 498
+            },
+            {
+              "x": 20,
+              "cold": 497,
+              "id": 497
+            },
+            {
+              "x": 22,
+              "cold": 499,
+              "id": 499
+            },
+            {
+              "x": 24,
+              "cold": 28,
+              "id": 53
+            },
+            {
+              "x": 26,
+              "cold": 498,
+              "id": 501
+            },
+            {
+              "x": 28,
+              "cold": 497,
+              "id": 500
+            },
+            {
+              "x": 30,
+              "cold": 499,
+              "id": 502
+            }
+          ],
+          "atlasChannels": 4096,
+          "mesh": {
+            "values": 32736,
+            "worker": "worker"
+          }
+        },
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 1,
+          "charcoal": 3,
+          "rawIron": 4,
+          "rawGold": 2,
+          "furnace": {
+            "x": 12,
+            "y": 65,
+            "z": 12,
+            "input": {
+              "id": 495,
+              "count": 1
+            },
+            "fuel": {
+              "id": 494,
+              "count": 1
+            },
+            "output": null,
+            "burn": 70,
+            "burnMax": 80,
+            "cook": 0
+          },
+          "facingRows": [
+            {
+              "id": 28,
+              "state": {
+                "x": 16,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 498,
+              "state": {
+                "x": 18,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 497,
+              "state": {
+                "x": 20,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 499,
+              "state": {
+                "x": 22,
+                "y": 65,
+                "z": 10,
+                "input": null,
+                "fuel": null,
+                "output": null,
+                "burn": 0,
+                "burnMax": 0,
+                "cook": 0,
+                "dim": 0
+              }
+            },
+            {
+              "id": 53,
+              "state": {
+                "x": 24,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 501,
+              "state": {
+                "x": 26,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 500,
+              "state": {
+                "x": 28,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            },
+            {
+              "id": 502,
+              "state": {
+                "x": 30,
+                "y": 65,
+                "z": 10,
+                "input": {
+                  "id": 495,
+                  "count": 2
+                },
+                "fuel": null,
+                "output": null,
+                "burn": 75,
+                "burnMax": 80,
+                "cook": 0.5,
+                "dim": 0
+              }
+            }
+          ],
+          "gui": 2
+        },
+        "errors": []
+      }
+    ]
+  },
+  "artifact": {
+    "path": "dist/index.html",
+    "bytes": 11245132,
+    "sha256": "38ef92984370616f3d9147cca5bead8f33ff65a433378e1daed47bff30e7c2bc"
+  },
+  "limits": [
+    "Production HTML and pinned real provider with mocked login page/whoami; no live user accounts or public auth server exercised.",
+    "Exact same-origin only, no OAuth/OIDC or cross-origin token transfer.",
+    "Account integration does not migrate/synchronize worlds, public profiles or plot ownership.",
+    "Existing device data is unchanged, not a new private per-account store.",
+    "Same-origin projects are not mutually isolated.",
+    "Mobile viewport emulation, not a physical phone test."
+  ]
+}
