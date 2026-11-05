@@ -1,5 +1,6 @@
 /** Real account-owned cloud saves. The opaque token stays in this module's
  * closure, never in React state, save data, logs, exports, URLs or a new store. */
+import { MultiplayerConnectionError } from './multiplayerLease';
 import { ACCOUNT_ORIGIN, ProjectAccount } from './communityAccount';
 import { readScopedSaves, replaceScopedSaves, readSaveJournal, writeSaveJournal, SAVES_CHANGED, SAVES_FAILED, setSaveNamespace, type StoredWorld } from './saves';
 export const ACCOUNT_DB = 'https://hzbqzfimtroixnldzjeq.supabase.co';
@@ -7,6 +8,7 @@ export const ACCOUNT_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 const WORLD_GATEWAY = 'https://bewwejewgqzctnjrbclu.supabase.co/functions/v1/mconline-gateway';
 export type CloudPhase = 'guest' | 'loading' | 'ready' | 'saving' | 'error' | 'conflict';
 export interface CloudState { phase: CloudPhase; owner: string | null; username: string | null; message: string }
+export interface MultiplayerDelivery { keepalive?: boolean; timeout?: number }
 export const CLOUD_CHANGED = 'mconline-cloud-changed';
 let state: CloudState = { phase: 'guest', owner: null, username: null, message: 'Bez konta: światy tylko na tym urządzeniu. Zaloguj się: zapis w chmurze i multiplayer.' };
 let active: AccountWorlds | null = null;
@@ -18,7 +20,7 @@ export function cloudPlayable() { return state.phase === 'guest' || (state.phase
 export function currentAccountTransport() {
   const session = active;
   if (!session) throw new Error('Zaloguj się, aby grać w trybie wieloosobowym.');
-  return { owner: session.owner, username: session.username, request: (op: string, world: string, id: string, args?: unknown) => session.multiplayer(op, world, id, args) };
+  return { owner: session.owner, username: session.username, request: (op: string, world: string, id: string, args?: unknown, delivery?: MultiplayerDelivery) => session.multiplayer(op, world, id, args, delivery) };
 }
 export async function syncCloudNow() { if (active) await active.sync(); }
 export async function refreshCloud() { if (active) await active.refresh(); }
@@ -56,12 +58,12 @@ export class AccountWorlds {
     }
     return result;
   }
-  async multiplayer(op: string, world: string, session: string, args?: unknown) {
+  async multiplayer(op: string, world: string, session: string, args?: unknown, delivery: MultiplayerDelivery = {}) {
     if (this.stopped || active !== this) throw new Error('Konto zmieniono lub rozłączono.');
-    const r = await this.transport(WORLD_GATEWAY, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: this.token, op, world, session, args }), signal: AbortSignal.timeout(20000) });
+    const r = await this.transport(WORLD_GATEWAY, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: this.token, op, world, session, args }), keepalive: !!delivery.keepalive, signal: AbortSignal.timeout(delivery.timeout ?? 20000) });
     const result = await r.json();
     if (this.stopped || active !== this) throw new Error('Konto zmieniono lub rozłączono.');
-    if (!r.ok || result.error) throw new Error(result.error || 'Nie można połączyć się z serwerem kontowym.');
+    if (!r.ok || result.error) throw new MultiplayerConnectionError(result.error || 'Nie można połączyć się z serwerem kontowym.', typeof result.code === 'string' ? result.code : 'SERVER_ERROR');
     return result.data;
   }
   refresh(): Promise<void> {

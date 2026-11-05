@@ -30,15 +30,16 @@ export function gateway(worldURL: string, serviceKey: string, request: typeof fe
         if (!r.ok) {
           // SQL messages are hand-written and do not contain RPC arguments.
           const message = typeof result.message === 'string' && !/token|capability|key|uuid|syntax|constraint|column|relation/i.test(result.message) ? result.message : 'Serwer odrzucił żądanie.';
-          throw new Error(message);
+          const error = new Error(message) as Error & { code?: string }; error.code = result.code; throw error;
         }
         return result;
       };
       const rpc = (name: string, args: Obj) => db(`rpc/${name}`, args);
-      const member = await rpc('mconline_member', { p_account: identity.id, p_username: identity.username, p_session: b.session, p_world: b.world, p_op: b.op === 'join' ? 'join' : b.op === 'leave' ? 'leave' : 'touch' });
-      if (b.op === 'join') return response({ data: { pid: member.pid, username: member.username, cursor: member.cursor } });
-      if (b.op === 'leave') return response({ data: null });
       const args = (b.args && typeof b.args === 'object' && !Array.isArray(b.args) ? b.args : {}) as Obj;
+      if (!['join','replace','leave','poll','read','profile','rpc'].includes(b.op)) return response({ error: 'Nieznana operacja.' }, 400);
+      const member = await rpc('mconline_member_v2', { p_account: identity.id, p_username: identity.username, p_session: b.session, p_world: b.world, p_op: ['join','replace','leave'].includes(b.op) ? b.op : 'touch', p_resume: ['join','replace'].includes(b.op) ? args.resume ?? null : null });
+      if (b.op === 'join' || b.op === 'replace') return response({ data: { pid: member.pid, username: member.username, cursor: member.cursor } });
+      if (b.op === 'leave') return response({ data: null });
       let data: unknown;
       if (b.op === 'poll') {
         data = await rpc('mconline_poll', { p_account: identity.id, p_session: b.session, p_world: b.world, p_presence: args.presence ?? {}, p_messages: args.messages ?? [], p_since: Math.max(0, Math.trunc(Number(args.since) || 0)) });
@@ -75,6 +76,7 @@ export function gateway(worldURL: string, serviceKey: string, request: typeof fe
       } else throw new Error('Nieznana operacja.');
       return response({ data });
     } catch (error) {
+      if ((error as { code?: string })?.code === 'P0409') return response({ error: 'Serwer pamięta wcześniejsze połączenie konta. Może to być poprzednia karta lub inne urządzenie. Poczekaj do minuty albo świadomie odzyskaj połączenie.', code: 'ACCOUNT_IN_USE' }, 409);
       if (error instanceof SyntaxError) return response({ error: 'Nieprawidłowy JSON.' }, 400);
       if (error instanceof Error && !/fetch|network|abort|timeout|json|token|apikey|bearer/i.test(error.message)) return response({ error: error.message.slice(0,240) }, 409);
       return response({ error: 'Brak połączenia z serwerem. Spróbuj ponownie.' }, 503);

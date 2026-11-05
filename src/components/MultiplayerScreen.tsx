@@ -22,17 +22,21 @@ export default function MultiplayerScreen({ onStart, onClose, onAccount }: {
   const [account, setAccount] = useState(cloudState);
   const net = useRef<PublicServer | null>(null);
   const attempt = useRef(0);
+  const pending = useRef<AbortController | null>(null);
+  const [canReplace, setCanReplace] = useState(false);
   const handedOff = useRef(false);
   useEffect(() => {
     const changed = () => setAccount(cloudState()); window.addEventListener(CLOUD_CHANGED, changed);
-    return () => { window.removeEventListener(CLOUD_CHANGED, changed); attempt.current++; if (!handedOff.current) net.current?.close('Anulowano'); };
+    return () => { window.removeEventListener(CLOUD_CHANGED, changed); attempt.current++; if (!handedOff.current) { pending.current?.abort(); net.current?.close('Anulowano'); } };
   }, []);
-  const join = async (selected = world) => {
-    if (!account.owner || busy) return;
+  const join = async (selected = world, replace = false) => {
+    if (!account.owner || pending.current) return;
+    const controller = new AbortController(); pending.current = controller;
+    setCanReplace(false);
     const serial = ++attempt.current;
     setBusy(true); setMessage('Potwierdzam konto na serwerze…');
     try {
-      const access = await openAccountServer(selected);
+      const access = await openAccountServer(selected, { replace, signal: controller.signal });
       if (serial !== attempt.current) { access.release(); return; }
       const server = new PublicServer({ name: access.name, pid: access.pid, client: access.client, worldId: selected, onClose: access.release, accountBound: true });
       net.current = server;
@@ -40,18 +44,19 @@ export default function MultiplayerScreen({ onStart, onClose, onAccount }: {
       server.onProgress = setMessage;
       await server.connect();
       if (serial !== attempt.current) { server.close('Anulowano'); return; }
-      handedOff.current = true;
+      handedOff.current = true; pending.current = null;
       onStart({ net: server, seed: server.world.seed, mode: server.world.mode, worldName: server.world.name, worldType: server.world.worldType ?? 'normal' });
     } catch (error) {
       net.current?.close('Błąd połączenia');
       if (serial !== attempt.current) return;
+      setCanReplace((error as { code?: string }).code === 'ACCOUNT_IN_USE');
       setBusy(false); setMessage(error instanceof Error ? error.message : 'Nie można połączyć się z serwerem.');
-    }
+    } finally { if (pending.current === controller) pending.current = null; }
   };
   return <JavaPage title={busy ? 'Łączenie z serwerem...' : 'Tryb wieloosobowy'} footer={<>
     <JavaButton disabled={busy || !account.owner} onClick={() => void join()}>Dołącz do serwera</JavaButton>
     {!account.owner && <JavaButton onClick={onAccount}>Zaloguj się przez rejson59.github.io</JavaButton>}
-    <JavaButton onClick={() => { attempt.current++; net.current?.close('Anulowano'); onClose(); }}>Anuluj</JavaButton>
+    <JavaButton onClick={() => { attempt.current++; pending.current?.abort(); net.current?.close('Anulowano'); onClose(); }}>Anuluj</JavaButton>
   </>}>
     <p className="java-muted">{account.owner ? `Konto: ${account.username}. Profil i działki należą do konta, nie do urządzenia.` : 'Tylko zalogowani mogą grać w trybie wieloosobowym. Bez konta nadal możesz grać jednoosobowo.'}</p>
     <div className="java-world-list" role="listbox" aria-label="Serwery">
@@ -60,6 +65,10 @@ export default function MultiplayerScreen({ onStart, onClose, onAccount }: {
       </button>)}
     </div>
     {world === 'city' && <p className="java-muted">Creative dla każdego. Wejdź na trawiastą działkę i wpisz /dzialka zajmij (maks. 4). Budujesz tylko u siebie; ulice i wolne działki są chronione. Własność jest przypisana do konta i działa na innych urządzeniach.</p>}
+    {canReplace && <div role="alert" className="java-muted">
+      <p>Serwer pamięta poprzednie połączenie — nie jest to dowód logowania na innym urządzeniu. Jeśli to pozostałość po odświeżeniu lub awarii, możesz odzyskać dostęp. Naprawdę aktywne poprzednie połączenie zostanie rozłączone.</p>
+      <JavaButton disabled={busy} onClick={() => { if (window.confirm('Zastąpić poprzednie połączenie tego konta? Jeśli gra nadal działa w innej karcie lub na innym urządzeniu, zostanie rozłączona.')) void join(world, true); }}>Odzyskaj połączenie</JavaButton>
+    </div>}
     {message && <p role="status" style={{ margin: '10px 5px', color: '#ffaa00' }}>{message}</p>}
     <p className="java-muted">Nowy start: 5 listopada 2026. Jedno konto może grać na jednym urządzeniu naraz. Stare niezabezpieczone pokoje lokalne/P2P są wyłączone.</p>
     <p className="java-muted">To serwer tego projektu. Adresy oryginalnych serwerów Minecraft Java / Bedrock nie są obsługiwane.</p>

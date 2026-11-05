@@ -1,6 +1,12 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.28.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.28.1 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.28.1 „Powrót na serwer bez blokady”
+
+- **Naprawiona fałszywa blokada konta po odświeżeniu:** bezpieczne wznowienie tej samej karty z nową generacją połączenia, sprzątanie anulowanych/niepotwierdzonych prób oraz oczekiwanie na zakończenie poprzedniego zamykania.
+- **„Odzyskaj połączenie”** z jawnym potwierdzeniem, jeśli serwer pamięta nieznaną wcześniejszą sesję. Nie diagnozujemy automatycznie „innego urządzenia”; inne aktywne karty/urządzenia nie są przejmowane bez zgody.
+- **Bez ponownego resetu:** światy, profile, ekwipunek i własność działek pozostają. [Przyczyna, ograniczenia i testy zgłoszenia](docs/MULTIPLAYER-4.28.1.md).
 
 ## Wersja 4.28.0 „Światy na koncie, nowy start”
 
