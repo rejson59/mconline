@@ -185,7 +185,7 @@ export class PublicServer implements NetLike {
   private pendingProfile: PlayerProfile | null = null;
   private writingProfile = false;
   private profileTask: Promise<void> | null = null;
-  private release?: () => void;
+  private release?: (settled: Promise<void>) => void;
   private accountBound = false;
   private warnedProfile = false;
   private warnedCache = false;
@@ -204,7 +204,7 @@ export class PublicServer implements NetLike {
   private worldId: string = PUBLIC_WORLD_ID;
   private channelName: string = PUBLIC_CHANNEL;
 
-  constructor(opts: { name: string; id?: string; pid?: string; client?: SupabaseClient; worldId?: string; channel?: string; worldName?: string; onClose?: () => void; accountBound?: boolean }) {
+  constructor(opts: { name: string; id?: string; pid?: string; client?: SupabaseClient; worldId?: string; channel?: string; worldName?: string; onClose?: (settled: Promise<void>) => void; accountBound?: boolean }) {
     // „Niewidzialna sesja”: id w sieci to trwały pid, więc pozostali gracze
     // widzą tę samą postać nawet po zmianie nicku czy skórki.
     this.release = opts.onClose; this.accountBound = !!opts.accountBound;
@@ -791,7 +791,9 @@ export class PublicServer implements NetLike {
         /* kanał mógł już być zamknięty */
       }
     }
-    void Promise.all([finalEdits, this.writeProfiles()]).finally(() => this.release?.());
+    const settled = Promise.all([finalEdits, this.writeProfiles()]).then(() => {});
+    void settled.catch(() => {}); // Also flush profiles for transports without an onClose callback.
+    this.release?.(settled);
     this.setStatus('closed', reason ?? null);
   }
 

@@ -1,0 +1,116 @@
+{
+  "version": "4.28.1",
+  "issue": "1b53b6a5-0561-46ac-b8ef-899eeb26f32f",
+  "date": "2026-11-05",
+  "offlineChecks": 25400,
+  "lifecycleChecks": 12,
+  "cloudGatewayChecks": 22,
+  "liveSQL": {
+    "oldBugReproduced": true,
+    "resumeChecks": 16,
+    "syntheticFixturesRolledBack": true
+  },
+  "browser": {
+    "productionHTML": true,
+    "realProvider": true,
+    "mockedGateway": true,
+    "realWebLocks": true,
+    "renderPausedForConcurrentTabs": true,
+    "legacyOrphanRecoveredByConfirmedAction": true,
+    "confirmationCancelSendsNothing": true,
+    "reloadAfterDroppedLeave": true,
+    "freshGeneration": true,
+    "duplicatedTabBlocked": true,
+    "otherDeviceNotAutomaticallyReplaced": true,
+    "errors": []
+  },
+  "regressions": {
+    "cloud": [
+      {
+        "productionHTML": true,
+        "realPinnedProvider": true,
+        "mockedRPC": true,
+        "isolatedDevices": 2,
+        "fullGameSnapshotUploaded": true,
+        "blocksAndInventoryRestored": true,
+        "offlineConflictProtected": true,
+        "storageFailureVisible": true,
+        "accountSwitchStopsGame": true,
+        "localDeviceWorldPreserved": true,
+        "errors": []
+      }
+    ],
+    "account": [
+      {
+        "device": "desktop",
+        "environment": "production HTML and pinned real provider, mocked login page/whoami, synthetic accounts only",
+        "helperLoads": 3,
+        "whoamiRequests": 20,
+        "loginVisits": 2,
+        "roundTrip": true,
+        "noServiceWorker": true,
+        "noCredentialForms": true,
+        "verifiedName": true,
+        "projectDisconnectPreservesSharedSession": true,
+        "sharedLogout": true,
+        "accountSwitch": true,
+        "lateResponseIgnored": true,
+        "offlineRetry": true,
+        "worldsAndProfileUntouched": true,
+        "secretsInUrls": false,
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "environment": "production HTML and pinned real provider, mocked login page/whoami, synthetic accounts only",
+        "helperLoads": 3,
+        "whoamiRequests": 20,
+        "loginVisits": 2,
+        "roundTrip": true,
+        "noServiceWorker": true,
+        "noCredentialForms": true,
+        "verifiedName": true,
+        "projectDisconnectPreservesSharedSession": true,
+        "sharedLogout": true,
+        "accountSwitch": true,
+        "lateResponseIgnored": true,
+        "offlineRetry": true,
+        "worldsAndProfileUntouched": true,
+        "secretsInUrls": false,
+        "errors": []
+      },
+      {
+        "device": "preview",
+        "sameOriginRestriction": true,
+        "helperRequests": 0,
+        "noCredentialForms": true,
+        "errors": []
+      },
+      {
+        "device": "file",
+        "sameOriginRestriction": true,
+        "helperRequests": 0,
+        "noCredentialForms": true,
+        "errors": []
+      },
+      {
+        "device": "other-origin",
+        "sameOriginRestriction": true,
+        "helperRequests": 0,
+        "noCredentialForms": true,
+        "errors": []
+      }
+    ]
+  },
+  "backend": {
+    "gatewayVersion": 2,
+    "migration": "mconline_multiplayer_resume_fencing",
+    "worldsReset": false,
+    "accountsChanged": false,
+    "gatewayBuildSHA256": "e9196bb8a72438fd41173a87cbd161ea0c1aa1a601ac306e1e670ce3b874e90b"
+  },
+  "artifact": {
+    "bytes": 11236744,
+    "sha256": "2c41d6425a02dde7b525a2dbe54e1156552146b49de8d70fd07ba49336ad8106"
+  }
+}

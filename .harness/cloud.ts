@@ -59,10 +59,11 @@ try {
   const before = localStorage.getItem(saveKey(B)); other.stop(); await other.refresh();
   check('stopped account cannot apply a late cloud response', () => assert.equal(localStorage.getItem(saveKey(B)), before));
   const calls: { path: string; body: any }[] = [];
-  let valid = true;
+  let valid = true, busy = false;
   const upstream = (async (url: string, init: RequestInit) => {
     const body = init.body ? JSON.parse(String(init.body)) : null; calls.push({ path: url, body });
     if (url.includes('mconline_identity')) return valid ? Response.json({ id: A, username: 'Alice' }) : Response.json({ error: 'invalid' }, { status: 401 });
+    if (url.includes('mconline_member') && busy) return Response.json({code:'P0409',message:'Serwer pamięta wcześniejsze połączenie konta.'},{status:400});
     if (url.includes('mconline_member')) return Response.json({ pid: 'p' + 'a'.repeat(19), capability: 'server-only-capability', username: 'Alice', cursor: 42 });
     return Response.json([]);
   }) as typeof fetch;
@@ -85,6 +86,10 @@ try {
   check('arbitrary RPC forwarding is forbidden', () => assert.equal(r.status, 409));
   const count = calls.length; r = await send({ ...base, op: 'join' }, 'https://rejson59.github.io.evil.invalid');
   check('lookalike origin is rejected before receiving account authority', () => { assert.equal(r.status, 403); assert.equal(calls.length, count); });
+  busy=true; r=await send({...base,op:'join',args:{resume:'a'.repeat(64)}}); const conflict=await r.json();
+  check('busy lease uses a structured recoverable conflict, not an invented device diagnosis',()=>{assert.equal(r.status,409);assert.equal(conflict.code,'ACCOUNT_IN_USE');});
+  busy=false; await send({...base,op:'replace',args:{resume:'a'.repeat(64),p_account:B}});
+  check('explicit recovery still binds verified account, nonce and tab proof on backend',()=>{const args=calls.at(-1)!.body;assert.equal(args.p_account,A);assert.equal(args.p_op,'replace');assert.equal(args.p_resume,'a'.repeat(64));assert.equal(args.p_session,base.session);});
   first.stop(); second.stop();
   console.log(`${checks} cloud/gateway checks passed`);
 } finally { setSaveNamespace(null); dom.window.close(); }

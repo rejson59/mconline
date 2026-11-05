@@ -9,7 +9,7 @@ begin
  assert not has_function_privilege('anon','public.mconline_poll(uuid,text,text,jsonb,jsonb,bigint)','execute'),'anonymous poll RPC';
  m:=public.mconline_member(a,'Alice',s,'public','join'); cursor0:=(m->>'cursor')::bigint;
  assert m->>'pid' ~ '^p[0-9a-f]{19}$','bad persistent account pid';
- begin perform public.mconline_member(a,'Alice',s2,'public','join'); raise exception 'concurrent device joined'; exception when raise_exception then if sqlerrm='concurrent device joined' then raise; end if; end;
+ begin perform public.mconline_member(a,'Alice',s2,'public','join'); raise exception 'concurrent device joined'; exception when sqlstate 'P0409' then if sqlerrm='concurrent device joined' then raise; end if; end;
  p:=public.mconline_poll(a,s,'public','{}',jsonb_build_array(jsonb_build_object('t','chat','text','test','from','victim','name','Forged','_mid',mid)),cursor0);
  assert p->'messages'->0->'payload'->>'from'=m->>'pid','spoofed packet sender';
  assert p->'messages'->0->'payload'->>'name'='Alice','spoofed verified username';

@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'lease', entry: path.join(here, 'multiplayerLease.ts'), label: 'Multiplayer: powrót karty i sprzątanie sesji' },
   { name: 'cloud', entry: path.join(here, 'cloud.ts'), label: 'Światy kontowe, konflikt urządzeń i autoryzowana bramka' },
   { name: 'panorama', entry: path.join(here, 'panorama.tsx'), label: 'Ruchome panoramy i wybór tła menu' },
   { name: 'facing', entry: path.join(here, 'facing.ts'), label: 'Oryginalne stany pieca, tekstury i UV' },
