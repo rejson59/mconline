@@ -37,6 +37,14 @@ export function gateway(worldURL: string, serviceKey: string, request: typeof fe
       const rpc = (name: string, args: Obj) => db(`rpc/${name}`, args);
       const args = (b.args && typeof b.args === 'object' && !Array.isArray(b.args) ? b.args : {}) as Obj;
       if (!['join','replace','leave','poll','read','profile','rpc'].includes(b.op)) return response({ error: 'Nieznana operacja.' }, 400);
+      const saveProfile = async (profile: Obj, leave = false) => {
+        const row: Obj = {};
+        for (const field of ['x','y','z','yaw','pitch','health','hunger','inv','armor','xp','skin','dim']) if (Object.prototype.hasOwnProperty.call(profile,field)) row[field] = profile[field];
+        return rpc('mconline_profile', { p_account: identity.id, p_username: identity.username, p_session: b.session, p_world: b.world, p_profile: row, p_guard: profile.mconline_guard === true, p_expected: profile.mconline_base ?? null, p_save: profile.mconline_save ?? null, p_leave: leave });
+      };
+      // A final checkpoint and leave MUST share one fenced SQL transaction.
+      if (b.op === 'leave' && args.profile) return response({ data: await saveProfile(args.profile, true) });
+      if (b.op === 'profile') return response({ data: await saveProfile(args) });
       const member = await rpc('mconline_member_v2', { p_account: identity.id, p_username: identity.username, p_session: b.session, p_world: b.world, p_op: ['join','replace','leave'].includes(b.op) ? b.op : 'touch', p_resume: ['join','replace'].includes(b.op) ? args.resume ?? null : null });
       if (b.op === 'join' || b.op === 'replace') return response({ data: { pid: member.pid, username: member.username, cursor: member.cursor } });
       if (b.op === 'leave') return response({ data: null });
@@ -57,13 +65,6 @@ export function gateway(worldURL: string, serviceKey: string, request: typeof fe
           q.set('limit', String(Math.max(1, Math.min(5000, Math.trunc(Number(args.limit) || 1000)))));
         } else throw new Error('Niedozwolona tabela.');
         data = await db(`${args.table}?${q}`);
-      } else if (b.op === 'profile') {
-        // Only existing profile columns; never accept an arbitrary REST row.
-        const allowed = ['x','y','z','yaw','pitch','health','hunger','inv','armor','xp','skin','updated_at','name','dim'];
-        const row: Obj = { world: b.world, pid: member.pid };
-        for (const field of allowed) if (Object.prototype.hasOwnProperty.call(args,field)) row[field] = args[field];
-        row.name = member.username; row.updated_at = new Date().toISOString();
-        data = await db('blockcraft_players?on_conflict=world,pid', row);
       } else if (b.op === 'rpc') {
         const city = b.world === 'city';
         const plot = city ? 'blockcraft_city_plot' : 'blockcraft_plot';
@@ -76,6 +77,7 @@ export function gateway(worldURL: string, serviceKey: string, request: typeof fe
       } else throw new Error('Nieznana operacja.');
       return response({ data });
     } catch (error) {
+      if ((error as { code?: string })?.code === 'P0410') return response({ error: 'Zapis ekwipunku zmienił się. Kopia lokalna zachowana; nie nadpisano serwera.', code: 'PROFILE_CONFLICT' }, 409);
       if ((error as { code?: string })?.code === 'P0409') return response({ error: 'Serwer pamięta wcześniejsze połączenie konta. Może to być poprzednia karta lub inne urządzenie. Poczekaj do minuty albo świadomie odzyskaj połączenie.', code: 'ACCOUNT_IN_USE' }, 409);
       if (error instanceof SyntaxError) return response({ error: 'Nieprawidłowy JSON.' }, 400);
       if (error instanceof Error && !/fetch|network|abort|timeout|json|token|apikey|bearer/i.test(error.message)) return response({ error: error.message.slice(0,240) }, 409);

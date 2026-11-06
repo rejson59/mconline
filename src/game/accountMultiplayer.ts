@@ -37,6 +37,7 @@ async function establishAccountServer(authority: Authority, world: 'public' | 'c
   };
   let closed = false, releasing: Promise<void> | null = null;
   const channels = new Set<AccountChannel>();
+  let exitProfile: (() => RecordData | null) | undefined;
   const release = (settled: Promise<unknown> = Promise.resolve(), immediate = false): Promise<void> => {
     if (releasing) return releasing;
     for (const channel of channels) channel.close();
@@ -45,7 +46,11 @@ async function establishAccountServer(authority: Authority, world: 'public' | 'c
     releasing = (async () => {
       if (!immediate) { await Promise.allSettled([settled]); await Promise.allSettled([...pending]); }
       closed = true;
-      try { await raw('leave', undefined, { keepalive: immediate, timeout: 5000 }); }
+      try {
+        const profile = immediate ? exitProfile?.() : null;
+        const checkpoint = profile && new TextEncoder().encode(JSON.stringify(profile)).length <= 48000 ? { profile } : undefined;
+        await raw('leave', checkpoint, { keepalive: immediate, timeout: 5000 });
+      }
       catch { /* An ambiguous leave is recovered by resume/fencing, never by resetting other users. */ }
       finally { try { await guard.unlock(); } catch { /* Lost document/lock is already released. */ } }
     })();
@@ -72,6 +77,7 @@ async function establishAccountServer(authority: Authority, world: 'public' | 'c
       catch (error) { return { data: null, error: { message: error instanceof Error ? error.message : 'Błąd połączenia.' } }; }
     };
     const client = {
+      setExitProfile: (get: () => RecordData | null) => { exitProfile = get; },
       from: (table: string) => new AccountQuery(table, call),
       rpc: (name: string, params: RecordData) => call('rpc', { name, params }),
       channel: () => { const channel = new AccountChannel(request, joined.cursor ?? 0); channels.add(channel); return channel; },

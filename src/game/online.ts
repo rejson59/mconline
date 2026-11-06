@@ -24,6 +24,7 @@ import { cleanDrop, type SharedDrop } from './sharedDrops';
  */
 
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
+import { ProfileCheckpoint } from './profileCheckpoint';
 import { loadPlayerId, profileRow, sanitizeProfile, cacheProfile, loadCachedProfile, type PlayerProfile } from './profile';
 import {
   MAX_SNAPSHOT_EDITS,
@@ -185,6 +186,7 @@ export class PublicServer implements NetLike {
   private pendingProfile: PlayerProfile | null = null;
   private writingProfile = false;
   private profileTask: Promise<void> | null = null;
+  private checkpoint?: ProfileCheckpoint;
   private release?: (settled: Promise<void>) => void;
   private accountBound = false;
   private warnedProfile = false;
@@ -220,6 +222,10 @@ export class PublicServer implements NetLike {
     // korzystamy z jednego współdzielonego połączenia.
     this.client = opts.client ?? supabaseClient();
     this.world = this.baseWorld(opts.worldName);
+    if (this.accountBound) {
+      this.checkpoint = new ProfileCheckpoint(this.worldId, this.pid);
+      (this.client as unknown as { setExitProfile?: (get: () => Record<string, unknown> | null) => void }).setExitProfile?.(() => this.lastProfile ? this.checkpoint!.row(this.lastProfile) : null);
+    }
     try {
       const journal = JSON.parse(localStorage.getItem(this.dropOutboxKey()) || '{}');
       const rows: unknown = Array.isArray(journal) ? journal : journal.drops;
@@ -312,7 +318,7 @@ export class PublicServer implements NetLike {
       if (data?.length && (!remote || remote.pid !== this.pid)) throw new Error('Nieprawidłowy zapis gracza');
       // Account servers are authoritative across devices; a browser with a
       // future clock/stale cache must never replace a newer remote inventory.
-      const newest = this.accountBound ? remote ?? cached : cached && (!remote || cached.updated >= remote.updated) ? cached : remote;
+      const newest = this.checkpoint ? this.checkpoint.load(data?.[0] ?? null) : this.accountBound ? remote ?? cached : cached && (!remote || cached.updated >= remote.updated) ? cached : remote;
       if (newest) {
         newest.unlocked = [...new Set([...(cached?.unlocked ?? []), ...(remote?.unlocked ?? [])])];
         cacheProfile(this.worldId, newest);
@@ -331,7 +337,8 @@ export class PublicServer implements NetLike {
     const snapshot = sanitizeProfile(profile);
     if (!snapshot || snapshot.pid !== this.pid) return;
     this.lastProfile = snapshot;
-    const cached = cacheProfile(this.worldId, snapshot);
+    const journaled = this.checkpoint?.stage(snapshot) ?? true;
+    const cached = cacheProfile(this.worldId, snapshot) && journaled;
     if (!cached && !this.warnedCache) this.onChat?.('Zapis', 'Przeglądarka nie pozwala utworzyć kopii awaryjnej postępu.');
     this.warnedCache = !cached;
     const now = Date.now();
@@ -355,9 +362,10 @@ export class PublicServer implements NetLike {
         const profile = this.pendingProfile;
         this.pendingProfile = null;
         try {
-          const { error } = await this.client.from(PROFILE_TABLE)
-            .upsert(profileRow(profile, this.worldId), { onConflict: 'world,pid' });
+          const { data, error } = await this.client.from(PROFILE_TABLE)
+            .upsert(this.checkpoint?.row(profile) ?? profileRow(profile, this.worldId), { onConflict: 'world,pid' });
           if (error) throw new Error(error.message);
+          if (this.checkpoint) this.checkpoint.acknowledge(data?.[0] ?? {}, profile);
           this.warnedProfile = false;
         } catch (error) {
           console.warn('Player profile upload failed; local snapshot retained', error);

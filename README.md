@@ -1,6 +1,13 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.28.1 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.28.2 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.28.2 „Bezpieczny ekwipunek i regeneracja”
+
+- **Naprawiony zapis ekwipunku multiplayer:** silnik używa teraz potwierdzonego PID konta zamiast starego ID urządzenia. Wcześniejsza niezgodność powodowała odrzucanie własnych snapshotów.
+- **Niepotwierdzony postęp nie znika po odświeżeniu:** dziennik lokalny, wersjonowane i idempotentne zapisy oraz atomowy ostatni checkpoint z rozłączeniem. Ochrona przed nadpisaniem nowszego ekwipunku z innego urządzenia, bez resetu danych.
+- **Regeneracja niezależna od limitu fizyki:** właściwe tempo także przy niskim FPS. Komunikat wyjaśnia pełny głód, nasycenie i miksturę leczenia — zwykły pokarm nie daje natychmiastowego HP.
+- [Diagnoza obu zgłoszeń, ograniczenia odzyskiwania i wyniki testów](docs/INVENTORY-HEALTH-4.28.2.md).
 
 ## Wersja 4.28.1 „Powrót na serwer bez blokady”
 
