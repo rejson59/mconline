@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       reference_network_probe:
-        description: 'Read-only connectivity test for reference imports (no uploads)'
+        description: 'Test połączenia z oryginalnymi plikami (bez uploadu)'
         type: boolean
         default: false
 

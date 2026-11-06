@@ -114,7 +114,7 @@ export async function probe(request = fetch, pin = PIN) {
     checks: {},
     boundaries: [
       "No bucket created; no upload or authenticated private download tested.",
-      "No complete client JAR downloaded; only its ZIP signature prefix is read.",
+      "At most a 16-byte client prefix may be read; full JAR download/integrity is not tested.",
       "No original game assets committed, published as artifacts, or executed.",
       "No game saves, accounts, backend settings or migrations changed.",
     ],
