@@ -1,6 +1,15 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.28.3 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.29.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.29.0 „Wspólne moby i skrzynie”
+
+- Wspólne ID, pozycje, AI, zdrowie i śmierć mobów. Jedna symulacja regionu z dzierżawą i przejęciem po rozłączeniu; serwer odrzuca spóźnione snapshoty.
+- Wspólny łup oraz XP z jednorazowym przyznaniem; oswajanie, strzyżenie, handel i primed TNT korzystają ze wspólnego stanu.
+- Zwykłe skrzynie: trwały stan świata i atomowe operacje skrzynia ↔ ekwipunek/kursor, także przy równoczesnym dostępie i utraconym ACK.
+- Kopanie/wybuch skrzyni nie duplikuje zawartości. Zachowane prawa działek i ulic oraz kopie starszej prywatnej zawartości. **Bez resetu danych.**
+- Wszystkie osiem wskazanych zgłoszeń ma poprawki i regresje; [wyniki i granice weryfikacji](docs/SHARED-STATE-4.29.md).
+- Po wdrożeniu odśwież grę na obu urządzeniach — otwarta wcześniej karta nadal wykonuje stary kod.
 
 ## Wersja 4.28.3 „Pochodnie, miód i wyrzucanie przedmiotów”
 
@@ -10,7 +19,7 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddz
 - Miód oddaje pustą butelkę, także przy pełnym plecaku i użyciu drugiej ręki.
 - Wyrzucone rzeczy: dwusekundowa ochrona przed własnym podniesieniem i mniejszy zasięg zbierania; inni nadal mogą je podnieść.
 - Mniejsze, różnorodne domy; skrzynie tylko w części domów i wybranych budynkach zawodowych, nie na każdej farmie/wieży.
-- **Nadal otwarte:** wspólne moby i trwała wspólna zawartość zwykłych skrzyń. Ta wersja nie wprowadza ich synchronizacji.
+- **Historyczny zakres 4.28.3:** moby i wspólne skrzynie pozostały wtedy otwarte; wdrożenie tych dwóch poprawek opisuje 4.29.0 powyżej.
 - [Status wszystkich 8 zgłoszeń i ograniczenia testów](docs/REPORTS-4.28.3.md).
 
 ## Wersja 4.28.2 „Bezpieczny ekwipunek i regeneracja”

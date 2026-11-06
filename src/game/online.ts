@@ -1,3 +1,5 @@
+import type { MobUpdate, MobRegion, MobExchange, MobTransaction, MobResult } from './sharedMobs';
+import { StateJournal, type ChestRef, type SharedChest, type StateTransaction, type StateResult } from './sharedState';
 import { CITY_WORLD_ID, CITY_NAME, CITY_CHANNEL, CITY_SEED, cityCell, cityPlotStart, cityBuildable } from './city';
 import { PlotAccess, plotKey } from './plots';
 import { World } from './world';
@@ -187,6 +189,9 @@ export class PublicServer implements NetLike {
   private writingProfile = false;
   private profileTask: Promise<void> | null = null;
   private checkpoint?: ProfileCheckpoint;
+  private stateJournal?: StateJournal;
+  private stateBusy = false;
+  get sharedContainers() { return this.accountBound; }
   private release?: (settled: Promise<void>) => void;
   private accountBound = false;
   private warnedProfile = false;
@@ -224,7 +229,8 @@ export class PublicServer implements NetLike {
     this.world = this.baseWorld(opts.worldName);
     if (this.accountBound) {
       this.checkpoint = new ProfileCheckpoint(this.worldId, this.pid);
-      (this.client as unknown as { setExitProfile?: (get: () => Record<string, unknown> | null) => void }).setExitProfile?.(() => this.lastProfile ? this.checkpoint!.row(this.lastProfile) : null);
+      this.stateJournal = new StateJournal(this.worldId, this.pid);
+      (this.client as unknown as { setExitProfile?: (get: () => Record<string, unknown> | null) => void }).setExitProfile?.(() => !this.stateBusy && this.lastProfile ? this.checkpoint!.row(this.lastProfile) : null);
     }
     try {
       const journal = JSON.parse(localStorage.getItem(this.dropOutboxKey()) || '{}');
@@ -261,6 +267,8 @@ export class PublicServer implements NetLike {
     this.setStatus('connecting');
     this.onProgress?.('Łączę z serwerem publicznym…');
     try {
+      const interrupted = this.stateJournal?.read();
+      if (interrupted) await this.resolveState(interrupted);
       await this.refreshPlots();
       const [edits, profile] = await Promise.all([this.loadBlocks(), this.loadProfile()]);
       if (this.closed) return;
@@ -332,7 +340,7 @@ export class PublicServer implements NetLike {
   }
 
   saveProfile(profile: PlayerProfile, force = false) {
-    if (this.closed || !profile) return;
+    if (this.closed || this.stateBusy || !profile) return;
     // Detach from mutable game stacks before caching or queuing a request.
     const snapshot = sanitizeProfile(profile);
     if (!snapshot || snapshot.pid !== this.pid) return;
@@ -346,6 +354,71 @@ export class PublicServer implements NetLike {
     this.lastProfileSave = now;
     this.pendingProfile = snapshot;
     void this.writeProfiles();
+  }
+
+  async openSharedChest(ref: ChestRef, seed: import('./inventory').Stack[] | (import('./inventory').Stack | null)[], legacy?: (import('./inventory').Stack | null)[]): Promise<SharedChest> {
+    await this.flush();
+    const { data, error } = await this.client.rpc('mconline_chest', { op: 'open', ref, seed, ...(legacy ? { legacy } : {}) });
+    if (error) throw Error(error.message);
+    return data as SharedChest;
+  }
+  async prepareSharedAction(profile: PlayerProfile) {
+    if (this.closed) throw Error('Połączenie zostało zakończone.');
+    if (this.stateBusy || this.stateJournal?.read()) throw Error('Poprzedni transfer czeka na potwierdzenie.');
+    this.saveProfile(profile, true);
+    this.stateBusy = true;
+    try {
+      await this.writeProfiles(); await this.flush();
+      if (this.warnedProfile || this.pending.size || this.flushing) throw Error('Brak potwierdzenia zapisu. Spróbuj ponownie.');
+    } catch (error) { this.stateBusy = false; throw error; }
+  }
+  abortPreparedSharedAction() {
+    // A local callback can fail before any RPC. Release that preflight only;
+    // an existing/malformed WAL is still uncertain and must remain fenced.
+    try { if (!this.stateJournal?.read()) this.stateBusy = false; } catch { /* keep fenced */ }
+  }
+  async commitSharedChest(profile: PlayerProfile, chest: SharedChest, drops: unknown[], destroy = false, dropBlock = false): Promise<StateResult> {
+    if (this.closed || !this.stateJournal || !this.checkpoint || !this.stateBusy) throw Error('Nie rozpoczęto transferu.');
+    const tx: StateTransaction = { id: crypto.randomUUID(), ref: { x: chest.x, y: chest.y, z: chest.z, d: chest.d }, revision: chest.revision,
+      slots: chest.slots, drops, destroy, dropBlock, profile: this.checkpoint.row(profile) };
+    try { this.stateJournal.write(tx); }
+    catch (error) { this.stateBusy = false; throw error; }
+    return this.resolveState(tx) as Promise<StateResult>;
+  }
+  async exchangeSharedMobs(regions: {d:'o'|'n';x:number;z:number}[], updates: MobUpdate[], position: {x:number;y:number;z:number;d:'o'|'n'}): Promise<MobExchange> {
+    const {data,error}=await this.client.rpc('mconline_mobs',{regions,updates,position});
+    if(error)throw Error(error.message);
+    return data as MobExchange;
+  }
+  async commitSharedMobs(profile: PlayerProfile, region: MobRegion, drops: unknown[], edits: unknown[]=[]): Promise<MobResult> {
+    if(this.closed||!this.stateJournal||!this.checkpoint||!this.stateBusy)throw Error('Nie rozpoczęto operacji.');
+    const tx: MobTransaction={kind:'mobs',id:crypto.randomUUID(),ref:{d:region.d,x:region.x,y:0,z:region.z},revision:region.revision,mobs:region.mobs,drops,edits,profile:this.checkpoint.row(profile)};
+    try{this.stateJournal.write(tx);}catch(e){this.stateBusy=false;throw e;}
+    return this.resolveState(tx) as Promise<MobResult>;
+  }
+  private async resolveState(tx: StateTransaction | MobTransaction): Promise<StateResult | MobResult> {
+    // Send the exact durable snapshot, not live slot/drop object references.
+    tx = this.stateJournal?.read() ?? tx;
+    this.stateBusy = true;
+    let cancel = false, notified = false;
+    while (!this.closed) {
+      try {
+        const {data,error}=await this.client.rpc('kind' in tx && tx.kind==='mobs'?'mconline_mob_action':'mconline_chest',{...tx,op:cancel?'cancel':'commit'});
+        if(!error&&data?.profile&&(data.chest||data.region)) {
+          const profile=sanitizeProfile(data.profile);
+          if(!profile||profile.pid!==this.pid||typeof data.profile.updated_at!=='string')throw Error('Nieprawidłowe potwierdzenie.');
+          this.checkpoint?.acknowledge(data.profile,profile);
+          this.lastProfile=profile;cacheProfile(this.worldId,profile);
+          try{this.stateJournal?.clear();}catch{this.onChat?.('Synchronizacja','Operacja potwierdzona; lokalny dziennik jest tylko do odczytu.');}
+          this.stateBusy=false;this.dropSyncAt=0;this.syncDrops();
+          return data as StateResult|MobResult;
+        }
+      } catch { /* Transport/invalid ACK is uncertain, never an ordinary rollback. */ }
+      cancel=true;
+      if(!notified){notified=true;this.onChat?.('Synchronizacja','Czekam na potwierdzenie. Operacja jest zachowana; możesz bezpiecznie wyjść do menu.');}
+      await new Promise(resolve=>setTimeout(resolve,1500));
+    }
+    throw Error('Transfer zachowano do odzyskania przy następnym wejściu.');
   }
 
   /** Serialize writes: an older slow request must not replace the exit snapshot. */
@@ -785,7 +858,7 @@ export class PublicServer implements NetLike {
     const finalEdits = this.flush();
     this.closed = true;
     // 2.19: ostatni zapis postępu – gracz wraca tu, gdzie wyszedł.
-    if (this.lastProfile) {
+    if (this.lastProfile && !this.stateBusy) {
       this.pendingProfile = this.lastProfile;
       void this.writeProfiles();
     }

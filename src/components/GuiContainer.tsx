@@ -240,7 +240,7 @@ export function GuiInventory({
             onHover={onHover}
             onAction={(action) => { game.inventoryAction('inventory', i, action); onChange(); }}
             onClick={(right) => {
-              inv.clickSlot(i, right);
+              game.clickInventorySlot(i, right);
               onChange();
             }}
           />

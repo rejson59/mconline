@@ -26,7 +26,7 @@ export function cleanDrop(raw: unknown): SharedDrop | null {
       (d.d !== 'o' && d.d !== 'n') || !validVector(d.pos) || !validVector(d.vel, 100) ||
       !Number.isFinite(d.created) || !Number.isFinite(d.expires) || d.expires <= d.created || d.expires - d.created > DROP_LIFETIME ||
       (d.pickupAfter !== undefined && (!Number.isFinite(d.pickupAfter) || d.pickupAfter < d.created || d.pickupAfter > d.created + 2000)) ||
-      !s || !Number.isInteger(s.id) || !(BLOCKS[s.id] || ITEMS[s.id]) || !Number.isInteger(s.count) || s.count < 1 || s.count > stackLimit(s.id) ||
+      !s || !Number.isInteger(s.id) || !(BLOCKS[s.id] || ITEMS[s.id] || s.id===65535) || !Number.isInteger(s.count) || s.count < 1 || s.count > stackLimit(s.id) ||
       (s.dur !== undefined && (!Number.isFinite(s.dur) || s.dur < 0 || s.dur > 100000)) ||
       (s.ench !== undefined && (typeof s.ench !== 'object' || s.ench === null || Array.isArray(s.ench) || Object.keys(s.ench).length > 16 || Object.values(s.ench).some(n => !Number.isInteger(n) || n < 0 || n > 10)))) return null;
   return { uid: d.uid, owner: d.owner, d: d.d, pos: [...d.pos], vel: [...d.vel], created: d.created, expires: d.expires,
