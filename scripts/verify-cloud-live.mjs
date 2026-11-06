@@ -25,6 +25,7 @@ await denied('gateway anonymous join',world,'/functions/v1/mconline-gateway',{op
 await denied('gateway invalid session, real cross-project check',world,'/functions/v1/mconline-gateway',{token:'not-a-real-account-session-only-ci',op:'join',world:'public',session:crypto.randomUUID()});
 await denied('private resume mapping RPC',world,'/rest/v1/rpc/mconline_member_v2',{p_account:crypto.randomUUID(),p_username:'Test',p_session:crypto.randomUUID(),p_world:'public',p_op:'touch'});
 await denied('gateway anonymous takeover',world,'/functions/v1/mconline-gateway',{op:'replace'});
+await denied('private atomic profile RPC',world,'/rest/v1/rpc/mconline_profile',{p_account:crypto.randomUUID(),p_username:'Test',p_session:crypto.randomUUID(),p_world:'public',p_profile:{}});
 const origin=await call(world,'/functions/v1/mconline-gateway',{op:'join'},{Origin:'https://rejson59.github.io.evil.invalid'});assert.equal(origin.status,403);count++;console.log('PASS gateway refuses lookalike origin');
 const preflight=await call(world,'/functions/v1/mconline-gateway',undefined,{Origin:'https://rejson59.github.io','Access-Control-Request-Method':'POST'},'OPTIONS');assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-origin'),'https://rejson59.github.io');count++;console.log('PASS production account origin preflight');
 console.log(`${count} deployed HTTP authorization checks passed (no real accounts, no persistent test writes)`);

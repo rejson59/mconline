@@ -1,19 +1,9 @@
 import { cleanStatus, type StatusSnapshot } from './statusEffects';
 import { achievementById } from './achievements';
 import { foodState } from './hunger';
-/**
- * BlockCraft 2.19 – „niewidzialna sesja” gracza na serwerze publicznym.
- *
- * GitHub Pages nie ma logowania, więc tożsamość gracza trzyma **losowy
- * identyfikator w przeglądarce** (`localStorage`). Jest on wysyłany do serwera
- * razem z postępem, a nie z nickiem: zmiana nicku ani skórki nie zmienia
- * konta, więc po powrocie gracz wraca tam, gdzie skończył, z tym samym
- * ekwipunkiem.
- *
- * Identyfikator jest losowy i nie da się z niego odczytać nic o graczu.
- * Nie jest to hasło – służy tylko do rozpoznania „to ten sam gracz”, który
- * wrócił na serwer (serwer publiczny i tak nie ma prywatnych danych).
- */
+/** Account multiplayer uses the stable PID issued by the verified backend.
+ * loadPlayerId below is only the legacy device identity, NOT an account ID.
+ * Profiles/cache keys must always use the owning public transport's identity. */
 
 import type { Stack } from './inventory';
 
@@ -22,7 +12,7 @@ export const PROFILE_KEY = 'blockcraft-profile-v1';
 export const PROFILE_TABLE = 'blockcraft_players';
 
 export interface PlayerProfile {
-  /** Losowy identyfikator sesji – ten sam po zmianie nicku i skórki. */
+  /** Stabilny PID gracza; w multiplayer pochodzi ze zweryfikowanego backendu. */
   pid: string;
   name: string;
   skin: string;
@@ -150,7 +140,7 @@ export function sanitizeProfile(raw: unknown): PlayerProfile | null {
     try {
       inv = JSON.parse(inv);
     } catch {
-      inv = [];
+      return null;
     }
   }
   let armor: unknown = r.armor;
@@ -158,9 +148,10 @@ export function sanitizeProfile(raw: unknown): PlayerProfile | null {
     try {
       armor = JSON.parse(armor);
     } catch {
-      armor = [];
+      return null;
     }
   }
+  if (inv !== undefined && !Array.isArray(inv) || armor !== undefined && !Array.isArray(armor)) return null;
   const health = num(r.health, 20);
   return {
     pid,

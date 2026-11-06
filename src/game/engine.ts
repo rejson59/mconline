@@ -15,7 +15,7 @@ import { isFire, isWater, waterHeight } from './blocks';
 import { submerged, waterCurrent } from './water';
 import { FirstPersonView } from './firstPersonView';
 import { ArmorVisual } from './armorVisual';
-import { foodState, exhaust, eat } from './hunger';
+import { foodState, exhaust, eat, foodClockDelta } from './hunger';
 import { playerRay, validCombat } from './playerCombat';
 import { cleanDrop, DROP_LIFETIME, validVector, type SharedDrop } from './sharedDrops';
 import { nearestStructure, structureKindFromName, STRUCTURE_LABELS } from './structures';
@@ -821,7 +821,7 @@ export class Game {
   private netHue = 0;
   /** 2.12: skórka gracza wysyłana w pozycjach (i widoczna u innych). */
   private netSkin = '';
-  /** 2.19: trwały identyfikator gracza – ten sam po zmianie nicku i skórki. */
+  /** Legacy device ID; account multiplayer MUST use the verified net.id. */
   private readonly playerId = loadPlayerId();
   /** 2.19: prośby o teleportację między graczami. */
   private tpaIn: { from: string; name: string; at: number } | null = null;
@@ -1418,7 +1418,7 @@ export class Game {
         this.applyProfile(profile);
         this.message(`Witaj ponownie, ${profile.name}! Wracasz tam, gdzie skończyłeś – ekwipunek też czeka.`);
       } else {
-        const spread = spreadSpawn(this.playerId);
+        const spread = spreadSpawn(net.id);
         if (net.city) { spread.radius = 8; spread.angle = Math.PI / 4; }
         const spot = this.findSpawnSpot(
           Math.round(Math.cos(spread.angle) * spread.radius),
@@ -1433,6 +1433,7 @@ export class Game {
             'T – czat, /tpa nick – zaproś kogoś do siebie, /help – komendy.'
         );
       }
+      this.profileReady = true;
       this.emitHud();
       return;
     }
@@ -1548,7 +1549,9 @@ export class Game {
     const p = this.body.pos;
     this.profileRevision = Math.max(Date.now(), (this.profileRevision ?? 0) + 1);
     return {
-      pid: this.playerId,
+      // Account multiplayer identity comes from the verified server, not the
+      // unrelated legacy device ID. Otherwise PublicServer rejects every save.
+      pid: this.net?.public ? this.net.id : this.playerId,
       name: this.netName,
       skin: this.netSkin,
       updated: this.profileRevision,
@@ -2616,6 +2619,8 @@ export class Game {
       // wcześniej W→S→W w krótkim odstępie uruchamiało sprint.
       if (e.code === 'KeyW') this.lastW = 0;
     }) as EventListener);
+    // Capture precedes the adapter's bubbling pagehide/leave listener.
+    this.on(window, 'pagehide', () => this.save(), { capture: true });
     this.on(window, 'blur', () => this.cancelActions());
     this.on(window, 'pointercancel', () => this.cancelActions());
     this.on(window, 'mousemove', ((e: MouseEvent) => {
@@ -3913,7 +3918,7 @@ export class Game {
   }
 
   private updateFood(dt: number) {
-    if (this.health <= 0 || this.ui === 'dead') return;
+    if (!Number.isFinite(dt) || dt <= 0 || this.health <= 0 || this.ui === 'dead') return;
     if (this.mode === 'creative') {
       if (this.health < 20 && performance.now() - this.lastHurt > 4000) {
         this.foodRegenAcc = (this.foodRegenAcc ?? 0) + dt;
@@ -3923,15 +3928,17 @@ export class Game {
     }
     Object.assign(this, foodState(this.hunger, this.saturation, this.exhaustion));
     if (this.health < 20 && this.hunger >= 18) {
-      this.foodRegenAcc = (this.foodRegenAcc ?? 0) + dt;
-      const saturated = this.hunger >= 20 && this.saturation > 0;
-      const interval = saturated ? 0.5 : 4;
-      if (this.foodRegenAcc >= interval) {
-        this.foodRegenAcc -= interval;
+      this.foodRegenAcc = (this.foodRegenAcc ?? 0) + Math.min(dt, 32);
+      for (let pulses = 0; pulses < 64 && this.health < 20 && this.hunger >= 18; pulses++) {
+        const saturated = this.hunger >= 20 && this.saturation > 0;
+        const interval = saturated ? 0.5 : 4;
+        if (this.foodRegenAcc + 1e-9 < interval) break;
+        this.foodRegenAcc = Math.max(0, this.foodRegenAcc - interval);
         const heal = saturated ? Math.min(this.saturation, 6) / 6 : 1;
         this.health = Math.min(20, this.health + heal);
         this.addExhaustion(heal * 6);
       }
+      if (this.health >= 20 || this.hunger < 18) this.foodRegenAcc = 0;
     } else this.foodRegenAcc = 0;
     if (this.hunger <= 0) {
       this.starveAcc = (this.starveAcc ?? 0) + dt;
@@ -3947,7 +3954,7 @@ export class Game {
     if (!food || food.kind !== 'food') return;
     if (this.eatCooldown > 0) return;
     if (this.hunger >= 20 && s.id !== I.HONEY_BOTTLE) {
-      this.message('Nie jesteś głodny.');
+      this.message(this.health < 20 ? 'Pełny głód: zwykłe jedzenie nie leczy bezpośrednio. Odpocznij — regeneracja zużywa nasycenie; bez niego pół serca co 4 s. Mikstura leczenia działa także przy pełnym głodzie.' : 'Nie jesteś głodny.');
       return;
     }
     Object.assign(this, eat(foodState(this.hunger, this.saturation, this.exhaustion), food.hunger ?? 0, food.saturation ?? 0.6));
@@ -6637,6 +6644,7 @@ export class Game {
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);
+      this.updateFood(foodClockDelta(frameMs, document.hidden));
       this.updateChestLids(dt);
       this.updateInteraction(dt);
       this.updateMobs(dt);
@@ -6907,7 +6915,6 @@ export class Game {
     if (inWater && !this.wasInWater) Sfx.playSplash();
     this.wasInWater = inWater;
 
-    this.updateFood(dt);
     if (b.pos.y < 36) this.unlock('cave');
 
     // steps
@@ -7589,7 +7596,15 @@ export class Game {
     }
   }
 
+  private inventoryCheckpoint = '';
+  private profileReady = false;
   emitHud() {
+    // Persist item transfers locally immediately, not only on the 6s heartbeat.
+    // Includes UI-held stacks so closing with a cursor/crafting item cannot lose it.
+    if (this.net?.public && this.profileReady) {
+      const contents = JSON.stringify([this.inventory.slots, this.armor, this.inventory.cursor, this.inventory.grid, this.enchantItem, this.inventory.offhand, [...this.pickupReceipts]]);
+      if (contents !== this.inventoryCheckpoint) { this.inventoryCheckpoint = contents; this.saveProfileNow(false); }
+    }
     const p = this.body.pos;
     const f = ((Math.round(this.yaw / (Math.PI / 2)) % 4) + 4) % 4;
     const now = performance.now();

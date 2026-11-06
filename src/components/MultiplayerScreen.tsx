@@ -38,7 +38,9 @@ export default function MultiplayerScreen({ onStart, onClose, onAccount }: {
     try {
       const access = await openAccountServer(selected, { replace, signal: controller.signal });
       if (serial !== attempt.current) { access.release(); return; }
-      const server = new PublicServer({ name: access.name, pid: access.pid, client: access.client, worldId: selected, onClose: access.release, accountBound: true });
+      let server: PublicServer;
+      try { server = new PublicServer({ name: access.name, pid: access.pid, client: access.client, worldId: selected, onClose: access.release, accountBound: true }); }
+      catch (error) { await access.release(); throw error; }
       net.current = server;
       server.skin = loadSkinId();
       server.onProgress = setMessage;

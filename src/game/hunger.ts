@@ -23,3 +23,9 @@ export function eat(state: FoodState, nutrition: number, modifier: number): Food
   s.saturation = Math.min(s.hunger, s.saturation + nutrition * modifier * 2);
   return s;
 }
+
+/** Food uses visible elapsed time, not the physics step capped at 100ms.
+ * Bound catch-up after a stall; hidden tabs never accumulate free healing. */
+export function foodClockDelta(frameMs: number, hidden = false): number {
+  return hidden || !Number.isFinite(frameMs) ? 0 : Math.max(0, Math.min(1, frameMs / 1000));
+}

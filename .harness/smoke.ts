@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.28.1', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Powrót na serwer bez blokady', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.28.2', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Bezpieczny ekwipunek i regeneracja', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -9947,6 +9947,42 @@ section('4.24: oriented furnaces retain state, tools, GUI and contents');
     }
     geo.dispose();
   }
+}
+
+section('4.28.2: regeneration keeps real time at low FPS and full hunger');
+{
+  const { foodClockDelta } = await import('../src/game/hunger');
+  const make = () => Object.assign(Object.create(Game.prototype), { mode:'survival',ui:'playing',health:10,hunger:20,saturation:6,exhaustion:0,foodRegenAcc:0,starveAcc:0 });
+  for (const fps of [2,5,10,30,60,144]) {
+    const g=make(); for(let i=0;i<fps;i++)g.updateFood(foodClockDelta(1000/fps));
+    check('saturated healing has the same one-second result at '+fps+' FPS', Math.abs(g.health-(11+5/6))<1e-8);
+    const slow=make();slow.saturation=0;for(let i=0;i<fps*4;i++)slow.updateFood(foodClockDelta(1000/fps));
+    check('full hunger without saturation heals half a heart in four seconds at '+fps+' FPS',slow.health===11);
+  }
+  const catchup=make();catchup.updateFood(1);check('one delayed visible frame processes both regeneration pulses',Math.abs(catchup.health-(11+5/6))<1e-8);
+  const hidden=make();hidden.updateFood(foodClockDelta(60000,true));eq('background time does not become instant healing',hidden.health,10);
+  const dead=make();dead.health=0;dead.updateFood(1);eq('food regeneration cannot revive a dead player',dead.health,0);
+  const hungry=make();hungry.hunger=17;hungry.updateFood(4);eq('below eighteen food points natural healing stops',hungry.health,10);
+  let hint='';const eater=Object.assign(Object.create(Game.prototype),{mode:'survival',health:10,hunger:20,eatCooldown:0,inventory:new Inventory(),selected:0,potionsDrunk:new Set<number>(),message:(text:string)=>{hint=text;},unlock(){},emitHud(){},updateHand(){}});
+  eater.inventory.slots[0]={id:I.BREAD,count:2};eater.tryEat(eater.inventory.slots[0]);
+  check('full-food refusal explains regeneration and does not consume bread or fake instant health',eater.inventory.slots[0].count===2&&eater.health===10&&hint.includes('Mikstura leczenia'));
+  eater.inventory.slots[0]={id:I.POTION_HEAL,count:1};eater.drinkPotion(eater.inventory.slots[0]);
+  check('healing potion really works at full food and returns its bottle',eater.health>10&&eater.hunger===20&&eater.inventory.slots[0]?.id===I.BOTTLE);
+  const accountPid='p'+'c'.repeat(19);
+  const game=Object.assign(Object.create(Game.prototype),{ playerId:'p'+'d'.repeat(19),net:{public:true,id:accountPid},body:{pos:new THREE.Vector3(1,70,2)},netName:'Fixture',netSkin:'steve',yaw:0,pitch:0,health:12,hunger:20,saturation:5,exhaustion:0,xp:new Xp(7),inventory:new Inventory(),armor:[],pickupReceipts:new Set<string>(),unlocked:new Set<string>(),statusSnapshot:()=>undefined });
+  game.inventory.slots[0]={id:B.STONE,count:17};
+  const snapshot=game.buildProfile();eq('real engine snapshot uses server account identity even with a different legacy ID',snapshot.pid,accountPid);
+  let uploaded:any=null;
+  const client={from(){return{async upsert(row:any){uploaded=row;return{error:null};}};}};
+  const server=new PublicServer({name:'Fixture',pid:accountPid,worldId:'identity-regression',client:client as never});
+  server.saveProfile(snapshot,true);await (server as any).writeProfiles();
+  check('the server adapter actually accepts and uploads the engine inventory',uploaded?.pid===accountPid&&JSON.parse(uploaded.inv)[0].count===17);
+  server.close();
+  const identityCode=readSource('src/game/engine.ts');
+  check('multiplayer profile and spawn use the verified network identity instead of the legacy device ID',identityCode.includes('pid: this.net?.public ? this.net.id : this.playerId')&&identityCode.includes('spreadSpawn(net.id)'));
+  const code=readSource('src/game/engine.ts');
+  check('regeneration clock is outside the capped player physics substeps',code.includes('this.updateFood(foodClockDelta(frameMs, document.hidden))')&&!code.includes('this.updateFood(dt);'));
+  check('pagehide checkpoints happen in capture before adapter leave',code.includes("this.on(window, 'pagehide', () => this.save(), { capture: true })"));
 }
 
 // =================================================================== report

@@ -1,0 +1,130 @@
+{
+  "version": "4.28.2",
+  "date": "2026-11-06",
+  "reports": [
+    "0438975b-3044-42dc-be5f-1caf93a0a380",
+    "c544b65d-a186-4ac7-a08b-5fcf1ad5566b"
+  ],
+  "offlineChecks": 25436,
+  "typecheck": "PASS",
+  "build": "PASS",
+  "sql": {
+    "checks": 13,
+    "syntheticFixturesRolledBack": true,
+    "initialTestFoundTriggerReturnMismatch": true,
+    "correctedAndRetested": true
+  },
+  "browser": {
+    "productionHTML": true,
+    "realProvider": true,
+    "mockedGateway": true,
+    "realWebLocks": true,
+    "renderPausedForConcurrentTabs": true,
+    "legacyOrphanRecoveredByConfirmedAction": true,
+    "confirmationCancelSendsNothing": true,
+    "reloadAfterDroppedLeave": true,
+    "freshGeneration": true,
+    "duplicatedTabBlocked": true,
+    "otherDeviceNotAutomaticallyReplaced": true,
+    "realEngineAt2FPSRegenerates": true,
+    "unacknowledgedInventoryRecovered": true,
+    "recoveredInventoryUploaded": true,
+    "secondDeviceInventoryRestored": true,
+    "finalCheckpointPayload": true,
+    "successfulFinalCheckpoint": true,
+    "uncertainCheckpointAckRecovered": true,
+    "errors": []
+  },
+  "regressions": {
+    "cloud": [
+      {
+        "productionHTML": true,
+        "realPinnedProvider": true,
+        "mockedRPC": true,
+        "isolatedDevices": 2,
+        "fullGameSnapshotUploaded": true,
+        "blocksAndInventoryRestored": true,
+        "offlineConflictProtected": true,
+        "storageFailureVisible": true,
+        "accountSwitchStopsGame": true,
+        "localDeviceWorldPreserved": true,
+        "errors": []
+      }
+    ],
+    "account": [
+      {
+        "device": "desktop",
+        "environment": "production HTML and pinned real provider, mocked login page/whoami, synthetic accounts only",
+        "helperLoads": 3,
+        "whoamiRequests": 20,
+        "loginVisits": 2,
+        "roundTrip": true,
+        "noServiceWorker": true,
+        "noCredentialForms": true,
+        "verifiedName": true,
+        "projectDisconnectPreservesSharedSession": true,
+        "sharedLogout": true,
+        "accountSwitch": true,
+        "lateResponseIgnored": true,
+        "offlineRetry": true,
+        "worldsAndProfileUntouched": true,
+        "secretsInUrls": false,
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "environment": "production HTML and pinned real provider, mocked login page/whoami, synthetic accounts only",
+        "helperLoads": 3,
+        "whoamiRequests": 20,
+        "loginVisits": 2,
+        "roundTrip": true,
+        "noServiceWorker": true,
+        "noCredentialForms": true,
+        "verifiedName": true,
+        "projectDisconnectPreservesSharedSession": true,
+        "sharedLogout": true,
+        "accountSwitch": true,
+        "lateResponseIgnored": true,
+        "offlineRetry": true,
+        "worldsAndProfileUntouched": true,
+        "secretsInUrls": false,
+        "errors": []
+      },
+      {
+        "device": "preview",
+        "sameOriginRestriction": true,
+        "helperRequests": 0,
+        "noCredentialForms": true,
+        "errors": []
+      },
+      {
+        "device": "file",
+        "sameOriginRestriction": true,
+        "helperRequests": 0,
+        "noCredentialForms": true,
+        "errors": []
+      },
+      {
+        "device": "other-origin",
+        "sameOriginRestriction": true,
+        "helperRequests": 0,
+        "noCredentialForms": true,
+        "errors": []
+      }
+    ]
+  },
+  "backend": {
+    "gatewayVersion": 3,
+    "migrations": [
+      "mconline_atomic_profile_checkpoints",
+      "mconline_profile_return_committed_row"
+    ],
+    "reset": false,
+    "generalAccountDatabaseChanged": false,
+    "gatewayBuildSHA256": "3fb62e649faeac4f7f362b1517660f86a060bdc4f060a5ff861b49e69996ac32"
+  },
+  "artifact": {
+    "bytes": 11240372,
+    "sha256": "af7b74379f54c9878f7c703b9c2cb9c9593afdd96fd59c0abaea62242dcc2e0a"
+  }
+}
