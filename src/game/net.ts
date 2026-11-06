@@ -299,6 +299,13 @@ export interface NetLike {
   close(reason?: string): void;
   /** 2.19: zapis postępu gracza (tylko serwer publiczny). */
   saveProfile?(profile: PlayerProfile, force?: boolean): void;
+  sharedContainers?: boolean;
+  abortPreparedSharedAction?: () => void;
+  exchangeSharedMobs?(regions: {d:'o'|'n';x:number;z:number}[], updates: import('./sharedMobs').MobUpdate[], position: {x:number;y:number;z:number;d:'o'|'n'}): Promise<import('./sharedMobs').MobExchange>;
+  commitSharedMobs?(profile: PlayerProfile, region: import('./sharedMobs').MobRegion, drops: unknown[], edits?: unknown[]): Promise<import('./sharedMobs').MobResult>;
+  openSharedChest?: import('./sharedState').SharedContainers['openSharedChest'];
+  prepareSharedAction?: import('./sharedState').SharedContainers['prepareSharedAction'];
+  commitSharedChest?: import('./sharedState').SharedContainers['commitSharedChest'];
   /** 2.19: prośba o teleportację do innego gracza (id odbiorcy). */
   sendTeleport?(to: string, t: NetTeleport): void;
 }

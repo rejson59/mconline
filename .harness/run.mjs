@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'shared', entry: path.join(here, 'sharedState.ts'), label: 'Wspólne skrzynie/moby: dziennik i przejęcie stanu' },
   { name: 'checkpoint', entry: path.join(here, 'profileCheckpoint.ts'), label: 'Ekwipunek: dziennik i bezpieczne odzyskiwanie' },
   { name: 'lease', entry: path.join(here, 'multiplayerLease.ts'), label: 'Multiplayer: powrót karty i sprzątanie sesji' },
   { name: 'cloud', entry: path.join(here, 'cloud.ts'), label: 'Światy kontowe, konflikt urządzeń i autoryzowana bramka' },

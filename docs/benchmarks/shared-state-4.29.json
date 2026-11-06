@@ -1,0 +1,232 @@
+{
+  "version": "4.29.0",
+  "verifiedOn": "2026-11-06",
+  "offline": {
+    "total": 25503,
+    "typecheck": "PASS",
+    "tests": "PASS",
+    "productionBuild": "PASS",
+    "productionDependencyVulnerabilities": 0,
+    "sharedModelJournalTransport": 15,
+    "chestPGlite": 17,
+    "mobPGlite": 22
+  },
+  "productionSQL": {
+    "shared_state.sql": {
+      "checks": 30,
+      "result": "PASS",
+      "fixtures": "ROLLBACK"
+    },
+    "shared_world_effects.sql": {
+      "checks": 10,
+      "result": "PASS",
+      "fixtures": "ROLLBACK"
+    },
+    "identities": "Generated fixture UUIDs, not human logins"
+  },
+  "sharedBrowser": {
+    "version": "4.29.0",
+    "checks": 27,
+    "environment": "Two isolated Chromium contexts (desktop + emulated mobile), real production engine/PublicServer + PostgreSQL WASM; synthetic identities and membership stubs, not physical devices or real account sessions",
+    "errors": [
+      [],
+      []
+    ]
+  },
+  "earlierReportsBrowser": {
+    "version": "4.29.0",
+    "environment": "Chromium/SwiftShader; mobile viewport and touch emulated; synthetic received peer packets; no live account sessions",
+    "reports": [
+      {
+        "device": "desktop",
+        "gameplay": {
+          "honeyBottle": true,
+          "discardGrace": true,
+          "lateTorch": true,
+          "dark": {
+            "rgb": [
+              45,
+              45,
+              45
+            ],
+            "light": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "lit": {
+            "rgb": [
+              107,
+              102,
+              96
+            ],
+            "light": [
+              0.72,
+              0,
+              0,
+              0
+            ]
+          },
+          "offhand": {
+            "rgb": [
+              107,
+              102,
+              96
+            ],
+            "light": [
+              0.72,
+              0,
+              0,
+              0
+            ]
+          },
+          "otherDimension": {
+            "rgb": [
+              45,
+              45,
+              45
+            ],
+            "light": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "dead": {
+            "rgb": [
+              45,
+              45,
+              45
+            ],
+            "light": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "touch": null,
+        "editable": {
+          "select": "text",
+          "webkit": "text",
+          "text": "miód i skrzynia"
+        },
+        "errors": []
+      },
+      {
+        "device": "mobile-emulated",
+        "gameplay": {
+          "honeyBottle": true,
+          "discardGrace": true,
+          "lateTorch": true,
+          "dark": {
+            "rgb": [
+              45,
+              45,
+              45
+            ],
+            "light": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "lit": {
+            "rgb": [
+              107,
+              102,
+              96
+            ],
+            "light": [
+              0.72,
+              0,
+              0,
+              0
+            ]
+          },
+          "offhand": {
+            "rgb": [
+              107,
+              102,
+              96
+            ],
+            "light": [
+              0.72,
+              0,
+              0,
+              0
+            ]
+          },
+          "otherDimension": {
+            "rgb": [
+              45,
+              45,
+              45
+            ],
+            "light": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "dead": {
+            "rgb": [
+              45,
+              45,
+              45
+            ],
+            "light": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "touch": {
+          "selection": "",
+          "menus": 0
+        },
+        "editable": {
+          "select": "text",
+          "webkit": "text",
+          "text": "miód i skrzynia"
+        },
+        "errors": []
+      }
+    ]
+  },
+  "nativeBrowser": {
+    "cases": [
+      "desktop",
+      "mobile-emulated",
+      "file"
+    ],
+    "result": "PASS",
+    "uncaughtErrors": 0
+  },
+  "publicHTTP": {
+    "script": "scripts/verify-cloud-live.mjs",
+    "checks": 18,
+    "localResult": "BLOCKED: ECONNRESET before TLS (sandbox outbound restriction)",
+    "ci": {
+      "result": "PASS",
+      "checks": 18,
+      "run": "https://github.com/rejson59/mconline/actions/runs/42286119137",
+      "sourceCommit": "67aeda0780a590d57df9225a0ffc8e82ae63d01f",
+      "step": "Deployed cloud authorization (no real sessions)"
+    }
+  },
+  "limitations": [
+    "No two physical devices with real official account sessions",
+    "No physical Android/iPhone or Safari tests",
+    "AI coordinated by client lease, not a dedicated server simulation",
+    "Villages improved, not full Minecraft Java structure parity"
+  ]
+}

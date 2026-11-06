@@ -1,3 +1,5 @@
+import { MOB_REGION_SIZE, mobRegionKey, type MobRegion, type MobUpdate, type MobExchange, type MobHit } from './sharedMobs';
+import type { SharedChest, ChestRef } from './sharedState';
 import ChunkMeshWorker from './chunkMesh.worker?worker&inline';
 import { AsyncMesher } from './asyncMesher';
 import { ChunkWorkBudget, chunkWorkLimits } from './chunkWork';
@@ -72,7 +74,7 @@ import {
 import { PUBLIC_POS_HZ } from './online';
 import { REMOTE_DELAY_LOCAL, REMOTE_DELAY_PUBLIC, RemoteTrack } from './netSmooth';
 import { fallbackSkin, loadSkinId, skinById } from './skins';
-import { loadPlayerId, spreadSpawn, cleanStacks, type PlayerProfile } from './profile';
+import { sanitizeProfile, loadPlayerId, spreadSpawn, cleanStacks, type PlayerProfile } from './profile';
 import { AVATAR_KINDS, avatarMaterial } from './mobTextures';
 import { hasPackSkin, isSlimSkin, playerSkinTexture, skinnedBox, skinnedHat } from './skinArt';
 import {
@@ -863,6 +865,24 @@ export class Game {
   furnaces = new Map<string, FurnaceState>();
   furnacePos: { x: number; y: number; z: number } | null = null;
   chests = new Map<string, ChestState>();
+  private sharedDisposed = false;
+  private mobContainerBackup: {furnaces:Map<string,FurnaceState>;anvils:Map<string,AnvilState>;brewings:Map<string,BrewingState>}|null=null;
+  private mobRegions = new Map<string,MobRegion>();
+  private mobUpdates: MobUpdate[] = [];
+  private mobTask: Promise<void> | null = null;
+  private mobPollAt = 0;
+  private mobStepAt = 0;
+  private mobSimulating = false;
+  private mobCaptureRegion = '';
+  private mobTargetId = '';
+  private mobCaptures = new Map<string,{drops:SharedDrop[];hits:MobHit[];edits:NetEdit[]}>();
+  private get sharedMobs() { return !!this.net?.sharedContainers && !!this.net?.exchangeSharedMobs; }
+  get sharedInputBlocked() { return !!(this.sharedBusy||this.mobContainerBackup)&&!this.sharedExecuting&&!this.mobSimulating; }
+  sharedBusy = false;
+  private sharedExecuting = false;
+  private sharedDrops: SharedDrop[] = [];
+  private sharedMessages: NetMessage[] = [];
+  private sharedPollAt = 0;
   chestPos: { x: number; y: number; z: number } | null = null;
 
   /**
@@ -1270,7 +1290,7 @@ export class Game {
       this.inventory.offhand = cleanStacks([opts.save.offhand], 1)[0];
       opts.save.inv.forEach((s, i) => (this.inventory.slots[i] = s ? { ...s } : null));
       for (const f of opts.save.furnaces ?? []) this.furnaces.set((f.dim ? 'n:' : '') + furnaceKey(f.x, f.y, f.z), { ...f, input: f.input ? { ...f.input } : null, fuel: f.fuel ? { ...f.fuel } : null, output: f.output ? { ...f.output } : null });
-      for (const c of opts.save.chests ?? []) this.chests.set((c.dim ? 'n:' : '') + chestKey(c.x, c.y, c.z), { x: c.x, y: c.y, z: c.z, dim: c.dim, slots: (c.slots ?? []).slice(0, 27).map((s) => (s ? { ...s } : null)) });
+      for (const c of opts.save.chests ?? []) this.chests.set((c.dim ? 'n:' : '') + chestKey(c.x, c.y, c.z), { x: c.x, y: c.y, z: c.z, dim: c.dim, shared: c.shared, revision: c.revision, slots: (c.slots ?? []).slice(0, 27).map((s) => (s ? { ...s } : null)) });
       for (const a of opts.save.anvils ?? []) {
         if (!a || typeof a.x !== 'number' || typeof a.y !== 'number' || typeof a.z !== 'number') continue;
         this.anvils.set((a.dim ? 'n:' : '') + anvilKey(a.x, a.y, a.z), {
@@ -1583,7 +1603,7 @@ export class Game {
 
   /** 2.19: zapis postępu bez czekania na koniec (np. przed wyjściem). */
   saveProfileNow(force = true) {
-    if (this.net?.public && this.net.saveProfile) this.net.saveProfile(this.buildProfile(), force);
+    if (!this.sharedBusy && this.net?.public && this.net.saveProfile) this.net.saveProfile(this.buildProfile(), force);
   }
 
   /** 2.19: prośba o teleportację do gracza o podanym nicku (lub id). */
@@ -1693,6 +1713,7 @@ export class Game {
   }
 
   private onNetMessage(m: NetMessage) {
+    if (this.sharedBusy && (m.t === 'pvp' || m.t === 'tpa')) { this.sharedMessages.push(m); return; }
     switch (m.t) {
       case 'drops':
         this.receiveSharedDrops(m.list, !!m.snapshot);
@@ -1800,6 +1821,13 @@ export class Game {
     if (!net) return;
     const now = performance.now();
     net.tick();
+    if (net.sharedContainers && net.openSharedChest && this.ui === 'chest' && this.chestPos && !this.sharedBusy && now-this.sharedPollAt>800) {
+      this.sharedPollAt = now;
+      const p = this.chestPos, key = this.cKey(p.x,p.y,p.z), d = this.isInNether ? 'n' : 'o';
+      void net.openSharedChest({...p,d},[]).then(c => {
+        if (!this.sharedBusy && this.ui==='chest' && this.chestPos && this.cKey(this.chestPos.x,this.chestPos.y,this.chestPos.z)===key && c.revision >= (this.chests.get(key)?.revision ?? 0)) { this.acceptSharedChest(c); this.emitHud(); }
+      }).catch(() => {});
+    }
     this.syncPublicClock();
     // 2.19: „niewidzialna sesja” – co kilka sekund zapisujemy pozycję
     // i ekwipunek, żeby po wyjściu gracz wrócił dokładnie tutaj.
@@ -2582,6 +2610,7 @@ export class Game {
       this.fpsFrames = this.fpsTime = 0;
     }) as EventListener);
     this.on(window, 'wheel', ((e: WheelEvent) => {
+      if(this.sharedInputBlocked)return;
       if ((!this.locked && !this.mouseFallback) || this.ui !== 'playing') return;
       const scroll = hotbarScroll(this.wheelRemainder, e.deltaY, e.deltaMode, this.scrollSensitivity, this.discreteScroll);
       this.wheelRemainder = scroll.remainder;
@@ -2729,6 +2758,7 @@ export class Game {
   }
 
   private onKeyDown(e: KeyboardEvent) {
+    if(this.sharedBusy){if(e.code==='Escape'){e.preventDefault();this.setUI('paused');}return;}
     if (this.ui === 'chat') return;
     // 2.5: Escape działa nawet, gdy fokus ma pole tekstowe (szukanie w
     // dzienniku, suwak w opcjach) – bez tego Esc „nic nie robił”, dopóki
@@ -2869,6 +2899,7 @@ export class Game {
   }
 
   setUI(s: UIState) {
+    if (this.sharedBusy && !this.sharedExecuting) { if (s === 'paused') { this.ui = s; this.onUI(s); } return; }
     this.wheelRemainder = 0;
     const prev = this.ui;
     this.ui = s;
@@ -2936,6 +2967,10 @@ export class Game {
   }
 
   closeInventory() {
+    if (this.sharedBusy) return;
+    if(this.inventory.cursor&&this.ui==='chest'&&this.net?.sharedContainers){
+      const c=this.currentChest();if(c?.revision!==undefined)void this.performSharedChestAction({...c,d:this.isInNether?'n':'o',revision:c.revision,destroyed:false},()=>this.returnHeldStack()).then(ok=>{if(ok&&!this.sharedDisposed)this.closeInventory();});return;
+    }
     this.returnHeldStack();
     this.furnacePos = null;
     this.enchantPos = null;
@@ -2956,6 +2991,7 @@ export class Game {
   }
 
   closeTrade() {
+    if(this.sharedInputBlocked)return;
     this.returnHeldStack();
     this.tradeMob = null;
     this.setUI('playing');
@@ -3013,6 +3049,8 @@ export class Game {
 
   /** Wykonuje wymianę o podanym numerze. Zwraca false, gdy się nie udała. */
   tradeWith(i: number): boolean {
+    if(this.tradeMob?.dead)return false;
+    if(this.tradeMob&&this.sharedMobAction(this.tradeMob,()=>{const mob=this.mobs.find(m=>m.netId===this.tradeMob?.netId);if(mob)this.tradeMob=mob;this.tradeWith(i);}))return false;
     const st = this.tradeMob?.trade;
     if (!st) return false;
     const row = this.tradeRows()[i];
@@ -3072,6 +3110,7 @@ export class Game {
   }
 
   currentFurnace(): FurnaceState | null {
+    if(this.mobContainerBackup)return null;
     if (!this.furnacePos || !this.canModify(this.furnacePos.x, this.furnacePos.z)) return null;
     return this.furnaces.get(this.fKey(this.furnacePos.x, this.furnacePos.y, this.furnacePos.z)) ?? null;
   }
@@ -3092,6 +3131,7 @@ export class Game {
 
   /** Moves the item between the cursor and the table's single slot. */
   clickEnchantSlot(right: boolean) {
+    if(this.sharedInputBlocked)return;
     this.transfer(() => this.enchantItem, (s) => { this.enchantItem = s; }, right);
     this.enchOptions = rollEnchantOptions(this.enchantItem, this.enchantPower(), Math.random);
     this.emitHud();
@@ -3108,6 +3148,7 @@ export class Game {
 
   /** Buys offer `i`: spends levels + lapis, stamps the enchantment on the item. */
   enchantWith(i: number): boolean {
+    if(this.sharedInputBlocked)return false;
     const opt = this.enchOptions[i];
     const item = this.enchantItem;
     if (!opt || !item || !canAddEnch(item, opt.ench)) return false;
@@ -3136,6 +3177,8 @@ export class Game {
   }
 
   openChest(x: number, y: number, z: number) {
+    if (this.sharedBusy) return;
+    if (this.net?.sharedContainers) { void this.loadSharedChest({ x, y, z, d: this.isInNether ? 'n' : 'o' }); return; }
     if (!this.canModify(x, z)) { this.message('Ten pojemnik jest na chronionej działce.'); return; }
     const key = this.cKey(x, y, z);
     let chest = this.chests.get(key);
@@ -3156,6 +3199,99 @@ export class Game {
     // 2.31: waniliowe `block.chest.open` – skrzynia skrzypi przy otwieraniu.
     Sfx.playChest(true, x + 0.5, y + 0.5, z + 0.5);
     this.setUI('chest');
+  }
+
+  private acceptSharedChest(c: SharedChest) {
+    const key = (c.d === 'n' ? 'n:' : '') + chestKey(c.x, c.y, c.z);
+    this.chests.set(key, { x: c.x, y: c.y, z: c.z, dim: c.d === 'n' ? 1 : 0, slots: c.slots, shared: true, revision: c.revision });
+    if (c.destroyed && this.chestPos?.x === c.x && this.chestPos?.y === c.y && this.chestPos?.z === c.z) { this.chestPos = null; this.ui = 'playing'; this.onUI('playing'); }
+  }
+  private async loadSharedChest(ref: ChestRef, show = true): Promise<SharedChest | null> {
+    if (!this.canModify(ref.x, ref.z) || !this.net?.openSharedChest || this.sharedBusy) return null;
+    this.sharedBusy = true;
+    try {
+      this.flushNetEdits();
+      const old = this.chests.get(this.cKey(ref.x, ref.y, ref.z));
+      const legacy = old && !old.shared ? old.slots : undefined;
+      if (legacy) {
+        const backup = `mconline-chest-legacy:${this.net.id}:${this.net.world?.seed}:${ref.d}:${ref.x},${ref.y},${ref.z}`;
+        if (!localStorage.getItem(backup)) localStorage.setItem(backup, JSON.stringify(old));
+      }
+      const id = this.world.getBlock(ref.x, ref.y, ref.z);
+      const seed = !old && isLootChest(id) ? this.generatedChest(ref.x, ref.y, ref.z).slots : Array(27).fill(null);
+      const c = await this.net.openSharedChest(ref, seed, legacy);
+      if(this.sharedDisposed)return null;
+      this.acceptSharedChest(c);
+      if (c.destroyed) { this.message('Ta skrzynia została zniszczona.'); return null; }
+      if (c.legacyPending) this.message('Starsza zawartość została zachowana w archiwum serwera. Zwolnij miejsca w skrzyni i otwórz ją ponownie, aby dokończyć import.');
+      if (isLootChest(id)) this.world.setBlock(ref.x, ref.y, ref.z, chestIdFor(chestFacing(id), false));
+      if (show) {
+        this.chestPos = { x: ref.x, y: ref.y, z: ref.z };
+        this.sharedBusy = false; this.setUI('chest');
+        Sfx.playChest(true, ref.x+.5, ref.y+.5, ref.z+.5);
+      }
+      return c;
+    } catch (e) { this.message(e instanceof Error ? e.message : 'Nie można wczytać wspólnej skrzyni.'); return null; }
+    finally { this.sharedBusy = false; if(!this.sharedDisposed)this.emitHud(); }
+  }
+  private sharedContainerAction(action: () => void): boolean {
+    if (this.sharedExecuting) return false;
+    if (this.sharedBusy||this.mobContainerBackup) return true;
+    if (this.ui !== 'chest' || !this.net?.sharedContainers) return false;
+    const c = this.currentChest();
+    if (!c || c.revision === undefined) return true;
+    const ref: SharedChest = { ...c, d: this.isInNether ? 'n' : 'o', revision: c.revision, destroyed: false };
+    void this.performSharedChestAction(ref, action);
+    return true;
+  }
+  private applySharedProfile(p: PlayerProfile) {
+    this.inventory.slots = p.inv; this.armor = p.armor;
+    this.inventory.cursor = p.cursor ?? null; this.inventory.offhand = p.offhand ?? null;
+    this.inventory.grid = p.grid ?? Array(9).fill(null); this.enchantItem = p.enchantItem ?? null;
+    this.health = p.health; Object.assign(this, foodState(p.hunger, p.saturation, p.exhaustion));
+    this.xp = new Xp(p.xp); this.pickupReceipts = new Set(p.pickupReceipts ?? []);
+    this.unlocked=new Set(p.unlocked??[]);this.restoreStatus(p.status);
+  }
+  private async performSharedChestAction(ref: SharedChest, action: () => void, destroy = false, dropBlock = false) {
+    const net = this.net;
+    if (!net?.prepareSharedAction || !net.commitSharedChest || this.sharedBusy || this.sharedDisposed) return;
+    this.sharedBusy = true;
+    const before = this.buildProfile(), original = structuredClone(this.chests.get(this.cKey(ref.x, ref.y, ref.z)));
+    let completed = false,accepted=false;
+    try {
+      this.flushNetEdits(); await net.prepareSharedAction(before);
+      if(this.sharedDisposed){net.abortPreparedSharedAction?.();return;}
+      this.sharedDrops = []; this.sharedExecuting = true;
+      try { action(); } finally { this.sharedExecuting = false; }
+      const c = this.chests.get(this.cKey(ref.x, ref.y, ref.z));
+      const result = await net.commitSharedChest(this.buildProfile(), { ...ref, slots: c?.slots ?? Array(27).fill(null) }, this.sharedDrops, destroy, dropBlock);
+      if(this.sharedDisposed)return;
+      const p = sanitizeProfile(result.profile); if (!p) throw Error('Nieprawidłowe potwierdzenie ekwipunku.');
+      this.applySharedProfile(p); this.acceptSharedChest(result.chest); completed = true;accepted=result.committed;
+      if (!result.committed) this.message('Zawartość skrzyni zmieniła się. Odświeżono sloty; operacja nie zabrała przedmiotów.');
+      if (destroy && result.committed) {
+        this.netApplying = true; try { this.world.setBlock(ref.x,ref.y,ref.z,B.AIR); } finally { this.netApplying = false; }
+        if(dropBlock)this.wearTool();
+      }
+    } catch (error) {
+      net.abortPreparedSharedAction?.();
+      this.applySharedProfile(before);
+      if (original) this.chests.set(this.cKey(ref.x, ref.y, ref.z), original);
+      this.message(error instanceof Error ? error.message : 'Transfer nie został potwierdzony.');
+    } finally {
+      this.sharedExecuting = false; this.sharedBusy = false; this.sharedDrops = [];
+      if(this.sharedDisposed)return;
+      this.updateHand(); this.emitHud();
+      // Deliver combat only after the indivisible inventory operation.
+      for (const m of this.sharedMessages.splice(0)) this.onNetMessage(m);
+      if (completed) this.saveProfileNow(false);
+      if(this.deferredMobHits.length)this.applyMobExchange({regions:[...this.mobRegions.values()],hits:this.deferredMobHits.splice(0),edits:[]});
+    }
+    return accepted;
+  }
+  clickInventorySlot(index: number, right: boolean) {
+    if (this.sharedContainerAction(() => this.clickInventorySlot(index, right))) return;
+    this.inventory.clickSlot(index, right); this.saveProfileNow(false);
   }
 
   currentChest(): ChestState | null {
@@ -3195,6 +3331,7 @@ export class Game {
   }
 
   placeInventoryCursor(area: SlotArea, index: number, right: boolean) {
+    if (this.sharedContainerAction(() => { this.placeInventoryCursor(area, index, right); })) return;
     const slot = this.navigationSlots(area)[index], held = this.inventory.cursor;
     if (!slot || !held || !this.canPlaceInventoryCursor(area, index)) return;
     const s = slot.get();
@@ -3204,6 +3341,7 @@ export class Game {
   }
 
   distributeInventoryCursor(targets: { area: SlotArea; index: number }[], right: boolean) {
+    if (this.sharedContainerAction(() => { this.distributeInventoryCursor(targets, right); })) return;
     const unique = [...new Map(targets.map(t => [`${t.area}:${t.index}`, t])).values()];
     const slots = unique.map(t => this.navigationSlots(t.area)[t.index]).filter((s): s is StackSlot => !!s);
     this.inventory.cursor = distributeCursor(this.inventory.cursor, slots, right);
@@ -3211,6 +3349,7 @@ export class Game {
   }
 
   dropInventoryCursor(right = false) {
+    if (this.sharedContainerAction(() => { this.dropInventoryCursor(right); })) return;
     const s = this.inventory.cursor; if (!s) return;
     const count = right ? 1 : s.count;
     this.discardStack(s, count);
@@ -3219,6 +3358,7 @@ export class Game {
   }
 
   inventoryAction(area: SlotArea, index: number, action: SlotAction) {
+    if (this.sharedContainerAction(() => { this.inventoryAction(area, index, action); })) return;
     const source = this.navigationSlots(area)[index];
     if (!source) return;
     const previous = source.get();
@@ -3261,6 +3401,7 @@ export class Game {
   }
 
   clickOffhand(right: boolean) {
+    if (this.sharedContainerAction(() => { this.clickOffhand(right); })) return;
     this.transfer(() => this.inventory.offhand, (s) => { this.inventory.offhand = s; }, right);
     this.updateHand();
     this.emitHud();
@@ -3268,6 +3409,7 @@ export class Game {
   }
 
   swapHands() {
+    if (this.sharedContainerAction(() => { this.swapHands(); })) return;
     swapSlots(this.navigationSlots('inventory')[this.selected], this.navigationSlots('offhand')[0]);
     this.bowDraw = -1;
     this.zooming = false;
@@ -3279,6 +3421,7 @@ export class Game {
   }
 
   quickCraft() {
+    if(this.sharedInputBlocked)return;
     // Check capacity BEFORE consuming ingredients; never spill a full-inventory craft.
     for (let n = 0; n < 1024; n++) {
       const recipe = this.inventory.gridMatch(!!this.craftingTable);
@@ -3294,6 +3437,7 @@ export class Game {
   }
 
   clickChest(i: number, right: boolean) {
+    if (this.sharedContainerAction(() => { this.clickChest(i, right); })) return;
     const c = this.currentChest();
     if (!c || i < 0 || i >= c.slots.length) return;
     this.transfer(() => c.slots[i], (s) => { c.slots[i] = s; }, right);
@@ -3330,6 +3474,7 @@ export class Game {
   }
 
   currentAnvil(): AnvilState | null {
+    if(this.mobContainerBackup)return null;
     if (!this.anvilPos) return null;
     return this.anvils.get(this.aKey(this.anvilPos.x, this.anvilPos.y, this.anvilPos.z)) ?? null;
   }
@@ -3353,6 +3498,7 @@ export class Game {
    * the intact output to inventory (or drops it if the inventory is full).
    */
   takeAnvilResult(): boolean {
+    if(this.sharedInputBlocked)return false;
     const a = this.currentAnvil();
     const offer = this.anvilOffer();
     if (!a || !offer.out) return false;
@@ -3388,6 +3534,7 @@ export class Game {
   }
 
   clickAnvilSlot(slot: 'a' | 'b', right: boolean) {
+    if(this.sharedInputBlocked)return;
     const a = this.currentAnvil();
     if (!a) return;
     this.transfer(() => (slot === 'a' ? a.a : a.b), (s) => { if (slot === 'a') a.a = s; else a.b = s; }, right);
@@ -3425,6 +3572,7 @@ export class Game {
   }
 
   currentBrewing(): BrewingState | null {
+    if(this.mobContainerBackup)return null;
     if (!this.brewingPos) return null;
     return this.brewings.get(this.bKey(this.brewingPos.x, this.brewingPos.y, this.brewingPos.z)) ?? null;
   }
@@ -3435,6 +3583,7 @@ export class Game {
    * accepts blaze powder; the cup only accepts real brewing ingredients.
    */
   clickBrewing(slot: 'b0' | 'b1' | 'b2' | 'ingredient' | 'fuel', right: boolean) {
+    if(this.sharedInputBlocked)return;
     const s = this.currentBrewing();
     if (!s) return;
     const cur = this.inventory.cursor;
@@ -3604,6 +3753,7 @@ export class Game {
 
   /** Move stacks between the cursor and a furnace slot. Output can only be taken. */
   clickFurnace(slot: 'input' | 'fuel' | 'output', right: boolean) {
+    if(this.sharedInputBlocked)return;
     const f = this.currentFurnace();
     if (!f) return;
     const cur = this.inventory.cursor;
@@ -3786,6 +3936,7 @@ export class Game {
 
   /** One XP orb; mobs and ores scatter 1–3 of them around the kill site. */
   spawnOrb(x: number, y: number, z: number, value: number) {
+    if(this.sharedMobs){this.spawnDrop(65535,value,x,y,z,undefined,0,1.5,0);return;}
     if (this.orbs.length > 48) return;
     const pos = new THREE.Vector3(x, y, z);
     const mesh = new THREE.Mesh(this.orbGeo, this.orbMat);
@@ -3860,6 +4011,7 @@ export class Game {
 
   /** Inventory-screen click on one of the four armor slots. */
   clickArmorSlot(i: number) {
+    if(this.sharedInputBlocked)return;
     if (i < 0 || i >= ARMOR_SLOT_COUNT) return;
     const cur = this.inventory.cursor;
     const slot = this.armor[i];
@@ -4457,6 +4609,18 @@ export class Game {
 
   spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2, ench?: Record<string, number>, name?: string, shared?: SharedDrop, pickupDelay = 0) {
     if (count <= 0) return;
+    if(this.mobSimulating) {
+      const created=Date.now(),capture=this.mobCaptures.get(this.mobCaptureRegion);
+      for(let n=count;n>0;n-=64)capture?.drops.push({uid:crypto.randomUUID(),owner:this.net!.id,d:this.isInNether?'n':'o',stack:{id,count:Math.min(64,n),...(dur!==undefined?{dur}:{}),...(ench?{ench}:{}),...(name?{name}:{})},pos:[x,y,z],vel:[vx,vy,vz],created,expires:created+DROP_LIFETIME});
+      return;
+    }
+    if (this.sharedExecuting) {
+      const created = Date.now();
+      for (let n = count; n > 0; n -= stackLimit(id)) this.sharedDrops.push({ uid: `${this.net!.id}:${crypto.randomUUID()}`, owner: this.net!.id,
+        d: this.isInNether ? 'n' : 'o', stack: { id, count: Math.min(n,stackLimit(id)), ...(dur !== undefined ? {dur} : {}), ...(ench ? {ench} : {}), ...(name ? {name} : {}) },
+        pos: [x,y,z], vel: [vx,vy,vz], created, expires: created+DROP_LIFETIME, ...(pickupDelay ? { pickupAfter: created+2000 } : {}) });
+      return;
+    }
     let publish = false;
     if (!shared && this.net?.publishDrop) {
       const limit = stackLimit(id);
@@ -4478,7 +4642,8 @@ export class Game {
       this.scene.remove(victim.mesh);
     }
     let mesh: THREE.Object3D;
-    if (BLOCKS[id]) {
+    if(id===65535)mesh=new THREE.Mesh(this.orbGeo,this.orbMat);
+    else if (BLOCKS[id]) {
       let geo = this.dropGeos.get(id);
       if (!geo) { geo = blockGeometry(id); this.dropGeos.set(id, geo); }
       mesh = new THREE.Mesh(geo, this.dropMat);
@@ -4512,6 +4677,7 @@ export class Game {
   }
 
   command(input: string) {
+    if(this.sharedBusy&&!this.sharedExecuting)return;
     const txt = input.trim();
     if (!txt) return;
     if (!txt.startsWith('/')) {
@@ -5177,7 +5343,7 @@ export class Game {
     let best: Mob | null = null;
     let bd = maxDist;
     for (const m of this.mobs) {
-      if (m.dead) continue;
+      if (m.dead||m.isTnt) continue;
       const t = m.rayHit(o, d, maxDist);
       if (t !== null && t < bd && this.clearShot(o.x, o.y, o.z, d.x, d.y, d.z, t)) { bd = t; best = m; }
     }
@@ -5265,6 +5431,7 @@ export class Game {
   }
 
   tryAttack() {
+    if(this.sharedBusy&&!this.sharedExecuting)return;
     // Mouse movement can arrive between frames: never destroy a cached floor
     // voxel after the player has already turned towards another block.
     this.target = this.raycastTarget();
@@ -5296,6 +5463,7 @@ export class Game {
    * obrażenia, zużywały narzędzie i respektowały cooldown.
    */
   private attackMob(mob: Mob) {
+    if(this.sharedMobAction(mob,()=>{const current=this.mobs.find(m=>m.netId===mob.netId);if(current&&!current.dead)this.attackMob(current);}))return;
     this.swingT = 0;
     const toolId = this.selectedStack()?.id ?? 0;
     if (ITEMS[toolId]?.tool === 'shears' && mob.type === 'sheep') {
@@ -5689,6 +5857,7 @@ export class Game {
               a.pos.z > mb.pos.z - r && a.pos.z < mb.pos.z + r
             ) {
               if (a.pvpOwner) { mobHit = spent = true; break; }
+              if(this.sharedMobs) { if(!a.pvpOwner)this.sharedMobAction(m,()=>{const current=this.mobs.find(o=>o.netId===m.netId);current?.damage(a.power,a.pos.x-dir.x*2,a.pos.z-dir.z*2,a.from);});mobHit=spent=true;break; }
               if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2, a.from)) {
                 mb.vel.x += dir.x * 4;
                 mb.vel.z += dir.z * 4;
@@ -5751,6 +5920,7 @@ export class Game {
             ) {
               if (a.pearl) { spent = true; break; }
               // 2.30: strzała gracza ma napastnika – golem wie, kto go drasnął.
+              if(this.sharedMobs) {this.sharedMobAction(m,()=>{const current=this.mobs.find(o=>o.netId===m.netId);current?.damage(a.power,a.pos.x-dir.x*2,a.pos.z-dir.z*2,'player');});spent=true;break;}
               if (m.damage(a.power, a.pos.x - dir.x * 2, a.pos.z - dir.z * 2, 'player')) {
                 mb.vel.x += dir.x * 4;
                 mb.vel.z += dir.z * 4;
@@ -5779,6 +5949,8 @@ export class Game {
   }
 
   tryUse() {
+    if(this.mobContainerBackup)return;
+    if(this.sharedBusy&&!this.sharedExecuting)return;
     const main = this.inventory.slots[this.selected];
     const off = this.inventory.offhand;
     const usable = (id: number) => !isItem(id) || ITEMS[id]?.tool === 'shovel' || id === I.SHIELD || isFood(id) || isPotion(id) || isHoe(id) ||
@@ -5911,6 +6083,7 @@ export class Game {
       return;
     }
     if (t && s.id === I.FLINT_STEEL) {
+      if(t.id===B.TNT&&this.sharedMobs&&!this.sharedExecuting){void this.performSharedMobAction(mobRegionKey(this.isInNether?'n':'o',Math.floor(t.x/128),Math.floor(t.z/128)),()=>this.tryUse());return;}
       let used = false;
       if (t.id === B.TNT) {
         if (this.net?.city || this.world.city) { this.message('TNT jest wyłączone w Mieście, aby chronić budowle.'); return; }
@@ -5941,6 +6114,7 @@ export class Game {
     if (s.id === I.BONE) {
       const wt = this.findMobTarget(4.5);
       if (wt.mob && wt.mob.type === 'wolf' && !wt.mob.tamed && !wt.mob.dead) {
+        if(this.sharedMobAction(wt.mob,()=>this.tryUse()))return;
         if (this.mode === 'survival') this.consumeSelected();
         wt.mob.tame();
         Sfx.playEat();
@@ -6152,6 +6326,7 @@ export class Game {
 
   /** 2.5: `whole` = wyrzuca cały stos (Ctrl+Q), domyślnie jeden przedmiot. */
   dropItem(whole = false) {
+    if (this.sharedContainerAction(() => { this.dropItem(whole); })) return;
     const s = this.selectedStack();
     if (!s) return;
     const n = whole ? s.count : 1;
@@ -6349,6 +6524,7 @@ export class Game {
   }
 
   breakBlock(x: number, y: number, z: number, silent = false) {
+    if(this.mobContainerBackup&&!this.mobSimulating)return false;
     if (y < 0 || y >= CH || !this.canModify(x, z)) return false;
     const id = this.world.getBlock(x, y, z);
     if (id === B.AIR || !BLOCKS[id] || (BLOCKS[id].hardness < 0 && this.mode !== 'creative') || (this.world.city && y === 0)) return false;
@@ -6357,6 +6533,18 @@ export class Game {
       if (this.world.peekBlock(x,y,z) !== B.AIR) return false;
       if (!silent) Sfx.playExtinguish(x+.5,y+.5,z+.5);
       return true;
+    }
+    if (this.net?.sharedContainers && isChestBlock(id)) {
+      if (!this.sharedBusy) void (async () => {
+        const c = await this.loadSharedChest({ x,y,z,d:this.isInNether?'n':'o' }, false);
+        if (c) await this.performSharedChestAction(c, () => {
+          const stacks=this.chests.get(this.cKey(x,y,z))!.slots;
+          for (const stack of stacks) if (stack) this.spawnDrop(stack.id,stack.count,x+.5,y+.5,z+.5,stack.dur,0,2,0,stack.ench,stack.name);
+          this.chests.get(this.cKey(x,y,z))!.slots=Array(27).fill(null);
+          if(!silent&&this.mode==='survival')this.spawnDrop(B.CHEST,1,x+.5,y+.5,z+.5,undefined,0,2,0);
+        }, true,!silent&&this.mode==='survival');
+      })();
+      return false;
     }
     const def = BLOCKS[id];
     // Derived flow, not a newly-created source, fills an opened cavity.
@@ -6427,8 +6615,19 @@ export class Game {
     return true;
   }
 
+  private setupSharedTnt(mob:Mob) {
+    mob.isTnt=true;mob.body.w=.98;mob.body.h=.98;mob.group.clear();
+    const mesh=new THREE.Mesh(this.tntGeo,new THREE.MeshBasicMaterial({map:this.atlasTex,vertexColors:true}));mesh.position.y=.49;mob.group.add(mesh);
+  }
   igniteTNT(x: number, y: number, z: number, fuse: number, owner: Mob | 'player' | null = null) {
     if (this.net?.city || this.world.city || !this.canModify(x, z) || this.world.peekBlock(x,y,z) !== B.TNT) return false;
+    if(this.sharedMobs) {
+      if(!this.mobSimulating&&!this.sharedExecuting){void this.performSharedMobAction(mobRegionKey(this.isInNether?'n':'o',Math.floor(x/128),Math.floor(z/128)),()=>this.igniteTNT(x,y,z,fuse,owner));return true;}
+      this.world.setBlock(x,y,z,B.AIR);
+      const mob=new Mob('creeper',x+.5,y,z+.5);this.setupSharedTnt(mob);mob.primeFuse=fuse;mob.netId=crypto.randomUUID();
+      mob.netRegion=this.mobSimulating?this.mobCaptureRegion:mobRegionKey(this.isInNether?'n':'o',Math.floor(x/128),Math.floor(z/128));
+      this.mobs.push(mob);this.scene.add(mob.group);return true;
+    }
     this.world.setBlock(x, y, z, B.AIR);
     if (this.world.peekBlock(x,y,z) !== B.AIR) return false;
     const mesh = new THREE.Mesh(this.tntGeo, new THREE.MeshBasicMaterial({ map: this.atlasTex, vertexColors: true }));
@@ -6466,6 +6665,11 @@ export class Game {
           if (id === B.AIR || id === B.BEDROCK || id === B.OBSIDIAN || isWater(id) || id === B.LAVA) continue;
           if (id === B.TNT) { this.igniteTNT(x, y, z, 0.3 + Math.random() * 0.6, source); continue; }
           if (isFurnace(id)) this.spillFurnace(x, y, z);
+          if (isChestBlock(id) && this.net?.sharedContainers) {
+            if(this.mobSimulating)this.mobCaptures.get(this.mobCaptureRegion)?.edits.push({x,y,z,id:0,d:this.isInNether?'n':'o',chestSeed:isLootChest(id)?this.generatedChest(x,y,z).slots:[]} as NetEdit);
+            else this.queueSharedChestBreak(x,y,z);
+            continue;
+          }
           if (isChestBlock(id)) this.spillChest(x, y, z);
           if (id === B.ANVIL) this.spillAnvil(x, y, z);
           if (id === B.BREWING) this.spillBrewing(x, y, z);
@@ -6488,15 +6692,21 @@ export class Game {
         hit(Math.floor(f * 22), kb);
       }
     };
+    if(this.mobSimulating) {
+      for(const [id,p] of this.combatPlayers)if(p.d===(this.isInNether?'n':'o')&&p.alive!==false)affect(new THREE.Vector3(p.x,p.y,p.z),1.8,(damage)=>{this.mobCaptures.get(this.mobCaptureRegion)?.hits.push({uid:crypto.randomUUID(),target:id,mob:source instanceof Mob?source.netId:'',damage,explosion:true});});
+    }
     affect(this.body.pos, this.body.h, (dmg, kb) => {
+      if(this.mobSimulating){this.mobCaptures.get(this.mobCaptureRegion)?.hits.push({uid:crypto.randomUUID(),target:this.net!.id,mob:source instanceof Mob?source.netId:'',damage:dmg,explosion:true});return;}
       this.body.vel.add(kb);
       this.fallStart = this.body.pos.y;
       this.damage(dmg);
     });
-    for (const m of this.mobs) affect(m.body.pos, m.body.h, (dmg, kb) => {
-      m.hurtTime = 0;
-      m.damage(dmg, cx, cz, source === m ? null : source);
-      m.body.vel.add(kb);
+    if(this.sharedMobs&&!this.mobSimulating) {
+      const affected=new Map<string,{id:string;damage:number;kb:THREE.Vector3}[]>();
+      for(const mob of this.mobs)affect(mob.body.pos,mob.body.h,(damage,kb)=>{const list=affected.get(mob.netRegion)??[];list.push({id:mob.netId,damage,kb});affected.set(mob.netRegion,list);});
+      void (async()=>{for(const [key,list] of affected)await this.performSharedMobAction(key,()=>{for(const hit of list){const mob=this.mobs.find(m=>m.netId===hit.id);if(mob&&!mob.dead){mob.hurtTime=0;mob.damage(hit.damage,cx,cz,source===mob?null:source);mob.body.vel.add(hit.kb);}}});})();
+    } else for (const m of this.mobs) affect(m.body.pos, m.body.h, (dmg, kb) => {
+      m.hurtTime = 0;m.damage(dmg,cx,cz,source===m?null:source);m.body.vel.add(kb);
     });
   }
 
@@ -6615,6 +6825,12 @@ export class Game {
     // się rodzi (ciepły, umiarkowany albo zimny).
     const biome = this.world.surface(Math.floor(x), Math.floor(z)).biome;
     const m = new Mob(type, x, y, z, profession, mobVariantForBiome(type, biome));
+    if(this.sharedMobs) {
+      const d=this.isInNether?'n':'o',rx=Math.floor(x/128),rz=Math.floor(z/128),key=mobRegionKey(d,rx,rz);
+      m.netId=crypto.randomUUID();m.netRegion=key;
+      if(this.mobSimulating) {if(this.mobRegions.get(key)?.owner!==this.net?.id||this.mobs.filter(o=>o.netRegion===key).length>=48)return m;}
+      else if(!this.sharedExecuting) {void this.performSharedMobAction(key,()=>{this.mobs.push(m);this.scene.add(m.group);});return m;}
+    }
     this.mobs.push(m);
     this.scene.add(m.group);
     return m;
@@ -6639,6 +6855,11 @@ export class Game {
     // 2.0: limit klatek – klatka jest po prostu pomijana, liczniki czasu
     // ruszają dopiero przy realnym renderze (ruch zostaje prawidłowy).
     if (this.fpsCap > 0 && now - this.lastTime < 1000 / this.fpsCap - 0.6) return;
+    if (this.sharedBusy) {
+      this.lastTime = now;
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
     const frameMs = now - this.lastTime;
     this.frameTimes.record(frameMs);
     let dt = frameMs / 1000;
@@ -7234,6 +7455,7 @@ export class Game {
    * klatce (kilkadziesiąt alokacji na sekundę). Teraz są stałymi metodami.
    */
   private mobAttackPlayer = (dmg: number, mob: Mob) => {
+    if(this.mobSimulating){this.mobCaptures.get(this.mobCaptureRegion)?.hits.push({uid:crypto.randomUUID(),target:this.mobTargetId,mob:mob.netId,damage:dmg});return;}
     if (this.ui === 'dead') return;
     const from = mob.body.pos.clone().add(new THREE.Vector3(0, mob.body.h * 0.75, 0));
     const to = this.body.pos.clone().add(new THREE.Vector3(0, this.body.h * 0.5, 0)).sub(from);
@@ -7261,6 +7483,7 @@ export class Game {
   };
 
   private mobShootPlayer = (mob: Mob) => {
+    if(this.mobSimulating){this.mobCaptures.get(this.mobCaptureRegion)?.hits.push({uid:crypto.randomUUID(),target:this.mobTargetId,mob:mob.netId,damage:4,shoot:true});return;}
     const p = this.body.pos;
     // skeleton shot: aim slightly above the player's chest
     const from = new THREE.Vector3(mob.body.pos.x, mob.body.pos.y + mob.body.h * 0.85, mob.body.pos.z);
@@ -7274,12 +7497,147 @@ export class Game {
     Sfx.playHurt();
   };
 
+  private chestBreakQueue: {x:number;y:number;z:number}[]=[];
+  private chestBreakTask: Promise<void>|null=null;
+  private queueSharedChestBreak(x:number,y:number,z:number) {
+    if(!this.chestBreakQueue.some(p=>p.x===x&&p.y===y&&p.z===z))this.chestBreakQueue.push({x,y,z});
+    if(this.chestBreakTask)return;
+    this.chestBreakTask=(async()=>{while(this.chestBreakQueue.length&&!this.sharedDisposed){
+      if(this.sharedBusy){await new Promise(r=>setTimeout(r,100));continue;}
+      const p=this.chestBreakQueue.shift()!,c=await this.loadSharedChest({...p,d:this.isInNether?'n':'o'},false);
+      if(c&&!c.destroyed)await this.performSharedChestAction(c,()=>{for(const stack of this.chests.get(this.cKey(p.x,p.y,p.z))!.slots)if(stack)this.spawnDrop(stack.id,stack.count,p.x+.5,p.y+.5,p.z+.5,stack.dur,0,2,0,stack.ench,stack.name);this.chests.get(this.cKey(p.x,p.y,p.z))!.slots=Array(27).fill(null);},true);
+    }})().finally(()=>{this.chestBreakTask=null;});
+  }
+  private requestedMobRegions() {
+    const x=Math.floor(this.body.pos.x/MOB_REGION_SIZE),z=Math.floor(this.body.pos.z/MOB_REGION_SIZE),d=this.isInNether?'n' as const:'o' as const;
+    return Array.from({length:9},(_,i)=>({d,x:x+i%3-1,z:z+Math.floor(i/3)-1}));
+  }
+  private applyMobExchange(result: MobExchange) {
+    if(this.sharedDisposed)return;
+    const old=new Map(this.mobs.map(m=>[m.netId,m]));
+    const next:Mob[]=[]; this.mobRegions=new Map();
+    for(const region of result.regions) {
+      const key=mobRegionKey(region.d,region.x,region.z); this.mobRegions.set(key,region);
+      for(const data of region.mobs) {
+        let mob=old.get(data.id);const previousPosition=mob?.group.position.clone();
+        if(!mob) { mob=new Mob(data.type,...data.pos as [number,number,number],((data.state.profession as number??0)+.5)/PROFESSIONS.length,data.variant,data.state.woolColor as number);if(data.state.isTnt)this.setupSharedTnt(mob);this.scene.add(mob.group); }
+        mob.restoreSnapshot(data);if(previousPosition)mob.group.position.copy(previousPosition);mob.netRegion=key;next.push(mob);old.delete(data.id);
+      }
+    }
+    for(const mob of this.mobs)if(!next.includes(mob)){this.scene.remove(mob.group);mob.dispose();}
+    this.mobs=next;
+    this.netApplying=true;try{for(const edit of result.edits??[])if((edit.d==='n')===this.isInNether)this.world.setBlock(edit.x,edit.y,edit.z,edit.id);}finally{this.netApplying=false;}
+    for(const hit of result.hits??[]) {
+      const uid='mob:'+hit.uid;if(this.pickupReceipts.has(uid)||hit.at!==undefined&&Date.now()-hit.at>2500)continue;
+      if(this.sharedBusy) { this.deferredMobHits.push(hit);continue; }
+      this.pickupReceipts.add(uid);
+      const mob=this.mobs.find(m=>m.netId===hit.mob);
+      if(mob) { if(hit.shoot)this.mobShootPlayer(mob);else if(hit.explosion)this.damage(hit.damage);else if(mob.body.pos.distanceTo(this.body.pos)<5)this.mobAttackPlayer(hit.damage,mob); }
+      this.saveProfileNow(false);
+    }
+  }
+  private deferredMobHits: MobHit[]=[];
+  private async flushSharedMobs() {
+    const net=this.net;if(!net?.exchangeSharedMobs)return;
+    const pending=this.mobUpdates,requested=this.requestedMobRegions();
+    const result=await net.exchangeSharedMobs(requested,pending,{x:this.body.pos.x,y:this.body.pos.y,z:this.body.pos.z,d:this.isInNether?'n':'o'});
+    if(this.sharedDisposed)return;
+    if(this.mobContainerBackup){
+      Object.assign(this,this.mobContainerBackup);this.mobContainerBackup=null;
+      for(const edit of result.edits??[]){
+        const key=(edit.d==='n'?'n:':'')+furnaceKey(edit.x,edit.y,edit.z);
+        if(!isFurnace(edit.id))this.furnaces.delete(key);
+        if(edit.id!==B.ANVIL)this.anvils.delete(key);
+        if(edit.id!==B.BREWING)this.brewings.delete(key);
+      }
+    }
+    this.mobUpdates=[];if(requested[0].d===(this.isInNether?'n':'o'))this.applyMobExchange(result);
+  }
+  private pollSharedMobs() {
+    if(this.sharedBusy||this.mobTask||this.sharedDisposed||performance.now()-this.mobPollAt<350)return;
+    this.mobPollAt=performance.now();
+    this.mobTask=(async()=>{
+      await this.flushSharedMobs();
+      if(this.sharedBusy||this.sharedDisposed)return;
+      const now=performance.now(),dt=Math.min(.4,Math.max(.05,(now-(this.mobStepAt||now-200))/1000));this.mobStepAt=now;
+      const all=this.mobs,owned=all.filter(m=>this.mobRegions.get(m.netRegion)?.owner===this.net?.id);
+      const ownedRegions=[...this.mobRegions.values()].filter(r=>r.owner===this.net?.id);
+      if(!ownedRegions.length)return;
+      this.mobCaptures=new Map(ownedRegions.map(r=>[mobRegionKey(r.d,r.x,r.z),{drops:[],hits:[],edits:[]}]));
+      const world=this.world,proxy=Object.create(world) as World,edits=new Map<string,number>();
+      proxy.getBlock=(x,y,z)=>edits.get(`${x},${y},${z}`)??world.getBlock(x,y,z);
+      proxy.peekBlock=(x,y,z)=>edits.get(`${x},${y},${z}`)??world.peekBlock(x,y,z);
+      proxy.setBlock=(x,y,z,id)=>{if(!this.canModify(x,z))return;edits.set(`${x},${y},${z}`,id);this.mobCaptures.get(this.mobCaptureRegion)?.edits.push({x,y,z,id,d:this.isInNether?'n':'o'});};
+      const containers={furnaces:structuredClone(this.furnaces),anvils:structuredClone(this.anvils),brewings:structuredClone(this.brewings)};
+      const containersBefore=JSON.stringify([...containers.furnaces,...containers.anvils,...containers.brewings]);
+      this.world=proxy;this.mobs=owned;this.mobSimulating=true;
+      try { this.updateMobs(dt); }
+      catch(error){Object.assign(this,containers);this.mobs=all;throw error;}
+      finally { this.world=world;this.mobSimulating=false; }
+      if(containersBefore!==JSON.stringify([...this.furnaces,...this.anvils,...this.brewings]))this.mobContainerBackup=containers;
+      const simulated=this.mobs;
+      // A home region is stable across cell boundaries; keep its entities in
+      // the subscribed halo rather than creating/deleting them on each viewer.
+      for(const mob of simulated) {
+        const region=this.mobRegions.get(mob.netRegion)!;
+        mob.body.pos.x=THREE.MathUtils.clamp(mob.body.pos.x,region.x*128-32,(region.x+1)*128+32);
+        mob.body.pos.z=THREE.MathUtils.clamp(mob.body.pos.z,region.z*128-32,(region.z+1)*128+32);
+      }
+      this.mobUpdates=ownedRegions.map(r=>({...r,mobs:simulated.filter(m=>m.netRegion===mobRegionKey(r.d,r.x,r.z)).map(m=>m.snapshot()),...this.mobCaptures.get(mobRegionKey(r.d,r.x,r.z))!}));
+      this.mobs=[...all.filter(m=>!owned.includes(m)),...simulated];
+    })().catch(()=>{/* Preserve the exact pending snapshot/drop IDs until CAS resolves it. */}).finally(()=>{this.mobTask=null;});
+  }
+  private sharedMobAction(mob: Mob,action:()=>void): boolean {
+    if(!this.sharedMobs||this.sharedExecuting||this.mobSimulating)return false;
+    if(this.sharedBusy)return true;
+    void this.performSharedMobAction(mob.netRegion,action);return true;
+  }
+  private async performSharedMobAction(key:string,action:()=>void) {
+    const net=this.net;if(!net?.commitSharedMobs||!net.prepareSharedAction||this.sharedBusy||this.sharedDisposed)return;
+    this.sharedBusy=true;const before=this.buildProfile();let original:ReturnType<Mob['snapshot']>[]=[];
+    try {
+      await this.mobTask;await this.flushSharedMobs();
+      if(this.sharedDisposed)return;
+      const region=this.mobRegions.get(key);if(!region)throw Error('Mob opuścił aktywny region.');
+      original=this.mobs.filter(m=>m.netRegion===key).map(m=>m.snapshot());
+      await net.prepareSharedAction(before);
+      if(this.sharedDisposed){net.abortPreparedSharedAction?.();return;}
+      this.sharedDrops=[];this.sharedExecuting=true;
+      const world=this.world,edits:NetEdit[]=[],changes=new Map<string,number>(),proxy=Object.create(world) as World;
+      proxy.getBlock=(x,y,z)=>changes.get(`${x},${y},${z}`)??world.getBlock(x,y,z);
+      proxy.peekBlock=(x,y,z)=>changes.get(`${x},${y},${z}`)??world.peekBlock(x,y,z);
+      proxy.setBlock=(x,y,z,id)=>{if(!this.canModify(x,z))return;changes.set(`${x},${y},${z}`,id);edits.push({x,y,z,id,d:this.isInNether?'n':'o'});};
+      this.world=proxy;
+      try {action();for(const mob of this.mobs.filter(m=>m.netRegion===key&&m.dead&&!m.looted)){mob.looted=true;if(!mob.exploded)this.mobLoot(mob);}}
+      finally {this.sharedExecuting=false;this.world=world;}
+      const result=await net.commitSharedMobs(this.buildProfile(),{...region,mobs:this.mobs.filter(m=>m.netRegion===key).map(m=>m.snapshot())},this.sharedDrops,edits);
+      if(this.sharedDisposed)return;
+      const profile=sanitizeProfile(result.profile);if(!profile)throw Error('Nieprawidłowe potwierdzenie ekwipunku.');
+      this.applySharedProfile(profile);
+      const regions=[...this.mobRegions.values()].map(r=>mobRegionKey(r.d,r.x,r.z)===key?result.region:r);
+      this.applyMobExchange({regions,hits:[],edits:result.edits??[]});
+      if(!result.committed)this.message('Stan moba zmienił się. Operacja nie zabrała przedmiotów; spróbuj ponownie.');
+    } catch(error) {
+      net.abortPreparedSharedAction?.();
+      this.applySharedProfile(before);
+      const region=this.mobRegions.get(key);
+      if(region&&original.length)this.applyMobExchange({regions:[...this.mobRegions.values()].map(r=>r===region?{...r,mobs:original}:r),hits:[],edits:[]});
+      this.message(error instanceof Error?error.message:'Nie potwierdzono operacji moba.');
+    } finally {
+      this.sharedBusy=false;this.sharedExecuting=false;this.sharedDrops=[];if(this.sharedDisposed)return;this.updateHand();this.emitHud();
+      for(const packet of this.sharedMessages.splice(0))this.onNetMessage(packet);
+      if(this.deferredMobHits.length)this.applyMobExchange({regions:[...this.mobRegions.values()],hits:this.deferredMobHits.splice(0),edits:[]});
+    }
+  }
+
   private updateMobs(dt: number) {
+    if(this.sharedMobs&&!this.mobSimulating) { this.pollSharedMobs(); for(const mob of this.mobs) {mob.group.visible=mob.body.pos.distanceTo(this.body.pos)<=96*this.entityDistance;mob.group.position.lerp(mob.body.pos,smoothAlpha(dt,12));mob.animateLimbs(Math.sin(performance.now()/110)*Math.min(.7,Math.hypot(mob.body.vel.x,mob.body.vel.z)*.15));} return; }
     const p = this.body.pos;
     const dl = this.daylight();
     const peaceful = this.mode === 'creative';
     for (let mi = 0; mi < this.mobs.length; mi++) {
       const m = this.mobs[mi];
+      if(this.mobSimulating)this.mobCaptureRegion=m.netRegion;
       // 2.28 (Entity Culling): moby dalej niż 48 bloków aktualizują się co
       // 2–6 klatek. Ruch liczymy z dt pomnożonym przez interwał, więc nic
       // nie „zwalnia” – po prostu próbkujemy rzadziej i taniej.
@@ -7292,8 +7650,13 @@ export class Game {
         skip = (this.frameNo + mi) % iv !== 0;
         mdt = dt * iv;
       }
-      if (skip) continue;
-      m.update(mdt, this.world, p, this.mobAttackPlayer, this.mobShootPlayer, peaceful, this.mobs, this.wolfBite);
+      if (skip && !this.mobSimulating) continue;
+      let target=p;
+      this.mobTargetId=this.net?.id??'';
+      if(this.mobSimulating)for(const [id,other] of this.combatPlayers)if(other.d===(this.isInNether?'n':'o')&&other.alive!==false&&other.mode!=='creative'&&performance.now()-other.seen<2500) {
+        const candidate=new THREE.Vector3(other.x,other.y,other.z);if(candidate.distanceTo(m.body.pos)<target.distanceTo(m.body.pos)){target=candidate;this.mobTargetId=id;}
+      }
+      m.update(this.mobSimulating?dt:mdt, this.world, target, this.mobAttackPlayer, this.mobShootPlayer, peaceful, this.mobs, this.wolfBite);
       // 2.31: kroki mobów – wanilia gra `step` co ok. 0,35 s chodu, więc
       // liczymy przebytą drogę, a nie czas (stojący mob nie stuka).
       if (!m.dead && m.body.onGround) {
@@ -7323,13 +7686,15 @@ export class Game {
     // remove dead / far
     for (const m of this.mobs) {
       // 2.31: własny dźwięk śmierci, grany raz przy zejściu zdrowia do zera.
+      if(this.mobSimulating)this.mobCaptureRegion=m.netRegion;
       if (m.dead && !m.deathCried) {
         m.deathCried = true;
         Sfx.playMob(m.type, 'death', m.body.pos.x, m.body.pos.y + m.body.h * 0.8, m.body.pos.z);
       }
       if (m.exploded && !m.looted) {
         m.looted = true;
-        this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2, m);
+        if(m.isTnt)this.explode(m.body.pos.x,m.body.pos.y+.6,m.body.pos.z,4,m);
+        else this.explode(m.body.pos.x, m.body.pos.y + 0.6, m.body.pos.z, 3.2, m);
       } else if (m.dead && !m.looted) {
         m.looted = true;
         this.mobLoot(m);
@@ -7337,7 +7702,7 @@ export class Game {
     }
     this.mobs = this.mobs.filter((m) => {
       // Mieszkańcy i golemy trzymają się osady – nie znikają tuż za jej granicą.
-      const far = m.body.pos.distanceTo(p) > (isVillageMob(m.type) ? 240 : 90);
+      const far = !this.mobSimulating && m.body.pos.distanceTo(p) > (isVillageMob(m.type) ? 240 : 90);
       const gone = (m.dead && m.deathTime > 0.9) || far || m.body.pos.y < -10;
       if (gone) {
         if (m.dead && !far) this.spawnSmoke(m.body.pos.x, m.body.pos.y + 0.5, m.body.pos.z, 10, 1);
@@ -7826,6 +8191,8 @@ export class Game {
 
   /** Dzwon na placu: mieszkańcy wracają na środek osady. */
   private ringBell(x: number, _y: number, z: number) {
+    const villager=this.mobs.find(m=>m.type==='villager'&&!m.dead&&Math.hypot(m.body.pos.x-x,m.body.pos.z-z)<=32);
+    if(villager&&this.sharedMobAction(villager,()=>this.ringBell(x,_y,z)))return;
     Sfx.playBell();
     let n = 0;
     for (const m of this.mobs) {
@@ -7976,10 +8343,10 @@ export class Game {
       for (let i = 0; i < m.bonusLoot; i++) if (Math.random() < 0.6) reroll();
       m.bonusLoot = 0;
     }
-    if (m.type === 'zombie') this.unlock('zombie');
-    if (m.type === 'creeper') this.unlock('creeper');
-    if (m.type === 'spider') this.unlock('string');
-    if (m.type === 'skeleton') this.unlock('skeleton');
+    if (!this.mobSimulating && m.type === 'zombie') this.unlock('zombie');
+    if (!this.mobSimulating && m.type === 'creeper') this.unlock('creeper');
+    if (!this.mobSimulating && m.type === 'spider') this.unlock('string');
+    if (!this.mobSimulating && m.type === 'skeleton') this.unlock('skeleton');
     this.mobXp(m, x, y, z);
   }
 
@@ -8016,23 +8383,25 @@ export class Game {
   }
   private deliverPickups() {
     const net = this.net;
-    if (!net || this.ui === 'dead') return;
+    if (!net || this.ui === 'dead' || this.sharedBusy) return;
     for (const d of this.pendingPickups.values()) {
       if (d.claimedBy !== this.net?.id) { this.pendingPickups.delete(d.uid); continue; }
       if (!this.pickupReceipts.has(d.uid)) {
         const s = d.stack;
-        if (!this.inventory.canAdd(s.id, s.count, s.dur, s.ench, s.name)) continue;
+        const experience=s.id===65535,beforeXp=experience?this.xp.total:0;
+        if (!experience&&!this.inventory.canAdd(s.id, s.count, s.dur, s.ench, s.name)) continue;
         const before = structuredClone(this.inventory.slots);
-        if (!this.inventory.add(s.id, s.count, s.dur, s.ench, s.name)) continue;
+        if(experience)this.xp.add(s.count);
+        else if (!this.inventory.add(s.id, s.count, s.dur, s.ench, s.name)) continue;
         this.pickupReceipts.add(d.uid);
         // Save inventory + receipt together BEFORE acknowledging delivery.
         // A lost response or refresh can replay the grant, not the inventory.
         if (net.public && !net.checkpointPickup?.(this.buildProfile())) {
-          this.inventory.slots = before;
+          this.inventory.slots = before;if(experience)this.xp.total=beforeXp;
           this.pickupReceipts.delete(d.uid);
           continue;
         }
-        Sfx.playPop(); this.notePickup(s.id); this.emitHud();
+        Sfx.playPop(); if(!experience)this.notePickup(s.id); this.emitHud();
       }
       this.removeSharedDrop(d.uid);
       net.acknowledgeDrop?.(d.uid);
@@ -8490,6 +8859,7 @@ export class Game {
   }
 
   dispose() {
+    this.sharedDisposed=true;
     this.meshWorker?.dispose();
     this.clearChestLids();
     cancelAnimationFrame(this.raf);

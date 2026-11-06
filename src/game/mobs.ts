@@ -1,3 +1,4 @@
+import type { MobSnapshot } from './sharedMobs';
 import { smoothAlpha } from './cameraEffects';
 import { isWater } from './blocks';
 import { submerged } from './water';
@@ -90,6 +91,10 @@ export function mobVariantForBiome(type: MobType, biome: string): MobVariant {
 }
 
 export class Mob {
+  isTnt = false;
+  primeFuse = 4;
+  netId = '';
+  netRegion = '';
   type: MobType;
   /** 2.23: wariant biomowy (tekstura + model, np. `cow_cold`). */
   readonly variant: MobVariant;
@@ -208,7 +213,7 @@ export class Mob {
   head!: THREE.Object3D;
   meshes: THREE.Mesh[] = [];
 
-  constructor(type: MobType, x: number, y: number, z: number, profession = 0, variant: MobVariant = 'temperate') {
+  constructor(type: MobType, x: number, y: number, z: number, profession = 0, variant: MobVariant = 'temperate', woolColor?: number) {
     this.type = type;
     this.variant = variant;
     // Waniliowe `knockbackResistance`: golem 1.0 (nie da się go odepchnąć),
@@ -218,12 +223,12 @@ export class Mob {
     // 2.21.1: dokładny rozkład z `SheepEntity`: 83,6% białych, 5% czarnych,
     // 5% szarych, 5% jasnoszarych, 3% brązowych i 2% różowych.
     const wc = Math.abs(Math.round(x * 7 + z * 13)) % 100;
-    this.woolColor = wc < 5 ? 0x1d1d21
+    this.woolColor = woolColor ?? (wc < 5 ? 0x1d1d21
       : wc < 10 ? 0x474f52
         : wc < 15 ? 0x9d9d97
           : wc < 18 ? 0x835432
             : wc < 20 ? 0xf38baa
-              : 0xf9fffe;
+              : 0xf9fffe);
     // 2.21.1: pudełka kolizji dokładnie z waniliowych `EntityDimensions`
     // (`PigEntity`, `CowEntity`, `SheepEntity`, `ChickenEntity`, `WolfEntity`,
     // `VillagerEntity`, `ZombieEntity`, `SkeletonEntity`, `CreeperEntity`,
@@ -843,6 +848,7 @@ export class Mob {
   }
 
   setTint(red: boolean) {
+    if(this.isTnt)return;
     this.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) (mesh.material as THREE.MeshLambertMaterial).emissive.setHex(red ? 0x770000 : 0x000000);
@@ -865,6 +871,7 @@ export class Mob {
    * (i każdy inny mob) po prostu to ignorował.
    */
   damage(amount: number, fromX: number, fromZ: number, attacker: Mob | 'player' | null = null) {
+    if(this.isTnt)return false;
     if (amount <= 0) return false;
     if (this.dead || this.hurtTime > 0) return false;
     this.health -= amount;
@@ -1182,6 +1189,27 @@ export class Mob {
     }
   }
 
+  snapshot(): MobSnapshot {
+    const state: Record<string, number | boolean | string> = {};
+    for (const [key,value] of Object.entries(this)) {
+      if (key !== 'netId' && key !== 'netRegion' && (typeof value==='number' && Number.isFinite(value) || typeof value==='boolean' || typeof value==='string')) state[key]=value;
+    }
+    return {id:this.netId,type:this.type,variant:this.variant,pos:this.body.pos.toArray(),vel:this.body.vel.toArray(),home:this.home.toArray(),state,trade:this.trade?structuredClone(this.trade):null};
+  }
+  restoreSnapshot(s: MobSnapshot) {
+    // Only restore scalar fields already present on a real Mob. Never hydrate
+    // arbitrary object/prototype fields from a network packet.
+    const wasTamed=this.tamed;
+    if (s.state.tamed && !wasTamed) this.tame();
+    for (const [key,value] of Object.entries(s.state)) if (Object.prototype.hasOwnProperty.call(this,key) && ['number','boolean','string'].includes(typeof (this as any)[key]) && typeof value===typeof (this as any)[key]) (this as any)[key]=value;
+    this.netId=s.id; this.body.pos.fromArray(s.pos); this.body.vel.fromArray(s.vel); this.home.fromArray(s.home);
+    this.trade=s.trade?structuredClone(s.trade):null;
+    for (const part of this.woolParts) part.visible=!this.sheared;
+    this.group.position.copy(this.body.pos); this.group.rotation.y=this.yaw;
+    this.group.rotation.z=this.dead?Math.min(Math.PI/2,this.deathTime*6):0;
+    this.setTint(this.hurtTime>0);
+  }
+
   update(
     dt: number,
     world: World,
@@ -1201,6 +1229,12 @@ export class Mob {
     if (this.dead) {
       this.deathTime += dt;
       this.group.rotation.z = Math.min(Math.PI / 2, this.deathTime * 6);
+      return;
+    }
+    if(this.isTnt) {
+      this.primeFuse-=dt;b.vel.y-=25*dt;b.vel.x*=Math.pow(.95,dt*60);b.vel.z*=Math.pow(.95,dt*60);stepBody(world,b,dt);
+      this.group.position.copy(b.pos);
+      if(this.primeFuse<=0){this.dead=true;this.exploded=true;this.deathTime=0;}
       return;
     }
     this.bowRecoil = Math.max(0, this.bowRecoil - dt);

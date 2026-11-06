@@ -72,6 +72,8 @@ export function gateway(worldURL: string, serviceKey: string, request: typeof fe
         const a = args.params ?? {};
         if (args.name === plot) data = await rpc(plot, { p_world: b.world, p_key: member.capability, p_op: a.p_op, p_cx: a.p_cx ?? 0, p_cz: a.p_cz ?? 0, p_name: member.username });
         else if (args.name === write) data = await rpc(write, { p_world: b.world, p_key: member.capability, p_edits: a.p_edits });
+        else if (['mconline_mobs','mconline_mob_action'].includes(args.name)) data = await rpc(args.name, { p_account: identity.id, p_username: identity.username, p_session: b.session, p_world: b.world, p_args: a });
+        else if (args.name === 'mconline_chest') data = await rpc('mconline_chest', { p_account: identity.id, p_username: identity.username, p_session: b.session, p_world: b.world, p_args: a });
         else if (args.name === 'blockcraft_drop_op') data = await rpc('blockcraft_drop_op', { p_world: b.world, p_actor: member.pid, p_op: a.p_op, p_drop: a.p_drop ? { ...a.p_drop, owner: member.pid } : null, p_uid: a.p_uid ?? null, p_dim: a.p_dim ?? null });
         else throw new Error('Niedozwolona operacja serwera.');
       } else throw new Error('Nieznana operacja.');

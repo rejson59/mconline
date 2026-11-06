@@ -283,7 +283,7 @@ export default function GameView({
           minimap={game.minimapCanvas}
           touchControls={touch}
           onSwapHands={() => game.swapHands()}
-          onSelectSlot={touch ? (i) => { game.selected = i; game.emitHud(); } : undefined}
+          onSelectSlot={touch ? (i) => { if(game.sharedInputBlocked)return; game.selected = i; game.emitHud(); } : undefined}
           onTpaAccept={() => { game.acceptTeleport(); }}
           onTpaDeny={() => { game.denyTeleport(); }}
         />

@@ -1,6 +1,8 @@
 # Zgłoszenia — 4.28.3 (2026-11-06)
 
-## Status: sześć poprawek, dwa zgłoszenia nadal otwarte
+> Aktualizacja: dwa pozostałe zgłoszenia otrzymały implementację i testy w [4.29.0](SHARED-STATE-4.29.md). Poniżej historyczny zakres wydania 4.28.3.
+
+## Status na dzień wydania 4.28.3: sześć poprawek, dwa zgłoszenia otwarte
 
 | Raport | Diagnoza | Zmiana / status |
 |---|---|---|

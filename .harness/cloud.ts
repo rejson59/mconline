@@ -86,6 +86,10 @@ try {
   check('profile read also binds the verified player', () => assert.match(calls.at(-1)!.path, /pid=eq.paaaaaaaaaaaaaaaaaaa/));
   r = await send({ ...base, op: 'rpc', args: { name: 'community_whoami', params: {} } });
   check('arbitrary RPC forwarding is forbidden', () => assert.equal(r.status, 409));
+  for(const name of ['mconline_chest','mconline_mobs','mconline_mob_action']) {
+    await send({...base,op:'rpc',args:{name,params:{p_account:B,p_world:'city',p_session:'forged',ref:{d:'o',x:1,y:65,z:1}}}});
+    check(name+' uses verified account/session/world, not caller overrides',()=>{const args=calls.at(-1)!.body;assert.equal(args.p_account,A);assert.equal(args.p_session,base.session);assert.equal(args.p_world,'public');assert.equal(args.p_username,'Alice');assert.ok(calls.at(-1)!.path.endsWith('/rpc/'+name));});
+  }
   const count = calls.length; r = await send({ ...base, op: 'join' }, 'https://rejson59.github.io.evil.invalid');
   check('lookalike origin is rejected before receiving account authority', () => { assert.equal(r.status, 403); assert.equal(calls.length, count); });
   busy=true; r=await send({...base,op:'join',args:{resume:'a'.repeat(64)}}); const conflict=await r.json();
