@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "edition": "Java",
+  "target": "26.3",
+  "checkedOn": "2026-11-07",
+  "status": "migration-target-not-runtime-parity",
+  "runtimeReference": "1.20.4",
+  "notice": "Reference data remains Mojang/Microsoft property; not project MIT. Cache is not committed. This lock does not install or run Minecraft.",
+  "sources": {
+    "summary": "d96c75fec200c4580dd75e033a76341521165461",
+    "assets": "9073095a88699785bb1f63f8f86d33322711e4fd",
+    "releaseList": "57e8a153dcaf7ae81b31c1f44f13b1dd64094c59"
+  },
+  "artifacts": {
+    "version": {
+      "api": "repos/misode/mcmeta/contents/version.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "format": "contents",
+      "sha256": "88bec449ce0f0d2eae011c004bd0f6f0c2487111759bf7773f5231e7257a1f67",
+      "bytes": 426
+    },
+    "recipes": {
+      "api": "repos/misode/mcmeta/contents/data/recipe/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "format": "contents",
+      "sha256": "6b9cd71611420e2c618c96075a25dd1180745e69c9bdad8ab07de39630ff4af5",
+      "bytes": 682197
+    },
+    "item-tags": {
+      "api": "repos/misode/mcmeta/contents/data/tag/item/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "format": "contents",
+      "sha256": "cd6b463583aa7379b340636ffa3ae62b97b2dc723fabb54bfec36a2b9d27e446",
+      "bytes": 67779
+    },
+    "asset-index": {
+      "api": "repos/InventivetalentDev/minecraft-assets/git/trees/9073095a88699785bb1f63f8f86d33322711e4fd?recursive=1",
+      "format": "tree",
+      "sha256": "6d33a1f96fb131a81cde845db6da426134d0ff30a6207b319ae4e7fc5ec89bd4",
+      "bytes": 8220037
+    },
+    "versions": {
+      "api": "repos/misode/mcmeta/contents/versions/data.json?ref=57e8a153dcaf7ae81b31c1f44f13b1dd64094c59",
+      "format": "contents",
+      "sha256": "d632e3e9035dc00fa1eadaa16fc66d18fdadfaade65a319a451d9928b98ed36f",
+      "bytes": 222906
+    }
+  }
+}

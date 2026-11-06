@@ -1,0 +1,250 @@
+{
+  "schema": 1,
+  "target": "26.3",
+  "checkedOn": "2026-11-07",
+  "runtimeReference": "1.20.4",
+  "status": "migration-target-not-runtime-parity",
+  "latestStableInPinnedList": "26.3",
+  "sources": {
+    "summary": "d96c75fec200c4580dd75e033a76341521165461",
+    "assets": "9073095a88699785bb1f63f8f86d33322711e4fd",
+    "releaseList": "57e8a153dcaf7ae81b31c1f44f13b1dd64094c59"
+  },
+  "assetIndex": {
+    "files": 28111,
+    "indexedBytes": 593206240,
+    "categories": {
+      "other": 46,
+      "assets/minecraft/_all.json": 1,
+      "assets/minecraft/_list.json": 1,
+      "assets/minecraft/atlases": 14,
+      "assets/minecraft/blockstates": 1290,
+      "assets/minecraft/equipment": 47,
+      "assets/minecraft/font": 15,
+      "assets/minecraft/gpu_warnlist.json": 1,
+      "assets/minecraft/items": 1660,
+      "assets/minecraft/lang": 146,
+      "assets/minecraft/models": 4197,
+      "assets/minecraft/particles": 117,
+      "assets/minecraft/post_effect": 7,
+      "assets/minecraft/regional_compliancies.json": 1,
+      "assets/minecraft/resourcepacks": 3,
+      "assets/minecraft/shaders": 93,
+      "assets/minecraft/sounds.json": 1,
+      "assets/minecraft/sounds": 5330,
+      "assets/minecraft/texts": 6,
+      "assets/minecraft/textures": 4371,
+      "assets/minecraft/waypoint_style": 4,
+      "data/minecraft/_list.json": 1,
+      "data/minecraft/advancement": 1897,
+      "data/minecraft/banner_pattern": 45,
+      "data/minecraft/block_transformer": 5,
+      "data/minecraft/cat_sound_variant": 4,
+      "data/minecraft/cat_variant": 13,
+      "data/minecraft/chat_type": 9,
+      "data/minecraft/chicken_sound_variant": 4,
+      "data/minecraft/chicken_variant": 5,
+      "data/minecraft/context_float_provider": 9,
+      "data/minecraft/context_int_provider": 33,
+      "data/minecraft/cow_sound_variant": 4,
+      "data/minecraft/cow_variant": 5,
+      "data/minecraft/damage_type": 53,
+      "data/minecraft/datapacks": 145,
+      "data/minecraft/decorated_pot_pattern": 25,
+      "data/minecraft/dialog": 5,
+      "data/minecraft/dimension_type": 6,
+      "data/minecraft/enchantment": 45,
+      "data/minecraft/enchantment_provider": 11,
+      "data/minecraft/frog_variant": 5,
+      "data/minecraft/instrument": 10,
+      "data/minecraft/jukebox_song": 24,
+      "data/minecraft/loot_table": 1500,
+      "data/minecraft/painting_variant": 53,
+      "data/minecraft/pig_sound_variant": 5,
+      "data/minecraft/pig_variant": 5,
+      "data/minecraft/predicate": 8,
+      "data/minecraft/recipe": 2046,
+      "data/minecraft/structure": 1710,
+      "data/minecraft/sulfur_cube_archetype": 14,
+      "data/minecraft/tags": 966,
+      "data/minecraft/test_environment": 3,
+      "data/minecraft/test_instance": 3,
+      "data/minecraft/timeline": 6,
+      "data/minecraft/trade_set": 97,
+      "data/minecraft/trial_spawner": 62,
+      "data/minecraft/trim_material": 13,
+      "data/minecraft/trim_pattern": 20,
+      "data/minecraft/villager_trade": 538,
+      "data/minecraft/wolf_sound_variant": 9,
+      "data/minecraft/wolf_variant": 11,
+      "data/minecraft/world_clock": 4,
+      "data/minecraft/worldgen": 1320,
+      "data/minecraft/zombie_nautilus_variant": 4
+    },
+    "meaning": "Path/size index only; NOT a semantic review or download of every file, and NOT compiled game code."
+  },
+  "recipeCorpus": {
+    "recipes": 2042,
+    "itemTags": 236,
+    "types": {
+      "minecraft:crafting_shaped": 827,
+      "minecraft:crafting_shapeless": 375,
+      "minecraft:stonecutting": 351,
+      "minecraft:smelting": 73,
+      "minecraft:campfire_cooking": 9,
+      "minecraft:smoking": 9,
+      "minecraft:crafting_special_bannerduplicate": 16,
+      "minecraft:crafting_transmute": 33,
+      "minecraft:smithing_trim": 18,
+      "minecraft:crafting_special_bookcloning": 1,
+      "minecraft:brewing": 279,
+      "minecraft:blasting": 25,
+      "minecraft:crafting_decorated_pot": 1,
+      "minecraft:crafting_special_firework_rocket": 1,
+      "minecraft:crafting_special_firework_star": 1,
+      "minecraft:crafting_special_firework_star_fade": 1,
+      "minecraft:crafting_dye": 6,
+      "minecraft:crafting_special_mapextending": 1,
+      "minecraft:smithing_transform": 12,
+      "minecraft:crafting_special_repairitem": 1,
+      "minecraft:crafting_special_shielddecoration": 1,
+      "minecraft:crafting_imbue": 1
+    },
+    "meaning": "All recipe records parsed and counted; NOT all implemented, matched to runtime, or behaviorally tested."
+  },
+  "legacySample": [
+    {
+      "name": "blue_dye",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "bricks",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "fishing_rod",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "gold_ingot_from_nuggets",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "gold_nugget",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "golden_axe",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "golden_hoe",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "golden_pickaxe",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "golden_shovel",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "golden_sword",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "honey_block",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "honey_bottle",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "iron_ingot_from_nuggets",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "iron_nugget",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "lantern",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "lever",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "oak_boat",
+      "referenceOnly": true,
+      "status": "equivalent"
+    },
+    {
+      "name": "observer",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "red_bed",
+      "referenceOnly": false,
+      "status": "unverified",
+      "reason": "Missing item tag: planks"
+    },
+    {
+      "name": "red_dye_from_poppy",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "sandstone",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "spyglass",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "stone_bricks",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "white_wool_from_string",
+      "referenceOnly": false,
+      "status": "equivalent"
+    },
+    {
+      "name": "yellow_dye_from_dandelion",
+      "referenceOnly": false,
+      "status": "equivalent"
+    }
+  ],
+  "boundaries": [
+    "No Minecraft JAR installed or executed.",
+    "No generated reference data added to the browser bundle.",
+    "Old recipe equivalence is not proof of runtime compatibility.",
+    "Missing legacy tags are UNVERIFIED, never assumed equivalent.",
+    "No saves, servers, backend migrations, IDs or runtime version labels changed."
+  ]
+}

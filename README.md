@@ -2,6 +2,10 @@
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
 
+## Cel dalszej migracji: Java 26.3
+
+Przypięto najnowsze stabilne wydanie ze sprawdzonego wykazu (2026-11-07), pobrano korpus 2042 receptur do ignorowanego cache i dodano audyt danych. **To etap przygotowawczy, nie ukończony port 26.3 ani instalacja oryginalnej gry.** Działający silnik nadal ma dotychczasowy zakres zgodności z 1.20.4. [Wyniki, ograniczenia i plan migracji](docs/JAVA-26.3-MIGRATION.md).
+
 ## Wersja 4.30.0 „Narzędzia, łóżka i światło”
 
 - Złote narzędzia: oryginalne receptury i ikony, szybkość 12, trwałość 32; złoty kilof nie wydobywa rud wymagających kamienia/żelaza.
