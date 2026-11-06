@@ -140,8 +140,8 @@ function layout(gx: number, gz: number, x: number, z: number, radius: number, ct
     const [ox, oz] = lots[i];
     const kind: BuildingKind = core[i] ?? (roll < 0.65 ? 'house' : roll < 0.9 ? 'farm' : 'hay');
     const small = kind === 'hay';
-    const w = small ? 2 : kind === 'watchtower' ? 7 : 9;
-    const d = small ? 2 : kind === 'house' && rnd(41 + i * 7) < 0.5 ? 9 : 7;
+    const w = small ? 2 : kind === 'watchtower' ? 7 : kind === 'house' ? (rnd(71 + i * 7) < 0.5 ? 5 : 7) : 9;
+    const d = small ? 2 : kind === 'house' ? (rnd(41 + i * 7) < 0.5 ? 5 : 9) : 7;
     const alongX = rnd(42 + i * 7) < 0.5;
     const face = alongX ? (ox > 0 ? 3 : 1) : (oz > 0 ? 0 : 2);
     const b: VillageBuilding = { kind, x: x + ox, z: z + oz, w, d, face, variant: Math.floor(rnd(60 + i) * 4) };
@@ -467,8 +467,15 @@ function house(v: Village, b: VillageBuilding, set: SetBlock, style: HouseStyle)
   } else {
     // 2.29: łóżko to dwa bloki – w chacie stawiamy stopę przy ścianie i
     // wezgłowie w głąb izby, jak w waniliowej wiosce.
-    set(b.x + 1, floor + 1, b.z + 1, B.BED_S);
-    set(b.x + 1, floor + 1, b.z + 2, B.BED_HEAD_S);
+    // A 5-deep cottage with a side entrance needs the bed along the north
+    // wall; the old north/south pair would block the first doorway cell.
+    if (b.d === 5 && (b.face === 1 || b.face === 3)) {
+      set(b.x + 1, floor + 1, b.z + 1, B.BED_E);
+      set(b.x + 2, floor + 1, b.z + 1, B.BED_HEAD_E);
+    } else {
+      set(b.x + 1, floor + 1, b.z + 1, B.BED_S);
+      set(b.x + 1, floor + 1, b.z + 2, B.BED_HEAD_S);
+    }
 
     if (b.variant % 3 === 0) set(b.x + b.w - 2, floor + 1, b.z + 1, B.FURNACE);
     else if (b.variant % 3 === 1) set(b.x + b.w - 2, floor + 1, b.z + 1, B.CRAFTING);
@@ -493,7 +500,9 @@ function house(v: Village, b: VillageBuilding, set: SetBlock, style: HouseStyle)
 
 /** One shared anchor for both the template and contextual loot lookup. */
 export function villageChestPosition(v: Village, b: VillageBuilding): { x: number; y: number; z: number } | null {
-  if (!['house', 'library', 'smith', 'bakery', 'apothecary', 'watchtower', 'farm'].includes(b.kind)) return null;
+  // Ordinary homes are not identical treasure rooms. Workplaces have themed
+  // storage; farms/watchtowers and most residential variants have no loot chest.
+  if (b.kind === 'house' ? b.variant % 4 !== 0 : !['smith', 'library', 'bakery', 'apothecary'].includes(b.kind)) return null;
   return { x: b.x + b.w - 2, y: (b.y ?? v.y) + 1, z: b.kind === 'smith' ? b.z + 1 : b.z + b.d - 2 };
 }
 export function villageLootKindAt(v: Village, x: number, y: number, z: number): ChestLootKind | null {
@@ -535,9 +544,8 @@ function farm(v: Village, b: VillageBuilding, set: SetBlock) {
       const roll = hash(b.x + x, 5, b.z + z, v.gx * 31 + v.gz);
       set(b.x + x, floor + 1, b.z + z, roll < 0.72 ? B.CROP3 : roll < 0.86 ? B.CROP2 : B.CROP1);
     }
-  const chest = villageChestPosition(v, b)!;
-  set(chest.x, floor, chest.z, B.PLANKS);
-  set(chest.x, chest.y, chest.z, B.LOOT_CHEST);
+  const chest = villageChestPosition(v, b);
+  if (chest) { set(chest.x, floor, chest.z, B.PLANKS); set(chest.x, chest.y, chest.z, B.LOOT_CHEST); }
   // siano w narożniku
   set(b.x + 1, floor + 1, b.z + b.d - 2, B.HAY);
   set(b.x + 2, floor + 1, b.z + b.d - 2, B.HAY);

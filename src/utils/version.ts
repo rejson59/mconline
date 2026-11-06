@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.28.2';
-export const GAME_RELEASE_NAME = 'Bezpieczny ekwipunek i regeneracja';
+export const GAME_VERSION = '4.28.3';
+export const GAME_RELEASE_NAME = 'Pochodnie, miód i wyrzucanie przedmiotów';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.28.3: poprawki rozgrywki', text: 'Pochodnie innych graczy oświetlają teren, żwir i piasek rozbijają się na pochodni, a miód oddaje pustą butelkę. Wyrzucone rzeczy mają 2 s ochrony przed własnym podniesieniem. Mniejsze, zróżnicowane domy i rzadsze skrzynie. Ochrona przed zaznaczaniem tekstu dotykiem.' },
   { title: '4.28.2: ekwipunek i zdrowie', text: 'Dziennik niepotwierdzonego ekwipunku, zapis z kontrolą wersji i ostatni checkpoint przy wyjściu. Regeneracja nie zwalnia już wraz z limitem fizyki na niskim FPS. Bez resetu danych.' },
   { title: '4.28.1: powrót na serwer', text: 'Odświeżenie tej samej karty może wznowić sesję multiplayer bez czekania na minutową blokadę. Sprzątanie przerwanych prób, ochrona przed spóźnionym wylogowaniem i potwierdzane odzyskanie wcześniejszego połączenia. Bez resetowania światów i ekwipunku.' },
   { title: '4.28: światy na koncie', text: 'Automatyczne zapisy jednoosobowe w chmurze, biblioteka konta na wielu urządzeniach i ochrona przed nadpisaniem postępu. Multiplayer tylko przez autoryzowaną bramkę; publiczny survival i miasto zaczynają od nowa. Lokalne światy gości pozostają na urządzeniu.' },

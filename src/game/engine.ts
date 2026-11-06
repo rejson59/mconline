@@ -34,7 +34,7 @@ import {
 } from './brewing';
 import { getAtlas, tileUV, tileUVInset, tileUVRect, AVG_COLOR } from './textures';
 import { autoJumpAhead, stepBody, aabbIntersectsBlock, slimeBounce, type Body } from './physics';
-import { fallPath, isFallingBlock, isPassableForFall } from './gravity';
+import { fallPath, isFallBreaker, isCrushable, isFallingBlock, isPassableForFall } from './gravity';
 import { isFarmland, isHydrated, updateFarmland } from './farmland';
 import { FrameGovernor, drawDistanceChunks, entityTickInterval, lodRange, lodStepFor, profileResScale, sortChunkOffsets, type PerfProfile } from './perf';
 import { LOD_TILE, buildLodTile, lodRing } from './lod';
@@ -155,6 +155,8 @@ interface RemoteAvatar {
   pitch: number;
   held: number;
   heldId: number;
+  offhand: number;
+  alive: boolean;
   name: string;
   walk: number;
   /** 2.30: wygładzona amplituda kroku (nogi nie przeskakują w miejscu). */
@@ -425,6 +427,7 @@ interface ArrowEntity {
 interface DropEntity {
   shared?: SharedDrop;
   claimAt?: number;
+  pickupDelay?: number;
   simulated?: number;
   id: number;
   count: number;
@@ -806,6 +809,7 @@ export class Game {
   /** Płynne przejście pogody (0 = jasno, 1 = pełny deszcz). */
   private stormBlend = 0;
   /** 2.8.1: światło trzymanego przedmiotu (pochodnia, latarnia…). */
+  private remoteLights = Array.from({ length: 4 }, () => new THREE.Vector4(0, -1000, 0, 0));
   private heldLight: HeldLightState = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
   /** 2.10: sesja multiplayer (null = gra jednoosobowa). */
   net: NetLike | null = null;
@@ -1106,7 +1110,7 @@ export class Game {
     ];
     // 2.8: warstwa przezroczysta (woda, szkło, portal) dostaje delikatną falę.
     this.materials.forEach((m, i) =>
-      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, fire: i === 1, time: this.uTime, held: this.heldLight, sun: this.sunState, brightness: this.brightness })
+      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, fire: i === 1, time: this.uTime, held: this.heldLight, remoteLights: this.remoteLights, sun: this.sunState, brightness: this.brightness })
     );
     this.dropMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.4, side: THREE.DoubleSide });
     // 2.18: pęknięcia bloku wprost z paczki (10 faz, jak w grze). Gdyby
@@ -1727,6 +1731,8 @@ export class Game {
         avatar.yaw = m.yaw;
         avatar.pitch = m.pitch;
         avatar.held = m.held ?? 0;
+        avatar.offhand = m.offhand ?? 0;
+        avatar.alive = m.alive !== false;
         avatar.seen = performance.now();
         if (m.skin && m.skin !== avatar.skinId) this.setRemoteSkin(m.from, m.skin);
         break;
@@ -1832,7 +1838,7 @@ export class Game {
         d: this.isInNether ? 'n' : 'o',
         x: p.x, y: p.y, z: p.z,
         yaw: this.yaw, pitch: this.pitch,
-        held: this.selectedStack()?.id ?? 0,
+        held: this.inventory.slots[this.selected]?.id ?? 0, offhand: this.inventory.offhand?.id ?? 0,
         armor: this.armor.map(s => s?.id ?? 0),
         mode: this.mode, alive: this.ui !== 'dead' && this.health > 0,
         name: net.name,
@@ -2027,7 +2033,7 @@ export class Game {
       group, head: neck, armL, legL, legR, hand,
       armor: new ArmorVisual({ head: neck, body, armL, armR, legL, legR }),
       track: new RemoteTrack(),
-      yaw: 0, pitch: 0, held: 0, heldId: -1,
+      yaw: 0, pitch: 0, held: 0, heldId: -1, offhand: 0, alive: true,
       name, walk: 0, swing: 0, headPitch: 0, seen: performance.now(), skinId: skin.id,
     };
   }
@@ -2048,6 +2054,8 @@ export class Game {
     fresh.yaw = old.yaw;
     fresh.pitch = old.pitch;
     fresh.held = old.held;
+    fresh.offhand = old.offhand;
+    fresh.alive = old.alive;
     fresh.seen = old.seen;
     fresh.walk = old.walk;
     fresh.swing = old.swing;
@@ -2923,7 +2931,7 @@ export class Game {
     const held = this.inventory.cursor;
     if (!held || this.inventory.returnCursor()) return;
     this.inventory.cursor = null;
-    this.spawnDrop(held.id, held.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, held.dur, undefined, undefined, undefined, held.ench, held.name);
+    this.discardStack(held, held.count);
     this.message('Brak miejsca – przedmiot z kursora upadł na ziemię.');
   }
 
@@ -3205,7 +3213,7 @@ export class Game {
   dropInventoryCursor(right = false) {
     const s = this.inventory.cursor; if (!s) return;
     const count = right ? 1 : s.count;
-    this.spawnDrop(s.id, count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, s.dur, undefined, undefined, undefined, s.ench, s.name);
+    this.discardStack(s, count);
     s.count -= count; if (!s.count) this.inventory.cursor = null;
     this.saveProfileNow(false);
   }
@@ -3240,7 +3248,7 @@ export class Game {
       const stack = source.get();
       if (stack) {
         const n = action.all ? stack.count : 1;
-        this.spawnDrop(stack.id, n, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, stack.dur, undefined, undefined, undefined, stack.ench, stack.name);
+        this.discardStack(stack, n);
         stack.count -= n;
         if (!stack.count) source.set(null);
       }
@@ -3368,7 +3376,7 @@ export class Game {
   /** Cursor → inventory, or onto the ground when everything else is full. */
   private giveOrDrop(stack: Stack): boolean {
     if (this.inventory.add(stack.id, stack.count, stack.dur, stack.ench, stack.name)) return true;
-    this.spawnDrop(stack.id, stack.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, stack.dur, undefined, undefined, undefined, stack.ench, stack.name);
+    this.spawnDrop(stack.id, stack.count, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z, stack.dur, undefined, undefined, undefined, stack.ench, stack.name, undefined, 2);
     this.message('Brak miejsca – przedmiot upadł na ziemię.');
     return true;
   }
@@ -3467,7 +3475,7 @@ export class Game {
     const s = this.brewings.get(key);
     if (!s) return;
     for (const stack of [...s.bottles, s.ingredient, s.fuel]) {
-      if (stack) this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.6, z + 0.5, stack.dur, undefined, undefined, undefined, stack.ench, stack.name);
+      if (stack) this.spawnDrop(stack.id, stack.count, x + 0.5, y + 0.6, z + 0.5, stack.dur, undefined, undefined, undefined, stack.ench, stack.name, undefined, 2);
     }
     this.brewings.delete(key);
   }
@@ -3963,6 +3971,11 @@ export class Game {
     Sfx.playEat();
     this.unlock('food');
     this.consumeSelected();
+    if (s.id === I.HONEY_BOTTLE && this.mode === 'survival') {
+      if (!this.selectedStack()) this.setSelectedStack({ id: I.BOTTLE, count: 1 });
+      else if (!this.inventory.add(I.BOTTLE, 1)) this.spawnDrop(I.BOTTLE, 1, this.body.pos.x, this.body.pos.y + 1, this.body.pos.z);
+    }
+    this.emitHud();
   }
 
   private tryTill(t: NonNullable<ReturnType<World['raycast']>>): boolean {
@@ -4442,18 +4455,18 @@ export class Game {
     return t;
   }
 
-  spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2, ench?: Record<string, number>, name?: string, shared?: SharedDrop) {
+  spawnDrop(id: number, count: number, x: number, y: number, z: number, dur?: number, vx = (Math.random() - 0.5) * 2.2, vy = 2.4 + Math.random() * 1.5, vz = (Math.random() - 0.5) * 2.2, ench?: Record<string, number>, name?: string, shared?: SharedDrop, pickupDelay = 0) {
     if (count <= 0) return;
     let publish = false;
     if (!shared && this.net?.publishDrop) {
       const limit = stackLimit(id);
       if (count > limit) {
-        for (let n = count; n > 0; n -= limit) this.spawnDrop(id, Math.min(n, limit), x, y, z, dur, vx, vy, vz, ench, name);
+        for (let n = count; n > 0; n -= limit) this.spawnDrop(id, Math.min(n, limit), x, y, z, dur, vx, vy, vz, ench, name, undefined, pickupDelay);
         return;
       }
       const created = Date.now();
       shared = cleanDrop({ uid: `${this.net.id}:${crypto.randomUUID()}`, owner: this.net.id, d: this.isInNether ? 'n' : 'o',
-        stack: { id, count, dur, ench, name }, pos: [x, y, z], vel: [vx, vy, vz], created, expires: created + DROP_LIFETIME }) ?? undefined;
+        stack: { id, count, dur, ench, name }, pos: [x, y, z], vel: [vx, vy, vz], ...(pickupDelay ? { pickupAfter: created + pickupDelay * 1000 } : {}), created, expires: created + DROP_LIFETIME }) ?? undefined;
       if (!shared) return;
       publish = true;
     }
@@ -4482,7 +4495,7 @@ export class Game {
     }
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
-    this.drops.push({ id, count, dur, ench, name, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0, ...(shared ? { shared } : {}) });
+    this.drops.push({ id, count, dur, ench, name, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0, pickupDelay, ...(shared ? { shared } : {}) });
     if (publish && shared) {
       const net = this.net, drop = shared;
       // Inventory/death mutations finish in this JS turn. Publish together
@@ -5186,7 +5199,7 @@ export class Game {
   }
   private combatPosition(): NetPos {
     return { d: this.isInNether ? 'n' : 'o', x: this.body.pos.x, y: this.body.pos.y, z: this.body.pos.z,
-      yaw: this.yaw, pitch: this.pitch, held: this.selectedStack()?.id ?? 0,
+      yaw: this.yaw, pitch: this.pitch, held: this.inventory.slots[this.selected]?.id ?? 0, offhand: this.inventory.offhand?.id ?? 0,
       armor: this.armor.map(s => s?.id ?? 0),
       name: this.netName, hue: this.netHue, mode: this.mode, alive: this.ui !== 'dead' && this.health > 0 };
   }
@@ -6130,20 +6143,24 @@ export class Game {
     }
   }
 
+  /** All explicit discards travel forward, including drops from inventory UI. */
+  private discardStack(s: Stack, count: number) {
+    const e = this.eyePos(), d = this.lookDir();
+    this.spawnDrop(s.id, count, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6,
+      s.dur, d.x * 4, 2, d.z * 4, s.ench, s.name, undefined, 2);
+  }
+
   /** 2.5: `whole` = wyrzuca cały stos (Ctrl+Q), domyślnie jeden przedmiot. */
   dropItem(whole = false) {
     const s = this.selectedStack();
     if (!s) return;
-    const e = this.eyePos();
-    const d = this.lookDir();
-    const dur = s.dur;
     const n = whole ? s.count : 1;
     if (this.mode === 'survival') {
-      this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y + d.y * 0.4, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
+      this.discardStack(s, n);
       s.count -= n;
       if (s.count <= 0) this.setSelectedStack(null);
     } else {
-      this.spawnDrop(s.id, n, e.x + d.x * 0.6, e.y, e.z + d.z * 0.6, dur, d.x * 4, 2, d.z * 4, s.ench, s.name);
+      this.discardStack(s, n);
       this.inventory.slots[this.selected] = null;
     }
     this.emitHud();
@@ -6173,12 +6190,14 @@ export class Game {
     }
     if (!ids.length) return 0;
     const path = fallPath(this.world, x, y, z);
-    if (path.to === y) return 0; // ma podparcie
+    const shatter = isFallBreaker(this.world.getBlock(x, path.to - 1, z));
+    if (path.to === y && !shatter) return 0; // ma podparcie
     for (const [cx, cy, cz] of path.crush) this.crushBlock(cx, cy, cz);
     for (let i = 0; i < ids.length; i++) this.world.setBlock(x, y + i, z, B.AIR);
     for (let i = 0; i < ids.length; i++) {
-      const target = path.to + i;
+      const target = path.to + (shatter ? 0 : i);
       if (animate && this.falling.length < 64) this.spawnFalling(x, y + i, z, ids[i], target);
+      else if (shatter) this.spawnDrop(ids[i], 1, x + 0.5, target + 0.1, z + 0.5);
       else this.world.setBlock(x, target, z, ids[i]);
     }
     return ids.length;
@@ -6225,10 +6244,32 @@ export class Game {
     for (const f of this.falling) {
       f.vel = Math.min(30, f.vel + 26 * dt);
       const ny = f.pos.y - f.vel * dt;
+      // Recheck the swept path: a torch can be placed AFTER the column began
+      // falling. Its destination cannot be frozen at the instant of mining.
+      let shattered = false;
+      for (let y = Math.floor(f.pos.y); y >= Math.max(0, Math.floor(ny) - 1); y--) {
+        if (isFallBreaker(this.world.getBlock(f.x, y, f.z)) && ny <= y + 1) {
+          this.scene.remove(f.mesh);
+          this.spawnDrop(f.id, 1, f.x + 0.5, y + 1.1, f.z + 0.5);
+          shattered = true; break;
+        }
+        const block = this.world.getBlock(f.x, y, f.z);
+        if (ny <= y + 1 && !isPassableForFall(block)) {
+          if (isCrushable(block)) this.crushBlock(f.x, y, f.z);
+          else { f.landY = y + 1; break; }
+        }
+      }
+      if (shattered) continue;
       if (ny <= f.landY) {
-        this.scene.remove(f.mesh);
-        this.landFalling(f);
-        continue;
+        // The original support (including a torch) may have been removed.
+        // Recompute only near landing, rather than scanning to the ground
+        // for every airborne entity on every frame.
+        f.landY = fallPath(this.world, f.x, Math.max(0, Math.ceil(f.pos.y)), f.z).to;
+        if (ny <= f.landY) {
+          this.scene.remove(f.mesh);
+          this.landFalling(f);
+          continue;
+        }
       }
       f.pos.y = ny;
       f.mesh.position.set(f.pos.x, f.pos.y + 0.5, f.pos.z);
@@ -6243,6 +6284,10 @@ export class Game {
     // Kratka docelowa mogła zostać zajęta, gdy blok leciał (np. gracz coś
     // postawił) – wtedy blok osypuje się na pierwszą wolną kratkę wyżej.
     let target = f.landY;
+    if (isFallBreaker(this.world.getBlock(x, target - 1, z))) {
+      this.spawnDrop(id, 1, x + 0.5, target + 0.1, z + 0.5);
+      return;
+    }
     while (target < CH - 1 && !isPassableForFall(this.world.getBlock(x, target, z))) target++;
     this.world.setBlock(x, target, z, id);
     Sfx.playPlace(BLOCKS[id].sound);
@@ -7460,6 +7505,15 @@ export class Game {
     // Pozycja: oczy gracza, lekko przed nim – blask pada na to, na co patrzy.
     const cp = this.camera.position;
     this.heldLight.pos.set(cp.x, cp.y, cp.z);
+    const sources = [...this.remotes.values()]
+      .filter(a => a.alive !== false && a.group.visible && performance.now() - a.seen <= 9000 &&
+        (HELD_LIGHT_ITEMS.has(a.held) || HELD_LIGHT_ITEMS.has(a.offhand)))
+      .sort((a, b) => a.group.position.distanceToSquared(cp) - b.group.position.distanceToSquared(cp));
+    for (let i = 0; i < this.remoteLights.length; i++) {
+      const a = sources[i], light = this.remoteLights[i];
+      if (a) light.set(a.group.position.x, a.group.position.y + 1.45, a.group.position.z, HELD_POWER);
+      else light.set(0, -1000, 0, 0);
+    }
     const unset = this.heldLight.strength === 0;
     for (const m of this.materials) {
       const u = m.userData.uHeldStrength as { value: number } | undefined;
@@ -8056,7 +8110,10 @@ export class Game {
         }
       }
       const dist = Math.hypot(d.pos.x - p.x, d.pos.z - p.z, d.pos.y - (p.y + 0.9));
-      const reachable = d.age > 0.4 && dist < 4.5 && this.ui !== 'dead' &&
+      const ownerReady = d.shared
+        ? d.shared.owner !== this.net?.id || Date.now() >= (d.shared.pickupAfter ?? 0)
+        : d.age >= (d.pickupDelay ?? 0);
+      const reachable = ownerReady && d.age > 0.4 && dist < 2 && this.ui !== 'dead' &&
         this.clearShot(p.x, p.y + 0.9, p.z, (d.pos.x - p.x) / (dist || 1),
           (d.pos.y - p.y - 0.9) / (dist || 1), (d.pos.z - p.z) / (dist || 1), dist);
       if (!d.shared && reachable && d.age > 0.55 && dist > 0.2) {
@@ -8064,7 +8121,7 @@ export class Game {
         d.vel.z += ((p.z - d.pos.z) / dist) * dt * 14;
         d.vel.y += ((p.y + 0.6 - d.pos.y) / dist) * dt * 10;
       }
-      if (d.shared && reachable && dist < 2.5 &&
+      if (d.shared && reachable && dist < 1.5 &&
           this.inventory.canAdd(d.id, d.count, d.dur, d.ench, d.name) &&
           Date.now() - (d.claimAt ?? 0) > 1500) {
         d.claimAt = Date.now();
@@ -8073,7 +8130,7 @@ export class Game {
         // array while it is traversing the drops.
         queueMicrotask(() => { if (this.net === net) net?.claimDrop?.(uid, dimension); });
       }
-      if (!d.shared && reachable && dist < 2.5) {
+      if (!d.shared && reachable && dist < 1.5) {
         if (this.inventory.add(d.id, d.count, d.dur, d.ench, d.name)) {
           Sfx.playPop();
           this.notePickup(d.id);
