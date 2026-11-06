@@ -161,11 +161,11 @@ export function applySkinUv(geometry: THREE.BoxGeometry, rect: SkinRect, texW: n
  * Pudełko jest o milimetr większe, a przezroczyste piksele znikają przez
  * `alphaTest` – dokładnie tak, jak robi to gra.
  */
-export function skinnedHat(size: [number, number, number], tex: THREE.Texture): THREE.Mesh {
+export function skinnedHat(size: [number, number, number], tex: THREE.Texture, lit=false): THREE.Mesh {
   const geometry = new THREE.BoxGeometry(size[0] + 0.012, size[1] + 0.012, size[2] + 0.012);
   const img = tex.image as { width: number; height: number };
   applySkinUv(geometry, { u: 32, v: 0, w: 8, h: 8, d: 8 }, img.width, img.height);
-  const material = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5, depthWrite: false });
+  const material = new (lit?THREE.MeshLambertMaterial:THREE.MeshBasicMaterial)({ map: tex, transparent: true, alphaTest: 0.5, depthWrite: false });
   return new THREE.Mesh(geometry, material);
 }
 
@@ -178,14 +178,15 @@ export function skinnedBox(
   size: [number, number, number],
   part: keyof typeof WIDE_LAYOUT,
   tex: THREE.Texture,
-  slim = false
+  slim = false,
+  lit = false
 ): THREE.Mesh {
   const [w, h, d] = size;
   const geometry = new THREE.BoxGeometry(w, h, d);
   const img = tex.image as { width: number; height: number };
   const layout = slim ? SLIM_LAYOUT : WIDE_LAYOUT;
   applySkinUv(geometry, layout[part], img.width, img.height);
-  const material = new THREE.MeshBasicMaterial({ map: tex });
+  const material = new (lit?THREE.MeshLambertMaterial:THREE.MeshBasicMaterial)({ map: tex });
   return new THREE.Mesh(geometry, material);
 }
 

@@ -119,7 +119,7 @@ export function patchChunkMaterial(
   mat.userData.uHeldStrength = uHeldStrength;
   mat.userData.uSun = uSun;
   mat.color.setRGB(1, 1, 1);
-  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-8-water' : fire ? 'blockcraft-light-9-fire' : 'blockcraft-light-8');
+  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-10-water' : fire ? 'blockcraft-light-9-fire' : 'blockcraft-light-8');
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uBrightness = uBrightness;
     shader.uniforms.uDay = uDay;
@@ -140,7 +140,7 @@ export function patchChunkMaterial(
         '#include <begin_vertex>',
         '#include <begin_vertex>\n\tvBlock = aBlock;\n\tvFace = aFace;' +
           (water
-            ? '\n\tif (aWave > 0.5) {\n\t\ttransformed.y += sin(uTime * 1.7 + transformed.x * 0.8 + transformed.z * 0.65) * 0.045;\n\t}'
+            ? '\n\tif (aWave > 0.5) {\n\t\tvec2 wp = (modelMatrix * vec4(transformed, 1.0)).xz;\n\t\ttransformed.y += sin(uTime * 1.3 + wp.x * 0.55 + wp.y * 0.38) * 0.018 + sin(uTime * 1.9 - wp.x * 0.31 + wp.y * 0.63) * 0.009;\n\t}'
             : '') +
           '\n\tvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;'
       );
@@ -220,5 +220,12 @@ vec3 faceNormal(float f) {
 		diffuseColor.rgb *= lightColor;
 	}`
       );
+    if(water)shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>', `
+      float facing=abs(dot(normalize(cameraPosition-vWorldPos),vec3(0.0,1.0,0.0)));
+      float fresnel=pow(1.0-clamp(facing,0.0,1.0),5.0);
+      vec3 reflectedSky=mix(vec3(0.025,0.04,0.075),vec3(0.42,0.65,0.85),clamp(uDay,0.0,1.0));
+      outgoingLight=mix(outgoingLight,reflectedSky,fresnel*0.38);
+      diffuseColor.a=clamp(diffuseColor.a+fresnel*0.18,0.0,0.94);
+      #include <opaque_fragment>`);
   };
 }

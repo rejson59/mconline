@@ -129,3 +129,13 @@ Embedded data: src/game/art/menuPanoramas.generated.ts; no runtime downloads.
 The default Java 1.20.4 scene remains in javaGui.generated.ts. These assets remain
 Mojang/Microsoft property and are NOT covered by this project's MIT license.
 Multiple background choices are a browser extension, not a vanilla 1.20.4 feature.
+
+4.30 native tools, bed and selected recipes:
+42 pinned Java Edition 1.20.4 files: 16 item PNGs, red bed entity PNG,
+and 25 recipe JSONs (oak boat is reference-only, not a registered feature).
+Mirror: InventivetalentDev/minecraft-assets, commit
+90d256dfee7b6fd8014e1bc3b107e64a530c5f9b.
+SHA-256/byte manifest: .harness/fixtures/java-refinements-1.20.4/manifest.json
+Embedded data: src/game/art/javaRefinements.generated.ts, javaRecipes.generated.ts.
+Reproduction: scripts/sync-java-refinements.py; no runtime downloads.
+Original artwork/data remain Mojang/Microsoft property and are NOT MIT.

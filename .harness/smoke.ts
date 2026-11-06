@@ -2392,13 +2392,13 @@ section('items: nether economy (1.9)');
   const invC = new Inventory();
   invC.grid[0] = { id: B.OBSIDIAN, count: 1 };
   invC.grid[1] = { id: I.GHAST_TEAR, count: 1 };
-  eq('obsidian + ghast tear craft crying obsidian', invC.gridMatch(false)?.out.id, B.CRYING_OBSIDIAN);
+  eq('invented crying obsidian recipe is rejected', invC.gridMatch(false), null);
 
   // brodawka Netheru farbuje wełnę na czerwono
   const invW = new Inventory();
   invW.grid[0] = { id: B.WOOL_WHITE, count: 1 };
   invW.grid[1] = { id: I.NETHER_WART, count: 1 };
-  eq('nether wart dyes wool red', invW.gridMatch(false)?.out.id, B.WOOL_RED);
+  eq('nether wart is not red dye', invW.gridMatch(false), null);
 
   // netherrack wytapia się na netherową cegłę (przedmiot), a ta składa się w blok
   eq('netherrack smelts into the nether brick item', smeltResult(B.NETHERRACK), I.NETHER_BRICK_ITEM);
@@ -2582,17 +2582,17 @@ section('2.3: fishing tables and timing');
   eq('a diamond sword hits for 7 like in vanilla', attackDamage(I.DIAMOND_SWORD, false), 7);
   // receptury 2.3
   const rod = new Inventory();
-  for (const i of [0, 1, 2]) rod.grid[i] = { id: I.STICK, count: 1 };
-  rod.grid[4] = { id: I.STRING, count: 1 };
+  for (const i of [2, 4, 6]) rod.grid[i] = { id: I.STICK, count: 1 };
+  rod.grid[5] = { id: I.STRING, count: 1 };
   rod.grid[8] = { id: I.STRING, count: 1 };
   eq('three sticks and two strings make a rod', rod.gridMatch(true)?.out.id, I.FISHING_ROD);
   const spy = new Inventory();
-  for (const [i, id] of [[1, B.GLASS], [3, B.GLASS], [5, B.GLASS], [7, B.GLASS], [4, I.GOLD]] as [number, number][]) spy.grid[i] = { id, count: 1 };
-  check('four glass and one ingot are consumed', spy.gridMatch(true) !== null);
-  eq('glass and gold make a spyglass', spy.gridMatch(true)?.out.id, I.SPYGLASS);
+  for (const [i, id] of [[1,I.AMETHYST],[4,I.COPPER],[7,I.COPPER]] as [number, number][]) spy.grid[i] = { id, count: 1 };
+  check('amethyst and two copper ingots form a native spyglass', spy.gridMatch(true) !== null);
+  eq('native copper and amethyst make a spyglass', spy.gridMatch(true)?.out.id, I.SPYGLASS);
   const totem = new Inventory();
   for (const [i, id] of [[1, I.EMERALD], [3, I.EMERALD], [5, I.EMERALD], [7, I.EMERALD], [4, I.GOLD]] as [number, number][]) totem.grid[i] = { id, count: 1 };
-  eq('emeralds and gold make a totem', totem.gridMatch(true)?.out.id, I.TOTEM);
+  eq('totems have no invented crafting recipe', totem.gridMatch(true), null);
   eq('the rod recipe needs a workbench', RECIPES.find((r) => r.out.id === I.FISHING_ROD)?.table, true);
   const small = new Inventory();
   small.grid[0] = { id: B.GLASS, count: 1 };
@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.29.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Wspólne moby i skrzynie', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.30.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Narzędzia, łóżka i światło', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -4654,11 +4654,9 @@ section('2.16: nowe przepisy rzemieślnicze');
     [B.QUARTZ_STAIRS_N, 'kwarcowe schody'],
     [B.COBBLE_SLAB, 'płyta brukowa'], [B.BRICK_SLAB, 'ceglana płyta'],
     [B.SANDSTONE_SLAB, 'piaskowcowa płyta'], [B.NETHER_BRICK_SLAB, 'netherowa płyta'],
-    [B.HAY, 'snop siana'], [B.LANTERN, 'latarnia'], [B.BELL, 'dzwon'],
+    [B.HAY, 'snop siana'], [B.LANTERN, 'latarnia'],
     [B.EMERALD_BLOCK, 'blok szmaragdu'], [B.HONEY_BLOCK, 'blok miodu'],
-    [B.CONCRETE_BLUE, 'niebieski beton'],
-    [B.CONCRETE_GREEN, 'zielony beton'], [B.CONCRETE_YELLOW, 'żółty beton'],
-    [B.CONCRETE_BLACK, 'czarny beton'], [B.MUD, 'błoto'],
+    [I.GOLD_PICK,'złoty kilof'], [I.GOLD_AXE,'złota siekiera'], [I.GOLD_HOE,'złota motyka'],
   ];
   const missing = wanted.filter(([id]) => !out(id)).map(([, name]) => name);
   eq('wszystkie nowe przepisy istnieją', missing.length, 0);
@@ -4671,8 +4669,8 @@ section('2.16: nowe przepisy rzemieślnicze');
   eq('9 pszenicy → snop', out(B.HAY)?.inputs.find((i) => i.id === I.WHEAT)?.count, 9);
   eq('4 nici → wełna', RECIPES.find((r) => r.out.id === B.WOOL_WHITE && r.inputs.some((i) => i.id === I.STRING))?.inputs[0].count, 4);
   eq('4 butelki miodu → blok miodu', out(B.HONEY_BLOCK)?.out.count, 1);
-  check('latarnia jest bezpostaciowa', out(B.LANTERN)?.pattern == null);
-  check('dzwon wymaga stołu', out(B.BELL)?.table === true);
+  check('native lantern has eight nuggets around a torch',out(B.LANTERN)?.inputs.some(s=>s.id===I.IRON_NUGGET&&s.count===8)&&!!out(B.LANTERN)?.pattern);
+  check('bell is not craftable in Java', !out(B.BELL));
 
   // Przepis naprawdę działa w siatce 3×3.
   const craft = (recipe: (typeof RECIPES)[number]) => {

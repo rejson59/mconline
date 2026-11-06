@@ -1,6 +1,16 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.29.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.30.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.30.0 „Narzędzia, łóżka i światło”
+
+- Złote narzędzia: oryginalne receptury i ikony, szybkość 12, trwałość 32; złoty kilof nie wydobywa rud wymagających kamienia/żelaza.
+- Łóżko znika w całości i daje jeden przedmiot; model ekwipunku obejmuje obie połówki oraz nogi.
+- Chmury integrują prędkość wiatru, zamiast przeskakiwać przy zmianie pogody. Woda ma ciągłe fale na granicach chunków i subtelne odbicie zależne od kąta patrzenia.
+- Skórki graczy reagują na światło; pochodnie oświetlają również awatary. Przedmioty mają grubość, a ikony małych bloków zachowują ich kształt.
+- Korekta wybranych receptur według danych Java 1.20.4 i usunięcie zmyślonych skrótów. **Nie oznacza to kompletnego katalogu receptur Java.**
+- **Łódka z pełną funkcjonalnością pozostaje otwarta i nie jest oferowana jako gotowa.** [Status wszystkich 9 zgłoszeń i ograniczenia](docs/REFINEMENTS-4.30.md).
+- Bez resetu zapisów i bez powtarzania wdrożonych poprawek 4.29.0.
 
 ## Wersja 4.29.0 „Wspólne moby i skrzynie”
 

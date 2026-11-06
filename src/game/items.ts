@@ -1,6 +1,6 @@
 import { destroyProgress, efficiencyBonus, MINING_TICK, type MiningEnvironment } from './mining';
 import { railBase } from './rails';
-import { B, BLOCKS, RENDER, isFurnace, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase, buildingItem, isSlabDouble } from './blocks';
+import { B, BLOCKS, RENDER, isFurnace, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase, buildingItem, isSlabDouble, isBed } from './blocks';
 import type { Stack } from './inventory';
 
 /** Item ids sit above block ids so a stack can hold either. */
@@ -115,6 +115,9 @@ export const I = {
   POTION_THICK: 357,
   // Append-only, above every existing block and item ID.
   CHARCOAL: 494, RAW_IRON: 495, RAW_GOLD: 496,
+  GOLD_PICK:600, GOLD_AXE:601, GOLD_SHOVEL:602, GOLD_SWORD:603, GOLD_HOE:604,
+  IRON_NUGGET:605, GOLD_NUGGET:606, COPPER:607, AMETHYST:608, BRICK_ITEM:609, CLAY_BALL:610,
+  RED_DYE:611, YELLOW_DYE:612, GREEN_DYE:613, BLUE_DYE:614, BLACK_DYE:615,
 } as const;
 
 export type ToolKind = 'pick' | 'axe' | 'shovel' | 'sword' | 'hoe' | 'shears' | 'igniter' | 'bow' | 'shield' | 'rod' | 'spyglass';
@@ -130,6 +133,8 @@ export interface ItemDef {
   kind: 'material' | 'tool' | 'food' | 'bucket' | 'armor' | 'potion';
   tool?: ToolKind;
   tier?: 1 | 2 | 3 | 4;
+  material?: 'gold';
+  miningSpeed?: number;
   durability?: number;
   hunger?: number;
   /** Saturation modifier: nutrition × modifier × 2. */
@@ -314,6 +319,14 @@ ARMOR_TIERS.forEach((tier, ti) => {
     });
   });
 });
+for(const [id,name,alias,kind] of [
+  [I.GOLD_PICK,'Złoty kilof','golden_pickaxe','pick'],[I.GOLD_AXE,'Złota siekiera','golden_axe','axe'],
+  [I.GOLD_SHOVEL,'Złota łopata','golden_shovel','shovel'],[I.GOLD_SWORD,'Złoty miecz','golden_sword','sword'],[I.GOLD_HOE,'Złota motyka','golden_hoe','hoe'],
+] as const) ITEM_LIST.push({...tool(id,name,[alias,name.toLocaleLowerCase('pl').replace(/ /g,'_')],kind,1,'#f6d34a'),material:'gold',miningSpeed:12,durability:32});
+for(const [id,name,alias] of [
+  [I.IRON_NUGGET,'Bryłka żelaza','iron_nugget'],[I.GOLD_NUGGET,'Bryłka złota','gold_nugget'],[I.COPPER,'Sztabka miedzi','copper_ingot'],[I.AMETHYST,'Odłamek ametystu','amethyst_shard'],
+  [I.BRICK_ITEM,'Cegła','brick'],[I.CLAY_BALL,'Kulka gliny','clay_ball'],[I.RED_DYE,'Czerwony barwnik','red_dye'],[I.YELLOW_DYE,'Żółty barwnik','yellow_dye'],[I.GREEN_DYE,'Zielony barwnik','green_dye'],[I.BLUE_DYE,'Niebieski barwnik','blue_dye'],[I.BLACK_DYE,'Czarny barwnik','black_dye'],
+] as const) ITEM_LIST.push({id,name,keys:[alias,name.toLocaleLowerCase('pl').replace(/ /g,'_')],kind:'material',color:'#cfb389'});
 ITEM_LIST.push(...armorItems);
 
 export const ITEMS: (ItemDef | undefined)[] = [];
@@ -483,12 +496,12 @@ export function toolMiningSpeed(blockId: number, toolId: number): number {
   const tool = ITEMS[toolId];
   const material = materialBlock(blockId);
   if (tool?.tool === 'shears') return LEAF_BLOCKS.has(blockId) ? 15 : WOOL_BLOCKS.has(blockId) ? 5 : 1;
-  if (tool?.tool === 'sword') return SWORD_BLOCKS.has(blockId) ? 1.5 : 1;
+  if (tool?.tool === 'sword') return (SWORD_BLOCKS.has(blockId)||WOOL_BLOCKS.has(blockId)) ? 1.5 : 1;
   const matches = tool?.tool === 'pick' ? PICK_BLOCKS.has(material)
-    : tool?.tool === 'axe' ? AXE_BLOCKS.has(material) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || isChestBlock(blockId)
+    : tool?.tool === 'axe' ? AXE_BLOCKS.has(material) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || isChestBlock(blockId) || isBed(blockId)
     : tool?.tool === 'shovel' ? SHOVEL_BLOCKS.has(blockId)
     : tool?.tool === 'hoe' ? HOE_BLOCKS.has(blockId) : false;
-  return matches ? TIER_SPEED[tool?.tier ?? 1] ?? 1 : 1;
+  return matches ? tool?.miningSpeed ?? TIER_SPEED[tool?.tier ?? 1] ?? 1 : 1;
 }
 export function miningDamage(blockId: number, toolId: number, eff = 0, environment: MiningEnvironment = {}): number {
   const def = BLOCKS[blockId];
@@ -588,6 +601,7 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
   if (blockId === B.GLOWSTONE) return [{ id: I.GLOWSTONE_DUST, count: Math.min(4, 2 + Math.floor(Math.random() * 3) + uniformDropBonus(fortune)) }];
   if (blockId === B.SLIME_BLOCK) return [{ id: B.SLIME_BLOCK, count: 1 }];
   if (blockId === B.HONEY_BLOCK) return [{ id: B.HONEY_BLOCK, count: 1 }];
+  if (blockId === B.CLAY && !opts.silk) return [{id:I.CLAY_BALL,count:4}];
   if (blockId === B.HONEYCOMB_BLOCK) return [{ id: B.HONEYCOMB_BLOCK, count: 1 }];
   if (blockId === B.IRON_ORE || blockId === B.GOLD_ORE) return [{ id: blockId === B.IRON_ORE ? I.RAW_IRON : I.RAW_GOLD, count: oreDropMultiplier(fortune) }];
   // płyty: górna dropuje dolną
@@ -630,6 +644,8 @@ export function blockDrops(blockId: number, toolId: number, opts: DropOpts = {})
 
 export function smeltResult(id: number): number | null {
   switch (id) {
+    case I.CLAY_BALL: return I.BRICK_ITEM;
+    case B.CACTUS: return I.GREEN_DYE;
     case B.IRON_ORE:
     case I.RAW_IRON:
       return I.IRON;
@@ -681,7 +697,7 @@ export function fuelSeconds(id: number): number {
   if (id === B.WOOL_WHITE || id === B.WOOL_RED || id === B.WOOL_BLUE || id === B.WOOL_GREEN || id === B.WOOL_YELLOW || id === B.WOOL_BLACK) return 5;
   if (id >= B.WOOL_ORANGE && id <= B.WOOL_BROWN) return 5;
   const it = ITEMS[id];
-  if (it?.tool && it.tier === 1) return 10;
+  if (it?.tool && it.tier === 1 && it.material !== 'gold') return 10;
   return 0;
 }
 

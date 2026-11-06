@@ -1,7 +1,9 @@
+import { drawBedIcon } from './bedItem';
+import { itemBox, itemCrop } from './itemShape';
 import { applyJavaFurnaceTextures } from './facingArt';
 import { buildingFaces, buildingUV } from './buildingShapes';
 import { CHEST_BODY, CHEST_LID, chestLockFor, chestFaceRect } from './chestModel';
-import { T, BLOCKS, RENDER, tileFor, isStairs, isSlab, collisionBoxes } from './blocks';
+import { T, BLOCKS, RENDER, tileFor, isBed, isStairs, isSlab, collisionBoxes } from './blocks';
 import { mulberry32 } from './noise';
 import { applyJavaFireTextures, applyJavaRailTextures, applyEntityTextures, applyOfficialTiles, ENTITY_ATLAS, isOfficialTile, type EntityAtlasKey } from './packArt';
 
@@ -1523,7 +1525,17 @@ function makeIcon(atlas: HTMLCanvasElement, id: number): string {
     const sx = (tile % ATLAS_TILES) * TILE, sy = Math.floor(tile / ATLAS_TILES) * TILE;
     ctx.drawImage(atlas, sx, sy, 16, 16, 0, 0, 16, 16);
   };
-  if (isStairs(id) || isSlab(id)) {
+  if(isBed(id)) { drawBedIcon(ctx,atlas); }
+  else if(itemBox(id)&&RENDER[id]!==12) {
+    const [x0,z0,x1,z1,y0,y1]=itemBox(id)!;
+    const project=(p:number[])=>[24+(p[0]-p[2])*20,32+(p[0]+p[2]-1)*10-p[1]*26];
+    const faces=[{f:3,p:[[x0,y1,z0],[x1,y1,z0],[x0,y1,z1]]},{f:5,p:[[x0,y1,z1],[x1,y1,z1],[x0,y0,z1]]},{f:1,p:[[x1,y1,z1],[x1,y1,z0],[x1,y0,z1]]}];
+    for(const face of faces){const [p,q,r]=face.p.map(project),tile=tileFor(id,face.f),crop=itemCrop(id)??[0,0,16,16],w=crop[2]-crop[0],h=crop[3]-crop[1];
+      ctx.setTransform((q[0]-p[0])/w,(q[1]-p[1])/w,(r[0]-p[0])/h,(r[1]-p[1])/h,p[0],p[1]);ctx.drawImage(atlas,(tile%16)*16+crop[0],Math.floor(tile/16)*16+crop[1],w,h,0,0,w,h);
+      if(face.f!==3){ctx.globalCompositeOperation='source-atop';ctx.fillStyle=face.f===1?'rgba(0,0,0,.35)':'rgba(0,0,0,.18)';ctx.fillRect(0,0,w,h);ctx.globalCompositeOperation='source-over';}
+    }
+  }
+  else if (isStairs(id) || isSlab(id)) {
     const project=(p:number[])=>[24+(p[0]-p[2])*20,26+(p[0]+p[2])*10-p[1]*22];
     const faces=buildingFaces(collisionBoxes(id)!).filter(f=>[1,3,5].includes(f.face));
     faces.sort((a,b)=>a.points.flat().reduce((n,v)=>n+v,0)-b.points.flat().reduce((n,v)=>n+v,0));
