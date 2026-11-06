@@ -8,6 +8,11 @@ on:
   # 2.31: ręczne uruchomienie z zakładki Actions (przydaje się po awarii
   # runnera – nie trzeba wtedy robić pustego commita).
   workflow_dispatch:
+    inputs:
+      reference_network_probe:
+        description: 'Read-only connectivity test for reference imports (no uploads)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,3 +46,16 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  reference-network:
+    # Owner-triggered only; no secrets or untrusted PR-controlled URLs.
+    if: github.event_name == 'workflow_dispatch' && inputs.reference_network_probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe official reference and Storage connectivity
+        run: node scripts/probe-reference-network.mjs
