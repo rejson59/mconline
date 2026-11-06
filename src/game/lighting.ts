@@ -102,7 +102,7 @@ export interface SunState {
 export function patchChunkMaterial(
   mat: THREE.MeshBasicMaterial,
   uDay: { value: number },
-  opts: { water?: boolean; fire?: boolean; time?: { value: number }; held?: HeldLightState; sun?: SunState; brightness?: { value: number } } = {}
+  opts: { water?: boolean; fire?: boolean; time?: { value: number }; held?: HeldLightState; remoteLights?: THREE.Vector4[]; sun?: SunState; brightness?: { value: number } } = {}
 ) {
   const water = !!opts.water, fire = !!opts.fire;
   const uTime = opts.time ?? { value: 0 };
@@ -119,10 +119,11 @@ export function patchChunkMaterial(
   mat.userData.uHeldStrength = uHeldStrength;
   mat.userData.uSun = uSun;
   mat.color.setRGB(1, 1, 1);
-  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-6-water' : fire ? 'blockcraft-light-7-fire' : 'blockcraft-light-6');
+  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-8-water' : fire ? 'blockcraft-light-9-fire' : 'blockcraft-light-8');
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uBrightness = uBrightness;
     shader.uniforms.uDay = uDay;
+    shader.uniforms.uRemoteLights = { value: opts.remoteLights ?? Array.from({ length: 4 }, () => new THREE.Vector4(0, -1000, 0, 0)) };
     shader.uniforms.uHeldPos = { value: heldPos };
     shader.uniforms.uHeldStrength = uHeldStrength;
     shader.uniforms.uHeldRange = { value: HELD_RANGE };
@@ -152,6 +153,7 @@ export function patchChunkMaterial(
         `#include <common>
 uniform float uDay;
 uniform float uBrightness;
+uniform vec4 uRemoteLights[4];
 uniform vec3 uHeldPos;
 uniform float uHeldStrength;
 uniform float uHeldRange;
@@ -192,6 +194,12 @@ vec3 faceNormal(float f) {
 			held = uHeldStrength * pow(t, 1.6);
 		}
 
+        for (int i = 0; i < 4; i++) {
+          if (uRemoteLights[i].w > 0.001) {
+            float t = clamp(1.0 - distance(vWorldPos, uRemoteLights[i].xyz) / uHeldRange, 0.0, 1.0);
+            held = max(held, uRemoteLights[i].w * pow(t, 1.6));
+          }
+        }
 		// Słońce: ściany zwrócone do niego jaśnieją, odwrotne zostają w cieniu.
 		// sky * 4 sprawia, że jaskinia (sky ≈ 0.04) nie łapie światła dziennego.
 		float ndl = max(dot(faceNormal(vFace), uSunDir), 0.0);

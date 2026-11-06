@@ -1,0 +1,385 @@
+{
+  "version": "4.28.3",
+  "environment": "Chromium/SwiftShader; mobile viewport and touch emulated; synthetic received peer packets; no live account sessions",
+  "reports": [
+    {
+      "device": "desktop",
+      "gameplay": {
+        "honeyBottle": true,
+        "discardGrace": true,
+        "lateTorch": true,
+        "dark": {
+          "rgb": [
+            45,
+            45,
+            45
+          ],
+          "light": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lit": {
+          "rgb": [
+            107,
+            102,
+            96
+          ],
+          "light": [
+            0.72,
+            0,
+            0,
+            0
+          ]
+        },
+        "offhand": {
+          "rgb": [
+            107,
+            102,
+            96
+          ],
+          "light": [
+            0.72,
+            0,
+            0,
+            0
+          ]
+        },
+        "otherDimension": {
+          "rgb": [
+            45,
+            45,
+            45
+          ],
+          "light": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "dead": {
+          "rgb": [
+            45,
+            45,
+            45
+          ],
+          "light": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "touch": null,
+      "editable": {
+        "select": "text",
+        "webkit": "text",
+        "text": "miód i skrzynia"
+      },
+      "errors": []
+    },
+    {
+      "device": "mobile-emulated",
+      "gameplay": {
+        "honeyBottle": true,
+        "discardGrace": true,
+        "lateTorch": true,
+        "dark": {
+          "rgb": [
+            45,
+            45,
+            45
+          ],
+          "light": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "lit": {
+          "rgb": [
+            107,
+            102,
+            96
+          ],
+          "light": [
+            0.72,
+            0,
+            0,
+            0
+          ]
+        },
+        "offhand": {
+          "rgb": [
+            107,
+            102,
+            96
+          ],
+          "light": [
+            0.72,
+            0,
+            0,
+            0
+          ]
+        },
+        "otherDimension": {
+          "rgb": [
+            45,
+            45,
+            45
+          ],
+          "light": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "dead": {
+          "rgb": [
+            45,
+            45,
+            45
+          ],
+          "light": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "touch": {
+        "selection": "",
+        "menus": 0
+      },
+      "editable": {
+        "select": "text",
+        "webkit": "text",
+        "text": "miód i skrzynia"
+      },
+      "errors": []
+    }
+  ],
+  "sql": {
+    "checks": 15,
+    "result": "PASS, synthetic fixture rolled back",
+    "file": "supabase/tests/drop_pickup_delay.sql"
+  },
+  "nativeBrowser": {
+    "version": "4.28.3",
+    "environment": "Chromium / SwiftShader sandbox, mobile is viewport emulation",
+    "reports": [
+      {
+        "device": "desktop",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 0,
+          "charcoal": 0,
+          "rawIron": 0,
+          "rawGold": 0,
+          "facingRows": [
+            {
+              "id": 0
+            },
+            {
+              "id": 32
+            },
+            {
+              "id": 32
+            },
+            {
+              "id": 0
+            },
+            {
+              "id": 0
+            },
+            {
+              "id": 32
+            },
+            {
+              "id": 0
+            },
+            {
+              "id": 0
+            }
+          ],
+          "gui": 2
+        },
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 0,
+          "charcoal": 0,
+          "rawIron": 0,
+          "rawGold": 0,
+          "facingRows": [
+            {
+              "id": 0
+            },
+            {
+              "id": 32
+            },
+            {
+              "id": 32
+            },
+            {
+              "id": 0
+            },
+            {
+              "id": 0
+            },
+            {
+              "id": 32
+            },
+            {
+              "id": 0
+            },
+            {
+              "id": 0
+            }
+          ],
+          "gui": 0
+        },
+        "errors": []
+      },
+      {
+        "device": "file",
+        "placed": [
+          0,
+          102,
+          0,
+          102,
+          230,
+          102,
+          0,
+          102,
+          0
+        ],
+        "cursorReturned": 1,
+        "coal": 16,
+        "drops": [
+          {
+            "id": 263,
+            "count": 1
+          },
+          {
+            "id": 340,
+            "count": 1
+          }
+        ],
+        "restored": {
+          "compass": 1,
+          "coal": 16,
+          "redstone": 0,
+          "iron": 0,
+          "charcoal": 0,
+          "rawIron": 0,
+          "rawGold": 0,
+          "facingRows": [
+            {
+              "id": 0
+            },
+            {
+              "id": 32
+            },
+            {
+              "id": 32
+            },
+            {
+              "id": 0
+            },
+            {
+              "id": 0
+            },
+            {
+              "id": 32
+            },
+            {
+              "id": 0
+            },
+            {
+              "id": 0
+            }
+          ],
+          "gui": 2
+        },
+        "errors": []
+      }
+    ]
+  },
+  "build": {
+    "bytes": 11243147,
+    "sha256": "babb42f889a57ee56d3e94ed9c3b9bddbf58e4f3dcbbcd2ed498f92ca59984f7"
+  },
+  "offlineChecks": 25446,
+  "commands": [
+    "npm run typecheck",
+    "npm test",
+    "npm run build",
+    "node scripts/verify-report-fixes-browser.mjs",
+    "node scripts/verify-native-browser.mjs"
+  ],
+  "unresolvedReports": [
+    "bba3c4b2-d042-42a4-a735-663db298cf42",
+    "ff2b8d77-b8e7-419f-ba5c-18fd29738aa2"
+  ]
+}

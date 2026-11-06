@@ -9,7 +9,7 @@
  *
  *  - które bloki spadają (`isFallingBlock`),
  *  - które kratki spadający blok może zająć (powietrze, woda, lawa),
- *  - co niszczy po drodze (trawa, pochodnia, szyna, lilia),
+ *  - co niszczy po drodze (trawa, szyna, lilia; pochodnia zamienia blok w przedmiot),
  *  - na jakiej wysokości wyląduje (`fallPath`).
  *
  * Silnik (`Game.fallGravity`) dokłada do tego animację, dźwięk i obrażenia.
@@ -25,6 +25,11 @@ export function isFallingBlock(id: number): boolean {
   return FALLING.has(id);
 }
 
+/** Torches break falling entities into items instead of being crushed. */
+export function isFallBreaker(id: number): boolean {
+  return id === B.TORCH || id === B.REDSTONE_TORCH || id === B.REDSTONE_TORCH_OFF;
+}
+
 /** Kratka, którą spadający blok może zająć: powietrze, woda albo lawa. */
 export function isPassableForFall(id: number): boolean {
   return id === B.AIR || RENDER[id] === 2;
@@ -32,13 +37,13 @@ export function isPassableForFall(id: number): boolean {
 
 /**
  * Drobiazgi, które spadający blok niszczy po drodze: rośliny (render `cross`),
- * szyny, pochodnie i lilie. Wszystkie mają własne, cienkie bryły i w wanilii
+ * szyny i lilie. Pochodnie zachowujemy: rozbijają spadający blok. Wszystkie mają własne, cienkie bryły i w wanilii
  * nie utrzymają spadającego piasku.
  */
 const CRUSHABLE_RENDER: ReadonlySet<number> = new Set<number>([1, 6, 10, 11]);
 
 export function isCrushable(id: number): boolean {
-  return id !== B.AIR && CRUSHABLE_RENDER.has(RENDER[id]) && IS_SOLID[id] === 0;
+  return id !== B.AIR && !isFallBreaker(id) && CRUSHABLE_RENDER.has(RENDER[id]) && IS_SOLID[id] === 0;
 }
 
 export interface FallPath {
@@ -58,6 +63,7 @@ export function fallPath(world: World, x: number, y: number, z: number): FallPat
   const crush: [number, number, number][] = [];
   while (to > 0) {
     const below = world.getBlock(x, to - 1, z);
+    if (isFallBreaker(below)) break;
     if (isPassableForFall(below)) {
       to--;
       continue;
@@ -74,7 +80,7 @@ export function fallPath(world: World, x: number, y: number, z: number): FallPat
 
 /** Czy blok na `(x, y, z)` ma podparcie i nie musi spadać? */
 export function isSupported(world: World, x: number, y: number, z: number): boolean {
-  return fallPath(world, x, y, z).to === y;
+  return !isFallBreaker(world.getBlock(x, y - 1, z)) && fallPath(world, x, y, z).to === y;
 }
 
 /**

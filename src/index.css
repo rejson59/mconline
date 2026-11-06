@@ -12,7 +12,9 @@ html, body {
   height: 100%;
   overflow: hidden;
   background: #000;
+  -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
   overscroll-behavior: none;
 }
 
@@ -1140,3 +1142,11 @@ body, button, input, select, textarea, .mc-btn, .mc-input { font-family: 'Java B
 .java-background-next:hover { background: #333d; border-color: white; }
 .java-background-next:focus-visible { outline: 2px solid white; outline-offset: 2px; }
 .java-background-shortcut output { display: block; width: fit-content; max-width: 100%; padding: 4px 6px; margin-top: 4px; background: #0009; line-height: 1.4; }
+
+/* Gameplay long presses must never select HUD labels/emoji or open callouts.
+   Keep native selection/editing available inside real text fields. */
+#root * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#root input, #root textarea, #root [contenteditable="true"], #root [contenteditable="true"] * {
+  -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+}
+.game-gesture-surface { touch-action: none; }

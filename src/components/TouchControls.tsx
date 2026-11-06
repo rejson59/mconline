@@ -461,8 +461,8 @@ export default function TouchControls({
   return (
     <div
       ref={rootRef}
-      className="pointer-events-auto absolute inset-0 z-10"
-      style={{ touchAction: 'none' }}
+      className="pointer-events-auto absolute inset-0 z-10 game-gesture-surface"
+      style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endPointer}

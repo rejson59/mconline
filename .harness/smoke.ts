@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.28.2', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Bezpieczny ekwipunek i regeneracja', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.28.3', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Pochodnie, miód i wyrzucanie przedmiotów', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -3689,6 +3689,8 @@ section('2.8.1: światło w ręce');
   const g = Object.create(Game.prototype) as G;
   const uniform = { value: 0 };
   g.materials = [{ userData: { uHeldStrength: uniform } }];
+  g.remotes = new Map();
+  g.remoteLights = Array.from({ length: 4 }, () => new THREE.Vector4(0, -1000, 0, 0));
   g.camera = { position: new THREE.Vector3(4, 70, -3) };
   g.inventory = new Inventory();
   g.heldLight = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
@@ -3972,7 +3974,7 @@ section('2.8.2: kierunkowe słońce');
   check('the fragment shader has a face normal helper', shader.fragmentShader.includes('faceNormal'));
   check('sunlight uses a dot product', shader.fragmentShader.includes('dot(faceNormal(vFace), uSunDir)'));
   check('sunlight is gated by sky exposure', shader.fragmentShader.includes('clamp(sky * 4.0, 0.0, 1.0)'));
-  check('light materials use a fresh cache key', mat.customProgramCacheKey() === 'blockcraft-light-6');
+  check('light materials use a fresh cache key', mat.customProgramCacheKey() === 'blockcraft-light-8');
 
   // Światło trzymane w dłoni jest mocniejsze i sięga dalej niż w 2.8.1.
   check('the held torch reaches further than before', HELD_RANGE >= 12);
@@ -5177,7 +5179,7 @@ section('2.25: fizyka spadających bloków');
 {
   check('piasek i żwir są sypkie', isFallingBlock(B.SAND) && isFallingBlock(B.GRAVEL));
   check('kamień i szkło nie spadają', !isFallingBlock(B.STONE) && !isFallingBlock(B.GLASS));
-  check('rośliny i pochodnie są zmiatane', isCrushable(B.TORCH) && isCrushable(B.SAPLING));
+  check('rośliny są zmiatane, ale pochodnie rozbijają żwir', !isCrushable(B.TORCH) && isCrushable(B.SAPLING));
   check('skrzynia nie jest drobiazgiem', !isCrushable(B.CHEST));
 
   // Filar z kamienia wysoko w powietrzu, żeby wynik nie zależał od terenu.
@@ -5215,14 +5217,14 @@ section('2.25: fizyka spadających bloków');
   check('kolumna wylądowała na filarze', pw.getBlock(5, 115, 5) === B.SAND && pw.getBlock(5, 116, 5) === B.SAND,
     `${pw.getBlock(5, 115, 5)},${pw.getBlock(5, 116, 5)}`);
 
-  // Pochodnia pod piaskiem zostaje zmiażdżona, a piasek ląduje niżej.
+  // Pochodnia rozbija spadający piasek, sama pozostaje na miejscu.
   pillar(7, 5);
   pw.setBlock(7, 118, 5, B.TORCH);
   pw.setBlock(7, 121, 5, B.SAND);
   (gAny as unknown as Game).fallGravity(7, 121, 5);
   for (let i = 0; i < 240 && gAny.falling.length; i++) (gAny as unknown as Game)['updateFalling'](1 / 60);
-  check('spadający piasek niszczy pochodnię', pw.getBlock(7, 118, 5) === B.AIR);
-  check('piasek spadł na filar pod pochodnią', pw.getBlock(7, 115, 5) === B.SAND);
+  check('spadający piasek zachowuje pochodnię', pw.getBlock(7, 118, 5) === B.TORCH);
+  check('piasek nie przechodzi przez pochodnię', pw.getBlock(7, 115, 5) === B.AIR);
 
   // Woda: piasek wpada na dno i wypiera kratkę, w której wylądował.
   pillar(9, 5);
@@ -8600,7 +8602,7 @@ section('4.7.0: water escape uses real mob AI, body clearance and shore impulses
   } finally { Math.random = random; }
 }
 
-section('4.7.0: 2.5-block pickups share range and obstruction checks');
+section('4.28.3: shorter pickups share range and obstruction checks');
 {
   const world = new World(473, true), y = FLAT_H + 8;
   world.getChunk(0, 0);
@@ -8618,8 +8620,8 @@ section('4.7.0: 2.5-block pickups share range and obstruction checks');
     for (const distance of [1.4, 2.4, 2.6]) {
       const { g, claims } = make(shared, distance); g.updateDrops(0);
       await Promise.resolve();
-      eq(`pickup ${shared ? 'shared' : 'offline'} at ${distance} blocks`, shared ? claims() : g.inventory.countOf(B.GLASS_PANE), distance < 2.5 ? 1 : 0);
-      if (shared) { g.updateDrops(0); await Promise.resolve(); eq(`shared pickup retry is throttled at ${distance}`, claims(), distance < 2.5 ? 1 : 0); }
+      eq(`pickup ${shared ? 'shared' : 'offline'} at ${distance} blocks`, shared ? claims() : g.inventory.countOf(B.GLASS_PANE), distance < 1.5 ? 1 : 0);
+      if (shared) { g.updateDrops(0); await Promise.resolve(); eq(`shared pickup retry is throttled at ${distance}`, claims(), distance < 1.5 ? 1 : 0); }
     }
     world.setBlock(5, y, 4, B.STONE);
     const wall = make(shared, 2); wall.g.updateDrops(0.01); await Promise.resolve();
@@ -9983,6 +9985,158 @@ section('4.28.2: regeneration keeps real time at low FPS and full hunger');
   const code=readSource('src/game/engine.ts');
   check('regeneration clock is outside the capped player physics substeps',code.includes('this.updateFood(foodClockDelta(frameMs, document.hidden))')&&!code.includes('this.updateFood(dt);'));
   check('pagehide checkpoints happen in capture before adapter leave',code.includes("this.on(window, 'pagehide', () => this.save(), { capture: true })"));
+}
+
+section('4.28.3: honey bottles, torch gravity, shared light and discard grace');
+{
+  const drops: number[][] = [];
+  const g = Object.assign(Object.create(Game.prototype), {
+    mode: 'survival', inventory: new Inventory(), selected: 0, eatCooldown: 0,
+    hunger: 20, saturation: 5, exhaustion: 0, body: { pos: new THREE.Vector3() },
+    emitHud() {}, updateHand() {}, unlock() {}, message() {},
+    spawnDrop(id: number, count: number) { drops.push([id, count]); },
+  }) as any;
+  const drink = (count: number) => { g.eatCooldown = 0; g.inventory.slots[0] = { id: I.HONEY_BOTTLE, count }; g.tryEat(g.inventory.slots[0]); };
+  drink(1);
+  eq('last honey bottle reuses the hand slot even at full hunger', g.inventory.slots[0]?.id, I.BOTTLE);
+  drink(2);
+  eq('drinking consumes only one honey from a stack', g.inventory.slots[0]?.count, 1);
+  eq('stacked honey puts one empty bottle in the backpack', g.inventory.countOf(I.BOTTLE), 1);
+  g.inventory.slots = Array.from({ length: 36 }, () => ({ id: B.STONE, count: 64 }));
+  drink(2);
+  eq('full backpack drops exactly one empty bottle', JSON.stringify(drops), JSON.stringify([[I.BOTTLE, 1]]));
+  drink(1);
+  eq('singleton honey in full backpack still reuses its own slot', g.inventory.slots[0]?.id, I.BOTTLE);
+  g.inventory.offhand = { id: I.HONEY_BOTTLE, count: 1 }; g.usingOffhand = true; g.eatCooldown = 0;
+  g.tryEat(g.inventory.offhand);
+  eq('offhand honey returns a bottle in the offhand', g.inventory.offhand?.id, I.BOTTLE);
+  eq('offhand honey leaves the main slot unchanged', g.inventory.slots[0]?.id, I.BOTTLE);
+  g.usingOffhand = false; g.mode = 'creative'; drink(1);
+  eq('creative honey creates no free empty bottles', g.inventory.slots[0]?.id, I.HONEY_BOTTLE);
+  eq('creative honey does not add a second spilled bottle', drops.length, 1);
+
+  const w = new World(4283, true); w.getChunk(0, 0);
+  const f = Object.assign(Object.create(Game.prototype), { world: w, falling: [], scene: new THREE.Scene(),
+    dropGeos: new Map(), dropMat: new THREE.MeshBasicMaterial(), body: { pos: new THREE.Vector3(5, 90, 5), h: 1.8 },
+    mode: 'survival', ui: 'playing', selectedStack: () => null, spawnParticles() {}, damage() {},
+    spawnDrop: (id: number, count: number) => drops.push([id, count]),
+  }) as any;
+  for (const torch of [B.TORCH, B.REDSTONE_TORCH, B.REDSTONE_TORCH_OFF]) {
+    for (const animate of [false, true]) {
+      for (let y = 90; y < 112; y++) w.setBlock(5, y, 5, B.AIR);
+      w.setBlock(5, 90, 5, B.STONE); w.setBlock(5, 91, 5, torch);
+      w.setBlock(5, 100, 5, B.GRAVEL); w.setBlock(5, 101, 5, B.SAND);
+      const before = drops.length;
+      f.fallColumn(5, 100, 5, animate);
+      for (let tick = 0; tick < 120 && f.falling.length; tick++) f.updateFalling(1 / 30);
+      eq(`torch ${torch} survives ${animate ? 'animated' : 'instant'} column`, w.getBlock(5, 91, 5), torch);
+      eq(`torch ${torch} turns the whole column into exactly two items (${animate})`, drops.length - before, 2);
+      check('fallen column leaves no duplicate block', w.getBlock(5, 100, 5) === B.AIR && w.getBlock(5, 101, 5) === B.AIR && w.getBlock(5, 92, 5) === B.AIR);
+    }
+  }
+  w.setBlock(5, 91, 5, B.AIR); w.setBlock(5, 105, 5, B.GRAVEL);
+  f.fallColumn(5, 105, 5, true); f.updateFalling(0.1);
+  w.setBlock(5, 96, 5, B.TORCH); // placed after spawn, above the original cached landing spot
+  const before = drops.length;
+  f.updateFalling(1); // low-FPS swept path must not tunnel past the torch
+  eq('torch placed during a low-FPS fall shatters gravel exactly once', drops.length - before, 1);
+  eq('late torch is not crushed', w.getBlock(5, 96, 5), B.TORCH);
+  eq('late torch leaves no falling entity', f.falling.length, 0);
+  w.setBlock(5, 96, 5, B.AIR); w.setBlock(5, 92, 5, B.GRAVEL); w.setBlock(5, 91, 5, B.TORCH);
+  check('torch is not mistaken for solid support', !isSupported(w, 5, 92, 5));
+  eq('gravel immediately above a torch also settles to an item', f.settle(5, 92, 5), 1);
+  w.setBlock(5, 105, 5, B.GRAVEL); f.fallColumn(5, 105, 5, true);
+  w.setBlock(5, 91, 5, B.AIR); const removedTorchDrops = drops.length;
+  for (let tick = 0; tick < 120 && f.falling.length; tick++) f.updateFalling(1 / 30);
+  eq('removing a torch during the fall lets gravel reach the real floor', w.getBlock(5, 91, 5), B.GRAVEL);
+  eq('removed torch cannot shatter gravel at a cached destination', drops.length, removedTorchDrops);
+
+
+  const light = Object.assign(Object.create(Game.prototype), { inventory: new Inventory(), selected: 0,
+    camera: { position: new THREE.Vector3() }, materials: [], heldLight: { pos: new THREE.Vector3(), strength: 0 },
+    remoteLights: Array.from({ length: 4 }, () => new THREE.Vector4()), remotes: new Map(),
+  }) as any;
+  const avatar = (x: number, held: number, offhand = 0, visible = true, seen = performance.now()) => {
+    const group = new THREE.Group(); group.position.set(x, 65, 0); group.visible = visible;
+    return { group, held, offhand, seen };
+  };
+  light.remotes.set('near', avatar(1, B.TORCH));
+  light.remotes.set('far', avatar(9, B.STONE, B.LANTERN));
+  light.remotes.set('other-dimension', avatar(0, B.TORCH, 0, false));
+  light.remotes.set('disconnected', avatar(0, B.TORCH, 0, true, performance.now() - 10000));
+  light.updateHeldLight();
+  eq('remote main-hand torch supplies shader light', light.remoteLights[0].x, 1);
+  check('remote offhand lantern also supplies shader light', light.remoteLights[1].x === 9 && light.remoteLights[1].w > 0);
+  eq('hidden and disconnected players supply no light', light.remoteLights[2].w, 0);
+  light.remotes.clear(); light.updateHeldLight();
+  check('leaving players cannot leave ghost light behind', light.remoteLights.every((v: THREE.Vector4) => v.w === 0));
+  const mat = new THREE.MeshBasicMaterial();
+  patchChunkMaterial(mat, { value: 0 }, { remoteLights: light.remoteLights });
+  const shader = { uniforms: {}, vertexShader: '#include <common>\n#include <begin_vertex>', fragmentShader: '#include <common>\n#include <color_fragment>' } as any;
+  mat.onBeforeCompile(shader, {} as any);
+  check('shader references the actual mutable remote light pool', shader.uniforms.uRemoteLights.value === light.remoteLights);
+  check('shader applies bounded remote light falloff', shader.fragmentShader.includes('uRemoteLights[4]') && shader.fragmentShader.includes('held = max(held, uRemoteLights[i].w'));
+
+  const { DropLedger, cleanDrop } = await import('../src/game/sharedDrops');
+  const now = Date.now(), owner = 'p1111111111111111111', other = 'p2222222222222222222';
+  const stack = { id: I.IRON_PICK, count: 1, dur: 19, name: 'discard regression', ench: { efficiency: 2 } };
+  const drop = { uid: 'discard-cooldown', owner, d: 'o', stack, pos: [0, 65, 0], vel: [0, 2, -4], created: now, expires: now + 300000, pickupAfter: now + 2000 };
+  const ledger = new DropLedger(); ledger.put(drop, owner, now);
+  eq('thrower cannot reclaim before owner grace ends', ledger.claim(drop.uid, owner, 'o', now + 1999), null);
+  check('another player may collect during owner grace', !!ledger.claim(drop.uid, other, 'o', now + 1));
+  eq('owner cannot steal a granted delivery after grace', ledger.claim(drop.uid, owner, 'o', now + 3000), null);
+  const next = { ...drop, uid: 'discard-expired-grace' }; ledger.put(next, owner, now);
+  check('thrower can collect at the exact end of grace', !!ledger.claim(next.uid, owner, 'o', now + 2000));
+  check('lost grant remains replayable', !!ledger.claim(next.uid, owner, 'o', now + 2000));
+  eq('invalid infinite pickup grace is rejected', cleanDrop({ ...next, pickupAfter: Infinity }), null);
+  eq('unbounded pickup grace is rejected', cleanDrop({ ...next, pickupAfter: now + 2001 }), null);
+  eq('drop serialization retains owner grace', cleanDrop(drop)?.pickupAfter, now + 2000);
+  const local = Object.assign(Object.create(Game.prototype), { inventory: new Inventory(), scene: new THREE.Scene(),
+    world: w, body: { pos: new THREE.Vector3(0, 65, 0) }, ui: 'playing',
+    clearShot: () => true, notePickup() {},
+    drops: [{ ...stack, age: 0.8, pickupDelay: 2, mesh: new THREE.Mesh(), pos: new THREE.Vector3(0.6, 65.9, 0), vel: new THREE.Vector3() }],
+  }) as any;
+  local.updateDrops(0);
+  eq('offline thrown item is not magnetized during grace', local.drops[0].vel.length(), 0);
+  eq('offline thrown item is not collected during grace', local.inventory.countOf(I.IRON_PICK), 0);
+  local.drops[0].age = 2; local.updateDrops(0);
+  eq('offline grace eventually expires', local.inventory.countOf(I.IRON_PICK), 1);
+  const tossed: unknown[][] = [];
+  const thrower = Object.assign(Object.create(Game.prototype), { body: { pos: new THREE.Vector3(5,65,5) }, eyeHeight: 1.62, yaw: 0, pitch: 0,
+    inventory: new Inventory(), spawnDrop: (...args: unknown[]) => tossed.push(args), saveProfileNow() {},
+  }) as any;
+  thrower.inventory.cursor = { id: B.STONE, count: 3 }; thrower.dropInventoryCursor();
+  check('discarding from inventory UI throws forward instead of at the feet', tossed[0][8] === -4 && tossed[0][12] === 2);
+
+
+  const ctx: VillageContext = { seed: 12453, flat: false, sea: SEA, surface: () => ({ h: 80, biome: 'Równiny' }) };
+  const villages: Village[] = [];
+  for (let x = -3; x <= 3; x++) for (let z = -3; z <= 3; z++) { const v = villageInCell(x, z, ctx); if (v) villages.push(v); }
+  const houses = villages.flatMap(v => v.buildings.filter(b => b.kind === 'house').map(b => ({ v, b })));
+  const chests = houses.filter(({ v, b }) => villageChestPosition(v, b));
+  check('some homes contain loot, not every home', chests.length > 0 && chests.length < houses.length / 2);
+  check('homes have varied, more compact footprints', new Set(houses.map(({ b }) => `${b.w}x${b.d}`)).size >= 3);
+  check('farms and watchtowers do not automatically receive chests', villages.every(v => v.buildings.filter(b => b.kind === 'farm' || b.kind === 'watchtower').every(b => !villageChestPosition(v, b))));
+  let blockedDoors = 0, checkedHomes = 0;
+  const faces = new Set<number>();
+  for (const v of villages.slice(0, 6)) {
+    const chunks = new Map<string, Uint16Array>();
+    const at = (x: number, y: number, z: number) => {
+      const cx = Math.floor(x / CS), cz = Math.floor(z / CS), key = `${cx},${cz}`;
+      if (!chunks.has(key)) { const data = new Uint16Array(CS * CS * CH); applyVillages(data, cx, cz, ctx); chunks.set(key, data); }
+      return chunks.get(key)![(y * CS + z - cz * CS) * CS + x - cx * CS];
+    };
+    for (const b of v.buildings.filter(b => b.kind === 'house')) {
+      checkedHomes++; faces.add(b.face);
+      const door = doorCell(b), dir = [[0,1],[-1,0],[0,-1],[1,0]][b.face];
+      for (const n of [1,2]) for (const h of [1,2]) {
+        if (at(door.x + dir[0]*n, (b.y ?? v.y)+h, door.z + dir[1]*n) !== B.AIR) blockedDoors++;
+      }
+    }
+  }
+  check('compact house doorway audit covers all four entrance orientations', faces.size === 4 && checkedHomes > 20);
+  eq('beds and furniture never block compact house entrances', blockedDoors, 0);
+
 }
 
 // =================================================================== report

@@ -121,6 +121,7 @@ export type NetMessage =
       pitch: number;
       /** Id bloku w ręce (do rąk awatara); brak = puste ręce. */
       held?: number;
+      offhand?: number;
       armor?: number[];
       mode?: 'survival' | 'creative';
       alive?: boolean;
@@ -236,6 +237,7 @@ export interface NetPos {
   yaw: number;
   pitch: number;
   held?: number;
+  offhand?: number;
   armor?: number[];
   name: string;
   hue: number;

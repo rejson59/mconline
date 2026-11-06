@@ -1,6 +1,17 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.28.2 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.28.3 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.28.3 „Pochodnie, miód i wyrzucanie przedmiotów”
+
+- Ochrona etykiet i emoji przed zaznaczaniem długim dotykiem, z zachowaniem edycji pól tekstowych.
+- Światło z trzymanych przedmiotów innych graczy (obie ręce; do czterech najbliższych źródeł).
+- Żwir/piasek rozbija się na pochodni i wypada jako przedmiot — również przy postawieniu pochodni w trakcie spadania.
+- Miód oddaje pustą butelkę, także przy pełnym plecaku i użyciu drugiej ręki.
+- Wyrzucone rzeczy: dwusekundowa ochrona przed własnym podniesieniem i mniejszy zasięg zbierania; inni nadal mogą je podnieść.
+- Mniejsze, różnorodne domy; skrzynie tylko w części domów i wybranych budynkach zawodowych, nie na każdej farmie/wieży.
+- **Nadal otwarte:** wspólne moby i trwała wspólna zawartość zwykłych skrzyń. Ta wersja nie wprowadza ich synchronizacji.
+- [Status wszystkich 8 zgłoszeń i ograniczenia testów](docs/REPORTS-4.28.3.md).
 
 ## Wersja 4.28.2 „Bezpieczny ekwipunek i regeneracja”
 
