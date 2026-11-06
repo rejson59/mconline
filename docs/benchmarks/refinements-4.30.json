@@ -1,0 +1,75 @@
+{
+  "version": "4.30.0",
+  "environment": "Chromium/SwiftShader; mobile viewport and touch emulated; synthetic received peer packets; no live account sessions",
+  "reports": [
+    {
+      "device": "desktop",
+      "gameplay": {
+        "goldenPickaxe": true,
+        "extrudedItem": true,
+        "bedCases": 8,
+        "waterShader": true,
+        "avatarPixels": {
+          "dark": [
+            0,
+            2,
+            2
+          ],
+          "sunlight": [
+            0,
+            132,
+            132
+          ],
+          "torch": [
+            0,
+            49,
+            32
+          ]
+        }
+      },
+      "touch": null,
+      "editable": {
+        "select": "text",
+        "webkit": "text",
+        "text": "miód i skrzynia"
+      },
+      "errors": []
+    },
+    {
+      "device": "mobile-emulated",
+      "gameplay": {
+        "goldenPickaxe": true,
+        "extrudedItem": true,
+        "bedCases": 8,
+        "waterShader": true,
+        "avatarPixels": {
+          "dark": [
+            0,
+            2,
+            2
+          ],
+          "sunlight": [
+            0,
+            132,
+            132
+          ],
+          "torch": [
+            0,
+            51,
+            33
+          ]
+        }
+      },
+      "touch": {
+        "selection": "",
+        "menus": 0
+      },
+      "editable": {
+        "select": "text",
+        "webkit": "text",
+        "text": "miód i skrzynia"
+      },
+      "errors": []
+    }
+  ]
+}

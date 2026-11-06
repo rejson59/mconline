@@ -1,3 +1,7 @@
+import { CloudMotion } from './sky';
+import { bedItemGeometry, createBedItemMaterial } from './bedItem';
+import { itemBox, itemCrop } from './itemShape';
+import { spriteItemGeometry } from './spriteItem';
 import { MOB_REGION_SIZE, mobRegionKey, type MobRegion, type MobUpdate, type MobExchange, type MobHit } from './sharedMobs';
 import type { SharedChest, ChestRef } from './sharedState';
 import ChunkMeshWorker from './chunkMesh.worker?worker&inline';
@@ -84,7 +88,7 @@ import {
   type EnchOption,
 } from './enchant';
 import * as Sfx from './audio';
-import { patchChunkMaterial, HELD_POWER, type HeldLightState, type SunState } from './lighting';
+import { patchChunkMaterial, HELD_POWER, HELD_RANGE, type HeldLightState, type SunState } from './lighting';
 import { cloudLook, rainFogMix } from './sky';
 import { spriteTexture } from './art/spriteTex';
 import { buildItemIcons } from './itemIcons';
@@ -458,6 +462,7 @@ interface Bobber {
 }
 
 export function blockGeometry(id: number): THREE.BufferGeometry {
+  if (isBed(id)) return bedItemGeometry();
   if (isChestBlock(id)) return closedChestGeometry();
   if (isStairs(id) || isSlab(id)) return buildingBlockGeometry(id);
   if (RENDER[id] === 1) {
@@ -478,30 +483,11 @@ export function blockGeometry(id: number): THREE.BufferGeometry {
   // 2.21: w ręce trzymamy ten sam kształt, co w świecie – płot to słupek,
   // pochodnia patyczek, skrzynia korpus 14/16, a lilia to płaski liść.
   const rt = RENDER[id];
-  const shape = rt === 16 ? [0, 7 / 16, 1, 9 / 16, 0, 1] : rt === 7
-    ? [1 / 16, 1 / 16, 15 / 16, 15 / 16, 0, 1]
-    : rt === 8
-      ? [0, 0, 1, 1, 0, 0.5625]
-      : rt === 9
-        ? [6 / 16, 6 / 16, 10 / 16, 10 / 16, 0, 1]
-        : rt === 10
-          ? [7 / 16, 7 / 16, 9 / 16, 9 / 16, 0, 10 / 16]
-          : rt === 12
-            ? [1 / 16, 1 / 16, 15 / 16, 15 / 16, 0, 15 / 16]
-            : rt === 13
-              ? [5 / 16, 5 / 16, 11 / 16, 11 / 16, 0, 11 / 16]
-              : rt === 14
-                ? [2 / 16, 6 / 16, 14 / 16, 10 / 16, 4 / 16, 1]
-                : rt === 15
-                  ? [7 / 16, 7 / 16, 9 / 16, 9 / 16, 0, 14 / 16]
-                  : isDoor(id)
-                    ? [0, 0, 1, 1, 0, 3 / 16]
-                    : null;
+  const shape = itemBox(id);
   const inset = rt === 7 ? 1 : 0;
   // 2.21: w ręce bierzemy ten sam wycinek tekstury co model w świecie
   // (latarnia – korpus, statyw – słupek), a nie rozciągnięty kafelek.
-  const handCrop: readonly [number, number, number, number] | null =
-    rt === 10 ? [7, 0, 9, 10] : rt === 13 ? [0, 2, 6, 9] : rt === 15 ? [7, 2, 9, 16] : null;
+  const handCrop = itemCrop(id);
   if (rt === 11 || rt === 6) {
     const g = new THREE.PlaneGeometry(1, 1);
     g.rotateX(-Math.PI / 2);
@@ -803,6 +789,8 @@ export class Game {
   stars: THREE.Points;
   clouds: THREE.Mesh;
   cloudTex: THREE.Texture;
+  private avatarLights: THREE.PointLight[]=[];
+  private cloudMotion = new CloudMotion(CLOUD_SPEED);
   /** 2.8.1: gęsta warstwa chmur widoczna tylko podczas deszczu. */
   stormClouds!: THREE.Mesh;
   stormTex!: THREE.Texture;
@@ -966,6 +954,7 @@ export class Game {
   private miniChunks = new Map<number, Chunk>();
   private miniSig = '';
   private uDay = { value: 1 };
+  private bedItemMat?:THREE.MeshBasicMaterial;
   private dropMat!: THREE.MeshBasicMaterial;
   private itemTex = new Map<number, THREE.Texture>();
   private dropGeos = new Map<number, THREE.BufferGeometry>();
@@ -1162,6 +1151,7 @@ export class Game {
     this.ambient = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2);
     this.dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     this.scene.add(this.ambient, this.dirLight, this.dirLight.target);
+    this.avatarLights=Array.from({length:5},()=>{const light=new THREE.PointLight(0xffcf92,0,HELD_RANGE,2);this.scene.add(light);return light;});
 
     // sky objects
     // 2.18: słońce i księżyc wprost z paczki (pikselowe, jak w grze).
@@ -1973,7 +1963,7 @@ export class Game {
     const slim = skin.slim === true || isSlimSkin(skin.id);
     const part = (size: [number, number, number], piece: 'body' | 'head' | 'rightArm' | 'rightLeg' | 'leftLeg' | 'leftArm', color: number, kind: 'shirt' | 'head' | 'sleeve' | 'pants') =>
       packTex
-        ? skinnedBox(size, piece, packTex, slim)
+        ? skinnedBox(size, piece, packTex, slim, true)
         : new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), mat(color, kind));
 
     // Proporcje 1:1 z gry: głowa 8 px, tułów 12 px, nogi 12 px (32 px = 2 bloki),
@@ -1992,7 +1982,7 @@ export class Game {
     const head = part([0.5, 0.5, 0.5], 'head', skin.skin, 'head');
     head.position.y = 1.75 - NECK_Y;
     // 2.19: czapka/włosy to druga warstwa skórki (jak w grze).
-    const hat = packTex ? skinnedHat([0.5, 0.5, 0.5], packTex) : null;
+    const hat = packTex ? skinnedHat([0.5, 0.5, 0.5], packTex, true) : null;
     if (hat) hat.position.y = 1.75 - NECK_Y;
     // Włosy i oczy rysujemy tylko dla starych, kolorowych skórek.
     const hair = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.1, 0.52), mat(skin.hair, 'hair'));
@@ -4298,7 +4288,7 @@ export class Game {
     const dz = facing === 2 ? 1 : facing === 0 ? -1 : 0;
     const other: [number, number, number] = isBedHead(id) ? [x - dx, y, z - dz] : [x + dx, y, z + dz];
     const oid = this.world.getBlock(other[0], other[1], other[2]);
-    return isBed(oid) && isBedHead(oid) === !isBedHead(id) ? other : null;
+    return isBed(oid) && bedFacing(oid)===facing && isBedHead(oid) === !isBedHead(id) ? other : null;
   }
 
   private toggleTrap(x: number, y: number, z: number, nx: number, nz: number) {
@@ -4646,7 +4636,7 @@ export class Game {
     else if (BLOCKS[id]) {
       let geo = this.dropGeos.get(id);
       if (!geo) { geo = blockGeometry(id); this.dropGeos.set(id, geo); }
-      mesh = new THREE.Mesh(geo, this.dropMat);
+      mesh = new THREE.Mesh(geo, isBed(id)?this.bedItemMat??=createBedItemMaterial():this.dropMat);
       mesh.scale.setScalar(RENDER[id] === 1 ? 0.4 : 0.28);
     } else {
       // 2.8: geometria i materiał są współdzielone – upadek przedmiotu nie
@@ -4656,7 +4646,8 @@ export class Game {
         mat = new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, alphaTest: 0.2, side: THREE.DoubleSide });
         this.dropIconMats.set(id, mat);
       }
-      mesh = new THREE.Mesh(this.dropIconGeo, mat);
+      let geo=this.dropGeos.get(id);if(!geo){geo=spriteItemGeometry(id,this.icons?.[id]);this.dropGeos.set(id,geo);}
+      mesh = new THREE.Mesh(geo, mat);mesh.scale.setScalar(.32);
     }
     mesh.position.set(x, y, z);
     this.scene.add(mesh);
@@ -5312,8 +5303,9 @@ export class Game {
       const side = off ? -1 : 1;
       let mesh: THREE.Mesh;
       if (isItem(id)) {
-        mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3),
+        mesh = new THREE.Mesh(spriteItemGeometry(id,this.icons?.[id]),
           new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.12, side: THREE.DoubleSide }));
+        mesh.scale.setScalar(.3);
         mesh.position.set(side * 0.42, -0.3, -0.62);
         mesh.rotation.set(0.15, side * -0.55, side * 0.2);
       } else if (id < 0) {
@@ -5321,7 +5313,7 @@ export class Game {
         mesh.position.set(0.46, -0.36, -0.55);
         mesh.rotation.set(0.2, 0.15, 0);
       } else {
-        mesh = new THREE.Mesh(blockGeometry(id), this.handMat);
+        mesh = new THREE.Mesh(blockGeometry(id), isBed(id)?createBedItemMaterial():this.handMat);
         const cross = RENDER[id] === 1;
         mesh.scale.setScalar(cross ? 0.3 : 0.2);
         mesh.position.set(side * 0.42, -0.32, -0.62);
@@ -6547,6 +6539,8 @@ export class Game {
       return false;
     }
     const def = BLOCKS[id];
+    const pairedBed = isBed(id) ? this.bedOther(x,y,z) : null;
+    if(pairedBed&&!this.canModify(pairedBed[0],pairedBed[2]))return false;
     // Derived flow, not a newly-created source, fills an opened cavity.
     let fill = B.AIR as number;
     // Lava behavior is unchanged by the water simulation.
@@ -6582,7 +6576,7 @@ export class Game {
     if (isBed(id)) {
       // Jedno łóżko = jeden przedmiot, niezależnie od tego, którą połowę
       // gracz rozwalił – druga znika razem z nią, jak w wanilii.
-      const other = this.bedOther(x, y, z);
+      const other = pairedBed;
       if (other) {
         this.world.setBlock(other[0], other[1], other[2], fill);
         this.growables.delete(`${other[0]},${other[1]},${other[2]}`);
@@ -6610,7 +6604,7 @@ export class Game {
     }
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
-    if (RENDER[above] === 1 || RENDER[above] === 6 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
+    if (isBed(above) || RENDER[above] === 1 || RENDER[above] === 6 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
     this.fallGravity(x, y + 1, z);
     return true;
   }
@@ -7879,6 +7873,11 @@ export class Game {
       if (a) light.set(a.group.position.x, a.group.position.y + 1.45, a.group.position.z, HELD_POWER);
       else light.set(0, -1000, 0, 0);
     }
+    for(let i=0;i<(this.avatarLights?.length??0);i++){
+      const light=this.avatarLights[i],source=i===0?null:this.remoteLights[i-1];
+      if(i===0){light.position.copy(this.heldLight.pos);light.intensity=this.heldLight.strength*12;}
+      else if(source){light.position.set(source.x,source.y,source.z);light.intensity=source.w*12;}
+    }
     const unset = this.heldLight.strength === 0;
     for (const m of this.materials) {
       const u = m.userData.uHeldStrength as { value: number } | undefined;
@@ -7996,7 +7995,7 @@ export class Game {
       // licznik gnał chmury z prędkością ~31 j/s (a w burzy ~105 j/s), więc
       // niebo wyglądało jak przewijana tapeta. Teraz to spokojne 3,4 j/s,
       // a deszcz przyspiesza je tylko o kilkanaście procent.
-      const drift = performance.now() / 1000 * CLOUD_SPEED * look.drift;
+      const drift = this.cloudMotion.advance(performance.now(),look.drift);
       // Każda warstwa ma własny rozmiar tekstury w świecie (plan / repeat).
       const baseTile = 3200 / 3;
       const stormTile = 3400 / 2.2;
@@ -8860,6 +8859,7 @@ export class Game {
 
   dispose() {
     this.sharedDisposed=true;
+    this.bedItemMat?.dispose();
     this.meshWorker?.dispose();
     this.clearChestLids();
     cancelAnimationFrame(this.raf);

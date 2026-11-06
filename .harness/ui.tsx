@@ -725,10 +725,10 @@ section('2.4: potion item metadata');
   check('new items do not collide with blocks', potionIds.every((id) => !BLOCKS[id]) && !BLOCKS[I.SUGAR] && !BLOCKS[I.BOTTLE] && !BLOCKS[I.WATER_BOTTLE] && !BLOCKS[I.HONEY_BOTTLE]);
   check('bottles never stack (vanilla)', potionIds.every((id) => stackLimit(id) === 1));
   check('honey bottle is food', isFood(I.HONEY_BOTTLE) === true);
-  check('the three new recipes are registered',
+  check('native honey bottle conversion requires a honey block',
     RECIPES.some((r) => r.out.id === I.SUGAR) &&
     RECIPES.some((r) => r.out.id === I.BOTTLE) &&
-    RECIPES.some((r) => r.out.id === I.HONEY_BOTTLE));
+    RECIPES.some((r) => r.out.id === I.HONEY_BOTTLE&&r.inputs.some(i=>i.id===B.HONEY_BLOCK)));
 }
 
 

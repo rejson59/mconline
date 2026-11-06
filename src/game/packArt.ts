@@ -1,3 +1,4 @@
+import { JAVA_REFINEMENT_ICONS } from './art/javaRefinements.generated';
 import { javaFurnaceItemPixels, JAVA_FURNACE_IDS } from './furnaceArt';
 import { JAVA_FIRE_ANIMATIONS, JAVA_FIRE_TEXTURES } from './art/javaFire.generated';
 import { javaBrewingItemPixels, JAVA_BREWING_IDS } from './brewingArt';
@@ -155,6 +156,7 @@ export function officialTileCount(): number {
  * odpowiednika w paczce 1.16 (tarcza, lorneta…).
  */
 export function officialItemPixels(id: number): Uint8Array | null {
+  const refinement=JAVA_REFINEMENT_ICONS[id];if(refinement)return decodePng(refinement).data;
   const furnace = javaFurnaceItemPixels(id); if (furnace) return furnace;
   const native = javaBrewingItemPixels(id); if (native) return native;
   const src = officialItemAtlas();
@@ -178,7 +180,7 @@ export function officialItemPixels(id: number): Uint8Array | null {
 
 /** Czy przedmiot ma ikonę z paczki. */
 export function hasOfficialItemIcon(id: number): boolean {
-  return JAVA_FURNACE_IDS.has(id) || JAVA_BREWING_IDS.has(id) || ITEM_TILE[id] !== undefined;
+  return JAVA_REFINEMENT_ICONS[id]!==undefined || JAVA_FURNACE_IDS.has(id) || JAVA_BREWING_IDS.has(id) || ITEM_TILE[id] !== undefined;
 }
 
 /** Ile przedmiotów ma oficjalną ikonę. */

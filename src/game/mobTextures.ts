@@ -537,11 +537,10 @@ export function mobMaterial(kind: MobTexKind, base: number): THREE.MeshLambertMa
 }
 
 /**
- * Materiał awatara gracza. Awatary są nielitowane (`MeshBasicMaterial`),
- * więc tekstura daje im „pikselowy” wygląd bez wpływu świateł.
+ * Materiał awatara gracza. Awatary reagują na oświetlenie sceny (`MeshLambertMaterial`).
  */
-export function avatarMaterial(kind: MobTexKind, base: number): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({ map: partTexture(kind, base), color: 0xffffff });
+export function avatarMaterial(kind: MobTexKind, base: number): THREE.MeshLambertMaterial {
+  return new THREE.MeshLambertMaterial({ map: partTexture(kind, base), color: 0xffffff });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+import { refinementRecipes } from './refinementRecipes';
 import { B } from './blocks';
 import { I, stackLimit } from './items';
 
@@ -113,10 +114,7 @@ export const RECIPES: Recipe[] = [
   })),
   { out: { id: B.CRAFTING, count: 1 }, inputs: [{ id: B.PLANKS, count: 4 }], table: false, pattern: ['PP', 'PP'], key: { P: B.PLANKS } },
   { out: { id: B.FURNACE, count: 1 }, inputs: [{ id: B.COBBLE, count: 8 }], table: true, pattern: ['CCC', 'C C', 'CCC'], key: { C: B.COBBLE } },
-  { out: { id: B.GLASS, count: 1 }, inputs: [{ id: B.SAND, count: 1 }, { id: I.COAL, count: 1 }], table: true },
-  { out: { id: B.STONE, count: 4 }, inputs: [{ id: B.COBBLE, count: 4 }, { id: I.COAL, count: 1 }], table: true },
   { out: { id: B.STONE_BRICKS, count: 4 }, inputs: [{ id: B.STONE, count: 4 }], table: true },
-  { out: { id: B.BRICK, count: 2 }, inputs: [{ id: B.CLAY, count: 4 }, { id: I.COAL, count: 1 }], table: true },
   { out: { id: B.SANDSTONE, count: 1 }, inputs: [{ id: B.SAND, count: 4 }], table: false },
   // 1.5 „Zaklęcia": papier → książka → biblioteczka (modyfikuje ten sam blok)
   { out: { id: B.BOOKSHELF, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.BOOK, count: 3 }], table: true, pattern: ['PPP', 'BBB', 'PPP'], key: { P: B.PLANKS, B: I.BOOK } },
@@ -129,16 +127,6 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.GUNPOWDER, count: 5 }], table: true, pattern: ['GSG', 'SGS', 'GSG'], key: { G: I.GUNPOWDER, S: B.SAND } },
   // 1.9: jasnogłaz składa się z pyłu jasnogłazu (jak w Minecraftcie)
   { out: { id: B.GLOWSTONE, count: 1 }, inputs: [{ id: I.GLOWSTONE_DUST, count: 4 }], table: false, pattern: ['DD', 'DD'], key: { D: I.GLOWSTONE_DUST } },
-  { out: { id: B.MOSSY, count: 1 }, inputs: [{ id: B.COBBLE, count: 1 }, { id: B.LEAVES, count: 1 }], table: false },
-  { out: { id: B.WOOL_WHITE, count: 1 }, inputs: [{ id: B.TALLGRASS, count: 4 }], table: false },
-  { out: { id: B.WOOL_RED, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 1 }, { id: B.FLOWER_RED, count: 1 }], table: false },
-  { out: { id: B.WOOL_YELLOW, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 1 }, { id: B.FLOWER_YELLOW, count: 1 }], table: false },
-  { out: { id: B.WOOL_GREEN, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 1 }, { id: B.CACTUS, count: 1 }], table: false },
-  { out: { id: B.WOOL_BLACK, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 1 }, { id: I.COAL, count: 1 }], table: false },
-  { out: { id: B.WOOL_BLUE, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 1 }, { id: I.DIAMOND, count: 1 }], table: false },
-  { out: { id: B.OBSIDIAN, count: 1 }, inputs: [{ id: B.STONE, count: 4 }, { id: I.DIAMOND, count: 1 }], table: true },
-  { out: { id: I.COAL, count: 1 }, inputs: [{ id: B.COAL_ORE, count: 1 }], table: false },
-  { out: { id: I.DIAMOND, count: 1 }, inputs: [{ id: B.DIAMOND_ORE, count: 1 }], table: false },
   { out: { id: I.LAPIS, count: 4 }, inputs: [{ id: B.LAPIS_ORE, count: 1 }], table: false },
   { out: { id: I.STICK, count: 4 }, inputs: [{ id: B.PLANKS, count: 2 }], table: false, pattern: ['P', 'P'], key: { P: B.PLANKS } },
   { out: { id: B.TORCH, count: 4 }, inputs: [{ id: I.COAL, count: 1 }, { id: I.STICK, count: 1 }], table: false, pattern: ['C', 'S'], key: { C: I.COAL, S: I.STICK } },
@@ -160,7 +148,6 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.DIAMOND_BLOCK, count: 1 }, inputs: [{ id: I.DIAMOND, count: 9 }], table: true, pattern: ['DDD', 'DDD', 'DDD'], key: { D: I.DIAMOND } },
   { out: { id: I.IRON, count: 9 }, inputs: [{ id: B.IRON_BLOCK, count: 1 }], table: false },
   { out: { id: I.GOLD, count: 9 }, inputs: [{ id: B.GOLD_BLOCK, count: 1 }], table: false },
-  { out: { id: I.DIAMOND, count: 9 }, inputs: [{ id: B.DIAMOND_BLOCK, count: 1 }], table: false },
   { out: { id: I.BOW, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 3 }], table: true, pattern: [' #S', '# S', ' #S'], key: { '#': I.STICK, S: I.STRING } },
   { out: { id: I.ARROW, count: 4 }, inputs: [{ id: I.FLINT, count: 1 }, { id: I.STICK, count: 1 }, { id: I.FEATHER, count: 1 }], table: true, pattern: ['F', 'S', 'P'], key: { F: I.FLINT, S: I.STICK, P: I.FEATHER } },
   { out: { id: I.SHIELD, count: 1 }, inputs: [{ id: B.PLANKS, count: 6 }, { id: I.IRON, count: 1 }], table: true, pattern: ['PIP', 'PPP', ' P '], key: { P: B.PLANKS, I: I.IRON } },
@@ -182,9 +169,6 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.QUARTZ_PILLAR, count: 2 }, inputs: [{ id: B.QUARTZ_BLOCK, count: 2 }], table: true, pattern: ['Q', 'Q'], key: { Q: B.QUARTZ_BLOCK } },
   { out: { id: B.NETHER_BRICKS, count: 1 }, inputs: [{ id: I.NETHER_BRICK_ITEM, count: 4 }], table: true, pattern: ['NN', 'NN'], key: { N: I.NETHER_BRICK_ITEM } },
   { out: { id: B.END_BRICKS, count: 4 }, inputs: [{ id: B.END_STONE, count: 4 }], table: true, pattern: ['EE', 'EE'], key: { E: B.END_STONE } },
-  { out: { id: B.PURPUR_BLOCK, count: 4 }, inputs: [{ id: B.PURPUR_PILLAR, count: 4 }], table: false },
-  { out: { id: B.CONCRETE_WHITE, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: I.BONE, count: 1 }], table: true },
-  { out: { id: B.CONCRETE_RED, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: B.FLOWER_RED, count: 1 }], table: true },
   { out: { id: B.RAIL, count: 16 }, inputs: [{ id: I.IRON, count: 6 }, { id: I.STICK, count: 1 }], table: true, pattern: ['I I', 'ISI', 'I I'], key: { I: I.IRON, S: I.STICK } },
   { out: { id: B.POWERED_RAIL, count: 6 }, inputs: [{ id: I.GOLD, count: 6 }, { id: I.STICK, count: 1 }, { id: I.REDSTONE, count: 1 }], table: true, pattern: ['G G', 'GSG', 'GRG'], key: { G: I.GOLD, S: I.STICK, R: I.REDSTONE } },
   { out: { id: B.DETECTOR_RAIL, count: 6 }, inputs: [{ id: I.IRON, count: 6 }, { id: B.STONE, count: 1 }, { id: I.REDSTONE, count: 1 }], table: true, pattern: ['I I', 'ISI', 'IRI'], key: { I: I.IRON, S: B.STONE, R: I.REDSTONE } },
@@ -194,8 +178,6 @@ export const RECIPES: Recipe[] = [
   // 1.9: netherowe surowce mają swoje receptury i źródła
   { out: { id: B.MAGMA, count: 1 }, inputs: [{ id: I.MAGMA_CREAM, count: 4 }], table: false, pattern: ['MM', 'MM'], key: { M: I.MAGMA_CREAM } },
   { out: { id: B.BREWING, count: 1 }, inputs: [{ id: I.BLAZE_ROD, count: 1 }, { id: B.COBBLE, count: 3 }], table: false, pattern: [' R ', 'CCC'], key: { R: I.BLAZE_ROD, C: B.COBBLE } },
-  { out: { id: B.CRYING_OBSIDIAN, count: 1 }, inputs: [{ id: B.OBSIDIAN, count: 1 }, { id: I.GHAST_TEAR, count: 1 }], table: false },
-  { out: { id: B.WOOL_RED, count: 1 }, inputs: [{ id: B.WOOL_WHITE, count: 1 }, { id: I.NETHER_WART, count: 1 }], table: false },
   { out: { id: B.OAK_STAIRS_N, count: 4 }, inputs: [{ id: B.PLANKS, count: 6 }], table: true, pattern: ['P  ', 'PP ', 'PPP'], key: { P: B.PLANKS } },
   { out: { id: B.COBBLE_STAIRS_N, count: 4 }, inputs: [{ id: B.COBBLE, count: 6 }], table: true, pattern: ['C  ', 'CC ', 'CCC'], key: { C: B.COBBLE } },
   { out: { id: B.OAK_SLAB, count: 6 }, inputs: [{ id: B.PLANKS, count: 3 }], table: true, pattern: ['PPP'], key: { P: B.PLANKS } },
@@ -207,7 +189,6 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.FISHING_ROD, count: 1 }, inputs: [{ id: I.STICK, count: 3 }, { id: I.STRING, count: 2 }], table: true },
   // Lorneta: krzyż ze szkła złoconego oczkiem pośrodku (4 szkła + 1 sztabka złota).
   { out: { id: I.SPYGLASS, count: 1 }, inputs: [{ id: B.GLASS, count: 4 }, { id: I.GOLD, count: 1 }], table: true, pattern: [' G ', 'GYG', ' G '], key: { G: B.GLASS, Y: I.GOLD } },
-  { out: { id: I.TOTEM, count: 1 }, inputs: [{ id: I.EMERALD, count: 4 }, { id: I.GOLD, count: 1 }], table: true, pattern: [' E ', 'EGE', ' E '], key: { E: I.EMERALD, G: I.GOLD } },
   // Java: one rod crafts two powders; one powder is fuel for 20 brews.
   { out: { id: I.BLAZE_POWDER, count: 2 }, inputs: [{ id: I.BLAZE_ROD, count: 1 }], table: false },
   { out: { id: I.MAGMA_CREAM, count: 1 }, inputs: [{ id: I.BLAZE_POWDER, count: 1 }, { id: I.SLIME_BALL, count: 1 }], table: false },
@@ -215,7 +196,6 @@ export const RECIPES: Recipe[] = [
   { out: { id: I.SUGAR, count: 1 }, inputs: [{ id: B.SUGARCANE, count: 1 }], table: false },
   { out: { id: B.GLASS_PANE, count: 16 }, inputs: [{ id: B.GLASS, count: 6 }], table: true, pattern: ['GGG', 'GGG'], key: { G: B.GLASS } },
   { out: { id: I.BOTTLE, count: 3 }, inputs: [{ id: B.GLASS, count: 3 }], table: true, pattern: ['G G', ' G '], key: { G: B.GLASS } },
-  { out: { id: I.HONEY_BOTTLE, count: 1 }, inputs: [{ id: I.BOTTLE, count: 1 }, { id: I.HONEYCOMB, count: 1 }], table: false },
 
   // ==========================================================================
   // 2.16 „Pikselowe tekstury”: brakujące przepisy z nowszych wersji Minecrafta
@@ -234,14 +214,12 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.SANDSTONE_SLAB, count: 6 }, inputs: [{ id: B.SANDSTONE, count: 3 }], table: true, pattern: ['AAA'], key: { A: B.SANDSTONE } },
   { out: { id: B.NETHER_BRICK_SLAB, count: 6 }, inputs: [{ id: B.NETHER_BRICKS, count: 3 }], table: true, pattern: ['NNN'], key: { N: B.NETHER_BRICKS } },
   // Wełna z nici – klasyczny przepis z Minecrafta, ratunek, gdy nie ma owiec.
-  { out: { id: B.WOOL_WHITE, count: 1 }, inputs: [{ id: I.STRING, count: 4 }], table: false },
   // Snop siana i z powrotem (9 pszenicy ↔ 9 pszenicy w snopie).
   { out: { id: B.HAY, count: 1 }, inputs: [{ id: I.WHEAT, count: 9 }], table: false, pattern: ['WWW', 'WWW', 'WWW'], key: { W: I.WHEAT } },
   { out: { id: I.WHEAT, count: 9 }, inputs: [{ id: B.HAY, count: 1 }], table: false },
   // Latarnia: pochodnia + sztabka żelaza (odpowiednik 8 grudek żelaza).
   { out: { id: B.LANTERN, count: 1 }, inputs: [{ id: B.TORCH, count: 1 }, { id: I.IRON, count: 1 }], table: false },
   // Dzwon: 4 sztabki złota na stole rzemieślniczym.
-  { out: { id: B.BELL, count: 1 }, inputs: [{ id: I.GOLD, count: 4 }], table: true, pattern: ['GG', 'GG'], key: { G: I.GOLD } },
   // Blok szmaragdu i rozbiórka (9 ↔ 1), jak pozostałe bloki minerałów.
   { out: { id: B.EMERALD_BLOCK, count: 1 }, inputs: [{ id: I.EMERALD, count: 9 }], table: true, pattern: ['EEE', 'EEE', 'EEE'], key: { E: I.EMERALD } },
   { out: { id: I.EMERALD, count: 9 }, inputs: [{ id: B.EMERALD_BLOCK, count: 1 }], table: false },
@@ -249,12 +227,7 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.HONEY_BLOCK, count: 1 }, inputs: [{ id: I.HONEY_BOTTLE, count: 4 }], table: true, pattern: ['HH', 'HH'], key: { H: I.HONEY_BOTTLE } },
   // Terracotta is smelted from clay blocks; no ambiguous duplicate of the brick recipe.
   // Beton w pozostałych czterech kolorach – ten sam przepis co biały i czerwony.
-  { out: { id: B.CONCRETE_BLUE, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: I.LAPIS, count: 1 }], table: true },
-  { out: { id: B.CONCRETE_GREEN, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: B.CACTUS, count: 1 }], table: true },
-  { out: { id: B.CONCRETE_YELLOW, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: B.FLOWER_YELLOW, count: 1 }], table: true },
-  { out: { id: B.CONCRETE_BLACK, count: 8 }, inputs: [{ id: B.SAND, count: 4 }, { id: B.GRAVEL, count: 4 }, { id: I.COAL, count: 1 }], table: true },
   // Błoto: ziemia + butelka wody (w Minecrafcie używa się butelki na bloku).
-  { out: { id: B.MUD, count: 1 }, inputs: [{ id: B.DIRT, count: 1 }, { id: I.BOTTLE, count: 1 }], table: false },
 ];
 
 /**
@@ -297,6 +270,16 @@ addTools(B.PLANKS, I.WOOD_PICK, I.WOOD_AXE, I.WOOD_SHOVEL, I.WOOD_SWORD, I.WOOD_
 addTools(B.COBBLE, I.STONE_PICK, I.STONE_AXE, I.STONE_SHOVEL, I.STONE_SWORD, I.STONE_HOE);
 addTools(I.IRON, I.IRON_PICK, I.IRON_AXE, I.IRON_SHOVEL, I.IRON_SWORD, I.IRON_HOE);
 addTools(I.DIAMOND, I.DIAMOND_PICK, I.DIAMOND_AXE, I.DIAMOND_SHOVEL, I.DIAMOND_SWORD, I.DIAMOND_HOE);
+
+// Native JSON is the source of truth for corrected outputs (no duplicate shortcut).
+const nativeRecipes=refinementRecipes();
+for(const r of nativeRecipes){const i=RECIPES.findIndex(old=>old.out.id===r.out.id&&r.out.id!==I.IRON&&r.out.id!==I.GOLD);if(i>=0)RECIPES.splice(i,1,r);else RECIPES.push(r);}
+const dyes=[[B.WOOL_RED,I.RED_DYE],[B.WOOL_YELLOW,I.YELLOW_DYE],[B.WOOL_BLUE,I.BLUE_DYE],[B.WOOL_GREEN,I.GREEN_DYE],[B.WOOL_BLACK,I.BLACK_DYE]];
+const wools=[B.WOOL_WHITE,B.WOOL_RED,B.WOOL_YELLOW,B.WOOL_BLUE,B.WOOL_GREEN,B.WOOL_BLACK,...Array.from({length:10},(_,i)=>B.WOOL_ORANGE+i)];
+for(const [out,dye] of dyes)for(const wool of wools)if(wool!==out)RECIPES.push({out:{id:out,count:1},inputs:[{id:wool,count:1},{id:dye,count:1}],table:false});
+RECIPES.push({out:{id:B.CLAY,count:1},inputs:[{id:I.CLAY_BALL,count:4}],table:false,pattern:['CC','CC'],key:{C:I.CLAY_BALL}});
+
+RECIPES.push({out:{id:I.DIAMOND,count:9},inputs:[{id:B.DIAMOND_BLOCK,count:1}],table:false});
 
 // Explicit native coal alternatives: do not substitute charcoal in invented dye/ore shortcuts.
 for (const r of RECIPES.filter(r => r.out.id === B.TORCH || r.out.id === B.CAMPFIRE)) {
@@ -499,11 +482,14 @@ export class Inventory {
     const r = this.gridMatch(table);
     if (!r) return null;
     const out: Stack = { ...r.out };
+    const beforeSlots=this.slots.map(s=>s?copyStack(s):null),beforeGrid=this.grid.map(s=>s?copyStack(s):null);
     for (const i of table ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [0, 1, 3, 4]) {
       const cell = this.grid[i];
       if (!cell) continue;
       cell.count -= 1;
-      if (cell.count <= 0) this.grid[i] = null;
+      const remainder=cell.id===I.HONEY_BOTTLE?I.BOTTLE:null;
+      if (cell.count <= 0) this.grid[i] = remainder?{id:remainder,count:1}:null;
+      else if(remainder&&!this.add(remainder,1)){this.slots=beforeSlots;this.grid=beforeGrid;return null;}
     }
     return out;
   }
@@ -531,7 +517,9 @@ export class Inventory {
     for (const input of r.inputs) {
       if (removeFromSlots(projected, input.id, input.count) > 0) return false;
     }
-    return canFitInSlots(projected, r.out);
+    const projection=new Inventory();projection.slots=projected;
+    if(!projection.add(r.out.id,r.out.count,r.out.dur,r.out.ench,r.out.name))return false;
+    return r.inputs.every(s=>s.id!==I.HONEY_BOTTLE||projection.add(I.BOTTLE,s.count));
   }
 
   craft(r: Recipe): boolean {
@@ -544,6 +532,7 @@ export class Inventory {
       this.slots = previous;
       return false;
     }
+    for(const input of r.inputs)if(input.id===I.HONEY_BOTTLE)this.add(I.BOTTLE,input.count);
     return true;
   }
 

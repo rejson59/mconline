@@ -1,0 +1,217 @@
+{
+  "version": "1.20.4",
+  "repository": "InventivetalentDev/minecraft-assets",
+  "commit": "90d256dfee7b6fd8014e1bc3b107e64a530c5f9b",
+  "files": [
+    {
+      "path": "assets/minecraft/textures/item/golden_pickaxe.png",
+      "sha256": "55c30dae711177820b2ebf82027083ed1bd1ac0b02144f83eae009e0ef50f540",
+      "bytes": 181
+    },
+    {
+      "path": "assets/minecraft/textures/item/golden_axe.png",
+      "sha256": "e709211f89ef1d4dd05eea8ea4a9b48ca323fc57c8390ceead92923f0f065a46",
+      "bytes": 179
+    },
+    {
+      "path": "assets/minecraft/textures/item/golden_shovel.png",
+      "sha256": "1dd289fc552ec20ce9217a8a06edb7862c337a8fcccb3777ce740c9d152f0e77",
+      "bytes": 159
+    },
+    {
+      "path": "assets/minecraft/textures/item/golden_sword.png",
+      "sha256": "ec9c723ff0d81cf7254ec59819a4179c65a15edcc9148bddea569e54791b25da",
+      "bytes": 196
+    },
+    {
+      "path": "assets/minecraft/textures/item/golden_hoe.png",
+      "sha256": "f58876620206ce0ce456bdebaa587817cd71fde70a2507118ea581d229dc1a62",
+      "bytes": 162
+    },
+    {
+      "path": "assets/minecraft/textures/item/iron_nugget.png",
+      "sha256": "c9647153bb90c1ba20e2405707cc872d32284674a0086e19e8dc82fbccdfc775",
+      "bytes": 175
+    },
+    {
+      "path": "assets/minecraft/textures/item/gold_nugget.png",
+      "sha256": "73c9c64b35e15a47366802fa899b115fce6380d1f19bda38dd7ef196182029ca",
+      "bytes": 136
+    },
+    {
+      "path": "assets/minecraft/textures/item/copper_ingot.png",
+      "sha256": "ebccaba00d1623ef8acce3768e104bf54c8ee157d92ba7c969d7100830414875",
+      "bytes": 204
+    },
+    {
+      "path": "assets/minecraft/textures/item/amethyst_shard.png",
+      "sha256": "24fa75f6b75202d890019ec7a901d525918cfacd3e8c0e6cb0580c7b7933b363",
+      "bytes": 184
+    },
+    {
+      "path": "assets/minecraft/textures/item/brick.png",
+      "sha256": "0c052c23230ff95ec48959b3ee23e88d9b95b04fd4f9b3429da6a585e6e95c81",
+      "bytes": 191
+    },
+    {
+      "path": "assets/minecraft/textures/item/clay_ball.png",
+      "sha256": "99d84ef4b14b2fd33474162cce7ed2493ed396bd7d2493385573baa794d18178",
+      "bytes": 184
+    },
+    {
+      "path": "assets/minecraft/textures/item/red_dye.png",
+      "sha256": "b35a1e3297e33a20548e0ab45098576706f543776a575cabd1128df2cf77e47a",
+      "bytes": 184
+    },
+    {
+      "path": "assets/minecraft/textures/item/yellow_dye.png",
+      "sha256": "da330cb33b0fceb4710eed3cdeecdad158e62d7b3a3524947652345f88d0429f",
+      "bytes": 185
+    },
+    {
+      "path": "assets/minecraft/textures/item/green_dye.png",
+      "sha256": "4941250888212437bc3fc6f34d6f2913d59b8f34d86692772104f8cad0959a7c",
+      "bytes": 189
+    },
+    {
+      "path": "assets/minecraft/textures/item/blue_dye.png",
+      "sha256": "6cf7ce48373b5e4d1b42c36abdff0abc847eef2dd10c9886bc1a77903b66617d",
+      "bytes": 178
+    },
+    {
+      "path": "assets/minecraft/textures/item/black_dye.png",
+      "sha256": "8e393b186cccb6c2925ff5d9ca390dcad66d40c7a63807840c4600b7838d3268",
+      "bytes": 174
+    },
+    {
+      "path": "data/minecraft/recipes/golden_pickaxe.json",
+      "sha256": "188ed510c1a59b9add8d55aff00ea3191cfea0dce585b38403406aa8398d9b0a",
+      "bytes": 298
+    },
+    {
+      "path": "data/minecraft/recipes/golden_axe.json",
+      "sha256": "6d554257ea410d99467c573fd96259cfdefa2ff055b24b224a3f2bdfd116d8d0",
+      "bytes": 291
+    },
+    {
+      "path": "data/minecraft/recipes/golden_shovel.json",
+      "sha256": "537d9e127511968d36abc058d546f1acb94bf09f09507f871e684545dc71bbaf",
+      "bytes": 291
+    },
+    {
+      "path": "data/minecraft/recipes/golden_sword.json",
+      "sha256": "048da388bf1012a9ec4ca4daaf213b6a417d8467afcd16bc6ac6f7a4320ec61c",
+      "bytes": 290
+    },
+    {
+      "path": "data/minecraft/recipes/golden_hoe.json",
+      "sha256": "b665a99e765e8532b3a7a5cfd5c3bcea201db22a14e653f233041c1486e44989",
+      "bytes": 291
+    },
+    {
+      "path": "data/minecraft/recipes/iron_nugget.json",
+      "sha256": "efac7ba4b7618a6122fa22269558ec0a67bc18a9fff98d0b31fcff56508126ec",
+      "bytes": 210
+    },
+    {
+      "path": "data/minecraft/recipes/gold_nugget.json",
+      "sha256": "c1c390b7fe85381c61402c5a87b8280249aa9a87b11303b7abc6c6edac711652",
+      "bytes": 210
+    },
+    {
+      "path": "data/minecraft/recipes/iron_ingot_from_nuggets.json",
+      "sha256": "5b2a654f7493be821936908d54cac189fb51c5a5504a883b0c3828d7dacfbf28",
+      "bytes": 265
+    },
+    {
+      "path": "data/minecraft/recipes/gold_ingot_from_nuggets.json",
+      "sha256": "00d9bb3200e7c44ba64fe3e6c8a730ec1c6824a8543d36fc35e548c28dfda719",
+      "bytes": 265
+    },
+    {
+      "path": "data/minecraft/recipes/spyglass.json",
+      "sha256": "8a893b2d973e491207b8de42727e2a7490eb1ec13e09bec8930a318c45cffaad",
+      "bytes": 303
+    },
+    {
+      "path": "data/minecraft/recipes/lantern.json",
+      "sha256": "ce9c4361a9e5af27f82538d754a066871ea03b225ce56405f5d17bef2766104b",
+      "bytes": 287
+    },
+    {
+      "path": "data/minecraft/recipes/fishing_rod.json",
+      "sha256": "35315007c1c104b2ef85a7a59e4e548030008cf4b607503740eb6251ba586833",
+      "bytes": 291
+    },
+    {
+      "path": "data/minecraft/recipes/stone_bricks.json",
+      "sha256": "0c12f4a1817149bcfdecf76e1ab85c2fa6ec0b8ac16a90a889dbf8e25752b705",
+      "bytes": 243
+    },
+    {
+      "path": "data/minecraft/recipes/sandstone.json",
+      "sha256": "c42c283c5d4fddb9e3b17f9492dd00f78bcb09c097f8170b91af397d0c7c3512",
+      "bytes": 223
+    },
+    {
+      "path": "data/minecraft/recipes/white_wool_from_string.json",
+      "sha256": "2a10127d8652d71b5ca13d1a645a50bed24285ef7f353388f0f6def23574af5b",
+      "bytes": 226
+    },
+    {
+      "path": "data/minecraft/recipes/lever.json",
+      "sha256": "65da9ca88701bbce31ebcba24d1213b11b9a528832d3ebc74e71da9d099bcf0c",
+      "bytes": 274
+    },
+    {
+      "path": "data/minecraft/recipes/observer.json",
+      "sha256": "74db1ad02d29134aa4a41b65a10360d5988f2bf090b69021f0646e2681f9871e",
+      "bytes": 346
+    },
+    {
+      "path": "data/minecraft/recipes/red_bed.json",
+      "sha256": "01058d6d5dee33ff7a69c20e1fa45e0a49a52ebf7e1cfd4a7474a6cc41439ca5",
+      "bytes": 291
+    },
+    {
+      "path": "data/minecraft/recipes/bricks.json",
+      "sha256": "50adee3e4d0d8bd4314d2ec7d28609f5f502d690ac0c485536c9e8fff1257a6f",
+      "bytes": 221
+    },
+    {
+      "path": "data/minecraft/recipes/red_dye_from_poppy.json",
+      "sha256": "ec6437708f5b24c8f43a1a69687dd5d59dcd6ae1bf8dd92627c34fe1d0fcdaa7",
+      "bytes": 207
+    },
+    {
+      "path": "data/minecraft/recipes/yellow_dye_from_dandelion.json",
+      "sha256": "ab18144fb1f4b5f49a0da650402d96412dbcdfbec8db15ce4ef543c4b80d3ec1",
+      "bytes": 217
+    },
+    {
+      "path": "data/minecraft/recipes/blue_dye.json",
+      "sha256": "4277e3126c44d23a7e5fea38149056ac34b058284edc0d82fd446e3c892a929c",
+      "bytes": 216
+    },
+    {
+      "path": "data/minecraft/recipes/honey_block.json",
+      "sha256": "27367e117aadb52d6beb9213d727d7abdbbecf15200046fc3c4c611cca706020",
+      "bytes": 233
+    },
+    {
+      "path": "data/minecraft/recipes/honey_bottle.json",
+      "sha256": "fe7d856b1aee0d7f2a2ca65b004192e00344882e65fd84a1376dcb3c27f21d31",
+      "bytes": 420
+    },
+    {
+      "path": "data/minecraft/recipes/oak_boat.json",
+      "sha256": "bf072ba906067e8f42c322d61186bd74429e2bfef9b7cfb78d7b7b8cf3915789",
+      "bytes": 245
+    },
+    {
+      "path": "assets/minecraft/textures/entity/bed/red.png",
+      "sha256": "4f2ec7ee54e7cea9d8d38105b77eb6c2003653131e409e3d3857065ba7554e1e",
+      "bytes": 907
+    }
+  ]
+}

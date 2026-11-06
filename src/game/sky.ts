@@ -79,3 +79,15 @@ export function rainFogMix(daylight: number, stormBlend: number): number {
   const day = clamp01(daylight);
   return (0.35 + 0.25 * (1 - day)) * clamp01(stormBlend);
 }
+
+/** Integrate velocity; multiplying total uptime by changing weather causes jumps. */
+export class CloudMotion {
+  private last: number|null=null;
+  distance=0;
+  constructor(private speed=3.4){}
+  advance(now:number,multiplier=1):number{
+    if(!Number.isFinite(now)||!Number.isFinite(multiplier))return this.distance;
+    if(this.last!==null)this.distance+=Math.max(0,Math.min(.25,(now-this.last)/1000))*this.speed*Math.max(0,multiplier);
+    this.last=now;return this.distance;
+  }
+}
