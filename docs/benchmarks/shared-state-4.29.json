@@ -215,7 +215,13 @@
     "script": "scripts/verify-cloud-live.mjs",
     "checks": 18,
     "localResult": "BLOCKED: ECONNRESET before TLS (sandbox outbound restriction)",
-    "ci": "Runs on pull_request/main; inspect workflow result"
+    "ci": {
+      "result": "PASS",
+      "checks": 18,
+      "run": "https://github.com/rejson59/mconline/actions/runs/42286119137",
+      "sourceCommit": "67aeda0780a590d57df9225a0ffc8e82ae63d01f",
+      "step": "Deployed cloud authorization (no real sessions)"
+    }
   },
   "limitations": [
     "No two physical devices with real official account sessions",
