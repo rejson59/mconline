@@ -1,0 +1,14 @@
+{
+  "source": "supabase/functions/mconline-reference-archive/index.ts",
+  "compiler": "esbuild 0.28.2",
+  "external": "npm:jose@6.2.15",
+  "sourceSHA256": "0f36dc7e7b166b83ebfddee5dd6aedfc74506c09755ab07de65780d026fd3aaa",
+  "inputs": {
+    "supabase/functions/mconline-reference-archive/index.ts": "0f36dc7e7b166b83ebfddee5dd6aedfc74506c09755ab07de65780d026fd3aaa",
+    "scripts/reference-official-pin.mjs": "c0b4634cf5a45b9500fc6012d170089e2453e3e80a8a2604b96979114ff97deb",
+    "scripts/reference-corpus-core.mjs": "285671f84a3a82f2b7ae223dc74bbe55fa59f4d5580f73b98e0427703c129cf9",
+    "scripts/reference-transfer-core.mjs": "56fefdb84dcfbfc6863742aff3f700fa69ffe5f53470f5a1039daf7ebb9000c7"
+  },
+  "standaloneSHA256": "4668c6b2a00197e5f9e40cb8c03aee7fc60fa0d9745c3c1a5e1ce7d0e84d114f",
+  "bytes": 18044
+}

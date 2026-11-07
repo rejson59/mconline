@@ -43,4 +43,9 @@ for(const bearer of [undefined,'Bearer not-a-real-job-identity',`Bearer ${worldK
  assert.equal(reader.status,401,'reference reader rejects missing/opaque/non-OIDC identity');await reader.arrayBuffer();count++;console.log('PASS reference reader denies non-job identity');
 }
 const readerBrowser=await call(world,'/functions/v1/mconline-reference-reader',undefined,{Origin:'https://rejson59.github.io'},'POST');assert.equal(readerBrowser.status,403);count++;console.log('PASS reference reader rejects browser access');
+for(const bearer of [undefined,'Bearer not-a-real-archive-identity',`Bearer ${worldKey}`]){
+ const archive=await fetch(world+'/functions/v1/mconline-reference-archive',{method:'POST',headers:bearer?{Authorization:bearer}:{},signal:AbortSignal.timeout(30000)});
+ assert.equal(archive.status,401,'archive rejects missing/opaque/non-OIDC identity');await archive.arrayBuffer();count++;console.log('PASS archive denies non-job identity');
+}
+const archiveBrowser=await call(world,'/functions/v1/mconline-reference-archive',undefined,{Origin:'https://rejson59.github.io'},'POST');assert.equal(archiveBrowser.status,403);count++;console.log('PASS archive rejects browser access');
 console.log(`${count} deployed HTTP authorization checks passed (no real accounts, no persistent test writes)`);
