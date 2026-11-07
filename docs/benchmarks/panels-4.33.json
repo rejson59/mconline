@@ -1,0 +1,180 @@
+{
+  "version": "4.33.0",
+  "reports": [
+    {
+      "device": "desktop",
+      "viewport": {
+        "width": 960,
+        "height": 600
+      },
+      "panels": [
+        {
+          "id": 69,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 5.5,
+            "z": 4.7,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 70,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5125,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 71,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5,
+            "z": 5.5125,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 72,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 4.7,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        }
+      ],
+      "closedTrapDistance": 2,
+      "doorStates": 32,
+      "errors": []
+    },
+    {
+      "device": "mobile",
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "isMobile": true,
+        "hasTouch": true
+      },
+      "panels": [
+        {
+          "id": 69,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 5.5,
+            "z": 4.7,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 70,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5125,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 71,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5,
+            "z": 5.5125,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 72,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 4.7,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        }
+      ],
+      "closedTrapDistance": 2,
+      "doorStates": 32,
+      "errors": []
+    }
+  ],
+  "scope": "Legacy trapdoor physical panels and exact door/trap targeting; not Java 26.3 parity proof",
+  "regression": {
+    "initial56BeforeFix": {
+      "passed": 4,
+      "failed": 52
+    },
+    "finalGroups": 62,
+    "failed": 0,
+    "engineChecks": 16973,
+    "uiChecks": 409,
+    "fullSuite": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "auditVulnerabilities": 0
+  },
+  "limitations": [
+    "Only legacy trap states 68–72; closing still loses facing",
+    "No full half/facing migration, underside placement, support rule replacement, redstone or waterlogging",
+    "No new original-client comparison or texture/UV change",
+    "Desktop/touch emulation, not a physical phone performance benchmark"
+  ]
+}

@@ -77,9 +77,13 @@ Nie pobrano ani nie przeanalizowano jeszcze rzeczywistych oryginałów. Java run
 
 Praca nie czeka na magazyn: naprawiono kontakty z rzeczywistymi powierzchniami drzwi/skrzyń/szyb, swept collision dla cienkich brył, uwzględnienie wystającej części płotu, pionowy kontakt i sprawdzanie całej drogi step-up. Płot używa nieprzezroczystego materiału desek, zamiast wycinanej ikonki. **45 nowych grup regresji**, pełna regresja, build oraz istniejący test produkcyjny Chromium na desktop/mobile: PASS. [Granice i macierz zgodności](MOVEMENT-4.31.md); to nie jest dowód pełnej zgodności ruchu lub obrazu z oryginalnym klientem.
 
-## Obecna porcja: płoty 4.32
+## Poprzednia porcja: płoty 4.32
 
 Usunięto pełną kratkę kolizji płotu: słupek i ramiona wynikają z jednej maski sąsiadów wspólnej z renderingiem. Dodano oddzielny kształt zaznaczania, dynamiczny obrys/pękanie i ochronę stawiania przed nowymi ramionami sąsiedniego płotu. **79 grup regresji oraz rzeczywisty test produkcyjnej gry w Chromium desktop/touch mobile: PASS.** [Zakres i granica dowodu](FENCES-4.32.md). Nie deklarujemy pełnej zgodności z 26.3 na podstawie historycznego źródła ani własnych regresji.
+
+## Obecna porcja: włazy i drzwi 4.33
+
+Otwarte włazy blokują rzeczywistym skrzydłem 3/16. Rendering, kolizje i celowanie korzystają ze wspólnej bryły; drzwi i włazy mają dokładny obrys/pękanie, a stawianie włazu sprawdza wynikowy kierunek i przecięcie ciał. **62 grupy regresji oraz produkcyjny Chromium desktop/touch mobile: PASS.** Bez zmiany ID i resetu. [Zakres i jawne ograniczenia starego formatu](PANELS-4.33.md): nadal jeden stan zamknięty, brak pełnej połowy/kierunku, bez dowodu kompletnej zgodności z 26.3.
 
 ## Dalsza porcja — od inwentarza do kontrolowanego transportu
 

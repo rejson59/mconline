@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'panels', entry: path.join(here, 'thinPanels.ts'), label: 'Włazy i drzwi: fizyka, celownik i stawianie' },
   { name: 'fences', entry: path.join(here, 'fences.ts'), label: 'Płoty: sąsiedzi, kolizje, celownik i stawianie' },
   { name: 'movement', entry: path.join(here, 'movement.ts'), label: 'Ruch: cienkie bryły, podparcie i płoty' },
   {name:'refinements',entry:path.join(here,'refinements.ts'),label:'Złoto, receptury, łóżka, chmury i modele'},

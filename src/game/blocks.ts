@@ -320,7 +320,7 @@ for (let i = 0; i < 4; i++) {
   def(B.DOOR_URN + i, `Górne drzwi (zawias z prawej, ${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, opaque: false, layer: 1 });
   def(B.DOOR_UORN + i, `Otwarte górne drzwi (zawias z prawej, ${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, opaque: false, layer: 1 });
   def(B.LADDER_N + i, i === 0 ? 'Drabina' : `Drabina (${FACE_PL[i]})`, T.ladder, { solid: false, opaque: false, layer: 1, hardness: 0.4, sound: 'wood', drop: B.LADDER_N });
-  def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 3, sound: 'wood', drop: B.TRAP, solid: false, opaque: false });
+  def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 3, sound: 'wood', drop: B.TRAP, opaque: false });
 }
 def(B.TRAP, 'Właz', T.trapdoor, { hardness: 3, sound: 'wood', opaque: false });
 def(B.FENCE, 'Płot', T.planks, { opaque: false, layer: 1, hardness: 2, sound: 'wood', render: 'fence' });
@@ -544,6 +544,12 @@ function collisionFor(d: BlockDef): Float32Array | null {
   // wieko 5 px od y=9), więc i kolizja, i celownik muszą sięgać 14/16.
   if (d.render === 'chest') return new Float32Array([1 / 16, 0, 1 / 16, 15 / 16, 14 / 16, 15 / 16]);
   if (d.id === B.PATH) return new Float32Array([0, 0, 0, 1, 0.9375, 1]);
+  // Legacy trap states keep their saved orientation; physics and meshing share
+  // these exact 3/16 panels instead of treating open wings as empty air.
+  if (d.id === B.TRAP_N) return new Float32Array([0, 0, 0, 1, 1, 3 / 16]);
+  if (d.id === B.TRAP_E) return new Float32Array([13 / 16, 0, 0, 1, 1, 1]);
+  if (d.id === B.TRAP_S) return new Float32Array([0, 0, 13 / 16, 1, 1, 1]);
+  if (d.id === B.TRAP_W) return new Float32Array([0, 0, 0, 3 / 16, 1, 1]);
   if (d.id === B.TRAP) return new Float32Array([0, 0.8125, 0, 1, 1, 1]);
   if (isLadder(d.id)) {
     const f = ladderFacing(d.id);

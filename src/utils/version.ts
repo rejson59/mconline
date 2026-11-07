@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.32.0';
-export const GAME_RELEASE_NAME = 'Płoty bez niewidzialnej kratki';
+export const GAME_VERSION = '4.33.0';
+export const GAME_RELEASE_NAME = 'Włazy i drzwi bez pustych trafień';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.33: włazy i drzwi bez pustych trafień', text: 'Otwarte włazy zatrzymują na cienkim skrzydle, a celownik, obrys i pękanie drzwi oraz włazów śledzą rzeczywistą płytę. Stawianie sprawdza gracza i moby bez zużycia po odmowie. Przytrzymanie użycia nie przełącza włazu z powrotem. Bez zmiany ID i resetu zapisów; pełne stany włazów pozostają otwarte.' },
   { title: '4.32: płoty bez niewidzialnej kratki', text: 'Kolizja płotu obejmuje słupek i połączone ramiona, nie pełną kratkę. Ten sam układ sąsiadów steruje szczeblami i fizyką; celownik i pękanie śledzą kształt do wysokości jednego bloku. Stawianie chroni też przed nowym ramieniem sąsiedniego płotu. Bez resetu zapisów.' },
   { title: '4.31: dokładniejsze kolizje i widoczne płoty', text: 'Drzwi, skrzynie i szyby zatrzymują na rzeczywistej powierzchni, nie na granicy całej kratki. Ruch uwzględnia górną część płotu; jego słupki i szczeble używają nieprzezroczystego materiału desek. Bez resetu zapisów. Pełna zgodność z Java 26.3 pozostaje celem, nie deklaracją tego wydania.' },
   {title:'4.30: narzędzia, łóżka i światło',text:'Złote narzędzia, poprawione receptury, jeden drop łóżka, spokojne chmury, fale wody i oświetlone skórki. Łódka 1:1 pozostaje otwarta.'},

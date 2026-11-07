@@ -10,7 +10,7 @@ import { isWater, isFire, waterHeight } from './blocks';
 import { applyStructures } from './structures';
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, T, EMIT, isFurnace, furnaceCapCorner, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, selectionBoxesAt, fenceMask, paneBoxes, paneConnects, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, stairsBoxesAt, isStairs, isSlab, collisionBoxes, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
+import { B, T, EMIT, isFurnace, furnaceCapCorner, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, selectionBoxesAt, fenceMask, paneBoxes, paneConnects, isTrap, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, stairsBoxesAt, isStairs, isSlab, collisionBoxes, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
 import { TILE_UV4, entityUV, tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
@@ -696,7 +696,6 @@ function specialOf(id: number): SpecialBox[] | null {
 }
 
 function specialBoxes(id: number): SpecialBox[] | null {
-  const t = 0.1875;
   const face = ladderFacing(id);
   // 2.21: drabina to płaska deska 0,3 px od ściany (wanilia: z = 15,2/16),
   // a nie blok o grubości 3 px jak właz.
@@ -705,11 +704,7 @@ function specialBoxes(id: number): SpecialBox[] | null {
   if (face === 1) return [{ b: [1 - lt, 0, 0, 1, 1, 1] }];
   if (face === 2) return [{ b: [0, 0, 1 - lt, 1, 1, 1] }];
   if (face === 3) return [{ b: [0, 0, 0, lt, 1, 1] }];
-  if (id === B.TRAP_N) return [{ b: [0, 0, 0, 1, 1, t] }];
-  if (id === B.TRAP_E) return [{ b: [1 - t, 0, 0, 1, 1, 1] }];
-  if (id === B.TRAP_S) return [{ b: [0, 0, 1 - t, 1, 1, 1] }];
-  if (id === B.TRAP_W) return [{ b: [0, 0, 0, t, 1, 1] }];
-  if (id === B.TRAP) return [{ b: [0, 1 - t, 0, 1, 1, 1] }];
+  if (isTrap(id)) return [{ b: Array.from(collisionBoxes(id)!) as SpecialBox['b'] }];
   if (isBed(id)) return bedBoxes(id);
   if (id === B.PATH) {
     // 2.21: waniliowa ścieżka ma 15/16 wysokości, a boki zaczynają się 1 px
@@ -2195,7 +2190,7 @@ export class World {
     let t = 0;
     while (t <= maxDist) {
       const id = this.peekBlock(x, y, z);
-      if (options.solidOnly || id === B.GLASS_PANE || isFence(id) || isStairs(id) || isSlab(id)) {
+      if (options.solidOnly || id === B.GLASS_PANE || isFence(id) || isStairs(id) || isSlab(id) || isDoor(id) || isTrap(id)) {
         // Slab intersection, not opacity or coarse point samples: glass stops
         // melee, while the empty part of an open door/slab remains passable.
         // Fences can extend half a block above their own voxel.

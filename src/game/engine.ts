@@ -5987,7 +5987,7 @@ export class Game {
 
   /** Keep outline and breaking overlay on the same exposed shape as the mesh. */
   private updateBuildingTarget(id: number, x: number, y: number, z: number) {
-    const shaped = isStairs(id) || isSlab(id) || isFence(id),
+    const shaped = isStairs(id) || isSlab(id) || isFence(id) || isDoor(id) || isTrap(id),
       boxes = shaped ? selectionBoxesAt(this.world, x, y, z) : null;
     const key = boxes ? Array.from(boxes).join(',') : 'cube';
     if ((this.selection.userData.buildingShape ?? 'cube') === key) return;
@@ -6034,7 +6034,7 @@ export class Game {
         this.mouseRight = false;
         return;
       }
-      if (isTrap(t.id)) { this.toggleTrap(t.x, t.y, t.z, t.nx, t.nz); return; }
+      if (isTrap(t.id)) { this.toggleTrap(t.x, t.y, t.z, t.nx, t.nz); this.mouseRight = false; return; }
       if (isChestBlock(t.id)) { this.openChest(t.x, t.y, t.z); return; }
       if (t.id === B.CRAFTING) { this.openInventory(true); return; }
       if (isFurnace(t.id)) { this.openFurnace(t.x, t.y, t.z); return; }
@@ -6146,7 +6146,7 @@ export class Game {
       (mergeTarget||(isSlabTop(cur)?t.ny>0||(t.ny===0&&this.placementHitY(t)<=.5):t.ny<0||(t.ny===0&&this.placementHitY(t)>.5)));
     if (cur !== B.AIR && RENDER[cur] !== 2 && RENDER[cur] !== 1 && !mergeSlab) return;
     const id = s.id;
-    if (IS_SOLID[id] && !isStairs(id) && !isSlab(id) && !isFence(id)) {
+    if (IS_SOLID[id] && !isStairs(id) && !isSlab(id) && !isFence(id) && !isTrap(id)) {
       const b = this.body;
       if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, px, py, pz)) return;
       for (const m of this.mobs) if (!m.dead && aabbIntersectsBlock(m.body.pos.x, m.body.pos.y, m.body.pos.z, m.body.w, m.body.h, px, py, pz)) return;
@@ -6238,9 +6238,11 @@ export class Game {
       this.consumeSelected();
       return;
     } else if (isTrap(id)) {
-      if (t.ny === 1) this.world.setBlock(px, py, pz, B.TRAP);
-      else if (t.ny === 0) this.world.setBlock(px, py, pz, B.TRAP_N + facingFromNormal(-t.nx, -t.nz));
-      else { this.message('Właz kładzie się na podłodze albo na ścianie.'); return; }
+      const placed = t.ny === 1 ? B.TRAP : t.ny === 0 ? B.TRAP_N + facingFromNormal(-t.nx, -t.nz) : null;
+      if (placed === null) { this.message('Właz kładzie się na podłodze albo na ścianie.'); return; }
+      if (!this.canPlaceBuilding(placed, px, py, pz)) return;
+      this.world.setBlock(px, py, pz, placed);
+      this.onBlockChanged(px, py, pz);
       Sfx.playPlace('wood');
       this.swingT = 0;
       this.consumeSelected();
