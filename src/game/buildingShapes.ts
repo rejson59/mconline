@@ -163,6 +163,7 @@ const faceCache = new Map<number, BuildingFace[]>();
 /** Visible boundary only; merge coplanar half-grid rectangles. No hidden box
  * overlap, stretched brickwork, z-fighting or duplicated internal surfaces. */
 export function buildingFaces(boxes: Float32Array): BuildingFace[] {
+  if (boxes.some(n=>n!==0 && n!==0.5 && n!==1)) return exactBuildingFaces(boxes);
   let mask = 0;
   for (let y = 0; y < 2; y++)
     for (let z = 0; z < 2; z++)
@@ -266,4 +267,32 @@ export function buildingUV(
 /** The normal points OUT of the clicked face. Side clicks use the actual hit height. */
 export function upperHalf(normalY: number, hitY: number): boolean {
   return normalY < 0 || (normalY === 0 && hitY > 0.5);
+}
+
+
+// Keep the existing half-grid fast path/fingerprints. Fences need exact 6/16
+// and 10/16 boundaries: sampling a half-grid would erase the narrow post.
+const exactFaceCache = new WeakMap<Float32Array, BuildingFace[]>();
+function exactBuildingFaces(boxes:Float32Array):BuildingFace[] {
+  const cached=exactFaceCache.get(boxes);if(cached)return cached;
+  const edges=[0,1,2].map(axis=>[...new Set(Array.from({length:boxes.length/6},(_,i)=>
+    [boxes[i*6+axis],boxes[i*6+axis+3]]).flat())].sort((a,b)=>a-b));
+  const filled=(x:number,y:number,z:number)=> {
+    const cell=[x,y,z];
+    if(cell.some((n,a)=>n<0||n>=edges[a].length-1))return false;
+    const centre=cell.map((n,a)=>(edges[a][n]+edges[a][n+1])/2);
+    for(let i=0;i<boxes.length;i+=6)if(centre.every((v,a)=>v>boxes[i+a]&&v<boxes[i+a+3]))return true;
+    return false;
+  };
+  const faces:BuildingFace[]=[];
+  for(let f=0;f<6;f++)for(let y=0;y<edges[1].length-1;y++)
+    for(let z=0;z<edges[2].length-1;z++)for(let x=0;x<edges[0].length-1;x++) {
+      const [dx,dy,dz]=directions[f];
+      if(!filled(x,y,z)||filled(x+dx,y+dy,z+dz))continue;
+      const axis=Math.floor(f/2),cell=[x,y,z];
+      const lo=cell.map((n,a)=>edges[a][n]),hi=cell.map((n,a)=>edges[a][n+1]);
+      lo[axis]=hi[axis]=f%2?hi[axis]:lo[axis];
+      faces.push({face:f,points:corners[f].map(p=>p.map((v,a)=>lo[a]+v*(hi[a]-lo[a])))});
+    }
+  exactFaceCache.set(boxes,faces);return faces;
 }

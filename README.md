@@ -2,6 +2,10 @@
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
 
+## Wersja 4.32.0 — płoty bez niewidzialnej kratki
+
+Płot ma kolizję słupka i połączonych ramion, wspólne reguły łączenia dla renderingu/fizyki oraz dopasowany celownik i obrys pękania. Stawianie chroni także przed nowym ramieniem sąsiedniego płotu. **79 nowych grup regresji + sprawdzenie produkcyjnej gry w Chromium desktop/touch mobile.** Bez resetu zapisów. [Wyniki i pozostałe różnice](docs/FENCES-4.32.md).
+
 ## Wersja 4.31.0 — kolizje i widoczne płoty
 
 **Zmiana w samej grze:** dokładniejsze zatrzymywanie przy drzwiach, skrzyniach i szybach, wykrywanie górnej części płotu oraz nieprzezroczyste słupki i szczeble. 45 nowych grup regresji; bez resetu światów i kont. [Co naprawiono, wyniki i pozostałe różnice](docs/MOVEMENT-4.31.md). To kolejny odcinek implementacji, nie deklaracja pełnego 1:1 z Java 26.3.

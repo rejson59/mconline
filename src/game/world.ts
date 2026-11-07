@@ -10,7 +10,7 @@ import { isWater, isFire, waterHeight } from './blocks';
 import { applyStructures } from './structures';
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, T, EMIT, isFurnace, furnaceCapCorner, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, paneBoxes, paneConnects, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, stairsBoxesAt, isStairs, isSlab, collisionBoxes, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
+import { B, T, EMIT, isFurnace, furnaceCapCorner, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, selectionBoxesAt, fenceMask, paneBoxes, paneConnects, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, stairsBoxesAt, isStairs, isSlab, collisionBoxes, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
 import { TILE_UV4, entityUV, tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
@@ -2015,10 +2015,8 @@ export class World {
             const t = tileFor(id, 0);
             const wx = ox + x, wz = oz + z;
             addBoxPx(buf, wx, y, wz, 6 / 16, 0, 6 / 16, 10 / 16, 1, 10 / 16, t, sky, blk);
-            const linked = (dx: number, dz: number) => {
-              const n = get(x + dx, y, z + dz);
-              return isFence(n) || IS_OPAQUE[n] === 1;
-            };
+            const mask = fenceMask(get,x,y,z);
+            const linked = (dx:number,dz:number) => !!(mask & (dz<0?1:dx>0?2:dz>0?4:8));
             const rail = (dx: number, dz: number) => {
               if (dx < 0) {
                 addBoxPx(buf, wx, y, wz, 0, 6 / 16, 7 / 16, 6 / 16, 9 / 16, 9 / 16, t, sky, blk);
@@ -2197,14 +2195,14 @@ export class World {
     let t = 0;
     while (t <= maxDist) {
       const id = this.peekBlock(x, y, z);
-      if (options.solidOnly || id === B.GLASS_PANE || isStairs(id) || isSlab(id)) {
+      if (options.solidOnly || id === B.GLASS_PANE || isFence(id) || isStairs(id) || isSlab(id)) {
         // Slab intersection, not opacity or coarse point samples: glass stops
         // melee, while the empty part of an open door/slab remains passable.
         // Fences can extend half a block above their own voxel.
         let nearest: { x: number; y: number; z: number; nx: number; ny: number; nz: number; id: number; dist: number } | null = null;
         for (const by of options.solidOnly ? [y, y - 1] : [y]) {
           const bid = by === y ? id : this.peekBlock(x, by, z);
-          const boxes = collisionBoxesAt(this, x, by, z);
+          const boxes = options.solidOnly ? collisionBoxesAt(this,x,by,z) : selectionBoxesAt(this,x,by,z);
           if (!boxes) continue;
           for (let i = 0; i < boxes.length; i += 6) {
             if (by !== y && boxes[i + 4] <= 1) continue;

@@ -95,7 +95,7 @@ for (const x of [0, -16, 15])
     assert.equal(bodyFits(world, x + 0.5, 1.1, 0.5, b.w, b.h), false);
     b.vel.x = 5;
     stepBody(world, b, 0.3);
-    assert.ok(b.pos.x <= x - b.w / 2 + 0.001);
+    near(b.pos.x, x + 6 / 16 - b.w / 2);
     assert.equal(b.hitWall, true);
   });
 test('landing stays on the upper half of a fence instead of dropping through', () => {

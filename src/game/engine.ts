@@ -29,7 +29,7 @@ import { explorationLootKind } from './explorationLoot';
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, chestLidGeometry, closedChestGeometry, buildingBlockGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
-import { B, BLOCKS, isFurnace, furnaceFacing, furnaceIdFor, furnaceFacingForYaw, furnaceCapCorner, IS_SOLID, RENDER, collisionBoxesAt, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsId, buildingItem, isSlab, isSlabTop, slabBase, slabDouble, isSlabDouble, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
+import { B, BLOCKS, isFurnace, furnaceFacing, furnaceIdFor, furnaceFacingForYaw, furnaceCapCorner, IS_SOLID, RENDER, collisionBoxesAt, selectionBoxesAt, isFence, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsId, buildingItem, isSlab, isSlabTop, slabBase, slabDouble, isSlabDouble, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryLightPortalAt } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -5963,42 +5963,32 @@ export class Game {
     y: number,
     z: number
   ): boolean {
-    const boxes = collisionBoxesAt(
-      {
-        peekBlock: (bx, by, bz) =>
-          bx === x && by === y && bz === z
-            ? id
-            : this.world.peekBlock(bx, by, bz),
-        hasChunk: (cx, cz) => this.world.hasChunk(cx, cz),
-      },
-      x,
-      y,
-      z
-    );
-    if (!boxes) return true;
-    const bodies = [
-      this.body,
-      ...this.mobs.filter((m) => !m.dead).map((m) => m.body),
-    ];
-    return !bodies.some((b) => {
-      for (let i = 0; i < boxes.length; i += 6)
-        if (
-          b.pos.x + b.w / 2 > x + boxes[i] + 1e-6 &&
-          b.pos.x - b.w / 2 < x + boxes[i + 3] - 1e-6 &&
-          b.pos.y + b.h > y + boxes[i + 1] + 1e-6 &&
-          b.pos.y < y + boxes[i + 4] - 1e-6 &&
-          b.pos.z + b.w / 2 > z + boxes[i + 2] + 1e-6 &&
-          b.pos.z - b.w / 2 < z + boxes[i + 5] - 1e-6
-        )
-          return true;
-      return false;
-    });
+    const preview = {
+      peekBlock: (bx:number,by:number,bz:number) => bx===x&&by===y&&bz===z?id:this.world.peekBlock(bx,by,bz),
+      hasChunk: (cx:number,cz:number) => this.world.hasChunk(cx,cz),
+    };
+    const bodies=[this.body,...this.mobs.filter(m=>!m.dead).map(m=>m.body)];
+    const candidates=[[x,y,z],[x-1,y,z],[x+1,y,z],[x,y,z-1],[x,y,z+1]];
+    for(const [bx,by,bz] of candidates) {
+      const placed=bx===x&&bz===z;
+      if(!placed && (!this.world.hasChunk(Math.floor(bx/CS),Math.floor(bz/CS)) || !isFence(this.world.peekBlock(bx,by,bz))))continue;
+      const boxes=collisionBoxesAt(preview,bx,by,bz);
+      if(!boxes || (!placed && boxes===collisionBoxesAt(this.world,bx,by,bz)))continue;
+      if(bodies.some(body=> {
+        for(let i=0;i<boxes.length;i+=6)if(
+          body.pos.x+body.w/2>bx+boxes[i]+1e-6 && body.pos.x-body.w/2<bx+boxes[i+3]-1e-6 &&
+          body.pos.y+body.h>by+boxes[i+1]+1e-6 && body.pos.y<by+boxes[i+4]-1e-6 &&
+          body.pos.z+body.w/2>bz+boxes[i+2]+1e-6 && body.pos.z-body.w/2<bz+boxes[i+5]-1e-6)return true;
+        return false;
+      }))return false;
+    }
+    return true;
   }
 
   /** Keep outline and breaking overlay on the same exposed shape as the mesh. */
   private updateBuildingTarget(id: number, x: number, y: number, z: number) {
-    const shaped = isStairs(id) || isSlab(id),
-      boxes = shaped ? collisionBoxesAt(this.world, x, y, z) : null;
+    const shaped = isStairs(id) || isSlab(id) || isFence(id),
+      boxes = shaped ? selectionBoxesAt(this.world, x, y, z) : null;
     const key = boxes ? Array.from(boxes).join(',') : 'cube';
     if ((this.selection.userData.buildingShape ?? 'cube') === key) return;
     const geometry = shaped
@@ -6156,7 +6146,7 @@ export class Game {
       (mergeTarget||(isSlabTop(cur)?t.ny>0||(t.ny===0&&this.placementHitY(t)<=.5):t.ny<0||(t.ny===0&&this.placementHitY(t)>.5)));
     if (cur !== B.AIR && RENDER[cur] !== 2 && RENDER[cur] !== 1 && !mergeSlab) return;
     const id = s.id;
-    if (IS_SOLID[id] && !isStairs(id) && !isSlab(id)) {
+    if (IS_SOLID[id] && !isStairs(id) && !isSlab(id) && !isFence(id)) {
       const b = this.body;
       if (aabbIntersectsBlock(b.pos.x, b.pos.y, b.pos.z, b.w, b.h, px, py, pz)) return;
       for (const m of this.mobs) if (!m.dead && aabbIntersectsBlock(m.body.pos.x, m.body.pos.y, m.body.pos.z, m.body.w, m.body.h, px, py, pz)) return;
@@ -6272,7 +6262,7 @@ export class Game {
       if (below !== B.GRASS && below !== B.DIRT && below !== B.SNOW && !isFarmland(below)) return;
     }
     const finalId = placeId ?? id;
-    if ((isStairs(id) || isSlab(id)) && !this.canPlaceBuilding(finalId,px,py,pz)) return;
+    if (!this.canPlaceBuilding(finalId,px,py,pz)) return;
     this.world.setBlock(px, py, pz, finalId);
     // 2.25: sypki blok postawiony w powietrzu od razu zaczyna spadać.
     this.fallGravity(px, py, pz);
