@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.34.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.35.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.35.0 — włazy bez rozciągniętych tekstur
+
+Wąskie krawędzie dębowego włazu używają właściwych pasków tekstury; otwarte skrzydło obraca UV razem z modelem. Otwory korzystają z materiału cutout zamiast czarnych pól. **73 grupy porównania z przypiętymi modelami/PNG 26.3, 504 narożniki i produkcyjny Chromium desktop/touch.** Bez zmiany ID, fizyki i zapisów. [Wyniki i granice porównania](docs/TRAPDOOR-UV-4.35.md).
 
 ## Wersja 4.34.0 — włazy z pamięcią kierunku i połowy
 

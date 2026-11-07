@@ -2,7 +2,7 @@
 
 Stan na **2026-11-07**. Cel migracji: **Java Edition 26.3**, najnowsze stabilne wydanie w sprawdzonym, przypiętym wykazie wersji. `26.4 Snapshot 7` jest nowszym wydaniem testowym, nie stabilnym celem.
 
-**To nie jest ukończony port Minecrafta 26.3.** Działająca gra ma wydanie projektu 4.34.0 ([ruch 4.31](MOVEMENT-4.31.md), [płoty 4.32](FENCES-4.32.md), [włazy i drzwi 4.33](PANELS-4.33.md), [stany włazów 4.34](TRAPDOORS-4.34.md)), z dotychczasowymi porównaniami Java 1.20.4 i opisanymi wcześniej brakami. Nie zmieniono etykiety gry na „zgodna z 26.3” ani formatów zapisów.
+**To nie jest ukończony port Minecrafta 26.3.** Działająca gra ma wydanie projektu 4.35.0 ([ruch 4.31](MOVEMENT-4.31.md), [płoty 4.32](FENCES-4.32.md), [włazy i drzwi 4.33](PANELS-4.33.md), [stany włazów 4.34](TRAPDOORS-4.34.md), [UV włazów 4.35](TRAPDOOR-UV-4.35.md)), z dotychczasowymi porównaniami Java 1.20.4 i opisanymi wcześniej brakami. Nie zmieniono etykiety gry na „zgodna z 26.3” ani formatów zapisów.
 
 ## Co rzeczywiście wykonano
 

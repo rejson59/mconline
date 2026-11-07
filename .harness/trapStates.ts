@@ -109,16 +109,9 @@ for (let state = 0; state < 16; state++) {
     assert.equal(isTrapOpen(id), open);
     assert.deepEqual([...collisionBoxes(id)!], box);
     assert.equal(IS_SOLID[id], 1);
-    for (const table of [
-      IS_OPAQUE,
-      IS_LEAFY,
-      OCCLUDES,
-      CULLS,
-      LAYER,
-      RENDER,
-      EMIT,
-    ])
+    for (const table of [IS_OPAQUE, IS_LEAFY, OCCLUDES, CULLS, RENDER, EMIT])
       assert.equal(table[id], 0);
+    assert.equal(LAYER[id], 1);
     assert.ok(BLOCKS[id]);
     assert.ok(!CREATIVE_BLOCKS.includes(id));
     assert.equal(buildingItem(id), B.TRAP);
@@ -135,7 +128,7 @@ for (let state = 0; state < 16; state++) {
       { snapshot } = snapshotMesh(w, 0, 0),
       worker = meshSnapshot(snapshot, 1).geometries.map(unpackGeometry);
     assert.deepEqual(meshFingerprint(worker), meshFingerprint(direct));
-    const p = direct[0].getAttribute("position");
+    const p = direct[1].getAttribute("position");
     assert.equal(p.count, 24);
     for (let axis = 0; axis < 3; axis++) {
       const values = Array.from({ length: p.count }, (_, i) =>

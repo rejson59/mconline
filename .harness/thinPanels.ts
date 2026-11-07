@@ -63,7 +63,7 @@ for (let index = 0; index < ids.length; index++) {
       collisionBoxesAt(w, 5, 100, 5),
     );
     const geometries = w.buildMesh(w.getChunk(0, 0));
-    const p = geometries[0].getAttribute("position");
+    const p = geometries[1].getAttribute("position");
     assert.equal(p.count, 24);
     for (let a = 0; a < 3; a++) {
       const values = Array.from({ length: p.count }, (_, i) =>

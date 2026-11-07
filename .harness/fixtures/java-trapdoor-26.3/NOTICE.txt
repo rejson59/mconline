@@ -1,0 +1,4 @@
+Minecraft model/blockstate data and artwork are copyright Mojang AB / Microsoft.
+These reference files are NOT covered by the project MIT code license.
+All underlying rights remain with their owners; this notice grants no redistribution rights.
+Pinned source and hashes: manifest.json. See public/Minecraft-NOTICE.txt.

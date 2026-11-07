@@ -1,3 +1,4 @@
+import { trapdoorUVs, type PanelUVs } from './trapdoorUV';
 import { FireSimulation, FIRE_QUADS } from './fire';
 import { cityLocal, CITY_ROAD } from './city';
 import { buildingFaces, buildingUV } from './buildingShapes';
@@ -10,7 +11,7 @@ import { isWater, isFire, waterHeight } from './blocks';
 import { applyStructures } from './structures';
 import * as THREE from 'three';
 import { SimplexNoise } from './noise';
-import { B, T, EMIT, isFurnace, furnaceCapCorner, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, selectionBoxesAt, fenceMask, paneBoxes, paneConnects, isTrap, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, stairsBoxesAt, isStairs, isSlab, collisionBoxes, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
+import { B, T, EMIT, isFurnace, furnaceCapCorner, IS_LEAFY, IS_OPAQUE, IS_SOLID, LAYER, OCCLUDES, CULLS, RENDER, collisionBoxesAt, selectionBoxesAt, fenceMask, paneBoxes, paneConnects, isTrap, isTrapOpen, trapFacing, isDoor, isDoorOpen, doorFacing, doorHinge, doorPlate, isFence, ladderFacing, tileFor, stairsBoxesAt, isStairs, isSlab, collisionBoxes, isBed, isBedHead, bedFacing, chestFacing, isChestBlock, chestLeftDir } from './blocks';
 import { TILE_UV4, entityUV, tileUV, tileUVInset, tileUVRect } from './textures';
 import { treeShape, treeKindForBiome, type TreeKind } from './trees';
 import { CH, CS, FLAT_H, SEA } from './constants';
@@ -467,6 +468,7 @@ function addBox(
   inset = 0,
   /** Wycinki UV per ściana (0 -x, 1 +x, 2 -y, 3 +y, 4 -z, 5 +z), w pikselach. */
   crops?: (readonly [number, number, number, number] | null)[],
+  uvs?: PanelUVs,
 ) {
   const map = (v: number, a: number, b: number) => a + v * (b - a);
   for (let f = 0; f < 6; f++) {
@@ -484,7 +486,9 @@ function addBox(
     const crop = crops?.[f] ?? null;
     for (let k = 0; k < 4; k++) {
       const cr = F.c[k];
-      const uv = crop ? tileUVRect(faceTile, crop, cr[3], cr[4]) : tileUVInset(faceTile, cr[3], cr[4], inset);
+      const point = uvs?.[f]?.[k];
+      const uv = point ? tileUVRect(faceTile, PANEL_FULL_UV, point[0] / 16, 1 - point[1] / 16)
+        : crop ? tileUVRect(faceTile, crop, cr[3], cr[4]) : tileUVInset(faceTile, cr[3], cr[4], inset);
       buf.vertex(ox + map(cr[0], x0, x1), oy + map(cr[1], y0, y1), oz + map(cr[2], z0, z1), uv[0], uv[1], br, br, br, bl, 0, f);
     }
     buf.quad(base);
@@ -535,6 +539,8 @@ function addBoxPx(
   }
 }
 
+const PANEL_FULL_UV = [0, 0, 16, 16] as const;
+
 /** Bryła inna niż pełny sześcian: kształt + kafelki poszczególnych ścian. */
 export interface SpecialBox {
   b: [number, number, number, number, number, number];
@@ -544,6 +550,8 @@ export interface SpecialBox {
   inset?: number;
   /** Wycinek UV per ściana (0 -x, 1 +x, 2 -y, 3 +y, 4 -z, 5 +z), w pikselach 16×16. */
   crops?: (readonly [number, number, number, number] | null)[];
+  /** Per-corner image-pixel UVs for rotated/mirrored thin panels. */
+  uvs?: PanelUVs;
   /** Kafelek per ściana – gdy blok ma różne tekstury na każdej ścianie. */
   tiles?: number[];
 }
@@ -704,7 +712,7 @@ function specialBoxes(id: number): SpecialBox[] | null {
   if (face === 1) return [{ b: [1 - lt, 0, 0, 1, 1, 1] }];
   if (face === 2) return [{ b: [0, 0, 1 - lt, 1, 1, 1] }];
   if (face === 3) return [{ b: [0, 0, 0, lt, 1, 1] }];
-  if (isTrap(id)) return [{ b: Array.from(collisionBoxes(id)!) as SpecialBox['b'] }];
+  if (isTrap(id)) return [{ b: Array.from(collisionBoxes(id)!) as SpecialBox['b'], uvs: trapdoorUVs(trapFacing(id), isTrapOpen(id)) }];
   if (isBed(id)) return bedBoxes(id);
   if (id === B.PATH) {
     // 2.21: waniliowa ścieżka ma 15/16 wysokości, a boki zaczynają się 1 px
@@ -1918,7 +1926,7 @@ export class World {
               addBox(
                 buf, ox + x, y, oz + z,
                 sb.b[0], sb.b[1], sb.b[2], sb.b[3], sb.b[4], sb.b[5],
-                sb.tiles ?? sb.side ?? tileFor(id, 0), sky, blk, sb.top, sb.bottom, sb.inset ?? 0, sb.crops
+                sb.tiles ?? sb.side ?? tileFor(id, 0), sky, blk, sb.top, sb.bottom, sb.inset ?? 0, sb.crops, sb.uvs
               );
             }
             if (id === B.CAMPFIRE) addFlames(buf,ox+x,y+.25,oz+z,T.campfire_flame,sky,blk,4,.75);

@@ -1,0 +1,48 @@
+{
+  "version": "26.3",
+  "repository": "InventivetalentDev/minecraft-assets",
+  "commit": "9073095a88699785bb1f63f8f86d33322711e4fd",
+  "boundary": "Pinned mirror assets, not an original executed client or full corpus; data/artwork NOT MIT.",
+  "files": [
+    {
+      "path": "assets/minecraft/blockstates/oak_trapdoor.json",
+      "bytes": 1728,
+      "sha256": "b272198a142dabae0939962b36bb775d9ce13382d09a911bae1d98cc4ca0e873"
+    },
+    {
+      "path": "assets/minecraft/models/block/oak_trapdoor_bottom.json",
+      "bytes": 125,
+      "sha256": "f572bf88b44001a252b240ded875098759c603c0628bda66bf52e80252216f22"
+    },
+    {
+      "path": "assets/minecraft/models/block/oak_trapdoor_top.json",
+      "bytes": 122,
+      "sha256": "b97d800615088b3f11ee457b350590908b1f881e3302e50f974eee1f4a36d461"
+    },
+    {
+      "path": "assets/minecraft/models/block/oak_trapdoor_open.json",
+      "bytes": 123,
+      "sha256": "443d31c055f9e1688b816db4572f3c123cf12166cf5f3617fe5ac33de3e6ab35"
+    },
+    {
+      "path": "assets/minecraft/models/block/template_trapdoor_bottom.json",
+      "bytes": 792,
+      "sha256": "c2418939d7d778b1cc0620edd11f12e34003d5b1667727267edb0255add972aa"
+    },
+    {
+      "path": "assets/minecraft/models/block/template_trapdoor_top.json",
+      "bytes": 760,
+      "sha256": "ed61498e04e694aa7e78516f2a171896219766b9dd7f461d111a4b54cb888202"
+    },
+    {
+      "path": "assets/minecraft/models/block/template_trapdoor_open.json",
+      "bytes": 765,
+      "sha256": "876a8d1fbcb822b6395749d9dae3a08c5f541944360c328e2917145fc3b63150"
+    },
+    {
+      "path": "assets/minecraft/textures/block/oak_trapdoor.png",
+      "bytes": 198,
+      "sha256": "7f2d78c69dcfb71d4900b974d40f6e334065f4e4c72aa36fe37ce034df9a2abd"
+    }
+  ]
+}
