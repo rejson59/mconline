@@ -1,0 +1,69 @@
+{
+  "version": "26.3",
+  "repository": "InventivetalentDev/minecraft-assets",
+  "commit": "9073095a88699785bb1f63f8f86d33322711e4fd",
+  "files": [
+    {
+      "path": "assets/minecraft/items/stone.json",
+      "bytes": 88,
+      "sha256": "977becf517afb93235bcbb08d7136e09cfe07b0225e7c1e6d114d10f7958eac9"
+    },
+    {
+      "path": "assets/minecraft/items/cobblestone.json",
+      "bytes": 94,
+      "sha256": "8f92f89a82cd47518583ff6179c89770d5217bb34f7b3db827165480e9502f57"
+    },
+    {
+      "path": "assets/minecraft/items/dirt.json",
+      "bytes": 87,
+      "sha256": "8b221a572f72ac5fbbbb42fb5b03745c7f85a62e1a9432b72daef0c2efc2fb3c"
+    },
+    {
+      "path": "assets/minecraft/items/oak_planks.json",
+      "bytes": 93,
+      "sha256": "eb4cd70fb11fa524f2ec401635ab0dc0f44ad090de66d8f2f673a4a0c25ae12d"
+    },
+    {
+      "path": "assets/minecraft/items/sand.json",
+      "bytes": 87,
+      "sha256": "2b3f8ea18e4cf9ddff4a83b158e8c90d76f842451edc78ad3c140775bb9c5ad8"
+    },
+    {
+      "path": "assets/minecraft/models/block/stone.json",
+      "bytes": 98,
+      "sha256": "c0734082e7f1e2f44809737b2fbe1136fc7304bde7232e45fbe921884a4a327e"
+    },
+    {
+      "path": "assets/minecraft/models/block/cobblestone.json",
+      "bytes": 104,
+      "sha256": "dee026b80b7b77c5d540d75b91cfaec770245a2e7affb53555e9e4ad3ddb551f"
+    },
+    {
+      "path": "assets/minecraft/models/block/dirt.json",
+      "bytes": 97,
+      "sha256": "c7a496ef02d69788d589fac7d2d2465e36eeb8a187cb8b23612310f3945c4868"
+    },
+    {
+      "path": "assets/minecraft/models/block/oak_planks.json",
+      "bytes": 103,
+      "sha256": "79b1146adb4eff1b405c0a18384e3290fa171edc1347f64fef50df3df4df939d"
+    },
+    {
+      "path": "assets/minecraft/models/block/sand.json",
+      "bytes": 97,
+      "sha256": "187225c0dfc289790098a9aa0d01894a1d2ea5248ed1fd05f21faca564f4cffe"
+    },
+    {
+      "path": "assets/minecraft/models/block/cube_all.json",
+      "bytes": 227,
+      "sha256": "be3205d629ffb9e03834c3d1d083f8a2c62e9f9ae80820755129408634e9144a"
+    },
+    {
+      "path": "assets/minecraft/models/block/cube.json",
+      "bytes": 584,
+      "sha256": "3e4aacd02e816aeba38f83076596e18ded4cf49c01e17c62d1fce79850ffb84e"
+    }
+  ],
+  "blockParentFixture": "../java-trapdoor-item-26.3/assets/minecraft/models/block/block.json",
+  "boundary": "Pinned model data, NOT MIT; no original client execution."
+}

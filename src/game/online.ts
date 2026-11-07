@@ -189,6 +189,8 @@ export class PublicServer implements NetLike {
   private writingProfile = false;
   private profileTask: Promise<void> | null = null;
   private checkpoint?: ProfileCheckpoint;
+  profileRecoveryNotice?: string;
+  profileRecovery() { return this.checkpoint?.exportRecoveries() ?? { count: 0, json: "" }; }
   private stateJournal?: StateJournal;
   private stateBusy = false;
   get sharedContainers() { return this.accountBound; }
@@ -327,6 +329,7 @@ export class PublicServer implements NetLike {
       // Account servers are authoritative across devices; a browser with a
       // future clock/stale cache must never replace a newer remote inventory.
       const newest = this.checkpoint ? this.checkpoint.load(data?.[0] ?? null) : this.accountBound ? remote ?? cached : cached && (!remote || cached.updated >= remote.updated) ? cached : remote;
+      this.profileRecoveryNotice = this.checkpoint?.recoveryNotice ?? undefined;
       if (newest) {
         newest.unlocked = [...new Set([...(cached?.unlocked ?? []), ...(remote?.unlocked ?? [])])];
         cacheProfile(this.worldId, newest);
@@ -380,7 +383,7 @@ export class PublicServer implements NetLike {
   async commitSharedChest(profile: PlayerProfile, chest: SharedChest, drops: unknown[], destroy = false, dropBlock = false): Promise<StateResult> {
     if (this.closed || !this.stateJournal || !this.checkpoint || !this.stateBusy) throw Error('Nie rozpoczęto transferu.');
     const tx: StateTransaction = { id: crypto.randomUUID(), ref: { x: chest.x, y: chest.y, z: chest.z, d: chest.d }, revision: chest.revision,
-      slots: chest.slots, drops, destroy, dropBlock, profile: this.checkpoint.row(profile) };
+      slots: chest.slots, drops, destroy, dropBlock, profile: this.checkpoint.row(profile, false) };
     try { this.stateJournal.write(tx); }
     catch (error) { this.stateBusy = false; throw error; }
     return this.resolveState(tx) as Promise<StateResult>;
@@ -392,7 +395,7 @@ export class PublicServer implements NetLike {
   }
   async commitSharedMobs(profile: PlayerProfile, region: MobRegion, drops: unknown[], edits: unknown[]=[]): Promise<MobResult> {
     if(this.closed||!this.stateJournal||!this.checkpoint||!this.stateBusy)throw Error('Nie rozpoczęto operacji.');
-    const tx: MobTransaction={kind:'mobs',id:crypto.randomUUID(),ref:{d:region.d,x:region.x,y:0,z:region.z},revision:region.revision,mobs:region.mobs,drops,edits,profile:this.checkpoint.row(profile)};
+    const tx: MobTransaction={kind:'mobs',id:crypto.randomUUID(),ref:{d:region.d,x:region.x,y:0,z:region.z},revision:region.revision,mobs:region.mobs,drops,edits,profile:this.checkpoint.row(profile, false)};
     try{this.stateJournal.write(tx);}catch(e){this.stateBusy=false;throw e;}
     return this.resolveState(tx) as Promise<MobResult>;
   }

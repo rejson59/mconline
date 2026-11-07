@@ -38,15 +38,17 @@ if (!fs.existsSync(libs)) {
 }
 const output = path.join(
   root,
-  process.env.BROWSER_TRAP_POSE
-    ? ".cache/verification438"
-    : process.env.BROWSER_TRAP_ITEM
-      ? ".cache/verification436"
-      : process.env.BROWSER_TRAP_UV
-        ? ".cache/verification435"
-        : process.env.BROWSER_TRAPS
-          ? ".cache/verification434"
-          : ".cache/verification433",
+  process.env.BROWSER_CUBE_POSE
+    ? ".cache/verification439"
+    : process.env.BROWSER_TRAP_POSE
+      ? ".cache/verification438"
+      : process.env.BROWSER_TRAP_ITEM
+        ? ".cache/verification436"
+        : process.env.BROWSER_TRAP_UV
+          ? ".cache/verification435"
+          : process.env.BROWSER_TRAPS
+            ? ".cache/verification434"
+            : ".cache/verification433",
 );
 fs.mkdirSync(output, { recursive: true });
 const enums = path.join(output, "blocks.mjs");
@@ -65,6 +67,15 @@ await build({
 const { B, T, trapdoorReference, decodePng } = await import(
   pathToFileURL(enums).href
 );
+const cubeDisplayReferences = JSON.parse(
+  fs.readFileSync(
+    path.join(
+      root,
+      ".harness/fixtures/java-trapdoor-item-26.3/assets/minecraft/models/block/block.json",
+    ),
+    "utf8",
+  ),
+).display;
 const displayReferences = Object.assign(
   {},
   ...["block", "thin_block"].map(
@@ -598,6 +609,7 @@ try {
         itemBounds,
         alphaProbes,
         displayReferences,
+        cubeDisplayReferences,
       }) => {
         const g = window.minecraft.game;
         g.inventory.slots.fill(null);
@@ -675,8 +687,15 @@ try {
           }
           return [x, y, z];
         };
-        const pose = (mesh, key, anchor, angles = [0, 0, 0], left = false) => {
-          const d = displayReferences[key],
+        const pose = (
+          mesh,
+          key,
+          anchor,
+          angles = [0, 0, 0],
+          left = false,
+          references = displayReferences,
+        ) => {
+          const d = references[key],
             sign = left ? -1 : 1;
           mesh.updateMatrix();
           const p = mesh.geometry.getAttribute("position"),
@@ -774,6 +793,95 @@ try {
           drop.pickupDelay !== 2
         )
           throw Error("Drop behavior changed");
+        const beforeCubes = poseVertices;
+        for (const id of [B.STONE, B.COBBLE, B.DIRT, B.PLANKS, B.SAND]) {
+          g.inventory.slots[0] = { id, count: 8 };
+          g.inventory.offhand = { id, count: 1 };
+          g.updateHand();
+          pose(
+            g.handMesh,
+            "firstperson_righthand",
+            [0.42, -0.32, -0.62],
+            [(0.1 * 180) / Math.PI, 45 + (0.12 * 180) / Math.PI, 0],
+            false,
+            cubeDisplayReferences,
+          );
+          pose(
+            g.offHandMesh,
+            "firstperson_lefthand",
+            [-0.42, -0.32, -0.62],
+            [(0.1 * 180) / Math.PI, -45 - (0.12 * 180) / Math.PI, 0],
+            true,
+            cubeDisplayReferences,
+          );
+          g.spawnDrop(
+            id,
+            2,
+            7,
+            65.35,
+            8,
+            undefined,
+            0,
+            0,
+            0,
+            undefined,
+            undefined,
+            undefined,
+            2,
+          );
+          const cube = g.drops.at(-1);
+          pose(
+            cube.mesh,
+            "ground",
+            [7, 65.35, 8],
+            [0, 0, 0],
+            false,
+            cubeDisplayReferences,
+          );
+          remote.held = id;
+          g.updateRemoteHeld(remote);
+          pose(
+            remote.hand,
+            "thirdperson_righthand",
+            anchor,
+            [0, 0, 0],
+            false,
+            cubeDisplayReferences,
+          );
+          for (const mesh of [
+            g.handMesh,
+            g.offHandMesh,
+            cube.mesh,
+            remote.hand,
+          ]) {
+            const geo = mesh.geometry;
+            geo.computeBoundingBox();
+            if (
+              Math.abs(geo.boundingBox.max.y - geo.boundingBox.min.y - 1) > 1e-6
+            )
+              throw Error("Full cube geometry changed");
+            if (mesh.material.map !== g.atlasTex)
+              throw Error("Cube item lost atlas");
+          }
+        }
+        g.updateDrops(0);
+        for (const d of g.drops.slice(-5))
+          if (
+            Math.abs(
+              d.mesh.position.y -
+                d.pos.y -
+                0.12 -
+                Math.sin(d.age * 3) * 0.06 -
+                3 / 16,
+            ) > 1e-6
+          )
+            throw Error("Cube ground translation lost");
+        const cubePoseVertices = poseVertices - beforeCubes;
+        g.inventory.slots[0] = { id: B.STONE, count: 8 };
+        g.inventory.offhand = { id: B.PLANKS, count: 1 };
+        g.updateHand();
+        remote.held = B.COBBLE;
+        g.updateRemoteHeld(remote);
         const icon = g.icons[B.TRAP];
         for (const { id } of expectedUVs)
           if (g.icons[id] !== icon)
@@ -829,6 +937,8 @@ try {
           dropHeight,
           remoteHeight,
           poseVertices,
+          cubePoseVertices,
+          cubeFamilies: 5,
           uvPairs,
           iconBounds: bounds,
           holeChecks,
@@ -838,7 +948,15 @@ try {
           icon,
         };
       },
-      { B, T, expectedUVs, itemBounds, alphaProbes, displayReferences },
+      {
+        B,
+        T,
+        expectedUVs,
+        itemBounds,
+        alphaProbes,
+        displayReferences,
+        cubeDisplayReferences,
+      },
     );
     fs.writeFileSync(
       path.join(output, (mobile ? "mobile" : "desktop") + "-icon.png"),

@@ -1,5 +1,6 @@
 import { portraitGameplayBlocked } from '../utils/screen';
-import { trapdoorItemGeometry, applyTrapdoorDisplay, TRAPDOOR_GROUND_OFFSET_Y } from './trapdoorItem';
+import { trapdoorItemGeometry } from './trapdoorItem';
+import { hasReferenceItemDisplay, applyReferenceItemDisplay, referenceGroundOffset } from './blockItemDisplay';
 import { CloudMotion } from './sky';
 import { bedItemGeometry, createBedItemMaterial } from './bedItem';
 import { itemBox, itemCrop } from './itemShape';
@@ -1404,6 +1405,7 @@ export class Game {
       this.emitHud();
     };
     net.onChat = (name, text) => this.message(`<${name}> ${text}`);
+    if (net.profileRecoveryNotice) this.message(net.profileRecoveryNotice);
     net.onStatus = (status, error) => {
       if (status === 'error' && error) this.message('Sieć: ' + error);
       else if (status === 'closed') this.message('Rozłączono z sesją.');
@@ -1910,27 +1912,27 @@ export class Game {
     }
   }
 
-  /** Replace the old gold placeholder for oak trapdoors, using the actual
+  /** Replace the old gold placeholder for verified item families, using the actual
    * third-person model display. Other item families retain their existing path.
    */
   private updateRemoteHeld(a: RemoteAvatar) {
     if (a.held === a.heldId) return;
-    const wasTrap = isTrap(a.heldId);
+    const hadModel = hasReferenceItemDisplay(a.heldId);
     a.heldId = a.held;
     const hand = a.hand;
     hand.userData.itemAnchor ??= hand.position.clone();
-    if (isTrap(a.held) || wasTrap) {
+    if (hasReferenceItemDisplay(a.held) || hadModel) {
       hand.geometry.dispose();
       if (Array.isArray(hand.material)) hand.material.forEach(m => m.dispose());
       else hand.material.dispose();
       hand.position.copy(hand.userData.itemAnchor);
       hand.rotation.set(0, 0, 0);
       hand.scale.setScalar(1);
-      if (isTrap(a.held)) {
+      if (hasReferenceItemDisplay(a.held)) {
         hand.geometry = blockGeometry(a.held);
         // This avatar owns the clone: dropRemote may dispose it, not handMat.
         hand.material = this.handMat.clone();
-        applyTrapdoorDisplay(hand, 'thirdperson');
+        applyReferenceItemDisplay(hand, a.held, 'thirdperson');
       } else {
         hand.geometry = new THREE.BoxGeometry(0.18, 0.18, 0.18);
         hand.material = new THREE.MeshBasicMaterial({ color: 0xc9a227 });
@@ -4686,7 +4688,7 @@ export class Game {
       let geo = this.dropGeos.get(id);
       if (!geo) { geo = blockGeometry(id); this.dropGeos.set(id, geo); }
       mesh = new THREE.Mesh(geo, isBed(id)?this.bedItemMat??=createBedItemMaterial():this.dropMat);
-      mesh.scale.setScalar(isTrap(id) ? 1 : RENDER[id] === 1 ? 0.4 : 0.28);
+      mesh.scale.setScalar(hasReferenceItemDisplay(id) ? 1 : RENDER[id] === 1 ? 0.4 : 0.28);
     } else {
       // 2.8: geometria i materiał są współdzielone – upadek przedmiotu nie
       // alokuje już nowej tekstury, geometrii ani materiału.
@@ -4699,7 +4701,7 @@ export class Game {
       mesh = new THREE.Mesh(geo, mat);mesh.scale.setScalar(.32);
     }
     mesh.position.set(x, y, z);
-    if (isTrap(id)) applyTrapdoorDisplay(mesh, 'ground');
+    if (hasReferenceItemDisplay(id)) applyReferenceItemDisplay(mesh, id, 'ground');
     this.scene.add(mesh);
     this.drops.push({ id, count, dur, ench, name, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0, pickupDelay, ...(shared ? { shared } : {}) });
     if (publish && shared) {
@@ -4740,6 +4742,19 @@ export class Game {
         if (!['info', 'lista', 'zajmij', 'zwolnij'].includes(op)) { this.message('/dzialka info|lista|zajmij|zwolnij'); return; }
         this.flushNetEdits();
         void this.net.plotCommand(op, this.body.pos.x, this.body.pos.z); return;
+      }
+      case 'kopie': case 'backups': {
+        try {
+          const backup = this.net?.profileRecovery?.();
+          if (!backup?.count) { this.message('Brak rozbieżnych kopii postępu na tym urządzeniu.'); return; }
+          const url = URL.createObjectURL(new Blob([backup.json], { type: 'application/json' }));
+          const link = document.createElement('a');
+          link.href = url; link.download = `minecraft-kopie-${this.net?.city ? 'miasto' : 'survival'}.json`;
+          document.body.appendChild(link); link.click(); link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          this.message(`Pobrano kopie odzyskiwania: ${backup.count}. Aktualny ekwipunek nie został zmieniony.`);
+        } catch { this.message('Nie udało się pobrać kopii. Zachowane dane nie zostały zmienione.'); }
+        return;
       }
       case 'help': {
         // 2.9: pomoc pochodzi z tego samego katalogu, co lista w czacie.
@@ -5369,9 +5384,9 @@ export class Game {
         mesh.position.set(side * 0.42, -0.32, -0.62);
         mesh.rotation.set(0.1, side * (cross ? -0.3 : Math.PI / 4 + 0.12), 0);
       }
-      if (isTrap(id)) {
+      if (hasReferenceItemDisplay(id)) {
         mesh.scale.setScalar(1);
-        applyTrapdoorDisplay(mesh, 'firstperson', off);
+        applyReferenceItemDisplay(mesh, id, 'firstperson', off);
       }
       mesh.renderOrder = 1000;
       if (off) this.offHandMesh = mesh;
@@ -8553,7 +8568,7 @@ export class Game {
           return false;
         }
       }
-      d.mesh.position.set(d.pos.x, d.pos.y + 0.12 + Math.sin(d.age * 3) * 0.06 + (isTrap(d.id) ? TRAPDOOR_GROUND_OFFSET_Y : 0), d.pos.z);
+      d.mesh.position.set(d.pos.x, d.pos.y + 0.12 + Math.sin(d.age * 3) * 0.06 + referenceGroundOffset(d.id), d.pos.z);
       d.mesh.rotation.y += dt * 2.2;
       return true;
     });

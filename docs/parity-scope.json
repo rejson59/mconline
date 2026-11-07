@@ -136,7 +136,12 @@
         ".harness/trapdoorPose.ts",
         "docs/TRAPDOOR-POSES-4.38.md",
         "docs/benchmarks/trapdoor-poses-4.38.json",
-        "scripts/verify-panels-browser.mjs"
+        "scripts/verify-panels-browser.mjs",
+        "src/game/blockItemDisplay.ts",
+        ".harness/cubeDisplay.ts",
+        ".harness/fixtures/java-cube-display-26.3/manifest.json",
+        "docs/benchmarks/cube-display-4.39.json",
+        "docs/SERVER-RECOVERY-4.39.md"
       ]
     },
     {
@@ -151,7 +156,12 @@
         ".harness/trapdoorPose.ts",
         "docs/TRAPDOOR-POSES-4.38.md",
         "docs/benchmarks/trapdoor-poses-4.38.json",
-        "scripts/verify-panels-browser.mjs"
+        "scripts/verify-panels-browser.mjs",
+        "src/game/blockItemDisplay.ts",
+        ".harness/cubeDisplay.ts",
+        ".harness/fixtures/java-cube-display-26.3/manifest.json",
+        "docs/benchmarks/cube-display-4.39.json",
+        "docs/SERVER-RECOVERY-4.39.md"
       ]
     },
     {
@@ -661,7 +671,11 @@
       "weight": null,
       "acceptance": "Zachowanie istniejących zabezpieczeń kont, CAS/dzienników i odtwarzania.",
       "evidence": [
-        "src/game/profileCheckpoint.ts"
+        "src/game/profileCheckpoint.ts",
+        "docs/SERVER-RECOVERY-4.39.md",
+        "docs/benchmarks/server-recovery-4.39.json",
+        ".harness/profileCheckpoint.ts",
+        "scripts/verify-multiplayer-lease-browser.mjs"
       ]
     },
     {

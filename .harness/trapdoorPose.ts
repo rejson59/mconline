@@ -309,7 +309,7 @@ test("remote switching disposes owned resources, restores placeholder and never 
   a.held = 503;
   g.updateRemoteHeld(a);
   checkMesh(hand, "thirdperson", false, [0.35, 0.82, -0.26]);
-  a.held = B.STONE;
+  a.held = B.GLASS;
   g.updateRemoteHeld(a);
   assert.deepEqual(hand.position.toArray(), [0.35, 0.82, -0.26]);
   assert.deepEqual(hand.scale.toArray(), [1, 1, 1]);
@@ -365,13 +365,13 @@ test("real avatar removal disposes owned textures but not the shared atlas", () 
   atlas.dispose();
 });
 test("other block hand/drop scale is unchanged", () => {
-  const h = hands(B.STONE),
+  const h = hands(B.GLASS),
     d = drops();
   try {
     h.updateHand();
     near(h.handMesh.scale.x, 0.2);
     near(h.handMesh.position.y, -0.32);
-    d.spawnDrop(B.STONE, 1, 1, 65, 1, undefined, 0, 0, 0);
+    d.spawnDrop(B.GLASS, 1, 1, 65, 1, undefined, 0, 0, 0);
     near(d.drops[0].mesh.scale.x, 0.28);
     near(d.drops[0].mesh.position.y, 65);
   } finally {
@@ -384,7 +384,7 @@ test("ground translation survives animation without affecting drop physics or pi
   g.body = { pos: new THREE.Vector3(100, 65, 100) };
   g.world = { getBlock: () => 0, peekBlock: () => 0, isSolid: () => false };
   try {
-    for (const id of [B.TRAP, B.STONE])
+    for (const id of [B.TRAP, B.GLASS])
       g.spawnDrop(
         id,
         2,
