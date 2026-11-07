@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "release": "4.32.0",
+  "scope": "fence-shapes-connections-targeting-placement-project-regressions",
+  "checks": {
+    "fenceRegressionGroupsPassed": 79,
+    "previousMovementGroupsPassed": 45,
+    "fullTypecheckTestsBuildPassed": true,
+    "npmAuditVulnerabilities": 0
+  },
+  "productionBrowser": {
+    "version": "4.32.0",
+    "reports": [
+      {
+        "device": "desktop",
+        "viewport": {
+          "width": 960,
+          "height": 600
+        },
+        "beside": {
+          "x": 10.214523809533507,
+          "y": 65,
+          "hitWall": false
+        },
+        "blocked": {
+          "x": 5.075,
+          "y": 65,
+          "hitWall": true
+        },
+        "postTargetDistance": 1.375,
+        "outlineWidth": 0.251,
+        "connectedOutlineWidth": 0.6275,
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "viewport": {
+          "width": 390,
+          "height": 844,
+          "isMobile": true,
+          "hasTouch": true
+        },
+        "beside": {
+          "x": 10.214523809533507,
+          "y": 65,
+          "hitWall": false
+        },
+        "blocked": {
+          "x": 5.075,
+          "y": 65,
+          "hitWall": true
+        },
+        "postTargetDistance": 1.375,
+        "outlineWidth": 0.251,
+        "connectedOutlineWidth": 0.6275,
+        "errors": []
+      }
+    ]
+  },
+  "historicalSourceInspection": {
+    "repository": "mahtomedi/minecraft",
+    "commit": "6ac5fe18be48a7395be84148be051908111d6772",
+    "version": "1.20.3-pre1",
+    "purpose": "Historical sanity check of 4/16-wide post/arms, 16/16 selection, 24/16 physical height and sturdy-face/exception rule; NOT current 26.3 proof.",
+    "files": [
+      {
+        "path": "src/main/java/net/minecraft/world/level/block/Block.java",
+        "bytes": 22541,
+        "sha256": "e54b1ffad766b6be392a22b6e9178184f0db9af2f7e40e78fe1fecfcea6f603d"
+      },
+      {
+        "path": "src/main/java/net/minecraft/world/level/block/CrossCollisionBlock.java",
+        "bytes": 7144,
+        "sha256": "57e54dbc45e090b910e669da6f8ad77570c8e8cbb59b2d018f47d48440c0e35a"
+      },
+      {
+        "path": "src/main/java/net/minecraft/world/level/block/FenceBlock.java",
+        "bytes": 5762,
+        "sha256": "d416256ef71a6f6f21a67b192b59b58cb3183b7facb33fa95ab8c3d6387f8d72"
+      }
+    ]
+  },
+  "limits": [
+    "No official-client execution or original-versus-project image/movement comparison.",
+    "No claim that historical source proves Java 26.3 parity.",
+    "Fence gates, other fence families and waterlogging are not implemented by this change.",
+    "Texture pixels and rail UVs still reuse existing rendering; this is not full visual parity.",
+    "New terrain/network edits are not a full authoritative player-physics server."
+  ],
+  "fullGameParityVerified": false,
+  "backendChanged": false,
+  "saveFormatChanged": false
+}

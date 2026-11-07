@@ -73,9 +73,13 @@ Dodano `scripts/reference-embedded.mjs`: pełne SHA-1/SHA-256 źródła, weryfik
 
 Nie pobrano ani nie przeanalizowano jeszcze rzeczywistych oryginałów. Java runtime, backup i porównania pozostają otwarte. Nie zmieniono workflow, wdrożonego backendu, budżetu zapisu, kont, gry ani zapisów. Kontynuowanie tej pracy offline nie wymaga od właściciela zrzutów panelu ani obsługi komputera; nieznana pojemność pozostaje bramką dużego zapisu, nie bramką całego rozwoju.
 
-## Obecna porcja: poprawki gry 4.31
+## Poprzednia porcja: poprawki gry 4.31
 
 Praca nie czeka na magazyn: naprawiono kontakty z rzeczywistymi powierzchniami drzwi/skrzyń/szyb, swept collision dla cienkich brył, uwzględnienie wystającej części płotu, pionowy kontakt i sprawdzanie całej drogi step-up. Płot używa nieprzezroczystego materiału desek, zamiast wycinanej ikonki. **45 nowych grup regresji**, pełna regresja, build oraz istniejący test produkcyjny Chromium na desktop/mobile: PASS. [Granice i macierz zgodności](MOVEMENT-4.31.md); to nie jest dowód pełnej zgodności ruchu lub obrazu z oryginalnym klientem.
+
+## Obecna porcja: płoty 4.32
+
+Usunięto pełną kratkę kolizji płotu: słupek i ramiona wynikają z jednej maski sąsiadów wspólnej z renderingiem. Dodano oddzielny kształt zaznaczania, dynamiczny obrys/pękanie i ochronę stawiania przed nowymi ramionami sąsiedniego płotu. **79 grup regresji oraz rzeczywisty test produkcyjnej gry w Chromium desktop/touch mobile: PASS.** [Zakres i granica dowodu](FENCES-4.32.md). Nie deklarujemy pełnej zgodności z 26.3 na podstawie historycznego źródła ani własnych regresji.
 
 ## Dalsza porcja — od inwentarza do kontrolowanego transportu
 

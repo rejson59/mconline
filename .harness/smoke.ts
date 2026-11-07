@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.31.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Dokładniejsze kolizje i widoczne płoty', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.32.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Płoty bez niewidzialnej kratki', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -5665,7 +5665,7 @@ section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
   eq('płyta dolna ma pół bloku', box(B.OAK_SLAB)[4], 0.5);
   eq('płyta górna zajmuje górną połowę', box(B.OAK_SLAB_TOP)[1], 0.5);
   eq('płot jest wyższy niż blok', box(B.FENCE)[4], 1.5);
-  check('płot blokuje na pełną szerokość (skrzyżowane szczeble)', box(B.FENCE)[3] - box(B.FENCE)[0] === 1);
+  eq('odizolowany płot blokuje tylko słupek 4/16', box(B.FENCE)[3] - box(B.FENCE)[0], 4/16);
   check('drabina nie blokuje ruchu (się po niej wchodzi)', collisionBoxes(B.LADDER_N) === null);
   eq('ścieżka ma 15/16 wysokości', box(B.PATH)[4], 0.9375);
   eq('grządka ma 15/16 wysokości', box(B.FARMLAND)[4], 0.9375);
@@ -5858,7 +5858,7 @@ section('2.21: bryły, kolizje i przedmioty jak w Minecrafcie');
   w6.setBlock(8, gy6, 2, B.FENCE);
   const b6 = { pos: new THREE.Vector3(8.5, gy6, 0.5), vel: new THREE.Vector3(0, 0, 4), w: 0.6, h: 1.8, onGround: true, hitWall: false };
   for (let i = 0; i < 90; i++) { stepBody(w6, b6, 1 / 60); b6.vel.z = 4; }
-  check('płot zatrzymuje gracza', b6.pos.z < 2, `z=${b6.pos.z.toFixed(2)}`);
+  check('płot zatrzymuje gracza na powierzchni słupka', Math.abs(b6.pos.z-(2+6/16-.3))<.001, `z=${b6.pos.z.toFixed(2)}`);
 }
 
 // ============================================ 2.26: prześwity, grządki i odrzut

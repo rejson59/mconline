@@ -1,3 +1,4 @@
+import { fenceBoxes, fullSide } from './fenceShapes';
 import { stairShape, stairBoxes } from './buildingShapes';
 import { CS } from './constants';
 
@@ -536,7 +537,7 @@ function collisionFor(d: BlockDef): Float32Array | null {
       : new Float32Array([0, 0, 0, 1, 0.5, 1]);
   }
   if (d.render === 'stairs') return stairBoxes(stairsFacing(d.id),isStairsTop(d.id));
-  if (d.render === 'fence') return new Float32Array([0, 0, 0, 1, 1.5, 1]);
+  if (d.render === 'fence') return fenceBoxes(0);
   if (d.render === 'cactus') return new Float32Array([1 / 16, 0, 1 / 16, 15 / 16, 1, 15 / 16]);
   if (d.render === 'bed') return new Float32Array([0, 0, 0, 1, 0.5625, 1]);
   // 2.32: waniliowa skrzynia ma dokładnie 14/16 wysokości (korpus 10 px +
@@ -598,6 +599,22 @@ export function paneBoxes(mask: number): Float32Array {
   if (links & 5) boxes.push(7 / 16, 0, links & 1 ? 0 : 7 / 16, 9 / 16, 1, links & 4 ? 1 : 9 / 16);
   return PANE_BOXES[mask] = new Float32Array(boxes);
 }
+/** Full support faces, not arbitrary opaque neighbours. Gates/other wood families
+ * are not implemented yet; do not pretend those states exist.
+ */
+export function fenceMask(get: (x:number,y:number,z:number)=>number, x:number,y:number,z:number): number {
+  const directions = [[0,-1],[1,0],[0,1],[-1,0]];
+  let mask=0;
+  for(let side=0;side<4;side++) {
+    const [dx,dz]=directions[side], nx=x+dx,nz=z+dz, id=get(nx,y,nz);
+    if (isFence(id)) { mask|=1<<side; continue; }
+    if (IS_LEAFY[id] || id===B.PUMPKIN) continue;
+    if (isStairs(id)) {
+      if(fullSide(stairsBoxesAt(get,nx,y,nz),(side+2)%4))mask|=1<<side;
+    } else if (CULLS[id] || id===B.GLASS || id===B.ICE || isSlabDouble(id)) mask|=1<<side;
+  }
+  return mask;
+}
 interface ShapeWorld {
   peekBlock(x: number, y: number, z: number): number;
   hasChunk(cx: number, cz: number): boolean;
@@ -605,10 +622,21 @@ interface ShapeWorld {
 /** Same derived geometry for physics, selection and raycasts; never loads terrain. */
 export function collisionBoxesAt(world: ShapeWorld, x: number, y: number, z: number): Float32Array | null {
   const id = world.peekBlock(x, y, z);
+  if (isFence(id)) {
+    const get=(nx:number,ny:number,nz:number)=>world.hasChunk(Math.floor(nx/CS),Math.floor(nz/CS))?world.peekBlock(nx,ny,nz):B.AIR;
+    return fenceBoxes(fenceMask(get,x,y,z));
+  }
   if (isStairs(id)) return stairsBoxesAt((nx,ny,nz)=>world.peekBlock(nx,ny,nz),x,y,z);
   if (id !== B.GLASS_PANE) return collisionBoxes(id);
   const joins = (nx: number, nz: number) => world.hasChunk(Math.floor(nx / CS), Math.floor(nz / CS)) && paneConnects(world.peekBlock(nx, y, nz));
   return paneBoxes((joins(x, z - 1) ? 1 : 0) | (joins(x + 1, z) ? 2 : 0) | (joins(x, z + 1) ? 4 : 0) | (joins(x - 1, z) ? 8 : 0));
+}
+
+/** Selection is one block tall; the extra half-block is a physical barrier only. */
+export function selectionBoxesAt(world: ShapeWorld,x:number,y:number,z:number): Float32Array | null {
+  if(!isFence(world.peekBlock(x,y,z)))return collisionBoxesAt(world,x,y,z);
+  const get=(nx:number,ny:number,nz:number)=>world.hasChunk(Math.floor(nx/CS),Math.floor(nz/CS))?world.peekBlock(nx,ny,nz):B.AIR;
+  return fenceBoxes(fenceMask(get,x,y,z),false);
 }
 
 export function isFence(id: number): boolean {
