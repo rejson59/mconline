@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "checkedOn": "2026-11-07",
+  "repository": "rejson59/mconline",
+  "repositoryID": "1387893577",
+  "ownerID": "185239338",
+  "settingsAPI": "https://api.github.com/repos/rejson59/mconline/actions/oidc/customization/sub",
+  "observedSettings": {
+    "use_default": true,
+    "use_immutable_subject": true,
+    "sub_claim_prefix": "repo:rejson59@185239338/mconline@1387893577"
+  },
+  "expectedSubject": "repo:rejson59@185239338/mconline@1387893577:ref:refs/heads/main",
+  "documentation": "https://github.com/github/docs/blob/8cd1075179df75319912891d6620c9cb78eefb4d/content/actions/reference/security/oidc.md#immutable-subject-claims",
+  "failedRun": "https://github.com/rejson59/mconline/actions/runs/42318667829",
+  "failureHTTPStatus": 403,
+  "verifiedLivePrivateReadAfterFix": false
+}

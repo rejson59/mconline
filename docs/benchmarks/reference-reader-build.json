@@ -2,7 +2,7 @@
   "source": "supabase/functions/mconline-reference-reader/index.ts",
   "compiler": "esbuild 0.28.2",
   "external": "npm:jose@6.2.15",
-  "sourceSHA256": "3499b0e6a17d4e4694af87d756ccd17d7f8e76ec4e9e907bc8eca90108706d4d",
-  "standaloneSHA256": "08720da31d1ff0dae62de2032aff0c1c46ececc3661efa02280b8221f034078f",
-  "bytes": 3289
+  "sourceSHA256": "2e27532734d9da555f22cdd3a04cdef15cfd03fa82e822a7f8403b97e45f5895",
+  "standaloneSHA256": "5b812c001ae2405974742c97cad5c6622795ead4843fb7ef708cbbc48034fe9d",
+  "bytes": 3310
 }

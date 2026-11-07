@@ -7,7 +7,8 @@ export const TRUST = Object.freeze({
   repositoryID: "1387893577",
   actorID: "185239338",
   workflow: "rejson59/mconline/.github/workflows/ci.yml@refs/heads/main",
-  subject: "repo:rejson59/mconline:ref:refs/heads/main",
+  // Exact immutable default subject observed from the repository OIDC settings API.
+  subject: "repo:rejson59@185239338/mconline@1387893577:ref:refs/heads/main",
 });
 export const BUCKET = "mconline-reference-private";
 export const OBJECT = "probes/roundtrip-v1.txt";
