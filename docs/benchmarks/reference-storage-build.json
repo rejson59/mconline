@@ -1,0 +1,7 @@
+{
+  "source": "supabase/functions/mconline-reference-storage/index.ts",
+  "compiler": "esbuild 0.28.2",
+  "sourceSHA256": "39f06eccdcf76a7aba2eb48793c343215198774b7c4332ef9206422937a18040",
+  "standaloneSHA256": "19f7de21c4fc6f1f25412933e1f1ba93c412e8163fcea4650fd50b12117a23b5",
+  "bytes": 4775
+}

@@ -3,6 +3,11 @@
  * inside rolled-back transactions. Never prints response bodies or headers. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+// Keep the sanitized status assertion accessible through GitHub annotations when log downloads are unavailable.
+process.on('uncaughtException', error => {
+ const text=String(error instanceof Error?error.message:'Authorization check failed').slice(0,1600).replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A');
+ console.error(`::error title=Deployed authorization check::${text}`);process.exitCode=1;
+});
 const online=fs.readFileSync(new URL('../src/game/online.ts',import.meta.url),'utf8');
 const fixture=fs.readFileSync(new URL('../.harness/fixtures/rejson-account/rejson-account.js',import.meta.url),'utf8');
 const world='https://bewwejewgqzctnjrbclu.supabase.co',account='https://hzbqzfimtroixnldzjeq.supabase.co';
@@ -29,4 +34,8 @@ await denied('private atomic profile RPC',world,'/rest/v1/rpc/mconline_profile',
 const origin=await call(world,'/functions/v1/mconline-gateway',{op:'join'},{Origin:'https://rejson59.github.io.evil.invalid'});assert.equal(origin.status,403);count++;console.log('PASS gateway refuses lookalike origin');
 const preflight=await call(world,'/functions/v1/mconline-gateway',undefined,{Origin:'https://rejson59.github.io','Access-Control-Request-Method':'POST'},'OPTIONS');assert.equal(preflight.status,204);assert.equal(preflight.headers.get('access-control-allow-origin'),'https://rejson59.github.io');count++;console.log('PASS production account origin preflight');
 for(const name of ['mconline_chest','mconline_mobs','mconline_mob_action'])await denied('private shared-state RPC '+name,world,'/rest/v1/rpc/'+name,{p_account:crypto.randomUUID(),p_username:'Test',p_session:crypto.randomUUID(),p_world:'public',p_args:{}});
+await denied('reference panel anonymous session',world,'/functions/v1/mconline-reference-storage',{op:'status'});
+await denied('reference panel invalid session, cross-project check',world,'/functions/v1/mconline-reference-storage',{op:'probe',token:'not-a-real-account-session-only-ci'});
+const refOrigin=await call(world,'/functions/v1/mconline-reference-storage',{op:'status'},{Origin:'https://rejson59.github.io.evil.invalid'});assert.equal(refOrigin.status,403);count++;console.log('PASS reference panel refuses lookalike origin');
+const refOptions=await call(world,'/functions/v1/mconline-reference-storage',undefined,{Origin:'https://rejson59.github.io','Access-Control-Request-Method':'POST'},'OPTIONS');assert.equal(refOptions.status,204);assert.equal(refOptions.headers.get('access-control-allow-origin'),'https://rejson59.github.io');count++;console.log('PASS reference panel preflight');
 console.log(`${count} deployed HTTP authorization checks passed (no real accounts, no persistent test writes)`);

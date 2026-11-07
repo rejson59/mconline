@@ -1,6 +1,8 @@
 # Prywatny magazyn oryginałów — etap 0: test drogi transferu
 
-Stan: 2026-11-07. Cel: oryginalne pliki **Java 26.3** jako odniesienie dla pełnej migracji, nie tylko wybranych receptur. Ten dokument nie oznacza ukończenia portu ani dostępnego panelu uploadu.
+Opis pierwotnego etapu 0: 2026-11-07. **Aktualizacja:** właściciel uruchomił [zadanie 42314690988](https://github.com/rejson59/mconline/actions/runs/42314690988), test sieci runnera przeszedł. Szczegóły i następny etap: [PRIVATE-STORAGE-PROBE.md](PRIVATE-STORAGE-PROBE.md). Poniższe punkty o nieustalonym wyniku opisują stan sprzed tego uruchomienia.
+
+Cel: oryginalne pliki **Java 26.3** jako odniesienie dla pełnej migracji, nie tylko wybranych receptur. Ten dokument nie oznacza ukończenia portu ani dostępnego panelu uploadu.
 
 ## Stan faktyczny
 
