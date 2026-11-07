@@ -24,7 +24,7 @@ Obliczona niezależnie suma oczekiwanego tekstu jest identyczna. Odczyt metadany
 
 ## Opcjonalne powtórzenie na telefonie
 
-Aby kiedyś powtórzyć test, można otworzyć [poprzednie uruchomienie](https://github.com/rejson59/mconline/actions/runs/42318667829) i wybrać **Re-run failed jobs**. Skrypt klienta nie zmienił się; ponowienie otrzyma świeżą tożsamość. Napisz potem „uruchomione”.
+Aby kiedyś powtórzyć test, można otworzyć [poprzednie uruchomienie](https://github.com/rejson59/mconline/actions/runs/42318667829) i wybrać **Re-run all jobs**. Skrypt klienta nie zmienił się; ponowienie otrzyma świeżą tożsamość. Nie jest to teraz potrzebne.
 
 Alternatywnie można rozpocząć nowe uruchomienie:
 
