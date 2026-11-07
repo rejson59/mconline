@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.32.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Płoty bez niewidzialnej kratki', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.33.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Włazy i drzwi bez pustych trafień', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -7078,6 +7078,12 @@ section('4.2.1: door thresholds and intentional chest opening');
   use.tryUse();
   check('touch use opens both halves', isDoorOpen(world.getBlock(2, y, 2)) && isDoorOpen(world.getBlock(2, y + 1, 2)));
   eq('door use consumes the held action until the next press', use.mouseRight, false);
+  use.mouseRight = true;
+  use.tryUse();
+  check('fresh press aimed through open-door gap does not close it', isDoorOpen(world.getBlock(2, y, 2)));
+  // Aim at the rotated panel, not the now-empty middle of the voxel.
+  const openPlate = collisionBoxes(world.getBlock(2, y, 2))!;
+  use.eyePos = () => new THREE.Vector3(2 + (openPlate[0] + openPlate[3]) / 2, y + 0.5, 4.5);
   use.mouseRight = true;
   use.tryUse();
   check('a fresh press can close the door', !isDoorOpen(world.getBlock(2, y, 2)));
