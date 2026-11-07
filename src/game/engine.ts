@@ -1,5 +1,5 @@
 import { portraitGameplayBlocked } from '../utils/screen';
-import { trapdoorItemGeometry } from './trapdoorItem';
+import { trapdoorItemGeometry, applyTrapdoorDisplay, TRAPDOOR_GROUND_OFFSET_Y } from './trapdoorItem';
 import { CloudMotion } from './sky';
 import { bedItemGeometry, createBedItemMaterial } from './bedItem';
 import { itemBox, itemCrop } from './itemShape';
@@ -1906,11 +1906,37 @@ export class Game {
         a.armL.rotation.x = -swing * 0.8;
       }
       a.group.visible = ((this.combatPlayers.get(id)?.d === 'n') === this.isInNether) && a.group.position.distanceToSquared(this.body.pos) <= (96 * this.entityDistance) ** 2;
-      if (a.held !== a.heldId) {
-        a.heldId = a.held;
-        a.hand.visible = !!a.held;
+      this.updateRemoteHeld(a);
+    }
+  }
+
+  /** Replace the old gold placeholder for oak trapdoors, using the actual
+   * third-person model display. Other item families retain their existing path.
+   */
+  private updateRemoteHeld(a: RemoteAvatar) {
+    if (a.held === a.heldId) return;
+    const wasTrap = isTrap(a.heldId);
+    a.heldId = a.held;
+    const hand = a.hand;
+    hand.userData.itemAnchor ??= hand.position.clone();
+    if (isTrap(a.held) || wasTrap) {
+      hand.geometry.dispose();
+      if (Array.isArray(hand.material)) hand.material.forEach(m => m.dispose());
+      else hand.material.dispose();
+      hand.position.copy(hand.userData.itemAnchor);
+      hand.rotation.set(0, 0, 0);
+      hand.scale.setScalar(1);
+      if (isTrap(a.held)) {
+        hand.geometry = blockGeometry(a.held);
+        // This avatar owns the clone: dropRemote may dispose it, not handMat.
+        hand.material = this.handMat.clone();
+        applyTrapdoorDisplay(hand, 'thirdperson');
+      } else {
+        hand.geometry = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+        hand.material = new THREE.MeshBasicMaterial({ color: 0xc9a227 });
       }
     }
+    hand.visible = !!a.held;
   }
 
   private ensureRemote(p: NetPlayer): RemoteAvatar {
@@ -1943,7 +1969,9 @@ export class Game {
       const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
       for (const one of Array.isArray(mat) ? mat : mat ? [mat] : []) {
         const map = (one as THREE.SpriteMaterial).map;
-        map?.dispose();
+        // Held model material clones borrow the world atlas; only the game
+        // owns that texture. Avatar-specific skin/name textures still retire.
+        if (map !== this.atlasTex) map?.dispose();
         one.dispose();
       }
     });
@@ -4658,7 +4686,7 @@ export class Game {
       let geo = this.dropGeos.get(id);
       if (!geo) { geo = blockGeometry(id); this.dropGeos.set(id, geo); }
       mesh = new THREE.Mesh(geo, isBed(id)?this.bedItemMat??=createBedItemMaterial():this.dropMat);
-      mesh.scale.setScalar(RENDER[id] === 1 ? 0.4 : 0.28);
+      mesh.scale.setScalar(isTrap(id) ? 1 : RENDER[id] === 1 ? 0.4 : 0.28);
     } else {
       // 2.8: geometria i materiał są współdzielone – upadek przedmiotu nie
       // alokuje już nowej tekstury, geometrii ani materiału.
@@ -4671,6 +4699,7 @@ export class Game {
       mesh = new THREE.Mesh(geo, mat);mesh.scale.setScalar(.32);
     }
     mesh.position.set(x, y, z);
+    if (isTrap(id)) applyTrapdoorDisplay(mesh, 'ground');
     this.scene.add(mesh);
     this.drops.push({ id, count, dur, ench, name, mesh, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(vx, vy, vz), age: 0, pickupDelay, ...(shared ? { shared } : {}) });
     if (publish && shared) {
@@ -5339,6 +5368,10 @@ export class Game {
         mesh.scale.setScalar(cross ? 0.3 : 0.2);
         mesh.position.set(side * 0.42, -0.32, -0.62);
         mesh.rotation.set(0.1, side * (cross ? -0.3 : Math.PI / 4 + 0.12), 0);
+      }
+      if (isTrap(id)) {
+        mesh.scale.setScalar(1);
+        applyTrapdoorDisplay(mesh, 'firstperson', off);
       }
       mesh.renderOrder = 1000;
       if (off) this.offHandMesh = mesh;
@@ -8520,7 +8553,7 @@ export class Game {
           return false;
         }
       }
-      d.mesh.position.set(d.pos.x, d.pos.y + 0.12 + Math.sin(d.age * 3) * 0.06, d.pos.z);
+      d.mesh.position.set(d.pos.x, d.pos.y + 0.12 + Math.sin(d.age * 3) * 0.06 + (isTrap(d.id) ? TRAPDOOR_GROUND_OFFSET_Y : 0), d.pos.z);
       d.mesh.rotation.y += dt * 2.2;
       return true;
     });

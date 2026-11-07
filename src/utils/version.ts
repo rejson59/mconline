@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.37.0';
-export const GAME_RELEASE_NAME = 'Na telefonie tylko poziomo';
+export const GAME_VERSION = '4.38.0';
+export const GAME_RELEASE_NAME = 'Właz we właściwej pozie';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.38: właz we właściwej pozie', text: 'Dębowy właz używa referencyjnych obrotów, przesunięć i skali modelu w prawej i lewej ręce oraz jako drop. U innych graczy złotą kostkę zastąpił właściwy, teksturowany model włazu z pozą thirdperson. Zachowano fizykę, zapisy i podnoszenie; animacje ramienia/kamery pozostają projektowe.' },
   { title: '4.37: na telefonie tylko poziomo', text: 'Usunięto granie w pionie i zapamiętaną zgodę na ten tryb. Obrót zatrzymuje sterowanie; okna i przedmioty pozostają zachowane. Obróć telefon, aby wrócić, albo zapisz i wyjdź do menu. Multiplayer nie zatrzymuje serwera.' },
   { title: '4.36: cienki właz także jako przedmiot', text: 'W obu rękach, na ziemi i w ekwipunku dębowy właz jest płytą 3/16, nie pełnym sześcianem. Używa właściwych pasków UV; ikona dziedziczy obrót i skalę modelu odniesienia. Wszystkie stany świata dają jeden model przedmiotu. Bez zmiany fizyki, zapisów i zasad podnoszenia.' },
   { title: '4.35: włazy bez rozciągniętych tekstur', text: 'Cienkie krawędzie dębowego włazu używają właściwych trzypikselowych pasków, zamiast rozciągniętej całej tekstury. Obrót otwartego skrzydła przenosi UV razem z modelem; górne/dolne powierzchnie mają właściwe odbicie. Otwory są wycinane zamiast rysowania czarnych pól. Porównano 504 narożniki z przypiętymi modelami 26.3. Bez zmiany stanów, fizyki i zapisów.' },

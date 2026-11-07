@@ -5,12 +5,101 @@ import { PANEL_CORNERS, trapdoorUVs } from "./trapdoorUV";
 // world block's direction/half/open state. No block registry or canvas at import.
 const shades = [0.62, 0.62, 0.5, 1, 0.8, 0.8];
 export const TRAPDOOR_ITEM_DISPLAY = {
+  firstperson_righthand: {
+    rotation: [0, 45, 0],
+    translation: [0, 4.2, 0],
+    scale: [0.4, 0.4, 0.4],
+  },
+  firstperson_lefthand: {
+    rotation: [0, 225, 0],
+    translation: [0, 4.2, 0],
+    scale: [0.4, 0.4, 0.4],
+  },
+  thirdperson_righthand: {
+    rotation: [75, 45, 0],
+    translation: [0, 2.5, 2],
+    scale: [0.375, 0.375, 0.375],
+  },
+  ground: {
+    rotation: [0, 0, 0],
+    translation: [0, 3, 0],
+    scale: [0.25, 0.25, 0.25],
+  },
   gui: {
     rotation: [30, 225, 0],
     translation: [0, 0, 0],
     scale: [0.625, 0.625, 0.625],
   },
 } as const;
+export type TrapdoorDisplayContext = "firstperson" | "thirdperson" | "ground";
+type Display = {
+  readonly rotation: readonly number[];
+  readonly translation: readonly number[];
+  readonly scale: readonly number[];
+};
+/** Java ItemTransform convention: translation pixels /16; only translation X
+ * and rotation Y/Z change sign for the left hand, never mirror the geometry.
+ * The missing thirdperson_lefthand display inherits the right-hand display.
+ */
+export function itemDisplayMatrix(
+  display: Display,
+  left = false,
+): THREE.Matrix4 {
+  const sign = left ? -1 : 1;
+  return new THREE.Matrix4().compose(
+    new THREE.Vector3(
+      (sign * display.translation[0]) / 16,
+      display.translation[1] / 16,
+      display.translation[2] / 16,
+    ),
+    new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(
+        (display.rotation[0] * Math.PI) / 180,
+        (sign * display.rotation[1] * Math.PI) / 180,
+        (sign * display.rotation[2] * Math.PI) / 180,
+        "XYZ",
+      ),
+    ),
+    new THREE.Vector3(...(display.scale as [number, number, number])),
+  );
+}
+const displayCache = new Map<string, THREE.Matrix4>();
+export function trapdoorDisplayMatrix(
+  context: TrapdoorDisplayContext,
+  left = false,
+): THREE.Matrix4 {
+  const key = context + ":" + left;
+  if (!displayCache.has(key)) {
+    const display =
+      context === "ground"
+        ? TRAPDOOR_ITEM_DISPLAY.ground
+        : context === "thirdperson"
+          ? TRAPDOOR_ITEM_DISPLAY.thirdperson_righthand
+          : left
+            ? TRAPDOOR_ITEM_DISPLAY.firstperson_lefthand
+            : TRAPDOOR_ITEM_DISPLAY.firstperson_righthand;
+    displayCache.set(
+      key,
+      itemDisplayMatrix(display, context !== "ground" && left),
+    );
+  }
+  return displayCache.get(key)!.clone();
+}
+/** Compose after the existing camera/arm anchor, not before it. Swing and
+ * camera animation belong to the parent group and are deliberately unchanged.
+ */
+export function applyTrapdoorDisplay(
+  object: THREE.Object3D,
+  context: TrapdoorDisplayContext,
+  left = false,
+): void {
+  object.updateMatrix();
+  object.matrix.multiply(trapdoorDisplayMatrix(context, left));
+  object.matrix.decompose(object.position, object.quaternion, object.scale);
+}
+export const TRAPDOOR_GROUND_OFFSET_Y =
+  TRAPDOOR_ITEM_DISPLAY.ground.translation[1] / 16;
+
 const faces = PANEL_CORNERS.map((quad, face) => ({
   face,
   points: quad.map(([x, y, z]) => [x, (y * 3) / 16, z]),
@@ -21,7 +110,7 @@ export function trapdoorItemFaces() {
   return faces;
 }
 /** Unposed bottom model, centered about the block origin like Java item models.
- * The hand/drop callers retain their existing project placement/animation.
+ * Display transforms are applied by callers; geometry/UV stay canonical.
  */
 export function trapdoorItemGeometry(
   mapUV: (u: number, v: number) => [number, number],
