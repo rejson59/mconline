@@ -35,7 +35,12 @@ if (!fs.existsSync(libs)) {
   execFileSync("tar", ["xf", tar, "-C", libs]);
   fs.unlinkSync(tar);
 }
-const output = path.join(root, ".cache/verification433");
+const output = path.join(
+  root,
+  process.env.BROWSER_TRAPS
+    ? ".cache/verification434"
+    : ".cache/verification433",
+);
 fs.mkdirSync(output, { recursive: true });
 const enums = path.join(output, "blocks.mjs");
 await build({
@@ -278,12 +283,109 @@ try {
             throw Error("Door outline remains cube");
           doors++;
         }
+      const modernStates = [];
+      for (let state = 0; state < 16; state++) {
+        const id = B.TRAP_BOTTOM_N + state,
+          open = !!(state & 8),
+          top = !!(state & 4),
+          face = state % 4,
+          axis = open ? (face % 2 ? 0 : 2) : 1;
+        w.setBlock(5, y, 5, id);
+        g.updateBuildingTarget(id, 5, y, 5);
+        g.selection.geometry.computeBoundingBox();
+        const b = g.selection.geometry.boundingBox;
+        if (
+          Math.abs(
+            b.max.getComponent(axis) -
+              b.min.getComponent(axis) -
+              (3 / 16) * 1.004,
+          ) > 1e-5
+        )
+          throw Error("New state outline missing " + id);
+        const origin = [5.5, y + 0.5, 5.5],
+          direction = [0, 0, 0];
+        origin[axis] = axis === 1 ? y + 2 : 4;
+        direction[axis] = axis === 1 ? -1 : 1;
+        const hit = w.raycast(...origin, ...direction, 3);
+        const expected =
+          axis === 1
+            ? top
+              ? 1
+              : 2 - 3 / 16
+            : 1 + (face === 1 || face === 2 ? 13 / 16 : 0);
+        if (hit?.id !== id || Math.abs(hit.dist - expected) > 1e-5)
+          throw Error("New state ray missing " + id);
+        if (open) {
+          const blocked = walk(axis),
+            gap = walk(axis, true),
+            expectedContact =
+              5 + (face === 1 || face === 2 ? 13 / 16 : 0) - 0.3;
+          if (
+            Math.abs((axis === 0 ? blocked.x : blocked.z) - expectedContact) >
+              0.001 ||
+            !blocked.hitWall
+          )
+            throw Error("New wing lacks physics " + id);
+          if ((axis === 0 ? gap.z : gap.x) < 6.5)
+            throw Error("New wing gap blocks player " + id);
+        }
+        modernStates.push({ id, rayDistance: hit.dist });
+      }
+      // Actual player eye/aim and production tryUse: no substituted target ray.
       w.setBlock(5, y, 5, B.AIR);
-      w.setBlock(6, y, 5, B.TRAP_N);
-      w.setBlock(7, y, 5, B.TRAP_E);
-      w.setBlock(8, y, 5, B.TRAP_S);
-      w.setBlock(9, y, 5, B.TRAP_W);
-      w.setBlock(10, y, 5, B.TRAP);
+      g.aimDir = null;
+      g.inventory.offhand = null;
+      g.inventory.slots.fill(null);
+      g.inventory.slots[0] = { id: B.TRAP, count: 8 };
+      g.selected = 0;
+      g.body.pos.set(12.5, y, 8);
+      g.body.vel.set(0, 0, 0);
+      g.yaw = 0;
+      g.pitch = -Math.atan2(g.eyeHeight, 2.5);
+      g.updateCamera(0.016);
+      const floorTarget = g.raycastTarget();
+      if (floorTarget?.ny !== 1 || floorTarget.x !== 12 || floorTarget.z !== 5)
+        throw Error("Floor placement ray wrong");
+      g.tryUse();
+      const floorPlaced = w.getBlock(12, y, 5);
+      if (floorPlaced !== B.TRAP_BOTTOM_N)
+        throw Error("Floor did not place closed lower trap");
+      g.tryUse();
+      if (w.getBlock(12, y, 5) !== B.TRAP_OPEN_BOTTOM_N)
+        throw Error("Floor trap lost half on opening");
+      g.pitch = -Math.atan2(g.eyeHeight - 0.5, 8 - (5 + 3 / 16));
+      g.updateCamera(0.016);
+      if (g.raycastTarget()?.id !== B.TRAP_OPEN_BOTTOM_N)
+        throw Error("Cannot aim at rotated lower wing");
+      g.tryUse();
+      const closedAgain = w.getBlock(12, y, 5);
+      if (closedAgain !== floorPlaced)
+        throw Error("Lower trap lost direction/half on closing");
+      w.setBlock(14, y + 2, 5, B.STONE);
+      g.body.pos.set(14.5, y, 8);
+      g.pitch = Math.atan2(2 - g.eyeHeight, 2.5);
+      g.updateCamera(0.016);
+      const ceilingTarget = g.raycastTarget();
+      if (
+        ceilingTarget?.ny !== -1 ||
+        ceilingTarget.x !== 14 ||
+        ceilingTarget.z !== 5
+      )
+        throw Error("Ceiling placement ray wrong");
+      g.tryUse();
+      const ceilingPlaced = w.getBlock(14, y + 1, 5);
+      if (ceilingPlaced !== B.TRAP_TOP_N)
+        throw Error("Underside did not place upper trap");
+      w.setBlock(12, y, 5, B.AIR);
+      w.setBlock(14, y + 1, 5, B.AIR);
+      w.setBlock(14, y + 2, 5, B.AIR);
+      g.inventory.slots.fill(null);
+      w.setBlock(5, y, 5, B.AIR);
+      w.setBlock(6, y, 5, B.TRAP_BOTTOM_N);
+      w.setBlock(7, y, 5, B.TRAP_TOP_E);
+      w.setBlock(8, y, 5, B.TRAP_OPEN_BOTTOM_S);
+      w.setBlock(9, y, 5, B.TRAP_OPEN_TOP_W);
+      w.setBlock(10, y, 5, B.TRAP_TOP_N);
       w.setBlock(8, y, 7, B.DOOR_N);
       w.setBlock(8, y + 1, 7, B.DOOR_UN);
       g.body.pos.set(7.5, y, 10.5);
@@ -294,11 +396,19 @@ try {
       g.buildChunk(0, 0);
       g.buildChunk(1, 0);
       g.emitHud();
-      g.updateBuildingTarget(B.TRAP_S, 8, y, 5);
+      g.updateBuildingTarget(B.TRAP_OPEN_BOTTOM_S, 8, y, 5);
       g.selection.position.set(8.5, y + 0.5, 5.5);
       g.selection.visible = true;
       g.firstPerson.render(g.renderer, g.scene, g.camera);
-      return { panels, closedTrapDistance: closed.dist, doorStates: doors };
+      return {
+        panels,
+        closedTrapDistance: closed.dist,
+        doorStates: doors,
+        modernStates,
+        floorPlaced,
+        closedAgain,
+        ceilingPlaced,
+      };
     }, B);
     if (errors.length) throw Error(JSON.stringify(errors));
     const device = mobile ? "mobile" : "desktop";

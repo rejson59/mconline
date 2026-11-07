@@ -81,9 +81,13 @@ Praca nie czeka na magazyn: naprawiono kontakty z rzeczywistymi powierzchniami d
 
 Usunięto pełną kratkę kolizji płotu: słupek i ramiona wynikają z jednej maski sąsiadów wspólnej z renderingiem. Dodano oddzielny kształt zaznaczania, dynamiczny obrys/pękanie i ochronę stawiania przed nowymi ramionami sąsiedniego płotu. **79 grup regresji oraz rzeczywisty test produkcyjnej gry w Chromium desktop/touch mobile: PASS.** [Zakres i granica dowodu](FENCES-4.32.md). Nie deklarujemy pełnej zgodności z 26.3 na podstawie historycznego źródła ani własnych regresji.
 
-## Obecna porcja: włazy i drzwi 4.33
+## Poprzednia porcja: włazy i drzwi 4.33
 
 Otwarte włazy blokują rzeczywistym skrzydłem 3/16. Rendering, kolizje i celowanie korzystają ze wspólnej bryły; drzwi i włazy mają dokładny obrys/pękanie, a stawianie włazu sprawdza wynikowy kierunek i przecięcie ciał. **62 grupy regresji oraz produkcyjny Chromium desktop/touch mobile: PASS.** Bez zmiany ID i resetu. [Zakres i jawne ograniczenia starego formatu](PANELS-4.33.md): nadal jeden stan zamknięty, brak pełnej połowy/kierunku, bez dowodu kompletnej zgodności z 26.3.
+
+## Obecna porcja: trwałe stany włazów 4.34
+
+Dopisano 16 stanów half/edge/open, zamknięte stawianie na podłodze/ścianie i pod sufitem, zachowanie połowy/kierunku przy przełączeniu i brak zależności od podparcia. Stare ID 68–72 nie są masowo migrowane ani przesuwane. Przekroczenie 511 obsłużone w tablicach klienta oraz addytywnej migracji obu writerów bazy gry; metadane po wdrożeniu potwierdzają te same ACL/ochrony. **114 nowych grup + 83 kontrole PostgreSQL oraz Chromium desktop/touch: PASS.** [Zakres i granice](TRAPDOORS-4.34.md): powered/waterlogging i zgodność tekstur/UV nadal otwarte; historyczne źródło nie dowodzi pełnego 26.3.
 
 ## Dalsza porcja — od inwentarza do kontrolowanego transportu
 

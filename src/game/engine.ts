@@ -29,7 +29,7 @@ import { explorationLootKind } from './explorationLoot';
 import * as THREE from 'three';
 import { World, CS, CH, SEA, plantTree, chestLidGeometry, closedChestGeometry, buildingBlockGeometry, type Biome, type Chunk } from './world';
 import { hardwareHint, shouldRestoreTouch, type HardwareKind, type InputKind } from '../utils/input';
-import { B, BLOCKS, isFurnace, furnaceFacing, furnaceIdFor, furnaceFacingForYaw, furnaceCapCorner, IS_SOLID, RENDER, collisionBoxesAt, selectionBoxesAt, isFence, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsId, buildingItem, isSlab, isSlabTop, slabBase, slabDouble, isSlabDouble, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
+import { B, BLOCKS, isFurnace, furnaceFacing, furnaceIdFor, furnaceFacingForYaw, furnaceCapCorner, IS_SOLID, RENDER, collisionBoxesAt, selectionBoxesAt, isFence, tileFor, isDoor, isDoorOpen, isDoorTop, isLadder, isTrap, isTrapOpen, isTrapTop, trapFacing, trapIdFor, doorFacing, doorHinge, doorPair, ladderFacing, facingFromNormal, isStairs, stairsId, buildingItem, isSlab, isSlabTop, slabBase, slabDouble, isSlabDouble, isPiston, isBed, isBedHead, bedFacing, bedPart, isChestBlock, isLootChest, chestFacing, chestIdFor, chestFacingTowards, chestLeftDir } from './blocks';
 import { tickRedstone, toggleLever as rsToggleLever, pressButton as rsPressButton, tryLightPortalAt } from './redstone';
 import { biteDelay, cookedOf, isFishStack, rollCatch, BITE_WINDOW, PATIENCE } from './fishing';
 import { anvilKey, anvilResult, cleanItemName, emptyAnvil, type AnvilResult, type AnvilState } from './anvil';
@@ -4293,12 +4293,13 @@ export class Game {
 
   private toggleTrap(x: number, y: number, z: number, nx: number, nz: number) {
     const id = this.world.getBlock(x, y, z);
-    if (id === B.TRAP) {
-      const face = nx !== 0 || nz !== 0 ? facingFromNormal(nx, nz) : this.facingOf(0, 1, 0);
-      this.world.setBlock(x, y, z, B.TRAP_N + face);
-    } else if (isTrapOpen(id)) {
-      this.world.setBlock(x, y, z, B.TRAP);
-    }
+    if (!isTrap(id)) return;
+    const stored = trapFacing(id);
+    // Only an unoriented legacy closed panel needs a one-time inferred edge.
+    const face = stored >= 0 ? stored : nx !== 0 || nz !== 0
+      ? facingFromNormal(nx, nz) : this.facingOf(0, 1, 0);
+    this.world.setBlock(x, y, z, trapIdFor(face, isTrapTop(id), !isTrapOpen(id)));
+    this.onBlockChanged(x, y, z);
     Sfx.playPlace('wood');
     this.swingT = 0;
   }
@@ -6238,8 +6239,9 @@ export class Game {
       this.consumeSelected();
       return;
     } else if (isTrap(id)) {
-      const placed = t.ny === 1 ? B.TRAP : t.ny === 0 ? B.TRAP_N + facingFromNormal(-t.nx, -t.nz) : null;
-      if (placed === null) { this.message('Właz kładzie się na podłodze albo na ścianie.'); return; }
+      const dir = this.lookDir();
+      const face = t.ny === 0 ? facingFromNormal(-t.nx, -t.nz) : facingFromNormal(dir.x, dir.z);
+      const placed = trapIdFor(face, t.ny < 0 || (t.ny === 0 && this.placementHitY(t) > 0.5));
       if (!this.canPlaceBuilding(placed, px, py, pz)) return;
       this.world.setBlock(px, py, pz, placed);
       this.onBlockChanged(px, py, pz);
@@ -6554,7 +6556,7 @@ export class Game {
     for (let f = 0; f < 4; f++) {
       const lx = x - attach[f][0], lz = z - attach[f][1];
       const nid = this.world.getBlock(lx, y, lz);
-      if (ladderFacing(nid) === f || (isTrapOpen(nid) && nid - B.TRAP_N === f)) this.breakBlock(lx, y, lz, silent);
+      if (ladderFacing(nid) === f) this.breakBlock(lx, y, lz, silent);
     }
     // 2.21: jak w wanilii – pochodnia, lilia i sadzonka tracą podparcie razem
     // z blokiem pod nimi (wcześniej wisiały w powietrzu).
@@ -6596,7 +6598,7 @@ export class Game {
     }
     // things above that need support
     const above = this.world.getBlock(x, y + 1, z);
-    if (isBed(above) || RENDER[above] === 1 || RENDER[above] === 6 || above === B.CACTUS || above === B.TRAP || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
+    if (isBed(above) || RENDER[above] === 1 || RENDER[above] === 6 || above === B.CACTUS || (isDoor(above) && !isDoorTop(above))) this.breakBlock(x, y + 1, z, silent);
     this.fallGravity(x, y + 1, z);
     return true;
   }

@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.33.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.34.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.34.0 — włazy z pamięcią kierunku i połowy
+
+Włazy stawia się w dolnej lub górnej połowie, także pod sufitem. Otwieranie/zamykanie zachowuje kierunek i połowę; zniszczenie podparcia nie niszczy włazu. **114 nowych grup regresji + 83 kontrole PostgreSQL + produkcyjny Chromium desktop/touch.** Stare ID zachowują położenie, bez resetu zapisów. Serwerowy limit nowych stanów rozszerzony bez zmiany ochrony działek i uprawnień. [Wyniki, kompatybilność i pozostałe różnice](docs/TRAPDOORS-4.34.md).
 
 ## Wersja 4.33.0 — włazy i drzwi bez pustych trafień
 

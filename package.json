@@ -1,7 +1,7 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.33.0",
+  "version": "4.34.0",
   "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
   "type": "module",
   "license": "MIT",
@@ -19,7 +19,7 @@
     "build": "vite build && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs && node scripts/test-shared-state-sql.mjs && node scripts/test-shared-mobs-sql.mjs && node --test scripts/audit-java-reference.test.mjs scripts/probe-reference-network.test.mjs && node --test scripts/reference-storage.test.mjs && node --test scripts/reference-reader.test.mjs && node --test scripts/reference-corpus.test.mjs && node --test scripts/reference-transfer.test.mjs && node --test scripts/reference-archive.test.mjs && node --test scripts/reference-embedded.test.mjs",
+    "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs && node scripts/test-shared-state-sql.mjs && node scripts/test-shared-mobs-sql.mjs && node --test scripts/audit-java-reference.test.mjs scripts/probe-reference-network.test.mjs && node --test scripts/reference-storage.test.mjs && node --test scripts/reference-reader.test.mjs && node --test scripts/reference-corpus.test.mjs && node --test scripts/reference-transfer.test.mjs && node --test scripts/reference-archive.test.mjs && node --test scripts/reference-embedded.test.mjs && node scripts/test-trapdoor-state-sql.mjs",
     "test:native": "node .harness/run.mjs native",
     "test:fire": "node .harness/run.mjs fire",
     "test:engine": "node .harness/run.mjs smoke",
@@ -65,7 +65,10 @@
     "test:fences": "node .harness/run.mjs fences",
     "test:browser:fences": "node scripts/verify-fences-browser.mjs",
     "test:panels": "node .harness/run.mjs panels",
-    "test:browser:panels": "node scripts/verify-panels-browser.mjs"
+    "test:browser:panels": "node scripts/verify-panels-browser.mjs",
+    "test:traps": "node .harness/run.mjs traps",
+    "test:traps:sql": "node scripts/test-trapdoor-state-sql.mjs",
+    "test:browser:traps": "BROWSER_TRAPS=1 node scripts/verify-panels-browser.mjs"
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",
