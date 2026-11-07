@@ -2,6 +2,10 @@
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
 
+## Wersja 4.31.0 — kolizje i widoczne płoty
+
+**Zmiana w samej grze:** dokładniejsze zatrzymywanie przy drzwiach, skrzyniach i szybach, wykrywanie górnej części płotu oraz nieprzezroczyste słupki i szczeble. 45 nowych grup regresji; bez resetu światów i kont. [Co naprawiono, wyniki i pozostałe różnice](docs/MOVEMENT-4.31.md). To kolejny odcinek implementacji, nie deklaracja pełnego 1:1 z Java 26.3.
+
 ## Cel dalszej migracji: Java 26.3
 
 Przypięto najnowsze stabilne wydanie ze sprawdzonego wykazu (2026-11-07), pobrano korpus 2042 receptur do ignorowanego cache i dodano audyt danych. **To etap przygotowawczy, nie ukończony port 26.3 ani instalacja oryginalnej gry.** Działający silnik nadal ma dotychczasowy zakres zgodności z 1.20.4. [Wyniki, ograniczenia i plan migracji](docs/JAVA-26.3-MIGRATION.md).
