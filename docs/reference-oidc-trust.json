@@ -14,5 +14,7 @@
   "documentation": "https://github.com/github/docs/blob/8cd1075179df75319912891d6620c9cb78eefb4d/content/actions/reference/security/oidc.md#immutable-subject-claims",
   "failedRun": "https://github.com/rejson59/mconline/actions/runs/42318667829",
   "failureHTTPStatus": 403,
-  "verifiedLivePrivateReadAfterFix": false
+  "verifiedLivePrivateReadAfterFix": true,
+  "liveReadProof": "benchmarks/reference-runner-read-proof.json",
+  "failedRunAttempt": 1
 }

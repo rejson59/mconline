@@ -30,7 +30,7 @@ Raport łączności: [benchmarks/reference-connectivity-proof.json](benchmarks/r
 5. Po komunikacie **TEST BACKENDU OK** naciśnij **Sprawdź ponowny odczyt**. Można też odświeżyć stronę i powtórzyć sam odczyt, aby potwierdzić obecność pliku w późniejszym żądaniu.
 6. Napisz w rozmowie, co pokazał test. Jeśli się nie udał, wystarczy tekst komunikatu albo zrzut ekranu bez danych sesji. Nie wysyłaj tokenów ani haseł.
 
-**Nadal nie pobieraj i nie przesyłaj dużych oryginałów.** Odbiór prywatnych plików przez środowisko analizy i kopia zapasowa pozostają kolejnymi krokami.
+**Nadal nie pobieraj i nie przesyłaj dużych oryginałów.** Osobny runner odczytał już prywatny plik testowy 79 B — [etap 2 i pokwitowanie](REFERENCE-PRIVATE-READ.md). Transport dużych plików i niezależna kopia zapasowa nie są jeszcze gotowe.
 
 ## Co robi przycisk — i czego nie robi
 
@@ -61,6 +61,6 @@ Nawet sukces potwierdza **round-trip backend ↔ Storage**, nie odczyt przez san
 - Pełne `npm test`: **25 825 sprawdzeń**, typecheck/build — PASS. `npm audit --omit=dev`: 0 podatności.
 - Chromium desktop i emulowany mobile 390×844: status właściciela, test, ponowny odczyt, logout, brak poziomego przewijania; zero wyjątków. Obcy origin: zero pobrań helpera i zablokowany test. **Provider i backend w tym teście są syntetyczne, nie jest to test prawdziwej sesji właściciela ani Storage.** Raport: [benchmarks/reference-storage-ui.json](benchmarks/reference-storage-ui.json).
 - CI rozszerzono o rzeczywiste, niemutujące negatywne kontrole wdrożonej funkcji: brak tokenu, fałszywy token/cross-project, zły origin i preflight. Nie zapisują plików i nie używają prawdziwych sesji.
-- Właściciel wykonał test na żywym koncie i zgłosił sukces; raport ma 79 bajtów i SHA-256 zgodny z oczekiwanym. Niezależnie potwierdzono metadane obiektu i prywatny bucket. Nie oznacza to jeszcze odczytu bajtów przez środowisko analizy — to etap 2.
+- Właściciel wykonał test na żywym koncie i zgłosił sukces; raport ma 79 bajtów i SHA-256 zgodny z oczekiwanym. Niezależnie potwierdzono metadane obiektu i prywatny bucket. Sam ten raport nie dowodzi odczytu przez runner. Późniejszy osobny [etap 2](REFERENCE-PRIVATE-READ.md) przeszedł: runner odczytał ten sam plik 79 B z poprawną sumą.
 
 Kontrola HTTP PR po poprawieniu wdrożenia: [CI 42316809139](https://github.com/rejson59/mconline/actions/runs/42316809139) — PASS, w tym brak sesji, nieprawidłowa sesja, zły origin i preflight nowej funkcji. To nadal nie zastępuje pozytywnego testu właściciela.
