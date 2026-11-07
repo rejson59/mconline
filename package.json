@@ -1,7 +1,7 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.36.0",
+  "version": "4.37.0",
   "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
   "type": "module",
   "license": "MIT",
@@ -72,7 +72,9 @@
     "test:trapuv": "node .harness/run.mjs trapuv",
     "test:browser:trapuv": "BROWSER_TRAP_UV=1 node scripts/verify-panels-browser.mjs",
     "test:trapitem": "node .harness/run.mjs trapitem",
-    "test:browser:trapitem": "BROWSER_TRAP_ITEM=1 node scripts/verify-panels-browser.mjs"
+    "test:browser:trapitem": "BROWSER_TRAP_ITEM=1 node scripts/verify-panels-browser.mjs",
+    "test:landscape": "node .harness/run.mjs landscape",
+    "test:browser:landscape": "node scripts/verify-landscape-browser.mjs"
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",

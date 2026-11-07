@@ -84,7 +84,7 @@ try {
     p.on("pageerror", (e) => errors.push(e.message));
     await p.setViewport(
       i
-        ? { width: 390, height: 844, isMobile: true, hasTouch: true }
+        ? { width: 844, height: 390, isMobile: true, hasTouch: true }
         : { width: 960, height: 600 },
     );
     await p.exposeFunction("sharedRpc", async (name, a) => {
@@ -156,7 +156,6 @@ try {
           fpsCapUserSet: true,
         }),
       );
-      sessionStorage.setItem("blockcraft-portrait-ok", "1");
       localStorage.setItem(
         "blockcraft-saves-v2",
         JSON.stringify([
@@ -199,9 +198,6 @@ try {
     );
     await p.evaluate(() => {
       cancelAnimationFrame(window.minecraft.game.raf);
-      [...document.querySelectorAll("button")]
-        .find((b) => b.textContent.trim() === "Graj w pionie mimo to")
-        ?.click();
     });
     await p.addScriptTag({ path: path.join(out, "bridge.js") });
     await p.evaluate(

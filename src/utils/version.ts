@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.36.0';
-export const GAME_RELEASE_NAME = 'Cienki właz także jako przedmiot';
+export const GAME_VERSION = '4.37.0';
+export const GAME_RELEASE_NAME = 'Na telefonie tylko poziomo';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.37: na telefonie tylko poziomo', text: 'Usunięto granie w pionie i zapamiętaną zgodę na ten tryb. Obrót zatrzymuje sterowanie; okna i przedmioty pozostają zachowane. Obróć telefon, aby wrócić, albo zapisz i wyjdź do menu. Multiplayer nie zatrzymuje serwera.' },
   { title: '4.36: cienki właz także jako przedmiot', text: 'W obu rękach, na ziemi i w ekwipunku dębowy właz jest płytą 3/16, nie pełnym sześcianem. Używa właściwych pasków UV; ikona dziedziczy obrót i skalę modelu odniesienia. Wszystkie stany świata dają jeden model przedmiotu. Bez zmiany fizyki, zapisów i zasad podnoszenia.' },
   { title: '4.35: włazy bez rozciągniętych tekstur', text: 'Cienkie krawędzie dębowego włazu używają właściwych trzypikselowych pasków, zamiast rozciągniętej całej tekstury. Obrót otwartego skrzydła przenosi UV razem z modelem; górne/dolne powierzchnie mają właściwe odbicie. Otwory są wycinane zamiast rysowania czarnych pól. Porównano 504 narożniki z przypiętymi modelami 26.3. Bez zmiany stanów, fizyki i zapisów.' },
   { title: '4.34: włazy pamiętają kierunek i połowę', text: 'Właz można umieścić w dolnej lub górnej połowie, również pod sufitem. Otwieranie i zamykanie zachowuje kierunek oraz połowę, a usunięcie podparcia nie niszczy włazu. Stare zapisane płyty pozostają na miejscu; nowe stany działają także w multiplayerze. Bez resetu światów.' },

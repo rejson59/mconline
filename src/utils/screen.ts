@@ -194,21 +194,10 @@ export function watchLandscape(onChange?: (fullscreen: boolean) => void): () => 
   };
 }
 
-/** Nazwa klucza w sessionStorage – „graj w pionie mimo to” działa do zamknięcia karty. */
-export const PORTRAIT_DISMISS_KEY = 'blockcraft-portrait-ok';
-
-export function portraitDismissed(): boolean {
-  try {
-    return sessionStorage.getItem(PORTRAIT_DISMISS_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-export function dismissPortrait(): void {
-  try {
-    sessionStorage.setItem(PORTRAIT_DISMISS_KEY, '1');
-  } catch {
-    /* prywatny tryb przeglądarki */
-  }
+/** Gameplay on phones/tablets requires landscape. Use layout size, not the
+ * visual viewport: opening a keyboard must not masquerade as a rotation.
+ * Deliberately independent of control mode and any old sessionStorage opt-out.
+ */
+export function portraitGameplayBlocked(): boolean {
+  return isTouchScreen() && isPortrait();
 }

@@ -83,7 +83,7 @@ try {
     });
     await p.setViewport(
       mobile
-        ? { width: 390, height: 844, isMobile: true, hasTouch: true }
+        ? { width: 844, height: 390, isMobile: true, hasTouch: true }
         : { width: 960, height: 600 },
     );
     await p.evaluateOnNewDocument((mobile) => {
@@ -100,7 +100,6 @@ try {
           fpsCapUserSet: true,
         }),
       );
-      sessionStorage.setItem("blockcraft-portrait-ok", "1");
       localStorage.setItem(
         "blockcraft-saves-v2",
         JSON.stringify([
@@ -135,9 +134,6 @@ try {
     );
     await p.evaluate(() => {
       cancelAnimationFrame(window.minecraft.game.raf);
-      [...document.querySelectorAll("button")]
-        .find((b) => b.textContent.trim() === "Graj w pionie mimo to")
-        ?.click();
     });
     await p.waitForFunction(() => !window.minecraft.game.meshWorker?.busy, {
       timeout: 15000,

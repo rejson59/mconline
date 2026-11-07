@@ -75,7 +75,6 @@ async function device(mobile=false,recovery=null){
   localStorage.setItem(shared,JSON.stringify({token:tokenA,username:'NotTrusted'}));
   localStorage.setItem('blockcraft-saves-v2','[{"id":"old-device-world","seed":42,"name":"Do not erase"}]');
   localStorage.setItem('blockcraft-settings',JSON.stringify({quality:'potato',renderDistance:2,volume:0,fpsCap:30,fpsCapUserSet:true,autoQuality:false,lod:false,controlMode:'desktop'}));
-  localStorage.setItem('blockcraft-portrait-ok','1');
  },{shared,tokenA});
  if(recovery)await p.evaluateOnNewDocument(recovery=>{localStorage.setItem(recovery.key,recovery.worlds);localStorage.setItem(recovery.key+':sync',recovery.journal);},recovery);
  await p.goto('https://rejson59.github.io/mconline/',{waitUntil:'networkidle0'});if(!recovery)await ready(p).catch(async error=>{console.log('STATE',await p.evaluate(()=>document.body.innerText),errors);throw error;});

@@ -161,7 +161,7 @@ import {
 } from '../src/components/launcher/model';
 import {
   isPortraitSize, isPhoneScreen, isTouchScreen, canLockOrientation, inFullscreen,
-  toggleFullscreenLandscape, PORTRAIT_DISMISS_KEY, watchLandscape,
+  toggleFullscreenLandscape, watchLandscape,
 } from '../src/utils/screen';
 import { lightFactor, heldFalloff, patchChunkMaterial, HELD_POWER, HELD_RANGE, AMBIENT } from '../src/game/lighting';
 import { cloudLook, rainFogMix } from '../src/game/sky';
@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.36.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Cienki właz także jako przedmiot', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.37.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Na telefonie tylko poziomo', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -3489,7 +3489,7 @@ section('2.15: pełny ekran nie psuje sterowania');
   check('pełny ekran działa na powłoce aplikacji, nie na <html>', /getElementById\(APP_ROOT_ID\)/.test(screenSrc) && /APP_ROOT_ID = 'root'/.test(screenSrc));
   check('po wejściu w pełny ekran wymiary są mierzone ponownie', /pokeLayout\(\)/.test(screenSrc));
   check('blokada orientacji tylko na dotyku', /isTouchScreen\(\) \? await lockLandscape\(\) : false/.test(screenSrc));
-  check('aplikacja nasłuchuje zmian widocznego ekranu', /onViewportChange/.test(app) && /onViewportChange/.test(readSource('src/components/OrientationGuard.tsx')));
+  check('aplikacja nasłuchuje zmian widocznego ekranu', /onViewportChange/.test(app) && /useLandscapeRequired/.test(readSource('src/components/OrientationGuard.tsx')) && /onViewportChange/.test(readSource('src/utils/useLandscapeRequired.ts')));
 
   // Silnik: płótno dopasowuje się do kontenera i słucha pełnego ekranu.
   check('silnik mierzy kontener zamiast polegać na resize', /syncViewport\(\)/.test(engine) && /clientWidth/.test(engine) && /clientHeight/.test(engine));
@@ -3543,7 +3543,6 @@ section('2.13: telefon gra się w poziomie');
   check('pion poznajemy po wysokości większej od szerokości', isPortraitSize(360, 640));
   check('poziom to szerokość większa od wysokości', !isPortraitSize(844, 390));
   check('kwadratowy ekran nie jest pionem', !isPortraitSize(600, 600));
-  eq('klucz „graj w pionie” jest stały', PORTRAIT_DISMISS_KEY, 'blockcraft-portrait-ok');
   // W Node nie ma `screen` ani pełnego DOM-u – funkcje muszą to przetrwać.
   check('poza przeglądarką nie ma dotyku', !isTouchScreen());
   check('poza przeglądarką nie ma telefonu', !isPhoneScreen());
@@ -3560,10 +3559,10 @@ section('2.13: telefon gra się w poziomie');
   const guard = readSource('src/components/OrientationGuard.tsx');
   check('nakładka każe obrócić telefon', guard.includes('Obróć telefon poziomo'));
   check('jest przycisk pełnego ekranu i poziomu', guard.includes('Pełny ekran i poziomo'));
-  check('jest wyjście awaryjne w pionie', guard.includes('Graj w pionie mimo to'));
+  check('nie ma obejścia blokady pionu', !guard.includes('Graj w pionie mimo to'));
   const gameView = readSource('src/components/GameView.tsx');
-  check('gra pokazuje nakładkę w trakcie grania', /wantsLandscape && <OrientationGuard/.test(gameView));
-  check('start gry prosi o pełny ekran i poziom', /const resume[\s\S]{0,400}enterLandscapeMode\(\)/.test(gameView));
+  check('gra pokazuje nakładkę w trakcie grania', /<OrientationGuard onQuit=/.test(gameView));
+  check('start gry prosi o pełny ekran i poziom', /const resume[\s\S]{0,700}enterLandscapeMode\(\)/.test(gameView));
   const touch = readSource('src/components/TouchControls.tsx');
   check('przycisk ⛶ włącza też poziom', touch.includes('toggleFullscreenLandscape'));
   const menus = readSource('src/components/Menus.tsx');
