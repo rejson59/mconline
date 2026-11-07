@@ -38,13 +38,15 @@ if (!fs.existsSync(libs)) {
 }
 const output = path.join(
   root,
-  process.env.BROWSER_TRAP_ITEM
-    ? ".cache/verification436"
-    : process.env.BROWSER_TRAP_UV
-      ? ".cache/verification435"
-      : process.env.BROWSER_TRAPS
-        ? ".cache/verification434"
-        : ".cache/verification433",
+  process.env.BROWSER_TRAP_POSE
+    ? ".cache/verification438"
+    : process.env.BROWSER_TRAP_ITEM
+      ? ".cache/verification436"
+      : process.env.BROWSER_TRAP_UV
+        ? ".cache/verification435"
+        : process.env.BROWSER_TRAPS
+          ? ".cache/verification434"
+          : ".cache/verification433",
 );
 fs.mkdirSync(output, { recursive: true });
 const enums = path.join(output, "blocks.mjs");
@@ -62,6 +64,23 @@ await build({
 });
 const { B, T, trapdoorReference, decodePng } = await import(
   pathToFileURL(enums).href
+);
+const displayReferences = Object.assign(
+  {},
+  ...["block", "thin_block"].map(
+    (name) =>
+      JSON.parse(
+        fs.readFileSync(
+          path.join(
+            root,
+            ".harness/fixtures/java-trapdoor-item-26.3/assets/minecraft/models/block/" +
+              name +
+              ".json",
+          ),
+          "utf8",
+        ),
+      ).display,
+  ),
 );
 const expectedUVs = [
   68,
@@ -572,7 +591,14 @@ try {
       { B, T, expectedUVs, pixels },
     );
     const itemReport = await p.evaluate(
-      async ({ B, T, expectedUVs, itemBounds, alphaProbes }) => {
+      async ({
+        B,
+        T,
+        expectedUVs,
+        itemBounds,
+        alphaProbes,
+        displayReferences,
+      }) => {
         const g = window.minecraft.game;
         g.inventory.slots.fill(null);
         g.inventory.slots[0] = { id: B.TRAP, count: 8 };
@@ -636,8 +662,64 @@ try {
           }
           return b.max.y - b.min.y;
         };
+        let poseVertices = 0;
+        const rotate = (point, angles) => {
+          let [x, y, z] = point;
+          for (const axis of [2, 1, 0]) {
+            const a = (angles[axis] * Math.PI) / 180,
+              c = Math.cos(a),
+              s = Math.sin(a);
+            if (axis === 2) [x, y] = [c * x - s * y, s * x + c * y];
+            else if (axis === 1) [x, z] = [c * x + s * z, -s * x + c * z];
+            else [y, z] = [c * y - s * z, s * y + c * z];
+          }
+          return [x, y, z];
+        };
+        const pose = (mesh, key, anchor, angles = [0, 0, 0], left = false) => {
+          const d = displayReferences[key],
+            sign = left ? -1 : 1;
+          mesh.updateMatrix();
+          const p = mesh.geometry.getAttribute("position"),
+            m = mesh.matrix.elements;
+          for (let i = 0; i < p.count; i++) {
+            const point = [p.getX(i), p.getY(i), p.getZ(i)];
+            let expected = rotate(
+              point.map((v, a) => v * d.scale[a]),
+              [d.rotation[0], sign * d.rotation[1], sign * d.rotation[2]],
+            );
+            expected = expected.map(
+              (v, a) => v + (d.translation[a] / 16) * (a === 0 ? sign : 1),
+            );
+            expected = rotate(expected, angles).map((v, a) => v + anchor[a]);
+            for (let a = 0; a < 3; a++) {
+              const actual =
+                m[a] * point[0] +
+                m[a + 4] * point[1] +
+                m[a + 8] * point[2] +
+                m[a + 12];
+              if (Math.abs(actual - expected[a]) > 3e-6)
+                throw Error(
+                  "Display mismatch " + key + " vertex " + i + " axis " + a,
+                );
+            }
+            poseVertices++;
+          }
+        };
         const mainHeight = inspect(g.handMesh),
           offhandHeight = inspect(g.offHandMesh);
+        pose(
+          g.handMesh,
+          "firstperson_righthand",
+          [0.42, -0.32, -0.62],
+          [(0.1 * 180) / Math.PI, 45 + (0.12 * 180) / Math.PI, 0],
+        );
+        pose(
+          g.offHandMesh,
+          "firstperson_lefthand",
+          [-0.42, -0.32, -0.62],
+          [(0.1 * 180) / Math.PI, -45 - (0.12 * 180) / Math.PI, 0],
+          true,
+        );
         const oldDropCount = g.drops.length;
         g.spawnDrop(
           B.TRAP,
@@ -656,6 +738,36 @@ try {
         );
         const drop = g.drops.at(-1),
           dropHeight = inspect(drop.mesh);
+        pose(drop.mesh, "ground", [7, 65.35, 8]);
+        g.updateDrops(0);
+        if (
+          Math.abs(
+            drop.mesh.position.y -
+              drop.pos.y -
+              0.12 -
+              Math.sin(drop.age * 3) * 0.06 -
+              3 / 16,
+          ) > 1e-6
+        )
+          throw Error("Ground animation lost display translation");
+        const remoteId = "synthetic-pose-browser";
+        const remote = g.ensureRemote({
+          id: remoteId,
+          name: "Test modelu",
+          hue: 120,
+          skin: "steve",
+        });
+        remote.held = B.TRAP;
+        const anchor = remote.hand.position.toArray();
+        g.updateRemoteHeld(remote);
+        const remoteHeight = inspect(remote.hand);
+        pose(remote.hand, "thirdperson_righthand", anchor);
+        if (remote.hand.material.map !== g.atlasTex)
+          throw Error("Avatar does not use item atlas");
+        remote.group.position.set(5.8, 65, 6.5);
+        remote.group.rotation.y = Math.PI;
+        remote.group.visible = true;
+        window.poseTestRemoteId = remoteId;
         if (
           g.drops.length !== oldDropCount + 1 ||
           drop.count !== 2 ||
@@ -715,6 +827,8 @@ try {
           mainHeight,
           offhandHeight,
           dropHeight,
+          remoteHeight,
+          poseVertices,
           uvPairs,
           iconBounds: bounds,
           holeChecks,
@@ -724,7 +838,7 @@ try {
           icon,
         };
       },
-      { B, T, expectedUVs, itemBounds, alphaProbes },
+      { B, T, expectedUVs, itemBounds, alphaProbes, displayReferences },
     );
     fs.writeFileSync(
       path.join(output, (mobile ? "mobile" : "desktop") + "-icon.png"),
@@ -735,6 +849,18 @@ try {
     if (errors.length) throw Error(JSON.stringify(errors));
     const device = mobile ? "mobile" : "desktop";
     await p.screenshot({ path: path.join(output, device + ".png") });
+    // Actual avatar teardown must not invalidate the atlas used by both hands/world.
+    await p.evaluate(() => {
+      const g = window.minecraft.game;
+      let disposed = 0;
+      const onDispose = () => disposed++;
+      g.atlasTex.addEventListener("dispose", onDispose);
+      g.dropRemote(window.poseTestRemoteId);
+      g.atlasTex.removeEventListener("dispose", onDispose);
+      if (disposed) throw Error("Avatar removal disposed shared atlas");
+      g.firstPerson.render(g.renderer, g.scene, g.camera);
+    });
+    if (errors.length) throw Error(JSON.stringify(errors));
     reports.push({ device, viewport, ...report, errors });
     console.log("PASS " + device + " " + JSON.stringify(report));
     await context.close();

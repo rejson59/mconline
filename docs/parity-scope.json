@@ -131,7 +131,12 @@
       "weight": null,
       "acceptance": "Referencyjne firstperson/thirdperson, obie ręce, używanie i animacje.",
       "evidence": [
-        "src/game/firstPersonView.ts"
+        "src/game/firstPersonView.ts",
+        "src/game/trapdoorItem.ts",
+        ".harness/trapdoorPose.ts",
+        "docs/TRAPDOOR-POSES-4.38.md",
+        "docs/benchmarks/trapdoor-poses-4.38.json",
+        "scripts/verify-panels-browser.mjs"
       ]
     },
     {
@@ -141,7 +146,12 @@
       "weight": null,
       "acceptance": "Referencyjne ground i zachowanie stosów/dropów, nie wyłącznie geometria.",
       "evidence": [
-        "src/game/engine.ts"
+        "src/game/engine.ts",
+        "src/game/trapdoorItem.ts",
+        ".harness/trapdoorPose.ts",
+        "docs/TRAPDOOR-POSES-4.38.md",
+        "docs/benchmarks/trapdoor-poses-4.38.json",
+        "scripts/verify-panels-browser.mjs"
       ]
     },
     {

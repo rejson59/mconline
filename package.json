@@ -1,7 +1,7 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.37.0",
+  "version": "4.38.0",
   "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
   "type": "module",
   "license": "MIT",
@@ -20,6 +20,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs && node scripts/test-shared-state-sql.mjs && node scripts/test-shared-mobs-sql.mjs && node --test scripts/audit-java-reference.test.mjs scripts/probe-reference-network.test.mjs && node --test scripts/reference-storage.test.mjs && node --test scripts/reference-reader.test.mjs && node --test scripts/reference-corpus.test.mjs && node --test scripts/reference-transfer.test.mjs && node --test scripts/reference-archive.test.mjs && node --test scripts/reference-embedded.test.mjs && node scripts/test-trapdoor-state-sql.mjs && node --test scripts/parity-progress.test.mjs && npm run progress:check",
+    "test:trappose": "node .harness/run.mjs trappose",
+    "test:browser:trappose": "BROWSER_TRAP_POSE=1 node scripts/verify-panels-browser.mjs",
     "test:native": "node .harness/run.mjs native",
     "test:fire": "node .harness/run.mjs fire",
     "test:engine": "node .harness/run.mjs smoke",

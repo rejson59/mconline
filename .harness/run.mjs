@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'trappose', entry: path.join(here, 'trapdoorPose.ts'), label: 'Włazy: oryginalne pozycje w rękach, dropie i u innych graczy' },
   { name: 'landscape', entry: path.join(here, 'landscape.tsx'), label: 'Telefon: tylko pozioma rozgrywka, bez obejścia blokady' },
   { name: 'trapitem', entry: path.join(here, 'trapdoorItem.ts'), label: 'Przedmiot włazu: ręce, drop i ikona ekwipunku' },
   { name: 'trapuv', entry: path.join(here, 'trapdoorUV.ts'), label: 'Tekstury włazów: oryginalne modele, UV i worker' },

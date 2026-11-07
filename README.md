@@ -1,10 +1,14 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.37.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.38.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
 
+## Wersja 4.38.0 — właz we właściwej pozie
+
+W obu rękach i dropie dębowy właz używa odziedziczonych ustawień `display` z przypiętych modeli 26.3: obrotu, przesunięcia i skali. U innych graczy złotą kostkę zastąpił teksturowany właz z pozą `thirdperson`. Przesunięcie dropu pozostaje poprawne podczas animacji; usunięcie awatara nie usuwa wspólnego atlasu. Bez resetów i zmian protokołu. [Zakres, dowody i ograniczenia](docs/TRAPDOOR-POSES-4.38.md).
+
 ## Jeden wspólny pasek drogi do 1:1
 
-Dodano [powtarzalny audyt postępu](docs/PARITY-PROGRESS.md), oparty na rzeczywistych rejestrach i przypiętej referencji 26.3. Pierwszy pomiar: **304 stany bloków, 124 przedmioty, 221 receptur i 14 typów mobów**. W jawnie zmapowanej części craftingu **23 definicje danych** odpowiadają referencji. To nie procent ukończenia całej gry. Wspólny procent pozostaje **nieustalony**, dopóki zakres i wagi nie będą rozliczone; nie jest liczony jako średnia z 20 działów ani liczba zielonych testów. Kontrola spójności raportu działa w CI. Bez zmian runtime 4.37.0, zapisów i backendu.
+Dodano [powtarzalny audyt postępu](docs/PARITY-PROGRESS.md), oparty na rzeczywistych rejestrach i przypiętej referencji 26.3. Pierwszy pomiar: **304 stany bloków, 124 przedmioty, 221 receptur i 14 typów mobów**. W jawnie zmapowanej części craftingu **23 definicje danych** odpowiadają referencji. To nie procent ukończenia całej gry. Wspólny procent pozostaje **nieustalony**, dopóki zakres i wagi nie będą rozliczone; nie jest liczony jako średnia z 20 działów ani liczba zielonych testów. Kontrola spójności raportu działa w CI. Sam audyt dodano przy runtime 4.37.0 bez zmiany rozgrywki; bieżącą zmianę 4.38 opisano powyżej.
 
 ## Wersja 4.37.0 — na telefonie tylko poziomo
 
@@ -12,7 +16,7 @@ Wycofano granie w pionie i zapamiętane obejście blokady. Obrót telefonu zatrz
 
 ## Wersja 4.36.0 — cienki właz także jako przedmiot
 
-Dębowy właz nie jest już sześcianem w geometrii obu rąk, dropu i ikony ekwipunku. Model ma grubość **3/16**, poprawne UV i otwory; wszystkie 21 stanów korzysta z kanonicznego modelu dolnego, wskazanego przez referencyjną definicję przedmiotu. **34 grupy / 504 pary UV + produkcyjny Chromium desktop/touch.** Bez zmian zapisów, fizyki i backendu. Pozy i animacje trzymania pozostają projektowe, nie deklarujemy pełnego 1:1. [Wyniki i ograniczenia](docs/TRAPDOOR-ITEM-4.36.md).
+Dębowy właz nie jest już sześcianem w geometrii obu rąk, dropu i ikony ekwipunku. Model ma grubość **3/16**, poprawne UV i otwory; wszystkie 21 stanów korzysta z kanonicznego modelu dolnego, wskazanego przez referencyjną definicję przedmiotu. **34 grupy / 504 pary UV + produkcyjny Chromium desktop/touch.** Bez zmian zapisów, fizyki i backendu. W 4.36 pozy i animacje trzymania pozostawały projektowe; 4.38 dodaje ustawienia modelu `display`, nie pełne animacje Java. [Wyniki i ograniczenia](docs/TRAPDOOR-ITEM-4.36.md).
 
 ## Wersja 4.35.0 — włazy bez rozciągniętych tekstur
 
