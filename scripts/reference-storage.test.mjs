@@ -250,7 +250,7 @@ function ui({ origin = ORIGIN, session = { token }, reply, delayStatus } = {}) {
             privateReadVerified: true,
             publicReadBlocked: true,
             sha256: "a".repeat(64),
-            bytes: 74,
+            bytes: 79,
             created: true,
           },
     );

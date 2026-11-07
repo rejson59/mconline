@@ -1,0 +1,28 @@
+{
+  "environment": "Chromium; synthetic account provider and backend; no real session or Storage writes",
+  "reports": [
+    {
+      "device": "desktop",
+      "ownerUI": true,
+      "probe": true,
+      "repeatRead": true,
+      "logoutClearsProof": true,
+      "noHorizontalOverflow": true,
+      "errors": []
+    },
+    {
+      "device": "mobile-emulated",
+      "ownerUI": true,
+      "probe": true,
+      "repeatRead": true,
+      "logoutClearsProof": true,
+      "noHorizontalOverflow": true,
+      "errors": []
+    },
+    {
+      "device": "other-origin",
+      "blocked": true,
+      "helperRequests": 0
+    }
+  ]
+}

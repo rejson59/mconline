@@ -6,7 +6,7 @@ Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddz
 
 Przypięto najnowsze stabilne wydanie ze sprawdzonego wykazu (2026-11-07), pobrano korpus 2042 receptur do ignorowanego cache i dodano audyt danych. **To etap przygotowawczy, nie ukończony port 26.3 ani instalacja oryginalnej gry.** Działający silnik nadal ma dotychczasowy zakres zgodności z 1.20.4. [Wyniki, ograniczenia i plan migracji](docs/JAVA-26.3-MIGRATION.md).
 
-Przygotowanie prywatnego transferu oryginałów: [test połączenia i instrukcja dla właściciela na telefonie](docs/REFERENCE-TRANSFER.md). **Panel uploadu i magazyn nie są jeszcze wdrożone.**
+Przygotowanie prywatnego transferu oryginałów: [wynik testu połączenia](docs/REFERENCE-TRANSFER.md) i [panel małego prywatnego testu `/testy/`](docs/PRIVATE-STORAGE-PROBE.md). **Upload oryginałów i odczyt prywatnych plików przez środowisko analizy nie są jeszcze gotowe.**
 
 ## Wersja 4.30.0 „Narzędzia, łóżka i światło”
 
