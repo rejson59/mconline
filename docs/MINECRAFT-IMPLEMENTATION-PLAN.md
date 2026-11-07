@@ -22,7 +22,7 @@ To plan wykonywania kodu, nie obietnica terminu pełnej zgodności. Duży projek
 | 0. Dostęp | Właściciel → prywatny backend; OIDC runner → prywatny probe | Rzeczywisty odczyt 79 B, zgodny hash, odmowa publicznego odczytu | **Potwierdzony**; [pokwitowanie](benchmarks/reference-runner-read-proof.json) |
 | 1. Inwentarz | Plan wszystkich pobrań deklarowanych przez oficjalny manifest i indeks zasobów; content-addressed obiekty; audyt zawartości | Deterministyczne plany, deduplikacja bez utraty aliasów, odrzucanie uszkodzeń i raportowanie braków | **Kod, regresje offline i rzeczywisty inwentarz PASS**: [5266 obiektów / 5147 assetów](REFERENCE-ARCHIVE-BACKEND.md#potwierdzony-rzeczywisty-inwentarz). Pełny oficjalny korpus jeszcze nie pobrany |
 | 2. Transport | Osobna, wąska autoryzacja zapisu; części plików, wznowienie, limity bajtów, potwierdzenie kompletności | Zerwanie i kontynuacja transferu, pełny hash po złożeniu, brak nadpisania, obce konto/repo/ścieżka odrzucone | **Częściowo wykonane:** [protokół, wznowienie, źródło HTTPS i lokalny adapter](REFERENCE-TRANSFER-PROTOCOL.md), 31 regresji offline. [Backend OIDC i adapter chmurowy](REFERENCE-ARCHIVE-BACKEND.md) dodane i wdrożone z budżetem zapisu 0; 27 dalszych regresji. Rzeczywisty transfer i backup niepotwierdzone; endpointy probe bez zmian |
-| 3. Domknięcie korpusu | Platformowe manifesty i pliki wymaganej Javy; inwentarz wnętrza klienta i bundla serwera; kopia niezależna | Wszystkie wymagane kategorie rozliczone; rzeczywisty odczyt i odtworzenie drugiej kopii | **Niewykonane**. Sam bucket nie jest backupem |
+| 3. Domknięcie korpusu | Platformowe manifesty i pliki wymaganej Javy; inwentarz wnętrza klienta i bundla serwera; kopia niezależna | Wszystkie wymagane kategorie rozliczone; rzeczywisty odczyt i odtworzenie drugiej kopii | **Częściowo: [analizator wnętrza JAR-ów i bundla](REFERENCE-EMBEDDED-INVENTORY.md), 29 regresji offline.** Rzeczywista analiza, pliki Javy i backup niewykonane. Sam bucket nie jest backupem |
 | 4. Stanowisko porównań | Legalnie dostępna referencja + te same kontrolowane scenariusze w projekcie; ślady stanu i obrazy | Powtarzalne porównanie przynajmniej pierwszego pionowego odcinka, z jawną wersją, wejściami i tolerancjami | **Niewykonane dla 26.3**. Nie pobieramy sesji kont i nie obchodzimy logowania |
 | 5. Bloki, obraz, ruch | Mapa rejestrów/starych ID, stany i modele bloków, materiały/oświetlenie, ruch, kolizje i interakcje | Kontrolowane sceny i ślady zachowania; brak regresji zapisów; pomiar desktop/mobile | **Pierwszy odcinek właściwej migracji**, nie ukończona funkcja 26.3 |
 | 6. Przedmioty i survival | Ekwipunek, komponenty, crafting/przetwarzanie, narzędzia, zużycie, dropy, walka | Każda rodzina receptur i mechanik ma testy oryginał ↔ projekt; brakujący składnik jawnie raportowany | Istnieją implementacje częściowe; zgodność całego zakresu 26.3 **niesprawdzona** |
@@ -61,11 +61,17 @@ Zaimplementowano `scripts/reference-transfer.mjs`: części 4 MiB, binarny rekor
 
 To nie jest wdrożony backend ani niezależny backup. Nie przesyłano oryginałów, nie uruchamiano nowych workflow i nie zmieniano funkcji probe. Pozostałe etapy zachowują dotychczasowy stan.
 
-## Obecna porcja: backend OIDC i klient
+## Poprzednia porcja: backend OIDC i klient
 
 Dodano [backend i adapter](REFERENCE-ARCHIVE-BACKEND.md), samodzielne wdrożenie ACTIVE v1 z zapisem zablokowanym w kodzie (`budgetBytes:0`), serwerowe zatwierdzanie oficjalnych metadanych i niezależne finalize oraz 27 nowych regresji. Planner i protokół są współdzielone przez czyste moduły bez filesystemu. Dodano ręczny, domyślnie wyłączony job rzeczywistego inwentarza; nie transferuje oryginałów ani nie zapisuje Storage. Właściciel wykonał job `42368321972`, check `128391030962`: PASS. Zwykłe CI nadal go pomija; [pokwitowanie](benchmarks/reference-archive-inventory-proof.json) zapisuje rzeczywistą adnotację.
 
 Odczyt metadanych potwierdził prywatny bucket, limit pliku 10 MiB i tylko 1 obiekt / 79 B. Nie jest to dowód wolnej pojemności konta ani backupu. Dotychczasowe probe, konta, gra i zapisy bez zmian.
+
+## Obecna porcja: analizator wnętrza archiwów
+
+Dodano `scripts/reference-embedded.mjs`: pełne SHA-1/SHA-256 źródła, weryfikację ZIP i rzeczywistych bajtów wszystkich wpisów, kategorie zasobów/danych/klas, listy bibliotek i wersji bundla serwera oraz weryfikację i inwentarz zagnieżdżonych JAR-ów. Oficjalne wejście wyprowadza deskryptory z przypiętych surowych metadanych, nie z samego hashu planu. **29 regresji syntetycznych** wchodzi do standardowego `npm test`; [zakres, limity i granice dowodu](REFERENCE-EMBEDDED-INVENTORY.md).
+
+Nie pobrano ani nie przeanalizowano jeszcze rzeczywistych oryginałów. Java runtime, backup i porównania pozostają otwarte. Nie zmieniono workflow, wdrożonego backendu, budżetu zapisu, kont, gry ani zapisów. Kontynuowanie tej pracy offline nie wymaga od właściciela zrzutów panelu ani obsługi komputera; nieznana pojemność pozostaje bramką dużego zapisu, nie bramką całego rozwoju.
 
 ## Dalsza porcja — od inwentarza do kontrolowanego transportu
 
