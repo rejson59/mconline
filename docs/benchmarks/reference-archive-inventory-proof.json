@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "scope": "actual-server-approved-declared-corpus-inventory",
+  "run": {
+    "id": 42368321972,
+    "url": "https://github.com/rejson59/mconline/actions/runs/42368321972",
+    "attempt": 1,
+    "conclusion": "success",
+    "event": "workflow_dispatch",
+    "branch": "main",
+    "commit": "c6b4c149656054ae2f7d18b5037c44aa6d796f84",
+    "actorID": "185239338",
+    "triggeringActorID": "185239338",
+    "completedAt": "2026-11-07T11:29:43Z"
+  },
+  "checkRunID": 128391030962,
+  "annotationTitle": "Reference archive inventory",
+  "report": {
+    "schema": 1,
+    "mode": "server-approved-declared-corpus-inventory",
+    "target": "26.3",
+    "planDigestVerified": true,
+    "provenanceMatchesPinnedManifest": true,
+    "planSHA256": "8663cdb93cf8812e444946f530b18e5f3a75371da26c46193d7f40b554acabe7",
+    "manifestSHA1": "80608ff6753705b6a82e2cb86a5937d4d233abd4",
+    "uniqueObjects": 5266,
+    "logicalReferences": 5266,
+    "assetEntries": 5147,
+    "totalBytes": 706205684,
+    "maximumStoredBytes": 717451342,
+    "javaMajor": 25,
+    "pending": [
+      "java-runtime-platform-manifests-and-files",
+      "embedded-client-resource-inventory",
+      "embedded-server-bundle-inventory",
+      "private-persistent-transfer",
+      "independent-backup-and-restore",
+      "execution-and-behavior-comparison"
+    ],
+    "writesEnabled": false,
+    "storageWrites": false,
+    "originalsTransferred": false,
+    "independentBackupVerified": false,
+    "fullCorpusReady": false,
+    "officialMetadataBytesIndependentlyVerifiedByRunner": false
+  },
+  "archiveDeployment": {
+    "version": 1,
+    "id": "69a62439-6f50-489b-8cdf-3b39855d2abd",
+    "writeBudgetBytes": 0
+  },
+  "storageMetadataObservation": {
+    "project": "bewwejewgqzctnjrbclu",
+    "checkedOn": "2026-11-07",
+    "bucket": "mconline-reference-private",
+    "public": false,
+    "perObjectLimitBytes": 10485760,
+    "objectCount": 1,
+    "indexedBytes": 79,
+    "projectStorageQuotaBytes": null,
+    "organizationStorageQuotaBytes": null,
+    "remainingAccountStorageBytes": null,
+    "independentBackupVerified": false
+  },
+  "limits": [
+    "The backend fetched and verified pinned raw metadata; the runner validated the returned plan, not raw official metadata bytes.",
+    "These sizes cover declared downloads only; Java runtime platform files and embedded archive inventories remain pending.",
+    "The 717451342-byte bound covers this declared archive with protocol overhead, not the full installation, independent backup, organization quota or billing.",
+    "The metadata observation confirms indexed usage, not available capacity or guaranteed retention.",
+    "No original client/server/assets/libraries transferred or executed; no Storage writes by this job."
+  ]
+}

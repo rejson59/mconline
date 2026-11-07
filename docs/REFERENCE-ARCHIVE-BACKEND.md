@@ -58,11 +58,35 @@ indexed_bytes: 79
 
 Te liczby opisują zajętość i konfigurację znanego bucketu, **nie całkowitą pojemność konta**. Nie odczytywano zawartości probe tą drogą i nie przesyłano oryginałów.
 
-## Rzeczywisty inwentarz z telefonu — bez transferu plików
+## Potwierdzony rzeczywisty inwentarz
+
+[Uruchomienie 42368321972](https://github.com/rejson59/mconline/actions/runs/42368321972), próba 1, job `reference-archive-plan`, check `128391030962`: **SUCCESS**. Właściciel i wyzwalający to GitHub ID `185239338`, zdarzenie `workflow_dispatch`, gałąź `main`, commit `c6b4c149656054ae2f7d18b5037c44aa6d796f84`.
+
+[Pokwitowanie API z pełną bezpieczną adnotacją](benchmarks/reference-archive-inventory-proof.json):
+
+| Pole | Wynik |
+| --- | ---: |
+| Unikalne obiekty / referencje logiczne | 5266 / 5266 |
+| Wpisy assetów | 5147 |
+| Bajty zadeklarowanych plików | 706 205 684 (706,2 MB / 673,49 MiB) |
+| Górny szacunek archiwum z narzutem protokołu | 717 451 342 (717,5 MB / 684,21 MiB) |
+| Wymagany Java major | 25 |
+
+Digest planu: `8663cdb93cf8812e444946f530b18e5f3a75371da26c46193d7f40b554acabe7`. SHA-1 manifestu pozostał przypięty: `80608ff6753705b6a82e2cb86a5937d4d233abd4`.
+
+To rzeczywisty dowód podpisanej ścieżki właściciel → runner → wdrożony backend → oficjalne metadane i wspólny planner. Surowe metadane zweryfikował backend; runner sprawdził digest/pochodzenie otrzymanego planu, nie samodzielnie bajty oficjalnych manifestów. **Nie** pobrano ani nie zapisano klienta, serwera, assetów lub bibliotek. `writesEnabled`, `storageWrites`, `originalsTransferred`, `independentBackupVerified`, `fullCorpusReady` pozostają false.
+
+Wartość 717,5 MB dotyczy zadeklarowanego archiwum, **nie całej instalacji**: pliki platformowych runtime'ów Javy oraz inwentarze wnętrza klienta/bundla serwera nadal są w `pending`. Nie oznacza ona potrzebnej pojemności wraz z niezależnym backupem ani wolnego miejsca w organizacji.
+
+Po odczycie wyniku ponownie sprawdzono wyłącznie metadane całego Storage projektu: nadal jeden prywatny bucket i 1 obiekt / 79 B. Udostępnione informacje `get_project` oraz metadane SQL nie zawierają kwoty Storage organizacji/projektu ani pozostałego limitu konta. Pola pojemności w pokwitowaniu są jawnie `null`, nie wywnioskowane z limitu pliku 10 MiB. Nie zmieniano planu płatności, nie tworzono nowego projektu ani nie odblokowywano zapisu.
+
+**Nie trzeba powtarzać inwentarza.** Dalsze bramki to rzeczywiste limity i pojemność, niezależna kopia/odtworzenie, pozostały zakres korpusu i pomiar transferu przed kontrolowanym odblokowaniem. Informacja o limicie Storage może być podana jako sama liczba; nie potrzebujemy danych płatniczych, sekretów ani tokenów.
+
+## Opcjonalne ponowienie z telefonu — bez transferu plików
 
 Dodano domyślnie wyłączoną opcję `reference_archive_plan` w istniejącym workflow CI. Osobny job ma `contents:read` oraz własne `id-token:write` i działa tylko dla ręcznego uruchomienia właściciela na `main`. Bez nowych sekretów, artefaktów i transferu oryginałów. Nie zmieniono triggerów w celu obejścia odmowy dispatch dla integracji Arena.
 
-Po zielonym scaleniu:
+Poniższa instrukcja służy tylko ewentualnemu ponowieniu; obecne uruchomienie już przeszło:
 
 1. [GitHub → Actions → CI](https://github.com/rejson59/mconline/actions/workflows/ci.yml) → **Run workflow** → **main**.
 2. Zaznacz wyłącznie **Inwentarz pełnego zestawu 26.3 i rozmiary (bez transferu plików)**.
@@ -70,11 +94,11 @@ Po zielonym scaleniu:
 
 Skrypt `inspect-reference-archive.mjs` otrzymuje krótkotrwałą tożsamość z nowym audience, wykonuje tylko `plan` i publikuje bezpieczną adnotację **Reference archive inventory**: digest, liczby, rozmiary, Java major i jawne braki. Nie wypisuje pełnej listy plików, tokenów, bajtów metadanych ani treści oryginałów. Wymaga zablokowanego zapisu; `storageWrites`, `originalsTransferred`, `fullCorpusReady`, `independentBackupVerified` pozostają false. Sam runner nie otrzymuje surowych manifestów: `officialMetadataBytesIndependentlyVerifiedByRunner:false`.
 
-**Pozytywny wynik nowego joba jest na razie niepotwierdzony.** Testy syntetyczne i ACTIVE nie zastępują odpowiedzi nowej funkcji z rzeczywistym tokenem oraz jej dostępu do Mojanga. Nie nazywamy tego już ukończonym korpusem ani transportem.
+**Pozytywny wynik inwentarza został potwierdzony** w uruchomieniu podanym wyżej. Odrębne bramki transferu dużych plików, Javy, backupu, uruchomienia referencji i zgodności gry pozostają niezaliczone.
 
 ## Weryfikacja i dalsza praca
 
 - 27 regresji: podpis/kontekst/czas, niezależny subject z obserwacji API, pin metadanych, blokada i budżet, publiczny bucket, zły indeks/obiekt/plan, fałszywy ACK, konflikt i korupcja, finalize oraz klient → podpisany backend → syntetyczny Storage z przerwaniem/wznowieniem; job inwentarza i brak tokenów w raportach.
 - Testy dotychczasowego plannera, protokołu, probe i readera są zachowane; wspólne rdzenie nie zawierają filesystemu/CLI. Pełne typecheck/test/build oraz audit są wykonywane przed scaleniem.
 - CI ma rzeczywiste **negatywne** kontrole nowego wdrożenia: brak tożsamości, opaque token, anon JWT Supabase, Origin przeglądarki. Nie pobierają oryginałów i nie zapisują Storage. Zielone zwykłe CI z pominiętym jobem inwentarza nie jest pozytywnym wynikiem planowania.
-- Następne bramki: rzeczywisty inwentarz i transport HTTPS z tego wdrożenia, wolne miejsce/koszty, niezależna kopia i test odtworzenia, pomiar granic pamięci/CPU/czasu Edge dla większych obiektów oraz kontrolowane odblokowanie po przeglądzie. Nie zgadujemy tych wyników.
+- Inwentarz rzeczywisty: PASS. Następne bramki: transfer HTTPS oryginałów z tego wdrożenia, wolne miejsce/koszty, niezależna kopia i test odtworzenia, pomiar granic pamięci/CPU/czasu Edge dla większych obiektów oraz kontrolowane odblokowanie po przeglądzie. Nie zgadujemy tych wyników.
