@@ -112,3 +112,7 @@ Następny odcinek: kadrowanie przedmiotów na pionowym ekranie oraz referencyjne
 Decyzja właściciela: **nie utrzymujemy możliwości grania w pionie**. Nakładka jest niepomijalna w całej sesji świata, stary klucz nie działa, wejście jest blokowane również w silniku. Obrót anuluje akcje; okna/kursor/grid pozostają nietknięte, SP jest wstrzymany, MP nie udaje pauzy serwera. Zawsze dostępny zapis i powrót do menu; menu/konto mogą pozostać w pionie. **28 grup + produkcyjny Chromium dla dotyku i komputerowego sterowania telefonu: PASS**, regresja modeli włazu również w poziomie. [Zakres i ograniczenia](LANDSCAPE-4.37.md).
 
 Poprzedni plan naprawiania kadru dłoni w pionie jest **wycofany**, nie pozostaje zadaniem. Kolejny odcinek: referencyjne pozy dłoni/ziemi i dalsze modele w poziomie; nie deklarujemy ich wdrożenia w 4.37.
+
+## Audyt bazowy wspólnego paska
+
+Dodano [pierwszy powtarzalny audyt](PARITY-PROGRESS.md): rzeczywiste rejestry runtime, porównanie zmapowanych receptur 26.3 i otwarty rejestr kryteriów/dowodów. Kalkulator zbiorczy nie publikuje fikcyjnego procentu z liczby działów. Procent pozostaje `null`, nie 0, przy niezamkniętym zakresie i nieskalibrowanych wagach. Hashy źródeł/nowych modułów pilnuje test offline w CI; pełna regeneracja wymaga zweryfikowanego cache. To narzędzie mierzenia, nie nowa mechanika gry i nie zamknięcie pełnego audytu zachowań. Runtime nadal 4.37.0; brak migracji/resetów. Następny runtime: pozy dłoni/dropu w poziomie.

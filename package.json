@@ -19,7 +19,7 @@
     "build": "vite build && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs && node scripts/test-shared-state-sql.mjs && node scripts/test-shared-mobs-sql.mjs && node --test scripts/audit-java-reference.test.mjs scripts/probe-reference-network.test.mjs && node --test scripts/reference-storage.test.mjs && node --test scripts/reference-reader.test.mjs && node --test scripts/reference-corpus.test.mjs && node --test scripts/reference-transfer.test.mjs && node --test scripts/reference-archive.test.mjs && node --test scripts/reference-embedded.test.mjs && node scripts/test-trapdoor-state-sql.mjs",
+    "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs && node scripts/test-shared-state-sql.mjs && node scripts/test-shared-mobs-sql.mjs && node --test scripts/audit-java-reference.test.mjs scripts/probe-reference-network.test.mjs && node --test scripts/reference-storage.test.mjs && node --test scripts/reference-reader.test.mjs && node --test scripts/reference-corpus.test.mjs && node --test scripts/reference-transfer.test.mjs && node --test scripts/reference-archive.test.mjs && node --test scripts/reference-embedded.test.mjs && node scripts/test-trapdoor-state-sql.mjs && node --test scripts/parity-progress.test.mjs && npm run progress:check",
     "test:native": "node .harness/run.mjs native",
     "test:fire": "node .harness/run.mjs fire",
     "test:engine": "node .harness/run.mjs smoke",
@@ -74,7 +74,10 @@
     "test:trapitem": "node .harness/run.mjs trapitem",
     "test:browser:trapitem": "BROWSER_TRAP_ITEM=1 node scripts/verify-panels-browser.mjs",
     "test:landscape": "node .harness/run.mjs landscape",
-    "test:browser:landscape": "node scripts/verify-landscape-browser.mjs"
+    "test:browser:landscape": "node scripts/verify-landscape-browser.mjs",
+    "progress:audit": "node scripts/parity-progress.mjs",
+    "progress:check": "node scripts/parity-progress.mjs --check-runtime",
+    "test:progress": "node --test scripts/parity-progress.test.mjs"
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",

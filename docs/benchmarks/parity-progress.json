@@ -1,0 +1,412 @@
+{
+  "schema": 1,
+  "target": "26.3",
+  "runtimeVersion": "4.37.0",
+  "sourceFingerprint": "aaa640fb6245a81cb5083c18e0a4f85889ae2563d10f05a8ba6fa30fe6347a62",
+  "sourceHashes": {
+    "docs/MINECRAFT-IMPLEMENTATION-PLAN.md": "cd10647d4cb2aa4bd3998cd22b6a266ed35160fbfdbcec5b1cf186c154293805",
+    "docs/REFERENCE-ARCHIVE-BACKEND.md": "6e4f17506904071072fe933be4540d099dbfaece90cb8bd2196526ac02d4b527",
+    "docs/REFERENCE-EMBEDDED-INVENTORY.md": "0a711d6aeb18a7ff29417cfdb85bb8ce20a2906a06419d15588db08e914332db",
+    "docs/benchmarks/trapdoor-item-4.36.json": "67580e228bbe91dded25415d6a186a474c55e327e0be2e42fc53ac8165ba28bf",
+    "docs/benchmarks/trapdoor-uv-4.35.json": "06b46c01da007ecbd45f475de4de699cb75a27b4a6bfa029f0b8193f84f701d2",
+    "docs/java-reference.lock.json": "52eb0cceac8e5c6a1cb95b91209df70cf0c062964a7f2907621b50b35311b388",
+    "docs/parity-scope.json": "53a9c11fd8c5990f35f214184206ec0344cdcaeb4ac7b9ef3de93a762323eefa",
+    "package-lock.json": "bb132e8f68007d6e3d6ed75c9e474b1063accf2b243c4b4c9af67cccf09f429e",
+    "scripts/audit-java-reference.mjs": "79aae5f48424b1d059dd7c0771c0d7c88b92c2167ad63c34bb532c1b20c465b1",
+    "scripts/parity-inventory.ts": "fc2af1e469c8e06a065c55a69051a5964971f39a017127114cd72bf40741406a",
+    "scripts/parity-progress.mjs": "4d32b73f8c036c5a49a06502b01434a20b785d1975dc2cd797da61fc52742e9f",
+    "scripts/parity-progress.test.mjs": "4d80512d52ac464aebb9971a002af2f7bc4817e2ff9aaf84939fb3ab25e27e77",
+    "src/App.tsx": "f2ecf1983b131b40fe3d368819e4d275ba8ff68b891d1d06f08749a7d6e9e686",
+    "src/components/AnvilScreen.tsx": "3868646cd2886ef13fc85c4d31d2a69bdff975137ebe62b89172627da8cc5b17",
+    "src/components/BrewingScreen.tsx": "4a322f3a6ddc19637a73ac2ae26cdee112d079b7dff8734b16bb9a10b6601157",
+    "src/components/ChatScreen.tsx": "6cc9cdd0d6e748b71b4a78b4de8fe0b8c06f60a2c01c9140c75ee6063e104401",
+    "src/components/ChestScreen.tsx": "3850ab22e172c29a3098aa55521023aa992113a361c3703fc949e30bd1f82dc6",
+    "src/components/CloseButton.tsx": "ee1b98926fcfb4faa7df1027de824b27fead918ffbaed4040e5c7b97b49272fb",
+    "src/components/CloudStatus.tsx": "4d38bb7ec3a402febc7d024277424e6fc5429f36a6cff34fb076951be097cbc5",
+    "src/components/CommunityAccount.tsx": "076e1b9d725f3b21f2917ac9faf9e4a47f38940ddd088dfcc9f8731ec0cb74e0",
+    "src/components/EnchantScreen.tsx": "47a7cc1aec344bde712e2e5de1c29fc9c2dcb4e3265d8e65f3e8d920b6daec8c",
+    "src/components/FurnaceScreen.tsx": "81ac5ea7e7ed17e4da385ad3a66ef3ccd42f890c31cb198a23d9f44cfbe2c0f1",
+    "src/components/GameView.tsx": "e472b57789c8793caeac7f5eaa366e74168155cf77c69a4bf68aaff691c3c230",
+    "src/components/GuiContainer.tsx": "4e3bc47d9c52197a6ed809a979b96fb578553c932baae1bdd34d096dfebcf7bd",
+    "src/components/HUD.tsx": "f8cbea2ae7d82aff726a3c19a35b7572d5a6b7f6c0d877a09f6b387154e2e8f5",
+    "src/components/InventoryScreen.tsx": "9b410983232407b6f8acd805f87f3edc4cc924710aa35ebf16d403b7b5f3f9dc",
+    "src/components/JavaMenus.tsx": "973a33712c24f6fea03df73c4f46d192c47cf57d969b167a2b210cb8dff7e90b",
+    "src/components/JavaPanorama.tsx": "5fcae8391ae3c61e72d432ef284f01c7602f3f5191349c889eb45cae110a0f8f",
+    "src/components/JavaPlayerPreview.tsx": "2b335bf0b3307a0af0620dcb265afe24a90da8db517007a6cfec143a6fee30fd",
+    "src/components/JavaSettings.tsx": "76c716fd01931b05f1da2cc0038cb23d269735047e63e4bcd01c2f5484a9f4f2",
+    "src/components/JournalScreen.tsx": "28eabe36f9c4803ac94d7ef425412c73c799ad7fb91d13c4439349041b19d298",
+    "src/components/Launcher.tsx": "ce0118061f80d0388bab6396f05682af86d36ed0c3ef9cd1ca5bc925d5525bf3",
+    "src/components/Menus.tsx": "a3c37496590679cf182b0cd9376ff13718cc00769d065cd85026507a30e283dd",
+    "src/components/MultiplayerScreen.tsx": "fcd17a5953cdbb767f56b94637ec62c768749f3c823f3c2723d1959f3f52bbf7",
+    "src/components/OrientationGuard.tsx": "827d90642731c177401142bbc0aa1c0f2d58477dc3fd38b6defeb0086a25a38d",
+    "src/components/SettingsScreen.tsx": "3ab0310dd6c4c0d459300ee2728231fa4d6863199a60f0ce080e7032d611a833",
+    "src/components/SkinPicker.tsx": "1f72351d484fc497cd3dc7ac7bacafc94fcfec8203a4ae09da17f38e45890e19",
+    "src/components/Slot.tsx": "ab7ebb7206dc41a442cdcdf8ca0b54008a4388cb05843355293fae162eea8031",
+    "src/components/TouchControls.tsx": "70d13896552074da56aaa4e59fbda02fa8051c424d257c44b47ef91d000191c5",
+    "src/components/TradeScreen.tsx": "c25e12ff5ef0bf192c247f3d0a3fd906e9176740d1861e190e384a0b39e61fc7",
+    "src/components/WaypointsScreen.tsx": "c64d5bc0163d6d4dc8910584fed2259a211948cae8c5fc8705465fe0a3025618",
+    "src/components/launcher/BlockCube.tsx": "d5815a5fae78acd0c896eae49ddceaced6f5acfef6a49f21113fc1caad7f7e34",
+    "src/components/launcher/model.ts": "6b1af2ce3c3a8c6a20bb25546dbcea70ec01e75021dff2815404510b63fa56e8",
+    "src/components/useGuiInteractions.ts": "984352c52fbcd1195741ab61f9d383a75127364d95bdce04ed398cea5868e679",
+    "src/components/useSlotNavigation.ts": "b5fcaa21f7462cd98ac541fe6bfb47eebda2dc8441c91c8b1ec1efed816a8ed4",
+    "src/game/accountMultiplayer.ts": "5916a593f2f925751f5f5aa14a5abc25a8189db6c86b139800d8a54a94899e33",
+    "src/game/accountWorlds.ts": "140973816c34437fc4ab1c249dc14c89eaaf74be60e8319ade3d6b9e3d0933ac",
+    "src/game/achievements.ts": "c15bc59dc868876cf738af27a753240dee0ea9a314e378c3c526482da8c46094",
+    "src/game/anvil.ts": "7523cdb8ee3c44b7fcba251bb0fbf2d74df823081fcd95081979d6a1052552a9",
+    "src/game/armor.ts": "a48eaddd45dcef1c58dd07ac73eaed3858d7b30b013212a972fd94fbccf4bfb6",
+    "src/game/armorVisual.ts": "73d4cd056581c935b5c9945dafb67c899d07a255f39c3fc3a0e95a66b3aef73f",
+    "src/game/art/javaBlocks.generated.ts": "f31a406ac61f36d9e988acff23db5df7a71a3d94a5773eafd2a7ac37594f5a8e",
+    "src/game/art/javaBrewing.generated.ts": "0c4d38f88ebba4350eaae64c89574cda8d576dcbac8750071c9a110051749cac",
+    "src/game/art/javaFacing.generated.ts": "cb1402f2795f895a424364dd0e50087d52be85c00b103cdc2a4379362c3e3d7b",
+    "src/game/art/javaFire.generated.ts": "9d16e021894f9f8b2dcff62616fddfc2d36d840dc5197b42774e075e55950228",
+    "src/game/art/javaFurnace.generated.ts": "d55d9d26ad645d71def065647afc51d24af9bf4f6e398b4fd4855a4a52963a0c",
+    "src/game/art/javaGui.generated.ts": "bab4ec61b0a7bad1d03ed3256eb03182bf37d2436e6bc2e662610b1096400a85",
+    "src/game/art/javaOptions.generated.ts": "5905f3fbf7c52b9b5062f412da142fc633e7b51928396cb83c4f15fc48fecb79",
+    "src/game/art/javaRecipes.generated.ts": "a57751e1b813c51bdbb434099c9d217e51fa68d69675ecc200aac44c5f5b6eef",
+    "src/game/art/javaRefinements.generated.ts": "de68114aaa84481868002a0af83f9dd7946d1203fdc9e884446e966c6a1165c3",
+    "src/game/art/javaRescue.generated.ts": "721e82204b0b6bdc8eef8597b6d0cb2b8e20c5c891a63f9724dc1e999b9599b0",
+    "src/game/art/javaSounds.generated.ts": "7070680a7e45ad15ba343249ee7ae2f40726230317639ff33f528614a4a6e469",
+    "src/game/art/menuPanoramas.generated.ts": "f72b235c4c686d1139c5d2c853674b7661f1e58164d9690839908441d499294b",
+    "src/game/art/miniPng.ts": "1d40fff64dee8eeb71150c8639407d73644f5b27d3b2638388206062f7978477",
+    "src/game/art/spriteTex.ts": "c34e79e01574bb8e23f2680327571d451e1cbd3b0de565795832804a1343fabb",
+    "src/game/art/uiSprites.ts": "1c38c1be021ef653167a768ccc044596465dbfeb05bca5d23b01726360069cb3",
+    "src/game/art/vanillaArt.generated.ts": "de7b793034eaf69247a53f14c7a37c53cd45230e85f5b963822745c7e5edf1ff",
+    "src/game/asyncMesher.ts": "48373cfc425c4cc5fe5a358a07ab03949059877f254b4d9bdf6629b50d6462bd",
+    "src/game/audio.ts": "77c7d59bc814b595b4dd53a5af4c61cf7660a7c4118d29522563681a82ac7edd",
+    "src/game/bedItem.ts": "90684baf5e702140b6d42e5f773f50e74d35fd3bf3a405295d547dfaccfb3036",
+    "src/game/blocks.ts": "3b3dcf0829740ede70f2f3c3172da2201a09ab480efea920c4c8bb1e45449bae",
+    "src/game/brewing.ts": "d0ee3eaa03ef128b135d10104c867d86f93f41f0284385e37ca19bb2b4686ea6",
+    "src/game/brewingArt.ts": "50ed820bb1fb37c4b778a82889986830cccf0532d4ae33ce3077b1b9c0290bbd",
+    "src/game/buildingShapes.ts": "c2778c92873f8f0581b1d7d849cc4649ef3d3e6e9dfc50462811d2473280bf72",
+    "src/game/cameraEffects.ts": "eac15006c621f15d41b357dd882fba7ec4b05ac739fd8e7815a4c28b9298aa0d",
+    "src/game/chest.ts": "2f08c38438f1c5f53bb08391d190314b953dccf7f2ab9f5a39bd9580ccfb115e",
+    "src/game/chestModel.ts": "abd43dcd1a3d28b2f2a2aecb0f98dcae12a0eb068124a04f179959f77ba2e557",
+    "src/game/chunkMesh.worker.ts": "e0d97217c1e0d647b72155248646b789488cf14c0252e3b686495784c66475b7",
+    "src/game/chunkWork.ts": "3ca7df7020c6f333e150a57693ff847ad508700adc5b7361a1fd06b7592f957b",
+    "src/game/city.ts": "49276e61ebc47d44b6dade860f983dd85ca89e670fc85b6ff5576e752b7ae7f2",
+    "src/game/commands.ts": "23335d5f591ba05a6b0d743c5c0f41d73317126674480e2166e8ee89846052ad",
+    "src/game/communityAccount.ts": "9188742c864e2bd0b99df52f381fb1aebf4fd8866e4294d184175e81770d9f44",
+    "src/game/constants.ts": "eba9e3e2fb47bfc7d16c51cb13158e9b6fb30c5179276e92f5435075920c6337",
+    "src/game/containerLayout.ts": "60cc2aa82c276c8836ef29091cbabbb31f7fc194b84b86f6805710455ef39cbe",
+    "src/game/creativeCategories.ts": "912530186d037cf72db18168cc7566a389c9b0994fc45a88687f04181123c0a5",
+    "src/game/decorationMask.ts": "89d4675ebb69cfabb92b51e2d5ba16a5fe055a3c069146bee2c1603127299e50",
+    "src/game/enchant.ts": "dfef66e5f2c9c0d975e506efc8d1bdfa2998cff2bcf1bcf45d2b0ca374ea665c",
+    "src/game/engine.ts": "02fb74caf287197b85725ae2a61534418bf12ff39d04c0a92167db5727543e4c",
+    "src/game/explorationLoot.ts": "c9959e4c1fa4b30fb5f8ed6a99e49e5c880b9e5fb3f27ed80867ce6c43df3758",
+    "src/game/facingArt.ts": "89d3f65cc50390b0947f6ef2cfa12bbc825b7a6441bd9fec7200f03edc96d99b",
+    "src/game/farmland.ts": "91e5921654b56ddc3d331bcd0b2b2d5824b54d4f629870e04e146d14e6e3df47",
+    "src/game/fenceShapes.ts": "90714ae605385d226217dee5bde439ebbd497db7d936a068fcc91b477d356d42",
+    "src/game/fire.ts": "e2061df093b2dcbb87448d8dae754289dc91f21df734c181a77f49d904e96e0a",
+    "src/game/firstPersonView.ts": "d06f370fd9e3a9d3bd388224b6b054f5083d9bf2ade7fbc2fbbb4a7fa9a410be",
+    "src/game/fishing.ts": "f57db1063c63636ccf264940122267aab490f55f6910880118d74f0b0db53e42",
+    "src/game/frameTimes.ts": "73452687036d27f5c5907b7ec71ad814880a3fc08ece2e8fda048a33fb299636",
+    "src/game/furnace.ts": "a83068925e1a07f13cc5c90033fbfbbaf23af2ac6015ad7a7132feb9c4e1bae9",
+    "src/game/furnaceArt.ts": "2c5671b9bcbe35cd50a54a73b87aa093982efed00313858c91d50109f5b5353d",
+    "src/game/gravity.ts": "e608d3ead0581eafe4602a7e9bc6d6a3617cbc296d402b0caad0d01969030d0c",
+    "src/game/hunger.ts": "b966ba52bb4748de4368656ae438c60ca04844f4fc721f8e17f8cc1d6e8090d6",
+    "src/game/inventory.ts": "40b7cf3f0321bee32e7a65ddc84685e013e34be6b8451e9a63aa6db030b674f5",
+    "src/game/inventoryNavigation.ts": "14b1d74681f65f49d9d72be8c0135620ee8fbfe92991c0479a29d12314f84df4",
+    "src/game/itemIcons.ts": "1541ba7308c11fa1ac84a95f3d4a86295c49ef3b14b53ff731da9152460e346a",
+    "src/game/itemShape.ts": "fdc21f8c4d07fad6fa3a9acb54aec6e4cf557f1c1605c4fbb8b9707390ca89fb",
+    "src/game/items.ts": "67187a6bcee124005169c0edc9c548d43db4701f87eb9d5e4ea0b7a4a955ccd3",
+    "src/game/landing.ts": "09adfafd2c1c20f07706fd7c0ea6c7c7855774f6c8e10ecc35b7236f0452aa7e",
+    "src/game/lightMap.ts": "32a4fa9b3bf0f9c5c0dee9fcce8cc7f810779ac3a651feba0fb506810c16bfeb",
+    "src/game/lighting.ts": "c9ec162e27fc848ec5073a44facbfa398aac7be54599274530665edd6159b385",
+    "src/game/lod.ts": "9d84ad34593486a0035fbd59a21231f54abe9fb4fdd30a4b705378d7c8edaf8a",
+    "src/game/merchantLayout.ts": "51bbc8371681c2ba2587572ad722899b3acde416c60854677cb92a29eb667753",
+    "src/game/meshProtocol.ts": "7c93762252688d5a4f07cc01e2e141f24c82b2af2a2a88f4dca288429382606d",
+    "src/game/mining.ts": "891dda704f5772fdce7818a849de78118d648f31e9317c9707a7e6b9aa00f60f",
+    "src/game/mobModels.ts": "71840f05a09f207f436c48bca323315c3a144a386fd17fbb45f8cc8f2770b576",
+    "src/game/mobSwimming.ts": "9472c3488856e35396eb572b22e8cb3c030f6ea1fb6a95ae6fd3d8e691432458",
+    "src/game/mobTextures.ts": "6574a0ec3789ea2f15bae3f028a8d09f4cf18ac595fb2775b7f57f6b0cf723d5",
+    "src/game/mobs.ts": "e3f5422bec5d1a42491bfd1913083deb533f244169cd76278aff373d7c511664",
+    "src/game/multiplayerLease.ts": "f8bbabf1531cf78e7fa2c95ce7d636b8c40e7adce5cc04aefbc965a6009fdca1",
+    "src/game/net.ts": "f65451f9dc8c2311d962199c75ac53f152de6f6562dcd7948501dc4e5b34dbe2",
+    "src/game/netSmooth.ts": "f2116d7a7d202394dc6027fd707a557c2341533e9851ebf026db93e9b4ff01f4",
+    "src/game/noise.ts": "6d2a848760621930a86b2d931e6d8077c5d35e4eb42440df9dba5b4b46295c49",
+    "src/game/online.ts": "102d951f3c3bfcb4e2249005daed8dfa7d533a779e30cd2eadd86313938b48bc",
+    "src/game/optionRules.ts": "c58a195c95fbf12b8c481a67dae252578d2e1c8db43feb3c98176d44ed31746d",
+    "src/game/packArt.ts": "2674fb8d3d4c6dd81f49b37a8e63c2c035b9f6faf58d046ce3544add55eead2d",
+    "src/game/perf.ts": "7c7abf8fa6763ce98548c0fd77447f520ac61a37de3ee1e6216e6cd5010a9120",
+    "src/game/physics.ts": "398b96487ba45fae7da98dc10d1e2a3fbebc6a1873d02fabd65877587760a9d3",
+    "src/game/playerCombat.ts": "d73163c22f7e27ac52e08b5505628133b24b04b1ae4ca667ac9a801a6972c8a4",
+    "src/game/plots.ts": "5bf568a041012bc887dd435dc25cf453698e41c5ef97fbcf60b2934975a90b9b",
+    "src/game/profile.ts": "2019aec674732fed14c92f16f5373b0e6deefae69f6dfd6a01f4357d3afdf916",
+    "src/game/profileCheckpoint.ts": "abc30b7ce2021d33b706b27273d5b2e934e473539bb6d3e20e5b83aad22df47b",
+    "src/game/rails.ts": "e1051c149ec30400af5671f380e7838db54b374c2a4c29e9cd6b537e5561fef0",
+    "src/game/redstone.ts": "5106f98a7434e9f361909f5c988605fdaee03c270f288241e8f4940c0fab534a",
+    "src/game/refinementRecipes.ts": "711dcfe174e8f508713c63de9109738ff5086672b3dc5427198cf03829e952b1",
+    "src/game/saves.ts": "37efc10a9d7cb1fd7b59cfc2fa0a89c9a4b762c267b9615402c5c53e821493c7",
+    "src/game/sharedDrops.ts": "34331e58638a21415e4d6b21c576081ad6c0a07dc56bc1a74cdf14279580913c",
+    "src/game/sharedMobs.ts": "47ee423539a6dfa573f3b2164e4f06604ac835a5205db28190b1e8c9f11fa667",
+    "src/game/sharedState.ts": "b32a64f67fff00591fd2e6f0ba3a47321dc6f6ef4c805c388c04a234e616b439",
+    "src/game/skinArt.ts": "64a923b95e7d91e2ac8948dc5cf89d2619d93f79117ef574c6d2eb134c98d04c",
+    "src/game/skins.ts": "f13fa0a582617fff512f75f87d95ec6e55b59cca6114d8e0b7595c587cb61486",
+    "src/game/sky.ts": "07ddbe1eb277a317055536bb78ee843bffde975eea050cc0df04f3f81690d024",
+    "src/game/spriteItem.ts": "5555b166f3b0adea5d8e1b6e380ec4abee36337982a35bd72abf351d2e6e28d9",
+    "src/game/statusEffects.ts": "21645639d81f24e675f38755d5113248cb4abb8ae5faedeb5bd6ced934ec70ac",
+    "src/game/structures.ts": "27a4d896a4ea7a0266df5379977737e69ce2b25287ba7860b9804e7e6f4bdbc9",
+    "src/game/textures.ts": "caad083f94c977b823a27333e24dec6e30f60a2b1fa1fcbb62d98bcdd0241f55",
+    "src/game/trading.ts": "26de937514f364abef4d556046e59b422f6521b50bbff1e518627c582b972c75",
+    "src/game/trapdoorItem.ts": "5439753f47568aa4faf9d66269f2453bb9e9a41e7a5962d23a3233b163c3d818",
+    "src/game/trapdoorUV.ts": "939463af2d82c0e8b37b20aea46d23257341731a24b23dae719907e5063c684f",
+    "src/game/trees.ts": "89d4660230c9098e7e9db3626ddd8e9a245cc2c654915450b79df9c164f4ca68",
+    "src/game/village.ts": "b2c445e4d03ea99603f2f0496719503b1668685bb1b8a90b1ebcadd32c4648f1",
+    "src/game/water.ts": "a3fc24691efa197c4f4354fcb06f391d451197f089e6ea57488f55c6ba2e8c45",
+    "src/game/world.ts": "152587528bb62ee6544df939e48334200c1638a1df56e52a94cc3501cfaa75f9",
+    "src/game/xp.ts": "8628b2ac28b43b511c3e8ba6b89c5a396c4df504ed6c582bb04b99cc90dc526b",
+    "src/main.tsx": "68009b560671217936fdebb2e923c750409676062f9de49d99da6d27bfbec669",
+    "src/utils/cn.ts": "d1f1e0d62cb8d8d1e04c26e14de842d8a151f75812d81b046c65b5d1fe8e4b27",
+    "src/utils/guiScale.ts": "5f4ef4d6d776f33ef70e4f7f79aff881e18de8285c96bd591cdbd311a018fe8f",
+    "src/utils/input.ts": "4cded8317a45aca7d86407456d1d1f08fd19848802a881154177ecff490d06b1",
+    "src/utils/menuPanorama.ts": "49f99b293eacb7f02cb9ca61bde55474e72ab1fe031daeb962bdc531b6be6b68",
+    "src/utils/packTheme.ts": "6bda9ce7da04f93a684525d2af16b84d2d7ae5f7e8535b2d7c08c02d34a42006",
+    "src/utils/performance.ts": "65d67eae05baf3092d49bf37ed0a21fb9ccdaca5edea941e106fc452211bcb2d",
+    "src/utils/recipeSearch.ts": "3f0fa6014c1a43e8218f5e1e4485ad9878a08f80f4a6d6f5ca8c8df6515baa41",
+    "src/utils/screen.ts": "431f62a58987ffbf240f36c6a1655ec1b80baad87b2f2a56e42ca4c8b9d07ed0",
+    "src/utils/settings.ts": "16ab8ac6e31a7ab321ec4b649d2f8f64cf48ee7b38a2953d1411bec319559db9",
+    "src/utils/soundSettings.ts": "5931f8154d3ce6097a86c81d41d543bddf98d4d82b4441e640955191d7d3e519",
+    "src/utils/tooltip.tsx": "2b777a91f66d5378888c4859656e2f711f48f631f58f4a4e8539af509d4410c4",
+    "src/utils/useLandscapeRequired.ts": "4981739ea3e8f58aab6ccdbe466a8176e841c0a0b06a25977024e24c1d986838",
+    "src/utils/version.ts": "04d9ba726e0c878be022c5bed64f084515c0b5658c70b294dd39e4b19819adda",
+    "src/utils/viewport.ts": "0ced690888a33e84a754e8a77fc6548edc57a8f2054babdca89b8da205d5c659"
+  },
+  "overall": {
+    "percent": null,
+    "remainingPercent": null,
+    "completedWeight": null,
+    "totalWeight": null,
+    "blockers": [
+      "Full requirement inventory is not closed",
+      "Work weights have not been calibrated"
+    ]
+  },
+  "reference": {
+    "sources": {
+      "summary": "d96c75fec200c4580dd75e033a76341521165461",
+      "assets": "9073095a88699785bb1f63f8f86d33322711e4fd",
+      "releaseList": "57e8a153dcaf7ae81b31c1f44f13b1dd64094c59"
+    },
+    "artifactHashes": {
+      "version": "88bec449ce0f0d2eae011c004bd0f6f0c2487111759bf7773f5231e7257a1f67",
+      "recipes": "6b9cd71611420e2c618c96075a25dd1180745e69c9bdad8ab07de39630ff4af5",
+      "item-tags": "cd6b463583aa7379b340636ffa3ae62b97b2dc723fabb54bfec36a2b9d27e446",
+      "asset-index": "6d33a1f96fb131a81cde845db6da426134d0ff30a6207b319ae4e7fc5ec89bd4",
+      "versions": "d632e3e9035dc00fa1eadaa16fc66d18fdadfaade65a319a451d9928b98ed36f"
+    },
+    "blockstateDefinitions": 1290,
+    "itemDefinitions": 1660,
+    "recipes": 2042,
+    "recipeTypes": [
+      "minecraft:blasting",
+      "minecraft:brewing",
+      "minecraft:campfire_cooking",
+      "minecraft:crafting_decorated_pot",
+      "minecraft:crafting_dye",
+      "minecraft:crafting_imbue",
+      "minecraft:crafting_shaped",
+      "minecraft:crafting_shapeless",
+      "minecraft:crafting_special_bannerduplicate",
+      "minecraft:crafting_special_bookcloning",
+      "minecraft:crafting_special_firework_rocket",
+      "minecraft:crafting_special_firework_star",
+      "minecraft:crafting_special_firework_star_fade",
+      "minecraft:crafting_special_mapextending",
+      "minecraft:crafting_special_repairitem",
+      "minecraft:crafting_special_shielddecoration",
+      "minecraft:crafting_transmute",
+      "minecraft:smelting",
+      "minecraft:smithing_transform",
+      "minecraft:smithing_trim",
+      "minecraft:smoking",
+      "minecraft:stonecutting"
+    ],
+    "meaning": "Pinned file/data inventory, not a complete behavior denominator."
+  },
+  "runtime": {
+    "version": "4.37.0",
+    "runtimeReference": "Minecraft: Java Edition 1.20.4",
+    "registeredBlockStates": 304,
+    "creativeBlockEntries": 149,
+    "registeredItems": 124,
+    "enchantments": [
+      {
+        "id": "aquaaffinity",
+        "aliases": [
+          "aqua_affinity",
+          "aquaaffinity",
+          "wydajnosc_pod_woda"
+        ]
+      },
+      {
+        "id": "efficiency",
+        "aliases": [
+          "wydajnosc",
+          "efficiency"
+        ]
+      },
+      {
+        "id": "fortune",
+        "aliases": [
+          "szczescie",
+          "fortune"
+        ]
+      },
+      {
+        "id": "silktouch",
+        "aliases": [
+          "jedwabny_dotyk",
+          "silktouch",
+          "silk_touch"
+        ]
+      },
+      {
+        "id": "unbreaking",
+        "aliases": [
+          "niezniszczalnosc",
+          "unbreaking"
+        ]
+      },
+      {
+        "id": "sharpness",
+        "aliases": [
+          "ostrzosc",
+          "sharpness"
+        ]
+      },
+      {
+        "id": "power",
+        "aliases": [
+          "moc",
+          "power"
+        ]
+      },
+      {
+        "id": "infinity",
+        "aliases": [
+          "nieskonczonosc",
+          "infinity"
+        ]
+      },
+      {
+        "id": "knockback",
+        "aliases": [
+          "odrzut",
+          "knockback"
+        ]
+      },
+      {
+        "id": "looting",
+        "aliases": [
+          "grabiez",
+          "looting"
+        ]
+      },
+      {
+        "id": "protection",
+        "aliases": [
+          "ochrona",
+          "protection"
+        ]
+      },
+      {
+        "id": "featherfalling",
+        "aliases": [
+          "lekki_krok",
+          "feather_falling",
+          "featherfalling"
+        ]
+      }
+    ],
+    "potionDefinitions": 10,
+    "projectAchievements": 62,
+    "projectCommands": 22,
+    "mobTypes": [
+      "pig",
+      "zombie",
+      "sheep",
+      "cow",
+      "chicken",
+      "creeper",
+      "spider",
+      "skeleton",
+      "wolf",
+      "villager",
+      "golem",
+      "enderman",
+      "slime",
+      "ghast"
+    ],
+    "biomeLabels": [
+      "Równiny",
+      "Las",
+      "Pustynia",
+      "Tundra",
+      "Góry",
+      "Plaża",
+      "Ocean",
+      "Brzozowy las",
+      "Bagno",
+      "Sawanna",
+      "Dżungla",
+      "Nether"
+    ],
+    "meaning": "Actual registry/type counts. Block states are NOT unique Java blocks; project achievements/commands are NOT equivalent to Java advancement/command coverage. Presence does not earn parity credit."
+  },
+  "crafting": {
+    "counts": {
+      "not-matched-in-mapped-subset": 1179,
+      "type-not-compared": 840,
+      "data-match": 23
+    },
+    "dataMatchIds": [
+      "blue_dye",
+      "bricks",
+      "fishing_rod",
+      "gold_ingot_from_nuggets",
+      "gold_nugget",
+      "golden_axe",
+      "golden_hoe",
+      "golden_pickaxe",
+      "golden_shovel",
+      "golden_sword",
+      "honey_block",
+      "honey_bottle",
+      "iron_ingot_from_nuggets",
+      "iron_nugget",
+      "lantern",
+      "lever",
+      "observer",
+      "red_dye_from_poppy",
+      "sandstone",
+      "spyglass",
+      "stone_bricks",
+      "white_wool_from_string",
+      "yellow_dye_from_dandelion"
+    ],
+    "referenceExceptions": [],
+    "runtimeRecords": 221,
+    "uniqueMappedSignatures": 26,
+    "excludedRuntimeRecords": {
+      "unmapped-identities": 195
+    },
+    "meaning": "Data-shape equality in explicitly mapped crafting subset only. Not original-client execution, crafting behavior, whole-crafting completion or global progress. Not-matched is NOT proof of a missing runtime recipe."
+  },
+  "capabilities": {
+    "listed": 69,
+    "counts": {
+      "partial": 61,
+      "unverified": 6,
+      "verified": 2
+    },
+    "completeInventory": false,
+    "meaning": "Open requirement/evidence register, not a fixed number of steps or an equally weighted percentage."
+  },
+  "boundaries": [
+    "No Minecraft client executed",
+    "No transfer/archive/backend/account/save changes",
+    "No original JSON corpus or bundle copied to report",
+    "Recipe data matches and registry counts never substitute for global completion",
+    "Unknown global progress is null, not zero; weights remain uncalibrated"
+  ]
+}

@@ -1,0 +1,706 @@
+{
+  "schema": 1,
+  "target": "26.3",
+  "complete": false,
+  "weightPolicy": "Uncalibrated: null is unknown, never equal weights or zero effort. Do not divide completed rows by row count. Scope contains broad capabilities plus separately credited narrow comparisons; weights must avoid overlap before closure.",
+  "records": [
+    {
+      "id": "reference.corpus",
+      "label": "Kompletny korpus i analiza wnętrza oryginalnych plików",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Analiza rzeczywistych plików klienta/serwera i rozliczenie wszystkich wymaganych kategorii.",
+      "evidence": [
+        "docs/REFERENCE-EMBEDDED-INVENTORY.md"
+      ]
+    },
+    {
+      "id": "reference.backup",
+      "label": "Odtworzenie niezależnej kopii oryginałów",
+      "state": "unverified",
+      "weight": null,
+      "acceptance": "Rzeczywisty transfer i odtworzenie drugiej kopii, nie sam inwentarz lub hash.",
+      "evidence": [
+        "docs/REFERENCE-ARCHIVE-BACKEND.md"
+      ]
+    },
+    {
+      "id": "reference.comparison",
+      "label": "Powtarzalne porównania z uruchomionym klientem",
+      "state": "unverified",
+      "weight": null,
+      "acceptance": "Te same sceny i wejścia w Java 26.3 oraz projekcie; ślady stanu i obrazy.",
+      "evidence": [
+        "docs/MINECRAFT-IMPLEMENTATION-PLAN.md"
+      ]
+    },
+    {
+      "id": "blocks.registry",
+      "label": "Pełny rejestr bloków i odwzorowanie identyfikatorów",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Jawna mapa wszystkich bloków Java bez liczenia wariantów stanu jako osobnych ukończonych bloków.",
+      "evidence": [
+        "src/game/blocks.ts"
+      ]
+    },
+    {
+      "id": "blocks.states",
+      "label": "Pełne właściwości i przejścia stanów bloków",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie właściwości i legalne przejścia, także aktualizacje sąsiadów.",
+      "evidence": [
+        "src/game/blocks.ts"
+      ]
+    },
+    {
+      "id": "blocks.models",
+      "label": "Modele i łańcuchy rodziców wszystkich rodzin",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Właściwe elementy, UV, rotacje, cullface i modele bez zastępczych sześcianów.",
+      "evidence": [
+        "src/game/world.ts"
+      ]
+    },
+    {
+      "id": "blocks.materials",
+      "label": "Właściwe tekstury, alpha i warstwy",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Cały zakres bloków i przedmiotów z poprawnymi teksturami oraz animacjami.",
+      "evidence": [
+        "src/game/textures.ts"
+      ]
+    },
+    {
+      "id": "blocks.placement",
+      "label": "Stawianie i utrata podparcia",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodne kierunki, ograniczenia położenia, podparcie i aktualizacje otoczenia.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "blocks.interaction",
+      "label": "Interakcje i celowanie",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodne trafienia, obrysy i interakcje wszystkich rodzin bloków.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "blocks.mining",
+      "label": "Kopanie i wymagania narzędzi",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie czasy, warunki, narzędzia i skutki niszczenia porównane z referencją.",
+      "evidence": [
+        "src/game/mining.ts"
+      ]
+    },
+    {
+      "id": "blocks.loot",
+      "label": "Łupy i doświadczenie z bloków",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne tabele łupów, warunki, losowanie i doświadczenie.",
+      "evidence": [
+        "src/game/items.ts"
+      ]
+    },
+    {
+      "id": "items.registry",
+      "label": "Przedmioty i komponenty danych",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne ID/komponenty, ograniczenia stosów, metadane i zachowania.",
+      "evidence": [
+        "src/game/items.ts"
+      ]
+    },
+    {
+      "id": "items.hand-poses",
+      "label": "Pozy i animacje przedmiotów w rękach",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Referencyjne firstperson/thirdperson, obie ręce, używanie i animacje.",
+      "evidence": [
+        "src/game/firstPersonView.ts"
+      ]
+    },
+    {
+      "id": "items.drop-poses",
+      "label": "Modele, pozycje i ruch wyrzuconych przedmiotów",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Referencyjne ground i zachowanie stosów/dropów, nie wyłącznie geometria.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "items.gui",
+      "label": "Ikony całego ekwipunku",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne modele/gui, orientacje, tekstury i oświetlenie.",
+      "evidence": [
+        "src/game/itemIcons.ts"
+      ]
+    },
+    {
+      "id": "items.armor",
+      "label": "Modele i zachowanie pancerzy",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie materiały, warstwy, warianty, ozdoby i animacje.",
+      "evidence": [
+        "src/game/armorVisual.ts"
+      ]
+    },
+    {
+      "id": "items.inventory",
+      "label": "Ekwipunek i operacje kursora",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Komplet operacji slotów/skrótów, metadanych i zachowań przy pełnych slotach.",
+      "evidence": [
+        "src/game/inventory.ts"
+      ]
+    },
+    {
+      "id": "items.crafting",
+      "label": "Wszystkie receptury i wykonanie craftingu",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie typy i receptury, alternatywy/tagi, wynik, zużycie i pozostałości.",
+      "evidence": [
+        "src/game/inventory.ts"
+      ]
+    },
+    {
+      "id": "items.processing",
+      "label": "Piece i pozostałe stanowiska przetwarzania",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne urządzenia, paliwa, timingi, receptury i doświadczenie.",
+      "evidence": [
+        "src/game/furnace.ts"
+      ]
+    },
+    {
+      "id": "items.enchanting",
+      "label": "Zaklinanie i wszystkie zaklęcia",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zaklęcia, konflikty, losowanie, koszt i efekty odpowiadają Java.",
+      "evidence": [
+        "src/game/enchant.ts"
+      ]
+    },
+    {
+      "id": "items.anvil",
+      "label": "Kowadła i naprawy",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Nazwy, naprawy, koszty, łączenie i ograniczenia dla wszystkich przedmiotów.",
+      "evidence": [
+        "src/game/anvil.ts"
+      ]
+    },
+    {
+      "id": "items.brewing",
+      "label": "Warzenie i warianty mikstur",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne receptury, warianty i efekty, timingi oraz zużycie paliwa.",
+      "evidence": [
+        "src/game/brewing.ts"
+      ]
+    },
+    {
+      "id": "items.trading",
+      "label": "Handel i rozwój mieszkańców",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie profesje, oferty, losowanie, reputacja, ceny i odnawianie.",
+      "evidence": [
+        "src/game/trading.ts"
+      ]
+    },
+    {
+      "id": "items.fishing",
+      "label": "Wędkarstwo",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodne warunki, timingi, animacje, łupy i zaklęcia.",
+      "evidence": [
+        "src/game/fishing.ts"
+      ]
+    },
+    {
+      "id": "player.movement",
+      "label": "Ruch naziemny, sprint i skok",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Ślady ruchu i kolizji we wszystkich warunkach zgodne z oryginałem.",
+      "evidence": [
+        "src/game/physics.ts"
+      ]
+    },
+    {
+      "id": "player.collision",
+      "label": "Częściowe bryły i interakcje ciał",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne bryły ruchu/wyboru każdej rodziny i kontaktów dynamicznych.",
+      "evidence": [
+        "src/game/blocks.ts"
+      ]
+    },
+    {
+      "id": "player.swimming",
+      "label": "Pływanie i ruch w płynach",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodne przyspieszenia, opory, prądy, oddychanie i kontakty z powierzchnią.",
+      "evidence": [
+        "src/game/physics.ts"
+      ]
+    },
+    {
+      "id": "player.flying",
+      "label": "Lot, szybowanie i jazda",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie tryby przemieszczania, pojazdy i relacje pasażerów.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "player.health-food",
+      "label": "Zdrowie, głód i regeneracja",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie źródła wyczerpania, pokarm, regeneracja i głodowanie.",
+      "evidence": [
+        "src/game/hunger.ts"
+      ]
+    },
+    {
+      "id": "player.combat",
+      "label": "Walka i obrażenia",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne źródła obrażeń, cooldown, tarcze, krytyki, redukcja i odrzut.",
+      "evidence": [
+        "src/game/playerCombat.ts"
+      ]
+    },
+    {
+      "id": "player.effects",
+      "label": "Efekty statusu i atrybuty",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie efekty, atrybuty, kolejność nakładania i wygasanie.",
+      "evidence": [
+        "src/game/statusEffects.ts"
+      ]
+    },
+    {
+      "id": "player.projectiles",
+      "label": "Pociski i eksplozje",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie rodzaje, trajektorie, trafienia i skutki dla świata.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "player.death",
+      "label": "Śmierć, odrodzenie i punkty odrodzenia",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodna utrata/retencja przedmiotów, doświadczenia i wybór miejsca.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "world.terrain",
+      "label": "Generator terenu i biome placement",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodny wynik dla tych samych seedów, współrzędnych i wersji.",
+      "evidence": [
+        "src/game/world.ts"
+      ]
+    },
+    {
+      "id": "world.biomes",
+      "label": "Komplet biomów, klimat i dekoracje",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie biomy, parametry, kolory, roślinność i reguły rozmieszczenia.",
+      "evidence": [
+        "src/game/world.ts"
+      ]
+    },
+    {
+      "id": "world.caves-ores",
+      "label": "Jaskinie i surowce",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodne carvery/aquifery, rozkład rud i zależności wysokości.",
+      "evidence": [
+        "src/game/world.ts"
+      ]
+    },
+    {
+      "id": "world.structures",
+      "label": "Struktury i ich łupy",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Cały katalog struktur, rozmieszczenie, elementy i tabele zawartości.",
+      "evidence": [
+        "src/game/structures.ts"
+      ]
+    },
+    {
+      "id": "world.nether",
+      "label": "Nether",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełny wymiar, biomy, generator, struktury i mechaniki.",
+      "evidence": [
+        "src/game/world.ts"
+      ]
+    },
+    {
+      "id": "world.end",
+      "label": "End i droga do ukończenia gry",
+      "state": "unverified",
+      "weight": null,
+      "acceptance": "Pełny wymiar, wyspy, miasta, boss, portale i postęp.",
+      "evidence": [
+        "src/game/world.ts"
+      ]
+    },
+    {
+      "id": "world.portals",
+      "label": "Przejścia między wymiarami",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie typy portali, wiązanie współrzędnych, transfer stanu i encji.",
+      "evidence": [
+        "src/game/redstone.ts"
+      ]
+    },
+    {
+      "id": "world.ticks",
+      "label": "Ticki i planowane aktualizacje",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Referencyjna kolejność, częstotliwości, random ticks i aktualizacje chunków.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "world.fluids",
+      "label": "Woda i lawa",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne poziomy, źródła, przepływy, kontakty i waterlogging.",
+      "evidence": [
+        "src/game/water.ts"
+      ]
+    },
+    {
+      "id": "world.fire",
+      "label": "Ogień, spalanie i zapłon",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodne warunki, prawdopodobieństwa, materiały i aktualizacje.",
+      "evidence": [
+        "src/game/fire.ts"
+      ]
+    },
+    {
+      "id": "world.growth",
+      "label": "Wzrost, grawitacja i rozpad",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie rośliny, spadające bloki i aktualizacje środowiska.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "world.redstone",
+      "label": "Redstone i kolejność aktualizacji",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełna logika zasilania, ticki, opóźnienia i wszystkie komponenty.",
+      "evidence": [
+        "src/game/redstone.ts"
+      ]
+    },
+    {
+      "id": "world.block-entities",
+      "label": "Byty blokowe i automatyzacja",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełny katalog, przechowywanie danych i interakcje/transport przedmiotów.",
+      "evidence": [
+        "src/game/chest.ts"
+      ]
+    },
+    {
+      "id": "mobs.registry",
+      "label": "Pełen katalog encji",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie moby i pozostałe encje, warianty oraz atrybuty.",
+      "evidence": [
+        "src/game/mobs.ts"
+      ]
+    },
+    {
+      "id": "mobs.ai",
+      "label": "AI i pathfinding",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodne cele, priorytety, nawigacja, pamięć i interakcje.",
+      "evidence": [
+        "src/game/mobs.ts"
+      ]
+    },
+    {
+      "id": "mobs.spawning",
+      "label": "Pojawianie się i znikanie mobów",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Limity, grupy, warunki, ticki i reguły despawnu.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "mobs.lifecycle",
+      "label": "Rozmnażanie, oswajanie i rozwój",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie etapy życia, relacje, zachowania i interakcje gracza.",
+      "evidence": [
+        "src/game/mobs.ts"
+      ]
+    },
+    {
+      "id": "mobs.bosses",
+      "label": "Bossowie i wydarzenia świata",
+      "state": "unverified",
+      "weight": null,
+      "acceptance": "Pełne walki z bossami, rajdy, fale i efekty wydarzeń.",
+      "evidence": [
+        "src/game/mobs.ts"
+      ]
+    },
+    {
+      "id": "render.lighting",
+      "label": "Światło i zacienienie",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne block/sky light, AO, materiały i światło encji odpowiadają referencji.",
+      "evidence": [
+        "src/game/lighting.ts"
+      ]
+    },
+    {
+      "id": "render.sky-weather",
+      "label": "Niebo, chmury i pogoda",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodne cykle, warunki, mgła, kolory i efekty pogodowe.",
+      "evidence": [
+        "src/game/sky.ts"
+      ]
+    },
+    {
+      "id": "render.particles",
+      "label": "Cząsteczki i efekty ekranowe",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Wszystkie emitery, obrazy, ruch i czas życia cząsteczek oraz efekty kamery.",
+      "evidence": [
+        "src/game/engine.ts"
+      ]
+    },
+    {
+      "id": "render.animation",
+      "label": "Modele i animacje postaci/mobów",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Komplet modeli, warstw, stanów i animacji referencyjnych.",
+      "evidence": [
+        "src/game/mobModels.ts"
+      ]
+    },
+    {
+      "id": "ui.screens",
+      "label": "Wszystkie ekrany i skala GUI",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne menu, kontenery, HUD, komunikaty i obsługa akcji.",
+      "evidence": [
+        "src/components/JavaMenus.tsx"
+      ]
+    },
+    {
+      "id": "ui.options-accessibility",
+      "label": "Opcje, dostępność i języki",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodny zakres opcji, wejść, lokalizacji i funkcji dostępności.",
+      "evidence": [
+        "src/components/JavaSettings.tsx"
+      ]
+    },
+    {
+      "id": "audio.sound-music",
+      "label": "Dźwięki, muzyka i napisy",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełny katalog oraz zgodne wyzwalanie, miksowanie, odległość i napisy.",
+      "evidence": [
+        "src/game/audio.ts"
+      ]
+    },
+    {
+      "id": "data.advancements",
+      "label": "Postępy i statystyki",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Oryginalne postępy/warunki i statystyki; własne osiągnięcia nie zastępują rejestru Java.",
+      "evidence": [
+        "src/game/achievements.ts"
+      ]
+    },
+    {
+      "id": "data.commands",
+      "label": "Komendy i reguły gry",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełna składnia, argumenty, wyniki, selektory i reguły Java.",
+      "evidence": [
+        "src/game/commands.ts"
+      ]
+    },
+    {
+      "id": "data.packs",
+      "label": "Pakiety zasobów i danych",
+      "state": "unverified",
+      "weight": null,
+      "acceptance": "Zgodne ładowanie i interpretacja wymaganych zasobów oraz danych.",
+      "evidence": [
+        "src/game/packArt.ts"
+      ]
+    },
+    {
+      "id": "network.behavior",
+      "label": "Zgodność wieloosobowej symulacji",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zgodne zachowanie wielu sesji, autorytatywność, ticki i utrata połączenia.",
+      "evidence": [
+        "src/game/net.ts"
+      ]
+    },
+    {
+      "id": "network.java-protocol",
+      "label": "Protokół i serwery Java",
+      "state": "unverified",
+      "weight": null,
+      "acceptance": "Zgodność protokołu/architektury połączenia z wersją docelową; obecny protokół własny nie jest zaliczeniem.",
+      "evidence": [
+        "src/game/net.ts"
+      ]
+    },
+    {
+      "id": "persistence.world",
+      "label": "Zapis pełnego stanu świata i encji",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Pełne dane, round-trip i zgodność zachowań po odczycie; bez utraty danych.",
+      "evidence": [
+        "src/game/saves.ts"
+      ]
+    },
+    {
+      "id": "persistence.multidevice",
+      "label": "Trwałość kont i konfliktów urządzeń",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Zachowanie istniejących zabezpieczeń kont, CAS/dzienników i odtwarzania.",
+      "evidence": [
+        "src/game/profileCheckpoint.ts"
+      ]
+    },
+    {
+      "id": "platform.mobile",
+      "label": "Poziome sterowanie i stabilność przeglądarki",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Scenariusze na rzeczywistych telefonach i przeglądarkach, bez pionowego trybu gry.",
+      "evidence": [
+        "src/components/GameView.tsx"
+      ]
+    },
+    {
+      "id": "platform.performance",
+      "label": "Wydajność i długie sesje",
+      "state": "partial",
+      "weight": null,
+      "acceptance": "Budżety CPU/GPU/pamięci i wielogodzinne testy bez zmiany mechanik dla FPS.",
+      "evidence": [
+        "src/game/perf.ts"
+      ]
+    },
+    {
+      "id": "oak-trapdoor.world-uv",
+      "label": "UV dębowego włazu w świecie",
+      "state": "verified",
+      "weight": null,
+      "acceptance": "504 narożniki UV wszystkich 21 ID według przypiętych modeli; nie całe zachowanie włazu.",
+      "evidence": [
+        "docs/benchmarks/trapdoor-uv-4.35.json"
+      ],
+      "comparison": {
+        "target": "26.3",
+        "kind": "reference-data"
+      }
+    },
+    {
+      "id": "oak-trapdoor.item-geometry",
+      "label": "Kanoniczna geometria i UV przedmiotu włazu",
+      "state": "verified",
+      "weight": null,
+      "acceptance": "Płyta 3/16 i UV wszystkich 21 ID; bez natywnych pozycji dłoni/ziemi i światła.",
+      "evidence": [
+        "docs/benchmarks/trapdoor-item-4.36.json"
+      ],
+      "comparison": {
+        "target": "26.3",
+        "kind": "reference-data"
+      }
+    }
+  ]
+}
