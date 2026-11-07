@@ -28,6 +28,8 @@ Manifest wersji nie wylicza wszystkiego wewnątrz JAR-ów ani samych plików dys
 - niezależną kopię i sprawdzone odtworzenie;
 - wykonanie i porównanie zachowań.
 
+Przygotowano już [analizator wnętrza klienta i bundla serwera](REFERENCE-EMBEDDED-INVENTORY.md), z weryfikacją bajtów każdego wpisu i zagnieżdżonych JAR-ów oraz 29 regresjami offline. To gotowy element do przyszłej analizy, **nie wykonany inwentarz rzeczywistych archiwów**. Powyższe `pending` pozostają bez zmian.
+
 Biblioteki stanowią nadzbiór wszystkich zadeklarowanych wariantów. Zachowanie reguł nie oznacza, że przetestowano ich resolver, uruchamianie na każdej platformie czy kompletność każdej platformy. Nie pobieramy alternatywnych, nieprzypiętych runtime'ów pod pretekstem zgodności numeru major.
 
 ## Format obiektów i integralność
