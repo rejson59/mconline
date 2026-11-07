@@ -3,6 +3,11 @@
  * inside rolled-back transactions. Never prints response bodies or headers. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+// Keep the sanitized status assertion accessible through GitHub annotations when log downloads are unavailable.
+process.on('uncaughtException', error => {
+ const text=String(error instanceof Error?error.message:'Authorization check failed').slice(0,1600).replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A');
+ console.error(`::error title=Deployed authorization check::${text}`);process.exitCode=1;
+});
 const online=fs.readFileSync(new URL('../src/game/online.ts',import.meta.url),'utf8');
 const fixture=fs.readFileSync(new URL('../.harness/fixtures/rejson-account/rejson-account.js',import.meta.url),'utf8');
 const world='https://bewwejewgqzctnjrbclu.supabase.co',account='https://hzbqzfimtroixnldzjeq.supabase.co';
