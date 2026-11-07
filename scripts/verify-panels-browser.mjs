@@ -1,3 +1,4 @@
+import { Matrix4, Euler, Vector3 } from "three";
 /** Production build, fresh guest-only profiles. No real accounts or multiplayer.
  * Browser tools: npm install --prefix .cache/browser-tools puppeteer-core @sparticuz/chromium
  * Start production preview, then npm run test:browser:panels.
@@ -37,11 +38,13 @@ if (!fs.existsSync(libs)) {
 }
 const output = path.join(
   root,
-  process.env.BROWSER_TRAP_UV
-    ? ".cache/verification435"
-    : process.env.BROWSER_TRAPS
-      ? ".cache/verification434"
-      : ".cache/verification433",
+  process.env.BROWSER_TRAP_ITEM
+    ? ".cache/verification436"
+    : process.env.BROWSER_TRAP_UV
+      ? ".cache/verification435"
+      : process.env.BROWSER_TRAPS
+        ? ".cache/verification434"
+        : ".cache/verification433",
 );
 fs.mkdirSync(output, { recursive: true });
 const enums = path.join(output, "blocks.mjs");
@@ -80,6 +83,64 @@ const pixels = Array.from(
       .toString("base64"),
   ).data,
 );
+const itemDisplay = JSON.parse(
+  fs.readFileSync(
+    path.join(
+      root,
+      ".harness/fixtures/java-trapdoor-item-26.3/assets/minecraft/models/block/block.json",
+    ),
+    "utf8",
+  ),
+).display.gui;
+const rotation = new Matrix4().makeRotationFromEuler(
+  new Euler(...itemDisplay.rotation.map((v) => (v * Math.PI) / 180), "XYZ"),
+);
+const itemProject = (x, y, z) =>
+  new Vector3(x - 0.5, y - 0.5, z - 0.5)
+    .applyMatrix4(rotation)
+    .multiplyScalar(itemDisplay.scale[0]);
+const projected = expectedUVs
+  .find((r) => r.id === 503)
+  .vertices.flatMap(([key]) => {
+    const [face, coords] = key.split(":"),
+      normal = [
+        [-1, 0, 0],
+        [1, 0, 0],
+        [0, -1, 0],
+        [0, 1, 0],
+        [0, 0, -1],
+        [0, 0, 1],
+      ][+face];
+    if (new Vector3(...normal).applyMatrix4(rotation).z <= 0) return [];
+    const v = itemProject(...coords.split(",").map((n) => Number(n) / 65536));
+    return [[24 + 48 * v.x, 24 - 48 * v.y]];
+  });
+const itemBounds = [
+  Math.min(...projected.map((p) => p[0])),
+  Math.min(...projected.map((p) => p[1])),
+  Math.max(...projected.map((p) => p[0])),
+  Math.max(...projected.map((p) => p[1])),
+];
+const alphaProbes = [];
+for (let u = 2; u < 14; u++)
+  for (let v = 2; v < 14; v++) {
+    const alpha = pixels[(v * 16 + u) * 4 + 3];
+    if (![0, 255].includes(alpha)) continue;
+    if (
+      [-1, 0, 1].some((dx) =>
+        [-1, 0, 1].some(
+          (dy) => pixels[((v + dy) * 16 + u + dx) * 4 + 3] !== alpha,
+        ),
+      )
+    )
+      continue;
+    const p = itemProject((u + 0.5) / 16, 3 / 16, (v + 0.5) / 16);
+    alphaProbes.push([
+      Math.floor(24 + 48 * p.x),
+      Math.floor(24 - 48 * p.y),
+      alpha,
+    ]);
+  }
 const version = JSON.parse(
   fs.readFileSync(path.join(root, "package.json"), "utf8"),
 ).version;
@@ -515,6 +576,167 @@ try {
       },
       { B, T, expectedUVs, pixels },
     );
+    const itemReport = await p.evaluate(
+      async ({ B, T, expectedUVs, itemBounds, alphaProbes }) => {
+        const g = window.minecraft.game;
+        g.inventory.slots.fill(null);
+        g.inventory.slots[0] = { id: B.TRAP, count: 8 };
+        g.inventory.offhand = { id: B.TRAP, count: 1 };
+        g.selected = 0;
+        g.handId = -999;
+        g.offHandId = -999;
+        g.updateHand();
+        const expected = new Map(
+          expectedUVs.find((r) => r.id === 503).vertices,
+        );
+        const normals = [
+          [-1, 0, 0],
+          [1, 0, 0],
+          [0, -1, 0],
+          [0, 1, 0],
+          [0, 0, -1],
+          [0, 0, 1],
+        ];
+        let uvPairs = 0;
+        const inspect = (mesh) => {
+          const geo = mesh.geometry;
+          geo.computeBoundingBox();
+          const b = geo.boundingBox;
+          if (
+            Math.abs(b.max.y - b.min.y - 3 / 16) > 1e-6 ||
+            Math.abs(b.min.y + 0.5) > 1e-6
+          )
+            throw Error("Item remains cube or uses world state");
+          if (!mesh.material.alphaTest) throw Error("Item holes are opaque");
+          const p = geo.getAttribute("position"),
+            uv = geo.getAttribute("uv"),
+            n = geo.getAttribute("normal");
+          for (let i = 0; i < p.count; i++) {
+            const face = normals.findIndex((v) =>
+              v.every((x, a) => Math.abs(x - n.getComponent(i, a)) < 1e-6),
+            );
+            const key =
+              face +
+              ":" +
+              [p.getX(i) + 0.5, p.getY(i) + 0.5, p.getZ(i) + 0.5]
+                .map((x) => Math.round(x * 65536))
+                .join(",");
+            const ref = expected.get(key);
+            if (!ref) throw Error("Unknown item corner");
+            const [u, v] = ref,
+              eps = 0.0004,
+              U =
+                ((T.trapdoor % 16) + u / 16) / 16 +
+                (u === 0 ? eps : u === 16 ? -eps : 0),
+              V =
+                1 -
+                (Math.floor(T.trapdoor / 16) + v / 16) / 16 +
+                (v === 0 ? -eps : v === 16 ? eps : 0);
+            if (
+              Math.abs(uv.getX(i) - U) > 2e-6 ||
+              Math.abs(uv.getY(i) - V) > 2e-6
+            )
+              throw Error("Item UV differs from bottom reference");
+            uvPairs++;
+          }
+          return b.max.y - b.min.y;
+        };
+        const mainHeight = inspect(g.handMesh),
+          offhandHeight = inspect(g.offHandMesh);
+        const oldDropCount = g.drops.length;
+        g.spawnDrop(
+          B.TRAP,
+          2,
+          7,
+          65.35,
+          8,
+          undefined,
+          0,
+          0,
+          0,
+          undefined,
+          undefined,
+          undefined,
+          2,
+        );
+        const drop = g.drops.at(-1),
+          dropHeight = inspect(drop.mesh);
+        if (
+          g.drops.length !== oldDropCount + 1 ||
+          drop.count !== 2 ||
+          drop.pickupDelay !== 2
+        )
+          throw Error("Drop behavior changed");
+        const icon = g.icons[B.TRAP];
+        for (const { id } of expectedUVs)
+          if (g.icons[id] !== icon)
+            throw Error("Hidden state has different item icon");
+        const image = new Image();
+        image.src = icon;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 48;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(image, 0, 0);
+        const rgba = ctx.getImageData(0, 0, 48, 48).data;
+        const bounds = [48, 48, -1, -1];
+        let opaque = 0,
+          transparent = 0;
+        for (let y = 0; y < 48; y++)
+          for (let x = 0; x < 48; x++) {
+            const a = rgba[(y * 48 + x) * 4 + 3];
+            if (a > 0) {
+              bounds[0] = Math.min(bounds[0], x);
+              bounds[1] = Math.min(bounds[1], y);
+              bounds[2] = Math.max(bounds[2], x);
+              bounds[3] = Math.max(bounds[3], y);
+            }
+            if (a === 0) transparent++;
+            if (a === 255) opaque++;
+          }
+        if (bounds.some((v, i) => Math.abs(v - itemBounds[i]) > 2))
+          throw Error(
+            "GUI projection does not match inherited display " +
+              JSON.stringify({ bounds, itemBounds }),
+          );
+        let holeChecks = 0,
+          woodChecks = 0;
+        for (const [x, y, expected] of alphaProbes) {
+          const a = rgba[(y * 48 + x) * 4 + 3];
+          if (expected === 0) {
+            if (a > 5) throw Error("GUI hole filled");
+            holeChecks++;
+          } else {
+            if (a < 250) throw Error("GUI wood missing");
+            woodChecks++;
+          }
+        }
+        if (!holeChecks || !woodChecks) throw Error("Missing alpha coverage");
+        g.swingT = 1;
+        g.updateCamera(0.016);
+        g.emitHud();
+        g.firstPerson.render(g.renderer, g.scene, g.camera);
+        return {
+          mainHeight,
+          offhandHeight,
+          dropHeight,
+          uvPairs,
+          iconBounds: bounds,
+          holeChecks,
+          woodChecks,
+          opaque,
+          transparent,
+          icon,
+        };
+      },
+      { B, T, expectedUVs, itemBounds, alphaProbes },
+    );
+    fs.writeFileSync(
+      path.join(output, (mobile ? "mobile" : "desktop") + "-icon.png"),
+      Buffer.from(itemReport.icon.split(",")[1], "base64"),
+    );
+    delete itemReport.icon;
+    report.item = itemReport;
     if (errors.length) throw Error(JSON.stringify(errors));
     const device = mobile ? "mobile" : "desktop";
     await p.screenshot({ path: path.join(output, device + ".png") });

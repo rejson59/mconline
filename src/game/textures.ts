@@ -1,9 +1,10 @@
+import { drawTrapdoorIcon } from './trapdoorItem';
 import { drawBedIcon } from './bedItem';
 import { itemBox, itemCrop } from './itemShape';
 import { applyJavaFurnaceTextures } from './facingArt';
 import { buildingFaces, buildingUV } from './buildingShapes';
 import { CHEST_BODY, CHEST_LID, chestLockFor, chestFaceRect } from './chestModel';
-import { T, BLOCKS, RENDER, tileFor, isBed, isStairs, isSlab, collisionBoxes } from './blocks';
+import { B, T, BLOCKS, RENDER, tileFor, isTrap, isBed, isStairs, isSlab, collisionBoxes } from './blocks';
 import { mulberry32 } from './noise';
 import { applyJavaFireTextures, applyJavaRailTextures, applyEntityTextures, applyOfficialTiles, ENTITY_ATLAS, isOfficialTile, type EntityAtlasKey } from './packArt';
 
@@ -1365,7 +1366,7 @@ export function buildAtlas(): AtlasResult {
   const icons: Record<number, string> = {};
   for (const d of BLOCKS) {
     if (!d || d.id === 0) continue;
-    icons[d.id] = makeIcon(canvas, d.id);
+    icons[d.id] = isTrap(d.id) && icons[B.TRAP] ? icons[B.TRAP] : makeIcon(canvas, d.id);
   }
 
   // Cracks
@@ -1525,7 +1526,8 @@ function makeIcon(atlas: HTMLCanvasElement, id: number): string {
     const sx = (tile % ATLAS_TILES) * TILE, sy = Math.floor(tile / ATLAS_TILES) * TILE;
     ctx.drawImage(atlas, sx, sy, 16, 16, 0, 0, 16, 16);
   };
-  if(isBed(id)) { drawBedIcon(ctx,atlas); }
+  if(isTrap(id)) { drawTrapdoorIcon(ctx,atlas,T.trapdoor); }
+  else if(isBed(id)) { drawBedIcon(ctx,atlas); }
   else if(itemBox(id)&&RENDER[id]!==12) {
     const [x0,z0,x1,z1,y0,y1]=itemBox(id)!;
     const project=(p:number[])=>[24+(p[0]-p[2])*20,32+(p[0]+p[2]-1)*10-p[1]*26];

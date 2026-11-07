@@ -6,7 +6,7 @@
 export type PanelUVs = readonly (readonly (readonly [number, number])[])[];
 const cache: PanelUVs[] = [];
 // Corner order of the existing box mesher: -x,+x,-y,+y,-z,+z.
-const corners = [
+export const PANEL_CORNERS = [
   [
     [0, 1, 0],
     [0, 0, 0],
@@ -60,7 +60,7 @@ export function trapdoorUVs(edge: number, open: boolean): PanelUVs {
   const key = open ? edge & 3 : 4;
   if (cache[key]) return cache[key];
   const turns = open ? (edge + 2) & 3 : 0;
-  return (cache[key] = corners.map((quad, worldFace) =>
+  return (cache[key] = PANEL_CORNERS.map((quad, worldFace) =>
     quad.map((corner): readonly [number, number] => {
       let [x, y, z] = corner;
       let [nx, ny, nz] = normals[worldFace];

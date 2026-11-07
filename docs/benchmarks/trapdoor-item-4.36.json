@@ -1,0 +1,391 @@
+{
+  "version": "4.36.0",
+  "reports": [
+    {
+      "device": "desktop",
+      "viewport": {
+        "width": 960,
+        "height": 600
+      },
+      "panels": [
+        {
+          "id": 69,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 5.5,
+            "z": 4.7,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 70,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5125,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 71,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5,
+            "z": 5.5125,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 72,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 4.7,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        }
+      ],
+      "closedTrapDistance": 2,
+      "doorStates": 32,
+      "modernStates": [
+        {
+          "id": 503,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 504,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 505,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 506,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 507,
+          "rayDistance": 1
+        },
+        {
+          "id": 508,
+          "rayDistance": 1
+        },
+        {
+          "id": 509,
+          "rayDistance": 1
+        },
+        {
+          "id": 510,
+          "rayDistance": 1
+        },
+        {
+          "id": 511,
+          "rayDistance": 1
+        },
+        {
+          "id": 512,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 513,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 514,
+          "rayDistance": 1
+        },
+        {
+          "id": 515,
+          "rayDistance": 1
+        },
+        {
+          "id": 516,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 517,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 518,
+          "rayDistance": 1
+        }
+      ],
+      "floorPlaced": 503,
+      "closedAgain": 503,
+      "ceilingPlaced": 507,
+      "matchedUVs": 504,
+      "referencePixelChannels": 1024,
+      "item": {
+        "mainHeight": 0.1875,
+        "offhandHeight": 0.1875,
+        "dropHeight": 0.1875,
+        "uvPairs": 72,
+        "iconBounds": [
+          2,
+          21,
+          45,
+          47
+        ],
+        "holeChecks": 4,
+        "woodChecks": 44,
+        "opaque": 504,
+        "transparent": 1673
+      },
+      "errors": []
+    },
+    {
+      "device": "mobile",
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "isMobile": true,
+        "hasTouch": true
+      },
+      "panels": [
+        {
+          "id": 69,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 5.5,
+            "z": 4.7,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 70,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5125,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 71,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5,
+            "z": 5.5125,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 72,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 4.7,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        }
+      ],
+      "closedTrapDistance": 2,
+      "doorStates": 32,
+      "modernStates": [
+        {
+          "id": 503,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 504,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 505,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 506,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 507,
+          "rayDistance": 1
+        },
+        {
+          "id": 508,
+          "rayDistance": 1
+        },
+        {
+          "id": 509,
+          "rayDistance": 1
+        },
+        {
+          "id": 510,
+          "rayDistance": 1
+        },
+        {
+          "id": 511,
+          "rayDistance": 1
+        },
+        {
+          "id": 512,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 513,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 514,
+          "rayDistance": 1
+        },
+        {
+          "id": 515,
+          "rayDistance": 1
+        },
+        {
+          "id": 516,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 517,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 518,
+          "rayDistance": 1
+        }
+      ],
+      "floorPlaced": 503,
+      "closedAgain": 503,
+      "ceilingPlaced": 507,
+      "matchedUVs": 504,
+      "referencePixelChannels": 1024,
+      "item": {
+        "mainHeight": 0.1875,
+        "offhandHeight": 0.1875,
+        "dropHeight": 0.1875,
+        "uvPairs": 72,
+        "iconBounds": [
+          2,
+          21,
+          45,
+          47
+        ],
+        "holeChecks": 4,
+        "woodChecks": 44,
+        "opaque": 504,
+        "transparent": 1673
+      },
+      "errors": []
+    }
+  ],
+  "scope": "Oak trapdoor canonical item geometry/UV and inherited GUI display, not native hand/ground poses or full original-client parity",
+  "checks": {
+    "groups": 34,
+    "matchedUVPairs": 504,
+    "stateCount": 21,
+    "originalEngineBaseline": {
+      "passed": 11,
+      "failed": 23,
+      "matchedUVPairs": 0
+    },
+    "worldUVGroups": 73,
+    "stateGroups": 114,
+    "panelGroups": 62,
+    "fenceGroups": 79,
+    "movementGroups": 45,
+    "postgresChecks": 83,
+    "engineChecks": 16973,
+    "uiChecks": 409,
+    "typecheck": "PASS",
+    "fullTest": "PASS",
+    "build": "PASS",
+    "auditVulnerabilities": 0
+  },
+  "reference": {
+    "version": "26.3",
+    "repository": "InventivetalentDev/minecraft-assets",
+    "commit": "9073095a88699785bb1f63f8f86d33322711e4fd",
+    "files": [
+      {
+        "path": "assets/minecraft/items/oak_trapdoor.json",
+        "bytes": 102,
+        "sha256": "24b6c011fa8646ce7f30881867d1ef70c750a52548fe0963d319f02dee54b6a9"
+      },
+      {
+        "path": "assets/minecraft/models/block/thin_block.json",
+        "bytes": 560,
+        "sha256": "eaf9db8960529736bda0fbfe31c439f1e87c02d48dcab9a769f2f55ba26f5e3f"
+      },
+      {
+        "path": "assets/minecraft/models/block/block.json",
+        "bytes": 1136,
+        "sha256": "212df16c5aa3e6aef3f4d3e080532d28a86cf9b2071618e4ca587ee9ef3c6d09"
+      }
+    ],
+    "worldModelFixtures": "../java-trapdoor-26.3",
+    "boundary": "Pinned mirror, not original client execution. Model data NOT MIT."
+  },
+  "limitations": [
+    "Pinned mirror, not original client execution",
+    "Existing project hand/drop poses, scales and bobbing retained; firstperson/thirdperson/ground display not implemented",
+    "GUI uses project face shading, not native lighting parity",
+    "Portrait held-item framing remains open: mesh checks do not prove on-screen visibility",
+    "Touch emulation is not physical phone performance/manual gestures/multisession multiplayer verification",
+    "Other trapdoor families, powered/waterlogging and full original corpus/backup remain open"
+  ],
+  "backendChanged": false,
+  "saveFormatChanged": false,
+  "collisionChanged": false
+}

@@ -1,6 +1,6 @@
 # Plan wykonania: własna implementacja Minecraft Java w przeglądarce
 
-2026-11-07. Cel referencyjny: **Java 26.3** z `java-reference.lock.json`. Runtime projektu pozostaje **4.30.0**, z dotychczasową bazą porównań **1.20.4**. Nie ogłaszamy migracji do 26.3 ani zgodności całej gry na podstawie indeksu plików.
+2026-11-07. Cel referencyjny: **Java 26.3** z `java-reference.lock.json`. Runtime projektu: **4.36.0**, z dotychczasową bazą porównań **1.20.4**. Nie ogłaszamy migracji do 26.3 ani zgodności całej gry na podstawie indeksu plików.
 
 To plan wykonywania kodu, nie obietnica terminu pełnej zgodności. Duży projekt dzielimy na zakończone, testowalne odcinki. „Własna implementacja” nie oznacza wyrzucenia już przetestowanego silnika, kont i zapisów. Bazą pozostają TypeScript, Three.js i istniejące workery. Ewentualny WebAssembly wymaga pomiaru konkretnego wąskiego gardła, nie zmiany języka dla samej nazwy.
 
@@ -89,7 +89,7 @@ Otwarte włazy blokują rzeczywistym skrzydłem 3/16. Rendering, kolizje i celow
 
 Dopisano 16 stanów half/edge/open, zamknięte stawianie na podłodze/ścianie i pod sufitem, zachowanie połowy/kierunku przy przełączeniu i brak zależności od podparcia. Stare ID 68–72 nie są masowo migrowane ani przesuwane. Przekroczenie 511 obsłużone w tablicach klienta oraz addytywnej migracji obu writerów bazy gry; metadane po wdrożeniu potwierdzają te same ACL/ochrony. **114 nowych grup + 83 kontrole PostgreSQL oraz Chromium desktop/touch: PASS.** [Zakres i granice](TRAPDOORS-4.34.md): powered/waterlogging i zgodność tekstur/UV nadal otwarte; historyczne źródło nie dowodzi pełnego 26.3.
 
-## Obecna porcja: tekstury włazów 4.35
+## Poprzednia porcja: tekstury włazów 4.35
 
 Właściwe paski 3 px i orientacja UV dębowego włazu według rzeczywistych rodziców `template_trapdoor_*`, obrót otwartego modelu bez uvlock, cutout dla otworów. **73 grupy/504 narożniki** wszystkich 21 starych/nowych stanów, identyczne piksele PNG i rzeczywistego atlasu oraz produkcyjny Chromium desktop/touch: PASS. Bez zmiany ID/kolizji/zapisów/backendu. [Pochodzenie i granice](TRAPDOOR-UV-4.35.md): porównanie z przypiętym mirrorem nie zastępuje oryginalnego klienta, oświetlenia/cullface, pozostałych rodzin ani redstone/waterlogging.
 
@@ -100,3 +100,9 @@ Właściwe paski 3 px i orientacja UV dębowego włazu według rzeczywistych rod
 3. **Źródło HTTPS i lokalne wznowienie wykonane, źródła rzeczywiste jeszcze niesprawdzone.** Integracja klienta z backendem jest w kodzie i regresjach; rzeczywisty transfer nie został jeszcze uruchomiony. Obiekt istniejący musi zostać zweryfikowany, a nie pobrany ponownie w ciemno. Części nie oznaczają kompletnego pliku.
 4. **Regresje protokołu i podpisanej autoryzacji wykonane.** Poprawny token i rzeczywisty inwentarz są już potwierdzone. Pozostają transfer danych do Storage, limity operacyjne i test odtworzenia przed transferem oryginałów.
 5. Przed rzeczywistym dużym transferem potwierdzić dostępne miejsce, limity usług i sposób niezależnej kopii. Nie obiecywać nieskończonego ani wieczystego magazynu. Brak drugiej kopii nie może być raportowany jako backup PASS.
+
+## Obecna porcja: przedmiot włazu 4.36
+
+Rzeczywista definicja `items/oak_trapdoor.json` wskazuje model dolny. Zamiast sześcianu geometria obu rąk i dropu używa płyty 3/16 z referencyjnymi UV; ikona korzysta z odziedziczonej rotacji/skali GUI i zachowuje otwory. **34 grupy / 504 pary UV**, rzeczywiste ścieżki ręka/offhand/drop i produkcyjny Chromium desktop/touch: PASS. Wszystkie 21 stanów ma ten sam kanoniczny przedmiot. [Zakres i ograniczenia](TRAPDOOR-ITEM-4.36.md).
+
+Następny odcinek: kadrowanie przedmiotów na pionowym ekranie oraz referencyjne pozy dłoni/ziemi; obecne pozy, skale i bobbing pozostały bez zmian. Testy geometrii na emulacji telefonu nie dowodzą widoczności całego trzymanego przedmiotu ani wydajności fizycznego telefonu. Pozostałe rodziny modeli, oświetlenie i porównanie z uruchomioną Javą nadal otwarte.

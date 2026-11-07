@@ -1,0 +1,24 @@
+{
+  "version": "26.3",
+  "repository": "InventivetalentDev/minecraft-assets",
+  "commit": "9073095a88699785bb1f63f8f86d33322711e4fd",
+  "files": [
+    {
+      "path": "assets/minecraft/items/oak_trapdoor.json",
+      "bytes": 102,
+      "sha256": "24b6c011fa8646ce7f30881867d1ef70c750a52548fe0963d319f02dee54b6a9"
+    },
+    {
+      "path": "assets/minecraft/models/block/thin_block.json",
+      "bytes": 560,
+      "sha256": "eaf9db8960529736bda0fbfe31c439f1e87c02d48dcab9a769f2f55ba26f5e3f"
+    },
+    {
+      "path": "assets/minecraft/models/block/block.json",
+      "bytes": 1136,
+      "sha256": "212df16c5aa3e6aef3f4d3e080532d28a86cf9b2071618e4ca587ee9ef3c6d09"
+    }
+  ],
+  "worldModelFixtures": "../java-trapdoor-26.3",
+  "boundary": "Pinned mirror, not original client execution. Model data NOT MIT."
+}

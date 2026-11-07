@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.35.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.36.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.36.0 — cienki właz także jako przedmiot
+
+Dębowy właz nie jest już sześcianem w geometrii obu rąk, dropu i ikony ekwipunku. Model ma grubość **3/16**, poprawne UV i otwory; wszystkie 21 stanów korzysta z kanonicznego modelu dolnego, wskazanego przez referencyjną definicję przedmiotu. **34 grupy / 504 pary UV + produkcyjny Chromium desktop/touch.** Bez zmian zapisów, fizyki i backendu. Pozy i animacje trzymania pozostają projektowe, nie deklarujemy pełnego 1:1. [Wyniki i ograniczenia](docs/TRAPDOOR-ITEM-4.36.md).
 
 ## Wersja 4.35.0 — włazy bez rozciągniętych tekstur
 
