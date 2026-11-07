@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'movement', entry: path.join(here, 'movement.ts'), label: 'Ruch: cienkie bryły, podparcie i płoty' },
   {name:'refinements',entry:path.join(here,'refinements.ts'),label:'Złoto, receptury, łóżka, chmury i modele'},
   { name: 'shared', entry: path.join(here, 'sharedState.ts'), label: 'Wspólne skrzynie/moby: dziennik i przejęcie stanu' },
   { name: 'checkpoint', entry: path.join(here, 'profileCheckpoint.ts'), label: 'Ekwipunek: dziennik i bezpieczne odzyskiwanie' },

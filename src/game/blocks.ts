@@ -322,7 +322,7 @@ for (let i = 0; i < 4; i++) {
   def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 3, sound: 'wood', drop: B.TRAP, solid: false, opaque: false });
 }
 def(B.TRAP, 'Właz', T.trapdoor, { hardness: 3, sound: 'wood', opaque: false });
-def(B.FENCE, 'Płot', T.fence, { opaque: false, layer: 1, hardness: 2, sound: 'wood', render: 'fence' });
+def(B.FENCE, 'Płot', T.planks, { opaque: false, layer: 1, hardness: 2, sound: 'wood', render: 'fence' });
 def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { hardness: 2, sound: 'wood', opaque: false, layer: 1 });
 def(B.CAMPFIRE_OFF, 'Zgaszone ognisko', T.campfire_off, { hardness: 2, sound: 'wood', opaque: false, layer: 1, drop: B.CAMPFIRE });
 def(B.FIRE, 'Ogień', T.fire, { solid: false, opaque: false, layer: 1, render: 'fire', hardness: 0, drop: -1 });

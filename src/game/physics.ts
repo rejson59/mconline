@@ -50,8 +50,8 @@ function hitsBlock(
 function collidesAt(world: World, px: number, py: number, pz: number, w: number, h: number): boolean {
   const hw = w / 2;
   const x0 = Math.floor(px - hw + EPS), x1 = Math.floor(px + hw - EPS);
-  // 2.21: płot ma 1,5 bloku – sięgamy jedną warstwę wyżej niż stopy.
-  const y0 = Math.floor(py + EPS), y1 = Math.floor(py + h - EPS);
+  // Fences extend above their voxel: include the row BELOW the feet.
+  const y0 = Math.floor(py + EPS) - 1, y1 = Math.floor(py + h - EPS);
   const z0 = Math.floor(pz - hw + EPS), z1 = Math.floor(pz + hw - EPS);
   for (let x = x0; x <= x1; x++)
     for (let y = y0; y <= y1; y++)
@@ -94,28 +94,6 @@ function supportTop(world: World, px: number, py: number, pz: number, w: number)
   return best;
 }
 
-/** 2.30: najniższy spód kolizji nad głową (`Infinity`, gdy nic nie blokuje). */
-function ceilingBottom(world: World, px: number, py: number, pz: number, w: number, h: number): number {
-  const hw = w / 2;
-  const x0 = Math.floor(px - hw + EPS), x1 = Math.floor(px + hw - EPS);
-  const z0 = Math.floor(pz - hw + EPS), z1 = Math.floor(pz + hw - EPS);
-  const y0 = Math.floor(py + EPS), y1 = Math.floor(py + h + 0.02);
-  let best = Infinity;
-  for (let y = y0; y <= y1; y++)
-    for (let x = x0; x <= x1; x++)
-      for (let z = z0; z <= z1; z++) {
-        const boxes = collisionBoxesAt(world, x, y, z);
-        if (!boxes) continue;
-        for (let i = 0; i < boxes.length; i += 6) {
-          if (px + hw <= x + boxes[i] || px - hw >= x + boxes[i + 3]) continue;
-          if (pz + hw <= z + boxes[i + 2] || pz - hw >= z + boxes[i + 5]) continue;
-          const bottom = y + boxes[i + 1];
-          if (bottom >= py + EPS && bottom < best) best = bottom;
-        }
-      }
-  return best;
-}
-
 /** Krok w górę: stopy lądują na rzeczywistej powierzchni, a nie 0,6 nad nią. */
 function stepUpTop(world: World, b: Body, nx: number, nz: number): number {
   const top = supportTop(world, nx, b.pos.y + STEP_HEIGHT, nz, b.w);
@@ -138,7 +116,7 @@ export function surfaceTopBetween(
   const hw = w / 2;
   const x0 = Math.floor(px - hw + EPS), x1 = Math.floor(px + hw - EPS);
   const z0 = Math.floor(pz - hw + EPS), z1 = Math.floor(pz + hw - EPS);
-  const y0 = Math.floor(py + 0.001), y1 = Math.floor(maxY);
+  const y0 = Math.floor(py + 0.001) - 1, y1 = Math.floor(maxY);
   let best = -Infinity;
   for (let y = y0; y <= y1; y++)
     for (let x = x0; x <= x1; x++)
@@ -197,59 +175,63 @@ export function slimeBounce(wasGround: boolean, onGround: boolean, velY: number)
   return -velY;
 }
 
-function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, d: number): boolean {
-  if (d === 0) return false;
-  const p = b.pos;
-  const hw = b.w / 2;
-  if (axis === 1) {
-    const ny = p.y + d;
-    if (!collidesAt(world, p.x, ny, p.z, b.w, b.h)) { p.y = ny; return false; }
-    // 2.30: lądujemy na rzeczywistej powierzchni bryły, którą mamy pod
-    // stopami (płyta 1/2, ścieżka 15/16, łóżko 9/16…), a nie na suficie
-    // całej kratki – właśnie to powodowało drganie na ścieżce.
-    if (d < 0) {
-      const top = supportTop(world, p.x, p.y, p.z, b.w);
-      p.y = Number.isFinite(top) ? top : Math.floor(ny) + 1 + EPS * 0.5;
-    } else {
-      const bottom = ceilingBottom(world, p.x, ny, p.z, b.w, b.h);
-      p.y = Number.isFinite(bottom) ? bottom - b.h - EPS * 0.5 : Math.floor(ny + b.h) - b.h - EPS * 0.5;
-    }
-    // safety: if still colliding, just don't move
-    if (collidesAt(world, p.x, p.y, p.z, b.w, b.h)) p.y = ny - d;
-    return true;
+/** Nearest contact along a swept axis, using actual shape faces, not voxel edges.
+ * A swept range also catches thin panes/doors between substep endpoints.
+ * Row -1 is needed for fences projecting half a block above their voxel.
+ */
+function clipAxis(world: World, b: Body, axis: 0 | 1 | 2, delta: number): number {
+  const min = [b.pos.x - b.w / 2, b.pos.y, b.pos.z - b.w / 2];
+  const max = [b.pos.x + b.w / 2, b.pos.y + b.h, b.pos.z + b.w / 2];
+  // Do not inset this sweep by EPS: even <0.001 penetration must clip.
+  const from = min.map((v, i) => Math.floor(v + (i === axis ? Math.min(0, delta) : 0)));
+  const to = max.map((v, i) => Math.floor(v + (i === axis ? Math.max(0, delta) : 0)));
+  from[1]--;
+  let allowed = delta;
+  const tolerance = 1e-9;
+  for (let x = from[0]; x <= to[0]; x++)
+    for (let y = from[1]; y <= to[1]; y++)
+      for (let z = from[2]; z <= to[2]; z++) {
+        const boxes = collisionBoxesAt(world, x, y, z);
+        if (!boxes) continue;
+        const origin = [x, y, z];
+        for (let j = 0; j < boxes.length; j += 6) {
+          let overlap = true;
+          for (let i = 0; i < 3; i++) if (i !== axis &&
+            (max[i] <= origin[i] + boxes[j + i] + tolerance ||
+             min[i] >= origin[i] + boxes[j + i + 3] - tolerance)) overlap = false;
+          if (!overlap) continue;
+          const lo = origin[axis] + boxes[j + axis];
+          const hi = origin[axis] + boxes[j + axis + 3];
+          if (delta > 0 && max[axis] <= lo + tolerance)
+            allowed = Math.min(allowed, Math.max(0, lo - max[axis]));
+          else if (delta < 0 && min[axis] >= hi - tolerance)
+            allowed = Math.max(allowed, Math.min(0, hi - min[axis]));
+        }
+      }
+  return allowed;
+}
+
+function moveAxis(world: World, b: Body, axis: 0 | 1 | 2, delta: number): boolean {
+  if (delta === 0) return false;
+  const allowed = clipAxis(world, b, axis, delta);
+  if (allowed === delta) {
+    b.pos.setComponent(axis, b.pos.getComponent(axis) + delta);
+    return false;
   }
-  if (axis === 0) {
-    const nx = p.x + d;
-    if (!collidesAt(world, nx, p.y, p.z, b.w, b.h)) { p.x = nx; return false; }
-    // 2.21: automatyczny krok na płytę/schodzenie (0,6) – jak w wanilii.
-    // 2.30: po wejściu stopy stają DOKŁADNIE na powierzchni przeszkody;
-    // wcześniej dodawaliśmy całe 0,55 i postać spadała pół bloku.
-    if (b.onGround) {
-      const top = stepUpTop(world, b, nx, p.z);
-      if (Number.isFinite(top)) {
-        p.y = Math.max(p.y, top);
-        p.x = nx;
+  if (axis !== 1 && b.onGround) {
+    const nx = b.pos.x + (axis === 0 ? delta : 0);
+    const nz = b.pos.z + (axis === 2 ? delta : 0);
+    const top = stepUpTop(world, b, nx, nz);
+    if (Number.isFinite(top) && clipAxis(world, b, 1, top - b.pos.y) === top - b.pos.y) {
+      // Both the lift and the raised horizontal sweep need clearance.
+      const raised = { ...b, pos: b.pos.clone().setY(top) };
+      if (clipAxis(world, raised, axis, delta) === delta) {
+        b.pos.set(nx, top, nz);
         return false;
       }
     }
-    if (d > 0) p.x = Math.floor(nx + hw) - hw - EPS * 0.5;
-    else p.x = Math.floor(nx - hw) + 1 + hw + EPS * 0.5;
-    if (collidesAt(world, p.x, p.y, p.z, b.w, b.h)) p.x = nx - d;
-    return true;
   }
-  const nz = p.z + d;
-  if (!collidesAt(world, p.x, p.y, nz, b.w, b.h)) { p.z = nz; return false; }
-  if (b.onGround) {
-    const top = stepUpTop(world, b, p.x, nz);
-    if (Number.isFinite(top)) {
-      p.y = Math.max(p.y, top);
-      p.z = nz;
-      return false;
-    }
-  }
-  if (d > 0) p.z = Math.floor(nz + hw) - hw - EPS * 0.5;
-  else p.z = Math.floor(nz - hw) + 1 + hw + EPS * 0.5;
-  if (collidesAt(world, p.x, p.y, p.z, b.w, b.h)) p.z = nz - d;
+  b.pos.setComponent(axis, b.pos.getComponent(axis) + allowed);
   return true;
 }
 
@@ -308,13 +290,5 @@ export function stepBody(world: World, b: Body, dt: number, sneak = false) {
 
 /** Entire body clearance, shared by shoreline navigation and physical movement. */
 export function bodyFits(world: World, x: number, y: number, z: number, w: number, h: number): boolean {
-  if (collidesAt(world, x, y, z, w, h)) return false;
-  // Fences extend above their voxel: also check the row below the feet.
-  const by = Math.floor(y) - 1;
-  for (let bx = Math.floor(x - w / 2 + EPS); bx <= Math.floor(x + w / 2 - EPS); bx++) {
-    for (let bz = Math.floor(z - w / 2 + EPS); bz <= Math.floor(z + w / 2 - EPS); bz++) {
-      if (hitsBlock(world, bx, by, bz, x, y, z, w / 2, h)) return false;
-    }
-  }
-  return true;
+  return !collidesAt(world, x, y, z, w, h);
 }

@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "release": "4.31.0",
+  "scope": "project-movement-regressions-and-small-mirror-model-inspection",
+  "reference": {
+    "version": "26.3",
+    "repository": "InventivetalentDev/minecraft-assets",
+    "commit": "9073095a88699785bb1f63f8f86d33322711e4fd",
+    "files": [
+      {
+        "path": "assets/minecraft/models/block/fence_post.json",
+        "bytes": 731,
+        "sha256": "f445d1cf4f8d81dffc8cddc6e237031d6e064e80a916b396e3d16aab73e7fe6b"
+      },
+      {
+        "path": "assets/minecraft/models/block/fence_side.json",
+        "bytes": 1168,
+        "sha256": "da3a9c2ea79551badf65c4d2da9f7bc26650534cda39a98c4ceda19b367c3f85"
+      },
+      {
+        "path": "assets/minecraft/models/block/oak_fence_post.json",
+        "bytes": 109,
+        "sha256": "65b93d1705e9d287a5fe153729c6a111645300b9a5e80776e1babe824f87d8dc"
+      }
+    ],
+    "boundary": "Pinned mirror JSON, not a running official client or original JAR."
+  },
+  "checks": {
+    "movementSuitePassed": 45,
+    "fencePostBoundsMatchInspectedModel": true,
+    "fenceTextureRoleMatchesPlanksBinding": true,
+    "fullTypecheckTestsBuildPassed": true,
+    "browserDesktopNativeRegressionPassed": true,
+    "browserMobileNativeRegressionPassed": true,
+    "sameSuiteAgainstBaseline": {
+      "passed": 24,
+      "failed": 21
+    }
+  },
+  "limits": [
+    "Runtime plank pixels are reused from the existing texture pack, not verified pixel-identical to Java 26.3.",
+    "Fence connection rules and full-voxel collision footprint still differ from vanilla.",
+    "No original-client execution or side-by-side movement/image comparison.",
+    "No claim that all missing-floor causes or the entire game are fixed."
+  ],
+  "fullGameParityVerified": false,
+  "originalsExecuted": false,
+  "backendChanged": false,
+  "saveFormatChanged": false
+}

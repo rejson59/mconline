@@ -3197,8 +3197,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.30.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Narzędzia, łóżka i światło', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.31.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Dokładniejsze kolizje i widoczne płoty', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -6972,7 +6972,10 @@ section('4.2.1: door thresholds and intentional chest opening');
       check(`threshold step stays at the real floor f${face} h${hinge}`, into.maxY <= 65.001, `y=${into.maxY}`);
       check(`exit also fits f${face} h${hinge}`, walk(fixture, false, dt).normal > 0.8);
     }
-    check(`closed door still blocks f${face} h${hinge}`, walk(entrance(face, hinge, false, B.PATH), true, 1 / 60).normal > 0);
+    // A thin door stops the body at its actual face, not the voxel entrance.
+    // The closed panel is on the far side: the centre may enter the door voxel.
+    const closed = walk(entrance(face, hinge, false, B.PATH), true, 1 / 60);
+    check(`closed door still blocks f${face} h${hinge}`, closed.body.hitWall && Math.abs(closed.normal + 0.0125) < 0.001);
     check(`open door panel still blocks its own side f${face} h${hinge}`, collisionBoxes(doorPair(face, true, false, hinge)) !== null);
     check(`low ceiling is not bypassed by stepping f${face} h${hinge}`, walk(entrance(face, hinge, true, B.PATH, 2), true, 1 / 60).normal > 0);
   }

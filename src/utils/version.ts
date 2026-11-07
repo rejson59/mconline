@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.30.0';
-export const GAME_RELEASE_NAME = 'Narzędzia, łóżka i światło';
+export const GAME_VERSION = '4.31.0';
+export const GAME_RELEASE_NAME = 'Dokładniejsze kolizje i widoczne płoty';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.31: dokładniejsze kolizje i widoczne płoty', text: 'Drzwi, skrzynie i szyby zatrzymują na rzeczywistej powierzchni, nie na granicy całej kratki. Ruch uwzględnia górną część płotu; jego słupki i szczeble używają nieprzezroczystego materiału desek. Bez resetu zapisów. Pełna zgodność z Java 26.3 pozostaje celem, nie deklaracją tego wydania.' },
   {title:'4.30: narzędzia, łóżka i światło',text:'Złote narzędzia, poprawione receptury, jeden drop łóżka, spokojne chmury, fale wody i oświetlone skórki. Łódka 1:1 pozostaje otwarta.'},
   { title: '4.29: wspólne moby i skrzynie', text: 'Te same encje, ruch i zdrowie dla pobliskich graczy; bezpieczne przejęcie symulacji po rozłączeniu, wspólny łup i XP. Zwykłe skrzynie: atomowe przenoszenie przedmiotów z kontrolą wersji, odzyskiwanie przerwanych operacji i ochrona przed podwójnym pobraniem. Bez resetu światów i ekwipunku.' },
   { title: '4.28.3: poprawki rozgrywki', text: 'Pochodnie innych graczy oświetlają teren, żwir i piasek rozbijają się na pochodni, a miód oddaje pustą butelkę. Wyrzucone rzeczy mają 2 s ochrony przed własnym podniesieniem. Mniejsze, zróżnicowane domy i rzadsze skrzynie. Ochrona przed zaznaczaniem tekstu dotykiem.' },
