@@ -13,6 +13,10 @@ on:
         description: 'Test połączenia z oryginalnymi plikami (bez uploadu)'
         type: boolean
         default: false
+      reference_archive_plan:
+        description: 'Inwentarz pełnego zestawu 26.3 i rozmiary (bez transferu plików)'
+        type: boolean
+        default: false
       reference_private_read:
         description: 'Odczyt prywatnego pliku testowego (79 bajtów, bez zapisu)'
         type: boolean
@@ -63,6 +67,21 @@ jobs:
           node-version: 22
       - name: Probe official reference and Storage connectivity
         run: node scripts/probe-reference-network.mjs
+
+  reference-archive-plan:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.actor_id == '185239338' && inputs.reference_archive_plan
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Inspect server-approved corpus plan without Storage writes or original transfers
+        run: node scripts/inspect-reference-archive.mjs
 
   reference-private-read:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.reference_private_read

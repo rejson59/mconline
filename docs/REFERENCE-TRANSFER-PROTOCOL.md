@@ -2,7 +2,7 @@
 
 2026-11-07. Następna porcja [planu wykonania](MINECRAFT-IMPLEMENTATION-PLAN.md), po plannerze korpusu. Kod: `scripts/reference-transfer.mjs`, testy: `scripts/reference-transfer.test.mjs`.
 
-**Wykonano:** koordynator transferu, sprawdzane binarne rekordy części, źródło ograniczonych zakresów HTTPS i lokalny adapter plików. **Nie wykonano:** nowego backendu OIDC/Storage, transferu oryginałów do chmury, kopii niezależnej i porównań mechanik. Nie zmieniono runtime'u gry, istniejących funkcji probe, ról ani polityk Storage. Nie trzeba powtarzać testu 79 B.
+**Wykonano:** koordynator transferu, sprawdzane binarne rekordy części, źródło ograniczonych zakresów HTTPS i lokalny adapter plików. **Aktualizacja kolejnej porcji:** [backend OIDC i adapter chmurowy](REFERENCE-ARCHIVE-BACKEND.md) są już w kodzie i wdrożeniu z zapisem zablokowanym. Nadal nie wykonano rzeczywistego transferu oryginałów do chmury, kopii niezależnej i porównań mechanik. Nie zmieniono runtime'u gry, istniejących funkcji probe, ról ani polityk Storage. Nie trzeba powtarzać testu 79 B.
 
 ## Zaufanie i autoryzacja
 
@@ -83,4 +83,4 @@ Przyszły adapter chmurowy musi zapewnić tę samą semantykę `read(key, limit)
 
 Żaden test nie pobiera oryginałów ani nie używa prawdziwej sesji właściciela. Wyniki pozostawiają `originalObjectExecuted:false`, `independentBackupVerified:false`, `fullCorpusReady:false`.
 
-**Następne:** integracja z zatwierdzaniem planu i nowym backendem OIDC/Storage, kontrola rzeczywistych limitów/pojemności, regresje cudzej tożsamości, testy rzeczywistej ścieżki oraz niezależna kopia z odtworzeniem. Nie ogłaszamy tych bramek jako zaliczonych na podstawie testów lokalnych.
+**W kolejnej porcji wykonano integrację zatwierdzania planu i nowego backendu OIDC/Storage oraz regresje podpisanej tożsamości. Następne:** rzeczywisty inwentarz, kontrola limitów/pojemności, testy rzeczywistej ścieżki oraz niezależna kopia z odtworzeniem. Nie ogłaszamy tych bramek jako zaliczonych na podstawie testów lokalnych.

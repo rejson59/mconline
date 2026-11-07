@@ -21,7 +21,7 @@ To plan wykonywania kodu, nie obietnica terminu pełnej zgodności. Duży projek
 | --- | --- | --- | --- |
 | 0. Dostęp | Właściciel → prywatny backend; OIDC runner → prywatny probe | Rzeczywisty odczyt 79 B, zgodny hash, odmowa publicznego odczytu | **Potwierdzony**; [pokwitowanie](benchmarks/reference-runner-read-proof.json) |
 | 1. Inwentarz | Plan wszystkich pobrań deklarowanych przez oficjalny manifest i indeks zasobów; content-addressed obiekty; audyt zawartości | Deterministyczne plany, deduplikacja bez utraty aliasów, odrzucanie uszkodzeń i raportowanie braków | **Kod i regresje offline wykonane w tej porcji**; [narzędzie](REFERENCE-CORPUS.md). Pełny oficjalny korpus jeszcze nie pobrany |
-| 2. Transport | Osobna, wąska autoryzacja zapisu; części plików, wznowienie, limity bajtów, potwierdzenie kompletności | Zerwanie i kontynuacja transferu, pełny hash po złożeniu, brak nadpisania, obce konto/repo/ścieżka odrzucone | **Częściowo wykonane:** [protokół, wznowienie, źródło HTTPS i lokalny adapter](REFERENCE-TRANSFER-PROTOCOL.md), 31 regresji offline. Backend OIDC i transfer do chmury nadal niewdrożone; endpointy probe bez zmian |
+| 2. Transport | Osobna, wąska autoryzacja zapisu; części plików, wznowienie, limity bajtów, potwierdzenie kompletności | Zerwanie i kontynuacja transferu, pełny hash po złożeniu, brak nadpisania, obce konto/repo/ścieżka odrzucone | **Częściowo wykonane:** [protokół, wznowienie, źródło HTTPS i lokalny adapter](REFERENCE-TRANSFER-PROTOCOL.md), 31 regresji offline. [Backend OIDC i adapter chmurowy](REFERENCE-ARCHIVE-BACKEND.md) dodane i wdrożone z budżetem zapisu 0; 27 dalszych regresji. Rzeczywisty transfer i backup niepotwierdzone; endpointy probe bez zmian |
 | 3. Domknięcie korpusu | Platformowe manifesty i pliki wymaganej Javy; inwentarz wnętrza klienta i bundla serwera; kopia niezależna | Wszystkie wymagane kategorie rozliczone; rzeczywisty odczyt i odtworzenie drugiej kopii | **Niewykonane**. Sam bucket nie jest backupem |
 | 4. Stanowisko porównań | Legalnie dostępna referencja + te same kontrolowane scenariusze w projekcie; ślady stanu i obrazy | Powtarzalne porównanie przynajmniej pierwszego pionowego odcinka, z jawną wersją, wejściami i tolerancjami | **Niewykonane dla 26.3**. Nie pobieramy sesji kont i nie obchodzimy logowania |
 | 5. Bloki, obraz, ruch | Mapa rejestrów/starych ID, stany i modele bloków, materiały/oświetlenie, ruch, kolizje i interakcje | Kontrolowane sceny i ślady zachowania; brak regresji zapisów; pomiar desktop/mobile | **Pierwszy odcinek właściwej migracji**, nie ukończona funkcja 26.3 |
@@ -55,16 +55,22 @@ Ten odcinek nie jest oznaczony jako wykonany w niniejszej porcji. Dzisiejsze zmi
 
 **Nie wykonano teraz:** rzeczywistego transferu dużych plików, zapisu ich do prywatnego backendu, pobrania Javy, przeglądu wnętrza archiwów, niezależnego backupu, uruchomienia oryginału ani migracji mechanik. Narzędzie zapisuje te luki w każdym planie, nawet jeśli wszystkie zadeklarowane obiekty przejdą lokalny audyt.
 
-## Obecna porcja: rdzeń transferu
+## Poprzednia porcja: rdzeń transferu
 
 Zaimplementowano `scripts/reference-transfer.mjs`: części 4 MiB, binarny rekord z checksumem i powiązaniem do planu/obiektu/próby/indeksu, wznowienie tylko brakujących części, kontrolę całego SHA-1/SHA-256 przed publikacją pokwitowania, źródło ścisłych zakresów HTTPS i lokalny adapter z atomowym zapisem bez nadpisania. **31 regresji offline** obejmuje przerwanie i utratę ACK, konkurencję, błędne dane, weryfikację w osobnym procesie i granice źródła HTTP. [Szczegóły i ograniczenia](REFERENCE-TRANSFER-PROTOCOL.md).
 
 To nie jest wdrożony backend ani niezależny backup. Nie przesyłano oryginałów, nie uruchamiano nowych workflow i nie zmieniano funkcji probe. Pozostałe etapy zachowują dotychczasowy stan.
 
-## Dalsza porcja kodu — bez kolejnego probe
+## Obecna porcja: backend OIDC i klient
 
-1. **Wykonano rdzeń i regresje offline; pozostała integracja backendu.** Protokół transferu części obiektu z planu: hash obiektu, długość, indeks/rozmiar części i hash części; limit części poniżej istniejącego limitu Storage 10 MiB.
-2. Dodać osobny backend z tą samą ścisłą tożsamością OIDC, lecz oddzielnymi uprawnieniami i ograniczoną przestrzenią nazw. Plan zatwierdza dozwolone obiekty; nie wolno przyjmować dowolnego URL/ścieżki. Żadnego publicznego uploadu ani service-role w Actions/przeglądarce.
-3. **Źródło HTTPS i lokalne wznowienie wykonane, źródła rzeczywiste jeszcze niesprawdzone.** Zintegrować klienta z backendem chmurowym. Obiekt istniejący musi zostać zweryfikowany, a nie pobrany ponownie w ciemno. Części nie oznaczają kompletnego pliku.
-4. **Regresje protokołu wykonane; brak jeszcze regresji nowej autoryzacji backendu.** Po integracji sprawdzić także obcą tożsamość i rzeczywiste odpowiedzi Storage przed transferem oryginałów.
+Dodano [backend i adapter](REFERENCE-ARCHIVE-BACKEND.md), samodzielne wdrożenie ACTIVE v1 z zapisem zablokowanym w kodzie (`budgetBytes:0`), serwerowe zatwierdzanie oficjalnych metadanych i niezależne finalize oraz 27 nowych regresji. Planner i protokół są współdzielone przez czyste moduły bez filesystemu. Dodano ręczny, domyślnie wyłączony job rzeczywistego inwentarza; nie transferuje oryginałów ani nie zapisuje Storage. Wynik tego joba nadal wymaga odczytania po akcji właściciela — zwykłe CI go pomija.
+
+Odczyt metadanych potwierdził prywatny bucket, limit pliku 10 MiB i tylko 1 obiekt / 79 B. Nie jest to dowód wolnej pojemności konta ani backupu. Dotychczasowe probe, konta, gra i zapisy bez zmian.
+
+## Dalsza porcja — od inwentarza do kontrolowanego transportu
+
+1. **Wykonano rdzeń i regresje offline; backend i adapter także już dodane, pozostają bramki operacyjne.** Protokół transferu części obiektu z planu: hash obiektu, długość, indeks/rozmiar części i hash części; limit części poniżej istniejącego limitu Storage 10 MiB.
+2. **Wykonano backend z osobnym audience i blokadą zapisu.** Potwierdzić jego rzeczywistą tożsamość i pobranie metadanych jobem inwentarza. Plan zatwierdza dozwolone obiekty; nie wolno przyjmować dowolnego URL/ścieżki. Żadnego publicznego uploadu ani service-role w Actions/przeglądarce.
+3. **Źródło HTTPS i lokalne wznowienie wykonane, źródła rzeczywiste jeszcze niesprawdzone.** Integracja klienta z backendem jest w kodzie i regresjach; rzeczywisty transfer nie został jeszcze uruchomiony. Obiekt istniejący musi zostać zweryfikowany, a nie pobrany ponownie w ciemno. Części nie oznaczają kompletnego pliku.
+4. **Regresje protokołu i podpisanej autoryzacji wykonane.** Pozostają rzeczywiste odpowiedzi nowego endpointu z poprawnym tokenem, dane Storage, limity operacyjne i test odtworzenia przed transferem oryginałów.
 5. Przed rzeczywistym dużym transferem potwierdzić dostępne miejsce, limity usług i sposób niezależnej kopii. Nie obiecywać nieskończonego ani wieczystego magazynu. Brak drugiej kopii nie może być raportowany jako backup PASS.
