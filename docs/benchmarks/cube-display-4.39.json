@@ -1,0 +1,352 @@
+{
+  "version": "4.39.0",
+  "reports": [
+    {
+      "device": "desktop",
+      "viewport": {
+        "width": 960,
+        "height": 600
+      },
+      "panels": [
+        {
+          "id": 69,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 5.5,
+            "z": 4.7,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 70,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5125,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 71,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5,
+            "z": 5.5125,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 72,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 4.7,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        }
+      ],
+      "closedTrapDistance": 2,
+      "doorStates": 32,
+      "modernStates": [
+        {
+          "id": 503,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 504,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 505,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 506,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 507,
+          "rayDistance": 1
+        },
+        {
+          "id": 508,
+          "rayDistance": 1
+        },
+        {
+          "id": 509,
+          "rayDistance": 1
+        },
+        {
+          "id": 510,
+          "rayDistance": 1
+        },
+        {
+          "id": 511,
+          "rayDistance": 1
+        },
+        {
+          "id": 512,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 513,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 514,
+          "rayDistance": 1
+        },
+        {
+          "id": 515,
+          "rayDistance": 1
+        },
+        {
+          "id": 516,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 517,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 518,
+          "rayDistance": 1
+        }
+      ],
+      "floorPlaced": 503,
+      "closedAgain": 503,
+      "ceilingPlaced": 507,
+      "matchedUVs": 504,
+      "referencePixelChannels": 1024,
+      "item": {
+        "mainHeight": 0.1875,
+        "offhandHeight": 0.1875,
+        "dropHeight": 0.1875,
+        "remoteHeight": 0.1875,
+        "poseVertices": 576,
+        "cubePoseVertices": 480,
+        "cubeFamilies": 5,
+        "uvPairs": 96,
+        "iconBounds": [
+          2,
+          21,
+          45,
+          47
+        ],
+        "holeChecks": 4,
+        "woodChecks": 44,
+        "opaque": 504,
+        "transparent": 1673
+      },
+      "errors": []
+    },
+    {
+      "device": "mobile",
+      "viewport": {
+        "width": 844,
+        "height": 390,
+        "isMobile": true,
+        "hasTouch": true
+      },
+      "panels": [
+        {
+          "id": 69,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 5.5,
+            "z": 4.7,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 70,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5125,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 71,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5,
+            "z": 5.5125,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 72,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 4.7,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        }
+      ],
+      "closedTrapDistance": 2,
+      "doorStates": 32,
+      "modernStates": [
+        {
+          "id": 503,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 504,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 505,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 506,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 507,
+          "rayDistance": 1
+        },
+        {
+          "id": 508,
+          "rayDistance": 1
+        },
+        {
+          "id": 509,
+          "rayDistance": 1
+        },
+        {
+          "id": 510,
+          "rayDistance": 1
+        },
+        {
+          "id": 511,
+          "rayDistance": 1
+        },
+        {
+          "id": 512,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 513,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 514,
+          "rayDistance": 1
+        },
+        {
+          "id": 515,
+          "rayDistance": 1
+        },
+        {
+          "id": 516,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 517,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 518,
+          "rayDistance": 1
+        }
+      ],
+      "floorPlaced": 503,
+      "closedAgain": 503,
+      "ceilingPlaced": 507,
+      "matchedUVs": 504,
+      "referencePixelChannels": 1024,
+      "item": {
+        "mainHeight": 0.1875,
+        "offhandHeight": 0.1875,
+        "dropHeight": 0.1875,
+        "remoteHeight": 0.1875,
+        "poseVertices": 576,
+        "cubePoseVertices": 480,
+        "cubeFamilies": 5,
+        "uvPairs": 96,
+        "iconBounds": [
+          2,
+          21,
+          45,
+          47
+        ],
+        "holeChecks": 4,
+        "woodChecks": 44,
+        "opaque": 504,
+        "transparent": 1673
+      },
+      "errors": []
+    }
+  ],
+  "headless": {
+    "groupsPassed": 37,
+    "transformedVertices": 480,
+    "families": 5
+  },
+  "reference": {
+    "version": "26.3",
+    "commit": "9073095a88699785bb1f63f8f86d33322711e4fd",
+    "manifest": ".harness/fixtures/java-cube-display-26.3/manifest.json"
+  },
+  "boundary": "Pinned local display data, not full renderer/arm animation or original client execution."
+}

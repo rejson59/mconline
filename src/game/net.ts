@@ -299,6 +299,8 @@ export interface NetLike {
   close(reason?: string): void;
   /** 2.19: zapis postępu gracza (tylko serwer publiczny). */
   saveProfile?(profile: PlayerProfile, force?: boolean): void;
+  profileRecoveryNotice?: string;
+  profileRecovery?(): { count: number; json: string };
   sharedContainers?: boolean;
   abortPreparedSharedAction?: () => void;
   exchangeSharedMobs?(regions: {d:'o'|'n';x:number;z:number}[], updates: import('./sharedMobs').MobUpdate[], position: {x:number;y:number;z:number;d:'o'|'n'}): Promise<import('./sharedMobs').MobExchange>;

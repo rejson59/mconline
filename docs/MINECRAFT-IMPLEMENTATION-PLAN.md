@@ -1,6 +1,6 @@
 # Plan wykonania: własna implementacja Minecraft Java w przeglądarce
 
-2026-11-07. Cel referencyjny: **Java 26.3** z `java-reference.lock.json`. Runtime projektu: **4.38.0**, z dotychczasową bazą porównań **1.20.4**. Nie ogłaszamy migracji do 26.3 ani zgodności całej gry na podstawie indeksu plików.
+2026-11-07. Cel referencyjny: **Java 26.3** z `java-reference.lock.json`. Runtime projektu: **4.39.0**, z dotychczasową bazą porównań **1.20.4**. Nie ogłaszamy migracji do 26.3 ani zgodności całej gry na podstawie indeksu plików.
 
 To plan wykonywania kodu, nie obietnica terminu pełnej zgodności. Duży projekt dzielimy na zakończone, testowalne odcinki. „Własna implementacja” nie oznacza wyrzucenia już przetestowanego silnika, kont i zapisów. Bazą pozostają TypeScript, Three.js i istniejące workery. Ewentualny WebAssembly wymaga pomiaru konkretnego wąskiego gardła, nie zmiany języka dla samej nazwy.
 
@@ -118,6 +118,11 @@ Poprzedni plan naprawiania kadru dłoni w pionie jest **wycofany**, nie pozostaj
 Dodano [pierwszy powtarzalny audyt](PARITY-PROGRESS.md): rzeczywiste rejestry runtime, porównanie zmapowanych receptur 26.3 i otwarty rejestr kryteriów/dowodów. Kalkulator zbiorczy nie publikuje fikcyjnego procentu z liczby działów. Procent pozostaje `null`, nie 0, przy niezamkniętym zakresie i nieskalibrowanych wagach. Hashy źródeł/nowych modułów pilnuje test offline w CI; pełna regeneracja wymaga zweryfikowanego cache. To narzędzie mierzenia, nie nowa mechanika gry i nie zamknięcie pełnego audytu zachowań. Runtime nadal 4.37.0; brak migracji/resetów. Następny runtime: pozy dłoni/dropu w poziomie.
 
 
-## Obecna porcja: pozy modelu włazu 4.38
+## Poprzednia porcja: pozy modelu włazu 4.38
 
 Wdrożono `firstperson_righthand`, `firstperson_lefthand`, `ground` oraz `thirdperson_righthand` z przypiętego łańcucha `thin_block` → `block`. Model w ręce zdalnego gracza zastępuje dawną złotą kostkę. Geometria i UV pozostają kanoniczne; fizyka dropów, podnoszenie, protokół i zapisy nie zmieniają się. To ustawienia lokalnego modelu, nie port całego renderera/animacji Java. [Dowody i granice](TRAPDOOR-POSES-4.38.md). Następne modele i pełne animacje pozostają otwarte.
+
+
+## Obecna porcja: bezpieczny powrót i dalsze modele 4.39
+
+Naprawiono zgłoszoną blokadę wejścia przy rozbieżnym lokalnym dzienniku: archiwizacja obu wersji przed użyciem zapisu serwera, `/kopie`, pełne porównanie ACK zamiast samego czasu i trwały identyfikator wyjścia. Zachowano CAS, oddzielny WAL skrzyń/mobów i ochronę kont. Dodano referencyjne pozy modeli kamienia, bruku, ziemi, dębowych desek i piasku w obu rękach, dropie i u zdalnych graczy. [Dowody i ograniczenia](SERVER-RECOVERY-4.39.md). Bez backendu/resetów; pełne animacje/renderowanie i pozostałe modele nadal otwarte.

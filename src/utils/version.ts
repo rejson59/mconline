@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.38.0';
-export const GAME_RELEASE_NAME = 'Właz we właściwej pozie';
+export const GAME_VERSION = '4.39.0';
+export const GAME_RELEASE_NAME = 'Bezpieczny powrót na serwer';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.39: bezpieczny powrót na serwer', text: 'Rozbieżna kopia ekwipunku nie blokuje już wejścia: gra zachowuje obie wersje i wczytuje aktualny zapis serwera, bez łączenia przedmiotów. /kopie pobiera kopie odzyskiwania. Poprawiono potwierdzenia zapisów i zamykanie strony. Kamień, bruk, ziemia, dębowe deski i piasek mają referencyjne pozy modelu w rękach, dropie i u innych graczy.' },
   { title: '4.38: właz we właściwej pozie', text: 'Dębowy właz używa referencyjnych obrotów, przesunięć i skali modelu w prawej i lewej ręce oraz jako drop. U innych graczy złotą kostkę zastąpił właściwy, teksturowany model włazu z pozą thirdperson. Zachowano fizykę, zapisy i podnoszenie; animacje ramienia/kamery pozostają projektowe.' },
   { title: '4.37: na telefonie tylko poziomo', text: 'Usunięto granie w pionie i zapamiętaną zgodę na ten tryb. Obrót zatrzymuje sterowanie; okna i przedmioty pozostają zachowane. Obróć telefon, aby wrócić, albo zapisz i wyjdź do menu. Multiplayer nie zatrzymuje serwera.' },
   { title: '4.36: cienki właz także jako przedmiot', text: 'W obu rękach, na ziemi i w ekwipunku dębowy właz jest płytą 3/16, nie pełnym sześcianem. Używa właściwych pasków UV; ikona dziedziczy obrót i skalę modelu odniesienia. Wszystkie stany świata dają jeden model przedmiotu. Bez zmiany fizyki, zapisów i zasad podnoszenia.' },

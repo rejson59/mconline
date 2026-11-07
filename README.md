@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.38.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.39.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.39.0 — bezpieczny powrót na serwer
+
+Rozbieżna niepotwierdzona kopia ekwipunku nie blokuje już wejścia: gra najpierw zachowuje obie wersje, potem wczytuje aktualny zapis serwera. Poprawiono potwierdzanie dwóch zmian w tej samej milisekundzie i utrwalanie końcowego zapisu; `/kopie` pobiera zachowane kopie bez zmiany ekwipunku. Bez czyszczenia danych, resetów i poluzowania CAS. Dodatkowo **kamień, bruk, ziemia, dębowe deski i piasek** otrzymały referencyjne ustawienia modeli w obu rękach, dropie i u innych graczy. [Testy i granice](docs/SERVER-RECOVERY-4.39.md).
 
 ## Wersja 4.38.0 — właz we właściwej pozie
 
@@ -8,7 +12,7 @@ W obu rękach i dropie dębowy właz używa odziedziczonych ustawień `display` 
 
 ## Jeden wspólny pasek drogi do 1:1
 
-Dodano [powtarzalny audyt postępu](docs/PARITY-PROGRESS.md), oparty na rzeczywistych rejestrach i przypiętej referencji 26.3. Pierwszy pomiar: **304 stany bloków, 124 przedmioty, 221 receptur i 14 typów mobów**. W jawnie zmapowanej części craftingu **23 definicje danych** odpowiadają referencji. To nie procent ukończenia całej gry. Wspólny procent pozostaje **nieustalony**, dopóki zakres i wagi nie będą rozliczone; nie jest liczony jako średnia z 20 działów ani liczba zielonych testów. Kontrola spójności raportu działa w CI. Sam audyt dodano przy runtime 4.37.0 bez zmiany rozgrywki; bieżącą zmianę 4.38 opisano powyżej.
+Dodano [powtarzalny audyt postępu](docs/PARITY-PROGRESS.md), oparty na rzeczywistych rejestrach i przypiętej referencji 26.3. Pierwszy pomiar: **304 stany bloków, 124 przedmioty, 221 receptur i 14 typów mobów**. W jawnie zmapowanej części craftingu **23 definicje danych** odpowiadają referencji. To nie procent ukończenia całej gry. Wspólny procent pozostaje **nieustalony**, dopóki zakres i wagi nie będą rozliczone; nie jest liczony jako średnia z 20 działów ani liczba zielonych testów. Kontrola spójności raportu działa w CI. Sam audyt dodano przy runtime 4.37.0 bez zmiany rozgrywki; bieżące zmiany opisano powyżej.
 
 ## Wersja 4.37.0 — na telefonie tylko poziomo
 

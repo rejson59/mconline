@@ -41,6 +41,7 @@ export const COMMAND_CATEGORIES: { id: CommandCategory; label: string; icon: str
  * najpierw to, po co gracz sięga najczęściej.
  */
 export const COMMANDS: CommandInfo[] = [
+  { name: 'kopie', aliases: ['backups'], usage: 'kopie', description: 'Pobiera zachowane kopie rozbieżnego postępu. Nie zmienia ekwipunku.', example: '/kopie', category: 'pomoc', keywords: ['zapis', 'odzyskiwanie', 'ekwipunek'] },
   { name: 'dzialka', aliases: ['działka', 'plot'], usage: 'dzialka <info|lista|zajmij|zwolnij>', description: 'Chronione działki: survival 16×16, Miasto budowniczych 32×32. Do czterech na klucz przeglądarki.', example: '/dzialka zajmij', category: 'świat', keywords: ['ochrona', 'teren', 'claim'] },
   {
     name: 'gamemode',

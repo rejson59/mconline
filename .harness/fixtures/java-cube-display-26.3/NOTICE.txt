@@ -1,0 +1,2 @@
+Minecraft item/model data copyright Mojang AB / Microsoft. NOT MIT.
+Pinned source and SHA-256: manifest.json. See public/Minecraft-NOTICE.txt.

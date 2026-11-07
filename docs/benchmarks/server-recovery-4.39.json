@@ -1,0 +1,37 @@
+{
+  "productionHTML": true,
+  "realProvider": true,
+  "mockedGateway": true,
+  "realWebLocks": true,
+  "renderPausedForConcurrentTabs": true,
+  "legacyOrphanRecoveredByConfirmedAction": true,
+  "confirmationCancelSendsNothing": true,
+  "reloadAfterDroppedLeave": true,
+  "freshGeneration": true,
+  "duplicatedTabBlocked": true,
+  "otherDeviceNotAutomaticallyReplaced": true,
+  "realEngineAt2FPSRegenerates": true,
+  "unacknowledgedInventoryRecovered": true,
+  "recoveredInventoryUploaded": true,
+  "secondDeviceInventoryRestored": true,
+  "finalCheckpointPayload": true,
+  "successfulFinalCheckpoint": true,
+  "uncertainCheckpointAckRecovered": true,
+  "staleBranchArchived": true,
+  "corruptBranchArchived": true,
+  "archiveExported": true,
+  "errors": [],
+  "version": "4.39.0",
+  "checkpointGroups": 28,
+  "baselineRegressionProbes": {
+    "head": "1adbed7c35aef54354a3bade267b195e1380448e",
+    "passed": 1,
+    "failed": 5
+  },
+  "fixedRegressionProbes": {
+    "passed": 6,
+    "failed": 0
+  },
+  "sharedBrowserChecks": 27,
+  "boundary": "Synthetic account/gateway; no real owner session, backend writes or migrations."
+}
