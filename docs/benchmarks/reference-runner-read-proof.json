@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "scope": "actual-private-probe-read-by-github-hosted-runner",
+  "run": {
+    "id": 42318667829,
+    "url": "https://github.com/rejson59/mconline/actions/runs/42318667829",
+    "attempt": 2,
+    "conclusion": "success",
+    "event": "workflow_dispatch",
+    "branch": "main",
+    "commit": "f3fd7217086aef4734082e8a57988ae6f636a601",
+    "actorID": "185239338",
+    "triggeringActorID": "185239338",
+    "completedAt": "2026-11-07T09:52:26Z"
+  },
+  "checkRunID": 128370776531,
+  "annotationTitle": "Private reference read proof",
+  "proof": {
+    "schema": 1,
+    "mode": "private-probe-read-only",
+    "analysisEnvironment": "github-hosted-runner",
+    "bytes": 79,
+    "sha256": "a46cc1a5248a3967c1b3ec5adccfcd83d86fdcc7fdeed200646d495b45c756b6",
+    "verified": true,
+    "storageWrites": false,
+    "originalsAccessTested": false,
+    "sandboxDirectAccess": false
+  },
+  "readerDeploymentVersion": 2,
+  "bucket": "mconline-reference-private",
+  "object": "probes/roundtrip-v1.txt",
+  "limits": [
+    "Only the fixed 79-byte probe was read; no Minecraft originals transferred.",
+    "No Storage writes or deletes by this job; no independent backup tested.",
+    "The runner read bytes; the Arena sandbox read the safe GitHub annotation, not Storage bytes.",
+    "The panel backend test is separate and its analysisPrivateReadVerified field is not updated by Actions."
+  ]
+}

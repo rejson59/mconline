@@ -12,13 +12,21 @@ a46cc1a5248a3967c1b3ec5adccfcd83d86fdcc7fdeed200646d495b45c756b6
 
 Obliczona niezależnie suma oczekiwanego tekstu jest identyczna. Odczyt metadanych Storage potwierdził prywatny bucket `mconline-reference-private`, limit 10 MiB i obiekt `probes/roundtrip-v1.txt` o rozmiarze 79 bajtów. Taki odczyt metadanych **nie pobiera zawartości** obiektu.
 
-[Pokwitowanie i metadane](benchmarks/reference-owner-probe-receipt.json) rozróżniają raport właściciela od obserwacji agenta. Pierwszy rzeczywisty test runnera zakończył się HTTP 403; pozytywny odczyt nadal pozostaje **niepotwierdzony** (szczegóły poniżej).
+[Pokwitowanie i metadane](benchmarks/reference-owner-probe-receipt.json) rozróżniają raport właściciela od obserwacji agenta. Pierwsza próba runnera zakończyła się HTTP 403. Po poprawce tożsamości OIDC właściciel ponowił zadanie: **próba 2 zakończyła się sukcesem rzeczywistego prywatnego odczytu** (szczegóły poniżej).
 
-## Następny krok na telefonie
+## Potwierdzony odczyt runnera
 
-Po wdrożeniu poprawki v2, scaleniu i zielonym CI najprościej otworzyć [poprzednie uruchomienie](https://github.com/rejson59/mconline/actions/runs/42318667829) i wybrać **Re-run failed jobs**. Skrypt klienta nie zmienił się; ponowienie otrzyma świeżą tożsamość. Napisz potem „uruchomione”.
+2026-11-07: [uruchomienie 42318667829, próba 2](https://github.com/rejson59/mconline/actions/runs/42318667829/attempts/2), zadanie `reference-private-read`, check `128370776531` — **SUCCESS**. Adnotacja **Private reference read proof** potwierdza `verified:true`, **79 bajtów** i SHA-256 zgodny z powyższym. `storageWrites:false`, `originalsAccessTested:false`, `sandboxDirectAccess:false`. Właściciel i wyzwalający: GitHub ID `185239338`, zdarzenie `workflow_dispatch`, gałąź `main`.
 
-Alternatywnie nowe uruchomienie:
+[Trwałe pokwitowanie odczytu](benchmarks/reference-runner-read-proof.json) zapisuje bezpieczną adnotację API, identyfikatory próby i ograniczenia dowodu. Runner rzeczywiście pobrał bajty i niezależnie sprawdził rozmiar, hash oraz nagłówek. Agent odczytał ten raport przez API GitHub, nie bajty bezpośrednio ze Storage. Ponowienie użyło starszego commita klienta `f3fd7217086aef4734082e8a57988ae6f636a601`; skrypt był niezmieniony i skontaktował się z poprawioną funkcją v2.
+
+**Nie trzeba ponawiać testu.** Kolejny etap to dopiero przygotowanie transportu dużych plików z wznawianiem, manifestami, sumami i niezależną kopią zapasową. Obecne endpointy nadal obsługują wyłącznie stały plik testowy, nie oryginały. Odczyt probe nie jest dowodem kompletności korpusu ani zgodności gry 1:1.
+
+## Opcjonalne powtórzenie na telefonie
+
+Aby kiedyś powtórzyć test, można otworzyć [poprzednie uruchomienie](https://github.com/rejson59/mconline/actions/runs/42318667829) i wybrać **Re-run failed jobs**. Skrypt klienta nie zmienił się; ponowienie otrzyma świeżą tożsamość. Napisz potem „uruchomione”.
+
+Alternatywnie można rozpocząć nowe uruchomienie:
 
 1. Otwórz [GitHub → Actions → CI](https://github.com/rejson59/mconline/actions/workflows/ci.yml).
 2. Wybierz **Run workflow**, gałąź **main**.
@@ -30,7 +38,7 @@ Nie potrzebujesz nowych haseł, tokenów, sekretów Actions ani pobierania plik�
 
 ## Pierwszy wynik i poprawka tożsamości OIDC
 
-[Uruchomienie 42318667829](https://github.com/rejson59/mconline/actions/runs/42318667829), zadanie `128237565631`: **HTTP 403**, bez dowodu odczytania bajtów. Zwykła weryfikacja CI przeszła, ale nie jest dowodem prywatnego odczytu.
+[Uruchomienie 42318667829](https://github.com/rejson59/mconline/actions/runs/42318667829), pierwsza próba, zadanie `128237565631`: **HTTP 403**, bez dowodu odczytania bajtów. Zwykła weryfikacja CI przeszła, ale nie jest dowodem prywatnego odczytu.
 
 Przyczyną niezgodności konfiguracji był oczekiwany przez nas stary format `sub`. Niezależny od kodu odczyt API konfiguracji repozytorium potwierdził `use_immutable_subject=true` i prefiks z identyfikatorami właściciela/repozytorium. [Obserwacja API i przypięta dokumentacja GitHuba](reference-oidc-trust.json) wskazują dokładnie:
 
@@ -40,7 +48,7 @@ repo:rejson59@185239338/mconline@1387893577:ref:refs/heads/main
 
 Wdrożona v2 wymaga wyłącznie tej wartości. Nie akceptuje równolegle starego formatu, nie zmienia konfiguracji OIDC repozytorium i zachowuje wszystkie pozostałe warunki podpisu, czasu, właściciela, repozytorium, workflow oraz brancha. Nie rejestrowano rzeczywistych tokenów.
 
-Wcześniejsze testy budowały `sub` z tej samej stałej co serwer, dlatego nie mogły wykryć błędnego założenia o konfiguracji zewnętrznej. Teraz poprawny podpisany token w testach używa niezależnie zaobserwowanej wartości z pokwitowania API. Dodatkowe regresje sprawdzają zgodność konfiguracji, akceptację ponowienia (`run_attempt=2`) oraz odrzucanie starego formatu i zmienionych identyfikatorów przed kontaktem ze Storage. Nadal **nie zastępuje to pozytywnego testu rzeczywistego runnera po poprawce**.
+Wcześniejsze testy budowały `sub` z tej samej stałej co serwer, dlatego nie mogły wykryć błędnego założenia o konfiguracji zewnętrznej. Teraz poprawny podpisany token w testach używa niezależnie zaobserwowanej wartości z pokwitowania API. Dodatkowe regresje sprawdzają zgodność konfiguracji, akceptację ponowienia (`run_attempt=2`) oraz odrzucanie starego formatu i zmienionych identyfikatorów przed kontaktem ze Storage. Testy lokalne nie zastępują rzeczywistego wyniku. Po poprawce niezależna próba 2 runnera przeszła, jak opisano wyżej.
 
 ## Nowa, wąska ścieżka odczytu
 
@@ -66,7 +74,7 @@ Po autoryzacji funkcja potwierdza, że bucket nadal jest prywatny. Pobiera maksy
 
 ## Zakres dowodu
 
-Pozytywny wynik oznacza **prywatny Storage → autoryzowana funkcja → GitHub-hosted runner**, z kontrolą integralności w obu miejscach. Agent odczytuje raport przez API GitHub. Nie oznacza to bezpośredniego dostępu sieciowego sandboxa do Storage.
+Uzyskany pozytywny wynik oznacza **prywatny Storage → autoryzowana funkcja → GitHub-hosted runner**, z kontrolą integralności w obu miejscach. Agent odczytuje raport przez API GitHub. Nie oznacza to bezpośredniego dostępu sieciowego sandboxa do Storage.
 
 To test jednego, niesekretnego pliku 79 bajtów. Nie udostępnia dowolnych oryginałów, nie jest uploadem, kopią zapasową ani dowodem poprawnego przetwarzania dużych plików. Panel `/testy/` nadal pokazuje wynik swojego testu backendu, a nie globalny stan osobnego workflow; jego pole `analysisPrivateReadVerified:false` nie jest aktualizowane przez samo uruchomienie Actions.
 
@@ -79,4 +87,4 @@ Oryginalny plik pozostaje w magazynie bez nadpisania i automatycznego kasowania.
 - 14 regresji offline, z **rzeczywistymi podpisami RSA** i syntetycznym JWKS: zły podpis/issuer/audience, token wygasły/przyszły/stary, brak claimów, obce repo/actor/ref/workflow/event, body/query/origin, publiczny bucket, ucięty/zmieniony plik, cache JWKS i świeży odczyt obiektu, kontekst joba i integralność po stronie klienta.
 - `npm test`: **25 839 sprawdzeń**; typecheck i build — PASS. Użyto nowego patcha Vite 7.3.7 i source-map-js 1.2.2, usuwających zgłoszone przez audit podatności narzędzi deweloperskich; `npm audit` dla całego drzewa — **0 podatności**. Brak aktualizacji major.
 - CI ma dodatkowe rzeczywiste negatywne kontrole endpointu: brak tożsamości zadania, fałszywa tożsamość, zwykły anon JWT Supabase i żądanie z przeglądarki. Nie odczytują pliku i nie używają rzeczywistych sesji użytkownika.
-- **Pozytywny test rzeczywistego OIDC i prywatnego odczytu w runnerze wymaga opisanej akcji właściciela.** Testy podpisów lokalnych i status ACTIVE nie zastępują tego wyniku.
+- **Pozytywny test rzeczywistego OIDC i prywatnego odczytu w runnerze: PASS**, uruchomienie `42318667829`, próba 2, check `128370776531`. To odrębny dowód od lokalnych podpisów, statusu ACTIVE i negatywnych kontroli CI.

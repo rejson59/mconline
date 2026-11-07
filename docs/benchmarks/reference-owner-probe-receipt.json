@@ -18,5 +18,7 @@
   },
   "expectedHashMatchesReport": true,
   "contentReadByAnalysisEnvironment": false,
-  "originalsTransferred": false
+  "originalsTransferred": false,
+  "snapshotBeforeRunnerRead": true,
+  "subsequentRunnerReadProof": "reference-runner-read-proof.json"
 }
