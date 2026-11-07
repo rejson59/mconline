@@ -12,11 +12,13 @@ a46cc1a5248a3967c1b3ec5adccfcd83d86fdcc7fdeed200646d495b45c756b6
 
 Obliczona niezależnie suma oczekiwanego tekstu jest identyczna. Odczyt metadanych Storage potwierdził prywatny bucket `mconline-reference-private`, limit 10 MiB i obiekt `probes/roundtrip-v1.txt` o rozmiarze 79 bajtów. Taki odczyt metadanych **nie pobiera zawartości** obiektu.
 
-[Pokwitowanie i metadane](benchmarks/reference-owner-probe-receipt.json) rozróżniają raport właściciela od obserwacji agenta. Do czasu uruchomienia poniższego zadania pozytywny test odczytu przez runner pozostaje **nieustalony**.
+[Pokwitowanie i metadane](benchmarks/reference-owner-probe-receipt.json) rozróżniają raport właściciela od obserwacji agenta. Pierwszy rzeczywisty test runnera zakończył się HTTP 403; pozytywny odczyt nadal pozostaje **niepotwierdzony** (szczegóły poniżej).
 
 ## Następny krok na telefonie
 
-Po scaleniu i zielonym CI:
+Po wdrożeniu poprawki v2, scaleniu i zielonym CI najprościej otworzyć [poprzednie uruchomienie](https://github.com/rejson59/mconline/actions/runs/42318667829) i wybrać **Re-run failed jobs**. Skrypt klienta nie zmienił się; ponowienie otrzyma świeżą tożsamość. Napisz potem „uruchomione”.
+
+Alternatywnie nowe uruchomienie:
 
 1. Otwórz [GitHub → Actions → CI](https://github.com/rejson59/mconline/actions/workflows/ci.yml).
 2. Wybierz **Run workflow**, gałąź **main**.
@@ -26,9 +28,23 @@ Po scaleniu i zielonym CI:
 
 Nie potrzebujesz nowych haseł, tokenów, sekretów Actions ani pobierania plików na telefon. Integracja Arena wcześniej otrzymała 403 na ręczny dispatch, dlatego nie powtarzamy próby ani nie zmieniamy triggera, aby obchodzić to ograniczenie.
 
+## Pierwszy wynik i poprawka tożsamości OIDC
+
+[Uruchomienie 42318667829](https://github.com/rejson59/mconline/actions/runs/42318667829), zadanie `128237565631`: **HTTP 403**, bez dowodu odczytania bajtów. Zwykła weryfikacja CI przeszła, ale nie jest dowodem prywatnego odczytu.
+
+Przyczyną niezgodności konfiguracji był oczekiwany przez nas stary format `sub`. Niezależny od kodu odczyt API konfiguracji repozytorium potwierdził `use_immutable_subject=true` i prefiks z identyfikatorami właściciela/repozytorium. [Obserwacja API i przypięta dokumentacja GitHuba](reference-oidc-trust.json) wskazują dokładnie:
+
+```text
+repo:rejson59@185239338/mconline@1387893577:ref:refs/heads/main
+```
+
+Wdrożona v2 wymaga wyłącznie tej wartości. Nie akceptuje równolegle starego formatu, nie zmienia konfiguracji OIDC repozytorium i zachowuje wszystkie pozostałe warunki podpisu, czasu, właściciela, repozytorium, workflow oraz brancha. Nie rejestrowano rzeczywistych tokenów.
+
+Wcześniejsze testy budowały `sub` z tej samej stałej co serwer, dlatego nie mogły wykryć błędnego założenia o konfiguracji zewnętrznej. Teraz poprawny podpisany token w testach używa niezależnie zaobserwowanej wartości z pokwitowania API. Dodatkowe regresje sprawdzają zgodność konfiguracji, akceptację ponowienia (`run_attempt=2`) oraz odrzucanie starego formatu i zmienionych identyfikatorów przed kontaktem ze Storage. Nadal **nie zastępuje to pozytywnego testu rzeczywistego runnera po poprawce**.
+
 ## Nowa, wąska ścieżka odczytu
 
-Osobna funkcja `mconline-reference-reader` (ACTIVE v1, ID `a1492d8f-4734-431c-ad41-792b0501c848`) ma tylko jedną zdolność: odczyt istniejącego pliku testowego. Nie przyjmuje ścieżki, treści, identyfikatora innego obiektu ani parametrów query. Nie zapisuje, nie tworzy bucketu, nie listuje i nie usuwa danych. Nie zmienia istniejącej funkcji panelu ani bramki gry.
+Osobna funkcja `mconline-reference-reader` (ACTIVE v2, ID `a1492d8f-4734-431c-ad41-792b0501c848`) ma tylko jedną zdolność: odczyt istniejącego pliku testowego. Nie przyjmuje ścieżki, treści, identyfikatora innego obiektu ani parametrów query. Nie zapisuje, nie tworzy bucketu, nie listuje i nie usuwa danych. Nie zmienia istniejącej funkcji panelu ani bramki gry.
 
 Autoryzacja nie korzysta z Twojej sesji strony ani service-role w GitHub. Ręcznie uruchomione zadanie otrzymuje krótkotrwały token tożsamości GitHub Actions OIDC. Serwer sprawdza podpis i czas ważności biblioteką **jose 6.2.15**, wyłącznie RS256, z kluczami pobieranymi ze stałego, zaufanego adresu GitHub. Nie ufa samemu rozkodowanemu payloadowi i nie pobiera kluczy z adresu podanego w JWT.
 
@@ -60,7 +76,7 @@ Oryginalny plik pozostaje w magazynie bez nadpisania i automatycznego kasowania.
 
 - Źródło: `supabase/functions/mconline-reference-reader/index.ts`.
 - Odtworzenie wdrażanego modułu: `node scripts/compile-reference-reader.mjs`; SHA i dokładna zależność npm w [reference-reader-build.json](benchmarks/reference-reader-build.json). Bez importowania kodu z ruchomego brancha GitHub.
-- 12 nowych regresji offline, z **rzeczywistymi podpisami RSA** i syntetycznym JWKS: zły podpis/issuer/audience, token wygasły/przyszły/stary, brak claimów, obce repo/actor/ref/workflow/event, body/query/origin, publiczny bucket, ucięty/zmieniony plik, cache JWKS i świeży odczyt obiektu, kontekst joba i integralność po stronie klienta.
-- `npm test`: **25 837 sprawdzeń**; typecheck i build — PASS. Użyto nowego patcha Vite 7.3.7 i source-map-js 1.2.2, usuwających zgłoszone przez audit podatności narzędzi deweloperskich; `npm audit` dla całego drzewa — **0 podatności**. Brak aktualizacji major.
+- 14 regresji offline, z **rzeczywistymi podpisami RSA** i syntetycznym JWKS: zły podpis/issuer/audience, token wygasły/przyszły/stary, brak claimów, obce repo/actor/ref/workflow/event, body/query/origin, publiczny bucket, ucięty/zmieniony plik, cache JWKS i świeży odczyt obiektu, kontekst joba i integralność po stronie klienta.
+- `npm test`: **25 839 sprawdzeń**; typecheck i build — PASS. Użyto nowego patcha Vite 7.3.7 i source-map-js 1.2.2, usuwających zgłoszone przez audit podatności narzędzi deweloperskich; `npm audit` dla całego drzewa — **0 podatności**. Brak aktualizacji major.
 - CI ma dodatkowe rzeczywiste negatywne kontrole endpointu: brak tożsamości zadania, fałszywa tożsamość, zwykły anon JWT Supabase i żądanie z przeglądarki. Nie odczytują pliku i nie używają rzeczywistych sesji użytkownika.
 - **Pozytywny test rzeczywistego OIDC i prywatnego odczytu w runnerze wymaga opisanej akcji właściciela.** Testy podpisów lokalnych i status ACTIVE nie zastępują tego wyniku.

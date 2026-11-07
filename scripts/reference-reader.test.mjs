@@ -36,6 +36,9 @@ const jwk = {
 };
 const content =
   "mconline reference storage probe v1\nNot a Minecraft asset. Never auto-deleted.\n";
+const observed = JSON.parse(
+  fs.readFileSync(new URL("docs/reference-oidc-trust.json", root)),
+);
 const claims = {
   repository: TRUST.repository,
   repository_id: TRUST.repositoryID,
@@ -43,7 +46,7 @@ const claims = {
   ref: "refs/heads/main",
   event_name: "workflow_dispatch",
   workflow_ref: TRUST.workflow,
-  sub: TRUST.subject,
+  sub: observed.expectedSubject,
   runner_environment: "github-hosted",
   run_id: "123456789",
   run_attempt: "1",
@@ -296,4 +299,37 @@ test("private read job only grants OIDC on explicit owner main dispatch, no arti
   assert.ok(part.includes("contents: read"));
   assert.ok(!part.includes("secrets."));
   assert.ok(!part.includes("upload-artifact"));
+});
+
+test("trust matches independently observed immutable repo OIDC configuration", () => {
+  assert.equal(observed.observedSettings.use_default, true);
+  assert.equal(observed.observedSettings.use_immutable_subject, true);
+  assert.equal(
+    observed.expectedSubject,
+    observed.observedSettings.sub_claim_prefix + ":ref:refs/heads/main",
+  );
+  assert.equal(TRUST.subject, observed.expectedSubject);
+  assert.equal(
+    TRUST.subject,
+    "repo:rejson59@185239338/mconline@1387893577:ref:refs/heads/main",
+  );
+  assert.equal(TRUST.repositoryID, observed.repositoryID);
+  assert.equal(TRUST.actorID, observed.ownerID);
+});
+test("signed rerun is allowed but legacy mutable and tampered immutable subjects are denied", async () => {
+  const rerun = fixture();
+  assert.equal(
+    (await rerun.run(await token({ run_attempt: "2" }))).status,
+    200,
+  );
+  for (const sub of [
+    "repo:rejson59/mconline:ref:refs/heads/main",
+    observed.expectedSubject.replace("@185239338", "@999"),
+    observed.expectedSubject.replace("@1387893577", "@999"),
+    observed.expectedSubject.replace("refs/heads/main", "refs/heads/other"),
+  ]) {
+    const f = fixture();
+    assert.equal((await f.run(await token({ sub }))).status, 403);
+    assert.equal(f.calls.filter((c) => c.url.includes("/storage/")).length, 0);
+  }
 });
