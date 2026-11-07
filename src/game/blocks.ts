@@ -148,6 +148,12 @@ export const B = {
   // 494–496 are charcoal/raw-metal items. Keep legacy south-facing IDs.
   FURNACE_N: 497, FURNACE_E: 498, FURNACE_W: 499,
   FURNACE_ON_N: 500, FURNACE_ON_E: 501, FURNACE_ON_W: 502,
+  // 4.34: append-only states; direction names describe the open panel edge,
+  // opposite to Java FACING. Legacy 68–72 retain their saved geometry.
+  TRAP_BOTTOM_N: 503, TRAP_BOTTOM_E: 504, TRAP_BOTTOM_S: 505, TRAP_BOTTOM_W: 506,
+  TRAP_TOP_N: 507, TRAP_TOP_E: 508, TRAP_TOP_S: 509, TRAP_TOP_W: 510,
+  TRAP_OPEN_BOTTOM_N: 511, TRAP_OPEN_BOTTOM_E: 512, TRAP_OPEN_BOTTOM_S: 513, TRAP_OPEN_BOTTOM_W: 514,
+  TRAP_OPEN_TOP_N: 515, TRAP_OPEN_TOP_E: 516, TRAP_OPEN_TOP_S: 517, TRAP_OPEN_TOP_W: 518,
 } as const;
 
 export type RenderType =
@@ -323,6 +329,10 @@ for (let i = 0; i < 4; i++) {
   def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 3, sound: 'wood', drop: B.TRAP, opaque: false });
 }
 def(B.TRAP, 'Właz', T.trapdoor, { hardness: 3, sound: 'wood', opaque: false });
+for (let state = 0; state < 16; state++) {
+  def(B.TRAP_BOTTOM_N + state, `Właz (${FACE_PL[state % 4]}, ${state & 4 ? 'górny' : 'dolny'}${state & 8 ? ', otwarty' : ''})`,
+    T.trapdoor, { hardness: 3, sound: 'wood', opaque: false, drop: B.TRAP });
+}
 def(B.FENCE, 'Płot', T.planks, { opaque: false, layer: 1, hardness: 2, sound: 'wood', render: 'fence' });
 def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { hardness: 2, sound: 'wood', opaque: false, layer: 1 });
 def(B.CAMPFIRE_OFF, 'Zgaszone ognisko', T.campfire_off, { hardness: 2, sound: 'wood', opaque: false, layer: 1, drop: B.CAMPFIRE });
@@ -445,14 +455,15 @@ def(B.LILY_PAD, 'Lilia wodna', T.lily_pad, { solid: false, opaque: false, layer:
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;
 
-// Fast lookup tables – expanded to 512 for 1.7 blocks
-export const IS_SOLID = new Uint8Array(512);
-export const IS_OPAQUE = new Uint8Array(512);
+// Size by the actual registry: append-only states can cross the old 511 limit.
+const BLOCK_TABLE_SIZE = Math.max(512, defs.length);
+export const IS_SOLID = new Uint8Array(BLOCK_TABLE_SIZE);
+export const IS_OPAQUE = new Uint8Array(BLOCK_TABLE_SIZE);
 // 2.8.1: liście są nieprzezroczyste dla siatki (żadnych wewnętrznych ścianek),
 // ale dla światła tylko tłumią je stopniowo – inaczej pień pod koroną był czarny.
-export const IS_LEAFY = new Uint8Array(512);
+export const IS_LEAFY = new Uint8Array(BLOCK_TABLE_SIZE);
 // Pełny okluder dla AO: liście cieniują, ale nie odcinają światła do zera.
-export const OCCLUDES = new Uint8Array(512);
+export const OCCLUDES = new Uint8Array(BLOCK_TABLE_SIZE);
 /**
  * 2.26: bloki, które zasłaniają CAŁĄ ścianę sąsiada (culling siatki).
  *
@@ -462,12 +473,12 @@ export const OCCLUDES = new Uint8Array(512);
  * (efekt x-ray w wioskach). Teraz cullujemy tylko wtedy, gdy kształt bloku
  * to naprawdę pełny sześcian.
  */
-export const CULLS = new Uint8Array(512);
-export const LAYER = new Uint8Array(512);
+export const CULLS = new Uint8Array(BLOCK_TABLE_SIZE);
+export const LAYER = new Uint8Array(BLOCK_TABLE_SIZE);
 // 0 cube, 1 cross, 2 liquid, 3 slab, 4 stairs, 5 portal, 6 rail,
 // 7 cactus, 8 bed, 9 fence, 10 torch, 11 lily pad, 12 chest,
 // 13 lantern, 14 bell, 15 brewing stand, 16 connecting glass pane
-export const RENDER = new Uint8Array(512);
+export const RENDER = new Uint8Array(BLOCK_TABLE_SIZE);
 for (const d of defs) {
   if (!d) continue;
   IS_SOLID[d.id] = d.solid ? 1 : 0;
@@ -497,7 +508,7 @@ for (const d of defs) {
 }
 
 /** Light level emitted by a block (0–15). Sampled while meshing, not stored in the save. */
-export const EMIT = new Uint8Array(512);
+export const EMIT = new Uint8Array(BLOCK_TABLE_SIZE);
 EMIT[B.LAVA] = 15;
 EMIT[B.GLOWSTONE] = 15;
 EMIT[B.TORCH] = 14;
@@ -544,13 +555,16 @@ function collisionFor(d: BlockDef): Float32Array | null {
   // wieko 5 px od y=9), więc i kolizja, i celownik muszą sięgać 14/16.
   if (d.render === 'chest') return new Float32Array([1 / 16, 0, 1 / 16, 15 / 16, 14 / 16, 15 / 16]);
   if (d.id === B.PATH) return new Float32Array([0, 0, 0, 1, 0.9375, 1]);
-  // Legacy trap states keep their saved orientation; physics and meshing share
-  // these exact 3/16 panels instead of treating open wings as empty air.
-  if (d.id === B.TRAP_N) return new Float32Array([0, 0, 0, 1, 1, 3 / 16]);
-  if (d.id === B.TRAP_E) return new Float32Array([13 / 16, 0, 0, 1, 1, 1]);
-  if (d.id === B.TRAP_S) return new Float32Array([0, 0, 13 / 16, 1, 1, 1]);
-  if (d.id === B.TRAP_W) return new Float32Array([0, 0, 0, 3 / 16, 1, 1]);
-  if (d.id === B.TRAP) return new Float32Array([0, 0.8125, 0, 1, 1, 1]);
+  if (isTrap(d.id)) {
+    if (!isTrapOpen(d.id)) return isTrapTop(d.id)
+      ? new Float32Array([0, 13 / 16, 0, 1, 1, 1])
+      : new Float32Array([0, 0, 0, 1, 3 / 16, 1]);
+    const f = trapFacing(d.id);
+    if (f === 0) return new Float32Array([0, 0, 0, 1, 1, 3 / 16]);
+    if (f === 1) return new Float32Array([13 / 16, 0, 0, 1, 1, 1]);
+    if (f === 2) return new Float32Array([0, 0, 13 / 16, 1, 1, 1]);
+    return new Float32Array([0, 0, 0, 3 / 16, 1, 1]);
+  }
   if (isLadder(d.id)) {
     const f = ladderFacing(d.id);
     const lt = 0.3125 / 16;
@@ -693,7 +707,7 @@ function creativeVisible(id: number): boolean {
   if (id >= B.DOOR_URN && id <= B.DOOR_URN + 3) return false;
   if (id >= B.DOOR_UORN && id <= B.DOOR_UORN + 3) return false;
   if (id >= B.LADDER_E && id <= B.LADDER_W) return false;
-  if (id >= B.TRAP_N && id <= B.TRAP_W) return false;
+  if (isTrap(id) && id !== B.TRAP) return false;
   if (id >= B.OAK_STAIRS_E && id <= B.OAK_STAIRS_W) return false;
   if (id >= B.COBBLE_STAIRS_E && id <= B.COBBLE_STAIRS_W) return false;
   if (id >= B.BRICK_STAIRS_E && id <= B.BRICK_STAIRS_W) return false;
@@ -804,10 +818,27 @@ export function isLadder(id: number): boolean {
 }
 
 export function isTrap(id: number): boolean {
-  return id === B.TRAP || (id >= B.TRAP_N && id <= B.TRAP_W);
+  return id === B.TRAP || (id >= B.TRAP_N && id <= B.TRAP_W) ||
+    (id >= B.TRAP_BOTTOM_N && id <= B.TRAP_OPEN_TOP_W);
 }
 export function isTrapOpen(id: number): boolean {
-  return id >= B.TRAP_N && id <= B.TRAP_W;
+  return (id >= B.TRAP_N && id <= B.TRAP_W) ||
+    (id >= B.TRAP_OPEN_BOTTOM_N && id <= B.TRAP_OPEN_TOP_W);
+}
+/** Legacy wings historically closed into the upper panel. */
+export function isTrapTop(id: number): boolean {
+  if (id >= B.TRAP && id <= B.TRAP_W) return true;
+  return isTrap(id) && !!((id - B.TRAP_BOTTOM_N) & 4);
+}
+/** Edge occupied by an open panel (N/E/S/W), not Java's opposite FACING.
+ * The legacy closed panel has no persisted orientation. */
+export function trapFacing(id: number): number {
+  if (id === B.TRAP) return -1;
+  if (id >= B.TRAP_N && id <= B.TRAP_W) return id - B.TRAP_N;
+  return isTrap(id) ? (id - B.TRAP_BOTTOM_N) % 4 : -1;
+}
+export function trapIdFor(facing: number, top: boolean, open = false): number {
+  return B.TRAP_BOTTOM_N + (facing & 3) + (top ? 4 : 0) + (open ? 8 : 0);
 }
 
 /** Horizontal facing from a face normal that points toward the player. */
@@ -871,6 +902,7 @@ export function stairsBoxesAt(
 /** Building variants are block states, never separate inventory items. */
 export function buildingItem(id: number): number {
   if (isFurnace(id)) return B.FURNACE;
+  if (isTrap(id)) return B.TRAP;
   if (id === B.CAMPFIRE_OFF) return B.CAMPFIRE;
   return isStairs(id) ? stairsBase(id) : isSlab(id) ? slabBase(id) : id;
 }

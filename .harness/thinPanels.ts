@@ -6,6 +6,8 @@ import {
   collisionBoxesAt,
   selectionBoxesAt,
   isTrapOpen,
+  trapIdFor,
+  trapFacing,
   CREATIVE_BLOCKS,
 } from "../src/game/blocks";
 import { World, Chunk } from "../src/game/world";
@@ -250,6 +252,8 @@ function useGame(w: World) {
     target: null,
     raycastTarget: () => g.target,
     findMobTarget: () => ({ mob: null }),
+    lookDir: () => new THREE.Vector3(0, 0, 1),
+    eyePos: () => new THREE.Vector3(5.5, 100.25, 5.5),
     consumeSelected() {
       consumed++;
     },
@@ -276,10 +280,11 @@ test("toggle via real use is one press, no consumed item, protection respected",
   g.target.id = id;
   g.mouseRight = true;
   g.tryUse();
-  assert.equal(w.getBlock(5, 100, 5), B.TRAP);
+  const closed = trapIdFor(trapFacing(id), true);
+  assert.equal(w.getBlock(5, 100, 5), closed);
   g.net = { public: true, canEdit: () => false };
   g.tryUse();
-  assert.equal(w.getBlock(5, 100, 5), B.TRAP);
+  assert.equal(w.getBlock(5, 100, 5), closed);
 });
 test("side placement permits gap, blocks panel/body intersection and spends nothing on refusal", () => {
   const w = fixture(),
@@ -287,13 +292,13 @@ test("side placement permits gap, blocks panel/body intersection and spends noth
   w.setBlock(4, 100, 5, B.STONE);
   inventory.slots[0] = { id: B.TRAP, count: 8 };
   g.target = { x: 4, y: 100, z: 5, id: B.STONE, nx: 1, ny: 0, nz: 0 };
-  g.body.pos.set(5.95, 100, 5.5);
+  g.body.pos.set(5.95, 100.3, 5.5);
   g.body.w = 0.1;
-  g.tryUse(); // legacy west side occupies x=0..3/16
-  assert.equal(w.getBlock(5, 100, 5), B.TRAP_W);
+  g.tryUse(); // new wall placement is a closed lower panel
+  assert.equal(w.getBlock(5, 100, 5), trapIdFor(3, false));
   assert.equal(count(), 1);
   w.setBlock(5, 100, 5, B.AIR);
-  g.body.pos.x = 5.1;
+  g.body.pos.y = 100.1;
   g.tryUse();
   assert.equal(w.getBlock(5, 100, 5), B.AIR);
   assert.equal(count(), 1);
@@ -317,7 +322,7 @@ for (const [nx, nz, id] of [
         body: {
           pos: new THREE.Vector3(
             5 + (box[0] + box[3]) / 2,
-            100.4,
+            100.05,
             5 + (box[2] + box[5]) / 2,
           ),
           w: 0.1,
@@ -330,7 +335,7 @@ for (const [nx, nz, id] of [
     assert.equal(count(), 0);
     g.mobs[0].dead = true;
     g.tryUse();
-    assert.equal(w.getBlock(5, 100, 5), id);
+    assert.equal(w.getBlock(5, 100, 5), trapIdFor(id - B.TRAP_N, false));
     assert.equal(count(), 1);
     w.setBlock(5, 100, 5, B.AIR);
     g.net = {
@@ -341,7 +346,7 @@ for (const [nx, nz, id] of [
     assert.equal(w.getBlock(5, 100, 5), B.AIR);
     assert.equal(count(), 1);
   });
-test("closed floor placement validates the actual upper panel, not full voxel", () => {
+test("closed floor placement validates the actual lower panel, not full voxel", () => {
   const w = fixture(),
     { g, inventory, count } = useGame(w);
   w.setBlock(5, 100, 5, B.STONE);
@@ -349,23 +354,23 @@ test("closed floor placement validates the actual upper panel, not full voxel", 
   g.target = { x: 5, y: 100, z: 5, id: B.STONE, nx: 0, ny: 1, nz: 0 };
   g.body = { pos: new THREE.Vector3(5.5, 101.2, 5.5), w: 0.1, h: 0.1 };
   g.tryUse();
-  assert.equal(w.getBlock(5, 101, 5), B.TRAP);
+  assert.equal(w.getBlock(5, 101, 5), trapIdFor(2, false));
   assert.equal(count(), 1);
   w.setBlock(5, 101, 5, B.AIR);
-  g.body.pos.y = 101.8;
+  g.body.pos.y = 101.1;
   g.tryUse();
   assert.equal(w.getBlock(5, 101, 5), B.AIR);
   assert.equal(count(), 1);
 });
-test("legacy underside placement stays refused without consuming or changing world", () => {
+test("underside placement now creates an upper panel", () => {
   const w = fixture(),
     { g, inventory, count } = useGame(w);
   w.setBlock(5, 100, 5, B.STONE);
   inventory.slots[0] = { id: B.TRAP, count: 8 };
   g.target = { x: 5, y: 100, z: 5, id: B.STONE, nx: 0, ny: -1, nz: 0 };
   g.tryUse();
-  assert.equal(w.getBlock(5, 99, 5), B.AIR);
-  assert.equal(count(), 0);
+  assert.equal(w.getBlock(5, 99, 5), trapIdFor(2, true));
+  assert.equal(count(), 1);
 });
 test("all five legacy IDs/drop identity/save values remain stable", () => {
   assert.deepEqual(ids, [68, 69, 70, 71, 72]);
