@@ -38,4 +38,9 @@ await denied('reference panel anonymous session',world,'/functions/v1/mconline-r
 await denied('reference panel invalid session, cross-project check',world,'/functions/v1/mconline-reference-storage',{op:'probe',token:'not-a-real-account-session-only-ci'});
 const refOrigin=await call(world,'/functions/v1/mconline-reference-storage',{op:'status'},{Origin:'https://rejson59.github.io.evil.invalid'});assert.equal(refOrigin.status,403);count++;console.log('PASS reference panel refuses lookalike origin');
 const refOptions=await call(world,'/functions/v1/mconline-reference-storage',undefined,{Origin:'https://rejson59.github.io','Access-Control-Request-Method':'POST'},'OPTIONS');assert.equal(refOptions.status,204);assert.equal(refOptions.headers.get('access-control-allow-origin'),'https://rejson59.github.io');count++;console.log('PASS reference panel preflight');
+for(const bearer of [undefined,'Bearer not-a-real-job-identity',`Bearer ${worldKey}`]){
+ const reader=await fetch(world+'/functions/v1/mconline-reference-reader',{method:'POST',headers:bearer?{Authorization:bearer}:{},signal:AbortSignal.timeout(30000)});
+ assert.equal(reader.status,401,'reference reader rejects missing/opaque/non-OIDC identity');await reader.arrayBuffer();count++;console.log('PASS reference reader denies non-job identity');
+}
+const readerBrowser=await call(world,'/functions/v1/mconline-reference-reader',undefined,{Origin:'https://rejson59.github.io'},'POST');assert.equal(readerBrowser.status,403);count++;console.log('PASS reference reader rejects browser access');
 console.log(`${count} deployed HTTP authorization checks passed (no real accounts, no persistent test writes)`);

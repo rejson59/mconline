@@ -2,6 +2,8 @@
 
 2026-11-07. To przygotowanie drogi do analizowania oryginalnych plików Java 26.3, **nie wdrożenie uploadu Minecrafta ani ukończonej zgodności 1:1**. Wersja silnika pozostaje 4.30.0.
 
+**Aktualizacja po teście właściciela:** zgłoszono pozytywny wynik 79 bajtów z oczekiwanym SHA-256. Odczyt metadanych potwierdził istnienie obiektu i prywatny bucket. Odczyt przez osobne środowisko analizy nadal wymaga [etapu 2](REFERENCE-PRIVATE-READ.md).
+
 ## Potwierdzono
 
 - Właściciel uruchomił ręcznie [CI 42314690988](https://github.com/rejson59/mconline/actions/runs/42314690988). Odczytano osobną adnotację zadania `reference-network`, nie tylko zielony status całego workflow.
@@ -59,6 +61,6 @@ Nawet sukces potwierdza **round-trip backend ↔ Storage**, nie odczyt przez san
 - Pełne `npm test`: **25 825 sprawdzeń**, typecheck/build — PASS. `npm audit --omit=dev`: 0 podatności.
 - Chromium desktop i emulowany mobile 390×844: status właściciela, test, ponowny odczyt, logout, brak poziomego przewijania; zero wyjątków. Obcy origin: zero pobrań helpera i zablokowany test. **Provider i backend w tym teście są syntetyczne, nie jest to test prawdziwej sesji właściciela ani Storage.** Raport: [benchmarks/reference-storage-ui.json](benchmarks/reference-storage-ui.json).
 - CI rozszerzono o rzeczywiste, niemutujące negatywne kontrole wdrożonej funkcji: brak tokenu, fałszywy token/cross-project, zły origin i preflight. Nie zapisują plików i nie używają prawdziwych sesji.
-- Pozytywny test na żywym koncie właściciela wymaga opisanych kliknięć. Do otrzymania wyniku pozostaje **niepotwierdzony**, mimo testów jednostkowych i statusu ACTIVE funkcji.
+- Właściciel wykonał test na żywym koncie i zgłosił sukces; raport ma 79 bajtów i SHA-256 zgodny z oczekiwanym. Niezależnie potwierdzono metadane obiektu i prywatny bucket. Nie oznacza to jeszcze odczytu bajtów przez środowisko analizy — to etap 2.
 
 Kontrola HTTP PR po poprawieniu wdrożenia: [CI 42316809139](https://github.com/rejson59/mconline/actions/runs/42316809139) — PASS, w tym brak sesji, nieprawidłowa sesja, zły origin i preflight nowej funkcji. To nadal nie zastępuje pozytywnego testu właściciela.

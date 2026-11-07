@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "scope": "owner-probe-receipt-and-metadata",
+  "reportedByOwner": {
+    "privateReadVerified": true,
+    "publicReadBlocked": true,
+    "created": true,
+    "bytes": 79,
+    "sha256": "a46cc1a5248a3967c1b3ec5adccfcd83d86fdcc7fdeed200646d495b45c756b6"
+  },
+  "observedMetadata": {
+    "bucket": "mconline-reference-private",
+    "public": false,
+    "fileSizeLimit": 10485760,
+    "object": "probes/roundtrip-v1.txt",
+    "bytes": 79,
+    "createdAt": "2026-11-07T00:17:27.339024Z"
+  },
+  "expectedHashMatchesReport": true,
+  "contentReadByAnalysisEnvironment": false,
+  "originalsTransferred": false
+}
