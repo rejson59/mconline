@@ -17,7 +17,8 @@ import { JavaPauseMenu as PauseMenu, JavaDeathScreen as DeathScreen, JavaPage, J
 import { ChatInput } from './ChatScreen';
 import TouchControls from './TouchControls';
 import OrientationGuard from './OrientationGuard';
-import { enterLandscapeMode } from '../utils/screen';
+import { useLandscapeRequired } from '../utils/useLandscapeRequired';
+import { portraitGameplayBlocked, enterLandscapeMode } from '../utils/screen';
 import {
   effectiveSettings,
   loadSettings,
@@ -54,6 +55,7 @@ export default function GameView({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
+  const portraitBlocked = useLandscapeRequired();
   const [hud, setHud] = useState<HUDState | null>(null);
   const [ui, setUi] = useState<UIState>('paused');
   const [settings, setSettings] = useState<Settings>(loadSettings);
@@ -128,6 +130,7 @@ export default function GameView({
     game.showFps = s.showFps;
     setVolume(s.volume);
     setSoundLevels(s.soundVolumes);
+    game.setOrientationBlocked(portraitGameplayBlocked());
     gameRef.current = game;
     // New console name; retain the legacy alias for existing diagnostic tools.
     const debug = window as unknown as { minecraft?: { game: Game }; blockcraft?: { game: Game } };
@@ -141,6 +144,10 @@ export default function GameView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    gameRef.current?.setOrientationBlocked(portraitBlocked);
+  }, [portraitBlocked]);
 
   // 2.0: każda zmiana ustawień trafia do silnika na żywo (bez restartu świata).
   useEffect(() => {
@@ -252,6 +259,7 @@ export default function GameView({
   const icons = game?.icons ?? {};
 
   const resume = () => {
+    if (portraitGameplayBlocked()) { void enterLandscapeMode(); return; }
     setStarted(true);
     gameRef.current?.setUI('playing');
     // 2.13: tapnięcie „Dotknij, aby grać” to gest użytkownika, więc właśnie
@@ -259,119 +267,108 @@ export default function GameView({
     if (touch) void enterLandscapeMode();
   };
 
-  // 2.13: poziom wymuszamy w grze i w oknach ze slotami. Czat, dziennik
-  // i pauza zostają wygodne także w pionie.
-  const wantsLandscape =
-    ui === 'playing' ||
-    ui === 'inventory' ||
-    ui === 'chest' ||
-    ui === 'furnace' ||
-    ui === 'anvil' ||
-    ui === 'enchant' ||
-    ui === 'brewing' ||
-    ui === 'trade';
-
   return (
     <div className="absolute inset-0">
-      <div ref={containerRef} className="absolute inset-0" />
-      {hud && game && ui !== 'dead' && (
-        <HUD
-          hud={hud}
-          chatSettings={settings}
-          chatOpen={ui === 'chat'}
-          icons={icons}
-          minimap={game.minimapCanvas}
-          touchControls={touch}
-          onSwapHands={() => game.swapHands()}
-          onSelectSlot={touch ? (i) => { if(game.sharedInputBlocked)return; game.selected = i; game.emitHud(); } : undefined}
-          onTpaAccept={() => { game.acceptTeleport(); }}
-          onTpaDeny={() => { game.denyTeleport(); }}
-        />
-      )}
-      {hud && ui === 'playing' && !hud.locked && !touch && (
-        <div className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 bg-black/50 px-4 py-2 text-xl mc-text">
-          {hud.lockCooldown ? 'Chwila… kliknij ponownie, aby przechwycić mysz' : 'Kliknij, aby kontynuować'}
-        </div>
-      )}
-      {game && ui === 'playing' && touch && (
-        <TouchControls
-          game={game}
-          settings={effective}
-          onInventory={() => game.openInventory(false)}
-          onPause={() => game.setUI('paused')}
-          onChat={() => {
-            setChatList(false);
-            game.setUI('chat');
-          }}
-          onWaypoints={() => game.setUI('waypoints')}
-        />
-      )}
-      {/* 2.32: tablet z klawiaturą/myszką Bluetooth – gra sama przeszła na
-          sterowanie komputerowe. Komunikat znika sam po 6 s. */}
-      {controlNotice && ui === 'playing' && (
-        <div
-          className="pointer-events-none absolute left-1/2 top-24 -translate-x-1/2 rounded bg-black/65 px-4 py-2 text-center text-sm text-white mc-text"
-          style={{ animation: 'fadeOut 6s forwards' }}
-        >
-          Wykryto klawiaturę i mysz – sterowanie komputerowe. Dotknij ekranu 3 razy, aby wrócić do dotyku.
-        </div>
-      )}
-      {/* 2.13: w grze wymuszamy poziom – w pionie HUD i sterowanie na siebie nachodzą. */}
-      {wantsLandscape && <OrientationGuard />}
-      {game && ui === 'inventory' && <InventoryScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'furnace' && <FurnaceScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'anvil' && <AnvilScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'brewing' && <BrewingScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
-      {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
-      {game && hud && ui === 'journal' && <JournalScreen hud={hud} unlocked={game.achievementIds()} onClose={() => game.setUI('playing')} />}
-      {game && ui === 'waypoints' && <WaypointsScreen game={game} onClose={() => game.setUI('playing')} />}
-      {game && ui === 'chat' && (
-        <ChatInput
-          onSubmit={(t) => game.command(t)}
-          onClose={() => game.setUI('playing')}
-          showListInitially={chatList}
-        />
-      )}
-      {game && ui === 'dead' && (
-        <DeathScreen
-          onRespawn={() => game.respawn()}
-          onQuit={() => {
-            game.health = 20;
-            game.body.pos.copy(game.spawnPoint);
-            onQuit();
-          }}
-        />
-      )}
-      {game && ui === 'paused' && !started && (
-        <JavaPage title="Dołączanie do świata" overlay>
-          <div className="java-centered" style={{ paddingTop: 45 }}><JavaButton onClick={resume}>{touch ? 'Dotknij, aby grać' : 'Dołącz do świata'}</JavaButton><p className="java-muted">{touch ? 'Sterowanie dotykowe' : 'Kliknięcie jest wymagane przez przeglądarkę do przechwycenia myszy.'}</p></div>
-        </JavaPage>
-      )}
-      {game && ui === 'paused' && started && (
-        <PauseMenu
-          settings={settings}
-          shareUrl={worldShareUrl(game.world.seed, game.mode)}
-          worldName={game.worldName}
-          unlocked={game.achievementIds()}
-          onSettings={setSettings}
-          onResume={resume}
-          onJournal={() => game.setUI('journal')}
-          onWaypoints={() => game.setUI('waypoints')}
-          onCommands={() => {
-            setChatList(true);
-            game.setUI('chat');
-          }}
-          onSave={() => game.save()}
-          onSkin={(id) => gameRef.current?.setSkin(id)}
-          session={hud?.players?.length ? { role: hud.netRole ?? 'host', players: hud.players } : null}
-          onQuit={() => {
-            game.save();
-            onQuit();
-          }}
-        />
-      )}
+      <div className="absolute inset-0" inert={portraitBlocked} aria-hidden={portraitBlocked || undefined} data-game-surface>
+        <div ref={containerRef} className="absolute inset-0" />
+        {hud && game && ui !== 'dead' && (
+          <HUD
+            hud={hud}
+            chatSettings={settings}
+            chatOpen={ui === 'chat'}
+            icons={icons}
+            minimap={game.minimapCanvas}
+            touchControls={touch}
+            onSwapHands={() => game.swapHands()}
+            onSelectSlot={touch ? (i) => { if(game.sharedInputBlocked)return; game.selected = i; game.emitHud(); } : undefined}
+            onTpaAccept={() => { game.acceptTeleport(); }}
+            onTpaDeny={() => { game.denyTeleport(); }}
+          />
+        )}
+        {hud && ui === 'playing' && !hud.locked && !touch && (
+          <div className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 bg-black/50 px-4 py-2 text-xl mc-text">
+            {hud.lockCooldown ? 'Chwila… kliknij ponownie, aby przechwycić mysz' : 'Kliknij, aby kontynuować'}
+          </div>
+        )}
+        {game && ui === 'playing' && touch && !portraitBlocked && (
+          <TouchControls
+            game={game}
+            settings={effective}
+            onInventory={() => game.openInventory(false)}
+            onPause={() => game.setUI('paused')}
+            onChat={() => {
+              setChatList(false);
+              game.setUI('chat');
+            }}
+            onWaypoints={() => game.setUI('waypoints')}
+          />
+        )}
+        {/* 2.32: tablet z klawiaturą/myszką Bluetooth – gra sama przeszła na
+            sterowanie komputerowe. Komunikat znika sam po 6 s. */}
+        {controlNotice && ui === 'playing' && (
+          <div
+            className="pointer-events-none absolute left-1/2 top-24 -translate-x-1/2 rounded bg-black/65 px-4 py-2 text-center text-sm text-white mc-text"
+            style={{ animation: 'fadeOut 6s forwards' }}
+          >
+            Wykryto klawiaturę i mysz – sterowanie komputerowe. Dotknij ekranu 3 razy, aby wrócić do dotyku.
+          </div>
+        )}
+        {game && ui === 'inventory' && <InventoryScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+        {game && ui === 'furnace' && <FurnaceScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+        {game && ui === 'chest' && <ChestScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+        {game && ui === 'enchant' && <EnchantScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+        {game && ui === 'anvil' && <AnvilScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+        {game && ui === 'brewing' && <BrewingScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+        {game && ui === 'trade' && <TradeScreen game={game} icons={icons} onChange={() => { game.saveProfileNow(false); game.emitHud(); force((n) => n + 1); }} />}
+        {game && hud && ui === 'journal' && <JournalScreen hud={hud} unlocked={game.achievementIds()} onClose={() => game.setUI('playing')} />}
+        {game && ui === 'waypoints' && <WaypointsScreen game={game} onClose={() => game.setUI('playing')} />}
+        {game && ui === 'chat' && (
+          <ChatInput
+            onSubmit={(t) => game.command(t)}
+            onClose={() => game.setUI('playing')}
+            showListInitially={chatList}
+          />
+        )}
+        {game && ui === 'dead' && (
+          <DeathScreen
+            onRespawn={() => game.respawn()}
+            onQuit={() => {
+              game.health = 20;
+              game.body.pos.copy(game.spawnPoint);
+              onQuit();
+            }}
+          />
+        )}
+        {game && ui === 'paused' && !started && (
+          <JavaPage title="Dołączanie do świata" overlay>
+            <div className="java-centered" style={{ paddingTop: 45 }}><JavaButton onClick={resume}>{touch ? 'Dotknij, aby grać' : 'Dołącz do świata'}</JavaButton><p className="java-muted">{touch ? 'Sterowanie dotykowe' : 'Kliknięcie jest wymagane przez przeglądarkę do przechwycenia myszy.'}</p></div>
+          </JavaPage>
+        )}
+        {game && ui === 'paused' && started && (
+          <PauseMenu
+            settings={settings}
+            shareUrl={worldShareUrl(game.world.seed, game.mode)}
+            worldName={game.worldName}
+            unlocked={game.achievementIds()}
+            onSettings={setSettings}
+            onResume={resume}
+            onJournal={() => game.setUI('journal')}
+            onWaypoints={() => game.setUI('waypoints')}
+            onCommands={() => {
+              setChatList(true);
+              game.setUI('chat');
+            }}
+            onSave={() => game.save()}
+            onSkin={(id) => gameRef.current?.setSkin(id)}
+            session={hud?.players?.length ? { role: hud.netRole ?? 'host', players: hud.players } : null}
+            onQuit={() => {
+              game.save();
+              onQuit();
+            }}
+          />
+        )}
+      </div>
+      <OrientationGuard onQuit={() => { game?.save(); onQuit(); }} />
     </div>
   );
 }

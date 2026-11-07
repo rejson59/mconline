@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.36.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.37.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.37.0 — na telefonie tylko poziomo
+
+Wycofano granie w pionie i zapamiętane obejście blokady. Obrót telefonu zatrzymuje sterowanie, a po powrocie do poziomu nie wznawia kopania ani ruchu samoczynnie. Otwarte okna i przedmioty pozostają zachowane; z komunikatu można zapisać i wrócić do menu. Menu i konto nadal dostępne w pionie. **28 nowych grup + produkcyjny Chromium dotyk/komputerowe sterowanie na telefonie; regresje modeli włazów w poziomie PASS.** Bez resetu i zmian backendu. [Wyniki i granice](docs/LANDSCAPE-4.37.md).
 
 ## Wersja 4.36.0 — cienki właz także jako przedmiot
 

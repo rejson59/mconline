@@ -1,3 +1,4 @@
+import { portraitGameplayBlocked } from '../utils/screen';
 import { trapdoorItemGeometry } from './trapdoorItem';
 import { CloudMotion } from './sky';
 import { bedItemGeometry, createBedItemMaterial } from './bedItem';
@@ -648,6 +649,7 @@ export class Game {
   private dimStash = { home: emptyStash(), nether: emptyStash() };
   mode: GameMode;
   ui: UIState = 'paused';
+  orientationBlocked = false;
   inventory = new Inventory();
   selected = 0;
   icons: Record<number, string>;
@@ -2556,7 +2558,7 @@ export class Game {
       this.locked = document.pointerLockElement === canvas;
       // A successful asynchronous request may arrive after a container opened.
       // Never leave a visible GUI routing mouse input to the world canvas.
-      if (this.locked && this.ui !== 'playing') {
+      if (this.locked && (this.orientationBlocked || portraitGameplayBlocked() || this.ui !== 'playing')) {
         document.exitPointerLock();
         return;
       }
@@ -2694,6 +2696,7 @@ export class Game {
     // 2.32: czytamy pola WPROST ze zdarzenia. `code`, `pointerType` i
     // `movementX` to gettery na prototypie, więc kopiowanie przez
     // `{ ...ev }` gubiłoby je i wykrywanie nigdy by nie zadziałało.
+    if (this.orientationBlocked) return;
     const kind = hardwareHint(ev);
     if (!kind) return;
     const now = performance.now();
@@ -2750,6 +2753,7 @@ export class Game {
   }
 
   private onKeyDown(e: KeyboardEvent) {
+    if (this.orientationBlocked || portraitGameplayBlocked()) return;
     if(this.sharedBusy){if(e.code==='Escape'){e.preventDefault();this.setUI('paused');}return;}
     if (this.ui === 'chat') return;
     // 2.5: Escape działa nawet, gdy fokus ma pole tekstowe (szukanie w
@@ -2853,7 +2857,7 @@ export class Game {
   }
 
   lockPointer() {
-    if (this.touchInput || this.ui !== 'playing') return;
+    if (this.orientationBlocked || portraitGameplayBlocked() || this.touchInput || this.ui !== 'playing') return;
     const c = this.renderer.domElement as HTMLCanvasElement & {
       requestPointerLock: (opts?: { unadjustedMovement?: boolean }) => unknown;
     };
@@ -2890,7 +2894,21 @@ export class Game {
     } catch { enableFallback(); }
   }
 
+  /** Landscape-only gameplay. Keep open containers/cursor intact; do not
+   * resume held actions automatically when the phone rotates back.
+   */
+  setOrientationBlocked(blocked: boolean) {
+    if (this.orientationBlocked === blocked) return;
+    this.orientationBlocked = blocked;
+    if (!blocked) return;
+    this.cancelActions();
+    this.sprinting = false;
+    if (this.ui === 'playing') this.setUI('paused');
+    try { if (document.pointerLockElement) document.exitPointerLock(); } catch { /* unsupported */ }
+  }
+
   setUI(s: UIState) {
+    if ((this.orientationBlocked || portraitGameplayBlocked()) && s !== 'paused' && s !== 'dead') return;
     if (this.sharedBusy && !this.sharedExecuting) { if (s === 'paused') { this.ui = s; this.onUI(s); } return; }
     this.wheelRemainder = 0;
     const prev = this.ui;
@@ -6896,7 +6914,7 @@ export class Game {
     }
     if (this.governor.tier !== this.appliedTier) this.applyPerfProfile(this.governor.profile);
 
-    const active = worldSimulationActive(this.ui, !!this.net);
+    const active = worldSimulationActive(this.orientationBlocked ? 'paused' : this.ui, !!this.net);
     if (active) {
       const sub = dt > 0.05 ? 2 : 1;
       for (let i = 0; i < sub; i++) this.updatePlayer(dt / sub);

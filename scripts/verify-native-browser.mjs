@@ -99,7 +99,7 @@ try {
     });
     await p.setViewport(
       device === "mobile"
-        ? { width: 390, height: 844, isMobile: true, hasTouch: true }
+        ? { width: 844, height: 390, isMobile: true, hasTouch: true }
         : { width: 960, height: 600 },
     );
     const init = await p.evaluateOnNewDocument((device) => {
@@ -163,11 +163,6 @@ try {
     await p.waitForFunction(() => !window.minecraft.game.meshWorker?.busy, {
       timeout: 15000,
     });
-    await p.evaluate(() =>
-      [...document.querySelectorAll("button")]
-        .find((e) => e.textContent?.trim() === "Graj w pionie mimo to")
-        ?.click(),
-    );
     await p.evaluate(
       ({ I }) => {
         const g = window.minecraft.game;
@@ -186,26 +181,6 @@ try {
     await p.waitForSelector(
       '[aria-label="Szukaj receptur po nazwie lub składniku"]',
     );
-    if (device === "mobile") {
-      await p.waitForFunction(
-        () =>
-          sessionStorage.getItem("blockcraft-portrait-ok") === "1" ||
-          [...document.querySelectorAll("button")].some(
-            (e) => e.textContent?.trim() === "Graj w pionie mimo to",
-          ),
-      );
-      await p.evaluate(() =>
-        [...document.querySelectorAll("button")]
-          .find((e) => e.textContent?.trim() === "Graj w pionie mimo to")
-          ?.click(),
-      );
-      await p.waitForFunction(
-        () =>
-          ![...document.querySelectorAll("button")].some(
-            (e) => e.textContent?.trim() === "Graj w pionie mimo to",
-          ),
-      );
-    }
     await p.type(
       '[aria-label="Szukaj receptur po nazwie lub składniku"]',
       "Kompas",

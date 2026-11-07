@@ -1,6 +1,6 @@
 # Plan wykonania: własna implementacja Minecraft Java w przeglądarce
 
-2026-11-07. Cel referencyjny: **Java 26.3** z `java-reference.lock.json`. Runtime projektu: **4.36.0**, z dotychczasową bazą porównań **1.20.4**. Nie ogłaszamy migracji do 26.3 ani zgodności całej gry na podstawie indeksu plików.
+2026-11-07. Cel referencyjny: **Java 26.3** z `java-reference.lock.json`. Runtime projektu: **4.37.0**, z dotychczasową bazą porównań **1.20.4**. Nie ogłaszamy migracji do 26.3 ani zgodności całej gry na podstawie indeksu plików.
 
 To plan wykonywania kodu, nie obietnica terminu pełnej zgodności. Duży projekt dzielimy na zakończone, testowalne odcinki. „Własna implementacja” nie oznacza wyrzucenia już przetestowanego silnika, kont i zapisów. Bazą pozostają TypeScript, Three.js i istniejące workery. Ewentualny WebAssembly wymaga pomiaru konkretnego wąskiego gardła, nie zmiany języka dla samej nazwy.
 
@@ -101,8 +101,14 @@ Właściwe paski 3 px i orientacja UV dębowego włazu według rzeczywistych rod
 4. **Regresje protokołu i podpisanej autoryzacji wykonane.** Poprawny token i rzeczywisty inwentarz są już potwierdzone. Pozostają transfer danych do Storage, limity operacyjne i test odtworzenia przed transferem oryginałów.
 5. Przed rzeczywistym dużym transferem potwierdzić dostępne miejsce, limity usług i sposób niezależnej kopii. Nie obiecywać nieskończonego ani wieczystego magazynu. Brak drugiej kopii nie może być raportowany jako backup PASS.
 
-## Obecna porcja: przedmiot włazu 4.36
+## Poprzednia porcja: przedmiot włazu 4.36
 
 Rzeczywista definicja `items/oak_trapdoor.json` wskazuje model dolny. Zamiast sześcianu geometria obu rąk i dropu używa płyty 3/16 z referencyjnymi UV; ikona korzysta z odziedziczonej rotacji/skali GUI i zachowuje otwory. **34 grupy / 504 pary UV**, rzeczywiste ścieżki ręka/offhand/drop i produkcyjny Chromium desktop/touch: PASS. Wszystkie 21 stanów ma ten sam kanoniczny przedmiot. [Zakres i ograniczenia](TRAPDOOR-ITEM-4.36.md).
 
 Następny odcinek: kadrowanie przedmiotów na pionowym ekranie oraz referencyjne pozy dłoni/ziemi; obecne pozy, skale i bobbing pozostały bez zmian. Testy geometrii na emulacji telefonu nie dowodzą widoczności całego trzymanego przedmiotu ani wydajności fizycznego telefonu. Pozostałe rodziny modeli, oświetlenie i porównanie z uruchomioną Javą nadal otwarte.
+
+## Obecna porcja: wycofanie pionowej rozgrywki 4.37
+
+Decyzja właściciela: **nie utrzymujemy możliwości grania w pionie**. Nakładka jest niepomijalna w całej sesji świata, stary klucz nie działa, wejście jest blokowane również w silniku. Obrót anuluje akcje; okna/kursor/grid pozostają nietknięte, SP jest wstrzymany, MP nie udaje pauzy serwera. Zawsze dostępny zapis i powrót do menu; menu/konto mogą pozostać w pionie. **28 grup + produkcyjny Chromium dla dotyku i komputerowego sterowania telefonu: PASS**, regresja modeli włazu również w poziomie. [Zakres i ograniczenia](LANDSCAPE-4.37.md).
+
+Poprzedni plan naprawiania kadru dłoni w pionie jest **wycofany**, nie pozostaje zadaniem. Kolejny odcinek: referencyjne pozy dłoni/ziemi i dalsze modele w poziomie; nie deklarujemy ich wdrożenia w 4.37.

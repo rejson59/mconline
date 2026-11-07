@@ -52,10 +52,9 @@ try {
     const context = await browser.createBrowserContext(), p = await context.newPage(), errors = [];
     p.on('pageerror', e => errors.push(e.message));
     p.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-    await p.setViewport(mobile ? { width: 390, height: 844, isMobile: true, hasTouch: true } : { width: 960, height: 600 });
+    await p.setViewport(mobile ? { width: 844, height: 390, isMobile: true, hasTouch: true } : { width: 960, height: 600 });
     await p.evaluateOnNewDocument(mobile => {
       localStorage.setItem('blockcraft-settings', JSON.stringify({ quality: 'potato', controlMode: mobile ? 'touch' : 'desktop', renderDistance: 2, volume: 0, lod: false, autoQuality: false, fpsCap: 30, fpsCapUserSet: true }));
-      sessionStorage.setItem('blockcraft-portrait-ok', '1');
       localStorage.setItem('blockcraft-saves-v2', JSON.stringify([{ id: 'report4283', name: 'Regression audit', seed: 4283, mode: 'creative', worldType: 'flat', mods: {}, pos: [4.5,65,8.5], yaw: 0, pitch: 0, inv: Array(36).fill(null), time: .75, health: 20, day: 1, updated: 1 }]));
     }, mobile);
     await p.goto(pathToFileURL(path.join(root, 'dist/index.html')).href, { waitUntil: 'domcontentloaded' });
@@ -63,7 +62,7 @@ try {
     await p.evaluate(() => document.querySelector('[role="option"]').click());
     await click(p, 'Graj w wybranym świecie');
     await p.waitForFunction(() => window.minecraft?.game?.loadingProgress >= .999, { timeout: 90000 });
-    await p.evaluate(() => { cancelAnimationFrame(window.minecraft.game.raf); [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Graj w pionie mimo to')?.click(); });
+    await p.evaluate(() => { cancelAnimationFrame(window.minecraft.game.raf); });
     await p.waitForFunction(() => !window.minecraft.game.meshWorker?.busy, { timeout: 15000 });
     const gameplay = await p.evaluate(({ B, I }) => {
       const g = window.minecraft.game;

@@ -75,7 +75,7 @@ try {
       if (m.type() === 'error') errors.push(m.text());
     });
     const viewport = mobile
-      ? { width: 390, height: 844, isMobile: true, hasTouch: true }
+      ? { width: 844, height: 390, isMobile: true, hasTouch: true }
       : { width: 960, height: 600 };
     await p.setViewport(viewport);
     await p.evaluateOnNewDocument((mobile) => {
@@ -155,11 +155,7 @@ try {
     await p.waitForFunction(() => !window.minecraft.game.meshWorker?.busy, {
       timeout: 15000,
     });
-    await p.evaluate(() =>
-      [...document.querySelectorAll('button')]
-        .find((e) => e.textContent?.trim() === 'Graj w pionie mimo to')
-        ?.click(),
-    );
+
     const report = await p.evaluate((B) => {
       const g = window.minecraft.game,
         w = g.world,
