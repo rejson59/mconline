@@ -13,6 +13,10 @@ on:
         description: 'Test połączenia z oryginalnymi plikami (bez uploadu)'
         type: boolean
         default: false
+      reference_private_read:
+        description: 'Odczyt prywatnego pliku testowego (79 bajtów, bez zapisu)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -59,3 +63,18 @@ jobs:
           node-version: 22
       - name: Probe official reference and Storage connectivity
         run: node scripts/probe-reference-network.mjs
+
+  reference-private-read:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.reference_private_read
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read and verify private probe using short-lived job identity
+        run: node scripts/read-reference-probe.mjs

@@ -19,7 +19,7 @@
     "build": "vite build && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs && node scripts/test-shared-state-sql.mjs && node scripts/test-shared-mobs-sql.mjs && node --test scripts/audit-java-reference.test.mjs scripts/probe-reference-network.test.mjs && node --test scripts/reference-storage.test.mjs",
+    "test": "node .harness/run.mjs && node --test scripts/portal-bootstrap.test.mjs scripts/account-bootstrap.test.mjs && node scripts/test-shared-state-sql.mjs && node scripts/test-shared-mobs-sql.mjs && node --test scripts/audit-java-reference.test.mjs scripts/probe-reference-network.test.mjs && node --test scripts/reference-storage.test.mjs && node --test scripts/reference-reader.test.mjs",
     "test:native": "node .harness/run.mjs native",
     "test:fire": "node .harness/run.mjs fire",
     "test:engine": "node .harness/run.mjs smoke",
@@ -54,7 +54,8 @@
     "test:reference": "node --test scripts/audit-java-reference.test.mjs",
     "test:reference:network": "node --test scripts/probe-reference-network.test.mjs",
     "test:reference:storage": "node --test scripts/reference-storage.test.mjs",
-    "test:browser:reference:storage": "node scripts/verify-reference-storage-browser.mjs"
+    "test:browser:reference:storage": "node scripts/verify-reference-storage-browser.mjs",
+    "test:reference:reader": "node --test scripts/reference-reader.test.mjs"
   },
   "dependencies": {
     "@fontsource/pixelify-sans": "^5.3.0",
@@ -74,6 +75,7 @@
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "5.1.1",
     "esbuild": "^0.28.2",
+    "jose": "6.2.15",
     "jsdom": "^26.1.0",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
