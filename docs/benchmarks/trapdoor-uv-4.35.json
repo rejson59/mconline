@@ -1,0 +1,389 @@
+{
+  "version": "4.35.0",
+  "reports": [
+    {
+      "device": "desktop",
+      "viewport": {
+        "width": 960,
+        "height": 600
+      },
+      "panels": [
+        {
+          "id": 69,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 5.5,
+            "z": 4.7,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 70,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5125,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 71,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5,
+            "z": 5.5125,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 72,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 4.7,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        }
+      ],
+      "closedTrapDistance": 2,
+      "doorStates": 32,
+      "modernStates": [
+        {
+          "id": 503,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 504,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 505,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 506,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 507,
+          "rayDistance": 1
+        },
+        {
+          "id": 508,
+          "rayDistance": 1
+        },
+        {
+          "id": 509,
+          "rayDistance": 1
+        },
+        {
+          "id": 510,
+          "rayDistance": 1
+        },
+        {
+          "id": 511,
+          "rayDistance": 1
+        },
+        {
+          "id": 512,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 513,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 514,
+          "rayDistance": 1
+        },
+        {
+          "id": 515,
+          "rayDistance": 1
+        },
+        {
+          "id": 516,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 517,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 518,
+          "rayDistance": 1
+        }
+      ],
+      "floorPlaced": 503,
+      "closedAgain": 503,
+      "ceilingPlaced": 507,
+      "matchedUVs": 504,
+      "referencePixelChannels": 1024,
+      "errors": []
+    },
+    {
+      "device": "mobile",
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "isMobile": true,
+        "hasTouch": true
+      },
+      "panels": [
+        {
+          "id": 69,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 5.5,
+            "z": 4.7,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 70,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5125,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 71,
+          "rayDistance": 1.8125,
+          "blocked": {
+            "x": 5.5,
+            "z": 5.5125,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 10.214523809533507,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": false
+          }
+        },
+        {
+          "id": 72,
+          "rayDistance": 1,
+          "blocked": {
+            "x": 4.7,
+            "z": 5.5,
+            "y": 65,
+            "hitWall": true
+          },
+          "gap": {
+            "x": 5.5,
+            "z": 10.214523809533507,
+            "y": 65,
+            "hitWall": false
+          }
+        }
+      ],
+      "closedTrapDistance": 2,
+      "doorStates": 32,
+      "modernStates": [
+        {
+          "id": 503,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 504,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 505,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 506,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 507,
+          "rayDistance": 1
+        },
+        {
+          "id": 508,
+          "rayDistance": 1
+        },
+        {
+          "id": 509,
+          "rayDistance": 1
+        },
+        {
+          "id": 510,
+          "rayDistance": 1
+        },
+        {
+          "id": 511,
+          "rayDistance": 1
+        },
+        {
+          "id": 512,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 513,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 514,
+          "rayDistance": 1
+        },
+        {
+          "id": 515,
+          "rayDistance": 1
+        },
+        {
+          "id": 516,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 517,
+          "rayDistance": 1.8125
+        },
+        {
+          "id": 518,
+          "rayDistance": 1
+        }
+      ],
+      "floorPlaced": 503,
+      "closedAgain": 503,
+      "ceilingPlaced": 507,
+      "matchedUVs": 504,
+      "referencePixelChannels": 1024,
+      "errors": []
+    }
+  ],
+  "scope": "Oak trapdoor world UV and cutout material; not full original-client image parity",
+  "checks": {
+    "groups": 73,
+    "matchedVertexPairs": 504,
+    "stateCount": 21,
+    "baselineUVGroups": {
+      "passed": 52,
+      "failed": 21
+    },
+    "stateGroups": 114,
+    "panelGroups": 62,
+    "fenceGroups": 79,
+    "movementGroups": 45,
+    "postgresChecks": 83,
+    "engineChecks": 16973,
+    "uiChecks": 409,
+    "typecheck": "PASS",
+    "fullTest": "PASS",
+    "build": "PASS",
+    "auditVulnerabilities": 0,
+    "cutoutLayer": 1,
+    "alphaTest": 0.5,
+    "rgbaChannelsCompared": 1024
+  },
+  "reference": {
+    "version": "26.3",
+    "repository": "InventivetalentDev/minecraft-assets",
+    "commit": "9073095a88699785bb1f63f8f86d33322711e4fd",
+    "boundary": "Pinned mirror assets, not an original executed client or full corpus; data/artwork NOT MIT.",
+    "files": [
+      {
+        "path": "assets/minecraft/blockstates/oak_trapdoor.json",
+        "bytes": 1728,
+        "sha256": "b272198a142dabae0939962b36bb775d9ce13382d09a911bae1d98cc4ca0e873"
+      },
+      {
+        "path": "assets/minecraft/models/block/oak_trapdoor_bottom.json",
+        "bytes": 125,
+        "sha256": "f572bf88b44001a252b240ded875098759c603c0628bda66bf52e80252216f22"
+      },
+      {
+        "path": "assets/minecraft/models/block/oak_trapdoor_top.json",
+        "bytes": 122,
+        "sha256": "b97d800615088b3f11ee457b350590908b1f881e3302e50f974eee1f4a36d461"
+      },
+      {
+        "path": "assets/minecraft/models/block/oak_trapdoor_open.json",
+        "bytes": 123,
+        "sha256": "443d31c055f9e1688b816db4572f3c123cf12166cf5f3617fe5ac33de3e6ab35"
+      },
+      {
+        "path": "assets/minecraft/models/block/template_trapdoor_bottom.json",
+        "bytes": 792,
+        "sha256": "c2418939d7d778b1cc0620edd11f12e34003d5b1667727267edb0255add972aa"
+      },
+      {
+        "path": "assets/minecraft/models/block/template_trapdoor_top.json",
+        "bytes": 760,
+        "sha256": "ed61498e04e694aa7e78516f2a171896219766b9dd7f461d111a4b54cb888202"
+      },
+      {
+        "path": "assets/minecraft/models/block/template_trapdoor_open.json",
+        "bytes": 765,
+        "sha256": "876a8d1fbcb822b6395749d9dae3a08c5f541944360c328e2917145fc3b63150"
+      },
+      {
+        "path": "assets/minecraft/textures/block/oak_trapdoor.png",
+        "bytes": 198,
+        "sha256": "7f2d78c69dcfb71d4900b974d40f6e334065f4e4c72aa36fe37ce034df9a2abd"
+      }
+    ]
+  },
+  "cornerConventionCheck": {
+    "repository": "mahtomedi/minecraft",
+    "commit": "6ac5fe18be48a7395be84148be051908111d6772",
+    "version": "1.20.3-pre1, historical sanity check only",
+    "path": "src/main/java/net/minecraft/client/renderer/FaceInfo.java",
+    "sha256": "4575bc607ce0ba4c20e42507d5f17942095b5ca4158919edfcb9d50c56dec334"
+  },
+  "limitations": [
+    "Pinned mirror models and PNG, not original 26.3 client execution",
+    "No full-scene lighting/AO/cullface parity or physical phone performance proof",
+    "Hand/item model, other trapdoor families, powered/waterlogging unchanged",
+    "No full original corpus transfer or archive backend change"
+  ],
+  "backendChanged": false,
+  "saveFormatChanged": false,
+  "collisionChanged": false
+}

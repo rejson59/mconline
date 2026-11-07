@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.34.0';
-export const GAME_RELEASE_NAME = 'Włazy z pamięcią kierunku i połowy';
+export const GAME_VERSION = '4.35.0';
+export const GAME_RELEASE_NAME = 'Włazy bez rozciągniętych tekstur';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.35: włazy bez rozciągniętych tekstur', text: 'Cienkie krawędzie dębowego włazu używają właściwych trzypikselowych pasków, zamiast rozciągniętej całej tekstury. Obrót otwartego skrzydła przenosi UV razem z modelem; górne/dolne powierzchnie mają właściwe odbicie. Otwory są wycinane zamiast rysowania czarnych pól. Porównano 504 narożniki z przypiętymi modelami 26.3. Bez zmiany stanów, fizyki i zapisów.' },
   { title: '4.34: włazy pamiętają kierunek i połowę', text: 'Właz można umieścić w dolnej lub górnej połowie, również pod sufitem. Otwieranie i zamykanie zachowuje kierunek oraz połowę, a usunięcie podparcia nie niszczy włazu. Stare zapisane płyty pozostają na miejscu; nowe stany działają także w multiplayerze. Bez resetu światów.' },
   { title: '4.33: włazy i drzwi bez pustych trafień', text: 'Otwarte włazy zatrzymują na cienkim skrzydle, a celownik, obrys i pękanie drzwi oraz włazów śledzą rzeczywistą płytę. Stawianie sprawdza gracza i moby bez zużycia po odmowie. Przytrzymanie użycia nie przełącza włazu z powrotem. Bez zmiany ID i resetu zapisów; pełne stany włazów pozostają otwarte.' },
   { title: '4.32: płoty bez niewidzialnej kratki', text: 'Kolizja płotu obejmuje słupek i połączone ramiona, nie pełną kratkę. Ten sam układ sąsiadów steruje szczeblami i fizyką; celownik i pękanie śledzą kształt do wysokości jednego bloku. Stawianie chroni też przed nowym ramieniem sąsiedniego płotu. Bez resetu zapisów.' },

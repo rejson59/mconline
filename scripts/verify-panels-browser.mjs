@@ -37,15 +37,18 @@ if (!fs.existsSync(libs)) {
 }
 const output = path.join(
   root,
-  process.env.BROWSER_TRAPS
-    ? ".cache/verification434"
-    : ".cache/verification433",
+  process.env.BROWSER_TRAP_UV
+    ? ".cache/verification435"
+    : process.env.BROWSER_TRAPS
+      ? ".cache/verification434"
+      : ".cache/verification433",
 );
 fs.mkdirSync(output, { recursive: true });
 const enums = path.join(output, "blocks.mjs");
 await build({
   stdin: {
-    contents: "export {B} from './src/game/blocks';",
+    contents:
+      "export {B,T} from './src/game/blocks'; export { trapdoorReference } from './.harness/trapdoorReference'; export { decodePng } from './src/game/art/miniPng';",
     resolveDir: root,
     loader: "ts",
   },
@@ -54,7 +57,29 @@ await build({
   platform: "node",
   outfile: enums,
 });
-const { B } = await import(pathToFileURL(enums).href);
+const { B, T, trapdoorReference, decodePng } = await import(
+  pathToFileURL(enums).href
+);
+const expectedUVs = [
+  68,
+  69,
+  70,
+  71,
+  72,
+  ...Array.from({ length: 16 }, (_, i) => 503 + i),
+].map((id) => ({ id, vertices: [...trapdoorReference(id).out] }));
+const pixels = Array.from(
+  decodePng(
+    fs
+      .readFileSync(
+        path.join(
+          root,
+          ".harness/fixtures/java-trapdoor-26.3/assets/minecraft/textures/block/oak_trapdoor.png",
+        ),
+      )
+      .toString("base64"),
+  ).data,
+);
 const version = JSON.parse(
   fs.readFileSync(path.join(root, "package.json"), "utf8"),
 ).version;
@@ -165,251 +190,331 @@ try {
         .find((e) => e.textContent?.trim() === "Graj w pionie mimo to")
         ?.click(),
     );
-    const report = await p.evaluate((B) => {
-      const g = window.minecraft.game,
-        w = g.world,
-        y = 65;
-      g.ui = "playing";
-      g.autoJump = false;
-      g.flying = false;
-      g.mobs = [];
-      for (let x = 2; x <= 16; x++)
-        for (let z = 3; z <= 11; z++)
-          for (let h = 64; h <= 69; h++)
-            w.setBlock(x, h, z, h === 64 ? B.STONE : B.AIR);
-      const panels = [];
-      const walk = (axis, parallel = false) => {
-        g.body.pos.set(parallel ? 5.5 : 4, y, parallel ? 4 : 5.5);
-        if (axis === 2)
-          g.body.pos.set(parallel ? 4 : 5.5, y, parallel ? 5.5 : 4);
-        g.body.vel.set(0, 0, 0);
-        g.body.onGround = true;
-        g.yaw = 0;
-        g.keys.clear();
-        g.keys.add((axis === 0) !== parallel ? "KeyD" : "KeyS");
-        for (let i = 0; i < 90; i++) g.updatePlayer(1 / 60);
-        g.keys.clear();
-        return {
-          x: g.body.pos.x,
-          z: g.body.pos.z,
-          y: g.body.pos.y,
-          hitWall: g.body.hitWall,
+    const report = await p.evaluate(
+      ({ B, T, expectedUVs, pixels }) => {
+        const g = window.minecraft.game,
+          w = g.world,
+          y = 65;
+        g.ui = "playing";
+        g.autoJump = false;
+        g.flying = false;
+        g.mobs = [];
+        for (let x = 2; x <= 16; x++)
+          for (let z = 3; z <= 11; z++)
+            for (let h = 64; h <= 69; h++)
+              w.setBlock(x, h, z, h === 64 ? B.STONE : B.AIR);
+        const panels = [];
+        const walk = (axis, parallel = false) => {
+          g.body.pos.set(parallel ? 5.5 : 4, y, parallel ? 4 : 5.5);
+          if (axis === 2)
+            g.body.pos.set(parallel ? 4 : 5.5, y, parallel ? 5.5 : 4);
+          g.body.vel.set(0, 0, 0);
+          g.body.onGround = true;
+          g.yaw = 0;
+          g.keys.clear();
+          g.keys.add((axis === 0) !== parallel ? "KeyD" : "KeyS");
+          for (let i = 0; i < 90; i++) g.updatePlayer(1 / 60);
+          g.keys.clear();
+          return {
+            x: g.body.pos.x,
+            z: g.body.pos.z,
+            y: g.body.pos.y,
+            hitWall: g.body.hitWall,
+          };
         };
-      };
-      for (const [id, axis, lo] of [
-        [B.TRAP_N, 2, 0],
-        [B.TRAP_E, 0, 13 / 16],
-        [B.TRAP_S, 2, 13 / 16],
-        [B.TRAP_W, 0, 0],
-      ]) {
-        w.setBlock(5, y, 5, id);
-        const origin = [5.5, y + 0.5, 5.5],
-          direction = [0, 0, 0];
-        origin[axis] = 4;
-        direction[axis] = 1;
-        const hit = w.raycast(...origin, ...direction, 3);
-        if (hit?.id !== id || Math.abs(hit.dist - 1 - lo) > 1e-6)
-          throw Error("Wing ray misses actual surface");
-        const tangent = axis === 0 ? 2 : 0;
-        origin[axis] = 5.5;
-        origin[tangent] = 4;
-        direction[axis] = 0;
-        direction[tangent] = 1;
-        if (w.raycast(...origin, ...direction, 3))
-          throw Error("Empty trap cell blocks targeting");
-        const blocked = walk(axis),
-          gap = walk(axis, true),
-          position = axis === 0 ? blocked.x : blocked.z;
-        if (Math.abs(position - (5 + lo - 0.3)) > 0.001 || !blocked.hitWall)
-          throw Error("Walking through open wing " + JSON.stringify(blocked));
-        if ((axis === 0 ? gap.z : gap.x) < 6.5 || Math.abs(gap.y - y) > 0.001)
-          throw Error("Trap gap blocks movement");
-        g.updateBuildingTarget(id, 5, y, 5);
-        g.selection.geometry.computeBoundingBox();
-        const bounds = g.selection.geometry.boundingBox;
-        if (
-          Math.abs(
-            (axis === 0
-              ? bounds.max.x - bounds.min.x
-              : bounds.max.z - bounds.min.z) -
-              (3 / 16) * 1.004,
-          ) > 1e-5
-        )
-          throw Error("Trap outline remains cube");
-        panels.push({ id, rayDistance: hit.dist, blocked, gap });
-      }
-      w.setBlock(5, y, 5, B.TRAP);
-      const closed = w.raycast(5.5, y + 3, 5.5, 0, -1, 0, 4);
-      if (closed?.id !== B.TRAP || Math.abs(closed.dist - 2) > 1e-6)
-        throw Error("Closed trap top target mismatch");
-      // All facing/hinge/half/open combinations must target the visible slab.
-      let doors = 0;
-      for (const base of [
-        B.DOOR_N,
-        B.DOOR_ON,
-        B.DOOR_UN,
-        B.DOOR_UON,
-        B.DOOR_RN,
-        B.DOOR_ORN,
-        B.DOOR_URN,
-        B.DOOR_UORN,
-      ])
-        for (let f = 0; f < 4; f++) {
-          const id = base + f;
+        for (const [id, axis, lo] of [
+          [B.TRAP_N, 2, 0],
+          [B.TRAP_E, 0, 13 / 16],
+          [B.TRAP_S, 2, 13 / 16],
+          [B.TRAP_W, 0, 0],
+        ]) {
           w.setBlock(5, y, 5, id);
-          g.updateBuildingTarget(id, 5, y, 5);
-          g.selection.geometry.computeBoundingBox();
-          const b = g.selection.geometry.boundingBox,
-            axis = b.max.x - b.min.x < 0.5 ? 0 : 2,
-            tangent = axis === 0 ? 2 : 0;
           const origin = [5.5, y + 0.5, 5.5],
             direction = [0, 0, 0];
           origin[axis] = 4;
           direction[axis] = 1;
-          if (w.raycast(...origin, ...direction, 3)?.id !== id)
-            throw Error("Door panel unselectable");
+          const hit = w.raycast(...origin, ...direction, 3);
+          if (hit?.id !== id || Math.abs(hit.dist - 1 - lo) > 1e-6)
+            throw Error("Wing ray misses actual surface");
+          const tangent = axis === 0 ? 2 : 0;
           origin[axis] = 5.5;
           origin[tangent] = 4;
           direction[axis] = 0;
           direction[tangent] = 1;
           if (w.raycast(...origin, ...direction, 3))
-            throw Error("Door gap still selected");
+            throw Error("Empty trap cell blocks targeting");
+          const blocked = walk(axis),
+            gap = walk(axis, true),
+            position = axis === 0 ? blocked.x : blocked.z;
+          if (Math.abs(position - (5 + lo - 0.3)) > 0.001 || !blocked.hitWall)
+            throw Error("Walking through open wing " + JSON.stringify(blocked));
+          if ((axis === 0 ? gap.z : gap.x) < 6.5 || Math.abs(gap.y - y) > 0.001)
+            throw Error("Trap gap blocks movement");
+          g.updateBuildingTarget(id, 5, y, 5);
+          g.selection.geometry.computeBoundingBox();
+          const bounds = g.selection.geometry.boundingBox;
           if (
             Math.abs(
-              (axis === 0 ? b.max.x - b.min.x : b.max.z - b.min.z) -
+              (axis === 0
+                ? bounds.max.x - bounds.min.x
+                : bounds.max.z - bounds.min.z) -
                 (3 / 16) * 1.004,
             ) > 1e-5
           )
-            throw Error("Door outline remains cube");
-          doors++;
+            throw Error("Trap outline remains cube");
+          panels.push({ id, rayDistance: hit.dist, blocked, gap });
         }
-      const modernStates = [];
-      for (let state = 0; state < 16; state++) {
-        const id = B.TRAP_BOTTOM_N + state,
-          open = !!(state & 8),
-          top = !!(state & 4),
-          face = state % 4,
-          axis = open ? (face % 2 ? 0 : 2) : 1;
-        w.setBlock(5, y, 5, id);
-        g.updateBuildingTarget(id, 5, y, 5);
-        g.selection.geometry.computeBoundingBox();
-        const b = g.selection.geometry.boundingBox;
-        if (
-          Math.abs(
-            b.max.getComponent(axis) -
-              b.min.getComponent(axis) -
-              (3 / 16) * 1.004,
-          ) > 1e-5
-        )
-          throw Error("New state outline missing " + id);
-        const origin = [5.5, y + 0.5, 5.5],
-          direction = [0, 0, 0];
-        origin[axis] = axis === 1 ? y + 2 : 4;
-        direction[axis] = axis === 1 ? -1 : 1;
-        const hit = w.raycast(...origin, ...direction, 3);
-        const expected =
-          axis === 1
-            ? top
-              ? 1
-              : 2 - 3 / 16
-            : 1 + (face === 1 || face === 2 ? 13 / 16 : 0);
-        if (hit?.id !== id || Math.abs(hit.dist - expected) > 1e-5)
-          throw Error("New state ray missing " + id);
-        if (open) {
-          const blocked = walk(axis),
-            gap = walk(axis, true),
-            expectedContact =
-              5 + (face === 1 || face === 2 ? 13 / 16 : 0) - 0.3;
+        w.setBlock(5, y, 5, B.TRAP);
+        const closed = w.raycast(5.5, y + 3, 5.5, 0, -1, 0, 4);
+        if (closed?.id !== B.TRAP || Math.abs(closed.dist - 2) > 1e-6)
+          throw Error("Closed trap top target mismatch");
+        // All facing/hinge/half/open combinations must target the visible slab.
+        let doors = 0;
+        for (const base of [
+          B.DOOR_N,
+          B.DOOR_ON,
+          B.DOOR_UN,
+          B.DOOR_UON,
+          B.DOOR_RN,
+          B.DOOR_ORN,
+          B.DOOR_URN,
+          B.DOOR_UORN,
+        ])
+          for (let f = 0; f < 4; f++) {
+            const id = base + f;
+            w.setBlock(5, y, 5, id);
+            g.updateBuildingTarget(id, 5, y, 5);
+            g.selection.geometry.computeBoundingBox();
+            const b = g.selection.geometry.boundingBox,
+              axis = b.max.x - b.min.x < 0.5 ? 0 : 2,
+              tangent = axis === 0 ? 2 : 0;
+            const origin = [5.5, y + 0.5, 5.5],
+              direction = [0, 0, 0];
+            origin[axis] = 4;
+            direction[axis] = 1;
+            if (w.raycast(...origin, ...direction, 3)?.id !== id)
+              throw Error("Door panel unselectable");
+            origin[axis] = 5.5;
+            origin[tangent] = 4;
+            direction[axis] = 0;
+            direction[tangent] = 1;
+            if (w.raycast(...origin, ...direction, 3))
+              throw Error("Door gap still selected");
+            if (
+              Math.abs(
+                (axis === 0 ? b.max.x - b.min.x : b.max.z - b.min.z) -
+                  (3 / 16) * 1.004,
+              ) > 1e-5
+            )
+              throw Error("Door outline remains cube");
+            doors++;
+          }
+        const modernStates = [];
+        for (let state = 0; state < 16; state++) {
+          const id = B.TRAP_BOTTOM_N + state,
+            open = !!(state & 8),
+            top = !!(state & 4),
+            face = state % 4,
+            axis = open ? (face % 2 ? 0 : 2) : 1;
+          w.setBlock(5, y, 5, id);
+          g.updateBuildingTarget(id, 5, y, 5);
+          g.selection.geometry.computeBoundingBox();
+          const b = g.selection.geometry.boundingBox;
           if (
-            Math.abs((axis === 0 ? blocked.x : blocked.z) - expectedContact) >
-              0.001 ||
-            !blocked.hitWall
+            Math.abs(
+              b.max.getComponent(axis) -
+                b.min.getComponent(axis) -
+                (3 / 16) * 1.004,
+            ) > 1e-5
           )
-            throw Error("New wing lacks physics " + id);
-          if ((axis === 0 ? gap.z : gap.x) < 6.5)
-            throw Error("New wing gap blocks player " + id);
+            throw Error("New state outline missing " + id);
+          const origin = [5.5, y + 0.5, 5.5],
+            direction = [0, 0, 0];
+          origin[axis] = axis === 1 ? y + 2 : 4;
+          direction[axis] = axis === 1 ? -1 : 1;
+          const hit = w.raycast(...origin, ...direction, 3);
+          const expected =
+            axis === 1
+              ? top
+                ? 1
+                : 2 - 3 / 16
+              : 1 + (face === 1 || face === 2 ? 13 / 16 : 0);
+          if (hit?.id !== id || Math.abs(hit.dist - expected) > 1e-5)
+            throw Error("New state ray missing " + id);
+          if (open) {
+            const blocked = walk(axis),
+              gap = walk(axis, true),
+              expectedContact =
+                5 + (face === 1 || face === 2 ? 13 / 16 : 0) - 0.3;
+            if (
+              Math.abs((axis === 0 ? blocked.x : blocked.z) - expectedContact) >
+                0.001 ||
+              !blocked.hitWall
+            )
+              throw Error("New wing lacks physics " + id);
+            if ((axis === 0 ? gap.z : gap.x) < 6.5)
+              throw Error("New wing gap blocks player " + id);
+          }
+          modernStates.push({ id, rayDistance: hit.dist });
         }
-        modernStates.push({ id, rayDistance: hit.dist });
-      }
-      // Actual player eye/aim and production tryUse: no substituted target ray.
-      w.setBlock(5, y, 5, B.AIR);
-      g.aimDir = null;
-      g.inventory.offhand = null;
-      g.inventory.slots.fill(null);
-      g.inventory.slots[0] = { id: B.TRAP, count: 8 };
-      g.selected = 0;
-      g.body.pos.set(12.5, y, 8);
-      g.body.vel.set(0, 0, 0);
-      g.yaw = 0;
-      g.pitch = -Math.atan2(g.eyeHeight, 2.5);
-      g.updateCamera(0.016);
-      const floorTarget = g.raycastTarget();
-      if (floorTarget?.ny !== 1 || floorTarget.x !== 12 || floorTarget.z !== 5)
-        throw Error("Floor placement ray wrong");
-      g.tryUse();
-      const floorPlaced = w.getBlock(12, y, 5);
-      if (floorPlaced !== B.TRAP_BOTTOM_N)
-        throw Error("Floor did not place closed lower trap");
-      g.tryUse();
-      if (w.getBlock(12, y, 5) !== B.TRAP_OPEN_BOTTOM_N)
-        throw Error("Floor trap lost half on opening");
-      g.pitch = -Math.atan2(g.eyeHeight - 0.5, 8 - (5 + 3 / 16));
-      g.updateCamera(0.016);
-      if (g.raycastTarget()?.id !== B.TRAP_OPEN_BOTTOM_N)
-        throw Error("Cannot aim at rotated lower wing");
-      g.tryUse();
-      const closedAgain = w.getBlock(12, y, 5);
-      if (closedAgain !== floorPlaced)
-        throw Error("Lower trap lost direction/half on closing");
-      w.setBlock(14, y + 2, 5, B.STONE);
-      g.body.pos.set(14.5, y, 8);
-      g.pitch = Math.atan2(2 - g.eyeHeight, 2.5);
-      g.updateCamera(0.016);
-      const ceilingTarget = g.raycastTarget();
-      if (
-        ceilingTarget?.ny !== -1 ||
-        ceilingTarget.x !== 14 ||
-        ceilingTarget.z !== 5
-      )
-        throw Error("Ceiling placement ray wrong");
-      g.tryUse();
-      const ceilingPlaced = w.getBlock(14, y + 1, 5);
-      if (ceilingPlaced !== B.TRAP_TOP_N)
-        throw Error("Underside did not place upper trap");
-      w.setBlock(12, y, 5, B.AIR);
-      w.setBlock(14, y + 1, 5, B.AIR);
-      w.setBlock(14, y + 2, 5, B.AIR);
-      g.inventory.slots.fill(null);
-      w.setBlock(5, y, 5, B.AIR);
-      w.setBlock(6, y, 5, B.TRAP_BOTTOM_N);
-      w.setBlock(7, y, 5, B.TRAP_TOP_E);
-      w.setBlock(8, y, 5, B.TRAP_OPEN_BOTTOM_S);
-      w.setBlock(9, y, 5, B.TRAP_OPEN_TOP_W);
-      w.setBlock(10, y, 5, B.TRAP_TOP_N);
-      w.setBlock(8, y, 7, B.DOOR_N);
-      w.setBlock(8, y + 1, 7, B.DOOR_UN);
-      g.body.pos.set(7.5, y, 10.5);
-      g.body.vel.set(0, 0, 0);
-      g.yaw = 0;
-      g.pitch = -0.35;
-      g.updateCamera(0.016);
-      g.buildChunk(0, 0);
-      g.buildChunk(1, 0);
-      g.emitHud();
-      g.updateBuildingTarget(B.TRAP_OPEN_BOTTOM_S, 8, y, 5);
-      g.selection.position.set(8.5, y + 0.5, 5.5);
-      g.selection.visible = true;
-      g.firstPerson.render(g.renderer, g.scene, g.camera);
-      return {
-        panels,
-        closedTrapDistance: closed.dist,
-        doorStates: doors,
-        modernStates,
-        floorPlaced,
-        closedAgain,
-        ceilingPlaced,
-      };
-    }, B);
+        // Actual player eye/aim and production tryUse: no substituted target ray.
+        w.setBlock(5, y, 5, B.AIR);
+        g.aimDir = null;
+        g.inventory.offhand = null;
+        g.inventory.slots.fill(null);
+        g.inventory.slots[0] = { id: B.TRAP, count: 8 };
+        g.selected = 0;
+        g.body.pos.set(12.5, y, 8);
+        g.body.vel.set(0, 0, 0);
+        g.yaw = 0;
+        g.pitch = -Math.atan2(g.eyeHeight, 2.5);
+        g.updateCamera(0.016);
+        const floorTarget = g.raycastTarget();
+        if (
+          floorTarget?.ny !== 1 ||
+          floorTarget.x !== 12 ||
+          floorTarget.z !== 5
+        )
+          throw Error("Floor placement ray wrong");
+        g.tryUse();
+        const floorPlaced = w.getBlock(12, y, 5);
+        if (floorPlaced !== B.TRAP_BOTTOM_N)
+          throw Error("Floor did not place closed lower trap");
+        g.tryUse();
+        if (w.getBlock(12, y, 5) !== B.TRAP_OPEN_BOTTOM_N)
+          throw Error("Floor trap lost half on opening");
+        g.pitch = -Math.atan2(g.eyeHeight - 0.5, 8 - (5 + 3 / 16));
+        g.updateCamera(0.016);
+        if (g.raycastTarget()?.id !== B.TRAP_OPEN_BOTTOM_N)
+          throw Error("Cannot aim at rotated lower wing");
+        g.tryUse();
+        const closedAgain = w.getBlock(12, y, 5);
+        if (closedAgain !== floorPlaced)
+          throw Error("Lower trap lost direction/half on closing");
+        w.setBlock(14, y + 2, 5, B.STONE);
+        g.body.pos.set(14.5, y, 8);
+        g.pitch = Math.atan2(2 - g.eyeHeight, 2.5);
+        g.updateCamera(0.016);
+        const ceilingTarget = g.raycastTarget();
+        if (
+          ceilingTarget?.ny !== -1 ||
+          ceilingTarget.x !== 14 ||
+          ceilingTarget.z !== 5
+        )
+          throw Error("Ceiling placement ray wrong");
+        g.tryUse();
+        const ceilingPlaced = w.getBlock(14, y + 1, 5);
+        if (ceilingPlaced !== B.TRAP_TOP_N)
+          throw Error("Underside did not place upper trap");
+        w.setBlock(12, y, 5, B.AIR);
+        w.setBlock(14, y + 1, 5, B.AIR);
+        w.setBlock(14, y + 2, 5, B.AIR);
+        g.inventory.slots.fill(null);
+        w.setBlock(5, y, 5, B.AIR);
+        let matchedUVs = 0;
+        for (const { id, vertices } of expectedUVs) {
+          w.setBlock(5, 90, 5, id);
+          const meshes = w.buildMesh(w.getChunk(0, 0));
+          try {
+            const ref = new Map(vertices);
+            let count = 0;
+            for (const [layer, mesh] of meshes.entries()) {
+              const p = mesh.getAttribute("position"),
+                uv = mesh.getAttribute("uv"),
+                f = mesh.getAttribute("aFace");
+              if (!p) continue;
+              for (let i = 0; i < p.count; i++) {
+                if (
+                  p.getX(i) < 5 ||
+                  p.getX(i) > 6 ||
+                  p.getY(i) < 90 ||
+                  p.getY(i) > 91 ||
+                  p.getZ(i) < 5 ||
+                  p.getZ(i) > 6
+                )
+                  continue;
+                const key =
+                  f.getX(i) +
+                  ":" +
+                  [p.getX(i) - 5, p.getY(i) - 90, p.getZ(i) - 5]
+                    .map((n) => Math.round(n * 65536))
+                    .join(",");
+                if (layer !== 1 || g.materials[layer].alphaTest !== 0.5)
+                  throw Error("Trap holes use opaque material");
+                const point = ref.get(key);
+                if (!point)
+                  throw Error("Unmatched trap vertex " + id + " " + key);
+                const [u, v] = point,
+                  eps = 0.0004,
+                  U =
+                    ((T.trapdoor % 16) + u / 16) / 16 +
+                    (u === 0 ? eps : u === 16 ? -eps : 0),
+                  V =
+                    1 -
+                    (Math.floor(T.trapdoor / 16) + v / 16) / 16 +
+                    (v === 0 ? -eps : v === 16 ? eps : 0);
+                if (
+                  Math.abs(uv.getX(i) - U) > 2e-6 ||
+                  Math.abs(uv.getY(i) - V) > 2e-6
+                )
+                  throw Error("Reference UV mismatch " + id + " " + key);
+                matchedUVs++;
+                count++;
+              }
+            }
+            if (count !== 24)
+              throw Error("Missing trap vertices " + id + " " + count);
+          } finally {
+            meshes.forEach((m) => m.dispose());
+            w.setBlock(5, 90, 5, B.AIR);
+          }
+        }
+        const atlasPixels = g.atlasTex.image
+          .getContext("2d")
+          .getImageData(
+            (T.trapdoor % 16) * 16,
+            Math.floor(T.trapdoor / 16) * 16,
+            16,
+            16,
+          ).data;
+        if (
+          atlasPixels.length !== pixels.length ||
+          pixels.some((v, i) => v !== atlasPixels[i])
+        )
+          throw Error("Production atlas differs from reference PNG");
+        w.setBlock(6, y, 5, B.TRAP_BOTTOM_N);
+        w.setBlock(7, y, 5, B.TRAP_TOP_E);
+        w.setBlock(8, y, 5, B.TRAP_OPEN_BOTTOM_S);
+        w.setBlock(9, y, 5, B.TRAP_OPEN_TOP_W);
+        w.setBlock(10, y, 5, B.TRAP_TOP_N);
+        w.setBlock(8, y, 7, B.DOOR_N);
+        w.setBlock(8, y + 1, 7, B.DOOR_UN);
+        g.body.pos.set(7.5, y, 10.5);
+        g.body.vel.set(0, 0, 0);
+        g.yaw = 0;
+        g.pitch = -0.35;
+        g.updateCamera(0.016);
+        g.buildChunk(0, 0);
+        g.buildChunk(1, 0);
+        g.emitHud();
+        g.updateBuildingTarget(B.TRAP_OPEN_BOTTOM_S, 8, y, 5);
+        g.selection.position.set(8.5, y + 0.5, 5.5);
+        g.selection.visible = true;
+        g.firstPerson.render(g.renderer, g.scene, g.camera);
+        return {
+          panels,
+          closedTrapDistance: closed.dist,
+          doorStates: doors,
+          modernStates,
+          floorPlaced,
+          closedAgain,
+          ceilingPlaced,
+          matchedUVs,
+          referencePixelChannels: pixels.length,
+        };
+      },
+      { B, T, expectedUVs, pixels },
+    );
     if (errors.length) throw Error(JSON.stringify(errors));
     const device = mobile ? "mobile" : "desktop";
     await p.screenshot({ path: path.join(output, device + ".png") });

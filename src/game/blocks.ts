@@ -326,12 +326,12 @@ for (let i = 0; i < 4; i++) {
   def(B.DOOR_URN + i, `Górne drzwi (zawias z prawej, ${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, opaque: false, layer: 1 });
   def(B.DOOR_UORN + i, `Otwarte górne drzwi (zawias z prawej, ${FACE_PL[i]})`, T.door_top, { hardness: 3, sound: 'wood', drop: -1, opaque: false, layer: 1 });
   def(B.LADDER_N + i, i === 0 ? 'Drabina' : `Drabina (${FACE_PL[i]})`, T.ladder, { solid: false, opaque: false, layer: 1, hardness: 0.4, sound: 'wood', drop: B.LADDER_N });
-  def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 3, sound: 'wood', drop: B.TRAP, opaque: false });
+  def(B.TRAP_N + i, `Otwarty właz (${FACE_PL[i]})`, T.trapdoor, { hardness: 3, sound: 'wood', drop: B.TRAP, opaque: false, layer: 1 });
 }
-def(B.TRAP, 'Właz', T.trapdoor, { hardness: 3, sound: 'wood', opaque: false });
+def(B.TRAP, 'Właz', T.trapdoor, { hardness: 3, sound: 'wood', opaque: false, layer: 1 });
 for (let state = 0; state < 16; state++) {
   def(B.TRAP_BOTTOM_N + state, `Właz (${FACE_PL[state % 4]}, ${state & 4 ? 'górny' : 'dolny'}${state & 8 ? ', otwarty' : ''})`,
-    T.trapdoor, { hardness: 3, sound: 'wood', opaque: false, drop: B.TRAP });
+    T.trapdoor, { hardness: 3, sound: 'wood', opaque: false, drop: B.TRAP, layer: 1 });
 }
 def(B.FENCE, 'Płot', T.planks, { opaque: false, layer: 1, hardness: 2, sound: 'wood', render: 'fence' });
 def(B.CAMPFIRE, 'Ognisko', [T.campfire, T.campfire_side, T.campfire_side], { hardness: 2, sound: 'wood', opaque: false, layer: 1 });

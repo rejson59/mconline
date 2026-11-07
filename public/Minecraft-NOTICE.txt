@@ -139,3 +139,14 @@ SHA-256/byte manifest: .harness/fixtures/java-refinements-1.20.4/manifest.json
 Embedded data: src/game/art/javaRefinements.generated.ts, javaRecipes.generated.ts.
 Reproduction: scripts/sync-java-refinements.py; no runtime downloads.
 Original artwork/data remain Mojang/Microsoft property and are NOT MIT.
+
+4.35 oak trapdoor model/UV reference fixtures (NOT MIT):
+Pinned Java 26.3 mirror commit: 9073095a88699785bb1f63f8f86d33322711e4fd
+Repository: InventivetalentDev/minecraft-assets
+Files: .harness/fixtures/java-trapdoor-26.3/assets/minecraft/
+  blockstates/oak_trapdoor.json; models/block/oak_trapdoor_{bottom,top,open}.json;
+  models/block/template_trapdoor_{bottom,top,open}.json; textures/block/oak_trapdoor.png.
+These small test-only model/blockstate data and artwork files belong to
+Mojang/Microsoft, not the project's MIT code license. They are not bundled
+into the game. The existing embedded oak texture is unchanged; its pixels
+are compared against the pinned reference. No new rights are granted.
