@@ -1,3 +1,4 @@
+import { trapdoorItemGeometry } from './trapdoorItem';
 import { CloudMotion } from './sky';
 import { bedItemGeometry, createBedItemMaterial } from './bedItem';
 import { itemBox, itemCrop } from './itemShape';
@@ -462,6 +463,7 @@ interface Bobber {
 }
 
 export function blockGeometry(id: number): THREE.BufferGeometry {
+  if (isTrap(id)) return trapdoorItemGeometry((u,v) => tileUVRect(tileFor(B.TRAP,0), [0,0,16,16], u/16, 1-v/16));
   if (isBed(id)) return bedItemGeometry();
   if (isChestBlock(id)) return closedChestGeometry();
   if (isStairs(id) || isSlab(id)) return buildingBlockGeometry(id);

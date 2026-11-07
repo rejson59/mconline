@@ -1,0 +1,3 @@
+Minecraft item/model reference data are copyright Mojang AB / Microsoft.
+NOT covered by the project MIT code license. No redistribution rights granted.
+Pinned source/hashes: manifest.json. See public/Minecraft-NOTICE.txt.

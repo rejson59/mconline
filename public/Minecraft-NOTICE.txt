@@ -150,3 +150,13 @@ These small test-only model/blockstate data and artwork files belong to
 Mojang/Microsoft, not the project's MIT code license. They are not bundled
 into the game. The existing embedded oak texture is unchanged; its pixels
 are compared against the pinned reference. No new rights are granted.
+
+4.36 oak trapdoor item/display reference fixtures (NOT MIT):
+Same pinned Java 26.3 mirror commit: 9073095a88699785bb1f63f8f86d33322711e4fd
+Repository: InventivetalentDev/minecraft-assets
+Files: .harness/fixtures/java-trapdoor-item-26.3/assets/minecraft/
+  items/oak_trapdoor.json; models/block/thin_block.json; models/block/block.json.
+SHA-256/byte manifest beside these three small test-only JSON fixtures.
+Original model/item data remain Mojang/Microsoft property, NOT MIT; no new
+rights granted. Fixtures are not shipped in the game bundle. Own geometry
+and canvas projection code is separate. No JAR or full original corpus added.
