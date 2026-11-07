@@ -16,7 +16,7 @@ Raport łączności: [benchmarks/reference-connectivity-proof.json](benchmarks/r
 
 - [Panel `/mconline/testy/`](https://rejson59.github.io/mconline/testy/) — niezależny, mały HTML/JS, bez uruchamiania gry i bez wyboru plików. Kopiowany przez Vite z `public/testy/`.
 - Osobna funkcja `mconline-reference-storage`, nie zmiana produkcyjnej bramki gry. `verify_jwt=false` jest celowe: sesja ogólnego konta nie jest JWT Supabase. Każde żądanie biznesowe weryfikuje sesję przez `mconline_identity`, a następnie porównuje zwrócony UUID z allowlistą właściciela. Podrobiona nazwa `rejson59`, token w localStorage lub element UI nie przyznają dostępu.
-- Funkcję wdrożono jako ACTIVE v1 (ID `c9bffb80-4465-4479-8599-5f0e244bf273`). Entry point importuje niezmienny, przypięty moduł z commita `a9b0d12bc0074479a67d370e39592e21e5c7a388`, ścieżka `supabase/functions/mconline-reference-storage/index.ts`. To własny kod tego repo, nie kod gry Mojanga; nie importuje żadnych sekretów z GitHub.
+- Funkcję wdrożono jako ACTIVE v2 (ID `c9bffb80-4465-4479-8599-5f0e244bf273`). Wdrożono samodzielny moduł skompilowany z `supabase/functions/mconline-reference-storage/index.ts`, bez zdalnych importów kodu podczas uruchamiania. Odtworzenie: `node scripts/compile-reference-storage.mjs`; sumy źródła i wyniku: [benchmarks/reference-storage-build.json](benchmarks/reference-storage-build.json). To własny kod tego repo, nie kod gry Mojanga. Pierwszy wariant wdrożenia v1 z importem nie przeszedł rzeczywistej kontroli HTTP; zastąpiono go modułem v2, po czym CI autoryzacji przeszło. Nie usuwano i nie osłabiano testów.
 - Klucz service-role pozostaje wyłącznie w środowisku Supabase. Klucze anon są publiczne i nie zastępują kontroli właściciela. Frontend nie ma klucza administracyjnego.
 
 ## Instrukcja na telefonie
@@ -60,3 +60,5 @@ Nawet sukces potwierdza **round-trip backend ↔ Storage**, nie odczyt przez san
 - Chromium desktop i emulowany mobile 390×844: status właściciela, test, ponowny odczyt, logout, brak poziomego przewijania; zero wyjątków. Obcy origin: zero pobrań helpera i zablokowany test. **Provider i backend w tym teście są syntetyczne, nie jest to test prawdziwej sesji właściciela ani Storage.** Raport: [benchmarks/reference-storage-ui.json](benchmarks/reference-storage-ui.json).
 - CI rozszerzono o rzeczywiste, niemutujące negatywne kontrole wdrożonej funkcji: brak tokenu, fałszywy token/cross-project, zły origin i preflight. Nie zapisują plików i nie używają prawdziwych sesji.
 - Pozytywny test na żywym koncie właściciela wymaga opisanych kliknięć. Do otrzymania wyniku pozostaje **niepotwierdzony**, mimo testów jednostkowych i statusu ACTIVE funkcji.
+
+Kontrola HTTP PR po poprawieniu wdrożenia: [CI 42316809139](https://github.com/rejson59/mconline/actions/runs/42316809139) — PASS, w tym brak sesji, nieprawidłowa sesja, zły origin i preflight nowej funkcji. To nadal nie zastępuje pozytywnego testu właściciela.
