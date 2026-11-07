@@ -292,7 +292,7 @@ export function buildCorpus(manifestRaw, assetRaw, pin = PIN) {
   return { ...plan, planSHA256: hash("sha256", stableJSON(plan)) };
 }
 
-function validatePlan(plan) {
+export function validatePlan(plan) {
   if (!objectMap(plan)) throw new Error("Invalid plan");
   const { planSHA256, ...body } = plan;
   if (
