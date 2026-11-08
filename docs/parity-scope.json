@@ -141,7 +141,11 @@
         ".harness/cubeDisplay.ts",
         ".harness/fixtures/java-cube-display-26.3/manifest.json",
         "docs/benchmarks/cube-display-4.39.json",
-        "docs/SERVER-RECOVERY-4.39.md"
+        "docs/SERVER-RECOVERY-4.39.md",
+        "src/game/engine.ts",
+        ".harness/remoteHands.ts",
+        "docs/REMOTE-HANDS-4.40.md",
+        "docs/benchmarks/remote-hands-4.40.json"
       ]
     },
     {
@@ -571,7 +575,11 @@
       "weight": null,
       "acceptance": "Komplet modeli, warstw, stanów i animacji referencyjnych.",
       "evidence": [
-        "src/game/mobModels.ts"
+        "src/game/mobModels.ts",
+        "src/game/engine.ts",
+        ".harness/remoteHands.ts",
+        "docs/REMOTE-HANDS-4.40.md",
+        "docs/benchmarks/remote-hands-4.40.json"
       ]
     },
     {
@@ -641,7 +649,11 @@
       "weight": null,
       "acceptance": "Zgodne zachowanie wielu sesji, autorytatywność, ticki i utrata połączenia.",
       "evidence": [
-        "src/game/net.ts"
+        "src/game/net.ts",
+        "src/game/engine.ts",
+        ".harness/remoteHands.ts",
+        "docs/REMOTE-HANDS-4.40.md",
+        "docs/benchmarks/remote-hands-4.40.json"
       ]
     },
     {
@@ -675,7 +687,8 @@
         "docs/SERVER-RECOVERY-4.39.md",
         "docs/benchmarks/server-recovery-4.39.json",
         ".harness/profileCheckpoint.ts",
-        "scripts/verify-multiplayer-lease-browser.mjs"
+        "scripts/verify-multiplayer-lease-browser.mjs",
+        "docs/benchmarks/server-recovery-4.40.json"
       ]
     },
     {

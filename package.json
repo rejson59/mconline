@@ -1,7 +1,7 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.39.0",
+  "version": "4.40.0",
   "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
   "type": "module",
   "license": "MIT",
@@ -25,6 +25,8 @@
     "test:browser:cubepose": "BROWSER_CUBE_POSE=1 node scripts/verify-panels-browser.mjs",
     "test:cubepose": "node .harness/run.mjs cubepose",
     "test:browser:recovery": "BROWSER_PROFILE_RECOVERY=1 node scripts/verify-multiplayer-lease-browser.mjs",
+    "test:remotehands": "node .harness/run.mjs remotehands",
+    "test:browser:remotehands": "BROWSER_REMOTE_HANDS=1 node scripts/verify-panels-browser.mjs",
     "test:native": "node .harness/run.mjs native",
     "test:fire": "node .harness/run.mjs fire",
     "test:engine": "node .harness/run.mjs smoke",

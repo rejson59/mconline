@@ -575,6 +575,18 @@ try {
       { key },
     );
     await join();
+    await p2.waitForFunction(
+      () => window.minecraft?.game?.loadingProgress >= 0.999,
+      { timeout: 90000, polling: 100 },
+    );
+    await click(p2, "Dołącz do świata");
+    await p2.waitForFunction(() => window.minecraft?.game?.ui === "playing", {
+      timeout: 15000,
+      polling: 100,
+    });
+    console.log(
+      "PASS recovered server fully generated terrain and resumed actual gameplay",
+    );
     const damaged = await p2.evaluate(
       ({ key }) => {
         const g = window.minecraft.game;
@@ -623,6 +635,10 @@ try {
   }
   assert.equal(errors.length, 0, JSON.stringify(errors));
   const report = {
+    version: JSON.parse(
+      fs.readFileSync(path.join(root, "package.json"), "utf8"),
+    ).version,
+    fullyGeneratedRecoveredWorld: !!process.env.BROWSER_PROFILE_RECOVERY,
     productionHTML: true,
     realProvider: true,
     mockedGateway: true,

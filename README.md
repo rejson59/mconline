@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.39.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.40.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.40.0 — obie ręce innych graczy
+
+Inni gracze pokazują **obie wyposażone ręce**, a przedmioty poruszają się z właściwymi ramionami. Zamiast złotej kostki widać istniejące modele bloków i teksturowane narzędzia/jedzenie. Sześć wcześniej zweryfikowanych rodzin ma ustawienia `thirdperson` również po lewej stronie; pozostałe korzystają z jawnego fallbacku projektu. Zmiana skóry zachowuje wyposażenie i pozę, a odejście gracza nie usuwa wspólnych tekstur. **62 grupy / 427 ID w obu rękach + produkcyjny Chromium desktop/touch PASS**; regresja logowania i ekwipunku również obejmuje pełny teren i wejście do rozgrywki. Bez zmiany zapisów, protokołu ani backendu. [Wyniki i granice](docs/REMOTE-HANDS-4.40.md).
 
 ## Wersja 4.39.0 — bezpieczny powrót na serwer
 

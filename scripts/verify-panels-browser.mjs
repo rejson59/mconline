@@ -38,24 +38,26 @@ if (!fs.existsSync(libs)) {
 }
 const output = path.join(
   root,
-  process.env.BROWSER_CUBE_POSE
-    ? ".cache/verification439"
-    : process.env.BROWSER_TRAP_POSE
-      ? ".cache/verification438"
-      : process.env.BROWSER_TRAP_ITEM
-        ? ".cache/verification436"
-        : process.env.BROWSER_TRAP_UV
-          ? ".cache/verification435"
-          : process.env.BROWSER_TRAPS
-            ? ".cache/verification434"
-            : ".cache/verification433",
+  process.env.BROWSER_REMOTE_HANDS
+    ? ".cache/verification440"
+    : process.env.BROWSER_CUBE_POSE
+      ? ".cache/verification439"
+      : process.env.BROWSER_TRAP_POSE
+        ? ".cache/verification438"
+        : process.env.BROWSER_TRAP_ITEM
+          ? ".cache/verification436"
+          : process.env.BROWSER_TRAP_UV
+            ? ".cache/verification435"
+            : process.env.BROWSER_TRAPS
+              ? ".cache/verification434"
+              : ".cache/verification433",
 );
 fs.mkdirSync(output, { recursive: true });
 const enums = path.join(output, "blocks.mjs");
 await build({
   stdin: {
     contents:
-      "export {B,T} from './src/game/blocks'; export { trapdoorReference } from './.harness/trapdoorReference'; export { decodePng } from './src/game/art/miniPng';",
+      "export {B,T} from './src/game/blocks'; export {I} from './src/game/items'; export { trapdoorReference } from './.harness/trapdoorReference'; export { decodePng } from './src/game/art/miniPng';",
     resolveDir: root,
     loader: "ts",
   },
@@ -64,7 +66,7 @@ await build({
   platform: "node",
   outfile: enums,
 });
-const { B, T, trapdoorReference, decodePng } = await import(
+const { B, T, I, trapdoorReference, decodePng } = await import(
   pathToFileURL(enums).href
 );
 const cubeDisplayReferences = JSON.parse(
@@ -605,6 +607,8 @@ try {
       async ({
         B,
         T,
+        I,
+        remoteHandsMode,
         expectedUVs,
         itemBounds,
         alphaProbes,
@@ -772,7 +776,7 @@ try {
         const remoteId = "synthetic-pose-browser";
         const remote = g.ensureRemote({
           id: remoteId,
-          name: "Test modelu",
+          name: remoteHandsMode ? "Steve" : "Test modelu",
           hue: 120,
           skin: "steve",
         });
@@ -882,6 +886,354 @@ try {
         g.updateHand();
         remote.held = B.COBBLE;
         g.updateRemoteHeld(remote);
+        let remoteHands = null;
+        if (remoteHandsMode) {
+          const inventoryBefore = JSON.stringify([
+            g.inventory.slots,
+            g.inventory.offhand,
+          ]);
+          const counters = { icons: 0, beds: 0, skins: 0, labels: 0 };
+          window.remoteHandsResourceDisposals = counters;
+          const watch = (texture, kind) =>
+            texture.addEventListener("dispose", () => counters[kind]++);
+          const packet = (id, skin, held, offhand, extra = {}) => ({
+            t: "pos",
+            from: id,
+            x: 5.8,
+            y: 65,
+            z: 6.5,
+            yaw: Math.PI,
+            pitch: 0,
+            held,
+            offhand,
+            alive: true,
+            d: "o",
+            name: skin === "steve" ? "Steve" : "Alex",
+            hue: 120,
+            skin,
+            ...extra,
+          });
+          const nativeIds = [
+            B.STONE,
+            B.COBBLE,
+            B.DIRT,
+            B.PLANKS,
+            B.SAND,
+            ...expectedUVs.map((r) => r.id),
+          ];
+          const peers = [remoteId, remoteId + "-slim"];
+          let referenceWorldVertices = 0;
+          const worldPose = (a, id, left, skin) => {
+            const mesh = left ? a.offHand : a.hand,
+              arm = left ? a.armL : a.armR;
+            if (mesh.parent !== arm)
+              throw Error("Held model is not attached to its arm");
+            a.group.updateMatrixWorld(true);
+            if (mesh.matrixWorld.determinant() <= 0)
+              throw Error("Offhand mirrored geometry/winding");
+            const refs =
+              (id >= 68 && id <= 72) || (id >= 503 && id <= 518)
+                ? displayReferences
+                : cubeDisplayReferences;
+            const d = refs.thirdperson_righthand,
+              sign = left ? -1 : 1,
+              p = mesh.geometry.getAttribute("position"),
+              m = mesh.matrixWorld.elements;
+            for (let i = 0; i < p.count; i++) {
+              const point = [p.getX(i), p.getY(i), p.getZ(i)];
+              let expected = rotate(
+                point.map((v, k) => v * d.scale[k]),
+                [d.rotation[0], sign * d.rotation[1], sign * d.rotation[2]],
+              );
+              expected = expected.map(
+                (v, k) =>
+                  v +
+                  (d.translation[k] / 16) * (k === 0 ? sign : 1) +
+                  [0, 0.82 - 1.125, -0.26][k],
+              );
+              expected = rotate(expected, [
+                (arm.rotation.x * 180) / Math.PI,
+                0,
+                0,
+              ]);
+              const armX =
+                (left ? -1 : 1) *
+                (0.25 + (skin === "alex" ? 0.1875 : 0.25) / 2);
+              expected = expected.map(
+                (v, k) => (v + [armX, 1.125, 0][k]) * 0.9375,
+              );
+              expected = rotate(expected, [
+                0,
+                (a.group.rotation.y * 180) / Math.PI,
+                0,
+              ]).map((v, k) => v + a.group.position.getComponent(k));
+              for (let k = 0; k < 3; k++) {
+                const actual =
+                  m[k] * point[0] +
+                  m[k + 4] * point[1] +
+                  m[k + 8] * point[2] +
+                  m[k + 12];
+                if (Math.abs(actual - expected[k]) > 4e-6)
+                  throw Error(
+                    "Animated world pose mismatch " +
+                      skin +
+                      "/" +
+                      id +
+                      "/" +
+                      left,
+                  );
+              }
+              referenceWorldVertices++;
+            }
+          };
+          const beforeReferences = poseVertices;
+          for (const [index, skin] of ["steve", "alex"].entries()) {
+            const id = peers[index];
+            for (const item of nativeIds) {
+              g.onNetMessage(packet(id, skin, item, item));
+              const a = g.remotes.get(id);
+              g.updateRemoteHeld(a);
+              a.armR.rotation.x = 0.31;
+              a.armL.rotation.x = -0.27;
+              a.group.rotation.y = 0.37;
+              const refs =
+                (item >= 68 && item <= 72) || (item >= 503 && item <= 518)
+                  ? displayReferences
+                  : cubeDisplayReferences;
+              pose(
+                a.hand,
+                "thirdperson_righthand",
+                [0, 0.82 - 1.125, -0.26],
+                [0, 0, 0],
+                false,
+                refs,
+              );
+              pose(
+                a.offHand,
+                "thirdperson_righthand",
+                [0, 0.82 - 1.125, -0.26],
+                [0, 0, 0],
+                true,
+                refs,
+              );
+              worldPose(a, item, false, skin);
+              worldPose(a, item, true, skin);
+            }
+          }
+          const referenceLocalVertices = poseVertices - beforeReferences;
+          const actor = g.remotes.get(remoteId);
+          // All remaining families use actual project geometry, not a gold cube.
+          for (const [held, offhand] of [
+            [B.TORCH, B.LANTERN],
+            [B.BED, B.CHEST],
+            [I.DIAMOND_SWORD, I.APPLE],
+          ]) {
+            g.onNetMessage(packet(remoteId, "steve", held, offhand));
+            g.updateRemoteHeld(actor);
+            for (const [mesh, item] of [
+              [actor.hand, held],
+              [actor.offHand, offhand],
+            ]) {
+              if (
+                mesh.userData.itemId !== item ||
+                !mesh.visible ||
+                !mesh.geometry.getAttribute("position")?.count
+              )
+                throw Error("Missing actual fallback model");
+              if (mesh.material.userData.borrowedMap !== true)
+                throw Error("Cached map ownership missing");
+              if (mesh.material.color.getHex() !== 0xffffff)
+                throw Error("Gold placeholder remains");
+            }
+            if (held === B.BED) {
+              if (actor.hand.material.map === g.atlasTex)
+                throw Error("Bed uses terrain atlas");
+              watch(actor.hand.material.map, "beds");
+            }
+          }
+          await Promise.all(
+            [I.DIAMOND_SWORD, I.APPLE].map(
+              (id) =>
+                new Promise((resolve, reject) => {
+                  const img = new Image();
+                  img.onload = resolve;
+                  img.onerror = reject;
+                  img.src = g.icons[id];
+                }),
+            ),
+          );
+          // Texture callbacks must have populated the actual cached render maps.
+          for (const [mesh, id] of [
+            [actor.hand, I.DIAMOND_SWORD],
+            [actor.offHand, I.APPLE],
+          ]) {
+            if (mesh.material.map.image?.src !== g.icons[id])
+              throw Error("Wrong sprite icon texture");
+            const geo = mesh.geometry;
+            geo.computeBoundingBox();
+            if (
+              Math.abs(geo.boundingBox.max.z - geo.boundingBox.min.z - 1 / 16) >
+              1e-6
+            )
+              throw Error(
+                "Sprite is a cube/flat billboard, not the existing extruded silhouette",
+              );
+            watch(mesh.material.map, "icons");
+          }
+          const mainGeometry = actor.hand.geometry,
+            mainMaterial = actor.hand.material;
+          g.onNetMessage(packet(remoteId, "steve", I.DIAMOND_SWORD, B.TRAP));
+          g.updateRemoteHeld(actor);
+          if (
+            actor.hand.geometry !== mainGeometry ||
+            actor.hand.material !== mainMaterial
+          )
+            throw Error("Offhand-only change rebuilt main hand");
+          for (const invalid of [0, -1, 1.1, 999999]) {
+            g.onNetMessage(packet(remoteId, "steve", invalid, invalid));
+            g.updateRemoteHeld(actor);
+            if (actor.hand.visible || actor.offHand.visible)
+              throw Error("Empty/invalid hand still shows a placeholder");
+          }
+          g.onNetMessage(
+            packet(remoteId, "steve", I.DIAMOND_SWORD, I.APPLE, {
+              alive: false,
+            }),
+          );
+          g.updateRemoteHeld(actor);
+          if (actor.hand.visible || actor.offHand.visible)
+            throw Error("Dead hands remain visible");
+          g.onNetMessage(packet(remoteId, "steve", I.DIAMOND_SWORD, I.APPLE));
+          g.updateRemoteHeld(actor);
+          if (!actor.hand.visible || !actor.offHand.visible)
+            throw Error("Unchanged live IDs did not restore hands");
+          g.onNetMessage(
+            packet(remoteId, "steve", I.DIAMOND_SWORD, I.APPLE, { d: "n" }),
+          );
+          if (actor.group.visible) throw Error("Other-dimension hands visible");
+          g.onNetMessage(packet(remoteId, "steve", I.DIAMOND_SWORD, I.APPLE));
+          g.updateRemoteHeld(actor);
+          watch(actor.armR.material.map, "skins");
+          actor.armR.rotation.x = 0.3;
+          actor.armL.rotation.x = -0.2;
+          actor.group.rotation.y = 0.4;
+          const spriteMap = actor.hand.material.map;
+          g.setRemoteSkin(remoteId, "alex");
+          const changed = g.remotes.get(remoteId);
+          if (
+            changed.offhand !== I.APPLE ||
+            !changed.hand.visible ||
+            !changed.offHand.visible ||
+            changed.hand.material.map !== spriteMap ||
+            Math.abs(changed.armR.rotation.x - 0.3) > 1e-6 ||
+            Math.abs(changed.armL.rotation.x + 0.2) > 1e-6 ||
+            Math.abs(changed.group.rotation.y - 0.4) > 1e-6
+          )
+            throw Error("Skin change lost held equipment/pose");
+          const transient = remoteId + "-leaving";
+          g.onNetMessage(packet(transient, "steve", I.DIAMOND_SWORD, I.APPLE));
+          g.updateRemoteHeld(g.remotes.get(transient));
+          g.onNetMessage({ t: "bye", from: transient });
+          if (g.remotes.has(transient))
+            throw Error("Leaving actor retained held meshes");
+          const outgoing = [],
+            oldNet = g.net;
+          try {
+            g.net = {
+              id: "synthetic-self",
+              name: "Synthetic",
+              public: false,
+              tick() {},
+              sendPos(value) {
+                outgoing.push(value);
+              },
+              sendEdits() {},
+            };
+            for (const [index, id] of peers.entries()) {
+              const x = index === 0 ? 5.8 : 4.4,
+                t = performance.now();
+              g.onNetMessage(
+                packet(
+                  id,
+                  index === 0 ? "steve" : "alex",
+                  index === 0 ? B.STONE : I.DIAMOND_SWORD,
+                  index === 0 ? B.TRAP : I.APPLE,
+                  { x },
+                ),
+              );
+              const a = g.remotes.get(id);
+              g.updateRemoteHeld(a);
+              a.track.clear();
+              a.track.push(t - 400, {
+                x: x - 0.4,
+                y: 65,
+                z: 6.5,
+                yaw: Math.PI,
+                pitch: 0,
+              });
+              a.track.push(t - 150, {
+                x,
+                y: 65,
+                z: 6.5,
+                yaw: Math.PI,
+                pitch: 0,
+              });
+              a.group.updateMatrixWorld(true);
+              a.userDataBefore = [...a.hand.matrixWorld.elements];
+            }
+            g.tickNet(0.1);
+            for (const id of peers) {
+              const a = g.remotes.get(id);
+              a.group.updateMatrixWorld(true);
+              if (
+                a.armR.rotation.x === 0 ||
+                Math.abs(a.armL.rotation.x + a.armR.rotation.x) > 1e-6
+              )
+                throw Error("Both arms are not animated");
+              if (
+                a.hand.matrixWorld.elements.every(
+                  (v, k) => Math.abs(v - a.userDataBefore[k]) < 1e-8,
+                )
+              )
+                throw Error("Held mesh remains frozen in world space");
+            }
+          } finally {
+            g.net = oldNet;
+          }
+          if (
+            JSON.stringify([g.inventory.slots, g.inventory.offhand]) !==
+            inventoryBefore
+          )
+            throw Error("Remote equipment modified local inventory");
+          for (const id of peers) {
+            const a = g.remotes.get(id);
+            watch(a.armR.material.map, "skins");
+            watch(
+              a.group.children.find((o) => o.type === "Sprite").material.map,
+              "labels",
+            );
+          }
+          window.remoteHandsIds = peers;
+          remoteHands = {
+            referenceFamilies: 6,
+            referenceAliases: nativeIds.length,
+            classicAndSlim: true,
+            referenceLocalVertices,
+            referenceWorldVertices,
+            packetUpdates: true,
+            independentHandCaches: true,
+            actualFallbackBlockAndSpriteGeometry: true,
+            emptyAndMalformedHidden: true,
+            deadAndDimensionHidden: true,
+            skinReplacementPreservesPose: true,
+            walkingUsesRealTrackAndTick: true,
+            localInventoryUnchanged: true,
+            leavingActorRemoved: true,
+          };
+          g.body.pos.set(5.1, 65, 9.2);
+          g.yaw = 0;
+          g.pitch = -0.28;
+        }
         const icon = g.icons[B.TRAP];
         for (const { id } of expectedUVs)
           if (g.icons[id] !== icon)
@@ -939,6 +1291,7 @@ try {
           poseVertices,
           cubePoseVertices,
           cubeFamilies: 5,
+          remoteHands,
           uvPairs,
           iconBounds: bounds,
           holeChecks,
@@ -951,6 +1304,8 @@ try {
       {
         B,
         T,
+        I,
+        remoteHandsMode: !!process.env.BROWSER_REMOTE_HANDS,
         expectedUVs,
         itemBounds,
         alphaProbes,
@@ -973,11 +1328,23 @@ try {
       let disposed = 0;
       const onDispose = () => disposed++;
       g.atlasTex.addEventListener("dispose", onDispose);
-      g.dropRemote(window.poseTestRemoteId);
+      for (const id of window.remoteHandsIds ?? [window.poseTestRemoteId])
+        g.dropRemote(id);
+      if (window.remoteHandsResourceDisposals) {
+        const c = window.remoteHandsResourceDisposals;
+        if (c.icons || c.beds || c.skins || c.labels !== 2)
+          throw Error(
+            "Incorrect shared/owned texture retirement " + JSON.stringify(c),
+          );
+      }
       g.atlasTex.removeEventListener("dispose", onDispose);
       if (disposed) throw Error("Avatar removal disposed shared atlas");
       g.firstPerson.render(g.renderer, g.scene, g.camera);
     });
+    if (itemReport.remoteHands)
+      itemReport.remoteHands.resourcesAfterCleanup = await p.evaluate(
+        () => window.remoteHandsResourceDisposals,
+      );
     if (errors.length) throw Error(JSON.stringify(errors));
     reports.push({ device, viewport, ...report, errors });
     console.log("PASS " + device + " " + JSON.stringify(report));
