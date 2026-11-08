@@ -289,7 +289,7 @@ test("display is composed after a rotated camera/arm anchor", () => {
   o.updateMatrix();
   o.matrix.elements.forEach((v, i) => near(v, expected.elements[i]));
 });
-test("remote switching disposes owned resources, restores placeholder and never disposes shared hand material", () => {
+test("remote switching disposes owned resources, uses the actual fallback block and never disposes shared hand material", () => {
   const base = material();
   let baseDisposals = 0,
     geoDisposals = 0,
@@ -312,7 +312,7 @@ test("remote switching disposes owned resources, restores placeholder and never 
   a.held = B.GLASS;
   g.updateRemoteHeld(a);
   assert.deepEqual(hand.position.toArray(), [0.35, 0.82, -0.26]);
-  assert.deepEqual(hand.scale.toArray(), [1, 1, 1]);
+  assert.deepEqual(hand.scale.toArray(), [0.25, 0.25, 0.25]);
   assert.deepEqual(hand.rotation.toArray().slice(0, 3), [0, 0, 0]);
   assert.equal(baseDisposals, 0);
   a.held = 0;

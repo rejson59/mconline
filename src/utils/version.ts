@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.39.0';
-export const GAME_RELEASE_NAME = 'Bezpieczny powrót na serwer';
+export const GAME_VERSION = '4.40.0';
+export const GAME_RELEASE_NAME = 'Obie ręce innych graczy';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.40: obie ręce innych graczy', text: 'Widać teraz przedmioty w obu rękach innych graczy: rzeczywiste modele bloków oraz teksturowane narzędzia i jedzenie zamiast złotej kostki. Modele poruszają się razem z ramionami; zmiana skórki zachowuje wyposażenie i pozę. Dla wcześniej sprawdzonych rodzin również lewa ręka używa referencyjnego display. Animacja marszu i pozy pozostałych przedmiotów nadal są projektowe.' },
   { title: '4.39: bezpieczny powrót na serwer', text: 'Rozbieżna kopia ekwipunku nie blokuje już wejścia: gra zachowuje obie wersje i wczytuje aktualny zapis serwera, bez łączenia przedmiotów. /kopie pobiera kopie odzyskiwania. Poprawiono potwierdzenia zapisów i zamykanie strony. Kamień, bruk, ziemia, dębowe deski i piasek mają referencyjne pozy modelu w rękach, dropie i u innych graczy.' },
   { title: '4.38: właz we właściwej pozie', text: 'Dębowy właz używa referencyjnych obrotów, przesunięć i skali modelu w prawej i lewej ręce oraz jako drop. U innych graczy złotą kostkę zastąpił właściwy, teksturowany model włazu z pozą thirdperson. Zachowano fizykę, zapisy i podnoszenie; animacje ramienia/kamery pozostają projektowe.' },
   { title: '4.37: na telefonie tylko poziomo', text: 'Usunięto granie w pionie i zapamiętaną zgodę na ten tryb. Obrót zatrzymuje sterowanie; okna i przedmioty pozostają zachowane. Obróć telefon, aby wrócić, albo zapisz i wyjdź do menu. Multiplayer nie zatrzymuje serwera.' },

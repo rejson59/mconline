@@ -155,9 +155,12 @@ interface RemoteAvatar {
   /** 2.30: zawias szyi – obraca całą głowę razem z czapką, włosami i oczami. */
   head: THREE.Object3D;
   armL: THREE.Mesh;
+  armR: THREE.Mesh;
   legL: THREE.Mesh;
   legR: THREE.Mesh;
   hand: THREE.Mesh;
+  offHand: THREE.Mesh;
+  offhandId: number;
   /** 2.30: bufor migawek – ruch jest interpolowany, a nie „doganiany”. */
   track: RemoteTrack;
   yaw: number;
@@ -1906,39 +1909,54 @@ export class Game {
         a.legL.rotation.x = swing;
         a.legR.rotation.x = -swing;
         a.armL.rotation.x = -swing * 0.8;
+        a.armR.rotation.x = swing * 0.8;
       }
       a.group.visible = ((this.combatPlayers.get(id)?.d === 'n') === this.isInNether) && a.group.position.distanceToSquared(this.body.pos) <= (96 * this.entityDistance) ** 2;
       this.updateRemoteHeld(a);
     }
   }
 
-  /** Replace the old gold placeholder for verified item families, using the actual
-   * third-person model display. Other item families retain their existing path.
+  /** Independent caches for both hands. The meshes are children of the arm
+   * meshes, so arm motion cannot leave the held item behind in world space.
    */
   private updateRemoteHeld(a: RemoteAvatar) {
-    if (a.held === a.heldId) return;
-    const hadModel = hasReferenceItemDisplay(a.heldId);
-    a.heldId = a.held;
-    const hand = a.hand;
+    a.heldId = this.updateRemoteHand(a.hand, a.held, a.heldId, false);
+    if (a.offHand) a.offhandId = this.updateRemoteHand(a.offHand, a.offhand, a.offhandId, true);
+    if (a.alive === false) { a.hand.visible = false; if (a.offHand) a.offHand.visible = false; }
+  }
+
+  private updateRemoteHand(hand: THREE.Mesh, value: number, previous: number, left: boolean): number {
+    // A malformed/stale peer packet is not permission to allocate arbitrary
+    // geometry or show a fictitious item. Empty hands are genuinely empty.
+    const id = Number.isInteger(value) && value > 0 && (BLOCKS[value] || isItem(value)) ? value : 0;
     hand.userData.itemAnchor ??= hand.position.clone();
-    if (hasReferenceItemDisplay(a.held) || hadModel) {
-      hand.geometry.dispose();
-      if (Array.isArray(hand.material)) hand.material.forEach(m => m.dispose());
-      else hand.material.dispose();
-      hand.position.copy(hand.userData.itemAnchor);
-      hand.rotation.set(0, 0, 0);
-      hand.scale.setScalar(1);
-      if (hasReferenceItemDisplay(a.held)) {
-        hand.geometry = blockGeometry(a.held);
-        // This avatar owns the clone: dropRemote may dispose it, not handMat.
-        hand.material = this.handMat.clone();
-        applyReferenceItemDisplay(hand, a.held, 'thirdperson');
-      } else {
-        hand.geometry = new THREE.BoxGeometry(0.18, 0.18, 0.18);
-        hand.material = new THREE.MeshBasicMaterial({ color: 0xc9a227 });
-      }
+    hand.visible = id !== 0;
+    hand.userData.itemId = id;
+    if (!id) { hand.userData.displaySource = 'empty'; return id; }
+    if (id === previous) return id;
+    hand.geometry.dispose();
+    if (Array.isArray(hand.material)) hand.material.forEach(m => m.dispose());
+    else hand.material.dispose();
+    hand.position.copy(hand.userData.itemAnchor);
+    hand.rotation.set(0, 0, 0);
+    hand.scale.setScalar(1);
+    if (isItem(id)) {
+      hand.geometry = spriteItemGeometry(id, this.icons?.[id]);
+      hand.material = new THREE.MeshBasicMaterial({ map: this.itemTexture(id), transparent: true, alphaTest: 0.12, side: THREE.DoubleSide });
+      hand.scale.setScalar(0.32);
+    } else {
+      hand.geometry = blockGeometry(id);
+      const material = isBed(id) ? createBedItemMaterial() : this.handMat.clone();
+      if (RENDER[id] === 1) material.side = THREE.DoubleSide;
+      hand.material = material;
+      if (hasReferenceItemDisplay(id)) applyReferenceItemDisplay(hand, id, 'thirdperson', left);
+      else hand.scale.setScalar(0.25);
     }
-    hand.visible = !!a.held;
+    // Atlas, sprite icon and bed textures belong to their caches, not to an
+    // avatar. Retiring this material must never invalidate another renderer.
+    hand.material.userData.borrowedMap = true;
+    hand.userData.displaySource = hasReferenceItemDisplay(id) ? 'java-model-display-26.3' : 'project-fallback';
+    return id;
   }
 
   private ensureRemote(p: NetPlayer): RemoteAvatar {
@@ -1971,9 +1989,9 @@ export class Game {
       const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
       for (const one of Array.isArray(mat) ? mat : mat ? [mat] : []) {
         const map = (one as THREE.SpriteMaterial).map;
-        // Held model material clones borrow the world atlas; only the game
-        // owns that texture. Avatar-specific skin/name textures still retire.
-        if (map !== this.atlasTex) map?.dispose();
+        // Atlas, icons, bed and skin maps belong to shared caches. Only owned
+        // maps, such as the avatar's nameplate, retire with this avatar.
+        if (map !== this.atlasTex && !one.userData.borrowedMap) map?.dispose();
         one.dispose();
       }
     });
@@ -2050,15 +2068,30 @@ export class Game {
       shoeL.visible = false;
       shoeR.visible = false;
     }
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), new THREE.MeshBasicMaterial({ color: 0xc9a227 }));
-    hand.position.set(0.25 + armW / 2, 0.82, -0.26);
-    hand.visible = false;
+    const hand = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial());
+    const offHand = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial());
+    // Keep the old resting anchor (.82, -.26) in figure space; convert only
+    // its parent. Both meshes now follow their own arm's existing animation.
+    hand.position.set(0, 0.82 - armR.position.y, -0.26);
+    offHand.position.set(0, 0.82 - armL.position.y, -0.26);
+    hand.name = 'held:main'; offHand.name = 'held:offhand';
+    hand.visible = offHand.visible = false;
+    armR.add(hand);
+    armL.add(offHand);
     // Skóra całej postaci jest skalowana jak w wanilii (15/16), ale stopy
     // zostają na y = 0, żeby `body.pos` dalej oznaczał ziemię.
     neck.add(head, ...(hat ? [hat] : []), hair, hairBack, eyeL, eyeR);
     const figure = new THREE.Group();
     figure.scale.setScalar(AVATAR_SCALE);
-    figure.add(body, neck, armL, armR, legL, legR, shoeL, shoeR, hand);
+    figure.add(body, neck, armL, armR, legL, legR, shoeL, shoeR);
+    // Packed skin and procedural part textures are cache-owned as well. The
+    // nameplate below is outside figure and retains its own texture lifetime.
+    figure.traverse(object => {
+      const material = (object as THREE.Mesh).material;
+      for (const one of Array.isArray(material) ? material : material ? [material] : []) {
+        if ((one as THREE.MeshBasicMaterial).map) one.userData.borrowedMap = true;
+      }
+    });
     group.add(figure);
 
     // Etykieta z nazwą.
@@ -2082,7 +2115,7 @@ export class Game {
     group.add(sprite);
 
     return {
-      group, head: neck, armL, legL, legR, hand,
+      group, head: neck, armL, armR, legL, legR, hand, offHand, offhandId: -1,
       armor: new ArmorVisual({ head: neck, body, armL, armR, legL, legR }),
       track: new RemoteTrack(),
       yaw: 0, pitch: 0, held: 0, heldId: -1, offhand: 0, alive: true,
@@ -2101,6 +2134,8 @@ export class Game {
     const player = this.netPlayers.find((p) => p.id === id);
     const fresh = this.makeAvatar(old.name, player?.hue ?? 0, skinId);
     fresh.group.position.copy(old.group.position);
+    fresh.group.quaternion.copy(old.group.quaternion);
+    for (const key of ['head', 'armL', 'armR', 'legL', 'legR'] as const) fresh[key].rotation.copy(old[key].rotation);
     fresh.armor.update(old.armor?.ids);
     fresh.track = old.track;
     fresh.yaw = old.yaw;
@@ -2113,6 +2148,7 @@ export class Game {
     fresh.swing = old.swing;
     fresh.headPitch = old.headPitch;
     fresh.group.visible = old.group.visible;
+    this.updateRemoteHeld(fresh);
     this.remoteGroup?.add(fresh.group);
     this.dropRemote(id);
     this.remotes.set(id, fresh);

@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'remotehands', entry: path.join(here, 'remoteHands.ts'), label: 'Obie ręce innych graczy: modele, ruch ramion i tekstury' },
   { name: 'cubepose', entry: path.join(here, 'cubeDisplay.ts'), label: 'Pięć rodzin bloków: pozy przedmiotów w rękach i dropie' },
   { name: 'trappose', entry: path.join(here, 'trapdoorPose.ts'), label: 'Włazy: oryginalne pozycje w rękach, dropie i u innych graczy' },
   { name: 'landscape', entry: path.join(here, 'landscape.tsx'), label: 'Telefon: tylko pozioma rozgrywka, bez obejścia blokady' },

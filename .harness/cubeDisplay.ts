@@ -209,7 +209,7 @@ for (let n = 0; n < names.length; n++) {
       assert.equal(hand.visible, true);
       a.held = B.GLASS;
       g.updateRemoteHeld(a);
-      near(hand.scale.x, 1);
+      near(hand.scale.x, 0.25);
       near(hand.position.y, 0.82);
     } finally {
       hand.geometry.dispose();
