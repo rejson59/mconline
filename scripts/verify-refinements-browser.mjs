@@ -37,7 +37,11 @@ if (!fs.existsSync(libs)) {
 import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
 import { build } from "esbuild";
-const out = path.join(root, ".cache/verification430");
+const report442 = process.env.BROWSER_REPORTS442 === "1";
+const out = path.join(
+  root,
+  report442 ? ".cache/verification442" : ".cache/verification430",
+);
 fs.mkdirSync(out, { recursive: true });
 await build({
   stdin: {
@@ -83,8 +87,13 @@ try {
     });
     await p.setViewport(
       mobile
-        ? { width: 844, height: 390, isMobile: true, hasTouch: true }
-        : { width: 960, height: 600 },
+        ? {
+            width: report442 ? 753 : 844,
+            height: report442 ? 360 : 390,
+            isMobile: true,
+            hasTouch: true,
+          }
+        : { width: report442 ? 1875 : 960, height: report442 ? 956 : 600 },
     );
     await p.evaluateOnNewDocument((mobile) => {
       localStorage.setItem(
@@ -274,6 +283,151 @@ try {
       },
       { B, I },
     );
+    let reports442 = null;
+    if (report442)
+      reports442 = await p.evaluate(
+        ({ B }) => {
+          const g = window.minecraft.game;
+          const check = (label, ok) => {
+            if (!ok) throw Error(label);
+          };
+          // Production game constructors/methods, with terrain isolated from the
+          // earlier visual fixtures. No injected replacement game implementation.
+          const clear = () => {
+            for (let x = 0; x < 12; x++)
+              for (let z = 0; z < 12; z++) {
+                g.world.setBlock(x, 89, z, B.STONE);
+                for (let y = 90; y < 97; y++) g.world.setBlock(x, y, z, B.AIR);
+              }
+          };
+          const wall = (id) => {
+            for (let y = 90; y < 95; y++)
+              for (let z = 1; z < 10; z++) g.world.setBlock(4, y, z, id);
+          };
+          const dispose = (m) => {
+            g.scene.remove(m.group);
+            g.mobs.splice(g.mobs.indexOf(m), 1);
+            m.dispose();
+          };
+          const target = g.body.pos.clone().set(5.5, 90, 5.5);
+          for (const id of [B.STONE, B.GLASS, B.GLASS_PANE]) {
+            clear();
+            wall(id);
+            const m = g.spawnMob("creeper", 3.5, 90, 5.5);
+            check("creeper fixture spawned", !!m);
+            m.aiTimer = 100;
+            for (let n = 0; n < 120; n++)
+              m.update(
+                1 / 60,
+                g.world,
+                target,
+                () => {},
+                () => {},
+                false,
+              );
+            check(
+              "wall prevents fuse " + id,
+              !m.dead && !m.exploded && m.fuse < 0,
+            );
+            dispose(m);
+          }
+          clear();
+          const exposed = g.spawnMob("creeper", 3.5, 90, 5.5);
+          exposed.aiTimer = 100;
+          for (let n = 0; n < 100; n++)
+            exposed.update(
+              1 / 60,
+              g.world,
+              target,
+              () => {},
+              () => {},
+              false,
+            );
+          check("exposed player triggers fuse", exposed.exploded);
+          dispose(exposed);
+          clear();
+          const cooling = g.spawnMob("creeper", 3.5, 90, 5.5);
+          cooling.fuse = 0.05;
+          wall(B.STONE);
+          for (let n = 0; n < 120; n++)
+            cooling.update(
+              1 / 60,
+              g.world,
+              target,
+              () => {},
+              () => {},
+              false,
+            );
+          check(
+            "new cover cancels fuse",
+            !cooling.exploded && cooling.fuse < 0,
+          );
+          dispose(cooling);
+          g.body.pos.set(6.5, 90, 5.5);
+          g.body.vel.set(0, 0, 0);
+          g.mode = "survival";
+          g.health = 20;
+          g.hurtTime = 0;
+          clear();
+          wall(B.STONE);
+          g.explode(3.5, 91, 5.5, 3.2, "player");
+          check(
+            "pre-blast wall shields health and knockback",
+            g.health === 20 && g.body.vel.length() === 0,
+          );
+          clear();
+          g.health = 20;
+          g.hurtTime = 0;
+          g.explode(3.5, 91, 5.5, 3.2, "player");
+          check(
+            "unshielded body is damaged and thrown",
+            g.health < 20 && g.body.vel.length() > 0,
+          );
+          const models = [];
+          for (const id of [
+            B.FLOWER_RED,
+            B.FLOWER_YELLOW,
+            B.SAPLING,
+            B.TALLGRASS,
+            B.TORCH,
+          ]) {
+            g.inventory.slots[0] = { id, count: 1 };
+            g.selected = 0;
+            g.updateHand();
+            const geometry = g.handMesh.geometry;
+            geometry.computeBoundingBox();
+            check(
+              "held small block has depth " + id,
+              geometry.boundingBox.max.z > geometry.boundingBox.min.z,
+            );
+            if (id !== B.TORCH)
+              check(
+                "held plant perimeter " + id,
+                geometry.attributes.position.count > 12,
+              );
+            models.push({
+              id,
+              vertices: geometry.attributes.position.count,
+              depth: geometry.boundingBox.max.z - geometry.boundingBox.min.z,
+            });
+          }
+          g.renderer.render(g.scene, g.camera);
+          const gl = g.renderer.getContext();
+          check(
+            "production geometry renders without GL errors",
+            gl.getError() === gl.NO_ERROR,
+          );
+          return {
+            wallTypes: 3,
+            exposedFuse: true,
+            newCoverDefuses: true,
+            preBlastShield: true,
+            openDamage: true,
+            models,
+          };
+        },
+        { B },
+      );
     const icon = await p.evaluate(
       (id) => window.minecraft.game.icons[id],
       B.BED,
@@ -359,6 +513,7 @@ try {
     reports.push({
       device: mobile ? "mobile-emulated" : "desktop",
       gameplay,
+      ...(report442 ? { reports442, viewport: p.viewport() } : {}),
       touch,
       editable,
       errors,

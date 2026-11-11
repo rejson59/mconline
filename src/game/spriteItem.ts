@@ -18,6 +18,14 @@ export function spriteItemGeometry(
     } catch {
       /* rectangular fallback, still transparent front */
     }
+  return spritePixelsGeometry(rgba, size);
+}
+
+/** Shared geometry builder for item icons and cross-plant atlas silhouettes. */
+export function spritePixelsGeometry(
+  rgba: Uint8Array | Uint8ClampedArray | null,
+  size = 16,
+): THREE.BufferGeometry {
   const positions: number[] = [],
     uvs: number[] = [];
   const face = (p: number[][], u: number[][]) => {

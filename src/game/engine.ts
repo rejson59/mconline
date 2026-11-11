@@ -1,3 +1,5 @@
+import { blastExposure } from './blast';
+import { officialBlockAtlas, isOfficialTile } from './packArt';
 import { MobMotion, mobAreaLoaded, mobFits, mobNeighbours } from './mobMotion';
 import { portraitGameplayBlocked } from '../utils/screen';
 import { trapdoorItemGeometry } from './trapdoorItem';
@@ -5,7 +7,7 @@ import { hasReferenceItemDisplay, applyReferenceItemDisplay, referenceGroundOffs
 import { CloudMotion } from './sky';
 import { bedItemGeometry, createBedItemMaterial } from './bedItem';
 import { itemBox, itemCrop } from './itemShape';
-import { spriteItemGeometry } from './spriteItem';
+import { spriteItemGeometry, spritePixelsGeometry } from './spriteItem';
 import { MOB_REGION_SIZE, mobRegionKey, type MobRegion, type MobUpdate, type MobExchange, type MobHit } from './sharedMobs';
 import type { SharedChest, ChestRef } from './sharedState';
 import ChunkMeshWorker from './chunkMesh.worker?worker&inline';
@@ -474,14 +476,22 @@ export function blockGeometry(id: number): THREE.BufferGeometry {
   if (isChestBlock(id)) return closedChestGeometry();
   if (isStairs(id) || isSlab(id)) return buildingBlockGeometry(id);
   if (RENDER[id] === 1) {
-    const g = new THREE.PlaneGeometry(1, 1);
-    const uv = g.attributes.uv as THREE.BufferAttribute;
-    const t = tileFor(id, 0);
-    for (let i = 0; i < uv.count; i++) {
-      const [U, V] = tileUV(t, Math.round(uv.getX(i)), Math.round(uv.getY(i)));
-      uv.setXY(i, U, V);
+    const t = tileFor(id, 0), atlas = officialBlockAtlas();
+    let pixels: Uint8Array | null = null;
+    if (atlas && isOfficialTile(t)) {
+      pixels = new Uint8Array(16 * 16 * 4);
+      const ox = (t % 16) * 16, oy = Math.floor(t / 16) * 16;
+      for (let y = 0; y < 16; y++) {
+        const offset = ((oy + y) * atlas.width + ox) * 4;
+        pixels.set(atlas.data.subarray(offset, offset + 16 * 4), y * 16 * 4);
+      }
     }
-    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(uv.count * 3).fill(1), 3));
+    const g = spritePixelsGeometry(pixels), uv = g.attributes.uv as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) {
+      const [u, v] = tileUV(t, uv.getX(i), uv.getY(i));
+      uv.setXY(i, u, v);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3));
     return g;
   }
   const faceMap = [1, 0, 3, 2, 5, 4];
@@ -6746,6 +6756,20 @@ export class Game {
    */
   explode(cx: number, cy: number, cz: number, power: number, source: Mob | 'player' | null = null) {
     if (this.net?.city || this.world.city) return; // City buildings and infrastructure never take explosion damage.
+    if (![cx, cy, cz, power].every(Number.isFinite) || power <= 0) return;
+    // Cache body exposure against the intact world. Calculating it after the
+    // destruction loop would remove the very wall that should shield a victim.
+    const cover = new Map<string, number>();
+    const coverKey = (pos: THREE.Vector3, h: number, w: number) => `${pos.x},${pos.y},${pos.z},${h},${w}`;
+    const remember = (pos: THREE.Vector3, h: number, w = .6) => {
+      if (Math.hypot(pos.x - cx, pos.y + h / 2 - cy, pos.z - cz) >= power * 2) return;
+      const key = coverKey(pos, h, w);
+      if (!cover.has(key)) cover.set(key, blastExposure(this.world, cx, cy, cz, pos.x, pos.y, pos.z, w, h));
+    };
+    remember(this.body.pos, this.body.h, this.body.w);
+    for (const mob of this.mobs) remember(mob.body.pos, mob.body.h, mob.body.w);
+    if (this.mobSimulating) for (const p of this.combatPlayers.values())
+      if (p.d === (this.isInNether?'n':'o') && p.alive !== false) remember(new THREE.Vector3(p.x, p.y, p.z), 1.8);
     Sfx.playExplosion();
     this.shake = 0.6;
     const disturbed = new Set<string>();
@@ -6779,11 +6803,12 @@ export class Game {
       this.fallGravity(dx2, dy2, dz2);
     }
     this.spawnSmoke(cx, cy, cz, 40, power * 1.5);
-    const affect = (pos: THREE.Vector3, h: number, hit: (dmg: number, kb: THREE.Vector3) => void) => {
+    const affect = (pos: THREE.Vector3, h: number, hit: (dmg: number, kb: THREE.Vector3) => void, w = .6) => {
       const dx = pos.x - cx, dy = pos.y + h / 2 - cy, dz = pos.z - cz;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (d < power * 2) {
-        const f = 1 - d / (power * 2);
+        const f = (1 - d / (power * 2)) * (cover.get(coverKey(pos,h,w)) ?? 0);
+        if (f <= 0) return;
         const kb = new THREE.Vector3(dx, dy + 0.5, dz).normalize().multiplyScalar(f * 18);
         hit(Math.floor(f * 22), kb);
       }
@@ -6796,14 +6821,14 @@ export class Game {
       this.body.vel.add(kb);
       this.fallStart = this.body.pos.y;
       this.damage(dmg);
-    });
+    }, this.body.w);
     if(this.sharedMobs&&!this.mobSimulating) {
       const affected=new Map<string,{id:string;damage:number;kb:THREE.Vector3}[]>();
-      for(const mob of this.mobs)affect(mob.body.pos,mob.body.h,(damage,kb)=>{const list=affected.get(mob.netRegion)??[];list.push({id:mob.netId,damage,kb});affected.set(mob.netRegion,list);});
+      for(const mob of this.mobs)affect(mob.body.pos,mob.body.h,(damage,kb)=>{const list=affected.get(mob.netRegion)??[];list.push({id:mob.netId,damage,kb});affected.set(mob.netRegion,list);}, mob.body.w);
       void (async()=>{for(const [key,list] of affected)await this.performSharedMobAction(key,()=>{for(const hit of list){const mob=this.mobs.find(m=>m.netId===hit.id);if(mob&&!mob.dead){mob.hurtTime=0;mob.damage(hit.damage,cx,cz,source===mob?null:source);mob.body.vel.add(hit.kb);}}});})();
     } else for (const m of this.mobs) affect(m.body.pos, m.body.h, (dmg, kb) => {
       m.hurtTime = 0;m.damage(dmg,cx,cz,source===m?null:source);m.body.vel.add(kb);
-    });
+    }, m.body.w);
   }
 
   private fireContactAcc = 0;

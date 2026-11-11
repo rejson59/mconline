@@ -1,0 +1,76 @@
+{
+  "target": "26.3",
+  "commit": "d96c75fec200c4580dd75e033a76341521165461",
+  "repository": "misode/mcmeta",
+  "format": "Canonical JSON objects extracted from hash-verified aggregate source files. Fixture hashes are not upstream original byte hashes.",
+  "sources": {
+    "recipes": {
+      "api": "repos/misode/mcmeta/contents/data/recipe/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "format": "contents",
+      "sha256": "6b9cd71611420e2c618c96075a25dd1180745e69c9bdad8ab07de39630ff4af5",
+      "bytes": 682197
+    },
+    "item-tags": {
+      "api": "repos/misode/mcmeta/contents/data/tag/item/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "format": "contents",
+      "sha256": "cd6b463583aa7379b340636ffa3ae62b97b2dc723fabb54bfec36a2b9d27e446",
+      "bytes": 67779
+    }
+  },
+  "files": [
+    {
+      "path": "golden_pickaxe.json",
+      "source": "recipes",
+      "key": "golden_pickaxe",
+      "sha256": "3d3d14a982c9bdf1bf881fc50e91bf6a2eae300ac636440d5eafeb3419d10d7a"
+    },
+    {
+      "path": "golden_axe.json",
+      "source": "recipes",
+      "key": "golden_axe",
+      "sha256": "1b467ca7c3a346db197922b1a74703dbe7066e4670b8c6baaa8f11aaa4632828"
+    },
+    {
+      "path": "golden_shovel.json",
+      "source": "recipes",
+      "key": "golden_shovel",
+      "sha256": "dfc4dbd2585b14f0eefe227c6013e25a1ad1ad86e58deca49bc7d0e0b3b71f83"
+    },
+    {
+      "path": "golden_sword.json",
+      "source": "recipes",
+      "key": "golden_sword",
+      "sha256": "a13f9c28b0c2b57b27b42a2a6d055afd896de1fb245cd053a41e3c7d6c1b629d"
+    },
+    {
+      "path": "golden_hoe.json",
+      "source": "recipes",
+      "key": "golden_hoe",
+      "sha256": "752858c26b1dd2015e06407d39f73922870d229c51fd5c8118e9e11007fe7b6b"
+    },
+    {
+      "path": "ladder.json",
+      "source": "recipes",
+      "key": "ladder",
+      "sha256": "d33e9118d6a49cd2907a7fbe230f9dfeb31147a1a5408d6e851b878233570fba"
+    },
+    {
+      "path": "oak_fence.json",
+      "source": "recipes",
+      "key": "oak_fence",
+      "sha256": "f79760005a2b72b9f3327db349f9f87fc0a10ca77a5077463b36d9c8e4c0d229"
+    },
+    {
+      "path": "lapis_lazuli.json",
+      "source": "recipes",
+      "key": "lapis_lazuli",
+      "sha256": "db6b4d5ba47efd9658627fe9c3def724a4fe082415073623d75824d9ef29bb64"
+    },
+    {
+      "path": "gold_tool_materials.json",
+      "source": "item-tags",
+      "key": "gold_tool_materials",
+      "sha256": "b253b0fb9d43c81671a0e15dc9e532ec6a896f2880ea41d026f7782a3b3582a4"
+    }
+  ]
+}
