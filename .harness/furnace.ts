@@ -333,11 +333,11 @@ for (const block of [B.CAMPFIRE, B.CAMPFIRE_OFF]) {
 }
 for (const output of [B.TORCH, B.CAMPFIRE]) {
   const r = RECIPES.find(
-    (r) => r.out.id === output && r.inputs.some((s) => s.id === I.CHARCOAL),
+    (r) => r.out.id === output && r.inputs.some((s) => s.id === I.CHARCOAL || r.ingredientChoices?.[s.id]?.includes(I.CHARCOAL)),
   )!;
   eq("charcoal recipe exists " + output, !!r, true);
   const inv = new Inventory();
-  for (const input of r.inputs) inv.add(input.id, input.count);
+  for (const input of r.inputs) inv.add(r.ingredientChoices?.[input.id]?.includes(I.CHARCOAL) ? I.CHARCOAL : input.id, input.count);
   eq("book places charcoal " + output, inv.placeRecipe(r, r.table), true);
   eq("charcoal grid matches " + output, inv.gridMatch(r.table)?.out, r.out);
   eq("charcoal craft output " + output, inv.craftGrid(r.table), r.out);

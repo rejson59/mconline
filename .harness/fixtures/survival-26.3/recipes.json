@@ -1,0 +1,720 @@
+{
+  "wooden_pickaxe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:wooden_tool_materials"
+    },
+    "pattern": [
+      "XXX",
+      " # ",
+      " # "
+    ],
+    "result": {
+      "id": "minecraft:wooden_pickaxe"
+    }
+  },
+  "wooden_axe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:wooden_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      "X#",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:wooden_axe"
+    }
+  },
+  "wooden_shovel": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:wooden_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "#",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:wooden_shovel"
+    }
+  },
+  "wooden_sword": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:wooden_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "X",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:wooden_sword"
+    }
+  },
+  "wooden_hoe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:wooden_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      " #",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:wooden_hoe"
+    }
+  },
+  "stone_pickaxe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:stone_tool_materials"
+    },
+    "pattern": [
+      "XXX",
+      " # ",
+      " # "
+    ],
+    "result": {
+      "id": "minecraft:stone_pickaxe"
+    }
+  },
+  "stone_axe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:stone_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      "X#",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:stone_axe"
+    }
+  },
+  "stone_shovel": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:stone_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "#",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:stone_shovel"
+    }
+  },
+  "stone_sword": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:stone_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "X",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:stone_sword"
+    }
+  },
+  "stone_hoe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:stone_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      " #",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:stone_hoe"
+    }
+  },
+  "iron_pickaxe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:iron_tool_materials"
+    },
+    "pattern": [
+      "XXX",
+      " # ",
+      " # "
+    ],
+    "result": {
+      "id": "minecraft:iron_pickaxe"
+    }
+  },
+  "iron_axe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:iron_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      "X#",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:iron_axe"
+    }
+  },
+  "iron_shovel": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:iron_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "#",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:iron_shovel"
+    }
+  },
+  "iron_sword": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:iron_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "X",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:iron_sword"
+    }
+  },
+  "iron_hoe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:iron_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      " #",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:iron_hoe"
+    }
+  },
+  "golden_pickaxe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:gold_tool_materials"
+    },
+    "pattern": [
+      "XXX",
+      " # ",
+      " # "
+    ],
+    "result": {
+      "id": "minecraft:golden_pickaxe"
+    }
+  },
+  "golden_axe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:gold_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      "X#",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:golden_axe"
+    }
+  },
+  "golden_shovel": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:gold_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "#",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:golden_shovel"
+    }
+  },
+  "golden_sword": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:gold_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "X",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:golden_sword"
+    }
+  },
+  "golden_hoe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:gold_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      " #",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:golden_hoe"
+    }
+  },
+  "diamond_pickaxe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:diamond_tool_materials"
+    },
+    "pattern": [
+      "XXX",
+      " # ",
+      " # "
+    ],
+    "result": {
+      "id": "minecraft:diamond_pickaxe"
+    }
+  },
+  "diamond_axe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:diamond_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      "X#",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:diamond_axe"
+    }
+  },
+  "diamond_shovel": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:diamond_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "#",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:diamond_shovel"
+    }
+  },
+  "diamond_sword": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:diamond_tool_materials"
+    },
+    "pattern": [
+      "X",
+      "X",
+      "#"
+    ],
+    "result": {
+      "id": "minecraft:diamond_sword"
+    }
+  },
+  "diamond_hoe": {
+    "type": "minecraft:crafting_shaped",
+    "category": "equipment",
+    "key": {
+      "#": "minecraft:stick",
+      "X": "#minecraft:diamond_tool_materials"
+    },
+    "pattern": [
+      "XX",
+      " #",
+      " #"
+    ],
+    "result": {
+      "id": "minecraft:diamond_hoe"
+    }
+  },
+  "crafting_table": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "#minecraft:planks"
+    },
+    "pattern": [
+      "##",
+      "##"
+    ],
+    "result": {
+      "id": "minecraft:crafting_table"
+    },
+    "show_notification": false
+  },
+  "chest": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "#minecraft:planks"
+    },
+    "pattern": [
+      "###",
+      "# #",
+      "###"
+    ],
+    "result": {
+      "id": "minecraft:chest"
+    }
+  },
+  "furnace": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "#minecraft:stone_crafting_materials"
+    },
+    "pattern": [
+      "###",
+      "# #",
+      "###"
+    ],
+    "result": {
+      "id": "minecraft:furnace"
+    }
+  },
+  "brewing_stand": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "#minecraft:stone_crafting_materials",
+      "B": "minecraft:blaze_rod"
+    },
+    "pattern": [
+      " B ",
+      "###"
+    ],
+    "result": {
+      "id": "minecraft:brewing_stand"
+    }
+  },
+  "campfire": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "C": "#minecraft:coals",
+      "L": "#minecraft:logs",
+      "S": "minecraft:stick"
+    },
+    "pattern": [
+      " S ",
+      "SCS",
+      "LLL"
+    ],
+    "result": {
+      "id": "minecraft:campfire"
+    }
+  },
+  "torch": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "minecraft:stick",
+      "X": [
+        "minecraft:coal",
+        "minecraft:charcoal"
+      ]
+    },
+    "pattern": [
+      "X",
+      "#"
+    ],
+    "result": {
+      "count": 4,
+      "id": "minecraft:torch"
+    }
+  },
+  "stick": {
+    "type": "minecraft:crafting_shaped",
+    "group": "sticks",
+    "key": {
+      "#": "#minecraft:planks"
+    },
+    "pattern": [
+      "#",
+      "#"
+    ],
+    "result": {
+      "count": 4,
+      "id": "minecraft:stick"
+    }
+  },
+  "paper": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "minecraft:sugar_cane"
+    },
+    "pattern": [
+      "###"
+    ],
+    "result": {
+      "count": 3,
+      "id": "minecraft:paper"
+    }
+  },
+  "book": {
+    "type": "minecraft:crafting_shapeless",
+    "ingredients": [
+      "minecraft:paper",
+      "minecraft:paper",
+      "minecraft:paper",
+      "minecraft:leather"
+    ],
+    "result": {
+      "id": "minecraft:book"
+    }
+  },
+  "bookshelf": {
+    "type": "minecraft:crafting_shaped",
+    "category": "building",
+    "key": {
+      "#": "#minecraft:planks",
+      "X": "minecraft:book"
+    },
+    "pattern": [
+      "###",
+      "XXX",
+      "###"
+    ],
+    "result": {
+      "id": "minecraft:bookshelf"
+    }
+  },
+  "oak_door": {
+    "type": "minecraft:crafting_shaped",
+    "category": "redstone",
+    "group": "wooden_door",
+    "key": {
+      "#": "minecraft:oak_planks"
+    },
+    "pattern": [
+      "##",
+      "##",
+      "##"
+    ],
+    "result": {
+      "count": 3,
+      "id": "minecraft:oak_door"
+    }
+  },
+  "oak_trapdoor": {
+    "type": "minecraft:crafting_shaped",
+    "category": "redstone",
+    "group": "wooden_trapdoor",
+    "key": {
+      "#": "minecraft:oak_planks"
+    },
+    "pattern": [
+      "###",
+      "###"
+    ],
+    "result": {
+      "count": 2,
+      "id": "minecraft:oak_trapdoor"
+    }
+  },
+  "oak_fence": {
+    "type": "minecraft:crafting_shaped",
+    "group": "wooden_fence",
+    "key": {
+      "#": "minecraft:stick",
+      "W": "minecraft:oak_planks"
+    },
+    "pattern": [
+      "W#W",
+      "W#W"
+    ],
+    "result": {
+      "count": 3,
+      "id": "minecraft:oak_fence"
+    }
+  },
+  "ladder": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "minecraft:stick"
+    },
+    "pattern": [
+      "# #",
+      "###",
+      "# #"
+    ],
+    "result": {
+      "count": 3,
+      "id": "minecraft:ladder"
+    }
+  },
+  "bread": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "minecraft:wheat"
+    },
+    "pattern": [
+      "###"
+    ],
+    "result": {
+      "id": "minecraft:bread"
+    }
+  },
+  "glass_pane": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "minecraft:glass"
+    },
+    "pattern": [
+      "###",
+      "###"
+    ],
+    "result": {
+      "count": 16,
+      "id": "minecraft:glass_pane"
+    }
+  },
+  "glass_bottle": {
+    "type": "minecraft:crafting_shaped",
+    "key": {
+      "#": "minecraft:glass"
+    },
+    "pattern": [
+      "# #",
+      " # "
+    ],
+    "result": {
+      "count": 3,
+      "id": "minecraft:glass_bottle"
+    }
+  },
+  "quartz_block": {
+    "type": "minecraft:crafting_shaped",
+    "category": "building",
+    "key": {
+      "#": "minecraft:quartz"
+    },
+    "pattern": [
+      "##",
+      "##"
+    ],
+    "result": {
+      "id": "minecraft:quartz_block"
+    }
+  },
+  "quartz_pillar": {
+    "type": "minecraft:crafting_shaped",
+    "category": "building",
+    "key": {
+      "#": "minecraft:quartz_block"
+    },
+    "pattern": [
+      "#",
+      "#"
+    ],
+    "result": {
+      "count": 2,
+      "id": "minecraft:quartz_pillar"
+    }
+  },
+  "nether_bricks": {
+    "type": "minecraft:crafting_shaped",
+    "category": "building",
+    "key": {
+      "#": "minecraft:nether_brick"
+    },
+    "pattern": [
+      "##",
+      "##"
+    ],
+    "result": {
+      "id": "minecraft:nether_bricks"
+    }
+  },
+  "end_stone_bricks": {
+    "type": "minecraft:crafting_shaped",
+    "category": "building",
+    "key": {
+      "#": "minecraft:end_stone"
+    },
+    "pattern": [
+      "##",
+      "##"
+    ],
+    "result": {
+      "count": 4,
+      "id": "minecraft:end_stone_bricks"
+    }
+  },
+  "stone_button": {
+    "type": "minecraft:crafting_shapeless",
+    "category": "redstone",
+    "ingredients": [
+      "minecraft:stone"
+    ],
+    "result": {
+      "id": "minecraft:stone_button"
+    }
+  }
+}

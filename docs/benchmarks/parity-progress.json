@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "target": "26.3",
-  "runtimeVersion": "4.42.0",
-  "sourceFingerprint": "1fc5d05db3ee2e92d177107bf1b738c81363d21617499e0ef83fad406f5d9c9d",
+  "runtimeVersion": "4.43.0",
+  "sourceFingerprint": "061d6b596963e9d65764c457a04a90c305751fa50d705f84afddffc7265d1221",
   "sourceHashes": {
     ".harness/cubeDisplay.ts": "3b3d801191a1a1061f70e50d73341adaba47b53b03d3cb5582d5729731995b62",
     ".harness/fixtures/java-cube-display-26.3/manifest.json": "e9b2e1f52b54b1e1126c83ed5becd85078a28d14f78b239379112597c063d282",
@@ -27,7 +27,7 @@
     "docs/benchmarks/trapdoor-uv-4.35.json": "06b46c01da007ecbd45f475de4de699cb75a27b4a6bfa029f0b8193f84f701d2",
     "docs/java-reference.lock.json": "52eb0cceac8e5c6a1cb95b91209df70cf0c062964a7f2907621b50b35311b388",
     "docs/parity-scope.json": "4d1a6a91fbdad79714547ca42dd3be64dcc9698e101ae4de729249474fef82a4",
-    "package-lock.json": "5e8243d5b63d6cd2b7427017640fb4e278d8def6de082a0d7cb73767c6b02e7e",
+    "package-lock.json": "5dd2c5cec2b98b833ef2cbb0fbb3e7e016b2e70f843276c7f0c12a398be614ea",
     "scripts/audit-java-reference.mjs": "79aae5f48424b1d059dd7c0771c0d7c88b92c2167ad63c34bb532c1b20c465b1",
     "scripts/parity-inventory.ts": "fc2af1e469c8e06a065c55a69051a5964971f39a017127114cd72bf40741406a",
     "scripts/parity-progress.mjs": "4d32b73f8c036c5a49a06502b01434a20b785d1975dc2cd797da61fc52742e9f",
@@ -48,7 +48,7 @@
     "src/components/GameView.tsx": "e472b57789c8793caeac7f5eaa366e74168155cf77c69a4bf68aaff691c3c230",
     "src/components/GuiContainer.tsx": "4e3bc47d9c52197a6ed809a979b96fb578553c932baae1bdd34d096dfebcf7bd",
     "src/components/HUD.tsx": "f8cbea2ae7d82aff726a3c19a35b7572d5a6b7f6c0d877a09f6b387154e2e8f5",
-    "src/components/InventoryScreen.tsx": "9b410983232407b6f8acd805f87f3edc4cc924710aa35ebf16d403b7b5f3f9dc",
+    "src/components/InventoryScreen.tsx": "b2d221695f1724e5eae5fabd25e28bbe199a1aeafee7cece208df6ab91d9d400",
     "src/components/JavaMenus.tsx": "973a33712c24f6fea03df73c4f46d192c47cf57d969b167a2b210cb8dff7e90b",
     "src/components/JavaPanorama.tsx": "5fcae8391ae3c61e72d432ef284f01c7602f3f5191349c889eb45cae110a0f8f",
     "src/components/JavaPlayerPreview.tsx": "2b335bf0b3307a0af0620dcb265afe24a90da8db517007a6cfec143a6fee30fd",
@@ -88,6 +88,8 @@
     "src/game/art/menuPanoramas.generated.ts": "f72b235c4c686d1139c5d2c853674b7661f1e58164d9690839908441d499294b",
     "src/game/art/miniPng.ts": "1d40fff64dee8eeb71150c8639407d73644f5b27d3b2638388206062f7978477",
     "src/game/art/spriteTex.ts": "c34e79e01574bb8e23f2680327571d451e1cbd3b0de565795832804a1343fabb",
+    "src/game/art/survivalMining.generated.ts": "3543bf1c1e0f2d885c3153c9f1b9ef8aada2c5fa6ffa4857341e4b6969de43d0",
+    "src/game/art/survivalRecipes.generated.ts": "8c1cf697cd2fa4dfd7339b98d0cf3da8a48943d83489be515f42d6ab7aed1116",
     "src/game/art/uiSprites.ts": "1c38c1be021ef653167a768ccc044596465dbfeb05bca5d23b01726360069cb3",
     "src/game/art/vanillaArt.generated.ts": "de7b793034eaf69247a53f14c7a37c53cd45230e85f5b963822745c7e5edf1ff",
     "src/game/asyncMesher.ts": "48373cfc425c4cc5fe5a358a07ab03949059877f254b4d9bdf6629b50d6462bd",
@@ -125,11 +127,11 @@
     "src/game/furnaceArt.ts": "2c5671b9bcbe35cd50a54a73b87aa093982efed00313858c91d50109f5b5353d",
     "src/game/gravity.ts": "e608d3ead0581eafe4602a7e9bc6d6a3617cbc296d402b0caad0d01969030d0c",
     "src/game/hunger.ts": "b966ba52bb4748de4368656ae438c60ca04844f4fc721f8e17f8cc1d6e8090d6",
-    "src/game/inventory.ts": "a27c69610ae294f64639f9eb52c1536321e4ee9d116824e75ada4b95562851ba",
+    "src/game/inventory.ts": "50178ee32d5b5c519bd376e381ae7d380605bccd19c4040a6613488cd8ee4a33",
     "src/game/inventoryNavigation.ts": "14b1d74681f65f49d9d72be8c0135620ee8fbfe92991c0479a29d12314f84df4",
     "src/game/itemIcons.ts": "1541ba7308c11fa1ac84a95f3d4a86295c49ef3b14b53ff731da9152460e346a",
     "src/game/itemShape.ts": "fdc21f8c4d07fad6fa3a9acb54aec6e4cf557f1c1605c4fbb8b9707390ca89fb",
-    "src/game/items.ts": "67187a6bcee124005169c0edc9c548d43db4701f87eb9d5e4ea0b7a4a955ccd3",
+    "src/game/items.ts": "60ee15b577bee6f4ca691bca50492be4420573aeefd11c57563e13d6afac5f49",
     "src/game/landing.ts": "09adfafd2c1c20f07706fd7c0ea6c7c7855774f6c8e10ecc35b7236f0452aa7e",
     "src/game/lightMap.ts": "32a4fa9b3bf0f9c5c0dee9fcce8cc7f810779ac3a651feba0fb506810c16bfeb",
     "src/game/lighting.ts": "c9ec162e27fc848ec5073a44facbfa398aac7be54599274530665edd6159b385",
@@ -156,6 +158,7 @@
     "src/game/profile.ts": "2019aec674732fed14c92f16f5373b0e6deefae69f6dfd6a01f4357d3afdf916",
     "src/game/profileCheckpoint.ts": "1010ae92d464cd9997d8f5c2169583c28899e69f06a6dfa26aa09372aeb71c9c",
     "src/game/rails.ts": "e1051c149ec30400af5671f380e7838db54b374c2a4c29e9cd6b537e5561fef0",
+    "src/game/recipeIngredients.ts": "0834f6ce2140065b4554a0fc55bb696598e219f01e0dc6ec4b541379d4d57785",
     "src/game/redstone.ts": "5106f98a7434e9f361909f5c988605fdaee03c270f288241e8f4940c0fab534a",
     "src/game/refinementRecipes.ts": "711dcfe174e8f508713c63de9109738ff5086672b3dc5427198cf03829e952b1",
     "src/game/saves.ts": "37efc10a9d7cb1fd7b59cfc2fa0a89c9a4b762c267b9615402c5c53e821493c7",
@@ -190,7 +193,7 @@
     "src/utils/soundSettings.ts": "5931f8154d3ce6097a86c81d41d543bddf98d4d82b4441e640955191d7d3e519",
     "src/utils/tooltip.tsx": "2b777a91f66d5378888c4859656e2f711f48f631f58f4a4e8539af509d4410c4",
     "src/utils/useLandscapeRequired.ts": "4981739ea3e8f58aab6ccdbe466a8176e841c0a0b06a25977024e24c1d986838",
-    "src/utils/version.ts": "d0209ccafdfc7d24e9466644da3cfb318765cdbb70ccce0a45c95646d3e8cdc1",
+    "src/utils/version.ts": "19bc5b9fa1db7e5212abf982506c7416690ae56e78493f7723ea23db4c60b775",
     "src/utils/viewport.ts": "0ced690888a33e84a754e8a77fc6548edc57a8f2054babdca89b8da205d5c659"
   },
   "overall": {
@@ -246,7 +249,7 @@
     "meaning": "Pinned file/data inventory, not a complete behavior denominator."
   },
   "runtime": {
-    "version": "4.42.0",
+    "version": "4.43.0",
     "runtimeReference": "Minecraft: Java Edition 1.20.4",
     "registeredBlockStates": 304,
     "creativeBlockEntries": 149,
@@ -407,10 +410,10 @@
       "yellow_dye_from_dandelion"
     ],
     "referenceExceptions": [],
-    "runtimeRecords": 220,
+    "runtimeRecords": 218,
     "uniqueMappedSignatures": 26,
     "excludedRuntimeRecords": {
-      "unmapped-identities": 194
+      "unmapped-identities": 192
     },
     "meaning": "Data-shape equality in explicitly mapped crafting subset only. Not original-client execution, crafting behavior, whole-crafting completion or global progress. Not-matched is NOT proof of a missing runtime recipe."
   },

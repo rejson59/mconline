@@ -26,7 +26,11 @@ export default function InventoryScreen({ game, icons, onChange, initialBookOpen
   const refresh = () => { tick(n => n + 1); onChange(); };
   const interact = useGuiInteractions(game, refresh);
   const match = inv.gridMatch(atTable);
-  const canPlace = (r: Recipe) => !!recipeCells(r, atTable) && r.inputs.every(i => inv.countOf(i.id) + inv.grid.reduce((n, s) => n + (s?.id === i.id ? s.count : 0), 0) >= i.count);
+  const placementReady = new Map<Recipe, boolean>();
+  const canPlace = (r: Recipe) => {
+    if (!placementReady.has(r)) placementReady.set(r, inv.canPlaceRecipe(r, atTable));
+    return placementReady.get(r)!;
+  };
   const recipes = filterRecipes(RECIPES, query).filter(r => !!recipeCells(r, atTable) && (!ready || canPlace(r)));
   const pages = Math.max(1, Math.ceil(recipes.length / 20));
   const currentPage = Math.min(page, pages - 1);

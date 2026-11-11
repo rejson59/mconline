@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'survival', entry: path.join(here, 'survival.ts'), label: 'Survival: natywne reguły narzędzi i receptur 26.3' },
   { name: 'reports442', entry: path.join(here, 'reports442.ts'), label: 'Dziesięć zgłoszeń: creeper, modele i przepisy' },
   { name: 'mobmotion', entry: path.join(here, 'mobMotion.ts'), label: 'Moby: płynność, bezpieczne pozycje i budżet symulacji' },
   { name: 'remotehands', entry: path.join(here, 'remoteHands.ts'), label: 'Obie ręce innych graczy: modele, ruch ramion i tekstury' },

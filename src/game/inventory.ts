@@ -1,3 +1,5 @@
+import { SURVIVAL_RECIPES } from './art/survivalRecipes.generated';
+import { ingredientMatches, planIngredients, consumeIngredientPlan } from './recipeIngredients';
 import { refinementRecipes } from './refinementRecipes';
 import { B } from './blocks';
 import { I, stackLimit } from './items';
@@ -75,6 +77,7 @@ export interface Recipe {
    * Optional crafting-grid pattern (rows of characters, ' ' or '.' = empty).
    * When present the grid requires this shape (or its horizontal reflection). `key` maps characters to item ids.
    */
+  ingredientChoices?: Record<number, number[]>;
   pattern?: string[];
   key?: Record<string, number>;
 }
@@ -286,6 +289,14 @@ for (const r of RECIPES.filter(r => r.out.id === B.TORCH || r.out.id === B.CAMPF
     key: Object.fromEntries(Object.entries(r.key ?? {}).map(([k,id]) => [k,id === I.COAL ? I.CHARCOAL : id])) });
 }
 
+// Replace whole output families, including old coal/log variants, with the
+// selected native 26.3 recipes. Tags retain all represented alternatives.
+for (const recipe of SURVIVAL_RECIPES) {
+  const first = RECIPES.findIndex(r => r.out.id === recipe.out.id);
+  for (let i = RECIPES.length - 1; i >= 0; i--) if (RECIPES[i].out.id === recipe.out.id) RECIPES.splice(i, 1);
+  RECIPES.splice(first < 0 ? RECIPES.length : Math.min(first, RECIPES.length), 0, recipe);
+}
+
 // A recipe's dimensions, not only a handwritten flag, determine whether a
 // crafting table is needed in grid matching and the recipe book.
 for (const recipe of RECIPES) {
@@ -371,22 +382,22 @@ export class Inventory {
     if (!cells || this.cursor) return false;
     const next = new Inventory(); next.slots = this.slots.map(s => s ? copyStack(s) : null);
     for (const s of this.grid) if (s && !next.add(s.id, s.count, s.dur, s.ench, s.name)) return false;
-    const need = new Map<number, number>();
-    for (const id of cells) if (id) need.set(id, (need.get(id) ?? 0) + 1);
-    for (const [id, count] of need) if (next.countOf(id) < count) return false;
-    const placed: (Stack | null)[] = cells.map(id => {
-      if (!id) return null;
-      for (let i = next.slots.length - 1; i >= 0; i--) {
-        const source = next.slots[i]; if (!source || source.id !== id) continue;
-        const ingredient = { ...copyStack(source), count: 1 };
-        source.count--; if (!source.count) next.slots[i] = null;
-        return ingredient;
-      }
-      return null;
-    });
+    const plan = planIngredients(recipe, next.slots, cells);
+    if (!plan) return false;
+    const placed = plan.map(i => i < 0 ? null : { ...copyStack(next.slots[i]!), count: 1 });
+    next.slots = consumeIngredientPlan(next.slots, plan);
     this.slots = next.slots;
     this.grid = placed;
     return true;
+  }
+
+  /** Same allocation and capacity rules used by the recipe-book ready filter. */
+  canPlaceRecipe(recipe: Recipe, table: boolean): boolean {
+    const copy = new Inventory();
+    copy.slots = this.slots.map(s => s ? copyStack(s) : null);
+    copy.grid = this.grid.map(s => s ? copyStack(s) : null);
+    copy.cursor = this.cursor;
+    return copy.placeRecipe(recipe, table);
   }
 
   /** Number of usable grid cells (2x2 without a table, 3x3 with one). */
@@ -429,17 +440,19 @@ export class Inventory {
               const want = ch === ' ' || ch === '.' ? 0 : (r.key?.[ch] ?? -1);
               const cell = at(minX + x, minY + y);
               if (want === 0) { if (cell) ok = false; }
-              else if (!cell || cell.id !== want) ok = false;
+              else if (!cell || !ingredientMatches(r, want, cell.id)) ok = false;
             }
           }
           if (ok) return r;
         }
       } else {
-        // shapeless: the placed items must be exactly the recipe inputs
-        if (have.size !== new Set(r.inputs.map((i) => i.id)).size) continue;
-        let ok = true;
-        for (const inp of r.inputs) if (have.get(inp.id) !== inp.count) { ok = false; break; }
-        if (ok) return r;
+        // Every occupied cell contributes one ingredient. The same allocator
+        // handles overlapping native tags without counting one cell twice.
+        const occupied = [...have.values()].reduce((a,b) => a+b,0);
+        if (occupied !== r.inputs.reduce((n,s) => n+s.count,0)) continue;
+        const cells: (Stack | null)[] = [];
+        for (const [id,count] of have) for (let i=0;i<count;i++) cells.push({id,count:1});
+        if (planIngredients(r,cells)) return r;
       }
     }
     return null;
@@ -515,32 +528,28 @@ export class Inventory {
   }
 
   canCraft(r: Recipe): boolean {
-    return r.inputs.every((inp) => this.countOf(inp.id) >= inp.count);
+    return planIngredients(r, this.slots) !== null;
   }
 
-  /** Checks both ingredients and output capacity, including slots freed by ingredients. */
+  /** Plan and output insertion are projected together; failure changes nothing. */
+  private craftProjection(r: Recipe): (Stack | null)[] | null {
+    const plan = planIngredients(r, this.slots);
+    if (!plan) return null;
+    const projection = new Inventory();
+    projection.slots = consumeIngredientPlan(this.slots, plan);
+    if (!projection.add(r.out.id, r.out.count, r.out.dur, r.out.ench, r.out.name)) return null;
+    for (const i of plan) if (i >= 0 && this.slots[i]?.id === I.HONEY_BOTTLE && !projection.add(I.BOTTLE, 1)) return null;
+    return projection.slots;
+  }
+
   canCraftToInventory(r: Recipe): boolean {
-    if (!this.canCraft(r)) return false;
-    const projected = this.slots.map((slot) => slot ? copyStack(slot) : null);
-    for (const input of r.inputs) {
-      if (removeFromSlots(projected, input.id, input.count) > 0) return false;
-    }
-    const projection=new Inventory();projection.slots=projected;
-    if(!projection.add(r.out.id,r.out.count,r.out.dur,r.out.ench,r.out.name))return false;
-    return r.inputs.every(s=>s.id!==I.HONEY_BOTTLE||projection.add(I.BOTTLE,s.count));
+    return this.craftProjection(r) !== null;
   }
 
   craft(r: Recipe): boolean {
-    if (!this.canCraftToInventory(r)) return false;
-    const previous = this.slots.map((slot) => slot ? copyStack(slot) : null);
-    for (const inp of r.inputs) this.remove(inp.id, inp.count);
-    if (!this.add(r.out.id, r.out.count, r.out.dur, r.out.ench, r.out.name)) {
-      // Defensive rollback: output insertion is normally guaranteed by the
-      // preflight above, but never consume a recipe if that assumption changes.
-      this.slots = previous;
-      return false;
-    }
-    for(const input of r.inputs)if(input.id===I.HONEY_BOTTLE)this.add(I.BOTTLE,input.count);
+    const slots = this.craftProjection(r);
+    if (!slots) return false;
+    this.slots = slots;
     return true;
   }
 

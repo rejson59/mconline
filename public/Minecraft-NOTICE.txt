@@ -162,3 +162,5 @@ rights granted. Fixtures are not shipped in the game bundle. Own geometry
 and canvas projection code is separate. No JAR or full original corpus added.
 
 4.42 reference tests: .harness/fixtures/report-recipes-26.3 contains small canonicalized Java 26.3 recipe/tag objects from pinned misode/mcmeta d96c75fec200c4580dd75e033a76341521165461. Mojang/Microsoft reference data, NOT project MIT; no full client/JAR distribution.
+
+4.43: small Java 26.3 recipe/tag/tool-component reference subsets in .harness/fixtures/survival-26.3 and translated rules in art/survival*.generated.ts; pinned misode/mcmeta d96c75fec200c4580dd75e033a76341521165461. Mojang/Microsoft data NOT covered by project MIT. No full game archive.
