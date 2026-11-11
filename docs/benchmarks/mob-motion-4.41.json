@@ -1,0 +1,113 @@
+{
+  "version": "4.41.0",
+  "reports": [
+    {
+      "device": "desktop",
+      "viewport": {
+        "width": 960,
+        "height": 600
+      },
+      "all14Types": true,
+      "fullyGeneratedWorld": true,
+      "packetIntervalMs": 350,
+      "minFrameStep": 0.01666666666666572,
+      "maxFrameStep": 0.016666666666672825,
+      "renderFrameSamples": 1764,
+      "sharedExchangeNoSnap": true,
+      "realOwnedPollNoSnap": true,
+      "wallChecks": 112,
+      "spawnRejected": true,
+      "embeddedBodyRecovered": true,
+      "localInventoryUnchanged": true,
+      "cpuOnly48Mobs": {
+        "samples": 30,
+        "medianMs": 0.5999999998603016,
+        "p95Ms": 11.199999999953434
+      },
+      "syntheticNetwork": true,
+      "physicalPhone": false,
+      "errors": []
+    },
+    {
+      "device": "mobile",
+      "viewport": {
+        "width": 844,
+        "height": 390,
+        "isMobile": true,
+        "hasTouch": true
+      },
+      "all14Types": true,
+      "fullyGeneratedWorld": true,
+      "packetIntervalMs": 350,
+      "minFrameStep": 0.01666666666666572,
+      "maxFrameStep": 0.016666666666672825,
+      "renderFrameSamples": 1764,
+      "sharedExchangeNoSnap": true,
+      "realOwnedPollNoSnap": true,
+      "wallChecks": 112,
+      "spawnRejected": true,
+      "embeddedBodyRecovered": true,
+      "localInventoryUnchanged": true,
+      "cpuOnly48Mobs": {
+        "samples": 30,
+        "medianMs": 0.8000000000465661,
+        "p95Ms": 13
+      },
+      "syntheticNetwork": true,
+      "physicalPhone": false,
+      "errors": []
+    }
+  ],
+  "headless": {
+    "passedGroups": 34,
+    "failedGroups": 0,
+    "negativeControl": {
+      "engineAndMobsCommit": "5141e3b5bf2612a1ad7316cb6f0e07d16a8fbd47",
+      "passedGroups": 27,
+      "failedGroups": 7
+    }
+  },
+  "sharedStateRegression": {
+    "version": "4.41.0",
+    "checks": 27,
+    "environment": "Two isolated Chromium contexts (desktop + emulated mobile), real production engine/PublicServer + PostgreSQL WASM; synthetic identities and membership stubs, not physical devices or real account sessions",
+    "errors": [
+      [],
+      []
+    ]
+  },
+  "recoveryRegression": {
+    "version": "4.41.0",
+    "fullyGeneratedRecoveredWorld": true,
+    "productionHTML": true,
+    "realProvider": true,
+    "mockedGateway": true,
+    "realWebLocks": true,
+    "renderPausedForConcurrentTabs": true,
+    "legacyOrphanRecoveredByConfirmedAction": true,
+    "confirmationCancelSendsNothing": true,
+    "reloadAfterDroppedLeave": true,
+    "freshGeneration": true,
+    "duplicatedTabBlocked": true,
+    "otherDeviceNotAutomaticallyReplaced": true,
+    "realEngineAt2FPSRegenerates": true,
+    "unacknowledgedInventoryRecovered": true,
+    "recoveredInventoryUploaded": true,
+    "secondDeviceInventoryRestored": true,
+    "finalCheckpointPayload": true,
+    "successfulFinalCheckpoint": true,
+    "uncertainCheckpointAckRecovered": true,
+    "staleBranchArchived": true,
+    "corruptBranchArchived": true,
+    "archiveExported": true,
+    "errors": []
+  },
+  "boundaries": [
+    "Production renderer, synthetic packets and region transport; no real accounts or physical owner phone",
+    "CPU simulation samples are not whole-frame FPS or a before/after speedup benchmark",
+    "No resets, backend/schema/RPC-frequency changes or alterations to CAS/journals/protection",
+    "Physics dt bounded to .4s and substeps <= 1/30s; missing terrain pauses entities",
+    "Fully encased entities without a nearby clear exit remain hidden and inactive, not silently deleted",
+    "No original Java client comparison or full pathfinding/animation parity claim"
+  ]
+}

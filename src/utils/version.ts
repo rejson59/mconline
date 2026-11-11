@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.40.0';
-export const GAME_RELEASE_NAME = 'Obie ręce innych graczy';
+export const GAME_VERSION = '4.41.0';
+export const GAME_RELEASE_NAME = 'Płynne moby bez przenikania';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.41: płynne moby bez przenikania', text: 'Oddzielono widoczny ruch mobów od skokowych aktualizacji sieci. Fizyka dzieli duże kroki czasu; tłum sprawdza tylko bliskich sąsiadów. Pojawianie się i teleportacja sprawdzają całą bryłę moba, a stare pozycje wewnątrz bloków mają ograniczone, bezpieczne wyjście. Brak generowania terenu przez moby i resetów zapisów.' },
   { title: '4.40: obie ręce innych graczy', text: 'Widać teraz przedmioty w obu rękach innych graczy: rzeczywiste modele bloków oraz teksturowane narzędzia i jedzenie zamiast złotej kostki. Modele poruszają się razem z ramionami; zmiana skórki zachowuje wyposażenie i pozę. Dla wcześniej sprawdzonych rodzin również lewa ręka używa referencyjnego display. Animacja marszu i pozy pozostałych przedmiotów nadal są projektowe.' },
   { title: '4.39: bezpieczny powrót na serwer', text: 'Rozbieżna kopia ekwipunku nie blokuje już wejścia: gra zachowuje obie wersje i wczytuje aktualny zapis serwera, bez łączenia przedmiotów. /kopie pobiera kopie odzyskiwania. Poprawiono potwierdzenia zapisów i zamykanie strony. Kamień, bruk, ziemia, dębowe deski i piasek mają referencyjne pozy modelu w rękach, dropie i u innych graczy.' },
   { title: '4.38: właz we właściwej pozie', text: 'Dębowy właz używa referencyjnych obrotów, przesunięć i skali modelu w prawej i lewej ręce oraz jako drop. U innych graczy złotą kostkę zastąpił właściwy, teksturowany model włazu z pozą thirdperson. Zachowano fizykę, zapisy i podnoszenie; animacje ramienia/kamery pozostają projektowe.' },

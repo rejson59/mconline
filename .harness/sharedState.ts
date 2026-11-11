@@ -183,9 +183,11 @@ test("primed TNT is a persistent entity with a fenced fuse, not a private local 
   const b = new Mob("creeper", 2, 65, 3);
   b.restoreSnapshot(s);
   assert.equal(b.damage(100, 0, 0), false);
+  const world = new World(1, true);
+  world.getChunk(0, 0); // A loaded scene, not an ungenerated world.
   b.update(
     0.2,
-    new World(1, true),
+    world,
     b.body.pos,
     () => {},
     () => {},

@@ -655,6 +655,7 @@ section('mobs: behaviour');
   // 2.22: pająk ma waniliowe pudełko 1,4 × 0,9 bloku, więc testy stawiają go
   // na płaskiej łące – na zboczu o szerokości 0,9 wchodził w sąsiedni blok.
   const w3 = new World(31337, true);
+  w3.getChunk(0, 0); // Entity simulation does not generate missing terrain.
   const g3 = FLAT_H + 1;
   const near = playerAt(7.0, g3, 6.5);
   let bites = 0;
@@ -3197,8 +3198,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.40.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Obie ręce innych graczy', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.41.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Płynne moby bez przenikania', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
