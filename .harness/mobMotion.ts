@@ -387,5 +387,27 @@ for (const fps of [20, 30, 60])
     assert.ok(Math.max(...steps) < 1.5 / fps);
     m.dispose();
   });
+await test("daylight post-processing cannot generate a missing chunk for a frozen zombie", () => {
+  const w = new World(441, true),
+    m = new Mob("zombie", 8.5, 65, 8.5);
+  m.soundTimer = 100;
+  const g: any = Object.assign(Object.create(Game.prototype), {
+    world: w,
+    mobs: [m],
+    scene: new THREE.Scene(),
+    body: { pos: new THREE.Vector3(8.5, 65, 8.5) },
+    mode: "creative",
+    daylight: () => 1,
+    entityDistance: 1,
+    entityCulling: false,
+    spawnTimer: 100,
+    spawnSmoke: () => {},
+  });
+  g.updateMobs(1 / 60);
+  assert.equal(w.hasChunk(0, 0), false);
+  assert.equal(m.group.visible, false);
+  assert.equal(m.health, 20);
+  m.dispose();
+});
 console.log(`Mob motion: ${passed} groups passed, ${failed} failed`);
 if (failed) process.exitCode = 1;

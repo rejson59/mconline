@@ -1,17 +1,17 @@
 {
   "schema": 1,
   "target": "26.3",
-  "runtimeVersion": "4.41.0",
-  "sourceFingerprint": "8eff59da7bbe71ac9731dc33e6ac93577f1513823a90d31a2977e9da37aaa02b",
+  "runtimeVersion": "4.41.1",
+  "sourceFingerprint": "cba45d0a2eb6cefb7d88e2756605c41b2f18ccb18a11824bd81ea54b1de28e1d",
   "sourceHashes": {
     ".harness/cubeDisplay.ts": "3b3d801191a1a1061f70e50d73341adaba47b53b03d3cb5582d5729731995b62",
     ".harness/fixtures/java-cube-display-26.3/manifest.json": "e9b2e1f52b54b1e1126c83ed5becd85078a28d14f78b239379112597c063d282",
-    ".harness/mobMotion.ts": "831cb5103ee2d87e735b99b04ce720f3068431ab8209aec84d9106b1668e8d16",
+    ".harness/mobMotion.ts": "5ea64e09e9f23f1bc6dd520447bf5df42852247c8af6ed99924d968190e2b308",
     ".harness/profileCheckpoint.ts": "d7cf9ece9b403c9a177177f50d83f78a9801ab2e5a3321052ad953d23832e096",
     ".harness/remoteHands.ts": "f182c91a90515fd60dd388fe906b8f42a07c43b972712133cf52e7e890b375e7",
     ".harness/trapdoorPose.ts": "a982ea1e691a192215b3e04dc3d8d44038a72486dd60723a20b1fc5701483332",
     "docs/MINECRAFT-IMPLEMENTATION-PLAN.md": "8c1e89cc8f18940516945b1e3a44005bed4d7135e05bd0fdf5ae605636cc09db",
-    "docs/MOB-MOTION-4.41.md": "c25413770454fce9522f35daef1388287e0eb8b3083bd7a1b73cb311f73940e5",
+    "docs/MOB-MOTION-4.41.md": "75b3858fd6e9507ef84c9f900336bc98076f4bf34eb56696b474812ffc326bf5",
     "docs/REFERENCE-ARCHIVE-BACKEND.md": "6e4f17506904071072fe933be4540d099dbfaece90cb8bd2196526ac02d4b527",
     "docs/REFERENCE-EMBEDDED-INVENTORY.md": "0a711d6aeb18a7ff29417cfdb85bb8ce20a2906a06419d15588db08e914332db",
     "docs/REMOTE-HANDS-4.40.md": "fbe97ab8cb70d4515de8821bc097bde7624cbf813c6ebaf064b03c59dd191e00",
@@ -27,7 +27,7 @@
     "docs/benchmarks/trapdoor-uv-4.35.json": "06b46c01da007ecbd45f475de4de699cb75a27b4a6bfa029f0b8193f84f701d2",
     "docs/java-reference.lock.json": "52eb0cceac8e5c6a1cb95b91209df70cf0c062964a7f2907621b50b35311b388",
     "docs/parity-scope.json": "4d1a6a91fbdad79714547ca42dd3be64dcc9698e101ae4de729249474fef82a4",
-    "package-lock.json": "1123414ac55592dbf35dc70494dbc284c1b37953956fac295df051daa2cc9a6c",
+    "package-lock.json": "a57d5da03bb3ac23c49605ae22a999301232758450819e8e91523d8b6d1f93c9",
     "scripts/audit-java-reference.mjs": "79aae5f48424b1d059dd7c0771c0d7c88b92c2167ad63c34bb532c1b20c465b1",
     "scripts/parity-inventory.ts": "fc2af1e469c8e06a065c55a69051a5964971f39a017127114cd72bf40741406a",
     "scripts/parity-progress.mjs": "4d32b73f8c036c5a49a06502b01434a20b785d1975dc2cd797da61fc52742e9f",
@@ -111,7 +111,7 @@
     "src/game/creativeCategories.ts": "912530186d037cf72db18168cc7566a389c9b0994fc45a88687f04181123c0a5",
     "src/game/decorationMask.ts": "89d4675ebb69cfabb92b51e2d5ba16a5fe055a3c069146bee2c1603127299e50",
     "src/game/enchant.ts": "dfef66e5f2c9c0d975e506efc8d1bdfa2998cff2bcf1bcf45d2b0ca374ea665c",
-    "src/game/engine.ts": "b6c0a1d365b5aad04505a8a3829add0686383486440a65c98756840f3a565759",
+    "src/game/engine.ts": "4c6afb869d01284f7d1809403d7b5a2553aca8446103659f915c8daf97123ca8",
     "src/game/explorationLoot.ts": "c9959e4c1fa4b30fb5f8ed6a99e49e5c880b9e5fb3f27ed80867ce6c43df3758",
     "src/game/facingArt.ts": "89d3f65cc50390b0947f6ef2cfa12bbc825b7a6441bd9fec7200f03edc96d99b",
     "src/game/farmland.ts": "91e5921654b56ddc3d331bcd0b2b2d5824b54d4f629870e04e146d14e6e3df47",
@@ -189,7 +189,7 @@
     "src/utils/soundSettings.ts": "5931f8154d3ce6097a86c81d41d543bddf98d4d82b4441e640955191d7d3e519",
     "src/utils/tooltip.tsx": "2b777a91f66d5378888c4859656e2f711f48f631f58f4a4e8539af509d4410c4",
     "src/utils/useLandscapeRequired.ts": "4981739ea3e8f58aab6ccdbe466a8176e841c0a0b06a25977024e24c1d986838",
-    "src/utils/version.ts": "488922697b96e0fd79bae41ceb3263f32280c4627b3aa9be2fa96946984178d8",
+    "src/utils/version.ts": "8d830b8718519e2a2a7649f594a879e16ff41d96987c05eed5f7fc9b47d30441",
     "src/utils/viewport.ts": "0ced690888a33e84a754e8a77fc6548edc57a8f2054babdca89b8da205d5c659"
   },
   "overall": {
@@ -245,7 +245,7 @@
     "meaning": "Pinned file/data inventory, not a complete behavior denominator."
   },
   "runtime": {
-    "version": "4.41.0",
+    "version": "4.41.1",
     "runtimeReference": "Minecraft: Java Edition 1.20.4",
     "registeredBlockStates": 304,
     "creativeBlockEntries": 149,
