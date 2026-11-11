@@ -1,3 +1,4 @@
+import { HeldLightField } from './heldLightField';
 import { blastExposure } from './blast';
 import { officialBlockAtlas, isOfficialTile } from './packArt';
 import { MobMotion, mobAreaLoaded, mobFits, mobNeighbours } from './mobMotion';
@@ -819,6 +820,7 @@ export class Game {
   private stormBlend = 0;
   /** 2.8.1: światło trzymanego przedmiotu (pochodnia, latarnia…). */
   private remoteLights = Array.from({ length: 4 }, () => new THREE.Vector4(0, -1000, 0, 0));
+  private heldField = new HeldLightField();
   private heldLight: HeldLightState = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
   /** 2.10: sesja multiplayer (null = gra jednoosobowa). */
   net: NetLike | null = null;
@@ -1140,7 +1142,7 @@ export class Game {
     ];
     // 2.8: warstwa przezroczysta (woda, szkło, portal) dostaje delikatną falę.
     this.materials.forEach((m, i) =>
-      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, fire: i === 1, time: this.uTime, held: this.heldLight, remoteLights: this.remoteLights, sun: this.sunState, brightness: this.brightness })
+      patchChunkMaterial(m as THREE.MeshBasicMaterial, this.uDay, { water: i === 2, fire: i === 1, time: this.uTime, held: this.heldLight, remoteLights: this.remoteLights, heldField: this.heldField.texture, sun: this.sunState, brightness: this.brightness })
     );
     this.dropMat = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, alphaTest: 0.4, side: THREE.DoubleSide });
     // 2.18: pęknięcia bloku wprost z paczki (10 faz, jak w grze). Gdyby
@@ -8036,6 +8038,10 @@ export class Game {
       if (a) light.set(a.group.position.x, a.group.position.y + 1.45, a.group.position.z, HELD_POWER);
       else light.set(0, -1000, 0, 0);
     }
+    this.heldField.update(this.world, [
+      { x: cp.x, y: cp.y, z: cp.z, strength: this.heldLight.strength },
+      ...this.remoteLights.map(v => ({ x: v.x, y: v.y, z: v.z, strength: v.w })),
+    ]);
     for(let i=0;i<(this.avatarLights?.length??0);i++){
       const light=this.avatarLights[i],source=i===0?null:this.remoteLights[i-1];
       if(i===0){light.position.copy(this.heldLight.pos);light.intensity=this.heldLight.strength*12;}
@@ -9098,6 +9104,7 @@ export class Game {
     this.skyDomeTex?.dispose();
     this.skyDome?.geometry.dispose();
     if (this.skyDome) (this.skyDome.material as THREE.Material).dispose();
+    this.heldField.dispose();
     for (const mat of this.materials) mat.dispose();
     this.materials = [];
     // 2.28: pasmo LOD ma własny materiał (bez tekstur) – zwalniamy je razem

@@ -1,3 +1,4 @@
+import { heldFieldGLSL } from './heldLightField';
 import * as THREE from 'three';
 
 /**
@@ -102,7 +103,7 @@ export interface SunState {
 export function patchChunkMaterial(
   mat: THREE.MeshBasicMaterial,
   uDay: { value: number },
-  opts: { water?: boolean; fire?: boolean; time?: { value: number }; held?: HeldLightState; remoteLights?: THREE.Vector4[]; sun?: SunState; brightness?: { value: number } } = {}
+  opts: { heldField?: THREE.DataTexture; water?: boolean; fire?: boolean; time?: { value: number }; held?: HeldLightState; remoteLights?: THREE.Vector4[]; sun?: SunState; brightness?: { value: number } } = {}
 ) {
   const water = !!opts.water, fire = !!opts.fire;
   const uTime = opts.time ?? { value: 0 };
@@ -119,8 +120,9 @@ export function patchChunkMaterial(
   mat.userData.uHeldStrength = uHeldStrength;
   mat.userData.uSun = uSun;
   mat.color.setRGB(1, 1, 1);
-  mat.customProgramCacheKey = () => (water ? 'blockcraft-light-10-water' : fire ? 'blockcraft-light-9-fire' : 'blockcraft-light-8');
+  mat.customProgramCacheKey = () => (opts.heldField ? 'voxel-held-1-' : '') + (water ? 'blockcraft-light-10-water' : fire ? 'blockcraft-light-9-fire' : 'blockcraft-light-8');
   mat.onBeforeCompile = (shader) => {
+    if (opts.heldField) shader.uniforms.uHeldField = { value: opts.heldField };
     shader.uniforms.uBrightness = uBrightness;
     shader.uniforms.uDay = uDay;
     shader.uniforms.uRemoteLights = { value: opts.remoteLights ?? Array.from({ length: 4 }, () => new THREE.Vector4(0, -1000, 0, 0)) };
@@ -151,6 +153,7 @@ export function patchChunkMaterial(
       .replace(
         '#include <common>',
         `#include <common>
+${opts.heldField ? heldFieldGLSL : ''}
 uniform float uDay;
 uniform float uBrightness;
 uniform vec4 uRemoteLights[4];
@@ -191,13 +194,13 @@ vec3 faceNormal(float f) {
 		if (uHeldStrength > 0.001) {
 			float d = distance(vWorldPos, uHeldPos);
 			float t = clamp(1.0 - d / uHeldRange, 0.0, 1.0);
-			held = uHeldStrength * pow(t, 1.6);
+			held = uHeldStrength * ${opts.heldField ? 'min(pow(t, 1.6), heldVisibility(vWorldPos + faceNormal(vFace) * 0.02, uHeldPos, 0.0))' : 'pow(t, 1.6)'};
 		}
 
         for (int i = 0; i < 4; i++) {
           if (uRemoteLights[i].w > 0.001) {
             float t = clamp(1.0 - distance(vWorldPos, uRemoteLights[i].xyz) / uHeldRange, 0.0, 1.0);
-            held = max(held, uRemoteLights[i].w * pow(t, 1.6));
+            held = max(held, uRemoteLights[i].w * ${opts.heldField ? 'min(pow(t, 1.6), heldVisibility(vWorldPos + faceNormal(vFace) * 0.02, uRemoteLights[i].xyz, float(i + 1)))' : 'pow(t, 1.6)'});
           }
         }
 		// Słońce: ściany zwrócone do niego jaśnieją, odwrotne zostają w cieniu.

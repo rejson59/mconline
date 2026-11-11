@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "target": "26.3",
-  "runtimeVersion": "4.43.0",
-  "sourceFingerprint": "061d6b596963e9d65764c457a04a90c305751fa50d705f84afddffc7265d1221",
+  "runtimeVersion": "4.44.0",
+  "sourceFingerprint": "718005d6dc05dc38f8307b910a0d6520a0e4307a23a322e517bed71bb6688879",
   "sourceHashes": {
     ".harness/cubeDisplay.ts": "3b3d801191a1a1061f70e50d73341adaba47b53b03d3cb5582d5729731995b62",
     ".harness/fixtures/java-cube-display-26.3/manifest.json": "e9b2e1f52b54b1e1126c83ed5becd85078a28d14f78b239379112597c063d282",
@@ -27,7 +27,7 @@
     "docs/benchmarks/trapdoor-uv-4.35.json": "06b46c01da007ecbd45f475de4de699cb75a27b4a6bfa029f0b8193f84f701d2",
     "docs/java-reference.lock.json": "52eb0cceac8e5c6a1cb95b91209df70cf0c062964a7f2907621b50b35311b388",
     "docs/parity-scope.json": "4d1a6a91fbdad79714547ca42dd3be64dcc9698e101ae4de729249474fef82a4",
-    "package-lock.json": "5dd2c5cec2b98b833ef2cbb0fbb3e7e016b2e70f843276c7f0c12a398be614ea",
+    "package-lock.json": "4f47ecc3816bd955687c9575bd24d7898a9f52f5b0599776b00867e3b372caf6",
     "scripts/audit-java-reference.mjs": "79aae5f48424b1d059dd7c0771c0d7c88b92c2167ad63c34bb532c1b20c465b1",
     "scripts/parity-inventory.ts": "fc2af1e469c8e06a065c55a69051a5964971f39a017127114cd72bf40741406a",
     "scripts/parity-progress.mjs": "4d32b73f8c036c5a49a06502b01434a20b785d1975dc2cd797da61fc52742e9f",
@@ -114,7 +114,7 @@
     "src/game/creativeCategories.ts": "912530186d037cf72db18168cc7566a389c9b0994fc45a88687f04181123c0a5",
     "src/game/decorationMask.ts": "89d4675ebb69cfabb92b51e2d5ba16a5fe055a3c069146bee2c1603127299e50",
     "src/game/enchant.ts": "dfef66e5f2c9c0d975e506efc8d1bdfa2998cff2bcf1bcf45d2b0ca374ea665c",
-    "src/game/engine.ts": "7d2fac77cddefd91ba783af33aba5e020e183ef3e958a9c44961d6c9798fdcf2",
+    "src/game/engine.ts": "4b06a1f2951918e977e485357663bbb5be081d219ca23d9c316abc7283a05de2",
     "src/game/explorationLoot.ts": "c9959e4c1fa4b30fb5f8ed6a99e49e5c880b9e5fb3f27ed80867ce6c43df3758",
     "src/game/facingArt.ts": "89d3f65cc50390b0947f6ef2cfa12bbc825b7a6441bd9fec7200f03edc96d99b",
     "src/game/farmland.ts": "91e5921654b56ddc3d331bcd0b2b2d5824b54d4f629870e04e146d14e6e3df47",
@@ -126,6 +126,7 @@
     "src/game/furnace.ts": "a83068925e1a07f13cc5c90033fbfbbaf23af2ac6015ad7a7132feb9c4e1bae9",
     "src/game/furnaceArt.ts": "2c5671b9bcbe35cd50a54a73b87aa093982efed00313858c91d50109f5b5353d",
     "src/game/gravity.ts": "e608d3ead0581eafe4602a7e9bc6d6a3617cbc296d402b0caad0d01969030d0c",
+    "src/game/heldLightField.ts": "d357a5c203a4b07d2aea051216bfb15c96c518bae4c6ef3fe45567f0dfb19b5c",
     "src/game/hunger.ts": "b966ba52bb4748de4368656ae438c60ca04844f4fc721f8e17f8cc1d6e8090d6",
     "src/game/inventory.ts": "50178ee32d5b5c519bd376e381ae7d380605bccd19c4040a6613488cd8ee4a33",
     "src/game/inventoryNavigation.ts": "14b1d74681f65f49d9d72be8c0135620ee8fbfe92991c0479a29d12314f84df4",
@@ -134,7 +135,7 @@
     "src/game/items.ts": "60ee15b577bee6f4ca691bca50492be4420573aeefd11c57563e13d6afac5f49",
     "src/game/landing.ts": "09adfafd2c1c20f07706fd7c0ea6c7c7855774f6c8e10ecc35b7236f0452aa7e",
     "src/game/lightMap.ts": "32a4fa9b3bf0f9c5c0dee9fcce8cc7f810779ac3a651feba0fb506810c16bfeb",
-    "src/game/lighting.ts": "c9ec162e27fc848ec5073a44facbfa398aac7be54599274530665edd6159b385",
+    "src/game/lighting.ts": "4d730ca7e26b367878be0712bd1a12e77eb2693c8547e9b19a5c58287b6bf0d7",
     "src/game/lod.ts": "9d84ad34593486a0035fbd59a21231f54abe9fb4fdd30a4b705378d7c8edaf8a",
     "src/game/merchantLayout.ts": "51bbc8371681c2ba2587572ad722899b3acde416c60854677cb92a29eb667753",
     "src/game/meshProtocol.ts": "7c93762252688d5a4f07cc01e2e141f24c82b2af2a2a88f4dca288429382606d",
@@ -193,7 +194,7 @@
     "src/utils/soundSettings.ts": "5931f8154d3ce6097a86c81d41d543bddf98d4d82b4441e640955191d7d3e519",
     "src/utils/tooltip.tsx": "2b777a91f66d5378888c4859656e2f711f48f631f58f4a4e8539af509d4410c4",
     "src/utils/useLandscapeRequired.ts": "4981739ea3e8f58aab6ccdbe466a8176e841c0a0b06a25977024e24c1d986838",
-    "src/utils/version.ts": "19bc5b9fa1db7e5212abf982506c7416690ae56e78493f7723ea23db4c60b775",
+    "src/utils/version.ts": "4cfe54e586b850dee31e3150a4cdb70fa1c7719b657bafa9d0332dc5f2ebe5ae",
     "src/utils/viewport.ts": "0ced690888a33e84a754e8a77fc6548edc57a8f2054babdca89b8da205d5c659"
   },
   "overall": {
@@ -249,7 +250,7 @@
     "meaning": "Pinned file/data inventory, not a complete behavior denominator."
   },
   "runtime": {
-    "version": "4.43.0",
+    "version": "4.44.0",
     "runtimeReference": "Minecraft: Java Edition 1.20.4",
     "registeredBlockStates": 304,
     "creativeBlockEntries": 149,
