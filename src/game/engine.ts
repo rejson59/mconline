@@ -1,4 +1,4 @@
-import { MobMotion, mobFits, mobNeighbours } from './mobMotion';
+import { MobMotion, mobAreaLoaded, mobFits, mobNeighbours } from './mobMotion';
 import { portraitGameplayBlocked } from '../utils/screen';
 import { trapdoorItemGeometry } from './trapdoorItem';
 import { hasReferenceItemDisplay, applyReferenceItemDisplay, referenceGroundOffset } from './blockItemDisplay';
@@ -7760,6 +7760,9 @@ export class Game {
     for (let mi = 0; mi < this.mobs.length; mi++) {
       const m = this.mobs[mi];
       if(this.mobSimulating)this.mobCaptureRegion=m.netRegion;
+      // Also gate post-AI daylight/audio work: heightAt would otherwise create
+      // the missing chunk even when Mob.update correctly refused to simulate.
+      if (!mobAreaLoaded(this.world, m.body)) { m.group.visible = false; continue; }
       // Distant AI runs every 2–6 frames. Accumulate the real elapsed time
       // (frames can differ in duration); presentation still runs on skipped frames.
       const dist = m.body.pos.distanceTo(p);

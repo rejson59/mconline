@@ -1,10 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.41.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.41.1 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
 
-## Wersja 4.41.0 — płynne moby bez przenikania
+## Wersja 4.41.1 — płynne moby bez przenikania
 
-Naprawiono skoki modeli przy sieciowych aktualizacjach mobów i sprint–postój między pakietami. Duże kroki fizyki są dzielone, a tłum sprawdza bliskich sąsiadów zamiast wszystkich par. Spawn i teleport endermana sprawdzają całą bryłę; istniejące pozycje w blokach mają ograniczone, bezpieczne odzyskiwanie. Brakujący teren nie jest traktowany jak powietrze. **34 grupy regresji, wszystkie 14 typów w produkcyjnym Chromium desktop/dotyk, wspólne moby/TNT i odzyskiwanie ekwipunku PASS.** Bez resetów i zmian backendu. [Przyczyny, wyniki i granice](docs/MOB-MOTION-4.41.md).
+Naprawiono skoki modeli przy sieciowych aktualizacjach mobów i sprint–postój między pakietami. Duże kroki fizyki są dzielone, a tłum sprawdza bliskich sąsiadów zamiast wszystkich par. Spawn i teleport endermana sprawdzają całą bryłę; istniejące pozycje w blokach mają ograniczone, bezpieczne odzyskiwanie. Brakujący teren nie jest traktowany jak powietrze. **35 grup regresji, wszystkie 14 typów w produkcyjnym Chromium desktop/dotyk, wspólne moby/TNT i odzyskiwanie ekwipunku PASS.** Bez resetów i zmian backendu. [Przyczyny, wyniki i granice](docs/MOB-MOTION-4.41.md).
 
 ## Wersja 4.40.0 — obie ręce innych graczy
 

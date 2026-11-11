@@ -51,3 +51,7 @@ To poprawka znalezionych przyczyn, a nie gwarancja usunięcia dowolnego laga sie
 ## Kontrole wydania
 
 `npm run typecheck`, pełne `npm test` (włącznie z SQL, odzyskiwaniem, kontem i aktualnym audytem dowodów), `npm run build`, `npm audit --audit-level=low` i `git diff --check`: **PASS, 0 podatności**. Raport 4.41 zachowuje częściowy status szerszych obszarów AI/animacji i nie zamienia liczby testów ani pomiarów CPU w procent całej gry.
+
+### Domknięcie 4.41.1 — brak generowania także po AI
+
+Dodatkowa kontrola wykryła, że słoneczne obrażenia zombie mogły wywołać `heightAt` już po zatrzymanym `Mob.update`, a tym samym wygenerować brakujący chunk. Strażnik całej iteracji odcina także ten etap i dźwięki. **35 grup PASS / 0 FAIL**; nowy test używa prawdziwego `Game.updateMobs`, zombie w pełnym słońcu i całkowicie niewczytanego świata, sprawdzając brak chunku, brak obrażeń i ukrycie modelu. Historyczna kontrola negatywna 27/7 dotyczy pierwszych 34 grup; nie jest przepisywana jako wynik nowej próby. Pokwitowanie przeglądarkowe 4.41.0 pozostaje historycznym pomiarem; dodatkowa poprawka nie zmienia ścieżki wczytanych mobów.
