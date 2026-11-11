@@ -1,6 +1,7 @@
+import { NATIVE_MINING_TOOLS, NATIVE_PICK_BLOCKS } from './art/survivalMining.generated';
 import { destroyProgress, efficiencyBonus, MINING_TICK, type MiningEnvironment } from './mining';
 import { railBase } from './rails';
-import { B, BLOCKS, RENDER, isFurnace, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase, buildingItem, isSlabDouble, isBed } from './blocks';
+import { B, BLOCKS, RENDER, isDoor, isLadder, isTrap, isChestBlock, stairsBase, slabBase, buildingItem, isSlabDouble } from './blocks';
 import type { Stack } from './inventory';
 
 /** Item ids sit above block ids so a stack can hold either. */
@@ -389,39 +390,9 @@ export function durabilityMax(id: number): number {
 
 export const CREATIVE_ITEMS: number[] = ITEM_LIST.map((it) => it.id);
 
-const TIER_SPEED = [0, 2, 4, 6, 8];
-
-const PICK_BLOCKS = new Set<number>([
-  B.STONE, B.COBBLE, B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.BRICK, B.FURNACE,
-  B.RAIL, B.POWERED_RAIL, B.DETECTOR_RAIL,
-  B.FURNACE_ON, B.OBSIDIAN, B.STONE_BRICKS, B.SANDSTONE, B.MOSSY, B.ICE, B.BEDROCK,
-  B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK, B.LAPIS_ORE, B.LAPIS_BLOCK, B.ENCHANT,
-  B.EMERALD_ORE, B.EMERALD_BLOCK, B.LANTERN, B.BELL,
-  B.REDSTONE_ORE, B.REDSTONE_BLOCK,
-  B.NETHERRACK, B.NETHER_BRICKS, B.QUARTZ_ORE, B.QUARTZ_BLOCK, B.QUARTZ_PILLAR,
-  B.MAGMA, B.END_STONE, B.END_BRICKS, B.PURPUR_BLOCK, B.PURPUR_PILLAR,
-  B.BASALT, B.BLACKSTONE, B.CRYING_OBSIDIAN, B.ANVIL, B.BREWING,
-  B.CONCRETE_WHITE, B.CONCRETE_RED, B.CONCRETE_BLUE, B.CONCRETE_GREEN, B.CONCRETE_YELLOW, B.CONCRETE_BLACK,
-  B.TERRACOTTA, B.OBSERVER, B.DISPENSER, B.PISTON, B.STICKY_PISTON,
-  B.COBBLE_STAIRS_N, B.BRICK_STAIRS_N, B.STONE_BRICK_STAIRS_N, B.SANDSTONE_STAIRS_N, B.NETHER_BRICK_STAIRS_N, B.QUARTZ_STAIRS_N,
-  B.STONE_SLAB, B.COBBLE_SLAB, B.BRICK_SLAB, B.SANDSTONE_SLAB, B.NETHER_BRICK_SLAB, B.QUARTZ_SLAB,
-]);
-const materialBlock = (id: number) => isFurnace(id) ? B.FURNACE : slabBase(stairsBase(railBase(id)));
-const AXE_BLOCKS = new Set<number>([
-  B.OAK_STAIRS_N, B.OAK_SLAB,
-  B.LOG, B.BIRCH_LOG, B.PLANKS, B.CRAFTING, B.BOOKSHELF, B.PUMPKIN, B.CHEST, B.LOOT_CHEST,
-  B.NOTE_BLOCK, B.CAMPFIRE, B.CAMPFIRE_OFF, B.TRAP, B.FENCE, B.LADDER_N, B.ACACIA_LOG,
-]);
-const SHOVEL_BLOCKS = new Set<number>([
-  B.DIRT, B.GRASS, B.SAND, B.GRAVEL, B.SNOW, B.CLAY, B.FARMLAND, B.FARMLAND_WET, B.PATH, B.SOUL_SAND, B.SOUL_SOIL, B.MUD,
-]);
-const LEAF_BLOCKS = new Set<number>([B.LEAVES, B.BIRCH_LEAVES, B.ACACIA_LEAVES, B.JUNGLE_LEAVES]);
-const HOE_BLOCKS = new Set<number>([...LEAF_BLOCKS, B.HAY, B.TARGET, B.SHROOMLIGHT]);
-const SWORD_BLOCKS = new Set<number>([...LEAF_BLOCKS,B.SAPLING,B.BIRCH_SAPLING,B.FLOWER_RED,B.FLOWER_YELLOW,B.TALLGRASS,B.SUGARCANE,B.PUMPKIN,B.LILY_PAD,B.CROP0,B.CROP1,B.CROP2,B.CROP3]);
-const WOOL_BLOCKS = new Set<number>([B.WOOL_WHITE,B.WOOL_RED,B.WOOL_BLUE,B.WOOL_GREEN,B.WOOL_YELLOW,B.WOOL_BLACK,
-  B.WOOL_ORANGE,B.WOOL_MAGENTA,B.WOOL_LIGHT_BLUE,B.WOOL_LIME,B.WOOL_PINK,B.WOOL_GRAY,B.WOOL_LIGHT_GRAY,B.WOOL_CYAN,B.WOOL_PURPLE,B.WOOL_BROWN]);
-// Being faster with a pick does NOT imply requiring one for drops.
-const HAND_HARVESTABLE_PICK = new Set<number>([B.ICE, B.PISTON, B.STICKY_PISTON, B.RAIL, B.POWERED_RAIL, B.DETECTOR_RAIL]);
+const PICK_BLOCKS = new Set<number>(NATIVE_PICK_BLOCKS);
+// Faster with a pick is not the same as requiring a correct tool for drops.
+const HAND_HARVESTABLE_PICK = new Set<number>([B.ICE, B.PISTON, B.PISTON_HEAD, B.STICKY_PISTON, B.RAIL, B.POWERED_RAIL, B.DETECTOR_RAIL, B.RAIL_EW, B.POWERED_RAIL_EW, B.DETECTOR_RAIL_EW, B.BUTTON, B.BUTTON_ON]);
 const ORES = new Set<number>([B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE, B.LAPIS_ORE, B.EMERALD_ORE, B.REDSTONE_ORE, B.QUARTZ_ORE]);
 
 /** Experience orbs dropped when an ore block is mined. 0 = no experience. */
@@ -470,7 +441,7 @@ export function requiredPickTier(blockId: number): number {
   if (blockId === B.IRON_BLOCK) return 2;
   if (blockId === B.ANVIL) return 1;
   if (blockId === B.NETHER_BRICKS || blockId === B.BLACKSTONE || blockId === B.BASALT) return 1;
-  if (PICK_BLOCKS.has(materialBlock(blockId)) && !HAND_HARVESTABLE_PICK.has(materialBlock(blockId))) return 1;
+  if (PICK_BLOCKS.has(blockId) && !HAND_HARVESTABLE_PICK.has(blockId)) return 1;
   return 0;
 }
 
@@ -493,15 +464,11 @@ export function pickHint(blockId: number, toolId: number): string | null {
 
 /** Native tool-tag speed, independent of whether this tool can harvest the drop. */
 export function toolMiningSpeed(blockId: number, toolId: number): number {
-  const tool = ITEMS[toolId];
-  const material = materialBlock(blockId);
-  if (tool?.tool === 'shears') return LEAF_BLOCKS.has(blockId) ? 15 : WOOL_BLOCKS.has(blockId) ? 5 : 1;
-  if (tool?.tool === 'sword') return (SWORD_BLOCKS.has(blockId)||WOOL_BLOCKS.has(blockId)) ? 1.5 : 1;
-  const matches = tool?.tool === 'pick' ? PICK_BLOCKS.has(material)
-    : tool?.tool === 'axe' ? AXE_BLOCKS.has(material) || isDoor(blockId) || isLadder(blockId) || isTrap(blockId) || isChestBlock(blockId) || isBed(blockId)
-    : tool?.tool === 'shovel' ? SHOVEL_BLOCKS.has(blockId)
-    : tool?.tool === 'hoe' ? HOE_BLOCKS.has(blockId) : false;
-  return matches ? tool?.miningSpeed ?? TIER_SPEED[tool?.tier ?? 1] ?? 1 : 1;
+  const tool = NATIVE_MINING_TOOLS[toolId];
+  if (!tool) return 1;
+  // Native tool rules resolve each property independently: an earlier rule
+  // denying drops must not suppress a later rule's effective mining speed.
+  return tool.rules.find(rule => rule.speed !== undefined && rule.blocks.includes(blockId))?.speed ?? tool.defaultSpeed;
 }
 export function miningDamage(blockId: number, toolId: number, eff = 0, environment: MiningEnvironment = {}): number {
   const def = BLOCKS[blockId];

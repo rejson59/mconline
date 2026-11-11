@@ -1,0 +1,30 @@
+{
+  "target": "26.3",
+  "repository": "misode/mcmeta",
+  "commit": "d96c75fec200c4580dd75e033a76341521165461",
+  "notice": "Native data Mojang/Microsoft, NOT-MIT. Compressed transport is decoded before SHA-256 comparison. No client archive.",
+  "artifacts": {
+    "recipes": {
+      "api": "repos/misode/mcmeta/contents/data/recipe/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "format": "contents",
+      "sha256": "6b9cd71611420e2c618c96075a25dd1180745e69c9bdad8ab07de39630ff4af5",
+      "bytes": 682197
+    },
+    "item-tags": {
+      "api": "repos/misode/mcmeta/contents/data/tag/item/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "format": "contents",
+      "sha256": "cd6b463583aa7379b340636ffa3ae62b97b2dc723fabb54bfec36a2b9d27e446",
+      "bytes": 67779
+    },
+    "block-tags": {
+      "api": "repos/misode/mcmeta/contents/data/tag/block/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "sha256": "0ad04c31d48a9dd1bc884c1482b4a0e6130d0962ff2e8a024b0f5b4c2b37943f",
+      "gzip": false
+    },
+    "item-components": {
+      "api": "repos/misode/mcmeta/contents/item_components/data.json.gz?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "sha256": "7b79adfc3be9ced1174d5edca6089cfdf021152d8ffe6c3549683274ba9cee52",
+      "gzip": true
+    }
+  }
+}

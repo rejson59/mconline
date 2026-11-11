@@ -37,10 +37,15 @@ if (!fs.existsSync(libs)) {
 import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
 import { build } from "esbuild";
-const report442 = process.env.BROWSER_REPORTS442 === "1";
+const survivalAudit = process.env.BROWSER_SURVIVAL === "1";
+const report442 = process.env.BROWSER_REPORTS442 === "1" || survivalAudit;
 const out = path.join(
   root,
-  report442 ? ".cache/verification442" : ".cache/verification430",
+  survivalAudit
+    ? ".cache/verification443"
+    : report442
+      ? ".cache/verification442"
+      : ".cache/verification430",
 );
 fs.mkdirSync(out, { recursive: true });
 await build({
@@ -428,6 +433,125 @@ try {
         },
         { B },
       );
+    let survival = null;
+    if (survivalAudit)
+      survival = await p.evaluate(
+        ({ B, I }) => {
+          const g = window.minecraft.game,
+            inv = g.inventory;
+          const check = (label, ok) => {
+            if (!ok) throw Error(label);
+          };
+          g.mode = "survival";
+          g.ui = "playing";
+          g.mouseLeft = false;
+          g.mouseRight = false;
+          g.touchAim = null;
+          for (let x = 0; x < 12; x++)
+            for (let z = 0; z < 12; z++) {
+              g.world.setBlock(x, 89, z, B.STONE);
+              for (let y = 90; y < 97; y++) g.world.setBlock(x, y, z, B.AIR);
+            }
+          inv.slots.fill(null);
+          inv.grid.fill(null);
+          inv.cursor = null;
+          for (const n of [0, 1, 2, 3, 5, 6, 7, 8])
+            inv.grid[n] = { id: B.COBBLE, count: 1 };
+          const furnaceRecipe = inv.gridMatch(true);
+          check("native furnace recipe found", !!furnaceRecipe);
+          inv.grid.fill(null);
+          inv.add(B.BLACKSTONE, 8);
+          check(
+            "book ready accounts for blackstone",
+            inv.canPlaceRecipe(furnaceRecipe, true),
+          );
+          check(
+            "book places real blackstone",
+            inv.placeRecipe(furnaceRecipe, true),
+          );
+          check(
+            "no canonical cobblestone invented",
+            inv.grid.filter((s) => s?.id === B.BLACKSTONE).length === 8,
+          );
+          check("tagged furnace crafts", inv.craftGrid(true)?.id === B.FURNACE);
+          const times = [];
+          const mine = (block, tool, expectedTicks) => {
+            g.ui = "playing";
+            g.body.pos.set(4.5, 90, 8.5);
+            g.body.onGround = true;
+            g.body.vel.set(0, 0, 0);
+            g.yaw = 0;
+            g.pitch = Math.atan2(91.25 - (90 + g.eyeHeight), 3);
+            inv.slots[0] = { id: tool, count: 1 };
+            g.selected = 0;
+            g.usingOffhand = false;
+            g.updateHand();
+            g.world.setBlock(4, 91, 5, block);
+            g.breakKey = "";
+            g.breakProgress = 0;
+            g.breakTickRemainder = 0;
+            g.breakCooldown = 0;
+            g.mouseLeft = true;
+            let ticks = 0;
+            while (g.world.peekBlock(4, 91, 5) === block && ticks < 100) {
+              g.updateInteraction(0.05);
+              ticks++;
+            }
+            g.mouseLeft = false;
+            check(
+              "real mining ticks " + block + "/" + tool,
+              ticks === expectedTicks,
+            );
+            check(
+              "actual targeted block removed",
+              g.world.peekBlock(4, 91, 5) === B.AIR,
+            );
+            times.push({
+              block,
+              tool,
+              ticks,
+              remainingDurability: inv.slots[0]?.dur,
+            });
+          };
+          mine(B.STONE, I.WOOD_PICK, 23);
+          mine(B.BED, I.GOLD_AXE, 6);
+          mine(B.WOOL_WHITE, I.WOOD_SWORD, 24);
+          const dropsBefore = g.drops.length;
+          mine(B.IRON_ORE, I.STONE_PICK, 23);
+          check(
+            "real ore break produces raw iron",
+            g.drops
+              .slice(dropsBefore)
+              .some((d) => d.id === I.RAW_IRON && d.count === 1),
+          );
+          g.world.setBlock(7, 90, 7, B.FURNACE);
+          g.openFurnace(7, 90, 7);
+          const f = g.furnaces.get("7,90,7");
+          check("actual furnace created", !!f);
+          f.input = { id: I.RAW_IRON, count: 1 };
+          f.fuel = { id: I.CHARCOAL, count: 1 };
+          f.output = null;
+          f.cook = 0;
+          f.burn = 0;
+          g.updateFurnaces(9.95);
+          check("no early smelting output", !f.output);
+          g.updateFurnaces(0.05);
+          check(
+            "raw iron smelts at 200 ticks",
+            f.output?.id === I.IRON && f.output.count === 1 && !f.input,
+          );
+          g.renderer.render(g.scene, g.camera);
+          const gl = g.renderer.getContext();
+          check("no WebGL errors", gl.getError() === gl.NO_ERROR);
+          return {
+            blackstoneRecipeBook: true,
+            actualMining: times,
+            rawOreDrop: true,
+            actualFurnace200Ticks: true,
+          };
+        },
+        { B, I },
+      );
     const icon = await p.evaluate(
       (id) => window.minecraft.game.icons[id],
       B.BED,
@@ -514,6 +638,7 @@ try {
       device: mobile ? "mobile-emulated" : "desktop",
       gameplay,
       ...(report442 ? { reports442, viewport: p.viewport() } : {}),
+      ...(survivalAudit ? { survival } : {}),
       touch,
       editable,
       errors,

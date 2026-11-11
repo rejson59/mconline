@@ -1,0 +1,1502 @@
+{
+  "wooden_pickaxe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 1,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.799999952316284,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:cooking_fuel": {
+      "burn_time": "minecraft:cooking/time_wood_items_large",
+      "speed_multiplier": "minecraft:cooking/speed_default"
+    },
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 15
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:wooden_pickaxe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.wooden_pickaxe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 59,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:wooden_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_wooden_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/pickaxe",
+          "correct_for_drops": true,
+          "speed": 2
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "wooden_axe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 6,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3.200000047683716,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:axe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:cooking_fuel": {
+      "burn_time": "minecraft:cooking/time_wood_items_large",
+      "speed_multiplier": "minecraft:cooking/speed_default"
+    },
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 15
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:wooden_axe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.wooden_axe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 59,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:wooden_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_wooden_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/axe",
+          "correct_for_drops": true,
+          "speed": 2
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "disable_blocking_for_seconds": 5,
+      "item_damage_per_attack": 2
+    }
+  },
+  "wooden_shovel": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 1.5,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:shovel",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:cooking_fuel": {
+      "burn_time": "minecraft:cooking/time_wood_items_large",
+      "speed_multiplier": "minecraft:cooking/speed_default"
+    },
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 15
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:wooden_shovel",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.wooden_shovel"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 59,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:wooden_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_wooden_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/shovel",
+          "correct_for_drops": true,
+          "speed": 2
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "wooden_sword": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 3,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.4000000953674316,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:cooking_fuel": {
+      "burn_time": "minecraft:cooking/time_wood_items_large",
+      "speed_multiplier": "minecraft:cooking/speed_default"
+    },
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 15
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:wooden_sword",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.wooden_sword"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 59,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:wooden_tool_materials"
+    },
+    "minecraft:tool": {
+      "can_destroy_blocks_in_creative": false,
+      "damage_per_block": 2,
+      "rules": [
+        {
+          "blocks": "minecraft:cobweb",
+          "correct_for_drops": true,
+          "speed": 15
+        },
+        {
+          "blocks": "#minecraft:sword_instantly_mines",
+          "speed": 3.4028235e+38
+        },
+        {
+          "blocks": "#minecraft:sword_efficient",
+          "speed": 1.5
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {}
+  },
+  "wooden_hoe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 0,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:hoe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:cooking_fuel": {
+      "burn_time": "minecraft:cooking/time_wood_items_large",
+      "speed_multiplier": "minecraft:cooking/speed_default"
+    },
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 15
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:wooden_hoe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.wooden_hoe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 59,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:wooden_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_wooden_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/hoe",
+          "correct_for_drops": true,
+          "speed": 2
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "stone_pickaxe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 2,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.799999952316284,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 5
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:stone_pickaxe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.stone_pickaxe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 131,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:stone_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_stone_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/pickaxe",
+          "correct_for_drops": true,
+          "speed": 4
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "stone_axe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 8,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3.200000047683716,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:axe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 5
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:stone_axe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.stone_axe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 131,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:stone_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_stone_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/axe",
+          "correct_for_drops": true,
+          "speed": 4
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "disable_blocking_for_seconds": 5,
+      "item_damage_per_attack": 2
+    }
+  },
+  "stone_shovel": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 2.5,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:shovel",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 5
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:stone_shovel",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.stone_shovel"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 131,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:stone_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_stone_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/shovel",
+          "correct_for_drops": true,
+          "speed": 4
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "stone_sword": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 4,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.4000000953674316,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 5
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:stone_sword",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.stone_sword"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 131,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:stone_tool_materials"
+    },
+    "minecraft:tool": {
+      "can_destroy_blocks_in_creative": false,
+      "damage_per_block": 2,
+      "rules": [
+        {
+          "blocks": "minecraft:cobweb",
+          "correct_for_drops": true,
+          "speed": 15
+        },
+        {
+          "blocks": "#minecraft:sword_instantly_mines",
+          "speed": 3.4028235e+38
+        },
+        {
+          "blocks": "#minecraft:sword_efficient",
+          "speed": 1.5
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {}
+  },
+  "stone_hoe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 0,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:hoe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 5
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:stone_hoe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.stone_hoe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 131,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:stone_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_stone_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/hoe",
+          "correct_for_drops": true,
+          "speed": 4
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "iron_pickaxe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 3,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.799999952316284,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 14
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:iron_pickaxe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.iron_pickaxe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 250,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:iron_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_iron_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/pickaxe",
+          "correct_for_drops": true,
+          "speed": 6
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "iron_axe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 8,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3.0999999046325684,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:axe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 14
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:iron_axe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.iron_axe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 250,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:iron_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_iron_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/axe",
+          "correct_for_drops": true,
+          "speed": 6
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "disable_blocking_for_seconds": 5,
+      "item_damage_per_attack": 2
+    }
+  },
+  "iron_shovel": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 3.5,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:shovel",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 14
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:iron_shovel",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.iron_shovel"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 250,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:iron_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_iron_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/shovel",
+          "correct_for_drops": true,
+          "speed": 6
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "iron_sword": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 5,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.4000000953674316,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 14
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:iron_sword",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.iron_sword"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 250,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:iron_tool_materials"
+    },
+    "minecraft:tool": {
+      "can_destroy_blocks_in_creative": false,
+      "damage_per_block": 2,
+      "rules": [
+        {
+          "blocks": "minecraft:cobweb",
+          "correct_for_drops": true,
+          "speed": 15
+        },
+        {
+          "blocks": "#minecraft:sword_instantly_mines",
+          "speed": 3.4028235e+38
+        },
+        {
+          "blocks": "#minecraft:sword_efficient",
+          "speed": 1.5
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {}
+  },
+  "iron_hoe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 0,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -1,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:hoe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 14
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:iron_hoe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.iron_hoe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 250,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:iron_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_iron_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/hoe",
+          "correct_for_drops": true,
+          "speed": 6
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "golden_pickaxe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 1,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.799999952316284,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 22
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:golden_pickaxe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.golden_pickaxe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 32,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:gold_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_gold_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/pickaxe",
+          "correct_for_drops": true,
+          "speed": 12
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "golden_axe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 6,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:axe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 22
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:golden_axe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.golden_axe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 32,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:gold_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_gold_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/axe",
+          "correct_for_drops": true,
+          "speed": 12
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "disable_blocking_for_seconds": 5,
+      "item_damage_per_attack": 2
+    }
+  },
+  "golden_shovel": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 1.5,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:shovel",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 22
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:golden_shovel",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.golden_shovel"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 32,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:gold_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_gold_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/shovel",
+          "correct_for_drops": true,
+          "speed": 12
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "golden_sword": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 3,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.4000000953674316,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 22
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:golden_sword",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.golden_sword"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 32,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:gold_tool_materials"
+    },
+    "minecraft:tool": {
+      "can_destroy_blocks_in_creative": false,
+      "damage_per_block": 2,
+      "rules": [
+        {
+          "blocks": "minecraft:cobweb",
+          "correct_for_drops": true,
+          "speed": 15
+        },
+        {
+          "blocks": "#minecraft:sword_instantly_mines",
+          "speed": 3.4028235e+38
+        },
+        {
+          "blocks": "#minecraft:sword_efficient",
+          "speed": 1.5
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {}
+  },
+  "golden_hoe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 0,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:hoe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 22
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:golden_hoe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.golden_hoe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 32,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:gold_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_gold_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/hoe",
+          "correct_for_drops": true,
+          "speed": 12
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "diamond_pickaxe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 4,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.799999952316284,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 10
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:diamond_pickaxe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.diamond_pickaxe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 1561,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:diamond_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_diamond_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/pickaxe",
+          "correct_for_drops": true,
+          "speed": 8
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "diamond_axe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 8,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:axe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 10
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:diamond_axe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.diamond_axe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 1561,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:diamond_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_diamond_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/axe",
+          "correct_for_drops": true,
+          "speed": 8
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "disable_blocking_for_seconds": 5,
+      "item_damage_per_attack": 2
+    }
+  },
+  "diamond_shovel": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 4.5,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -3,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:shovel",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 10
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:diamond_shovel",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.diamond_shovel"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 1561,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:diamond_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_diamond_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/shovel",
+          "correct_for_drops": true,
+          "speed": 8
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "diamond_sword": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 6,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": -2.4000000953674316,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 10
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:diamond_sword",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.diamond_sword"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 1561,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:diamond_tool_materials"
+    },
+    "minecraft:tool": {
+      "can_destroy_blocks_in_creative": false,
+      "damage_per_block": 2,
+      "rules": [
+        {
+          "blocks": "minecraft:cobweb",
+          "correct_for_drops": true,
+          "speed": 15
+        },
+        {
+          "blocks": "#minecraft:sword_instantly_mines",
+          "speed": 3.4028235e+38
+        },
+        {
+          "blocks": "#minecraft:sword_efficient",
+          "speed": 1.5
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {}
+  },
+  "diamond_hoe": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [
+      {
+        "type": "minecraft:attack_damage",
+        "amount": 0,
+        "id": "minecraft:base_attack_damage",
+        "operation": "add_value",
+        "slot": "mainhand"
+      },
+      {
+        "type": "minecraft:attack_speed",
+        "amount": 0,
+        "id": "minecraft:base_attack_speed",
+        "operation": "add_value",
+        "slot": "mainhand"
+      }
+    ],
+    "minecraft:block_transformer": "minecraft:hoe",
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantable": {
+      "value": 10
+    },
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:diamond_hoe",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.diamond_hoe"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 1561,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:repairable": {
+      "items": "#minecraft:diamond_tool_materials"
+    },
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "#minecraft:incorrect_for_diamond_tool",
+          "correct_for_drops": false
+        },
+        {
+          "blocks": "#minecraft:mineable/hoe",
+          "correct_for_drops": true,
+          "speed": 8
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {},
+    "minecraft:weapon": {
+      "item_damage_per_attack": 2
+    }
+  },
+  "shears": {
+    "minecraft:attack_animation": {},
+    "minecraft:attribute_modifiers": [],
+    "minecraft:break_sound": "minecraft:entity.item.break",
+    "minecraft:damage": 0,
+    "minecraft:enchantments": {},
+    "minecraft:interact_animation": {},
+    "minecraft:item_model": "minecraft:shears",
+    "minecraft:item_name": {
+      "translate": "item.minecraft.shears"
+    },
+    "minecraft:lore": [],
+    "minecraft:max_damage": 238,
+    "minecraft:max_stack_size": 1,
+    "minecraft:rarity": "common",
+    "minecraft:repair_cost": 0,
+    "minecraft:tool": {
+      "rules": [
+        {
+          "blocks": "minecraft:cobweb",
+          "correct_for_drops": true,
+          "speed": 15
+        },
+        {
+          "blocks": "#minecraft:shears_extreme_breaking_speed",
+          "speed": 15
+        },
+        {
+          "blocks": "#minecraft:shears_major_breaking_speed",
+          "speed": 5
+        },
+        {
+          "blocks": "#minecraft:shears_minor_breaking_speed",
+          "speed": 2
+        }
+      ]
+    },
+    "minecraft:tooltip_display": {},
+    "minecraft:use_effects": {}
+  }
+}

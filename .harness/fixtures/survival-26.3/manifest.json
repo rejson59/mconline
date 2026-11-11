@@ -1,0 +1,61 @@
+{
+  "target": "26.3",
+  "commit": "d96c75fec200c4580dd75e033a76341521165461",
+  "sources": {
+    "recipes": {
+      "api": "repos/misode/mcmeta/contents/data/recipe/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "format": "contents",
+      "sha256": "6b9cd71611420e2c618c96075a25dd1180745e69c9bdad8ab07de39630ff4af5",
+      "bytes": 682197
+    },
+    "item-tags": {
+      "api": "repos/misode/mcmeta/contents/data/tag/item/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "format": "contents",
+      "sha256": "cd6b463583aa7379b340636ffa3ae62b97b2dc723fabb54bfec36a2b9d27e446",
+      "bytes": 67779
+    },
+    "block-tags": {
+      "api": "repos/misode/mcmeta/contents/data/tag/block/data.json?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "sha256": "0ad04c31d48a9dd1bc884c1482b4a0e6130d0962ff2e8a024b0f5b4c2b37943f",
+      "gzip": false
+    },
+    "item-components": {
+      "api": "repos/misode/mcmeta/contents/item_components/data.json.gz?ref=d96c75fec200c4580dd75e033a76341521165461",
+      "sha256": "7b79adfc3be9ced1174d5edca6089cfdf021152d8ffe6c3549683274ba9cee52",
+      "gzip": true
+    }
+  },
+  "format": "Canonical object subsets; file hashes below are not original upstream byte hashes.",
+  "files": [
+    {
+      "path": "recipes.json",
+      "bytes": 13352,
+      "sha256": "05ee7d697bee25e07c310e70079cf3b8d6f76863e2119821c7cc01bb83488ada"
+    },
+    {
+      "path": "item-tags.json",
+      "bytes": 3964,
+      "sha256": "4bcad66a63a2047ca00215753782407e755a9413ec7ca317ae2e5a440f7b504d"
+    },
+    {
+      "path": "block-tags.json",
+      "bytes": 44886,
+      "sha256": "bd146f7a81f511baf2c0f1e5ed1fa9856bddf5a093e1770b6aaa5ce7ab29d247"
+    },
+    {
+      "path": "tool-components.json",
+      "bytes": 41694,
+      "sha256": "b948b36e6f31f4c584638f5c23f82a2e9c7c551b138833882defd0d70d6311ac"
+    },
+    {
+      "path": "bindings.json",
+      "bytes": 11852,
+      "sha256": "a9defaa1c9e0e042f110e8b33fee6cb76049242a0b2dae59f578f5cfd559d80a"
+    },
+    {
+      "path": "unrepresented-tag-members.json",
+      "bytes": 4509,
+      "sha256": "5ef313ed494f7da301d7ac73221ba874936e1f816a9432fd9dfba18c6962355b"
+    }
+  ]
+}

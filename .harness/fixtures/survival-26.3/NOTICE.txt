@@ -1,0 +1,1 @@
+Small canonical reference subsets from Minecraft Java 26.3, Mojang/Microsoft, NOT project MIT. See manifest.json and docs/survival-reference.lock.json. No full client/JAR distribution. Runtime translates only existing represented blocks/items; absent native tag members remain explicitly listed, not implemented.

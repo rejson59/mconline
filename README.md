@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.42.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.43.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.43.0 — survival według natywnych reguł
+
+Kamienne narzędzia, piec i statyw przyjmują czernit oraz mieszanki z brukiem; ognisko przyjmuje mieszane dostępne pnie i węgiel drzewny również przez książkę receptur. **47 wybranych receptur** korzysta z przypiętych danych 26.3. Szybkości 26 narzędzi wynikają z natywnych komponentów/tagów zamiast ręcznych założeń — poprawiono m.in. kopanie łóżek, wełny i kamiennych przycisków. **89 grup regresji, 7904 porównania szybkości, rzeczywiste kopanie i piec w produkcyjnym Chromium desktop/dotyk PASS.** Bez resetów, nowych ID i zmian backendu. [Metoda, wyniki i granice](docs/SURVIVAL-4.43.md).
 
 ## Wersja 4.42.0 — osłona przed creeperem i audyt zgłoszeń
 

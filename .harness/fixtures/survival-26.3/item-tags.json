@@ -1,0 +1,176 @@
+{
+  "wooden_tool_materials": {
+    "values": [
+      "#minecraft:planks"
+    ]
+  },
+  "planks": {
+    "values": [
+      "minecraft:oak_planks",
+      "minecraft:spruce_planks",
+      "minecraft:birch_planks",
+      "minecraft:jungle_planks",
+      "minecraft:acacia_planks",
+      "minecraft:dark_oak_planks",
+      "minecraft:pale_oak_planks",
+      "minecraft:crimson_planks",
+      "minecraft:warped_planks",
+      "minecraft:mangrove_planks",
+      "minecraft:bamboo_planks",
+      "minecraft:cherry_planks",
+      "minecraft:poplar_planks"
+    ]
+  },
+  "stone_tool_materials": {
+    "values": [
+      "minecraft:cobblestone",
+      "minecraft:blackstone",
+      "minecraft:cobbled_deepslate"
+    ]
+  },
+  "iron_tool_materials": {
+    "values": [
+      "minecraft:iron_ingot"
+    ]
+  },
+  "gold_tool_materials": {
+    "values": [
+      "minecraft:gold_ingot"
+    ]
+  },
+  "diamond_tool_materials": {
+    "values": [
+      "minecraft:diamond"
+    ]
+  },
+  "stone_crafting_materials": {
+    "values": [
+      "minecraft:cobblestone",
+      "minecraft:blackstone",
+      "minecraft:cobbled_deepslate"
+    ]
+  },
+  "coals": {
+    "values": [
+      "minecraft:coal",
+      "minecraft:charcoal"
+    ]
+  },
+  "logs": {
+    "values": [
+      "#minecraft:logs_that_burn",
+      "#minecraft:crimson_stems",
+      "#minecraft:warped_stems"
+    ]
+  },
+  "logs_that_burn": {
+    "values": [
+      "#minecraft:dark_oak_logs",
+      "#minecraft:pale_oak_logs",
+      "#minecraft:oak_logs",
+      "#minecraft:acacia_logs",
+      "#minecraft:birch_logs",
+      "#minecraft:jungle_logs",
+      "#minecraft:spruce_logs",
+      "#minecraft:mangrove_logs",
+      "#minecraft:cherry_logs",
+      "#minecraft:poplar_logs"
+    ]
+  },
+  "dark_oak_logs": {
+    "values": [
+      "minecraft:dark_oak_log",
+      "minecraft:dark_oak_wood",
+      "minecraft:stripped_dark_oak_log",
+      "minecraft:stripped_dark_oak_wood"
+    ]
+  },
+  "pale_oak_logs": {
+    "values": [
+      "minecraft:pale_oak_log",
+      "minecraft:pale_oak_wood",
+      "minecraft:stripped_pale_oak_log",
+      "minecraft:stripped_pale_oak_wood"
+    ]
+  },
+  "oak_logs": {
+    "values": [
+      "minecraft:oak_log",
+      "minecraft:oak_wood",
+      "minecraft:stripped_oak_log",
+      "minecraft:stripped_oak_wood"
+    ]
+  },
+  "acacia_logs": {
+    "values": [
+      "minecraft:acacia_log",
+      "minecraft:acacia_wood",
+      "minecraft:stripped_acacia_log",
+      "minecraft:stripped_acacia_wood"
+    ]
+  },
+  "birch_logs": {
+    "values": [
+      "minecraft:birch_log",
+      "minecraft:birch_wood",
+      "minecraft:stripped_birch_log",
+      "minecraft:stripped_birch_wood"
+    ]
+  },
+  "jungle_logs": {
+    "values": [
+      "minecraft:jungle_log",
+      "minecraft:jungle_wood",
+      "minecraft:stripped_jungle_log",
+      "minecraft:stripped_jungle_wood"
+    ]
+  },
+  "spruce_logs": {
+    "values": [
+      "minecraft:spruce_log",
+      "minecraft:spruce_wood",
+      "minecraft:stripped_spruce_log",
+      "minecraft:stripped_spruce_wood"
+    ]
+  },
+  "mangrove_logs": {
+    "values": [
+      "minecraft:mangrove_log",
+      "minecraft:mangrove_wood",
+      "minecraft:stripped_mangrove_log",
+      "minecraft:stripped_mangrove_wood"
+    ]
+  },
+  "cherry_logs": {
+    "values": [
+      "minecraft:cherry_log",
+      "minecraft:cherry_wood",
+      "minecraft:stripped_cherry_log",
+      "minecraft:stripped_cherry_wood"
+    ]
+  },
+  "poplar_logs": {
+    "values": [
+      "minecraft:poplar_log",
+      "minecraft:poplar_wood",
+      "minecraft:stripped_poplar_log",
+      "minecraft:stripped_poplar_wood"
+    ]
+  },
+  "crimson_stems": {
+    "values": [
+      "minecraft:crimson_stem",
+      "minecraft:stripped_crimson_stem",
+      "minecraft:crimson_hyphae",
+      "minecraft:stripped_crimson_hyphae"
+    ]
+  },
+  "warped_stems": {
+    "values": [
+      "minecraft:warped_stem",
+      "minecraft:stripped_warped_stem",
+      "minecraft:warped_hyphae",
+      "minecraft:stripped_warped_hyphae"
+    ]
+  }
+}

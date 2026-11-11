@@ -93,10 +93,10 @@ test("gold is faster but cannot harvest iron/diamond ores", () => {
   assert.equal(Math.round(mineSeconds(B.STONE, I.GOLD_PICK) * 20), 4);
   assert.equal(Math.round(mineSeconds(B.IRON_ORE, I.GOLD_PICK) * 20), 25);
 });
-test("native wool sword and bed axe tags affect mining times", () => {
-  assert.equal(toolMiningSpeed(B.WOOL_WHITE, I.WOOD_SWORD), 1.5);
-  assert.equal(toolMiningSpeed(B.BED, I.GOLD_AXE), 12);
-  assert.equal(toolMiningSpeed(B.BED_HEAD_E, I.IRON_AXE), 6);
+test("26.3 component rules supersede old wool-sword and bed-axe assumptions", () => {
+  assert.equal(toolMiningSpeed(B.WOOL_WHITE, I.WOOD_SWORD), 1);
+  assert.equal(toolMiningSpeed(B.BED, I.GOLD_AXE), 1);
+  assert.equal(toolMiningSpeed(B.BED_HEAD_E, I.IRON_AXE), 1);
 });
 test("no invented shortcuts for uncraftable blocks/items", () => {
   for (const id of [

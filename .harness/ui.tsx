@@ -909,6 +909,14 @@ async function mountWithJsdom(): Promise<boolean> {
   inv.returnCursor(); const beforeGhost=JSON.stringify(inv);
   await React.act(async()=>{(container.querySelector('[aria-label="Ułóż: Piaskowiec"]') as HTMLButtonElement).click();});
   check('UI: unavailable recipe is only a ghost preview and does not consume items',JSON.stringify(inv)===beforeGhost);
+  inv.slots.fill(null); inv.grid.fill(null); inv.cursor=null;inv.add(B.BLACKSTONE,8);game.craftingTable=true;await renderInventory();
+  const blackstoneFurnace=container.querySelector('[aria-label="Ułóż: Piec"]') as HTMLButtonElement;
+  check('UI: native tag alternatives enable the actual furnace recipe button',blackstoneFurnace?.getAttribute('data-ready')==='true');
+  await React.act(async()=>{blackstoneFurnace.click();});
+  check('UI: recipe-book click puts eight actual blackstone items into the grid',inv.grid.filter(s=>s?.id===B.BLACKSTONE).length===8 && inv.countOf(B.BLACKSTONE)===0);
+  await pointer(container.querySelector('[data-craft-result] .java-slot')!);
+  check('UI: taking the real tagged recipe output crafts one furnace',(inv.cursor as Stack|null)?.id===B.FURNACE && inv.grid.every(s=>!s));
+  inv.cursor=null;game.craftingTable=false;
   game.mode='creative';await renderInventory();
   await React.act(async()=>{(container.querySelector('[aria-label="Bloki budowlane"]') as HTMLButtonElement).click();});
   const catalog=()=>container.querySelector('.java-slot:not([data-slot-area])')!;

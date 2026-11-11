@@ -1,0 +1,300 @@
+{
+  "version": "4.43.0",
+  "baseline": "450c6c4f2bde06a0cd995d911b66c92051bac657",
+  "reference": {
+    "target": "26.3",
+    "commit": "d96c75fec200c4580dd75e033a76341521165461",
+    "nativeClientExecuted": false,
+    "lock": "docs/survival-reference.lock.json"
+  },
+  "coverage": {
+    "selectedNativeRecipes": 47,
+    "tools": 26,
+    "runtimeBlockStateBindings": 304,
+    "baseSpeedComparisons": 7904,
+    "note": "Not a complete mining-time/hardness/drop/XP matrix or a full native catalog."
+  },
+  "tests": {
+    "survival": {
+      "passedGroups": 89,
+      "failedGroups": 0
+    },
+    "negativeBaselineItemsAndInventory": {
+      "passedGroups": 58,
+      "failedGroups": 31,
+      "plannerStillPresent": true
+    },
+    "fullNpmTest": "PASS",
+    "engineChecks": 16964,
+    "uiChecks": 412,
+    "typecheck": "PASS",
+    "build": "PASS",
+    "progressAuditAndCheck": "PASS",
+    "productionDependencyVulnerabilities": 0,
+    "deterministicRegeneration": {
+      "passed": true,
+      "unchangedFiles": 9
+    }
+  },
+  "browser": {
+    "version": "4.43.0",
+    "environment": "Chromium/SwiftShader; mobile viewport and touch emulated; synthetic received peer packets; no live account sessions",
+    "reports": [
+      {
+        "device": "desktop",
+        "gameplay": {
+          "goldenPickaxe": true,
+          "extrudedItem": true,
+          "bedCases": 8,
+          "waterShader": true,
+          "avatarPixels": {
+            "dark": [
+              0,
+              2,
+              2
+            ],
+            "sunlight": [
+              0,
+              132,
+              132
+            ],
+            "torch": [
+              0,
+              49,
+              32
+            ]
+          }
+        },
+        "reports442": {
+          "wallTypes": 3,
+          "exposedFuse": true,
+          "newCoverDefuses": true,
+          "preBlastShield": true,
+          "openDamage": true,
+          "models": [
+            {
+              "id": 33,
+              "vertices": 324,
+              "depth": 0.0625
+            },
+            {
+              "id": 34,
+              "vertices": 240,
+              "depth": 0.0625
+            },
+            {
+              "id": 45,
+              "vertices": 624,
+              "depth": 0.0625
+            },
+            {
+              "id": 32,
+              "vertices": 1080,
+              "depth": 0.0625
+            },
+            {
+              "id": 44,
+              "vertices": 24,
+              "depth": 0.125
+            }
+          ]
+        },
+        "viewport": {
+          "width": 1875,
+          "height": 956
+        },
+        "survival": {
+          "blackstoneRecipeBook": true,
+          "actualMining": [
+            {
+              "block": 3,
+              "tool": 120,
+              "ticks": 23,
+              "remainingDurability": 58
+            },
+            {
+              "block": 52,
+              "tool": 601,
+              "ticks": 6,
+              "remainingDurability": 31
+            },
+            {
+              "block": 25,
+              "tool": 132,
+              "ticks": 24,
+              "remainingDurability": 57
+            },
+            {
+              "block": 14,
+              "tool": 121,
+              "ticks": 23,
+              "remainingDurability": 130
+            }
+          ],
+          "rawOreDrop": true,
+          "actualFurnace200Ticks": true
+        },
+        "touch": null,
+        "editable": {
+          "select": "text",
+          "webkit": "text",
+          "text": "miód i skrzynia"
+        },
+        "errors": []
+      },
+      {
+        "device": "mobile-emulated",
+        "gameplay": {
+          "goldenPickaxe": true,
+          "extrudedItem": true,
+          "bedCases": 8,
+          "waterShader": true,
+          "avatarPixels": {
+            "dark": [
+              0,
+              2,
+              2
+            ],
+            "sunlight": [
+              0,
+              132,
+              132
+            ],
+            "torch": [
+              0,
+              49,
+              32
+            ]
+          }
+        },
+        "reports442": {
+          "wallTypes": 3,
+          "exposedFuse": true,
+          "newCoverDefuses": true,
+          "preBlastShield": true,
+          "openDamage": true,
+          "models": [
+            {
+              "id": 33,
+              "vertices": 324,
+              "depth": 0.0625
+            },
+            {
+              "id": 34,
+              "vertices": 240,
+              "depth": 0.0625
+            },
+            {
+              "id": 45,
+              "vertices": 624,
+              "depth": 0.0625
+            },
+            {
+              "id": 32,
+              "vertices": 1080,
+              "depth": 0.0625
+            },
+            {
+              "id": 44,
+              "vertices": 24,
+              "depth": 0.125
+            }
+          ]
+        },
+        "viewport": {
+          "width": 753,
+          "height": 360,
+          "isMobile": true,
+          "hasTouch": true
+        },
+        "survival": {
+          "blackstoneRecipeBook": true,
+          "actualMining": [
+            {
+              "block": 3,
+              "tool": 120,
+              "ticks": 23,
+              "remainingDurability": 58
+            },
+            {
+              "block": 52,
+              "tool": 601,
+              "ticks": 6,
+              "remainingDurability": 31
+            },
+            {
+              "block": 25,
+              "tool": 132,
+              "ticks": 24,
+              "remainingDurability": 57
+            },
+            {
+              "block": 14,
+              "tool": 121,
+              "ticks": 23,
+              "remainingDurability": 130
+            }
+          ],
+          "rawOreDrop": true,
+          "actualFurnace200Ticks": true
+        },
+        "touch": {
+          "selection": "",
+          "menus": 0
+        },
+        "editable": {
+          "select": "text",
+          "webkit": "text",
+          "text": "miód i skrzynia"
+        },
+        "errors": []
+      }
+    ]
+  },
+  "sharedBrowser": {
+    "checks": 27,
+    "renderers": 2,
+    "passed": true,
+    "syntheticNetwork": true
+  },
+  "recoveryBrowser": {
+    "version": "4.43.0",
+    "fullyGeneratedRecoveredWorld": true,
+    "productionHTML": true,
+    "realProvider": true,
+    "mockedGateway": true,
+    "realWebLocks": true,
+    "renderPausedForConcurrentTabs": true,
+    "legacyOrphanRecoveredByConfirmedAction": true,
+    "confirmationCancelSendsNothing": true,
+    "reloadAfterDroppedLeave": true,
+    "freshGeneration": true,
+    "duplicatedTabBlocked": true,
+    "otherDeviceNotAutomaticallyReplaced": true,
+    "realEngineAt2FPSRegenerates": true,
+    "unacknowledgedInventoryRecovered": true,
+    "recoveredInventoryUploaded": true,
+    "secondDeviceInventoryRestored": true,
+    "finalCheckpointPayload": true,
+    "successfulFinalCheckpoint": true,
+    "uncertainCheckpointAckRecovered": true,
+    "staleBranchArchived": true,
+    "corruptBranchArchived": true,
+    "archiveExported": true,
+    "errors": []
+  },
+  "safety": {
+    "backendChanged": false,
+    "protocolChanged": false,
+    "saveFormatOrIdsChanged": false,
+    "resets": false,
+    "physicalPhoneTested": false,
+    "ownerProductionAccountTested": false
+  },
+  "limitations": [
+    "Only existing native representations; absent tag members explicitly listed.",
+    "Existing hardness, harvest/drop/XP algorithms not fully replaced or validated against native execution.",
+    "Prepared resources/synthetic network, not a full natural-world playthrough.",
+    "Boats, voxel lighting, complete materials/recipe catalog remain open."
+  ]
+}
