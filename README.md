@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.43.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.44.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.44.0 — pochodnie bez przenikania przez ściany
+
+Światło trzymanej pochodni na **terenie** zatrzymuje się na pełnej nieprzezroczystej ścianie, przechodzi przez otwory i szkło oraz słabnie po drodze. Dotyczy obu rąk i czterech najbliższych innych graczy. Reaguje na wykopanie/zamurowanie przejścia i zmiany chunków bez przebudowy geometrii. **21 nowych grup regresji, produkcyjny WebGL desktop/dotyk i negatywna kontrola przenikania PASS.** Bez resetu i zmian backendu. Oświetlenie modeli graczy/mobów w jaskiniach pozostaje następnym etapem; nie jest objęte tą poprawką. [Wyniki i granice](docs/LIGHTING-4.44.md).
 
 ## Wersja 4.43.0 — survival według natywnych reguł
 

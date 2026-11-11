@@ -1,7 +1,7 @@
 {
   "name": "minecraft-browser",
   "private": true,
-  "version": "4.43.0",
+  "version": "4.44.0",
   "description": "Minecraft — nieoficjalna wersja przeglądarkowa, survival i wspólne miasto Creative",
   "type": "module",
   "license": "MIT",
@@ -55,6 +55,8 @@
     "test:shared": "node .harness/run.mjs shared && node scripts/test-shared-state-sql.mjs && node scripts/test-shared-mobs-sql.mjs",
     "test:browser:shared": "node scripts/verify-shared-state-browser.mjs",
     "test:browser:survival": "BROWSER_SURVIVAL=1 node scripts/verify-refinements-browser.mjs",
+    "test:heldlighting": "node .harness/run.mjs heldlighting",
+    "test:browser:heldlighting": "node scripts/verify-held-lighting-browser.mjs",
     "test:survival": "node .harness/run.mjs survival",
     "reference:survival": "node scripts/sync-survival-reference.mjs",
     "test:reports442": "node .harness/run.mjs reports442",

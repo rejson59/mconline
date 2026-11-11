@@ -1,3 +1,4 @@
+import { HeldLightField } from '../src/game/heldLightField';
 import { tileUV } from '../src/game/textures';
 import { stairBoxes, stairShape, buildingFaces, buildingUV, STAIR_DIRECTIONS, type StairState, upperHalf } from '../src/game/buildingShapes';
 import { stairsId, stairsBase, stairsFacing, isStairs, isStairsTop, collisionBoxesAt, slabDouble } from '../src/game/blocks';
@@ -3198,8 +3199,8 @@ section('2.8: płynny świat (chunki, światło, cząstki)');
 section('2.8/2.8.1: wersja wydania');
 {
   // 2.15: wydanie naprawia pełny ekran na telefonie.
-  check('release label is the current line', GAME_VERSION === '4.43.0', GAME_VERSION);
-  check('release name is set', GAME_RELEASE_NAME === 'Survival według natywnych reguł', GAME_RELEASE_NAME);
+  check('release label is the current line', GAME_VERSION === '4.44.0', GAME_VERSION);
+  check('release name is set', GAME_RELEASE_NAME === 'Pochodnie bez przenikania przez ściany', GAME_RELEASE_NAME);
   // 2.32: skrzynia, wydajność i sterowanie hybrydowe.
   check('2.33 highlights mention the chest', RELEASE_HIGHLIGHTS.some((h) => /skrzynia 1:1|ZOMBIES 1:1|Zombies/i.test(h.title)));
   check('2.32 highlights mention potato performance', RELEASE_HIGHLIGHTS.some((h) => /ziemniak|ZOMBIES/i.test(h.title)));
@@ -3693,6 +3694,8 @@ section('2.8.1: światło w ręce');
   g.remoteLights = Array.from({ length: 4 }, () => new THREE.Vector4(0, -1000, 0, 0));
   g.camera = { position: new THREE.Vector3(4, 70, -3) };
   g.inventory = new Inventory();
+  g.heldField = new HeldLightField();
+  g.world = new World(444, true);
   g.heldLight = { pos: new THREE.Vector3(0, -1000, 0), strength: 0 };
   let held: any = { id: B.TORCH };
   g.selectedStack = () => held;
@@ -10061,6 +10064,7 @@ section('4.28.3: honey bottles, torch gravity, shared light and discard grace');
 
   const light = Object.assign(Object.create(Game.prototype), { inventory: new Inventory(), selected: 0,
     camera: { position: new THREE.Vector3() }, materials: [], heldLight: { pos: new THREE.Vector3(), strength: 0 },
+    heldField: new HeldLightField(), world: new World(444, true),
     remoteLights: Array.from({ length: 4 }, () => new THREE.Vector4()), remotes: new Map(),
   }) as any;
   const avatar = (x: number, held: number, offhand = 0, visible = true, seen = performance.now()) => {

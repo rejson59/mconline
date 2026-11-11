@@ -23,6 +23,7 @@ const root = path.resolve(here, '..');
 const cache = path.join(root, 'node_modules', '.cache', 'blockcraft-tests');
 
 const SUITES = [
+  { name: 'heldlighting', entry: path.join(here, 'heldLighting.ts'), label: 'Held light: voxel occlusion and bounded cache' },
   { name: 'survival', entry: path.join(here, 'survival.ts'), label: 'Survival: natywne reguły narzędzi i receptur 26.3' },
   { name: 'reports442', entry: path.join(here, 'reports442.ts'), label: 'Dziesięć zgłoszeń: creeper, modele i przepisy' },
   { name: 'mobmotion', entry: path.join(here, 'mobMotion.ts'), label: 'Moby: płynność, bezpieczne pozycje i budżet symulacji' },

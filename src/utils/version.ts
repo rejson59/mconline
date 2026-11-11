@@ -1,6 +1,6 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.43.0';
-export const GAME_RELEASE_NAME = 'Survival według natywnych reguł';
+export const GAME_VERSION = '4.44.0';
+export const GAME_RELEASE_NAME = 'Pochodnie bez przenikania przez ściany';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
 
@@ -112,6 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
+  { title: '4.44: światło trzymanej pochodni zatrzymuje się na ścianie', text: 'Światło na terenie rozchodzi się dostępnymi komórkami zamiast przenikać przez pełne nieprzezroczyste ściany. Dotyczy obu rąk i czterech najbliższych innych graczy. Reaguje na wykopane przejścia, zmiany bloków i rozładowanie chunków. Bez resetu zapisów. Oświetlenie modeli graczy i mobów w jaskiniach pozostaje kolejnym etapem.' },
   {
     title: 'Survival: czernit, mieszane składniki i reguły narzędzi',
     text: '47 wybranych receptur z danych 26.3: czernit na kamienne narzędzia i piec, mieszane pnie i węgiel drzewny na ognisko, właściwa siatka 2×2. Książka zużywa rzeczywiste materiały bez dopisywania zamienników. Szybkości narzędzi wynikają z natywnych komponentów/tagów; poprawiono m.in. łóżka i wełnę. 89 grup testów i 7904 porównania szybkości; pełna zgodność całej gry pozostaje w toku. Bez resetu zapisów.',
