@@ -127,7 +127,6 @@ export const RECIPES: Recipe[] = [
   { out: { id: B.TNT, count: 1 }, inputs: [{ id: B.SAND, count: 4 }, { id: I.GUNPOWDER, count: 5 }], table: true, pattern: ['GSG', 'SGS', 'GSG'], key: { G: I.GUNPOWDER, S: B.SAND } },
   // 1.9: jasnogłaz składa się z pyłu jasnogłazu (jak w Minecraftcie)
   { out: { id: B.GLOWSTONE, count: 1 }, inputs: [{ id: I.GLOWSTONE_DUST, count: 4 }], table: false, pattern: ['DD', 'DD'], key: { D: I.GLOWSTONE_DUST } },
-  { out: { id: I.LAPIS, count: 4 }, inputs: [{ id: B.LAPIS_ORE, count: 1 }], table: false },
   { out: { id: I.STICK, count: 4 }, inputs: [{ id: B.PLANKS, count: 2 }], table: false, pattern: ['P', 'P'], key: { P: B.PLANKS } },
   { out: { id: B.TORCH, count: 4 }, inputs: [{ id: I.COAL, count: 1 }, { id: I.STICK, count: 1 }], table: false, pattern: ['C', 'S'], key: { C: I.COAL, S: I.STICK } },
   { out: { id: I.BREAD, count: 1 }, inputs: [{ id: I.WHEAT, count: 3 }], table: true, pattern: ['WWW'], key: { W: I.WHEAT } },
@@ -285,6 +284,15 @@ RECIPES.push({out:{id:I.DIAMOND,count:9},inputs:[{id:B.DIAMOND_BLOCK,count:1}],t
 for (const r of RECIPES.filter(r => r.out.id === B.TORCH || r.out.id === B.CAMPFIRE)) {
   RECIPES.push({ ...r, inputs: r.inputs.map(s => ({...s, id: s.id === I.COAL ? I.CHARCOAL : s.id})),
     key: Object.fromEntries(Object.entries(r.key ?? {}).map(([k,id]) => [k,id === I.COAL ? I.CHARCOAL : id])) });
+}
+
+// A recipe's dimensions, not only a handwritten flag, determine whether a
+// crafting table is needed in grid matching and the recipe book.
+for (const recipe of RECIPES) {
+  if (recipe.pattern) {
+    const size = trimPattern(recipe.pattern);
+    if (size.w > 2 || size.h > 2) recipe.table = true;
+  } else if (recipe.inputs.reduce((sum, stack) => sum + stack.count, 0) > 4) recipe.table = true;
 }
 
 export class Inventory {

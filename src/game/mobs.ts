@@ -1,3 +1,4 @@
+import { clearSegment } from './blast';
 import { mobAreaLoaded, mobFits, recoverMob } from './mobMotion';
 import type { MobSnapshot } from './sharedMobs';
 import { smoothAlpha } from './cameraEffects';
@@ -7,7 +8,7 @@ import { findShore, type Shore } from './mobSwimming';
 import * as THREE from 'three';
 import type { World } from './world';
 import { stepBody, type Body } from './physics';
-import { IS_SOLID, IS_OPAQUE, B, isDoor } from './blocks';
+import { IS_SOLID, B, isDoor } from './blocks';
 import { PROFESSIONS, createVillagerState, professionFor, type VillagerState } from './trading';
 import { kindForColor, mobMaterial, setMobPalette, snapToPalette, type MobTexKind } from './mobTextures';
 import { MOB_MODELS, buildMobModel, type BuiltMob } from './mobModels';
@@ -1285,11 +1286,16 @@ export class Mob {
     const hostile = this.type === 'zombie' || this.type === 'creeper' || this.type === 'spider' || this.type === 'skeleton' || this.type === 'enderman' || this.type === 'slime' || this.type === 'ghast';
 
     if (this.fuse > 0) {
-      this.fuse -= dt;
+      // Keep sensing during the fuse. A solid wall or a retreat must allow
+      // an ordinary creeper to cool down; TNT uses its separate fuse branch.
+      const seesTarget = !peaceful && dist < 7 && this.hasLineOfSight(world, player.x, player.y + .9, player.z);
+      this.fuse = seesTarget ? this.fuse - dt : Math.min(1.35, this.fuse + dt);
       this.walking = false;
       this.setFlash(Math.floor(this.fuse * 8) % 2 === 0);
       this.group.scale.setScalar(1 + Math.sin(this.fuse * 18) * 0.05);
-      if (this.fuse <= 0 && !this.dead) {
+      if (!seesTarget && this.fuse >= 1.35) {
+        this.fuse = -1; this.setFlash(false); this.group.scale.setScalar(1);
+      } else if (this.fuse <= 0 && !this.dead) {
         this.exploded = true;
         this.dead = true;
         this.deathTime = 0;
@@ -1339,7 +1345,7 @@ export class Mob {
             this.body.vel.y = 6;
           }
         }
-        if (this.type === 'creeper' && dist < 2.15 && Math.abs(player.y - b.pos.y) < 2) {
+        if (this.type === 'creeper' && dist < 2.15 && Math.abs(player.y - b.pos.y) < 2 && this.hasLineOfSight(world, player.x, player.y + .9, player.z)) {
           this.fuse = 1.35;
           this.walking = false;
         }
@@ -1651,17 +1657,10 @@ export class Mob {
     if (this.head) this.pose(this.head, this.headPitch - dip * 0.62, this.headYaw, 0);
   }
 
-  /** Cheap visibility test used by the skeleton before it shoots. */
+  /** Physical visibility shared by creeper sensing and ranged attacks. */
   hasLineOfSight(world: World, tx: number, ty: number, tz: number): boolean {
     const sx = this.body.pos.x, sy = this.body.pos.y + this.body.h * 0.85, sz = this.body.pos.z;
-    const dx = tx - sx, dy = ty - sy, dz = tz - sz;
-    const d = Math.hypot(dx, dy, dz);
-    const steps = Math.max(1, Math.ceil(d * 2));
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps;
-      if (IS_OPAQUE[world.peekBlock(Math.floor(sx + dx * t), Math.floor(sy + dy * t), Math.floor(sz + dz * t))]) return false;
-    }
-    return true;
+    return clearSegment(world, sx, sy, sz, tx, ty, tz);
   }
 
   // Ray-AABB intersection distance

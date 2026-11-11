@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.41.1 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.42.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.42.0 — osłona przed creeperem i audyt zgłoszeń
+
+Creeper nie zapala lontu przez fizyczną przeszkodę i wygasza go po schowaniu się gracza. Wybuch oblicza osłonę ciał **przed zniszczeniem ścian**, ograniczając obrażenia i odrzut. Roślinne przedmioty blokowe mają grubość i obrys zamiast pojedynczej płaszczyzny. Poprawiono wymagania stołu receptur i usunięto zmyślony crafting rudy lapisu. Pozostałe wcześniejsze poprawki zostały ponownie sprawdzone; łódki i pełna zgodność katalogu Java nadal są otwarte. [Status wszystkich 10 zgłoszeń, testy i granice](docs/REPORTS-4.42.md).
 
 ## Wersja 4.41.1 — płynne moby bez przenikania
 

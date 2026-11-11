@@ -1,5 +1,5 @@
 /** Single release label shared by the menu, HUD, and in-game help. */
-export const GAME_VERSION = '4.41.1';
+export const GAME_VERSION = '4.42.0';
 export const GAME_RELEASE_NAME = 'Płynne moby bez przenikania';
 /** Wersja Minecrafta, do której gra dopasowuje tekstury, modele i zachowanie. */
 export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';

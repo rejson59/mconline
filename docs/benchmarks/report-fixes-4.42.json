@@ -1,0 +1,284 @@
+{
+  "version": "4.42.0",
+  "baseline": "f2c5180d1e4c17fd9c652ce0c69e6a46775bf939",
+  "referenceTarget": "26.3",
+  "nativeRuntimeParity": false,
+  "checks": {
+    "historicalRefinementsBeforeChanges": {
+      "passed": 90,
+      "failed": 0
+    },
+    "reports442": {
+      "passedGroups": 49,
+      "failedGroups": 0
+    },
+    "negativeControl": {
+      "passedGroups": 28,
+      "failedGroups": 21,
+      "replacedWithBaseline": [
+        "src/game/engine.ts",
+        "src/game/mobs.ts",
+        "src/game/inventory.ts"
+      ],
+      "note": "New DDA helper remains present: tests demonstrate integration regressions in old production sources."
+    },
+    "typecheck": "PASS",
+    "npmTest": "PASS",
+    "build": "PASS",
+    "progressAudit": "PASS",
+    "gitDiffCheck": "PASS",
+    "npmAuditProductionVulnerabilities": 0
+  },
+  "browser": {
+    "version": "4.42.0",
+    "environment": "Chromium/SwiftShader; mobile viewport and touch emulated; synthetic received peer packets; no live account sessions",
+    "reports": [
+      {
+        "device": "desktop",
+        "gameplay": {
+          "goldenPickaxe": true,
+          "extrudedItem": true,
+          "bedCases": 8,
+          "waterShader": true,
+          "avatarPixels": {
+            "dark": [
+              0,
+              2,
+              2
+            ],
+            "sunlight": [
+              0,
+              132,
+              132
+            ],
+            "torch": [
+              0,
+              48,
+              31
+            ]
+          }
+        },
+        "reports442": {
+          "wallTypes": 3,
+          "exposedFuse": true,
+          "newCoverDefuses": true,
+          "preBlastShield": true,
+          "openDamage": true,
+          "models": [
+            {
+              "id": 33,
+              "vertices": 324,
+              "depth": 0.0625
+            },
+            {
+              "id": 34,
+              "vertices": 240,
+              "depth": 0.0625
+            },
+            {
+              "id": 45,
+              "vertices": 624,
+              "depth": 0.0625
+            },
+            {
+              "id": 32,
+              "vertices": 1080,
+              "depth": 0.0625
+            },
+            {
+              "id": 44,
+              "vertices": 24,
+              "depth": 0.125
+            }
+          ]
+        },
+        "viewport": {
+          "width": 1875,
+          "height": 956
+        },
+        "touch": null,
+        "editable": {
+          "select": "text",
+          "webkit": "text",
+          "text": "miód i skrzynia"
+        },
+        "errors": []
+      },
+      {
+        "device": "mobile-emulated",
+        "gameplay": {
+          "goldenPickaxe": true,
+          "extrudedItem": true,
+          "bedCases": 8,
+          "waterShader": true,
+          "avatarPixels": {
+            "dark": [
+              0,
+              2,
+              2
+            ],
+            "sunlight": [
+              0,
+              132,
+              132
+            ],
+            "torch": [
+              0,
+              49,
+              32
+            ]
+          }
+        },
+        "reports442": {
+          "wallTypes": 3,
+          "exposedFuse": true,
+          "newCoverDefuses": true,
+          "preBlastShield": true,
+          "openDamage": true,
+          "models": [
+            {
+              "id": 33,
+              "vertices": 324,
+              "depth": 0.0625
+            },
+            {
+              "id": 34,
+              "vertices": 240,
+              "depth": 0.0625
+            },
+            {
+              "id": 45,
+              "vertices": 624,
+              "depth": 0.0625
+            },
+            {
+              "id": 32,
+              "vertices": 1080,
+              "depth": 0.0625
+            },
+            {
+              "id": 44,
+              "vertices": 24,
+              "depth": 0.125
+            }
+          ]
+        },
+        "viewport": {
+          "width": 753,
+          "height": 360,
+          "isMobile": true,
+          "hasTouch": true
+        },
+        "touch": {
+          "selection": "",
+          "menus": 0
+        },
+        "editable": {
+          "select": "text",
+          "webkit": "text",
+          "text": "miód i skrzynia"
+        },
+        "errors": []
+      }
+    ]
+  },
+  "mobMotionRegression": {
+    "version": "4.42.0",
+    "reports": [
+      {
+        "device": "desktop",
+        "viewport": {
+          "width": 960,
+          "height": 600
+        },
+        "all14Types": true,
+        "fullyGeneratedWorld": true,
+        "packetIntervalMs": 350,
+        "minFrameStep": 0.01666666666666572,
+        "maxFrameStep": 0.016666666666672825,
+        "renderFrameSamples": 1764,
+        "sharedExchangeNoSnap": true,
+        "realOwnedPollNoSnap": true,
+        "wallChecks": 112,
+        "spawnRejected": true,
+        "embeddedBodyRecovered": true,
+        "localInventoryUnchanged": true,
+        "cpuOnly48Mobs": {
+          "samples": 30,
+          "medianMs": 0.5,
+          "p95Ms": 4.400000000023283
+        },
+        "syntheticNetwork": true,
+        "physicalPhone": false,
+        "errors": []
+      },
+      {
+        "device": "mobile",
+        "viewport": {
+          "width": 844,
+          "height": 390,
+          "isMobile": true,
+          "hasTouch": true
+        },
+        "all14Types": true,
+        "fullyGeneratedWorld": true,
+        "packetIntervalMs": 350,
+        "minFrameStep": 0.01666666666666572,
+        "maxFrameStep": 0.016666666666672825,
+        "renderFrameSamples": 1764,
+        "sharedExchangeNoSnap": true,
+        "realOwnedPollNoSnap": true,
+        "wallChecks": 112,
+        "spawnRejected": true,
+        "embeddedBodyRecovered": true,
+        "localInventoryUnchanged": true,
+        "cpuOnly48Mobs": {
+          "samples": 30,
+          "medianMs": 0.5999999999767169,
+          "p95Ms": 2.800000000046566
+        },
+        "syntheticNetwork": true,
+        "physicalPhone": false,
+        "errors": []
+      }
+    ]
+  },
+  "sharedStateBrowser": {
+    "passed": 27,
+    "failed": 0,
+    "renderers": 2,
+    "syntheticNetwork": true
+  },
+  "recoveryBrowser": {
+    "version": "4.42.0",
+    "fullyGeneratedRecoveredWorld": true,
+    "productionHTML": true,
+    "realProvider": true,
+    "mockedGateway": true,
+    "realWebLocks": true,
+    "renderPausedForConcurrentTabs": true,
+    "legacyOrphanRecoveredByConfirmedAction": true,
+    "confirmationCancelSendsNothing": true,
+    "reloadAfterDroppedLeave": true,
+    "freshGeneration": true,
+    "duplicatedTabBlocked": true,
+    "otherDeviceNotAutomaticallyReplaced": true,
+    "realEngineAt2FPSRegenerates": true,
+    "unacknowledgedInventoryRecovered": true,
+    "recoveredInventoryUploaded": true,
+    "secondDeviceInventoryRestored": true,
+    "finalCheckpointPayload": true,
+    "successfulFinalCheckpoint": true,
+    "uncertainCheckpointAckRecovered": true,
+    "staleBranchArchived": true,
+    "corruptBranchArchived": true,
+    "archiveExported": true,
+    "errors": []
+  },
+  "limitations": [
+    "No physical phone or owner production-account testing.",
+    "No execution of native Java 26.3 client.",
+    "Boats absent; full recipe/mining/water/light parity not established.",
+    "No backend/reset/CAS/journal/protocol changes."
+  ]
+}

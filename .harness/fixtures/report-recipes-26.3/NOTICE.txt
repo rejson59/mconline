@@ -1,0 +1,1 @@
+Reference Minecraft Java 26.3 data, Mojang/Microsoft, NOT covered by project MIT. Canonicalized small recipe/tag objects for regression tests only, not a game/client archive. See manifest.json and public/Minecraft-NOTICE.txt.
