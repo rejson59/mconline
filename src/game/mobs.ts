@@ -1,3 +1,4 @@
+import { mobAreaLoaded, mobFits, recoverMob } from './mobMotion';
 import type { MobSnapshot } from './sharedMobs';
 import { smoothAlpha } from './cameraEffects';
 import { isWater } from './blocks';
@@ -1218,10 +1219,33 @@ export class Mob {
     onShoot: (mob: Mob) => void,
     peaceful: boolean,
     allies: Mob[] = [],
-    onBite: (mob: Mob, wolf: Mob) => void = () => {}
+    onBite: (mob: Mob, wolf: Mob) => void = () => {},
+    neighbours: Mob[] = allies
+  ) {
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    if (!recoverMob(world, this.body)) { this.group.visible = false; return; }
+    // Network exchanges and culled frames are not single giant physics ticks.
+    // Bound work after a suspended tab; never replay seconds of AI/attacks.
+    const count = Math.max(1, Math.ceil(Math.min(dt, .4) / (1 / 30)));
+    const step = Math.min(dt, .4) / count;
+    const previous = new THREE.Vector3();
+    for (let i = 0; i < count; i++) {
+      previous.copy(this.body.pos);
+      this.updateStep(step, world, player, onAttack, onShoot, peaceful, allies, onBite, neighbours);
+      if (!mobAreaLoaded(world, this.body)) {
+        this.body.pos.copy(previous); this.body.vel.set(0, 0, 0);
+        this.group.position.copy(previous); break;
+      }
+    }
+  }
+
+  private updateStep(
+    dt: number, world: World, player: THREE.Vector3,
+    onAttack: (dmg: number, mob: Mob) => void, onShoot: (mob: Mob) => void,
+    peaceful: boolean, allies: Mob[], onBite: (mob: Mob, wolf: Mob) => void, neighbours: Mob[]
   ) {
     const b = this.body;
-    this.pushAway(allies, dt);
+    this.pushAway(neighbours, dt);
     if (this.hurtTime > 0) {
       this.hurtTime -= dt;
       if (this.hurtTime <= 0 && !this.dead) this.setTint(false);
@@ -1305,9 +1329,11 @@ export class Mob {
           this.attackCooldown = this.type === 'enderman' ? 0.8 : 1;
           onAttack(this.type === 'enderman' ? 6 : this.type === 'slime' ? 2 : 3, this);
           if (this.type === 'enderman' && Math.random() < 0.3) {
-            // teleport
-            this.body.pos.x += (Math.random() - 0.5) * 8;
-            this.body.pos.z += (Math.random() - 0.5) * 8;
+            // Reject an obstructed/unloaded destination, not the collision world.
+            const before = b.pos.clone();
+            b.pos.x += (Math.random() - 0.5) * 8;
+            b.pos.z += (Math.random() - 0.5) * 8;
+            if (!mobFits(world, b)) b.pos.copy(before);
           }
           if (this.type === 'slime') {
             this.body.vel.y = 6;

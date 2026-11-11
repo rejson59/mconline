@@ -1,3 +1,4 @@
+import { MobMotion, mobFits, mobNeighbours } from './mobMotion';
 import { portraitGameplayBlocked } from '../utils/screen';
 import { trapdoorItemGeometry } from './trapdoorItem';
 import { hasReferenceItemDisplay, applyReferenceItemDisplay, referenceGroundOffset } from './blockItemDisplay';
@@ -868,6 +869,8 @@ export class Game {
   private mobTask: Promise<void> | null = null;
   private mobPollAt = 0;
   private mobStepAt = 0;
+  private mobMotion = new WeakMap<Mob, MobMotion>();
+  private mobElapsed = new WeakMap<Mob, number>();
   private mobSimulating = false;
   private mobCaptureRegion = '';
   private mobTargetId = '';
@@ -4947,6 +4950,7 @@ export class Game {
           profession = (idx + 0.5) / PROFESSIONS.length;
         }
         const mob = this.spawnMob(t, this.body.pos.x + d.x * 3, this.body.pos.y + 1, this.body.pos.z + d.z * 3, profession);
+        if (!mob) { this.message('Brak miejsca na tego moba. Wybierz wolną przestrzeń.'); break; }
         if (t === 'golem') this.unlock('golem');
         this.message('Przyzwano: ' + (t === 'villager' ? `mieszkańca (${villagerTitle(mob.trade ?? createVillagerState(professionFor(profession), this.nowSeconds()))})` : t));
         break;
@@ -6917,10 +6921,14 @@ export class Game {
     // się rodzi (ciepły, umiarkowany albo zimny).
     const biome = this.world.surface(Math.floor(x), Math.floor(z)).biome;
     const m = new Mob(type, x, y, z, profession, mobVariantForBiome(type, biome));
+    // Natural pack offsets and summons must fit the entire species, not just the
+    // center voxel. A rejected spawn never enters the world or shared snapshot.
+    if (!mobFits(this.world, m.body)) { m.dispose(); return null; }
+    m.group.position.copy(m.body.pos);
     if(this.sharedMobs) {
       const d=this.isInNether?'n':'o',rx=Math.floor(x/128),rz=Math.floor(z/128),key=mobRegionKey(d,rx,rz);
       m.netId=crypto.randomUUID();m.netRegion=key;
-      if(this.mobSimulating) {if(this.mobRegions.get(key)?.owner!==this.net?.id||this.mobs.filter(o=>o.netRegion===key).length>=48)return m;}
+      if(this.mobSimulating) {if(this.mobRegions.get(key)?.owner!==this.net?.id||this.mobs.filter(o=>o.netRegion===key).length>=48){m.dispose();return null;}}
       else if(!this.sharedExecuting) {void this.performSharedMobAction(key,()=>{this.mobs.push(m);this.scene.add(m.group);});return m;}
     }
     this.mobs.push(m);
@@ -7611,9 +7619,9 @@ export class Game {
     for(const region of result.regions) {
       const key=mobRegionKey(region.d,region.x,region.z); this.mobRegions.set(key,region);
       for(const data of region.mobs) {
-        let mob=old.get(data.id);const previousPosition=mob?.group.position.clone();
+        let mob=old.get(data.id);const previousPosition=mob?.group.position.clone(), previousYaw=mob?.group.rotation.y;
         if(!mob) { mob=new Mob(data.type,...data.pos as [number,number,number],((data.state.profession as number??0)+.5)/PROFESSIONS.length,data.variant,data.state.woolColor as number);if(data.state.isTnt)this.setupSharedTnt(mob);this.scene.add(mob.group); }
-        mob.restoreSnapshot(data);if(previousPosition)mob.group.position.copy(previousPosition);mob.netRegion=key;next.push(mob);old.delete(data.id);
+        mob.restoreSnapshot(data);if(previousPosition){mob.group.position.copy(previousPosition);mob.group.rotation.y=previousYaw!;}mob.netRegion=key;next.push(mob);old.delete(data.id);
       }
     }
     for(const mob of this.mobs)if(!next.includes(mob)){this.scene.remove(mob.group);mob.dispose();}
@@ -7663,9 +7671,15 @@ export class Game {
       const containers={furnaces:structuredClone(this.furnaces),anvils:structuredClone(this.anvils),brewings:structuredClone(this.brewings)};
       const containersBefore=JSON.stringify([...containers.furnaces,...containers.anvils,...containers.brewings]);
       this.world=proxy;this.mobs=owned;this.mobSimulating=true;
+      // Simulation may update its model internally, but a network tick must not
+      // bypass frame-by-frame presentation (the old 350ms visible teleport).
+      const visuals = owned.map(m => ({m, position:m.group.position.clone(), rotation:m.group.rotation.clone()}));
       try { this.updateMobs(dt); }
       catch(error){Object.assign(this,containers);this.mobs=all;throw error;}
-      finally { this.world=world;this.mobSimulating=false; }
+      finally {
+        this.world=world;this.mobSimulating=false;
+        for(const v of visuals){v.m.group.position.copy(v.position);v.m.group.rotation.copy(v.rotation);}
+      }
       if(containersBefore!==JSON.stringify([...this.furnaces,...this.anvils,...this.brewings]))this.mobContainerBackup=containers;
       const simulated=this.mobs;
       // A home region is stable across cell boundaries; keep its entities in
@@ -7722,33 +7736,56 @@ export class Game {
     }
   }
 
+  private presentMob(mob: Mob, dt: number, interval = .35) {
+    mob.group.visible = mob.body.pos.distanceToSquared(this.body.pos) <= (96 * this.entityDistance) ** 2;
+    if (!mob.group.visible) return;
+    if (!this.mobMotion) this.mobMotion = new WeakMap();
+    let motion = this.mobMotion.get(mob);
+    if (!motion) { motion = new MobMotion(); this.mobMotion.set(mob, motion); }
+    const swing = motion.present(this.world, mob.body, mob.group, mob.yaw, dt, interval);
+    if (!mob.dead) mob.animateLimbs(swing);
+    mob.group.rotation.z = mob.dead ? Math.min(Math.PI / 2, mob.deathTime * 6) : 0;
+  }
+
   private updateMobs(dt: number) {
-    if(this.sharedMobs&&!this.mobSimulating) { this.pollSharedMobs(); for(const mob of this.mobs) {mob.group.visible=mob.body.pos.distanceTo(this.body.pos)<=96*this.entityDistance;mob.group.position.lerp(mob.body.pos,smoothAlpha(dt,12));mob.animateLimbs(Math.sin(performance.now()/110)*Math.min(.7,Math.hypot(mob.body.vel.x,mob.body.vel.z)*.15));} return; }
+    if(this.sharedMobs&&!this.mobSimulating) {
+      this.pollSharedMobs();
+      for(const mob of this.mobs) this.presentMob(mob, dt);
+      return;
+    }
+    const neighbours = mobNeighbours(this.mobs);
     const p = this.body.pos;
     const dl = this.daylight();
     const peaceful = this.mode === 'creative';
     for (let mi = 0; mi < this.mobs.length; mi++) {
       const m = this.mobs[mi];
       if(this.mobSimulating)this.mobCaptureRegion=m.netRegion;
-      // 2.28 (Entity Culling): moby dalej niż 48 bloków aktualizują się co
-      // 2–6 klatek. Ruch liczymy z dt pomnożonym przez interwał, więc nic
-      // nie „zwalnia” – po prostu próbkujemy rzadziej i taniej.
+      // Distant AI runs every 2–6 frames. Accumulate the real elapsed time
+      // (frames can differ in duration); presentation still runs on skipped frames.
       const dist = m.body.pos.distanceTo(p);
       m.group.visible = dist <= 96 * this.entityDistance;
       let mdt = dt;
       let skip = false;
+      let interval = 1;
+      if (!this.mobElapsed) this.mobElapsed = new WeakMap();
+      const elapsed = (this.mobElapsed.get(m) ?? 0) + dt;
       if (this.entityCulling && !m.dead && dist > 48) {
         const iv = Math.max(1, Math.round(entityTickInterval(dist) * this.governor.profile.entityScale));
+        interval = iv;
         skip = (this.frameNo + mi) % iv !== 0;
-        mdt = dt * iv;
+        mdt = Math.min(.4, elapsed);
       }
-      if (skip && !this.mobSimulating) continue;
+      if (skip && !this.mobSimulating) { this.mobElapsed.set(m, elapsed); this.presentMob(m, dt, Math.min(.4, dt * interval)); continue; }
+      this.mobElapsed.set(m, 0);
       let target=p;
       this.mobTargetId=this.net?.id??'';
       if(this.mobSimulating)for(const [id,other] of this.combatPlayers)if(other.d===(this.isInNether?'n':'o')&&other.alive!==false&&other.mode!=='creative'&&performance.now()-other.seen<2500) {
         const candidate=new THREE.Vector3(other.x,other.y,other.z);if(candidate.distanceTo(m.body.pos)<target.distanceTo(m.body.pos)){target=candidate;this.mobTargetId=id;}
       }
-      m.update(this.mobSimulating?dt:mdt, this.world, target, this.mobAttackPlayer, this.mobShootPlayer, peaceful, this.mobs, this.wolfBite);
+      const visualPosition = interval > 1 && !this.mobSimulating ? m.group.position.clone() : null;
+      const visualYaw = m.group.rotation.y;
+      m.update(this.mobSimulating?dt:mdt, this.world, target, this.mobAttackPlayer, this.mobShootPlayer, peaceful, this.mobs, this.wolfBite, neighbours(m));
+      if (visualPosition) { m.group.position.copy(visualPosition); m.group.rotation.y = visualYaw; this.presentMob(m, dt, mdt); }
       // 2.31: kroki mobów – wanilia gra `step` co ok. 0,35 s chodu, więc
       // liczymy przebytą drogę, a nie czas (stojący mob nie stuka).
       if (!m.dead && m.body.onGround) {
@@ -8359,6 +8396,7 @@ export class Game {
         const y = this.world.heightAt(Math.floor(x), Math.floor(z)) + 1;
         if (!free(x, y, z)) continue;
         const mob = this.spawnMob('villager', x, y, z, Math.random());
+        if (!mob) continue;
         mob.trade = createVillagerState(mob.profession, this.nowSeconds());
         break;
       }

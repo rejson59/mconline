@@ -352,10 +352,20 @@ try {
         window.minecraft.game.inventory.countOf(SharedAudit.B.STONE) === 5,
     ),
   );
+  // The old fixture spawned the cow's head inside a tree canopy. Prepare a
+  // genuinely clear full-body spawn on both isolated renderers (fixture only).
+  for (const page of [a, b]) await page.evaluate(() => {
+    const g = window.minecraft.game;
+    g.netApplying = true;
+    try {
+      for (let x = 7; x <= 8; x++) for (let z = 7; z <= 9; z++) for (let y = 65; y <= 68; y++)
+        g.world.setBlock(x, y, z, SharedAudit.B.AIR);
+    } finally { g.netApplying = false; }
+  });
   await a.evaluate(async () => {
     const g = window.minecraft.game;
     await g.flushSharedMobs();
-    await g.performSharedMobAction("o:0:0", () => g.spawnMob("cow", 7, 65, 8));
+    await g.performSharedMobAction("o:0:0", () => g.spawnMob("cow", 7.5, 65, 8.5));
   });
   await b.evaluate(async () => {
     const g = window.minecraft.game;
