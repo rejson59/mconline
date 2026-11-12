@@ -28,6 +28,7 @@ export interface MeshReply {
   id: number;
   geometries: GeometryPacket[];
   lights: [string, { sky: number; blk: number }][];
+  sampledLight: Uint8Array;
   ms: number;
 }
 export interface MeshStamp {
@@ -127,7 +128,9 @@ export function unpackGeometry(packet: GeometryPacket): THREE.BufferGeometry {
   return g;
 }
 export function replyTransfers(reply: MeshReply): ArrayBuffer[] {
-  const buffers = new Set<ArrayBuffer>();
+  const buffers = new Set<ArrayBuffer>([
+    reply.sampledLight.buffer as ArrayBuffer,
+  ]);
   for (const g of reply.geometries) {
     for (const a of Object.values(g.attributes))
       buffers.add(a.array.buffer as ArrayBuffer);
@@ -157,6 +160,7 @@ export function meshSnapshot(snapshot: MeshSnapshot, id: number): MeshReply {
       id,
       geometries: geometries.map(packGeometry),
       lights: world.chunkChestLights(snapshot.cx, snapshot.cz),
+      sampledLight: world.getChunk(snapshot.cx, snapshot.cz).sampledLight!.data,
       ms: performance.now() - start,
     };
   } finally {

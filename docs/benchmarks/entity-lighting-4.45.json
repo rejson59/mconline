@@ -1,0 +1,860 @@
+{
+  "schema": 1,
+  "runtimeVersion": "4.45.0",
+  "scope": "World player/mob cave and wall light; not full native rendering parity",
+  "sourceHashes": {
+    "src/game/entityLighting.ts": "bd840823fc92570906a25f2db332dc3f225971eacaab20f3ff87bba91f0ba917",
+    "src/game/world.ts": "df04be24cbd8b674720b5ecf051bb8a8925b89dce06f497fc998975eac7b07ee",
+    "src/game/meshProtocol.ts": "d1d2816e54b51c1c672c672a1053e0310aaeeb55c1534da6c70b76d0b966b0e3",
+    "src/game/asyncMesher.ts": "7d4ad6ec51fc4ce4d18e66061f1e61d0b4d78b844202e2405d9f4e81bb27037b",
+    "src/game/engine.ts": "72702a36b2e2afc3a00213042e0926a39e332e1572ce072f8c6a00d5e316a7d6",
+    ".harness/entityLighting.ts": "627ee3bbdb6e272a9f4b56e5522626c2ad2118b22ad3ab23d67845b0874d2264",
+    "scripts/verify-entity-lighting-browser.mjs": "3e3d4eab1ee663fbbbfbd7d8b9f84ab6dce1843cfd43404c87bef1e5eff42eb8",
+    "scripts/verify-refinements-browser.mjs": "dbc93c6b6ce646f5d53fbbca64c2f59dc5e3932226b083f113077eeb4a3345dc"
+  },
+  "headless": {
+    "groupsPassed": 30,
+    "groupsFailed": 0,
+    "typesRendered": 14,
+    "sampleBytesPerMeshedChunk": 32768,
+    "fullTestSuite": "PASS"
+  },
+  "browser": [
+    {
+      "mobile": false,
+      "daylight": [
+        0,
+        74,
+        74
+      ],
+      "enclosed": [
+        0,
+        3,
+        3
+      ],
+      "globalLights": [
+        0,
+        3,
+        3
+      ],
+      "heldBlocked": [
+        0,
+        3,
+        3
+      ],
+      "heldAperture": [
+        0,
+        70,
+        70
+      ],
+      "heldResealed": [
+        0,
+        3,
+        3
+      ],
+      "placedInside": [
+        0,
+        50,
+        43
+      ],
+      "placedOutside": [
+        0,
+        3,
+        3
+      ],
+      "remoteBlocked": [
+        0,
+        3,
+        3
+      ],
+      "remoteAperture": [
+        0,
+        73,
+        73
+      ],
+      "negativeSky": [
+        0,
+        74,
+        74
+      ],
+      "negativeHeld": [
+        0,
+        32,
+        29
+      ],
+      "restored": [
+        0,
+        3,
+        3
+      ],
+      "patchedMeshes": 27,
+      "sprites": 1,
+      "models": [
+        {
+          "type": "pig",
+          "meshes": 7
+        },
+        {
+          "type": "cow",
+          "meshes": 10
+        },
+        {
+          "type": "sheep",
+          "meshes": 12
+        },
+        {
+          "type": "chicken",
+          "meshes": 8
+        },
+        {
+          "type": "wolf",
+          "meshes": 12
+        },
+        {
+          "type": "villager",
+          "meshes": 11
+        },
+        {
+          "type": "zombie",
+          "meshes": 7
+        },
+        {
+          "type": "skeleton",
+          "meshes": 11
+        },
+        {
+          "type": "creeper",
+          "meshes": 6
+        },
+        {
+          "type": "spider",
+          "meshes": 11
+        },
+        {
+          "type": "golem",
+          "meshes": 8
+        },
+        {
+          "type": "enderman",
+          "meshes": 6
+        },
+        {
+          "type": "slime",
+          "meshes": 5
+        },
+        {
+          "type": "ghast",
+          "meshes": 10
+        }
+      ],
+      "worker": "worker",
+      "sampleBytesPerChunk": 32768,
+      "workerSamples": {
+        "bytesCompared": 32768,
+        "differences": 0
+      },
+      "errors": []
+    },
+    {
+      "mobile": true,
+      "daylight": [
+        0,
+        74,
+        74
+      ],
+      "enclosed": [
+        0,
+        3,
+        3
+      ],
+      "globalLights": [
+        0,
+        3,
+        3
+      ],
+      "heldBlocked": [
+        0,
+        3,
+        3
+      ],
+      "heldAperture": [
+        0,
+        70,
+        70
+      ],
+      "heldResealed": [
+        0,
+        3,
+        3
+      ],
+      "placedInside": [
+        0,
+        50,
+        43
+      ],
+      "placedOutside": [
+        0,
+        3,
+        3
+      ],
+      "remoteBlocked": [
+        0,
+        3,
+        3
+      ],
+      "remoteAperture": [
+        0,
+        73,
+        73
+      ],
+      "negativeSky": [
+        0,
+        74,
+        74
+      ],
+      "negativeHeld": [
+        0,
+        34,
+        31
+      ],
+      "restored": [
+        0,
+        3,
+        3
+      ],
+      "patchedMeshes": 27,
+      "sprites": 1,
+      "models": [
+        {
+          "type": "pig",
+          "meshes": 7
+        },
+        {
+          "type": "cow",
+          "meshes": 10
+        },
+        {
+          "type": "sheep",
+          "meshes": 12
+        },
+        {
+          "type": "chicken",
+          "meshes": 8
+        },
+        {
+          "type": "wolf",
+          "meshes": 12
+        },
+        {
+          "type": "villager",
+          "meshes": 11
+        },
+        {
+          "type": "zombie",
+          "meshes": 7
+        },
+        {
+          "type": "skeleton",
+          "meshes": 11
+        },
+        {
+          "type": "creeper",
+          "meshes": 6
+        },
+        {
+          "type": "spider",
+          "meshes": 11
+        },
+        {
+          "type": "golem",
+          "meshes": 8
+        },
+        {
+          "type": "enderman",
+          "meshes": 6
+        },
+        {
+          "type": "slime",
+          "meshes": 5
+        },
+        {
+          "type": "ghast",
+          "meshes": 10
+        }
+      ],
+      "worker": "worker",
+      "sampleBytesPerChunk": 32768,
+      "workerSamples": {
+        "bytesCompared": 32768,
+        "differences": 0
+      },
+      "errors": []
+    }
+  ],
+  "heldTerrainRegression": [
+    {
+      "mobile": false,
+      "open": [
+        100,
+        94,
+        87
+      ],
+      "closed": [
+        10,
+        10,
+        10
+      ],
+      "aperture": [
+        107,
+        100,
+        92
+      ],
+      "resealed": [
+        10,
+        10,
+        10
+      ],
+      "glass": [
+        106,
+        100,
+        92
+      ],
+      "offhandClosed": [
+        10,
+        10,
+        10
+      ],
+      "remoteClosed": [
+        10,
+        10,
+        10
+      ],
+      "remoteOpen": [
+        111,
+        104,
+        95
+      ],
+      "removed": [
+        10,
+        10,
+        10
+      ],
+      "negativeControl": [
+        104,
+        98,
+        90
+      ],
+      "restored": [
+        10,
+        10,
+        10
+      ],
+      "final": [
+        10,
+        10,
+        10
+      ],
+      "worker": "worker",
+      "atlasBytes": 121945,
+      "renderer": "WebGL2",
+      "errors": []
+    },
+    {
+      "mobile": true,
+      "open": [
+        99,
+        94,
+        87
+      ],
+      "closed": [
+        10,
+        10,
+        10
+      ],
+      "aperture": [
+        107,
+        101,
+        93
+      ],
+      "resealed": [
+        10,
+        10,
+        10
+      ],
+      "glass": [
+        107,
+        100,
+        92
+      ],
+      "offhandClosed": [
+        10,
+        10,
+        10
+      ],
+      "remoteClosed": [
+        10,
+        10,
+        10
+      ],
+      "remoteOpen": [
+        111,
+        104,
+        95
+      ],
+      "removed": [
+        10,
+        10,
+        10
+      ],
+      "negativeControl": [
+        105,
+        98,
+        91
+      ],
+      "restored": [
+        10,
+        10,
+        10
+      ],
+      "final": [
+        10,
+        10,
+        10
+      ],
+      "worker": "worker",
+      "atlasBytes": 121945,
+      "renderer": "WebGL2",
+      "errors": []
+    }
+  ],
+  "meshingRegression": [
+    {
+      "device": "desktop",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 13.699999999953434,
+        "snapshotMs": 4.399999999906868,
+        "latencyMs": 15.400000000023283
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 1049760,
+        "differences": 0,
+        "drawCalls": 25,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 41.90000000002328,
+          "snapshotMs": 0.39999999990686774,
+          "latencyMs": 42.70000000006985
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 24.599999999976717,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 20.400000000023283,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 21.699999999953434
+        },
+        {
+          "syncMs": 11.5,
+          "submitMs": 4.800000000046566,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 10.70000000006985,
+          "snapshotMs": 1.5,
+          "latencyMs": 15.300000000046566
+        },
+        {
+          "syncMs": 7.800000000046566,
+          "submitMs": 0.9000000000232831,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 23.600000000093132,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 24.79999999993015
+        },
+        {
+          "syncMs": 14.800000000046566,
+          "submitMs": 6.300000000046566,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 16.900000000023283,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 24.099999999976717
+        },
+        {
+          "syncMs": 20.400000000023283,
+          "submitMs": 11.5,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 8.199999999953434,
+          "snapshotMs": 0.40000000002328306,
+          "latencyMs": 15.20000000006985
+        },
+        {
+          "syncMs": 5.099999999976717,
+          "submitMs": 0.6999999999534339,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 6.599999999976717,
+          "snapshotMs": 0.40000000002328306,
+          "latencyMs": 11.599999999976717
+        },
+        {
+          "syncMs": 5.099999999976717,
+          "submitMs": 0.40000000002328306,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 5.300000000046566,
+          "snapshotMs": 0.2000000000698492,
+          "latencyMs": 6.199999999953434
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    },
+    {
+      "device": "mobile",
+      "initial": {
+        "state": "worker",
+        "completed": 12,
+        "discarded": 0,
+        "workerMs": 7.100000000093132,
+        "snapshotMs": 1,
+        "latencyMs": 8.400000000023283
+      },
+      "parity": {
+        "values": 24464,
+        "pixels": 599114,
+        "differences": 0,
+        "drawCalls": 27,
+        "worker": {
+          "state": "worker",
+          "completed": 13,
+          "discarded": 1,
+          "workerMs": 40.79999999993015,
+          "snapshotMs": 0.30000000004656613,
+          "latencyMs": 45
+        }
+      },
+      "pairs": [
+        {
+          "syncMs": 47,
+          "submitMs": 2.5,
+          "state": "worker",
+          "completed": 14,
+          "discarded": 1,
+          "workerMs": 8.900000000023283,
+          "snapshotMs": 0.9000000000232831,
+          "latencyMs": 16.400000000023283
+        },
+        {
+          "syncMs": 6.099999999976717,
+          "submitMs": 0.5,
+          "state": "worker",
+          "completed": 15,
+          "discarded": 1,
+          "workerMs": 6.400000000023283,
+          "snapshotMs": 0.40000000002328306,
+          "latencyMs": 6.900000000023283
+        },
+        {
+          "syncMs": 25.20000000006985,
+          "submitMs": 5.699999999953434,
+          "state": "worker",
+          "completed": 16,
+          "discarded": 1,
+          "workerMs": 9.800000000046566,
+          "snapshotMs": 0.40000000002328306,
+          "latencyMs": 16.5
+        },
+        {
+          "syncMs": 18.399999999906868,
+          "submitMs": 6.800000000046566,
+          "state": "worker",
+          "completed": 17,
+          "discarded": 1,
+          "workerMs": 5.599999999976717,
+          "snapshotMs": 0.40000000002328306,
+          "latencyMs": 8.5
+        },
+        {
+          "syncMs": 9.79999999993015,
+          "submitMs": 5.900000000023283,
+          "state": "worker",
+          "completed": 18,
+          "discarded": 1,
+          "workerMs": 5.099999999976717,
+          "snapshotMs": 0.2999999999301508,
+          "latencyMs": 6.700000000069849
+        },
+        {
+          "syncMs": 28.20000000006985,
+          "submitMs": 5.100000000093132,
+          "state": "worker",
+          "completed": 19,
+          "discarded": 1,
+          "workerMs": 8.599999999976717,
+          "snapshotMs": 0.5999999999767169,
+          "latencyMs": 9.5
+        },
+        {
+          "syncMs": 5.099999999976717,
+          "submitMs": 2.700000000069849,
+          "state": "worker",
+          "completed": 20,
+          "discarded": 1,
+          "workerMs": 14.899999999906868,
+          "snapshotMs": 0.40000000002328306,
+          "latencyMs": 15.599999999976717
+        }
+      ],
+      "emergency": {
+        "cancelled": true,
+        "solid": true,
+        "built": true
+      }
+    }
+  ],
+  "survivalRegression": {
+    "version": "4.45.0",
+    "environment": "Chromium/SwiftShader; mobile viewport and touch emulated; synthetic received peer packets; no live account sessions",
+    "reports": [
+      {
+        "device": "desktop",
+        "gameplay": {
+          "goldenPickaxe": true,
+          "extrudedItem": true,
+          "bedCases": 8,
+          "waterShader": true,
+          "avatarPixels": {
+            "dark": [
+              0,
+              81,
+              81
+            ],
+            "sunlight": [
+              0,
+              137,
+              137
+            ],
+            "torch": [
+              0,
+              120,
+              116
+            ]
+          }
+        },
+        "reports442": {
+          "wallTypes": 3,
+          "exposedFuse": true,
+          "newCoverDefuses": true,
+          "preBlastShield": true,
+          "openDamage": true,
+          "models": [
+            {
+              "id": 33,
+              "vertices": 324,
+              "depth": 0.0625
+            },
+            {
+              "id": 34,
+              "vertices": 240,
+              "depth": 0.0625
+            },
+            {
+              "id": 45,
+              "vertices": 624,
+              "depth": 0.0625
+            },
+            {
+              "id": 32,
+              "vertices": 1080,
+              "depth": 0.0625
+            },
+            {
+              "id": 44,
+              "vertices": 24,
+              "depth": 0.125
+            }
+          ]
+        },
+        "viewport": {
+          "width": 1875,
+          "height": 956
+        },
+        "survival": {
+          "blackstoneRecipeBook": true,
+          "actualMining": [
+            {
+              "block": 3,
+              "tool": 120,
+              "ticks": 23,
+              "remainingDurability": 58
+            },
+            {
+              "block": 52,
+              "tool": 601,
+              "ticks": 6,
+              "remainingDurability": 31
+            },
+            {
+              "block": 25,
+              "tool": 132,
+              "ticks": 24,
+              "remainingDurability": 57
+            },
+            {
+              "block": 14,
+              "tool": 121,
+              "ticks": 23,
+              "remainingDurability": 130
+            }
+          ],
+          "rawOreDrop": true,
+          "actualFurnace200Ticks": true
+        },
+        "touch": null,
+        "editable": {
+          "select": "text",
+          "webkit": "text",
+          "text": "miód i skrzynia"
+        },
+        "errors": []
+      },
+      {
+        "device": "mobile-emulated",
+        "gameplay": {
+          "goldenPickaxe": true,
+          "extrudedItem": true,
+          "bedCases": 8,
+          "waterShader": true,
+          "avatarPixels": {
+            "dark": [
+              0,
+              81,
+              81
+            ],
+            "sunlight": [
+              0,
+              137,
+              137
+            ],
+            "torch": [
+              0,
+              120,
+              116
+            ]
+          }
+        },
+        "reports442": {
+          "wallTypes": 3,
+          "exposedFuse": true,
+          "newCoverDefuses": true,
+          "preBlastShield": true,
+          "openDamage": true,
+          "models": [
+            {
+              "id": 33,
+              "vertices": 324,
+              "depth": 0.0625
+            },
+            {
+              "id": 34,
+              "vertices": 240,
+              "depth": 0.0625
+            },
+            {
+              "id": 45,
+              "vertices": 624,
+              "depth": 0.0625
+            },
+            {
+              "id": 32,
+              "vertices": 1080,
+              "depth": 0.0625
+            },
+            {
+              "id": 44,
+              "vertices": 24,
+              "depth": 0.125
+            }
+          ]
+        },
+        "viewport": {
+          "width": 753,
+          "height": 360,
+          "isMobile": true,
+          "hasTouch": true
+        },
+        "survival": {
+          "blackstoneRecipeBook": true,
+          "actualMining": [
+            {
+              "block": 3,
+              "tool": 120,
+              "ticks": 23,
+              "remainingDurability": 58
+            },
+            {
+              "block": 52,
+              "tool": 601,
+              "ticks": 6,
+              "remainingDurability": 31
+            },
+            {
+              "block": 25,
+              "tool": 132,
+              "ticks": 24,
+              "remainingDurability": 57
+            },
+            {
+              "block": 14,
+              "tool": 121,
+              "ticks": 23,
+              "remainingDurability": 130
+            }
+          ],
+          "rawOreDrop": true,
+          "actualFurnace200Ticks": true
+        },
+        "touch": {
+          "selection": "",
+          "menus": 0
+        },
+        "editable": {
+          "select": "text",
+          "webkit": "text",
+          "text": "miód i skrzynia"
+        },
+        "errors": []
+      }
+    ]
+  },
+  "limitations": [
+    "Static sky/block light sampled once at presented body centre; no per-limb interpolation",
+    "Missing/stale samples conservatively dark until accepted rebuild",
+    "Existing whole-cell optical block classification and Nether light model retained",
+    "Drops, animated chest lids, distant LOD, first-person/inventory previews not migrated",
+    "Synthetic remote peer; not live authenticated multiplayer",
+    "Emulated touch; no physical-phone memory or performance measurement",
+    "No native Java client execution or measured whole-game completion percentage"
+  ]
+}

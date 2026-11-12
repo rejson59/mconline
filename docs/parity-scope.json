@@ -556,7 +556,13 @@
       "weight": null,
       "acceptance": "Pełne block/sky light, AO, materiały i światło encji odpowiadają referencji.",
       "evidence": [
-        "src/game/lighting.ts"
+        "src/game/lighting.ts",
+        "src/game/entityLighting.ts",
+        "src/game/heldLightField.ts",
+        "docs/LIGHTING-4.44.md",
+        "docs/ENTITY-LIGHTING-4.45.md",
+        "docs/benchmarks/entity-lighting-4.45.json",
+        ".harness/entityLighting.ts"
       ]
     },
     {

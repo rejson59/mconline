@@ -1,3 +1,4 @@
+import { EntityLighting } from './entityLighting';
 import { HeldLightField } from './heldLightField';
 import { blastExposure } from './blast';
 import { officialBlockAtlas, isOfficialTile } from './packArt';
@@ -95,7 +96,7 @@ import {
   type EnchOption,
 } from './enchant';
 import * as Sfx from './audio';
-import { patchChunkMaterial, HELD_POWER, HELD_RANGE, type HeldLightState, type SunState } from './lighting';
+import { patchChunkMaterial, HELD_POWER, type HeldLightState, type SunState } from './lighting';
 import { cloudLook, rainFogMix } from './sky';
 import { spriteTexture } from './art/spriteTex';
 import { buildItemIcons } from './itemIcons';
@@ -809,7 +810,7 @@ export class Game {
   stars: THREE.Points;
   clouds: THREE.Mesh;
   cloudTex: THREE.Texture;
-  private avatarLights: THREE.PointLight[]=[];
+  private entityLighting?: EntityLighting;
   private cloudMotion = new CloudMotion(CLOUD_SPEED);
   /** 2.8.1: gęsta warstwa chmur widoczna tylko podczas deszczu. */
   stormClouds!: THREE.Mesh;
@@ -1174,7 +1175,6 @@ export class Game {
     this.ambient = new THREE.HemisphereLight(0xffffff, 0x666666, 1.2);
     this.dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     this.scene.add(this.ambient, this.dirLight, this.dirLight.target);
-    this.avatarLights=Array.from({length:5},()=>{const light=new THREE.PointLight(0xffcf92,0,HELD_RANGE,2);this.scene.add(light);return light;});
 
     // sky objects
     // 2.18: słońce i księżyc wprost z paczki (pikselowe, jak w grze).
@@ -7082,6 +7082,7 @@ export class Game {
     this.updateSky();
     this.updateHeldLight();
     this.tickNet(dt);
+    this.updateEntityLighting();
 
     // 2.32: HUD odświeża się 10 × na sekundę, ale na słabym sprzęcie
     // 4 × – każde odświeżenie to re-render Reacta z pełnym stanem ekwipunku.
@@ -8042,15 +8043,24 @@ export class Game {
       { x: cp.x, y: cp.y, z: cp.z, strength: this.heldLight.strength },
       ...this.remoteLights.map(v => ({ x: v.x, y: v.y, z: v.z, strength: v.w })),
     ]);
-    for(let i=0;i<(this.avatarLights?.length??0);i++){
-      const light=this.avatarLights[i],source=i===0?null:this.remoteLights[i-1];
-      if(i===0){light.position.copy(this.heldLight.pos);light.intensity=this.heldLight.strength*12;}
-      else if(source){light.position.set(source.x,source.y,source.z);light.intensity=source.w*12;}
-    }
     const unset = this.heldLight.strength === 0;
     for (const m of this.materials) {
       const u = m.userData.uHeldStrength as { value: number } | undefined;
       if (u) u.value = unset ? 0 : this.heldLight.strength;
+    }
+  }
+
+  /** Sample at each presented body's centre, not its simulation/network target. */
+  private updateEntityLighting() {
+    const lighting = this.entityLighting ??= new EntityLighting({ day: this.uDay, brightness: this.brightness,
+      held: this.heldLight, field: this.heldField, remotes: this.remoteLights, sun: this.sunState });
+    for (const a of this.remotes.values()) if (a.group.visible) {
+      const p = a.group.position;
+      lighting.update(this.world, a.group, p.x, p.y + 0.9, p.z);
+    }
+    for (const m of this.mobs) if (m.group.visible) {
+      const p = m.group.position;
+      lighting.update(this.world, m.group, p.x, p.y + m.body.h * 0.5, p.z);
     }
   }
 

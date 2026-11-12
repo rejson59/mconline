@@ -1,5 +1,5 @@
 import type { BufferGeometry } from "three";
-import { World, type Chunk } from "./world";
+import { World, CS, CH, type Chunk } from "./world";
 import {
   currentMesh,
   snapshotMesh,
@@ -107,6 +107,8 @@ export class AsyncMesher {
           if (
             reply.geometries.length !== 3 ||
             !Array.isArray(reply.lights) ||
+            !(reply.sampledLight instanceof Uint8Array) ||
+            reply.sampledLight.length !== CS * CS * CH ||
             !Number.isFinite(reply.ms)
           )
             throw new Error("Invalid mesh reply");
@@ -114,6 +116,7 @@ export class AsyncMesher {
             geometries.push(unpackGeometry(packet));
           job.publish(world.chunks.get(World.key(cx, cz))!, geometries);
           world.replaceChestLights(cx, cz, reply.lights);
+          world.publishSampledLight(cx, cz, reply.sampledLight);
           this.staleCounts.delete(stamp.chunks[4].chunk);
           this.completed++;
           this.workerMs = reply.ms;
