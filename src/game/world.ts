@@ -64,6 +64,10 @@ export class Chunk {
   emitters: number[] = [];
   /** Zmienia się przy każdej modyfikacji terenu (cache minimapy). */
   revision = 0;
+  /** Identity tokens do not retain unloaded neighbours (or their light graphs). */
+  readonly lightIdentity = {};
+  /** Packed sky/block nibbles from the same accepted mesher as the terrain. */
+  sampledLight?: { data: Uint8Array; neighbours: { cx: number; cz: number; identity: object; revision: number }[] };
   constructor(cx: number, cz: number, data: Uint16Array = new Uint16Array(CS * CS * CH), heightMap: Uint16Array = new Uint16Array(CS * CS)) {
     this.data = data;
     this.heightMap = heightMap;
@@ -1719,6 +1723,44 @@ export class World {
     for (const [key, value] of lights) this.chestLight.set(key, value);
   }
 
+  /** Bounded per-chunk light data. Publication is coupled to accepted geometry. */
+  publishSampledLight(cx: number, cz: number, data: Uint8Array) {
+    if (data.length !== CS * CS * CH) throw new Error('Invalid sampled light volume');
+    const center = this.chunks.get(World.key(cx, cz));
+    if (!center) return;
+    const neighbours: { cx: number; cz: number; identity: object; revision: number }[] = [];
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const chunk = this.chunks.get(World.key(cx + dx, cz + dz));
+      if (!chunk) { center.sampledLight = undefined; return; }
+      neighbours.push({ cx: chunk.cx, cz: chunk.cz, identity: chunk.lightIdentity, revision: chunk.revision });
+    }
+    center.sampledLight = { data, neighbours };
+  }
+
+  /** No generation, no sky leaks before first mesh or after nearby edits.
+   * A stale field stays dark until its replacement geometry is accepted. */
+  sampleLightAt(x: number, y: number, z: number): { sky: number; block: number } {
+    if (![x, y, z].every(Number.isFinite) || y < 0 || y >= CH) return { sky: 0, block: 0 };
+    x = Math.floor(x); y = Math.floor(y); z = Math.floor(z);
+    const cx = Math.floor(x / CS), cz = Math.floor(z / CS);
+    const key = World.key(cx, cz), field = this.chunks.get(key)?.sampledLight;
+    if (!field) return { sky: 0, block: 0 };
+    let stale = false;
+    for (const stamp of field.neighbours) {
+      const current = this.chunks.get(World.key(stamp.cx, stamp.cz));
+      if (!current) return { sky: 0, block: 0 }; // Never generate an unloaded halo.
+      if (current.lightIdentity !== stamp.identity || current.revision !== stamp.revision) stale = true;
+    }
+    if (stale) {
+      // Halo revisions outside this mesh's affected light radius do not always
+      // dirty it. Queue a bounded repair instead of leaving an entity dark.
+      this.dirty.add(key);
+      return { sky: 0, block: 0 };
+    }
+    const packed = field.data[idx(x - cx * CS, y, z - cz * CS)];
+    return { sky: lightLevel(packed >>> 4), block: lightLevel(packed & 15) };
+  }
+
   /**
    * Native single/left/right texture region for a facing-compatible pair.
    */
@@ -2175,7 +2217,12 @@ export class World {
           }
         }
 
-    return bufs.map((b) => b.geometry());
+    const geometries = bufs.map((b) => b.geometry());
+    const sampled = new Uint8Array(CS * CS * CH);
+    for (let y = 0; y < CH; y++) for (let z = 0; z < CS; z++) for (let x = 0; x < CS; x++)
+      sampled[idx(x, y, z)] = (skyLevel(skyField, x, y, z) << 4) | Lmap[lat(x, y, z)];
+    this.publishSampledLight(c.cx, c.cz, sampled);
+    return geometries;
     } finally {
       for (let i=0;i<bufs.length;i++) if (bufs[i].scratchBytes > MAX_MESH_SCRATCH) meshScratch[i] = null;
     }

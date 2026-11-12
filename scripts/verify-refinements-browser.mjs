@@ -236,8 +236,11 @@ try {
         g.ambient.intensity = 0.01;
         g.dirLight.intensity = 0;
         g.heldLight.strength = 0;
-        for (const l of g.avatarLights) l.intensity = 0;
+        const originalDay = g.uDay.value;
+        g.uDay.value = 0;
+        g.remotes.set('lighting-audit', avatar);
         const pixel = () => {
+          g.updateEntityLighting();
           g.renderer.render(g.scene, g.camera);
           const gl = g.renderer.getContext(),
             p = new Uint8Array(4);
@@ -257,13 +260,15 @@ try {
         g.dirLight.position.set(7, 78, 10);
         g.dirLight.target.position.set(5.5, 73, 5.5);
         g.dirLight.intensity = 3;
+        g.uDay.value = 1;
         const sunlight = pixel();
         check(
-          "actual avatar pixels react to directional light",
+          "actual avatar pixels react to sampled daylight",
           sunlight.reduce((a, b) => a + b, 0) >
             dark.reduce((a, b) => a + b, 0) + 20,
         );
         g.dirLight.intensity = 0;
+        g.uDay.value = 0;
         g.inventory.slots[0] = { id: B.TORCH, count: 1 };
         g.updateHeldLight();
         const torch = pixel();
@@ -274,6 +279,8 @@ try {
         );
         g.dirLight.intensity = 1;
         g.ambient.intensity = 0.6;
+        g.uDay.value = originalDay;
+        g.remotes.delete('lighting-audit');
         g.camera.position.set(12, 76, 15);
         g.camera.lookAt(6, 71, 6);
         g.updateHeldLight();

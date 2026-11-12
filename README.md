@@ -1,6 +1,10 @@
-# Minecraft — nieoficjalna wersja przeglądarkowa 4.44.0 🌍
+# Minecraft — nieoficjalna wersja przeglądarkowa 4.45.0 🌍
 
 Gra sandboxowa w stylu **Minecraft** działająca w przeglądarce. Ma **dwa oddzielne publiczne światy — survival i Miasto budowniczych Creative**: wchodzisz jednym kliknięciem i budujesz wspólny świat razem ze wszystkimi, którzy są online – bez kodów i bez gospodarza — po zalogowaniu ogólnym kontem rejson59.github.io. Budowle zapisują się w chmurze (Supabase + Postgres), więc zostają po wyjściu i po odświeżeniu strony. Gra działa też offline i na telefonie.
+
+## Wersja 4.45.0 — postacie w świetle świata
+
+Gracze i moby **ciemnieją w zamkniętych jaskiniach i pomieszczeniach**: korzystają z danych światła terenu zamiast oświetlenia sceny ignorującego ściany. Pochodnie trzymane i postawione respektują osłonę również na postaciach. Poprawka obejmuje skórki, pancerze i obie ręce; działa po zmianie skórki, oswojeniu wilka i strzyżeniu owcy. **30 nowych grup regresji, rzeczywiste piksele skórek i wszystkie 14 modeli mobów w produkcyjnym WebGL desktop/dotyk PASS.** Dane światła z workera zgodne bajt w bajt z trybem synchronicznym. Bez resetów i zmian backendu. [Wyniki, koszt pamięci i granice](docs/ENTITY-LIGHTING-4.45.md).
 
 ## Wersja 4.44.0 — pochodnie bez przenikania przez ściany
 
