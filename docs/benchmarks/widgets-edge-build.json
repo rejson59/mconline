@@ -11,7 +11,5 @@
   },
   "standaloneSHA256": "4721faa641b5360758efb61484369b2eecd02389bebb3634cc33e2c2f3b30987",
   "bytes": 18044,
-  "artifact": "supabase/deploy/mconline-reference-archive.mjs",
-  "artifactSHA256": "4721faa641b5360758efb61484369b2eecd02389bebb3634cc33e2c2f3b30987",
-  "purpose": "Immutable single-file deployment input, generated own backend code only"
+  "purpose": "Standalone own backend code, deployed inline; remote static-import deployments failed startup and were replaced"
 }
