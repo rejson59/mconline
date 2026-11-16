@@ -49,14 +49,14 @@ import {
   type WorldHandshake,
 } from './net';
 
-/** Projekt Supabase BlockCraft (region Frankfurt). */
-export const SUPABASE_URL = 'https://bewwejewgqzctnjrbclu.supabase.co';
+/** Wspólny projekt rejson-widgets (konta i gra, region Frankfurt). */
+export const SUPABASE_URL = 'https://hzbqzfimtroixnldzjeq.supabase.co';
 /**
  * Klucz publiczny („anon”). Nie jest tajny – dostęp ogranicza RLS:
  * anonim nie ma dostępu do danych gry; wszystkie operacje przechodzą przez bramkę konta.
  */
 export const SUPABASE_ANON =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJld3dlamV3Z3F6Y3RuanJiY2x1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1MjQyOTQsImV4cCI6MjEwODEwMDI5NH0.bZVvA-lioshG9wgTloiRX_Lrul1965QqjukcOQk0SeQ';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6YnF6ZmltdHJvaXhubGR6amVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1OTYzOTEsImV4cCI6MjEwODE3MjM5MX0.oeZWOaNd6p3wZBZQQu3QWjRHlrkxV_BFQRNSN-6YntE';
 
 /** keep smoke test regex: client.channel(PUBLIC_CHANNEL — poniżej używamy this.channelName, ale literał musi zostać dla testu) */
  // client.channel(PUBLIC_CHANNEL

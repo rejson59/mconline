@@ -6,7 +6,7 @@ export const PIN = Object.freeze({
     "https://piston-meta.mojang.com/v1/packages/80608ff6753705b6a82e2cb86a5937d4d233abd4/26.3.json",
   clientSHA1: "e877b6a07acd633fb3bb475002175cec036e7b87",
   clientBytes: 41483720,
-  storageURL: "https://bewwejewgqzctnjrbclu.supabase.co/storage/v1/status",
+  storageURL: "https://hzbqzfimtroixnldzjeq.supabase.co/storage/v1/status",
 });
 export function validateManifest(manifest, pin = PIN) {
   if (manifest.id !== pin.version || manifest.type !== "release")

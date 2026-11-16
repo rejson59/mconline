@@ -1,0 +1,17 @@
+{
+  "source": "supabase/functions/mconline-reference-archive/index.ts",
+  "compiler": "esbuild 0.28.2",
+  "external": "npm:jose@6.2.15",
+  "sourceSHA256": "0f36dc7e7b166b83ebfddee5dd6aedfc74506c09755ab07de65780d026fd3aaa",
+  "inputs": {
+    "supabase/functions/mconline-reference-archive/index.ts": "0f36dc7e7b166b83ebfddee5dd6aedfc74506c09755ab07de65780d026fd3aaa",
+    "scripts/reference-official-pin.mjs": "469fd2e626a39cce21b88e6e688f114ce088060ce9509a9e78e079f385e7b68b",
+    "scripts/reference-corpus-core.mjs": "285671f84a3a82f2b7ae223dc74bbe55fa59f4d5580f73b98e0427703c129cf9",
+    "scripts/reference-transfer-core.mjs": "56fefdb84dcfbfc6863742aff3f700fa69ffe5f53470f5a1039daf7ebb9000c7"
+  },
+  "standaloneSHA256": "4721faa641b5360758efb61484369b2eecd02389bebb3634cc33e2c2f3b30987",
+  "bytes": 18044,
+  "artifact": "supabase/deploy/mconline-reference-archive.mjs",
+  "artifactSHA256": "4721faa641b5360758efb61484369b2eecd02389bebb3634cc33e2c2f3b30987",
+  "purpose": "Immutable single-file deployment input, generated own backend code only"
+}
