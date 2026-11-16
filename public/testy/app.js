@@ -1,6 +1,6 @@
 const ORIGIN = "https://rejson59.github.io";
 const ENDPOINT =
-  "https://bewwejewgqzctnjrbclu.supabase.co/functions/v1/mconline-reference-storage";
+  "https://hzbqzfimtroixnldzjeq.supabase.co/functions/v1/mconline-reference-storage";
 const status = document.getElementById("status");
 const result = document.getElementById("result");
 const login = document.getElementById("login");

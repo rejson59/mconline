@@ -8,7 +8,7 @@ import {
   PART_BYTES,
 } from "./reference-transfer-core.mjs";
 export const ARCHIVE_ENDPOINT =
-  "https://bewwejewgqzctnjrbclu.supabase.co/functions/v1/mconline-reference-archive";
+  "https://hzbqzfimtroixnldzjeq.supabase.co/functions/v1/mconline-reference-archive";
 export const ARCHIVE_AUDIENCE = "mconline-reference-archive-v1";
 export class ArchiveClientError extends Error {
   constructor(status) {

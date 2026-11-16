@@ -5,7 +5,7 @@ import { ACCOUNT_ORIGIN, ProjectAccount } from './communityAccount';
 import { readScopedSaves, replaceScopedSaves, readSaveJournal, writeSaveJournal, SAVES_CHANGED, SAVES_FAILED, setSaveNamespace, type StoredWorld } from './saves';
 export const ACCOUNT_DB = 'https://hzbqzfimtroixnldzjeq.supabase.co';
 export const ACCOUNT_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6YnF6ZmltdHJvaXhubGR6amVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1OTYzOTEsImV4cCI6MjEwODE3MjM5MX0.oeZWOaNd6p3wZBZQQu3QWjRHlrkxV_BFQRNSN-6YntE';
-const WORLD_GATEWAY = 'https://bewwejewgqzctnjrbclu.supabase.co/functions/v1/mconline-gateway';
+const WORLD_GATEWAY = 'https://hzbqzfimtroixnldzjeq.supabase.co/functions/v1/mconline-gateway';
 export type CloudPhase = 'guest' | 'loading' | 'ready' | 'saving' | 'error' | 'conflict';
 export interface CloudState { phase: CloudPhase; owner: string | null; username: string | null; message: string }
 export interface MultiplayerDelivery { keepalive?: boolean; timeout?: number }

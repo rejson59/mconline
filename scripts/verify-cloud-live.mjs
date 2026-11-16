@@ -10,7 +10,7 @@ process.on('uncaughtException', error => {
 });
 const online=fs.readFileSync(new URL('../src/game/online.ts',import.meta.url),'utf8');
 const fixture=fs.readFileSync(new URL('../.harness/fixtures/rejson-account/rejson-account.js',import.meta.url),'utf8');
-const world='https://bewwejewgqzctnjrbclu.supabase.co',account='https://hzbqzfimtroixnldzjeq.supabase.co';
+const world='https://hzbqzfimtroixnldzjeq.supabase.co',account='https://hzbqzfimtroixnldzjeq.supabase.co';
 const worldKey=/SUPABASE_ANON\s*=\s*'([^']+)'/.exec(online)[1],accountKey=/var KEY = "([^"]+)"/.exec(fixture)[1];
 async function call(base,path,body,extra={},method=body===undefined?'GET':'POST'){
  const key=base===account?accountKey:worldKey;

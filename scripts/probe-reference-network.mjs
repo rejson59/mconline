@@ -11,7 +11,7 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const ALLOWED = new Set([
   "piston-meta.mojang.com",
   "piston-data.mojang.com",
-  "bewwejewgqzctnjrbclu.supabase.co",
+  "hzbqzfimtroixnldzjeq.supabase.co",
 ]);
 
 export function allowedURL(raw) {

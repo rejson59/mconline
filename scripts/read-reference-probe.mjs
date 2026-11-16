@@ -6,7 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 export const AUDIENCE = "mconline-reference-probe-read-v1";
 export const ENDPOINT =
-  "https://bewwejewgqzctnjrbclu.supabase.co/functions/v1/mconline-reference-reader";
+  "https://hzbqzfimtroixnldzjeq.supabase.co/functions/v1/mconline-reference-reader";
 export const HASH =
   "a46cc1a5248a3967c1b3ec5adccfcd83d86fdcc7fdeed200646d495b45c756b6";
 async function bounded(response, limit) {
