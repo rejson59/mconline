@@ -112,7 +112,7 @@ export const MINECRAFT_TARGET = 'Minecraft: Java Edition 1.20.4';
  * Lista jest kumulatywna – trzyma też wpisy z poprzednich wydań.
  */
 export const RELEASE_HIGHLIGHTS: { title: string; text: string }[] = [
-  { title: '4.45.1: wspólny backend kont i gry', text: 'Dane serwerów, skrzyń i graczy przeniesiono do rejson-widgets, gdzie działają już konta i zapisy światów. Bez resetowania lokalnych zapisów. Stary projekt pozostaje zabezpieczony do czasu zakończenia kontroli odtwarzania z kopii.' },
+  { title: '4.45.1: wspólny backend kont i gry', text: 'Dane serwerów, skrzyń i graczy przeniesiono do rejson-widgets, gdzie działają już konta i zapisy światów. Bez resetowania lokalnych zapisów. Stary projekt został usunięty; zachowano prywatną kopię eksportu.' },
   { title: '4.45: postacie ciemnieją w zamkniętych jaskiniach', text: 'Gracze i moby korzystają z danych światła terenu, zamiast globalnego oświetlenia ignorującego ściany. Dotyczy skórek, pancerzy i wyposażenia w obu rękach; pochodnie trzymane i postawione respektują osłonę. Zmiany skórki, oswajanie wilka i strzyżenie owcy zachowują oświetlenie. Bez resetów zapisów. Pełna zgodność natywnej mapy światła i pomiary na fizycznym telefonie pozostają otwarte.' },
   { title: '4.44: światło trzymanej pochodni zatrzymuje się na ścianie', text: 'Światło na terenie rozchodzi się dostępnymi komórkami zamiast przenikać przez pełne nieprzezroczyste ściany. Dotyczy obu rąk i czterech najbliższych innych graczy. Reaguje na wykopane przejścia, zmiany bloków i rozładowanie chunków. Bez resetu zapisów. Oświetlenie modeli graczy i mobów w jaskiniach pozostaje kolejnym etapem.' },
   {

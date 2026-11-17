@@ -2,7 +2,7 @@
   "schema": 1,
   "target": "26.3",
   "runtimeVersion": "4.45.1",
-  "sourceFingerprint": "af643a698877eee7ebb25db5672cb94df839c05b276c6cf8f03ab7c11fb32cb2",
+  "sourceFingerprint": "77bf311a6e56e7eed199e2b8fc175a7daf0075c34b5e8c81c4ef3b1d1f1a4220",
   "sourceHashes": {
     ".harness/cubeDisplay.ts": "3b3d801191a1a1061f70e50d73341adaba47b53b03d3cb5582d5729731995b62",
     ".harness/entityLighting.ts": "627ee3bbdb6e272a9f4b56e5522626c2ad2118b22ad3ab23d67845b0874d2264",
@@ -199,7 +199,7 @@
     "src/utils/soundSettings.ts": "5931f8154d3ce6097a86c81d41d543bddf98d4d82b4441e640955191d7d3e519",
     "src/utils/tooltip.tsx": "2b777a91f66d5378888c4859656e2f711f48f631f58f4a4e8539af509d4410c4",
     "src/utils/useLandscapeRequired.ts": "4981739ea3e8f58aab6ccdbe466a8176e841c0a0b06a25977024e24c1d986838",
-    "src/utils/version.ts": "35f49c166b9469fafc16fd9841cde1fcb119444124514ee043c09eb4438cf3a3",
+    "src/utils/version.ts": "a21c0d534b2d9684268bf402aaffa80b2f14d5e5289d47a7657a28d84e787846",
     "src/utils/viewport.ts": "0ced690888a33e84a754e8a77fc6548edc57a8f2054babdca89b8da205d5c659"
   },
   "overall": {

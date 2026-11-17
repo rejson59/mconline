@@ -1,4 +1,4 @@
-# 4.45.1 — rejson-widgets cutover (source deletion NOT completed)
+# 4.45.1 — rejson-widgets cutover and source deletion
 
 ## Current operational state
 
@@ -6,7 +6,7 @@
 - The existing community identity, single-player cloud library, widgets, auth configuration, platform credentials and `rejfile` function are not replaced by the migration.
 - Browser game URL **and matching public anon JWT**, account-world gateway, owner panel and operational reference/authorization scripts now use this project. Regression tests reject a partial URL/JWT cutover.
 - Four game/reference Edge Functions deployed on the destination. The gateway still checks the community session; reference reader/archive still require GitHub OIDC. Archive writes remain locked (`budgetBytes: 0`). All four passed startup/unauthenticated request checks after inline deployment. The initial remote-import deployments failed startup and were replaced, not treated as success.
-- Source **BlockCraft**, `bewwejewgqzctnjrbclu`, is **NOT deleted**. Its 13 application tables have statement-level INSERT/UPDATE/DELETE/TRUNCATE fences. A locked cutover transaction first verified there were no active player leases. The source gateway is a bounded compatibility proxy to the destination; it no longer writes its old database. This avoids split-brain while old cached pages remain open. Reloading loads the new direct endpoints.
+- Source **BlockCraft**, `bewwejewgqzctnjrbclu`, has been **deleted** following the owner’s later authorization to proceed on the existing evidence despite the incomplete restore rehearsal. The delete API returned success, and a fresh project listing contained only healthy **rejson-widgets**. Before deletion all 13 source tables were write-fenced, with no active source leases. The temporary compatibility gateway disappeared with the source project: **old cached tabs must reload** to use the already-published destination endpoints.
 - No local saves, account namespaces, profile checkpoints, journals, resume proofs or CAS rules are reset. No historical destructive migration was replayed.
 
 ## Copy verification actually completed
@@ -37,7 +37,7 @@ Private Storage bucket `mconline-reference-private` and its sole object `probes/
 
 The destination's existing buckets and existing SQL objects were not dropped or recreated. A private before-image of the existing 73 public tables was taken; it is **not** a claim that a live shared database is frozen. A later check found concurrent changes to 10 existing community/rejchat tables (including account deletions), while the migration only created new, non-colliding game objects. Those changes were not blindly undone or attributed to this migration. The private `preservation_report` records counts without publishing account data. Any further integrity investigation must respect intentional concurrent deletions and must not restore stale account snapshots wholesale.
 
-## Recovery copy and unfinished deletion gate
+## Recovery copy, incomplete verification and deletion decision
 
 A complete application-schema/data export, source migration history and embedded Storage bytes were saved privately on the destination, independently of the source project:
 
@@ -52,21 +52,34 @@ The first restore attempt failed atomically during JSON parameter binding; no pa
 
 A separate restore rehearsal reached function verification but failed because the verifier incorrectly passed parameter names to `to_regprocedure`. It therefore rolled back; **do not claim that rehearsal passed**. A restricted helper `mconline_migration.check_snapshot(jsonb)` was created for a corrected rehearsal, but has **not been executed successfully**. The connector provider then blocked deployment of the corrected verification Edge code. The blocked call did not take effect and was **not rephrased or retried to evade the filter**.
 
-Consequently the owner's conditional authorization to delete BlockCraft has **not yet been satisfied**. Before deletion:
+The initial deletion gate was **not fully satisfied**, and the failed rehearsal was not relabelled as a pass. After being told that the existing copy/checks had passed but the full restore test had not, the owner subsequently instructed the assistant to proceed on the existing working-state evidence. This is the basis for proceeding with the deletion, **not a claim of full verification or a successful restore rehearsal**.
 
-1. Successfully rehearse restoration from the saved bytes without depending on the source; independently compare schema/function ACLs, policies, indexes, triggers and sequence state. Rolled-back tests can advance PostgreSQL sequences, so compare against the cutover receipt or a new fenced checkpoint appropriately, never reset a live sequence backwards.
-2. Confirm public Storage denial and owner/OIDC authorized read on the destination, and run current rolled-back cloud/multiplayer/checkpoint/chest/mob/plot suites against the deployed target. Local SQL fixtures and anonymous HTTP checks alone are not a logged-in production multiplayer test.
-3. Review live shared-target preservation, acknowledging independent concurrent changes; do not resurrect intentionally deleted accounts.
-4. Confirm new frontend production deployment and green PR/main CI and Pages; then verify no operational dependencies on the source remain.
-5. Only after these gates, delete **BlockCraft only**, then list projects to confirm the destination survives.
+### Checks before deletion
 
-The temporary `mconline-project-migrate` Edge endpoint and `MCONLINE_MIGRATION_SOURCE_KEY` destination secret have been **deleted**. The private job/baseline/verification helper state is retained for audit/recovery; the schema denies PUBLIC/anon/authenticated/service_role access, and the helper has no public execute grant. Source export/guard helpers remain service-role-only behind the source write fence. No migration credentials were placed in browser code or GitHub secrets.
+- Fresh project listing matched **BlockCraft** to the exact source ref and **rejson-widgets** to the destination ref.
+- The private export object still existed, with size **1,560,697 bytes** and its bucket still private. This metadata check was not a new download/hash test; the earlier full readback/hash receipt remains the byte-verification evidence.
+- The original migration ledger still reported complete, with database and Storage hashes verified, and all 13 destination tables existed.
+- Destination `db`, `rest`, `auth` and `storage` services were all healthy.
+- Source guard reported **13 tables, 13 frozen tables, 0 active leases**.
+- Supplemental tests ran on the real destination using synthetic fixtures and full ROLLBACK: `multiplayer_resume.sql` **16 checks PASS**, `account_worlds.sql` **12 checks PASS**, and `profile_checkpoints.sql` **13 checks PASS**. No live inventory/account rows were intentionally replaced. PostgreSQL sequence values consumed by tests were not reset backwards.
+
+### Deletion receipt
+
+- Called the supported Supabase `delete_project` operation for **`bewwejewgqzctnjrbclu` only**.
+- Result: `success: true`, `Project deleted successfully`.
+- Fresh `list_projects`: **rejson-widgets `hzbqzfimtroixnldzjeq` only**, status `ACTIVE_HEALTHY`; BlockCraft absent.
+- The destination and its private recovery export were not deleted. Deletion is irreversible; the old source is no longer a rollback option.
+- A post-deletion destination SQL check succeeded: **2403 block rows, 2 player rows**, account cloud table present, and the private export object still present.
+
+Full restore rehearsal, exhaustive independent post-copy schema/ACL equivalence, off-provider backup and a human logged-in gameplay test remain **unverified**. The provider-blocked deployment was not retried or bypassed. Further recovery validation must work from retained destination copies, not assume that the source still exists. Do not blindly restore stale account snapshots or reset sequences backwards on the active destination.
+
+The temporary `mconline-project-migrate` Edge endpoint and `MCONLINE_MIGRATION_SOURCE_KEY` destination secret have been **deleted**. The private job/baseline/verification helper state is retained for audit/recovery; the schema denies PUBLIC/anon/authenticated/service_role access, and the helper has no public execute grant. Source export/guard helpers and the compatibility proxy were removed as part of deleting their project. No migration credentials were placed in browser code or GitHub secrets.
 
 ## Repository validation
 
 - Four endpoint/key/secret/archive-lock regression groups in the default `npm test`.
 - Existing typecheck, full headless/SQL-WASM suites and production build.
 - Existing CI live authorization checks now exercise the unified target, including denied direct table/RPC access, invalid sessions, exact-origin CORS, reader/archive non-OIDC denial.
-- See the PR/main Actions results for deployed HTTP status checks. These do not substitute for the unfinished deletion gates above.
+- See the PR/main Actions results for deployed HTTP status checks. These do not substitute for the incomplete restore/operational checks recorded above.
 
 Historical evidence documents and old SQL migration files intentionally retain their original source-project references. Do not replay resets `004`, `009` or `010` to recreate the migrated database.
